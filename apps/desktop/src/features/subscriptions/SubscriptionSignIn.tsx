@@ -127,7 +127,7 @@ export function SubscriptionSignIn({ language, trustedAuthority, onReuseNative, 
   }
 
   return <section className="oc-scan-list" aria-label={text('连接订阅', 'Connect subscription')}>
-    <p className="v3-select-intro">{text('独立登录后可自动续期，无需保持原生客户端运行。登录完成后，检查并选择模型，保存后才会接入。', 'An independent sign-in renews automatically without keeping the native client running. After signing in, check and choose models, then save to connect them.')}</p>
+    <p className="v3-select-intro">{text('独立登录后，HiRoute 可自动刷新登录凭据，无需保持原生客户端运行。登录完成后，检查并选择模型，保存后才会接入。', 'After an independent sign-in, HiRoute can automatically refresh sign-in credentials without keeping the native client running. After signing in, check and choose models, then save to connect them.')}</p>
     {providers.map(provider => {
       const name = provider === 'codex' ? 'Codex' : 'Claude Code';
       const accounts = sessions.filter(session => session.provider === provider && !['cancelled', 'forgotten'].includes(session.status));
@@ -150,7 +150,7 @@ export function SubscriptionSignIn({ language, trustedAuthority, onReuseNative, 
         </div>)}
       </div>;
     })}
-    <Disclosure label={text('复用本机登录', 'Reuse a local sign-in')} language={language}><p className="oc-meta">{text('本机 Codex / Claude Code 更新登录后，HiRoute 会定时同步访问令牌。续期依赖原生客户端；未更新时，连接可能因过期而暂停。', 'Syncs access periodically after the local Codex / Claude Code client updates its sign-in. Renewal depends on the native client; the connection may pause if it has not renewed access.')}</p><p className="oc-meta">{text('Codex 仅支持复用文件中的登录；钥匙串等存储请使用独立登录。Claude Code 支持现有文件及 macOS 钥匙串登录。', 'Codex reuse supports file-based sign-ins; use independent sign-in for Keychain or other stores. Claude Code supports its existing file and macOS Keychain sign-ins.')}</p><button className="btn" type="button" disabled={!trustedAuthority || Boolean(busy)} onClick={onReuseNative}>{text('扫描本机登录', 'Find local sign-ins')}</button></Disclosure>
+    <Disclosure label={text('复用本机登录', 'Reuse a local sign-in')} language={language}><p className="oc-meta">{text('本机 Codex / Claude Code 刷新登录凭据后，HiRoute 会定时同步。凭据刷新依赖原生客户端；未更新时，连接可能因登录过期而暂停。', 'HiRoute syncs sign-in credentials periodically after the local Codex / Claude Code client refreshes them. Credential refresh depends on the native client; the connection may pause if the sign-in expires.')}</p><p className="oc-meta">{text('Codex 仅支持复用文件中的登录；钥匙串等存储请使用独立登录。Claude Code 支持现有文件及 macOS 钥匙串登录。', 'Codex reuse supports file-based sign-ins; use independent sign-in for Keychain or other stores. Claude Code supports its existing file and macOS Keychain sign-ins.')}</p><button className="btn" type="button" disabled={!trustedAuthority || Boolean(busy)} onClick={onReuseNative}>{text('扫描本机登录', 'Find local sign-ins')}</button></Disclosure>
     {error && <div className="callout bad" role="alert" data-error-code={error}><UiIcon name="warning" /><span>{text('操作未完成，请重试。已接入的模型配置会保留。', 'The operation did not complete. Try again; existing model settings are retained.')}</span></div>}
   </section>;
 }

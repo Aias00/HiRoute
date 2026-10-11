@@ -109,6 +109,7 @@ export function DeviceScanList({
   computeScanFailed,
   repairingSubscriptionSource,
   trustedAuthority,
+  onConnectSubscription,
   onOpenSubscription,
   onViewConnectedSubscription,
   onOpenDiscoveredConfiguration,
@@ -122,6 +123,7 @@ export function DeviceScanList({
   computeScanFailed: boolean;
   repairingSubscriptionSource: string | null;
   trustedAuthority: boolean;
+  onConnectSubscription(): void;
   onOpenSubscription(candidate: SubscriptionCandidate): void;
   onViewConnectedSubscription(candidate: SubscriptionCandidate): void;
   onOpenDiscoveredConfiguration(item: ComputeScanItem): void;
@@ -132,6 +134,11 @@ export function DeviceScanList({
   return <div className="oc-scan-list">
     <p className="v3-select-intro">{text('逐项查看和接入，不改变 Agent 的现有路由设置。', 'Review and connect each source without changing the agents’ routing settings.')}</p>
     <h3 className="oc-section-label">{text('可复用的订阅', 'Available subscriptions')}</h3>
+    <div className="subscription-reuse-note">
+      <p className="oc-meta">{text('复用本机登录依赖 Codex / Claude Code 刷新登录凭据，HiRoute 会定时同步。未更新时，连接可能因登录过期而暂停。', 'Reusing a local sign-in depends on Codex / Claude Code refreshing its credentials. HiRoute syncs those updates periodically; the connection may pause if the sign-in expires.')}</p>
+      <p className="oc-meta">{text('长期使用推荐连接订阅，由 HiRoute 自动刷新登录凭据。', 'For ongoing use, connect a subscription so HiRoute can automatically refresh sign-in credentials.')}</p>
+      <button className="btn" type="button" disabled={!trustedAuthority} onClick={onConnectSubscription}>{text('连接订阅（推荐）', 'Connect subscription (recommended)')}</button>
+    </div>
     {subscriptions.map(candidate => {
       const repairing = Boolean(candidate.existing_source_id && candidate.existing_source_id === repairingSubscriptionSource);
       return <div className="oc-status-row" key={candidate.candidate.candidate_ref}>

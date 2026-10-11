@@ -44,6 +44,50 @@ async function routing() {
   await until(() => document.querySelector('.plan-identity-fields input'), 'route editor');
 }
 const scenarios = [
+  scenario('desktop.models.subscription-scan.recommended-login', ['subscription-proxy', 'subscription-login'], 'Scan explains native credential refresh and opens independent sign-in without authorizing or saving', async () => {
+    for (const language of ['zh', 'en']) {
+      for (const scale of [1, 2]) {
+        await fresh(() => { c().handlers.manage_subscription_login = () => ({ schema: 'hiroute.subscription-login-result/v1', sessions: [] }); });
+        const saved = JSON.stringify(c().management);
+        localStorage.setItem('hiroute.language', language);
+        localStorage.setItem('hiroute.text-scale', String(scale));
+        c().remount();
+        const label = (zh, en) => language === 'zh' ? zh : en;
+        await click(label('模型', 'Models')); await click(label('添加模型', 'Add models'));
+        const scanLabel = label('扫描本机', 'Scan this device');
+        await until(() => all('.add-choice').some(item => item.textContent.includes(scanLabel)), 'scan choice');
+        all('.add-choice').find(item => item.textContent.includes(scanLabel)).click();
+        const entryLabel = label('连接订阅（推荐）', 'Connect subscription (recommended)');
+        await until(() => button(entryLabel), 'recommended independent sign-in entry');
+        const note = document.querySelector('.subscription-reuse-note');
+        assert(note.textContent.includes(label('依赖 Codex / Claude Code', 'depends on Codex / Claude Code')) && note.textContent.includes(label('自动刷新登录凭据', 'automatically refresh sign-in credentials')), 'Scan does not explain both credential refresh owners');
+        assert(!text().includes('自动续期'), 'Paid-subscription renewal copy remains');
+        const entry = button(entryLabel);
+        entry.scrollIntoView({ block: 'center' }); await pause(40);
+        const bounds = note.getBoundingClientRect();
+        const buttonBounds = entry.getBoundingClientRect();
+        const footer = document.querySelector('.modal-foot').getBoundingClientRect();
+        assert(note.scrollWidth <= note.clientWidth + 1 && entry.scrollWidth <= entry.clientWidth + 1, 'Refresh guidance or recommendation overflows horizontally');
+        assert(buttonBounds.left >= bounds.left && buttonBounds.right <= bounds.right && buttonBounds.bottom <= footer.top + 1, 'Recommendation is outside the note or obscured by the footer');
+        assert(footer.bottom <= innerHeight + 1, 'Fixed scan actions left the viewport');
+        for (const copy of note.querySelectorAll('p')) {
+          const range = document.createRange(); range.selectNodeContents(copy);
+          assert([...range.getClientRects()].every(rect => rect.left >= bounds.left - 1 && rect.right <= bounds.right + 1), 'Refresh guidance text is clipped');
+        }
+        const closes = calls('close_subscription_check').length;
+        await click(entryLabel);
+        await until(() => all('[role="dialog"] h2').some(item => item.textContent === label('连接订阅', 'Connect subscription')), 'independent sign-in dialog');
+        await until(() => calls('manage_subscription_login').length > 0, 'existing login session listing');
+        assert(text().includes(label('自动刷新登录凭据', 'automatically refresh sign-in credentials')), 'Sign-in copy does not explain automatic credential refresh');
+        assert(calls('close_subscription_check').length === closes + 1, 'Scan check intent was not released');
+        assert(calls('manage_subscription_login').every(item => item.payload.request.action === 'list'), 'Opening the recommendation automatically started authorization');
+        assert(calls('check_subscription').length === 0 && calls('apply_compute_save').length === 0 && calls('subscription_proxy_apply').length === 0 && JSON.stringify(c().management) === saved, 'Navigation mutated a connection or proxy');
+        all('summary').find(item => item.textContent.includes(label('复用本机登录', 'Reuse a local sign-in'))).click(); await pause(40);
+        await click(label('扫描本机登录', 'Find local sign-ins'));
+        await until(() => button(entryLabel), 'return to fresh device scan');
+      }
+    }
+  }),
   scenario('desktop.models.subscription-proxy.inline-cancel', ['subscription-proxy'], 'Proxy editing stays in the scan and cancelling retains its results and selected subscription', async () => {
     const saved = { config: { revision: 'fixture', policy: { mode: 'manual', url: 'http://proxy.example:8080', no_proxy: 'example.org' } }, applied: true };
     await fresh(() => { c().handlers.subscription_proxy_status = () => structuredClone(saved); });

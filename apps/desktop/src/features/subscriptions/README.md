@@ -14,7 +14,11 @@ check → model selection → Preview/Apply save flow. No sign-in action publish
 
 The native reuse option opens the existing device scan. Background token synchronization
 does not grant refresh authority: native clients retain their refresh tokens. Copy must
-distinguish this dependency from an independent sign-in's automatic renewal.
+distinguish this dependency from an independent sign-in's automatic credential refresh.
+The device scan explains that dependency before connection and links to the existing
+independent sign-in interaction. Opening that entry releases the prior scan check;
+it neither starts authorization nor saves a connection. Product copy calls this
+automatic sign-in credential refresh, never renewal of the paid subscription.
 
 Tests belong to the Desktop subscription suites and the production Pilot path; shared
 contract and protected callback admission regressions belong to Application API, CLI and

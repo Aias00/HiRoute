@@ -1093,7 +1093,7 @@ export function ModelManagementPage({
         </button>
         <button className="add-choice" type="button" disabled={!trustedAuthority} onClick={() => setAddStage('subscription-login')}>
           <span className="choice-icon"><UiIcon name="plug" /></span>
-          <div><strong>{language === 'zh' ? '连接订阅' : 'Connect subscription'}</strong><span>{language === 'zh' ? '独立登录 Codex / Claude Code，自动续期' : 'Sign in independently to Codex / Claude Code with automatic renewal'}</span></div>
+          <div><strong>{language === 'zh' ? '连接订阅' : 'Connect subscription'}</strong><span>{language === 'zh' ? '独立登录 Codex / Claude Code，自动刷新登录凭据' : 'Sign in independently to Codex / Claude Code with automatic credential refresh'}</span></div>
           <UiIcon name="chevronRight" />
         </button>
         <button className="add-choice" type="button" disabled={!trustedAuthority} onClick={() => { returnToScanList(); setSelectedSubscriptionRef(null); setRepairingSubscriptionSource(null); setSubscriptionNotice(''); setAddStage('scan'); void Promise.all([refreshSubscriptions(), recoverSubscriptionCheck()]); }}>
@@ -1173,6 +1173,7 @@ export function ModelManagementPage({
         computeScanFailed={Boolean(computeScanError)}
         repairingSubscriptionSource={repairingSubscriptionSource}
         trustedAuthority={trustedAuthority}
+        onConnectSubscription={() => { closeSubscriptionView(); setAddStage('subscription-login'); }}
         onOpenSubscription={openSubscription}
         onViewConnectedSubscription={viewConnectedSubscription}
         onOpenDiscoveredConfiguration={item => void prepareDiscoveredConfiguration(item)}

@@ -427,9 +427,9 @@ export function Models(props: Props) {
             <p className="field-help">{text(`此接入包含 ${source.models.length} 个模型。端点、Key 和启停操作作用于这份接入。`, `This connection has ${source.models.length} models. Endpoints, keys and enabled state belong to this connection.`)}</p>
             <p className="muted">{access === 'subscription'
               ? subscriptionMode === 'cpa_managed'
-                ? text('独立登录 · 由 HiRoute 自动续期，不依赖原生客户端。', 'Independent sign-in · HiRoute renews access without the native client.')
+                ? text('独立登录 · 由 HiRoute 自动刷新登录凭据，不依赖原生客户端。', 'Independent sign-in · HiRoute automatically refreshes sign-in credentials without the native client.')
                 : subscriptionMode === 'native_borrowed'
-                  ? text('复用本机登录 · 仅同步当前访问凭据，续期依赖原生客户端。', 'Local sign-in reuse · Syncs current access; renewal depends on the native client.')
+                  ? text('复用本机登录 · 仅同步当前访问凭据，凭据刷新依赖原生客户端。', 'Local sign-in reuse · Syncs current access; credential refresh depends on the native client.')
                   : text('使用订阅连接，无需重复填写 API Key。', 'Uses a subscription; no additional API key is needed.')
               : connectorManaged
                 ? text('凭据由本机连接器管理，无需在 HiRoute 中填写 API Key。', 'Credentials are managed by the local connector; no API key is entered in HiRoute.')
