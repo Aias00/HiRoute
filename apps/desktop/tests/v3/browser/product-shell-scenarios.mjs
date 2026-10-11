@@ -20,6 +20,17 @@ async function deviceScan() {
   all('.add-choice').find(item => item.textContent.includes('扫描本机')).click();
   await until(() => button('设置订阅连接代理') && !button('设置订阅连接代理').disabled, 'ready device scan');
 }
+async function newBailianAPI() {
+  await click('添加模型');
+  await until(() => all('.add-choice').some(item => item.textContent.includes('新建 API 接入')), 'new API entry');
+  all('.add-choice').find(item => item.textContent.includes('新建 API 接入')).click();
+  await until(() => all('.connection-provider-card').some(item => item.querySelector('strong')?.textContent === '百炼'), 'Bailian provider');
+  all('.connection-provider-card').find(item => item.querySelector('strong')?.textContent === '百炼').click();
+  await until(() => all('.connection-product-card').some(item => item.querySelector('strong')?.textContent.includes('Coding Plan')), 'Bailian Coding Plan');
+  all('.connection-product-card').find(item => item.querySelector('strong')?.textContent.includes('Coding Plan')).click();
+  await until(() => all('[role="dialog"] input[type="password"]').length === 1 && !button('检查并继续')?.disabled, 'visible API configuration');
+  return all('[role="dialog"] input[type="password"]')[0];
+}
 async function fresh(setup = () => {}) {
   c().reset(); setup(); await until(() => visible(document.querySelector('.sidebar-health .status-dot.good')), 'ready DesktopApp');
 }
@@ -226,15 +237,12 @@ const scenarios = [
         return c().fixtureResponse('apply_compute_save', payload);
       };
     });
-    await click('模型'); await click('添加模型');
-    await until(() => all('button').some(item => item.textContent.includes('新建 API 接入')), 'new connection entry');
-    all('button').find(item => item.textContent.includes('新建 API 接入')).click();
-    await until(() => document.querySelector('[role="dialog"] input[type="password"]'), 'key field');
-    setInput(document.querySelector('[role="dialog"] input[type="password"]'), 'synthetic-selection-key');
-    await click('检查接入');
+    await click('模型');
+    setInput(await newBailianAPI(), 'synthetic-selection-key');
+    await click('检查并继续');
     await until(() => all('.model-result-row input[type="checkbox"]').length, 'model choices');
     all('.model-result-row input[type="checkbox"]')[0].click(); await pause(40);
-    await click('保存接入');
+    await click('保存连接');
     await until(() => !document.querySelector('[role="dialog"]') && calls('get_compute_save_result').length, 'completed initial save');
     await click('按接入');
     await until(() => document.querySelector('.models-feature .detail-identity h2')?.textContent === b.display_name, 'saved connection focus');
@@ -248,22 +256,25 @@ const scenarios = [
     assert(document.querySelector('.models-feature .detail-identity h2')?.textContent === '接入 A 已改名', 'Refresh jumped to the previous saved connection');
     assert(JSON.stringify(b) === beforeB, 'Another connection changed while renaming A');
   }),
-  scenario('desktop.models.connection-template-directory-layout', ['model-connections'], 'The production stylesheet renders searchable template rows and pagination', async () => {
+  scenario('desktop.models.connection-template-directory-layout', ['model-connections'], 'The production stylesheet renders the complete searchable provider and product directory', async () => {
     await fresh(); await click('模型'); await click('添加模型');
     await until(() => all('button').some(item => item.textContent.includes('新建 API 接入')), 'new connection entry');
     all('button').find(item => item.textContent.includes('新建 API 接入')).click();
-    await until(() => all('.mc-template-row').length > 0, 'template directory');
-    assert(getComputedStyle(document.querySelector('.mc-template-directory')).display === 'grid', 'Production directory layout missing');
-    for (const row of all('.mc-template-row')) {
-      assert(getComputedStyle(row).display === 'flex' && getComputedStyle(row).alignItems === 'center', 'Template row is not aligned');
-      assert(getComputedStyle(row.querySelector('.field-help')).display === 'block', 'Template protocol is not on its own line');
+    await until(() => all('.connection-provider-card').length === 13, 'complete provider directory');
+    assert(document.querySelector('.connection-directory-intro').textContent.includes('18 种接入方式'), 'Directory omits supported products');
+    assert(getComputedStyle(document.querySelector('.connection-provider-grid')).display === 'grid', 'Production provider layout missing');
+    for (const row of all('.connection-provider-card')) {
+      assert(getComputedStyle(row).display === 'grid' && getComputedStyle(row).alignItems === 'center', 'Provider card is not aligned');
+      assert(row.scrollWidth <= row.clientWidth + 1, 'Provider card overflows horizontally');
     }
-    const selected = document.querySelector('.mc-template-row input:checked');
-    assert(selected?.closest('.mc-template-row').classList.contains('selected'), 'Selection styling missing');
-    setInput(document.querySelector('.mc-template-directory input[type="search"]'), '百炼');
-    await until(() => all('.mc-template-row').every(row => row.textContent.includes('百炼')), 'filtered templates');
-    assert(all('.mc-template-row').length > 0, 'Search removed matching templates');
-    assert(getComputedStyle(document.querySelector('.mc-template-pagination')).display === 'flex', 'Pagination layout missing');
+    setInput(document.querySelector('.connection-directory input[type="search"]'), '百炼');
+    await until(() => all('.connection-provider-card').length === 1 && all('.connection-provider-card')[0].textContent.includes('百炼'), 'filtered provider');
+    all('.connection-provider-card')[0].click();
+    await until(() => all('.connection-product-card').length === 3, 'all Bailian products');
+    for (const row of all('.connection-product-card')) {
+      assert(getComputedStyle(row).display === 'flex' && getComputedStyle(row).alignItems === 'center', 'Product row is not aligned');
+      assert(getComputedStyle(row.querySelector('.row-main')).display === 'grid', 'Product description is not on its own line');
+    }
     const close = all('[role="dialog"] button[aria-label="取消添加"]')[0];
     assert(close, 'Template dialog close control missing');
     close.click();
@@ -348,11 +359,8 @@ const scenarios = [
     await until(() => calls('apply_compute_save').length === 1, 'single remove apply');
   }),
   scenario('desktop.models.tool-check-selection', ['model-connections'], 'A tool check retains the chosen model with its fresh reference without selecting new inventory', async () => {
-    await fresh(); await click('模型'); await click('添加模型');
-    await until(() => all('button').some(item => item.textContent.includes('新建 API 接入')), 'add API entry');
-    all('button').find(item => item.textContent.includes('新建 API 接入')).click();
-    await until(() => document.querySelector('[role="dialog"] input[type="password"]'), 'API key input');
-    setInput(document.querySelector('[role="dialog"] input[type="password"]'), 'synthetic-tool-check-input');
+    await fresh(); await click('模型');
+    setInput(await newBailianAPI(), 'synthetic-tool-check-input');
     c().handlers.check_registered_model_connection = payload => {
       const result = c().fixtureResponse('check_registered_model_connection', payload);
       if (payload.request.inference_model_id) {
@@ -361,15 +369,15 @@ const scenarios = [
       }
       return result;
     };
-    await click('检查接入');
+    await click('检查并继续');
     await until(() => all('.model-result-row input[type="checkbox"]').length === 2, 'inventory');
     assert(all('.model-result-row input:checked').length === 0, 'Inventory selected models without consent');
     all('.model-result-row input[type="checkbox"]')[0].click(); await pause(40);
     await click('验证工具调用（仅所选模型，可能计费）');
-    await until(() => calls('check_registered_model_connection').length === 2 && button('保存接入'), 'tool check completed');
+    await until(() => calls('check_registered_model_connection').length === 2 && button('保存连接'), 'tool check completed');
     assert(all('.model-result-row input:checked').length === 1, 'Tool check lost the explicit model selection');
-    assert(!button('保存接入').disabled, 'Successful tool check disabled save');
-    await click('保存接入');
+    assert(!button('保存连接').disabled, 'Successful tool check disabled save');
+    await click('保存连接');
     await until(() => calls('preview_compute_save').length === 1, 'save preview');
     const preview = JSON.stringify(calls('preview_compute_save')[0].payload);
     assert(preview.includes('model-ref/qwen3-coder-plus/checked') && !preview.includes('model-ref/qwen3-max/checked'), 'Save did not use only the selected fresh model reference');
@@ -835,13 +843,9 @@ const scenarios = [
     all('button').find(item => item.textContent.includes('GPT-6-Astra')).click();
     await until(() => text().includes('接入就绪'), 'readiness status');
     assert(text().includes('不代表上游推理或工具调用已验证'), 'Local readiness claims upstream inference verification');
-    await click('添加模型');
-    await until(() => all('button').some(item => item.textContent.includes('新建 API 接入')), 'add API entry');
-    all('button').find(item => item.textContent.includes('新建 API 接入')).click();
-    await until(() => document.querySelector('[role="dialog"] input[type="password"]'), 'API key input');
-    const key = document.querySelector('[role="dialog"] input[type="password"]');
+    const key = await newBailianAPI();
     setInput(key, 'synthetic-input-preserved'); await pause(40);
-    const link = all('a').find(item => item.textContent.includes('官方说明与获取 Key'));
+    const link = all('[role="dialog"] a').find(item => item.textContent.includes('获取 API Key'));
     assert(link?.target === '_blank' && link.rel.includes('noreferrer') && link.href.startsWith('https://'), 'Web documentation link is unavailable');
     c().handlers.open_external_url = () => { throw new Error('BROWSER_UNAVAILABLE'); };
     link.click(); await until(() => text().includes('当前表单内容已保留'), 'native browser failure feedback');
