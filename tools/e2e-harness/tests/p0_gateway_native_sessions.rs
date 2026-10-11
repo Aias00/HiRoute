@@ -70,7 +70,12 @@ fn send_at(
     ordinal: usize,
 ) -> Value {
     let mut headers = headers.to_vec();
-    headers.push(("X-HiRoute-Token", token));
+    let bearer = format!("Bearer {token}");
+    headers.push(if path == "/v1/chat/completions" {
+        ("Authorization", bearer.as_str())
+    } else {
+        ("X-HiRoute-Token", token)
+    });
     let response = request(
         fixture.address,
         "POST",
@@ -81,7 +86,7 @@ fn send_at(
     assert_eq!(
         response.status,
         200,
-        "{}",
+        "{path}: {}",
         String::from_utf8_lossy(&response.body)
     );
     let finished = finished(fixture.observation_root.as_deref().unwrap(), ordinal);
