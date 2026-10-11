@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Published GitHub Release tag, for example v0.1.0
+        description: Published GitHub Release tag
         required: true
         type: string
       supersede_unpromoted_revision:

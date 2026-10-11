@@ -50,16 +50,18 @@ at build time. Evidence and reproduction commands belong in the public
 ## Public release contract
 
 `data/releases.json` is the single source for the download page and changelog.
-It is intentionally empty until a public package has completed integrity checks,
+Add a release only after its packages have completed integrity checks,
 installation review, applicable component-notice review, and release approval.
 Near-term releases may be self-signed; signing and notarization are not claimed
-unless the exact artifact declares `developer-id`. A self-signed record looks like:
+unless the exact artifact declares `developer-id`. The following template uses
+`<release-version>`, `<publication-time>`, and `<revision-prefix>` placeholders;
+replace them with the verified release facts before validating a record:
 
 ```json
 {
-  "version": "0.1.0",
+  "version": "<release-version>",
   "channel": "stable",
-  "published_at": "2026-09-21T00:00:00Z",
+  "published_at": "<publication-time>",
   "notes": { "zh": "版本说明。", "en": "Release notes." },
   "artifacts": [{
     "kind": "desktop",
@@ -68,7 +70,7 @@ unless the exact artifact declares `developer-id`. A self-signed record looks li
     "format": "dmg",
     "minimum_os": "15.0",
     "distribution": "self-signed",
-    "filename": "HiRoute-0.1.0-aaaaaaaaaaaa-macos-arm64-trial.dmg",
+    "filename": "HiRoute-<release-version>-<revision-prefix>-macos-arm64-trial.dmg",
     "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "size": 123456789
   }, {
@@ -78,10 +80,10 @@ unless the exact artifact declares `developer-id`. A self-signed record looks li
     "target": "x86_64-unknown-linux-gnu",
     "format": "tar.gz",
     "distribution": "unsigned",
-    "filename": "hiroute-0.1.0-aaaaaaaaaaaa-x86_64-unknown-linux-gnu.tar.gz",
+    "filename": "hiroute-<release-version>-<revision-prefix>-x86_64-unknown-linux-gnu.tar.gz",
     "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "size": 98765432,
-    "manifest_filename": "hiroute-0.1.0-aaaaaaaaaaaa-x86_64-unknown-linux-gnu.tar.gz.json",
+    "manifest_filename": "hiroute-<release-version>-<revision-prefix>-x86_64-unknown-linux-gnu.tar.gz.json",
     "manifest_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     "manifest_size": 4096
   }]

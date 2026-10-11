@@ -40,7 +40,7 @@ HiRoute 是长程 Agent 的本地控制与执行层。它把模型来源、可�
 
 ## News · 最新动态
 
-- **2026-10-08 · HiRoute 0.2.0** — 稳定版本：内置决策模型、更多 Agent 集成，以及 macOS/Linux 双架构安装包。[版本说明](https://github.com/higress-group/HiRoute/releases/tag/v0.2.0) · [下载](https://hiroute.ai/download/)
+- **最新稳定版本** — 提供 macOS Desktop 与 Linux 无界面版的 x86_64 / ARM64 安装包。[版本说明](https://github.com/higress-group/HiRoute/releases/latest) · [下载](https://hiroute.ai/download/)
 - **2026-10-04** — [HiRoute 智能路由实战：GPT-6 Astra × Qwen-3.8 Flash，同等质量下成本降低 90%](news/2026-10-04-astra-qwen.zh-CN.md)。[官网阅读](https://hiroute.ai/news/astra-qwen-smart-routing/) · [复现实验](experiments/README.md)
 - [全部新闻](news/README.md)
 
@@ -62,7 +62,7 @@ HiRoute 当前提供固定模型、智能省钱、自定义分支和免费优先
 ### macOS Desktop
 
 从 [hiroute.ai](https://hiroute.ai/download/) 下载当前 DMG，拖入“应用程序”目录。如果 macOS
-要求手动批准，请按[自签名安装说明](docs/macos-installation.zh-CN.md)操作。HiRoute 0.2.0 支持
+要求手动批准，请按[自签名安装说明](docs/macos-installation.zh-CN.md)操作。HiRoute 支持
 macOS 15 或更高版本，提供 Apple 芯片（`arm64`）与 Intel（`x86_64`）安装包。
 
 ### Linux 无界面版
@@ -172,7 +172,7 @@ npm run build
 
 ## 项目状态
 
-HiRoute 0.2.0 是稳定版本，提供 macOS Desktop 与 Linux 无界面版，两种平台均支持 x86_64 和
+最新稳定版本提供 macOS Desktop 与 Linux 无界面版，两种平台均支持 x86_64 和
 ARM64。最新安装包与版本说明见[官网](https://hiroute.ai/download/)。
 
 HiRoute 使用 [Apache License 2.0](LICENSE)。缺陷和功能建议请提交到
