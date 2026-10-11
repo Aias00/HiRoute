@@ -161,7 +161,7 @@ impl LocalControlAdapter {
             candidate_ref: request.candidate_ref.clone(),
             lineage_ref: request.lineage_ref.clone(),
             trusted_lineage_digest: None,
-            display_name: resolved.option.display_name.clone(),
+            display_name: request.display_name.clone(),
             existing_source_id: request.existing_source_id.clone(),
             edit_revision: request.edit_revision,
             check_id: request.check_id.clone(),
@@ -390,6 +390,7 @@ mod tests {
             inference_model_id: None,
             models: Vec::new(),
             connection_option_id: connection_option_id.into(),
+            display_name: "团队 API".into(),
             expected_catalog: ComputeCatalogProvenanceViewV1 {
                 product_release: provenance.product_release,
                 catalog_binding_id: provenance.catalog_binding_id,
@@ -536,6 +537,7 @@ mod tests {
             .adapter
             .trusted_registered_draft(&request(&catalog, "deepseek.official.global.v1"))
             .unwrap();
+        assert_eq!(deepseek.display_name, "团队 API");
         assert_eq!(deepseek.base_url, "https://api.deepseek.com");
         assert_eq!(deepseek.inventory_path_override.as_deref(), Some("/models"));
         assert_eq!(deepseek.protocol, UpstreamProtocol::Responses);

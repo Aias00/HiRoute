@@ -18,7 +18,8 @@ export function connectionErrorMessage(code: string, zh: boolean): string {
   if (code === 'MODEL_SAVE_RECHECK_REQUIRED') return zh
     ? '本次保存未生效。请重新检查接入后再保存；如使用 API Key，请重新输入。模型选择和非敏感配置已保留。'
     : 'This save did not take effect. Check the connection again before saving; re-enter the API key if used. Model choices and non-sensitive settings are retained.';
-  if (code === 'MODEL_CONNECTION_FIELDS_REQUIRED') return zh ? '请填写 API Key 和有效的连接地址。' : 'Enter an API key and a valid endpoint.';
+  if (code === 'MODEL_CONNECTION_NAME_REQUIRED') return zh ? '请填写连接名称，名称过长时请缩短。' : 'Enter a connection name; shorten it if it is too long.';
+  if (code === 'MODEL_CONNECTION_FIELDS_REQUIRED') return zh ? '请填写有效的连接地址。' : 'Enter a valid endpoint.';
   if (code === 'MODEL_CONNECTION_KEY_REQUIRED') return zh ? '请填写 API Key。' : 'Enter an API key.';
   if (code === 'MODEL_CONNECTION_AUTHENTICATION_REJECTED') return zh
     ? '凭据未通过检查。请检查 API Key 后重试，输入已保留。'

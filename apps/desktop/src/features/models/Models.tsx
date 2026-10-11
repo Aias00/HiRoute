@@ -478,6 +478,9 @@ export function Models(props: Props) {
 function connectionLabel(source: ManagedSource, language: 'zh' | 'en') {
   const product = connectionName(source.connection_identity?.connection_option_id, language, source.connection_identity?.product_label ?? '');
   const access = sourceAccess(source);
+  if (access === 'api' && source.display_name) {
+    return product && product !== source.display_name ? `${source.display_name} · ${product}` : source.display_name;
+  }
   if (product) {
     if (source.display_name && source.display_name !== product) return `${source.display_name} · ${product}`;
     if (access === 'subscription') return `${source.display_name || product} · OAuth`;

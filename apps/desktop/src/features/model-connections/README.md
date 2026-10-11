@@ -2,6 +2,13 @@
 
 `ModelConnectionForm` is the MVP-12 domain component for preset API, custom API, direct-free, and API-key-free entries. Its host supplies one `ModelConnectionBackend` implemented through the native protected-input bridge and Client Core. The component does not register Tauri commands or mount itself in the global shell.
 
+`ConnectionDirectory` groups the executable options into a complete branded provider
+directory, with product selection, search and billing filters. The form owns the
+service → configuration → model steps and editable source name. `ConnectionEditingSession`
+retains each product's draft and credential only while that dialog is open; returning
+between steps preserves it, while closing or saving releases unused protected inputs.
+Saved-source edit and append enter configuration directly and retain their lifecycle rules.
+
 The password field is uncontrolled. Its value is passed only to `registerProtectedInput` and cleared immediately; checks, previews, public state, and callbacks use the returned safe candidate reference. Editing the target, protocol, or authentication releases that reference and invalidates the prior check. Once Apply is dispatched, the component stops releasing the protected input because the save operation may have taken ownership, including when the response is uncertain.
 
 Each edit has a client `edit_revision`; every check has a unique `check_id`. A result is rendered only when those values, the candidate lineage, and both returned copies of `input_digest` agree. Save uses the backend `candidate_revision`, maps the enable checkbox to `save_ready`, and uses `save_disabled` for a disabled draft. `complete` facts still pass through backend Preview and Apply authorization.

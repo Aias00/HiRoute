@@ -108,6 +108,7 @@ impl LocalControlAdapter {
             inference_model_id: None,
             models: Vec::new(),
             connection_option_id: connection_option_id.clone(),
+            display_name: source.display_name.clone(),
             expected_catalog: ComputeCatalogProvenanceViewV1 {
                 product_release: provenance.product_release,
                 catalog_binding_id: provenance.catalog_binding_id,
@@ -413,6 +414,7 @@ mod tests {
             inference_model_id: None,
             models: Vec::new(),
             connection_option_id: "bailian.payg.cn.v1".into(),
+            display_name: "团队百炼 · 生产".into(),
             expected_catalog: ComputeCatalogProvenanceViewV1 {
                 product_release: provenance.product_release,
                 catalog_binding_id: provenance.catalog_binding_id,
@@ -795,6 +797,7 @@ mod tests {
             .adapter
             .saved_registered_draft(&saved, &source, &candidate)
             .unwrap();
+        assert_eq!(before_restart.display_name, "团队百炼 · 生产");
         assert_eq!(
             before_restart.trusted_lineage_digest,
             Some(source.lineage_digest.clone())
@@ -823,6 +826,7 @@ mod tests {
             .adapter
             .saved_registered_draft(&saved, &source, &candidate)
             .unwrap();
+        assert_eq!(after_restart.display_name, before_restart.display_name);
         assert_eq!(after_restart.base_url, before_restart.base_url);
         assert_eq!(after_restart.models, before_restart.models);
         assert_eq!(
@@ -856,6 +860,7 @@ mod tests {
             .adapter
             .saved_registered_draft(&saved, &catalog_a_source, &candidate)
             .unwrap();
+        assert_eq!(upgraded.display_name, before_restart.display_name);
         assert_eq!(upgraded.base_url, before_restart.base_url);
         assert!(matches!(
             upgraded.provenance,
