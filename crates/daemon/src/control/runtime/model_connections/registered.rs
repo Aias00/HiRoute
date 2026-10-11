@@ -161,7 +161,10 @@ impl LocalControlAdapter {
             candidate_ref: request.candidate_ref.clone(),
             lineage_ref: request.lineage_ref.clone(),
             trusted_lineage_digest: None,
-            display_name: request.display_name.clone(),
+            display_name: request
+                .display_name
+                .clone()
+                .unwrap_or_else(|| resolved.option.display_name.clone()),
             existing_source_id: request.existing_source_id.clone(),
             edit_revision: request.edit_revision,
             check_id: request.check_id.clone(),
@@ -390,7 +393,7 @@ mod tests {
             inference_model_id: None,
             models: Vec::new(),
             connection_option_id: connection_option_id.into(),
-            display_name: "团队 API".into(),
+            display_name: Some("团队 API".into()),
             expected_catalog: ComputeCatalogProvenanceViewV1 {
                 product_release: provenance.product_release,
                 catalog_binding_id: provenance.catalog_binding_id,
@@ -482,6 +485,54 @@ mod tests {
             .adapter
             .trusted_registered_draft(&request(&catalog, "bailian.payg.cn.v1"))
             .unwrap();
+        assert_eq!(bailian.display_name, "团队 API");
+        let legacy = serde_json::from_str::<hiroute_application_api::ComputeConnectionTestRequestV1>(
+            include_str!("../../../../../application-api/tests/fixtures/v0.3.0-registered-connection-test.json"),
+        ).unwrap();
+        let hiroute_application_api::ComputeConnectionTestRequestV1::Registered { request: legacy } =
+            legacy
+        else {
+            panic!("released fixture is not registered");
+        };
+        let legacy_draft = runtime.adapter.trusted_registered_draft(&legacy).unwrap();
+        let option = listed
+            .options
+            .iter()
+            .find(|option| option.connection_option_id == legacy.connection_option_id)
+            .unwrap();
+        assert_eq!(legacy_draft.display_name, option.display_name);
+        let app = hiroute_application::ApplicationService::new(runtime.application_ports());
+        let protected = |payload| {
+            hiroute_application_api::LocalControlWireRequestV2 {
+                schema_version: hiroute_application_api::SchemaVersion::new(2, 0),
+                request_id: "registered-name-authority".into(),
+                operation_id:
+                    hiroute_application_api::CHECK_REGISTERED_MODEL_CONNECTION_OPERATION_V1.into(),
+                payload,
+                protected_grant: Some(hiroute_application_api::ProtectedClientGrantV2 {
+                    principal_kind: hiroute_application_api::PrincipalKind::Desktop,
+                    capability: "invalid-capability".into(),
+                }),
+            }
+            .authenticate_ambient()
+        };
+        let absent_name = app.dispatch(protected(serde_json::to_value(&legacy).unwrap()));
+        assert_eq!(
+            absent_name.error.unwrap().code,
+            hiroute_application_api::ErrorCode::InvalidArguments
+        );
+        let current = request(&catalog, "bailian.payg.cn.v1");
+        let named = app.dispatch(protected(serde_json::to_value(current).unwrap()));
+        assert_eq!(
+            named.error.unwrap().code,
+            hiroute_application_api::ErrorCode::CapabilityDenied
+        );
+
+        assert_eq!(legacy_draft.protocol, UpstreamProtocol::ChatCompletions);
+        let mut forged = legacy.clone();
+        forged.expected_catalog.cross_reference_digest =
+            hiroute_domain::CanonicalDigest::of_bytes(b"untrusted");
+        assert!(runtime.adapter.trusted_registered_draft(&forged).is_err());
         assert_eq!(bailian.base_url, "https://dashscope.aliyuncs.com");
         assert_eq!(
             bailian.request_path_override.as_deref(),

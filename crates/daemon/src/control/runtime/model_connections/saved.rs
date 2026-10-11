@@ -108,7 +108,7 @@ impl LocalControlAdapter {
             inference_model_id: None,
             models: Vec::new(),
             connection_option_id: connection_option_id.clone(),
-            display_name: source.display_name.clone(),
+            display_name: Some(source.display_name.clone()),
             expected_catalog: ComputeCatalogProvenanceViewV1 {
                 product_release: provenance.product_release,
                 catalog_binding_id: provenance.catalog_binding_id,
@@ -414,7 +414,7 @@ mod tests {
             inference_model_id: None,
             models: Vec::new(),
             connection_option_id: "bailian.payg.cn.v1".into(),
-            display_name: "团队百炼 · 生产".into(),
+            display_name: Some("团队百炼 · 生产".into()),
             expected_catalog: ComputeCatalogProvenanceViewV1 {
                 product_release: provenance.product_release,
                 catalog_binding_id: provenance.catalog_binding_id,
