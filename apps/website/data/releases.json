@@ -2,6 +2,67 @@
   "schema": "hiroute.website.releases/v2",
   "releases": [
     {
+      "version": "0.3.1",
+      "channel": "stable",
+      "published_at": "2026-10-11T17:45:36Z",
+      "notes": {
+        "zh": "修复订阅连接代理与登录入口、原生客户端会话关联和 Mac 应用内升级失败恢复，完善 API 接入服务目录与模型选择，并保持已发布 CLI 接入检查请求兼容。",
+        "en": "Fixes subscription proxy/sign-in navigation, native-client session correlation and macOS in-app upgrade failure recovery; improves the API provider/product directory and model selection while preserving released CLI connection-probe requests."
+      },
+      "artifacts": [
+        {
+          "kind": "desktop",
+          "platform": "macOS",
+          "architecture": "arm64",
+          "format": "dmg",
+          "minimum_os": "15.0",
+          "distribution": "self-signed",
+          "filename": "HiRoute-0.3.1-13856abd873d-macos-arm64-trial.dmg",
+          "sha256": "de2ce3e347042b3ccd0539c88302727de68c616c490bbcdde56aa6d443d11c93",
+          "size": 82134076
+        },
+        {
+          "kind": "desktop",
+          "platform": "macOS",
+          "architecture": "x86_64",
+          "format": "dmg",
+          "minimum_os": "15.0",
+          "distribution": "self-signed",
+          "filename": "HiRoute-0.3.1-13856abd873d-macos-x86_64-trial.dmg",
+          "sha256": "f7df718e063241904fa1ef60e01f2e186a8fb64bcfb40c6bcad9b597358959d5",
+          "size": 89150787
+        },
+        {
+          "kind": "standalone",
+          "platform": "Linux",
+          "architecture": "x86_64",
+          "target": "x86_64-unknown-linux-gnu",
+          "format": "tar.gz",
+          "distribution": "unsigned",
+          "filename": "hiroute-0.3.1-13856abd873d-x86_64-unknown-linux-gnu.tar.gz",
+          "sha256": "dfa35ada12fcef9d0d2e10e680422cd0bf6a0454a8809c27879b74ba932d21aa",
+          "size": 67427520,
+          "manifest_filename": "hiroute-0.3.1-13856abd873d-x86_64-unknown-linux-gnu.tar.gz.json",
+          "manifest_sha256": "e7e313ac6d709ecaed9411f1c01121542d512f572bbe40542f8f2dd6a9474509",
+          "manifest_size": 2122
+        },
+        {
+          "kind": "standalone",
+          "platform": "Linux",
+          "architecture": "aarch64",
+          "target": "aarch64-unknown-linux-gnu",
+          "format": "tar.gz",
+          "distribution": "unsigned",
+          "filename": "hiroute-0.3.1-13856abd873d-aarch64-unknown-linux-gnu.tar.gz",
+          "sha256": "217960ee3982767de0f91c6ffb1b3515376942f54cd83e52de32ded73f38987c",
+          "size": 63379340,
+          "manifest_filename": "hiroute-0.3.1-13856abd873d-aarch64-unknown-linux-gnu.tar.gz.json",
+          "manifest_sha256": "07f8798dbcebffc011d85cf243f56023b765ce156be3c84fa12bd7a209dfa1d8",
+          "manifest_size": 2123
+        }
+      ]
+    },
+    {
       "version": "0.3.0",
       "channel": "stable",
       "published_at": "2026-10-11T09:54:56Z",
