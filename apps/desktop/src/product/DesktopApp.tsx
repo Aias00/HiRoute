@@ -40,6 +40,7 @@ import { RoutingPage, type RoutingEditorIntent } from './RoutingPage';
 import { SettingsPage } from './SettingsPage';
 import { useDesktopHome } from './use-desktop-home';
 import { safeDiagnosticCode } from '../error-code';
+import { takeSubscriptionProxyReturn } from '../features/subscription-proxy-return';
 import { planErrorMessage } from '../plan-editor-errors';
 import {
   acceptObservedOperation,
@@ -58,6 +59,7 @@ type ModelIntent = {
   key: string;
   sourceId?: string | null;
   startAdding?: boolean;
+  startScanning?: boolean;
   notice?: string;
 };
 
@@ -128,6 +130,14 @@ export function DesktopApp() {
   const [sessionIntent, setSessionIntent] = useState<SessionIntent>({ key: 'sessions/default' });
   const pollingGeneration = useRef(0);
   const supersededPendingKey = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!home.desktopSnapshot?.trusted_authority || !home.desktopSnapshot.service.mutation_available) return;
+    if (!takeSubscriptionProxyReturn()) return;
+    setModelIntent({ key: 'models/proxy-return', startScanning: true });
+    setVisited(current => new Set([...current, 'models']));
+    setPage('models');
+  }, [home.desktopSnapshot?.trusted_authority, home.desktopSnapshot?.service.mutation_available]);
 
   const text = language === 'zh'
     ? {
@@ -649,11 +659,11 @@ export function DesktopApp() {
             language={language}
             active={page === 'models' && modelTab === 'general'}
             tabs={modelTabs}
-            onOpenNetworkSettings={() => void navigate('settings')}
             trustedAuthority={Boolean(home.desktopSnapshot?.trusted_authority && home.desktopSnapshot.service.mutation_available)}
             refreshVersion={refreshVersion}
             initialSourceId={modelIntent.sourceId}
             startAdding={modelIntent.startAdding}
+            startScanning={modelIntent.startScanning}
             notice={modelIntent.notice}
             onOperation={value => acceptOperation(value, { kind: 'model-connection' })}
             onRecoveryRefresh={() => void home.refreshAll()}
@@ -742,13 +752,11 @@ export function DesktopApp() {
           language={language}
           languagePreference={preferences.languagePreference}
           theme={preferences.theme}
-          textScale={preferences.textScale}
           serviceLabel={settingsServiceLabel}
           serviceReady={serviceOperational}
           onServiceChanged={home.refreshDesktop}
           onLanguageChange={preferences.setLanguage}
           onThemeChange={preferences.setTheme}
-          onTextScaleChange={preferences.setTextScale}
           onOpenSessions={() => {
             void (async () => {
               if (!await allowPageChange('sessions')) return;

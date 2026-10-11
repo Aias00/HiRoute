@@ -1,20 +1,18 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useEffect, useState } from 'react';
-import { SubscriptionProxySettings } from '../features/SubscriptionProxySettings';
 import { DiagnosticsSettings } from '../features/diagnostics/DiagnosticsSettings';
 import { UpdatesSettings } from '../features/UpdatesSettings';
 import { safeDiagnosticCode } from '../error-code';
 import { ProductPage } from '../ui';
-import type { Language, LanguagePreference, TextScale, ThemePreference } from '../ui/preferences';
+import type { Language, LanguagePreference, ThemePreference } from '../ui/preferences';
 import { listenerApplyRequest, listenerScopeFromAddress, type GatewayListenerScope } from './gateway-listener-scope';
 
 type SettingsPageProps = {
-  active: boolean; language: Language; languagePreference: LanguagePreference; theme: ThemePreference; textScale: TextScale;
+  active: boolean; language: Language; languagePreference: LanguagePreference; theme: ThemePreference;
   serviceLabel: string; serviceReady: boolean;
   onServiceChanged: () => Promise<void>;
   onLanguageChange: (language: LanguagePreference) => void;
   onThemeChange: (theme: ThemePreference) => void;
-  onTextScaleChange: (scale: TextScale) => void;
   onOpenSessions: (scope?: 'content_only' | 'facts_and_content') => void;
 };
 
@@ -178,9 +176,6 @@ export function SettingsPage(props: SettingsPageProps) {
         <div className="settings-row"><div className="settings-copy"><strong>{text('外观', 'Appearance')}</strong><span>{text('默认跟随系统，可随时切换', 'Follows the system by default')}</span></div>
           <div className="segmented">{(['system', 'light', 'dark'] as const).map(theme => <button type="button" key={theme} className={`segment ${props.theme === theme ? 'active' : ''}`} aria-pressed={props.theme === theme} onClick={() => props.onThemeChange(theme)}>{theme === 'system' ? text('跟随系统', 'System') : theme === 'light' ? text('浅色', 'Light') : text('深色', 'Dark')}</button>)}</div>
         </div>
-        <div className="settings-row"><div className="settings-copy"><strong>{text('文字大小', 'Text size')}</strong><span>{text('标题、正文、提示和控件一起缩放', 'Scales headings, body text, messages, and controls together')}</span></div>
-          <div className="segmented">{([1, 1.5, 2] as const).map(scale => <button type="button" key={scale} className={`segment ${props.textScale === scale ? 'active' : ''}`} aria-pressed={props.textScale === scale} onClick={() => props.onTextScaleChange(scale)}>{Math.round(scale * 100)}%</button>)}</div>
-        </div>
       </div></section>
       <section className="settings-group"><h2>Worker</h2><div className="settings-list"><div className="settings-row">
         <div className="settings-copy"><strong>{text('并发任务上限', 'Concurrent task limit')}</strong><span>{workerLimit === null ? text('允许 1–1000 个任务', 'Allows 1–1000 tasks') : text(`当前生效：${workerLimit}`, `Effective now: ${workerLimit}`)}</span></div>
@@ -193,7 +188,6 @@ export function SettingsPage(props: SettingsPageProps) {
         <div className="settings-copy"><strong>{text('会话内容', 'Session content')}</strong><span>{text('在会话详情中，可以清理该会话的正文或记录。', 'Clear content or records from each session’s detail view.')}</span></div>
         <button className="btn" type="button" onClick={() => props.onOpenSessions()}>{text('查看会话', 'View sessions')}</button>
       </div></div></section>
-      <SubscriptionProxySettings active={props.active} language={props.language} />
       <DiagnosticsSettings active={props.active} language={props.language} />
       <UpdatesSettings active={props.active} language={props.language} onServiceChanged={props.onServiceChanged} />
       <section className="settings-group"><h2>CLI</h2><div className="settings-list"><div className="settings-row">

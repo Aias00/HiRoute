@@ -14,8 +14,14 @@ async function until(predicate, label, timeout = 6000) {
   await pause(30);
 }
 async function click(label) { await until(() => button(label), label); button(label).click(); await pause(40); }
+async function deviceScan() {
+  await click('模型'); await click('添加模型');
+  await until(() => all('.add-choice').some(item => item.textContent.includes('扫描本机')), 'scan choice');
+  all('.add-choice').find(item => item.textContent.includes('扫描本机')).click();
+  await until(() => button('设置订阅连接代理') && !button('设置订阅连接代理').disabled, 'ready device scan');
+}
 async function fresh(setup = () => {}) {
-  c().reset(); setup(); await until(() => text().includes('仅在本机运行'), 'ready DesktopApp');
+  c().reset(); setup(); await until(() => visible(document.querySelector('.sidebar-health .status-dot.good')), 'ready DesktopApp');
 }
 function setInput(input, value) {
   assert(input, 'Expected an editable input');
@@ -38,6 +44,172 @@ async function routing() {
   await until(() => document.querySelector('.plan-identity-fields input'), 'route editor');
 }
 const scenarios = [
+  scenario('desktop.models.subscription-scan.append-to-login', ['subscription-proxy', 'subscription-login'], 'Independent sign-in from an append scan creates a new connection instead of retaining the previous append target', async () => {
+    let previous;
+    await fresh(() => {
+      previous = JSON.stringify(c().management.sources.find(source => source.source_id === 'source/codex/subscription'));
+      const borrowed = c().fixtureResponse('compute_subscriptions', {}).candidates[0];
+      const pending = { ...borrowed, existing_source_id: undefined, display_name: 'New independent account', candidate: { candidate_ref: 'candidate/independent-new-account', candidate_revision: 1 } };
+      const base = c().fixtureResponse('check_subscription', {});
+      const checked = { ...base.checked_candidate, existing_source_id: undefined, display_name: pending.display_name,
+        candidate: { ...pending.candidate, candidate_revision: 2 },
+        models: [{ ...base.checked_candidate.models[0], model_ref: 'model-ref/independent-new-account' }],
+      };
+      c().handlers.compute_subscriptions = () => ({ discovery_state: 'complete', candidates: [borrowed, pending] });
+      c().handlers.manage_subscription_login = ({ request }) => ({ schema: 'hiroute.subscription-login-result/v1', sessions: request.provider === 'codex'
+        ? [{ provider: 'codex', login_ref: 'login/independent-new-account', status: 'authorized', candidate: pending.candidate }]
+        : [] });
+      c().handlers.check_subscription = () => ({ ...base, candidate: checked.candidate, checked_candidate: checked });
+    });
+    await click('模型'); await click('向此接入添加模型');
+    await until(() => button('返回') && text().includes('Codex 本机订阅'), 'append subscription detail');
+    await click('返回'); await click('连接订阅（推荐）');
+    await click('检查并选择模型'); await click('检查订阅');
+    await until(() => button('保存接入'), 'new account checked');
+    await click('保存接入');
+    await until(() => calls('preview_compute_save').length || document.querySelector('[data-error-code]'), 'save outcome');
+    assert(calls('preview_compute_save').length === 1, 'New independent account kept the previous append target and cannot save');
+    const change = calls('preview_compute_save')[0].payload.change;
+    assert(!change.edit && change.subject.candidate.candidate_ref === 'candidate/independent-new-account', 'New login was saved as an append to the old connection');
+    assert(JSON.stringify(change.selected_model_refs) === '["model-ref/independent-new-account"]', 'New login selection reused old membership');
+    await until(() => calls('apply_compute_save').length === 1, 'new connection apply');
+    assert(JSON.stringify(c().management.sources.find(source => source.source_id === 'source/codex/subscription')) === previous, 'Previous connection was changed');
+  }),
+  scenario('desktop.models.subscription-scan.recommended-login', ['subscription-proxy', 'subscription-login'], 'Scan explains native credential refresh and opens independent sign-in without authorizing or saving', async () => {
+    for (const language of ['zh', 'en']) {
+      for (const previousScale of [1, 1.5, 2]) {
+        await fresh(() => { c().handlers.manage_subscription_login = async () => { await pause(150); return { schema: 'hiroute.subscription-login-result/v1', sessions: [] }; }; });
+        const saved = JSON.stringify(c().management);
+        localStorage.setItem('hiroute.language', language);
+        localStorage.setItem('hiroute.text-scale', String(previousScale));
+        c().remount();
+        const label = (zh, en) => language === 'zh' ? zh : en;
+        await click(label('模型', 'Models')); await click(label('添加模型', 'Add models'));
+        const scanLabel = label('扫描本机', 'Scan this device');
+        await until(() => all('.add-choice').some(item => item.textContent.includes(scanLabel)), 'scan choice');
+        all('.add-choice').find(item => item.textContent.includes(scanLabel)).click();
+        const entryLabel = label('连接订阅（推荐）', 'Connect subscription (recommended)');
+        await until(() => button(entryLabel), 'recommended independent sign-in entry');
+        assert(document.querySelector('.hr-ui').dataset.textScale === '1', 'Scan retained a previous enlarged text preference');
+        const note = document.querySelector('.subscription-reuse-note');
+        assert(note.textContent.includes(label('依赖 Codex / Claude Code', 'depends on Codex / Claude Code')) && note.textContent.includes(label('自动刷新登录凭据', 'automatically refresh sign-in credentials')), 'Scan does not explain both credential refresh owners');
+        assert(!text().includes('自动续期'), 'Paid-subscription renewal copy remains');
+        const entry = button(entryLabel);
+        entry.scrollIntoView({ block: 'center' }); await pause(40);
+        const bounds = note.getBoundingClientRect();
+        const buttonBounds = entry.getBoundingClientRect();
+        const footer = document.querySelector('.modal-foot').getBoundingClientRect();
+        assert(note.scrollWidth <= note.clientWidth + 1 && entry.scrollWidth <= entry.clientWidth + 1, 'Refresh guidance or recommendation overflows horizontally');
+        assert(buttonBounds.left >= bounds.left && buttonBounds.right <= bounds.right && buttonBounds.bottom <= footer.top + 1, 'Recommendation is outside the note or obscured by the footer');
+        assert(footer.bottom <= innerHeight + 1, 'Fixed scan actions left the viewport');
+        for (const copy of note.querySelectorAll('p')) {
+          const range = document.createRange(); range.selectNodeContents(copy);
+          assert([...range.getClientRects()].every(rect => rect.left >= bounds.left - 1 && rect.right <= bounds.right + 1), 'Refresh guidance text is clipped');
+        }
+        const closes = calls('close_subscription_check').length;
+        await click(entryLabel);
+        await until(() => all('[role="dialog"] h2').some(item => item.textContent === label('连接订阅', 'Connect subscription')), 'independent sign-in dialog');
+        await until(() => calls('manage_subscription_login').length > 0, 'existing login session listing');
+        await until(() => all('.oc-scan-detail .btn-primary').some(item => !item.disabled), 'login session list completed');
+        await pause(40);
+        assert(text().includes(label('自动刷新登录凭据', 'automatically refresh sign-in credentials')), 'Sign-in copy does not explain automatic credential refresh');
+        const intro = document.querySelector('.v3-select-intro');
+        const body = intro.closest('.modal-body');
+        assert(intro.getBoundingClientRect().top >= body.getBoundingClientRect().top - 1, 'Initial login focus scrolled the credential-refresh explanation out of view');
+        assert(calls('close_subscription_check').length === closes + 1, 'Scan check intent was not released');
+        assert(calls('manage_subscription_login').every(item => item.payload.request.action === 'list'), 'Opening the recommendation automatically started authorization');
+        assert(calls('check_subscription').length === 0 && calls('apply_compute_save').length === 0 && calls('subscription_proxy_apply').length === 0 && JSON.stringify(c().management) === saved, 'Navigation mutated a connection or proxy');
+        all('summary').find(item => item.textContent.includes(label('复用本机登录', 'Reuse a local sign-in'))).click(); await pause(40);
+        await click(label('扫描本机登录', 'Find local sign-ins'));
+        await until(() => button(entryLabel), 'return to fresh device scan');
+      }
+    }
+  }),
+  scenario('desktop.models.subscription-proxy.inline-cancel', ['subscription-proxy'], 'Proxy editing stays in the scan and cancelling retains its results and selected subscription', async () => {
+    const saved = { config: { revision: 'fixture', policy: { mode: 'manual', url: 'http://proxy.example:8080', no_proxy: 'example.org' } }, applied: true };
+    await fresh(() => { c().handlers.subscription_proxy_status = () => structuredClone(saved); });
+    await click('设置');
+    assert(!text().includes('订阅连接代理') && calls('subscription_proxy_status').length === 0, 'Settings still owns the proxy entry');
+    await deviceScan();
+    await until(() => button('调整模型'), 'scanned subscription');
+    const dialog = document.querySelector('[role="dialog"]');
+    const list = document.querySelector('.oc-scan-list');
+    await click('设置订阅连接代理');
+    await until(() => document.querySelector('[aria-label="订阅代理地址"]'), 'saved manual proxy');
+    assert(document.querySelector('[role="dialog"]') === dialog && document.querySelector('.oc-scan-list') === list, 'Proxy entry replaced the scan');
+    assert(all('.subscription-proxy-scan-content button').every(item => item.matches(':disabled')), 'Scan actions remain enabled during proxy editing');
+    assert(text().includes('全部订阅及订阅检查') && text().includes('正在执行的请求和任务可能中断'), 'Scope or restart impact missing');
+    assert(getComputedStyle(document.querySelector('.subscription-proxy-control')).display === 'flex', 'Proxy form layout is missing from the production stylesheet');
+    assert(getComputedStyle(document.querySelector('.subscription-proxy-scan-content')).borderTopWidth === '0px', 'Disabled scan inherited an unintended fieldset border');
+    const panelBounds = document.querySelector('.subscription-proxy-panel').getBoundingClientRect();
+    const dialogBounds = dialog.getBoundingClientRect();
+    assert(panelBounds.left >= dialogBounds.left && panelBounds.right <= dialogBounds.right, 'Proxy form overflows the scan dialog');
+    for (const label of all('.subscription-proxy-control .field-label')) {
+      const range = document.createRange(); range.selectNodeContents(label.firstChild);
+      const labelText = range.getBoundingClientRect();
+      const control = label.querySelector('input, select').getBoundingClientRect();
+      assert(labelText.height <= parseFloat(getComputedStyle(label).lineHeight) * 2, 'Proxy field label wraps into a narrow column');
+      assert(control.top >= labelText.bottom && control.left >= panelBounds.left && control.right <= panelBounds.right, 'Proxy field collides with its label or panel edge');
+    }
+    assert(document.querySelector('[aria-label="订阅代理地址"]').placeholder === 'http://127.0.0.1:端口', 'Proxy placeholder exposes a fixed port');
+    setInput(document.querySelector('[aria-label="订阅代理地址"]'), 'http://draft.example:9000');
+    await click('取消');
+    assert(document.querySelector('.oc-scan-list') === list && !button('调整模型').matches(':disabled'), 'Cancel lost or locked the scan');
+    assert(calls('subscription_proxy_apply').length === 0, 'Cancel applied a draft');
+    await click('调整模型');
+    const detail = document.querySelector('.oc-scan-detail');
+    await click('设置订阅连接代理');
+    await until(() => document.querySelector('[aria-label="订阅代理地址"]')?.value === saved.config.policy.url, 'discarded draft and saved readback');
+    document.querySelector('[role="dialog"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await until(() => !document.querySelector('.subscription-proxy-panel'), 'Escape collapses editor');
+    assert(document.querySelector('.oc-scan-detail') === detail && document.querySelector('[role="dialog"]') === dialog, 'Escape lost the selected subscription');
+  }),
+  scenario('desktop.models.subscription-proxy.read-retry', ['subscription-proxy'], 'An unread proxy policy cannot be overwritten and retry loads the saved mode', async () => {
+    let attempts = 0;
+    await fresh(() => { c().handlers.subscription_proxy_status = () => {
+      if (++attempts === 1) throw new Error('SUBSCRIPTION_PROXY_UNAVAILABLE');
+      return { config: { revision: 'fixture', policy: { mode: 'direct' } }, applied: false };
+    }; });
+    await deviceScan(); await click('设置订阅连接代理');
+    await until(() => button('重试读取'), 'read failure');
+    assert(button('保存并重启 HiRoute').disabled && !document.querySelector('[aria-label="订阅代理模式"]'), 'Unknown policy can be edited or saved');
+    button('保存并重启 HiRoute').click(); await pause(40);
+    assert(calls('subscription_proxy_apply').length === 0, 'Read failure overwrote the saved policy');
+    await click('重试读取');
+    await until(() => document.querySelector('[aria-label="订阅代理模式"]')?.value === 'direct', 'retried saved policy');
+    assert(!button('保存并重启 HiRoute').disabled && text().includes('等待应用或服务就绪'), 'Retry did not restore editing or misreported application');
+  }),
+  scenario('desktop.models.subscription-proxy.save-retry-return', ['subscription-proxy'], 'Save failure retains the draft and a successful restart returns to a fresh scan with saved configuration', async () => {
+    let saved = { config: { revision: 'fixture', policy: { mode: 'inherit' } }, applied: true };
+    let fail = true;
+    await fresh(() => {
+      c().handlers.subscription_proxy_status = () => structuredClone(saved);
+      c().handlers.subscription_proxy_apply = ({ policy }) => {
+        if (fail) throw new Error('SUBSCRIPTION_PROXY_INVALID_OR_UNAVAILABLE');
+        saved = { config: { revision: 'next', policy }, applied: true };
+        c().remount();
+      };
+    });
+    await deviceScan(); await click('设置订阅连接代理');
+    await until(() => document.querySelector('[aria-label="订阅代理模式"]'), 'proxy modes');
+    const select = document.querySelector('[aria-label="订阅代理模式"]');
+    assert([...select.options].map(item => item.value).join(',') === 'inherit,direct,manual', 'Existing modes changed');
+    select.value = 'manual'; select.dispatchEvent(new Event('change', { bubbles: true })); await pause(40);
+    setInput(document.querySelector('[aria-label="订阅代理地址"]'), 'http://proxy.example:8080');
+    setInput(document.querySelector('[aria-label="订阅代理绕过列表"]'), 'example.org');
+    await click('保存并重启 HiRoute');
+    await until(() => text().includes('输入已保留'), 'failed save');
+    assert(document.querySelector('[aria-label="订阅代理地址"]').value === 'http://proxy.example:8080' && document.querySelector('[aria-label="订阅代理绕过列表"]').value === 'example.org', 'Save failure discarded input');
+    assert(!localStorage.getItem('hiroute.subscription-proxy-return'), 'Failed save left a restart hint');
+    const scans = calls('compute_subscriptions').length;
+    fail = false; await click('保存并重启 HiRoute');
+    await until(() => document.querySelector('.oc-scan-list') && !document.querySelector('.subscription-proxy-panel'), 'restart returned to scan');
+    assert(calls('compute_subscriptions').length > scans && !localStorage.getItem('hiroute.subscription-proxy-return'), 'Restart reused stale scan or retained navigation hint');
+    assert(calls('subscription_proxy_apply').length === 2 && calls('check_subscription').length === 0, 'Save was duplicated or restart automatically checked a subscription');
+    assert(JSON.stringify(calls('subscription_proxy_apply')[1].payload.policy) === JSON.stringify(saved.config.policy), 'Saved policy changed');
+    await click('设置订阅连接代理');
+    await until(() => document.querySelector('[aria-label="订阅代理地址"]')?.value === saved.config.policy.url, 'saved proxy on reopen');
+  }),
   scenario('desktop.models.selection-survives-save-refresh', ['model-connections'], 'Renaming a selected connection does not jump back to the previous save result', async () => {
     let a; let b; let beforeB; let latestChange;
     await fresh(() => {
@@ -526,13 +698,23 @@ const scenarios = [
     }
     assert(calls('save_decision_service').length === 0, 'Discard persisted an edit');
   }),
-  scenario('desktop.settings.persisted-scale', ['desktop-presentation'], 'Settings apply and persist all supported text scales through the shell', async () => {
+  scenario('desktop.settings.fixed-scale', ['desktop-presentation'], 'Settings omit text size and normalize old enlarged preferences without losing language or appearance', async () => {
     await fresh(); await click('设置');
-    for (const [label, value] of [['150%', '1.5'], ['200%', '2'], ['100%', '1']]) {
-      await click(label);
-      assert(button(label).getAttribute('aria-pressed') === 'true', 'Scale choice did not become selected');
-      assert(document.querySelector('.hr-ui').dataset.textScale === value, 'Shell did not apply the selected scale');
-      assert(localStorage.getItem('hiroute.text-scale') === value, 'Selected scale was not persisted');
+    const titleSize = getComputedStyle(all('.main .page-title')[0]).fontSize;
+    for (const previousScale of ['1.5', '2']) {
+      localStorage.setItem('hiroute.language', 'zh');
+      localStorage.setItem('hiroute.theme', 'dark');
+      localStorage.setItem('hiroute.text-scale', previousScale);
+      c().remount(); await click('设置');
+      assert(document.querySelector('.hr-ui').dataset.textScale === '1' && getComputedStyle(all('.main .page-title')[0]).fontSize === titleSize, 'Previous text size is still applied by the real shell');
+      assert(localStorage.getItem('hiroute.text-scale') === '1', 'Previous scale was not normalized in storage');
+      assert(!text().includes('文字大小') && !['100%', '150%', '200%'].some(label => button(label)), 'Text size controls remain in Settings');
+      assert(button('深色').getAttribute('aria-pressed') === 'true', 'Normalizing text changed the appearance preference');
+      await click('English'); await click('Light');
+      c().remount(); await click('Settings');
+      assert(document.querySelector('.hr-ui').lang === 'en' && document.querySelector('.hr-ui').dataset.theme === 'light', 'Language or appearance did not survive remount');
+      assert(document.querySelector('.hr-ui').dataset.textScale === '1' && localStorage.getItem('hiroute.text-scale') === '1', 'Remount restored the enlarged scale');
+      assert(!text().includes('Text size') && !['100%', '150%', '200%'].some(label => button(label)), 'English Settings still expose text size controls');
     }
   }),
   scenario('desktop.operation.dismiss-observes', ['operation-feedback'], 'Closing feedback leaves the operation observable and never cancels it', async () => {

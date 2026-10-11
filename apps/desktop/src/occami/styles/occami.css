@@ -14,6 +14,9 @@
 .oc-status-row strong {display:block;font-size:calc(13px * var(--hr-text-scale));}
 .oc-status-row p {margin:6px 0 0;font-size:calc(12px * var(--hr-text-scale));line-height:1.7;color:var(--text-muted);}
 .oc-scan-detail {display:grid;gap:16px;}
+.subscription-reuse-note {display:flex;flex-direction:column;align-items:flex-start;gap:10px;min-width:0;margin:0 0 16px;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--bg-soft);}
+.subscription-reuse-note>.oc-meta {margin:0;overflow-wrap:anywhere;}
+.subscription-reuse-note>.btn {max-width:100%;height:auto;min-height:calc(36px * var(--hr-text-scale));padding:8px 14px;white-space:normal;line-height:1.45;text-align:center;}
 .oc-section-label {font-size:calc(12px * var(--hr-text-scale));font-weight:500;color:var(--text-muted);margin:22px 0 12px;}
 .oc-field-grid {display:grid;grid-template-columns:1fr 1fr;gap:0 16px;}
 .oc-field-grid>.field {min-width:0;}

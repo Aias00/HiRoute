@@ -69,7 +69,7 @@ function Harness() {
   const [languagePreference, setLanguagePreference] = useState<LanguagePreference>(() => parseLanguage(params.get('lang'), 'zh'));
   const language = resolveLanguage(languagePreference, navigator.language);
   const [theme, setTheme] = useState<ThemePreference>(() => parseTheme(params.get('theme')));
-  const [textScale, setTextScale] = useState<TextScale>(() => parseTextScale(params.get('scale')));
+  const [textScale] = useState<TextScale>(() => parseTextScale(params.get('scale')));
   const [page, setPage] = useState<Page>(initialPage);
   const [newRouteFromModel, setNewRouteFromModel] = useState<string | null>(null);
   const reads = productHomeReads(scenario);
@@ -125,7 +125,7 @@ function Harness() {
       : page === 'routing' ? <RoutingPage language={language} snapshot={freshProduct ? { ...readyDesktop, catalog: { plans: [], drafts: [] } } : readyDesktop} agentSnapshot={freshProduct ? { ...readyAgents, agents: [] } : readyAgents} loading={false} busy={false} initialEditor={newRouteFromModel ? { key: 'new/from-model', initialBindingId: newRouteFromModel } : freshProduct ? null : { key: dailyPlan.agent_plan_id, plan: dailyPlan }} onRefresh={async () => undefined} onOperation={() => undefined} onOpenAgent={() => setPage('agents')} />
     : page === 'agents' ? <Agents language={language} initialAgentId={params.get('capture') === 'task_routing_only' ? 'agent_claude_default' : null} initialFacet="collaboration" initialTab={scenario === 'task_cancelled' ? 'tasks' : 'configuration'} initialTaskId={scenario === 'task_cancelled' ? 'task/fix-empty-list' : null} taskRead={taskRead} onTaskCancel={async (_task, onAccepted) => { fixtureTrace.commands.push('fixture_task_cancel'); onAccepted?.('cancelling'); await wait(1200); return 'cancelled'; }} onOpenTaskSession={() => setPage('sessions')} onCreatePlan={() => setPage('routing')} onMutation={() => undefined} />
           : page === 'sessions' ? <Sessions language={language} initialSession={scenario === 'gap' ? 'session/stream-gap' : null} onOpenAgents={() => setPage('agents')} />
-            : <SettingsPage active language={language} languagePreference={languagePreference} theme={theme} textScale={textScale} serviceLabel={labels.service} serviceReady={serviceReady} onLanguageChange={setLanguagePreference} onThemeChange={setTheme} onTextScaleChange={setTextScale} onOpenSessions={() => setPage('sessions')} />;
+            : <SettingsPage active language={language} languagePreference={languagePreference} theme={theme} serviceLabel={labels.service} serviceReady={serviceReady} onServiceChanged={async () => {}} onLanguageChange={setLanguagePreference} onThemeChange={setTheme} onOpenSessions={() => setPage('sessions')} />;
 
   return <PresentationRoot language={language} theme={resolveTheme(theme, matchMedia('(prefers-color-scheme: dark)').matches)} textScale={textScale}>
     <div className="app-window">

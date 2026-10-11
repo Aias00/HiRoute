@@ -17,6 +17,7 @@ const control = {
   clipboard: [] as string[],
   handlers: {} as Record<string, (payload: Record<string, unknown>) => unknown>,
   fixtureResponse: (command: string, payload: Record<string, unknown>) => mockProductInvoke(command, payload, 'ready'),
+  remount: () => root.render(<DesktopApp key={++generation} />),
   reset: () => {
     control.desktop = structuredClone(readyDesktop);
     control.agents = structuredClone(readyAgents);
@@ -26,7 +27,8 @@ const control = {
     control.handlers = {};
     localStorage.setItem('hiroute.language', 'zh');
     localStorage.setItem('hiroute.text-scale', '1');
-    root.render(<DesktopApp key={++generation} />);
+    localStorage.removeItem('hiroute.subscription-proxy-return');
+    control.remount();
   },
 };
 Object.assign(window, { productShell: control });

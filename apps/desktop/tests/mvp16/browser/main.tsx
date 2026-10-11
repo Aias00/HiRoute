@@ -50,7 +50,7 @@ function Harness() {
   const [languagePreference, setLanguagePreference] = useState<LanguagePreference>(initialLanguage);
   const language = resolveLanguage(languagePreference, navigator.language);
   const [theme, setTheme] = useState<ThemePreference>(initialTheme);
-  const [textScale, setTextScale] = useState<TextScale>(initialScale);
+  const [textScale] = useState<TextScale>(initialScale);
   const [scenario, setScenario] = useState<ScenarioName>(initialScenario);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -60,8 +60,8 @@ function Harness() {
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
   const resolvedTheme = resolveTheme(theme, prefersDark);
   const text = language === 'zh'
-    ? { page: '首页', settings: '显示设置', edit: '测试输入保留', close: '关闭', check: '组件检查', scenario: '场景', saveDraft: '保留输入', discardTitle: '放弃未保存输入？', discardBody: '只有这段非敏感测试输入会丢失。', keep: '继续编辑', discard: '放弃输入', draft: '非敏感草稿', draftHint: '切换语言、主题或字号后，这段输入必须仍然存在。' }
-    : { page: 'Home', settings: 'Display settings', edit: 'Test input retention', close: 'Close', check: 'Component check', scenario: 'Scenario', saveDraft: 'Keep input', discardTitle: 'Discard unsaved input?', discardBody: 'Only this non-sensitive test input will be lost.', keep: 'Keep editing', discard: 'Discard input', draft: 'Non-sensitive draft', draftHint: 'This input must remain after language, theme, or text-size changes.' };
+    ? { page: '首页', settings: '显示设置', edit: '测试输入保留', close: '关闭', check: '组件检查', scenario: '场景', saveDraft: '保留输入', discardTitle: '放弃未保存输入？', discardBody: '只有这段非敏感测试输入会丢失。', keep: '继续编辑', discard: '放弃输入', draft: '非敏感草稿', draftHint: '切换语言或主题后，这段输入必须仍然存在。' }
+    : { page: 'Home', settings: 'Display settings', edit: 'Test input retention', close: 'Close', check: 'Component check', scenario: 'Scenario', saveDraft: 'Keep input', discardTitle: 'Discard unsaved input?', discardBody: 'Only this non-sensitive test input will be lost.', keep: 'Keep editing', discard: 'Discard input', draft: 'Non-sensitive draft', draftHint: 'This input must remain after language or theme changes.' };
 
   function closeEditor() {
     discard.requestClose();
@@ -85,7 +85,7 @@ function Harness() {
         </div>
       </div>
       <Dialog open={settingsOpen} title={text.settings} description={language === 'zh' ? '偏好是本机非秘密数据；切换不会重建页面业务状态。' : 'Preferences are non-secret local data. Changes do not recreate page state.'} closeLabel={text.close} onClose={() => setSettingsOpen(false)}>
-        <PresentationControls language={language} languagePreference={languagePreference} theme={theme} textScale={textScale} onLanguageChange={setLanguagePreference} onThemeChange={setTheme} onTextScaleChange={setTextScale} />
+        <PresentationControls language={language} languagePreference={languagePreference} theme={theme} onLanguageChange={setLanguagePreference} onThemeChange={setTheme} />
       </Dialog>
       <Dialog
         open={editorOpen}
@@ -99,7 +99,7 @@ function Harness() {
       >
         <label className="hr-test-draft"><span>{text.draft}</span><textarea id="draft-note" data-autofocus value={draft} onChange={event => setDraft(event.target.value)} /></label>
         <div className="hr-test-draft-prefs">
-          <PresentationControls language={language} languagePreference={languagePreference} theme={theme} textScale={textScale} onLanguageChange={setLanguagePreference} onThemeChange={setTheme} onTextScaleChange={setTextScale} />
+          <PresentationControls language={language} languagePreference={languagePreference} theme={theme} onLanguageChange={setLanguagePreference} onThemeChange={setTheme} />
         </div>
       </Dialog>
     </PresentationRoot>

@@ -7,7 +7,8 @@ import { connectPage, evaluate, navigate, waitFor } from './cdp-client.mjs';
 const port = Number(process.argv[2]);
 const baseUrl = process.argv[3];
 const outputRoot = path.resolve(process.argv[4]);
-const shellOnly = process.argv[5] === '--shell-only';
+const subscriptionProxyOnly = process.argv[5] === '--subscription-proxy-only';
+const shellOnly = process.argv[5] === '--shell-only' || subscriptionProxyOnly;
 const routeSaveOnly = process.argv[5] === '--route-save-only';
 const workerReplacementOnly = process.argv[5] === '--worker-replacement-only';
 const claudeCollaborationOnly = process.argv[5] === '--claude-collaboration-only';
@@ -86,11 +87,16 @@ try {
       await navigate(client, new URL('product-shell.html', baseUrl).href, { width: 1280, height: 900 });
       await waitFor(client, 'Boolean(window.productShell)', { timeout: 7000 });
       const catalog = await evaluate(client, "import('/product-shell-scenarios.mjs').then(module => module.productShellScenarioCatalog)");
-      const selected = selectScenarios(catalog, { requiredIds: productShellRequired });
+      const selected = selectScenarios(catalog, subscriptionProxyOnly
+        ? { capability: 'subscription-proxy', requiredIds: focusedRequirements['subscription-proxy'] }
+        : { requiredIds: productShellRequired });
       const results = [];
       for (const { id } of selected) {
+        const viewport = id === 'desktop.models.subscription-scan.recommended-login'
+          ? { width: 755, height: 600 } : { width: 1280, height: 900 };
+        await client.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
         const batch = await evaluate(client, `import('/product-shell-scenarios.mjs').then(module => module.runProductShellScenarios(${JSON.stringify({ ids: [id], requiredIds: [id] })}))`);
-        results.push(...batch.results);
+        results.push(...batch.results.map(item => ({ ...item, viewport })));
         for (const item of batch.results) process.stdout.write(`${item.state}: ${item.id} · ${item.name}${item.error ? ` · ${item.error}` : ''}\n`);
       }
       assertScenarioResults(selected, results);

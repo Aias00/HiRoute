@@ -2,6 +2,7 @@ import { managementLoadFailureCopy, subscriptionFailureCopy } from '../features/
 import { requestEditorReplacement } from '../ui/discard-guard';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { SubscriptionProxySettings } from '../features/SubscriptionProxySettings';
 import { ModelConnectionForm } from '../features/model-connections/ModelConnectionForm';
 import { blankModel } from '../features/model-connections/form-support';
 import { checkMatches, clientIdempotencyKey, modelSaveCompleted, savedSourceConnectionFields } from '../features/model-connections/state';
@@ -146,6 +147,7 @@ export function ModelManagementPage({
   trustedAuthority,
   initialSourceId = null,
   startAdding = false,
+  startScanning = false,
   notice,
   onOperation,
   onRecoveryRefresh,
@@ -155,7 +157,6 @@ export function ModelManagementPage({
   agents = [],
   onOpenPlan,
   onCreatePlan,
-  onOpenNetworkSettings,
   tabs,
 }: {
   language: 'zh' | 'en';
@@ -163,6 +164,7 @@ export function ModelManagementPage({
   trustedAuthority: boolean;
   initialSourceId?: string | null;
   startAdding?: boolean;
+  startScanning?: boolean;
   notice?: string;
   onOperation(operation: OperationReference): void;
   onRecoveryRefresh(): void;
@@ -172,7 +174,6 @@ export function ModelManagementPage({
   agents?: Agent[];
   onOpenPlan?(planId: string): void;
   onCreatePlan?(bindingId: string): void;
-  onOpenNetworkSettings?(): void;
   tabs?: import('react').ReactNode;
 }) {
   const [management, setManagement] = useState<ManagementSnapshot | null>(null);
@@ -196,6 +197,9 @@ export function ModelManagementPage({
   const [discoveryAction, setDiscoveryAction] = useState<DiscoveryAction>(null);
   const [discoveryError, setDiscoveryError] = useState('');
   const [adding, setAdding] = useState(startAdding && trustedAuthority);
+  const [editingSubscriptionProxy, setEditingSubscriptionProxy] = useState(false);
+  const proxyButton = useRef<HTMLButtonElement>(null);
+  const scanResumed = useRef(false);
   const [reconnectingFrom, setReconnectingFrom] = useState<string | null>(null);
   const [addStage, setAddStage] = useState<'choose' | 'api' | 'scan' | 'subscription-login' | 'existing'>('choose');
   const [appendingSource, setAppendingSource] = useState<ManagedSource | null>(null);
@@ -667,6 +671,13 @@ export function ModelManagementPage({
 
   useEffect(() => { if (refreshVersion > 0) void refreshManagement(); }, [refreshVersion]);
 
+  useEffect(() => {
+    if (!startScanning || !trustedAuthority || !active || scanResumed.current) return;
+    scanResumed.current = true;
+    setAdding(true);
+    setAddStage('scan');
+  }, [startScanning, trustedAuthority, active]);
+
   const backend = useMemo<ModelConnectionBackend>(() => ({
     registerProtectedInput: secret => invoke<ProtectedInputRegistration>(
       'register_protected_model_input',
@@ -996,11 +1007,17 @@ export function ModelManagementPage({
   }
 
   function closeScan() {
+    setEditingSubscriptionProxy(false);
     setAppendingSource(null);
     setAppendManual(false);
     setAdding(false);
     closeSubscriptionView();
     requestAnimationFrame(() => addButton.current?.focus());
+  }
+
+  function cancelSubscriptionProxy() {
+    setEditingSubscriptionProxy(false);
+    requestAnimationFrame(() => proxyButton.current?.focus());
   }
 
   const subscriptionSaving = subscriptionAction === 'saving';
@@ -1076,7 +1093,7 @@ export function ModelManagementPage({
         </button>
         <button className="add-choice" type="button" disabled={!trustedAuthority} onClick={() => setAddStage('subscription-login')}>
           <span className="choice-icon"><UiIcon name="plug" /></span>
-          <div><strong>{language === 'zh' ? '连接订阅' : 'Connect subscription'}</strong><span>{language === 'zh' ? '独立登录 Codex / Claude Code，自动续期' : 'Sign in independently to Codex / Claude Code with automatic renewal'}</span></div>
+          <div><strong>{language === 'zh' ? '连接订阅' : 'Connect subscription'}</strong><span>{language === 'zh' ? '独立登录 Codex / Claude Code，自动刷新登录凭据' : 'Sign in independently to Codex / Claude Code with automatic credential refresh'}</span></div>
           <UiIcon name="chevronRight" />
         </button>
         <button className="add-choice" type="button" disabled={!trustedAuthority} onClick={() => { returnToScanList(); setSelectedSubscriptionRef(null); setRepairingSubscriptionSource(null); setSubscriptionNotice(''); setAddStage('scan'); void Promise.all([refreshSubscriptions(), recoverSubscriptionCheck()]); }}>
@@ -1110,8 +1127,15 @@ export function ModelManagementPage({
           setAddStage('scan');
         }} />}
     </Dialog>
-    <Dialog open={adding && addStage === 'scan'} title={language === 'zh' ? '扫描本机' : 'Scan this device'} closeLabel={subscriptionSaving || discoverySaving ? (language === 'zh' ? '正在保存' : 'Saving') : (language === 'zh' ? '关闭扫描' : 'Close scan')} closeDisabled={subscriptionSaving || discoverySaving} onClose={closeScan} footer={scanFooter}>
-      {onOpenNetworkSettings && <p className="oc-meta">{language === 'zh' ? '订阅连接需要代理？' : 'Need a proxy for subscriptions?'} <button className="btn" type="button" disabled={scanWorking || subscriptionSaving || discoverySaving} onClick={() => { closeScan(); onOpenNetworkSettings(); }}>{language === 'zh' ? '设置订阅连接代理' : 'Configure subscription proxy'}</button></p>}
+    <SubscriptionProxySettings
+      language={language}
+      editing={adding && addStage === 'scan' && editingSubscriptionProxy}
+      writable={trustedAuthority}
+      onCancel={cancelSubscriptionProxy}
+    >{({ panel, actions, saving }) => <Dialog open={adding && addStage === 'scan'} title={language === 'zh' ? '扫描本机' : 'Scan this device'} closeLabel={editingSubscriptionProxy ? (language === 'zh' ? '取消代理设置' : 'Cancel proxy settings') : subscriptionSaving || discoverySaving ? (language === 'zh' ? '正在保存' : 'Saving') : (language === 'zh' ? '关闭扫描' : 'Close scan')} closeDisabled={saving || subscriptionSaving || discoverySaving} onClose={editingSubscriptionProxy ? cancelSubscriptionProxy : closeScan} footer={editingSubscriptionProxy ? actions : scanFooter}>
+      <p className="oc-meta">{language === 'zh' ? '订阅连接需要代理？' : 'Need a proxy for subscriptions?'} <button ref={proxyButton} className="btn" type="button" aria-expanded={editingSubscriptionProxy} disabled={!trustedAuthority || scanWorking || editingSubscriptionProxy} onClick={() => setEditingSubscriptionProxy(true)}>{language === 'zh' ? '设置订阅连接代理' : 'Configure subscription proxy'}</button></p>
+      {panel}
+      <fieldset className="subscription-proxy-scan-content" disabled={editingSubscriptionProxy}>
       {scanWorking ? <div className="oc-status-row" role="status"><span className="oc-spinner" /><div className="row-main"><strong>{discoveryAction === 'preparing'
         ? (language === 'zh' ? '正在读取配置' : 'Reading configuration')
         : discoveryAction === 'saving' || subscriptionAction === 'saving'
@@ -1149,6 +1173,7 @@ export function ModelManagementPage({
         computeScanFailed={Boolean(computeScanError)}
         repairingSubscriptionSource={repairingSubscriptionSource}
         trustedAuthority={trustedAuthority}
+        onConnectSubscription={() => { closeSubscriptionView(); setAppendingSource(null); setAppendManual(false); setAddStage('subscription-login'); }}
         onOpenSubscription={openSubscription}
         onViewConnectedSubscription={viewConnectedSubscription}
         onOpenDiscoveredConfiguration={item => void prepareDiscoveredConfiguration(item)}
@@ -1156,7 +1181,8 @@ export function ModelManagementPage({
       {subscriptionNotice && !scanWorking && <div className="toast-stack" aria-live="polite"><div className="toast" role="status"><UiIcon name="check" /><span>{subscriptionNotice}</span></div></div>}
       {subscriptionError && subscriptionError.phase !== 'scan' && !scanWorking && <div className="callout bad" role="alert" data-error-code={subscriptionError.code}><UiIcon name="warning" /><span>{subscriptionFailureMessage(subscriptionError, language)}</span></div>}
       {discoveryError && !scanWorking && <div className="callout bad" role="alert" data-error-code={discoveryError}><UiIcon name="warning" /><span>{discoveryFailureMessage(discoveryError, language)}</span></div>}
-    </Dialog>
+      </fieldset>
+    </Dialog>}</SubscriptionProxySettings>
     {(notice || modelNotice) && <div className="toast-stack" aria-live="polite"><div className="toast" role="status"><UiIcon name="check" /><span>{notice || modelNotice}</span></div></div>}
     {loading && <div className="empty-state" role="status"><div><span className="oc-spinner" /><p>{text.loading}</p></div></div>}
     {error && <div className="callout bad" role="alert" data-error-code={error}><UiIcon name="warning" /><span>{managementLoadFailureCopy(error, language).detail}</span><button className="btn" type="button" onClick={() => void refreshManagement()}>{managementLoadFailureCopy(error, language).retry}</button></div>}
