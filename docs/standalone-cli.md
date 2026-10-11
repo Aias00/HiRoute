@@ -59,8 +59,13 @@ Use the component version and full source revision of the same committed candida
 
 After distribution integration, the installer also accepts
 `--manifest-url https://.../PACKAGE.tar.gz.json`. Redirects and archives must remain HTTPS.
-Before any write, the installer checks the platform, archive SHA-256, closed file set, and
+Before changing the installation, the installer checks the platform, archive SHA-256, closed file set, and
 per-file digests. Never infer an unpublished download URL from this page.
+
+HTTPS archive downloads use bounded requests and retries when a transfer ends early.
+When combining byte ranges, the installer requires one unchanged strong object identity;
+servers without range support retain whole-file downloads. All size and digest checks
+still complete before changing an existing installation.
 
 The collector uses only locked Rust dependencies and the CPA commit pinned by
 `vendor/cpa/source.json`. `--cpa-source-repo` supplies local objects for that exact commit and

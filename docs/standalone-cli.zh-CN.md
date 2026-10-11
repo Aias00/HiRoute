@@ -54,8 +54,12 @@ python3 scripts/install-standalone.py install \
 完整源码 revision。
 
 集成后安装器也接受 `--manifest-url https://.../PACKAGE.tar.gz.json`。重定向和归档必须保持
-HTTPS；安装器会在任何写入前校验平台、归档 SHA-256、闭合集合和逐文件摘要。不要根据本页
+HTTPS；安装器会在变更安装前校验平台、归档 SHA-256、闭合集合和逐文件摘要。不要根据本页
 拼造未发布的下载地址。
+
+HTTPS 归档下载会使用有大小边界的请求，并对提前结束的传输进行有限次重试。
+合并分段数据时，安装器要求服务端对象身份保持不变；不支持分段的服务端仍可整包下载。
+所有大小和摘要检查通过前，安装器不会更改现有安装。
 
 收集器只从锁定的 Rust 依赖和 `vendor/cpa/source.json` 指定的 CPA commit 生成材料；
 `--cpa-source-repo` 只是该固定 commit 的本地对象来源，不会采用 checkout 当前分支。

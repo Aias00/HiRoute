@@ -5,6 +5,7 @@ import argparse
 from contextlib import contextmanager
 import fcntl
 import hashlib
+import http.client
 import json
 import os
 from pathlib import Path
@@ -17,6 +18,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -28,6 +30,8 @@ MANAGED_TEXT = "Managed by HiRoute standalone installer"
 SERVICE_LABEL = "ai.hiroute.cli"
 MAX_MANIFEST = 1024 * 1024
 MAX_ARCHIVE = 1024 * 1024 * 1024
+DOWNLOAD_CHUNK_SIZE = 8 * 1024 * 1024
+DOWNLOAD_ATTEMPTS = 3
 PORTABLE = re.compile(r"^[A-Za-z0-9._-]+$")
 HEX_SHA256 = re.compile(r"^[a-fA-F0-9]{64}$")
 EXPECTED_FILES = {
@@ -108,24 +112,103 @@ def layout(home):
     }
 
 
-def fetch_https(url, destination, limit):
+class IncompleteDownload(OSError):
+    pass
+
+
+def https_response(url, headers):
+    request = urllib.request.Request(url, headers={"User-Agent": "HiRoute-Installer/1", **headers})
+    try:
+        response = urllib.request.urlopen(request, timeout=30)
+    except urllib.error.HTTPError:
+        raise
+    except (urllib.error.URLError, OSError) as error:
+        raise IncompleteDownload("HTTPS connection interrupted") from error
+    final = urllib.parse.urlparse(response.geturl())
+    if final.scheme != "https" or not final.netloc or final.username or final.password:
+        response.close()
+        raise ValueError("download redirect left HTTPS")
+    return response
+
+
+def https_chunks(response, limit):
+    total = 0
+    while True:
+        try:
+            chunk = response.read(1024 * 1024)
+        except (http.client.HTTPException, OSError) as error:
+            raise IncompleteDownload("HTTPS transfer interrupted") from error
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > limit:
+            raise ValueError("download exceeds the bounded size")
+        yield chunk
+    declared = response.headers.get("Content-Length")
+    if declared is not None and total != int(declared):
+        raise IncompleteDownload("HTTPS transfer ended before Content-Length")
+
+
+def fetch_whole_https(url, destination, limit, expected_size=None):
+    for attempt in range(DOWNLOAD_ATTEMPTS):
+        try:
+            with https_response(url, {}) as response, destination.open("wb") as output:
+                total = 0
+                for chunk in https_chunks(response, limit):
+                    output.write(chunk)
+                    total += len(chunk)
+                if expected_size is not None and total != expected_size:
+                    raise IncompleteDownload("HTTPS transfer ended before the manifest size")
+            return
+        except IncompleteDownload:
+            if attempt + 1 == DOWNLOAD_ATTEMPTS:
+                raise
+
+
+def fetch_https(url, destination, limit, expected_size=None):
     parsed = urllib.parse.urlparse(url)
     if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password:
         raise ValueError("download URL must be credential-free HTTPS")
-    request = urllib.request.Request(url, headers={"User-Agent": "HiRoute-Installer/1"})
-    with urllib.request.urlopen(request, timeout=30) as response, destination.open("wb") as output:
-        final = urllib.parse.urlparse(response.geturl())
-        if final.scheme != "https" or not final.netloc or final.username or final.password:
-            raise ValueError("download redirect left HTTPS")
-        total = 0
-        while True:
-            chunk = response.read(1024 * 1024)
-            if not chunk:
+    if expected_size is None:
+        return fetch_whole_https(url, destination, limit)
+    if type(expected_size) is not int or not 0 < expected_size <= limit:
+        raise ValueError("archive size exceeds the bounded size")
+    destination.write_bytes(b"")
+    offset, etag = 0, None
+    while offset < expected_size:
+        end = min(offset + DOWNLOAD_CHUNK_SIZE, expected_size) - 1
+        headers = {"Range": f"bytes={offset}-{end}"}
+        if etag is not None:
+            headers["If-Match"] = etag
+        for attempt in range(DOWNLOAD_ATTEMPTS):
+            try:
+                with https_response(url, headers) as response:
+                    if response.status == 200 and offset == 0:
+                        response.close()
+                        return fetch_whole_https(url, destination, expected_size, expected_size)
+                    if (
+                        response.status != 206
+                        or response.headers.get("Content-Range") != f"bytes {offset}-{end}/{expected_size}"
+                    ):
+                        raise ValueError("download returned an invalid byte range")
+                    identity = response.headers.get("ETag")
+                    if etag is not None and identity != etag:
+                        raise ValueError("download object identity changed")
+                    if offset == 0 and end + 1 < expected_size and (
+                        identity is None or not re.fullmatch(r'"[\x21\x23-\x7e\x80-\xff]*"', identity)
+                    ):
+                        response.close()
+                        return fetch_whole_https(url, destination, expected_size, expected_size)
+                    value = b"".join(https_chunks(response, end - offset + 1))
+                    if len(value) != end - offset + 1:
+                        raise IncompleteDownload("HTTPS byte range ended early")
                 break
-            total += len(chunk)
-            if total > limit:
-                raise ValueError("download exceeds the bounded size")
-            output.write(chunk)
+            except IncompleteDownload:
+                if attempt + 1 == DOWNLOAD_ATTEMPTS:
+                    raise
+        with destination.open("ab") as output:
+            output.write(value)
+        etag, offset = identity, end + 1
 
 
 def acquire(args, temporary):
@@ -138,7 +221,7 @@ def acquire(args, temporary):
         validate_manifest_shape(manifest)
         archive_path = temporary / manifest["archive"]["filename"]
         archive_url = urllib.parse.urljoin(args.manifest_url, manifest["archive"]["filename"])
-        fetch_https(archive_url, archive_path, MAX_ARCHIVE)
+        fetch_https(archive_url, archive_path, MAX_ARCHIVE, manifest["archive"]["size"])
     else:
         if args.archive is None:
             raise ValueError("a local manifest requires --archive")
