@@ -173,6 +173,48 @@ impl Resident {
             std::thread::sleep(Duration::from_millis(20));
         }
     }
+    /// Keep the host lock while reusing the ordinary startup/recovery entry. A pending
+    /// orderly stop is never converted into an ordinary Drop (which may force-kill).
+    #[cfg(all(target_os = "macos", feature = "desktop-runtime"))]
+    pub(crate) fn replacement_after_upgrade_stop(
+        &mut self,
+        root: &Path,
+        daemon: &Path,
+        diagnostics: &NativeDiagnostics,
+    ) -> Result<Self, String> {
+        self.replace_stopped(|lock| {
+            Self::open_resident(
+                root,
+                daemon,
+                &AtomicBool::new(false),
+                diagnostics,
+                Some(lock),
+            )
+        })
+    }
+    #[cfg(any(test, all(target_os = "macos", feature = "desktop-runtime")))]
+    fn replace_stopped(
+        &mut self,
+        initialize: impl FnOnce(File) -> Result<Self, String>,
+    ) -> Result<Self, String> {
+        let owned = self.owned.as_mut().ok_or("UPGRADE_RESIDENT_NOT_OWNED")?;
+        if owned.shutdown.is_some() {
+            return Err("UPGRADE_RESIDENT_NOT_STOPPED".into());
+        }
+        if owned
+            .child
+            .try_wait()
+            .map_err(|_| "UPGRADE_STOP_FAILED")?
+            .is_none()
+        {
+            return Err("UPGRADE_STOP_PENDING".into());
+        }
+        let lock = self
+            ._lock
+            .try_clone()
+            .map_err(|_| "RESIDENT_LOCK_UNAVAILABLE")?;
+        initialize(lock)
+    }
     pub fn open(root: &Path, daemon: &Path) -> Result<Self, String> {
         Self::open_managed(
             root,
@@ -966,3 +1008,5 @@ pub(crate) fn acquire_host_lock(root: &Path) -> Result<File, String> {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+pub(crate) use tests::session_resident;

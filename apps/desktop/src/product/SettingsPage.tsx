@@ -11,6 +11,7 @@ import { listenerApplyRequest, listenerScopeFromAddress, type GatewayListenerSco
 type SettingsPageProps = {
   active: boolean; language: Language; languagePreference: LanguagePreference; theme: ThemePreference; textScale: TextScale;
   serviceLabel: string; serviceReady: boolean;
+  onServiceChanged: () => Promise<void>;
   onLanguageChange: (language: LanguagePreference) => void;
   onThemeChange: (theme: ThemePreference) => void;
   onTextScaleChange: (scale: TextScale) => void;
@@ -194,7 +195,7 @@ export function SettingsPage(props: SettingsPageProps) {
       </div></div></section>
       <SubscriptionProxySettings active={props.active} language={props.language} />
       <DiagnosticsSettings active={props.active} language={props.language} />
-      <UpdatesSettings active={props.active} language={props.language} />
+      <UpdatesSettings active={props.active} language={props.language} onServiceChanged={props.onServiceChanged} />
       <section className="settings-group"><h2>CLI</h2><div className="settings-list"><div className="settings-row">
         <div className="settings-copy"><strong>{text('终端入口', 'Terminal entry')}</strong><span>{cliEntry === null
           ? text('正在检查 ~/.local/bin/hiroute', 'Checking ~/.local/bin/hiroute')

@@ -49,6 +49,7 @@ pub use diagnostics::DiagnosticsState;
 pub use startup::StartupState;
 use startup::*;
 mod web_confirmation;
+pub(crate) use web_confirmation::expire_window_confirmations;
 use web_confirmation::*;
 mod window_behavior;
 use window_behavior::*;
@@ -62,6 +63,15 @@ pub struct DesktopState(
     /// Process diagnostics for the protected Desktop action path; independent of the business Session.
     pub DiagnosticHandle,
 );
+
+async fn confirmation_session(
+    state: &DesktopState,
+    epoch: u64,
+) -> Result<tokio::sync::MutexGuard<'_, Option<Session>>, DesktopFailure> {
+    crate::confirmation::lock_current_session(&state.0, &state.2, epoch)
+        .await
+        .map_err(Into::into)
+}
 
 fn desktop_data_root(handle: &tauri::AppHandle) -> Result<std::path::PathBuf, ()> {
     let root = handle.path().app_local_data_dir().map_err(|_| ())?;
@@ -256,10 +266,8 @@ pub async fn refresh_route_references(
     let epoch = state.2.load(Ordering::SeqCst);
     let action = ActionDiagnostics::begin(&state.3, ActionOperation::PlanEditor);
     action.preview(PreviewPhase::Begin, None);
-    let context = state
-        .0
-        .lock()
-        .await
+    let context = confirmation_session(&state, epoch)
+        .await?
         .as_mut()
         .ok_or("RESIDENT_UNAVAILABLE")?
         .preview_reference_refresh(language)
@@ -285,10 +293,8 @@ pub async fn preview_plan_editor(
     let epoch = state.2.load(Ordering::SeqCst);
     let action = ActionDiagnostics::begin(&state.3, ActionOperation::PlanEditor);
     action.preview(PreviewPhase::Begin, None);
-    let context = state
-        .0
-        .lock()
-        .await
+    let context = confirmation_session(&state, epoch)
+        .await?
         .as_mut()
         .ok_or("RESIDENT_UNAVAILABLE")?
         .preview_editor(input)
@@ -326,7 +332,7 @@ pub async fn preview_rename(
     let action = ActionDiagnostics::begin(&state.3, ActionOperation::Rename);
     action.preview(PreviewPhase::Begin, None);
     let context = {
-        let mut guard = state.0.lock().await;
+        let mut guard = confirmation_session(&state, epoch).await?;
         guard
             .as_mut()
             .ok_or("RESIDENT_UNAVAILABLE")?
@@ -354,10 +360,8 @@ pub async fn preview_restore_name(
     let epoch = state.2.load(Ordering::SeqCst);
     let action = ActionDiagnostics::begin(&state.3, ActionOperation::RestoreName);
     action.preview(PreviewPhase::Begin, None);
-    let context = state
-        .0
-        .lock()
-        .await
+    let context = confirmation_session(&state, epoch)
+        .await?
         .as_mut()
         .ok_or("RESIDENT_UNAVAILABLE")?
         .preview_restore(input)
@@ -451,10 +455,8 @@ pub async fn preview_price_change(
     let epoch = state.2.load(Ordering::SeqCst);
     let action = ActionDiagnostics::begin(&state.3, ActionOperation::PriceChange);
     action.preview(PreviewPhase::Begin, None);
-    let context = state
-        .0
-        .lock()
-        .await
+    let context = confirmation_session(&state, epoch)
+        .await?
         .as_mut()
         .ok_or("RESIDENT_UNAVAILABLE")?
         .preview_price(input)
@@ -536,10 +538,8 @@ pub async fn preview_agent_settings(
     let epoch = state.2.load(Ordering::SeqCst);
     let action = ActionDiagnostics::begin(&state.3, ActionOperation::AgentSettings);
     action.preview(PreviewPhase::Begin, None);
-    let prepared = state
-        .0
-        .lock()
-        .await
+    let prepared = confirmation_session(&state, epoch)
+        .await?
         .as_mut()
         .ok_or("RESIDENT_UNAVAILABLE")?
         .preview_agent_settings(input)
@@ -585,10 +585,8 @@ pub async fn check_agent_authentication(
     let epoch = state.2.load(Ordering::SeqCst);
     let action = ActionDiagnostics::begin(&state.3, ActionOperation::AgentCheck);
     action.preview(PreviewPhase::Begin, None);
-    let context = state
-        .0
-        .lock()
-        .await
+    let context = confirmation_session(&state, epoch)
+        .await?
         .as_mut()
         .ok_or("RESIDENT_UNAVAILABLE")?
         .prepare_agent_check(input)
@@ -621,10 +619,8 @@ pub async fn check_agent_live(
     let epoch = state.2.load(Ordering::SeqCst);
     let action = ActionDiagnostics::begin(&state.3, ActionOperation::AgentCheck);
     action.preview(PreviewPhase::Begin, None);
-    let context = state
-        .0
-        .lock()
-        .await
+    let context = confirmation_session(&state, epoch)
+        .await?
         .as_mut()
         .ok_or("RESIDENT_UNAVAILABLE")?
         .prepare_agent_check(input)
@@ -653,13 +649,14 @@ async fn confirm(
 ) -> Result<NativeOutcome, DesktopFailure> {
     let action = ActionDiagnostics::begin(&state.3, operation);
     if state.2.load(Ordering::SeqCst) != epoch || !window.is_visible().unwrap_or(false) {
-        state
-            .0
-            .lock()
-            .await
-            .as_mut()
-            .ok_or("RESIDENT_UNAVAILABLE")?
-            .invalidate_confirmation();
+        let mut guard = state.0.lock().await;
+        // Recovery may have installed another Session while this callback waited.
+        if state.2.load(Ordering::SeqCst) == epoch {
+            guard
+                .as_mut()
+                .ok_or("RESIDENT_UNAVAILABLE")?
+                .invalidate_confirmation();
+        }
         action.confirmation(ConfirmationPhase::Expired, None);
         action.end(ActionResult::Stale, None);
         return Err("CONFIRMATION_STALE".into());
@@ -723,21 +720,21 @@ async fn confirm(
         true
     };
     if state.2.load(Ordering::SeqCst) != epoch || !window.is_visible().unwrap_or(false) {
-        state
-            .0
-            .lock()
-            .await
-            .as_mut()
-            .ok_or("RESIDENT_UNAVAILABLE")?
-            .invalidate_confirmation();
-        // The approval was invalidated; the caller's existing semantics still decide what
-        // happens next, and diagnostics only record that the confirmation expired.
+        let mut guard = state.0.lock().await;
+        if state.2.load(Ordering::SeqCst) == epoch {
+            guard
+                .as_mut()
+                .ok_or("RESIDENT_UNAVAILABLE")?
+                .invalidate_confirmation();
+        }
         action.confirmation(ConfirmationPhase::Expired, None);
+        action.end(ActionResult::Stale, None);
+        return Err("CONFIRMATION_STALE".into());
     }
     action.apply(ApplyPhase::Begin, Some(revision), None);
     let outcome = if let NativeConfirmation::SubscriptionCheck(context) = context {
         let pending = {
-            let mut guard = state.0.lock().await;
+            let mut guard = confirmation_session(state, epoch).await?;
             guard
                 .as_mut()
                 .ok_or("RESIDENT_UNAVAILABLE")?
@@ -747,19 +744,15 @@ async fn confirm(
         // Operation A performs connector I/O. Keep native close/recovery commands responsive while
         // it runs so close can submit cancellation rather than waiting behind this command.
         let completion = pending.execute().await;
-        state
-            .0
-            .lock()
-            .await
-            .as_mut()
-            .ok_or("RESIDENT_UNAVAILABLE")?
-            .finish_subscription_check_confirmation(completion)
+        // Completion belongs to the Session that submitted it, not the window's prompt epoch.
+        // Window close must still release an A resource created after the close-time sweep.
+        crate::session::complete_subscription_check(&state.0, completion)
             .await
             .map(Box::new)
             .map(NativeOutcome::SubscriptionCheck)
     } else if let NativeConfirmation::Check(context) = context {
         let dispatch = {
-            let mut guard = state.0.lock().await;
+            let mut guard = confirmation_session(state, epoch).await?;
             guard
                 .as_mut()
                 .ok_or("RESIDENT_UNAVAILABLE")?
@@ -772,7 +765,7 @@ async fn confirm(
             }
         }
     } else {
-        let mut guard = state.0.lock().await;
+        let mut guard = confirmation_session(state, epoch).await?;
         let session = guard.as_mut().ok_or("RESIDENT_UNAVAILABLE")?;
         match context {
             NativeConfirmation::Agent(context) => session
@@ -987,21 +980,18 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                window
-                    .state::<DesktopState>()
-                    .2
-                    .fetch_add(1, Ordering::SeqCst);
-                window
-                    .state::<WebConfirmationState>()
-                    .cancel_window(window.label());
-                window
-                    .state::<WorkerDependencyConfirmationState>()
-                    .cancel_window(window.label());
+                expire_window_confirmations(window.app_handle(), window.label());
                 api.prevent_close();
                 let _ = window.hide();
                 let state = window.state::<DesktopState>().0.clone();
+                let epoch = window.state::<DesktopState>().2.load(Ordering::SeqCst);
+                let handle = window.app_handle().clone();
                 tauri::async_runtime::spawn(async move {
-                    if let Some(session) = state.lock().await.as_mut() {
+                    let mut guard = state.lock().await;
+                    if handle.state::<DesktopState>().2.load(Ordering::SeqCst) != epoch {
+                        return;
+                    }
+                    if let Some(session) = guard.as_mut() {
                         session.invalidate_confirmation();
                         session.stop_observing();
                         let _ = session.close_subscription_check().await;

@@ -10,6 +10,16 @@ use tokio::sync::oneshot;
 pub(super) const WEB_CONFIRMATION_EVENT: &str = "hiroute-web-confirmation";
 const WEB_CONFIRMATION_SCHEMA: &str = "hiroute.web-confirmation/v1";
 
+pub(crate) fn expire_window_confirmations(app: &tauri::AppHandle, window_label: &str) {
+    app.state::<super::DesktopState>()
+        .2
+        .fetch_add(1, Ordering::SeqCst);
+    app.state::<WebConfirmationState>()
+        .cancel_window(window_label);
+    app.state::<super::WorkerDependencyConfirmationState>()
+        .cancel_window(window_label);
+}
+
 pub(super) struct WebConfirmationPrompt {
     pub title: String,
     pub message: String,
