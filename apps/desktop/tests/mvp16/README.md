@@ -24,4 +24,6 @@ Example deterministic URLs:
 - `http://127.0.0.1:4176/?scenario=partial&lang=en&theme=light&scale=1.5`
 - `http://127.0.0.1:4176/?scenario=drift&lang=zh&theme=dark&scale=2`
 
+`scale` 参数只用于通用组件的布局压力检查；产品界面固定 100% 字号。显示设置与输入保留夹具只提供语言和外观选项。
+
 The surface records navigation intents as local JSON only. It cannot prove model saving, Agent calls, Worker delegation, or any Desktop-to-backend production path.
