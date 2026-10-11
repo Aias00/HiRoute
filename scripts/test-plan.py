@@ -252,6 +252,9 @@ def e2e_consumers(path):
         return [("hiroute-product-e2e", "pi_delegation")]
     if path.startswith("crates/daemon/tests/support/qoder_"):
         return [("hiroute-product-e2e", "qoder_delegation")]
+    if path == "tools/e2e-harness/tests/p0_gateway_native_sessions.rs":
+        return [("hiroute-e2e", "p0_gateway_native_sessions"), ("hiroute-e2e", "p0_gateway_protocol"),
+                ("hiroute-e2e", "p0_gateway_matrix_coverage")]
     if path == "tools/e2e-harness/tests/p0_gateway_runtime.rs" or path.startswith("tools/e2e-harness/tests/p0_gateway_runtime/"):
         return [("hiroute-e2e", "p0_gateway_runtime"), ("hiroute-e2e", "p0_gateway_protocol"),
                 ("hiroute-e2e", "p0_gateway_matrix_coverage")]
@@ -271,7 +274,7 @@ def e2e_consumers(path):
     return []
 
 
-PROCESS_TARGETS = {"p0_gateway_runtime", "p0_gateway_protocol", "smoke_cli"}
+PROCESS_TARGETS = {"p0_gateway_native_sessions", "p0_gateway_runtime", "p0_gateway_protocol", "smoke_cli"}
 
 
 def worker_product_checks(paths):
@@ -410,7 +413,8 @@ def select(paths, full=False):
                    not (t == "smoke_cli" and groups & PRODUCT_GROUPS)}
         # #94: ACP enables preserve_order in the full backend graph. Keep this
         # known fixture-sensitive combination in focused runtime checks too.
-        runtime_context = ("hiroute-e2e", "p0_gateway_runtime") in pending
+        runtime_context = bool(pending & {("hiroute-e2e", "p0_gateway_runtime"),
+                                          ("hiroute-e2e", "p0_gateway_native_sessions")})
         feature_flags = ["--features", "serde_json/preserve_order"]
         if runtime_context:
             reasons.append("Gateway runtime: check serde_json/preserve_order from the full backend context (#94)")
@@ -424,7 +428,7 @@ def select(paths, full=False):
                 continue
             flags = ["--lib"] if target == "lib" else ["--test", target]
             commands.append(["cargo", "test", "--locked", "-p", package, "--all-features", *flags] +
-                            (feature_flags if target == "p0_gateway_runtime" else []) +
+                            (feature_flags if target in {"p0_gateway_runtime", "p0_gateway_native_sessions"} else []) +
                             (["--", "--test-threads=1"] if target in PROCESS_TARGETS else []))
     rust = bool(commands)
     if full or any(path.startswith(("assets/agent-profiles/", "assets/release-facts/",
@@ -486,7 +490,8 @@ def integration_preflight(plan, collect_failures=False, context_plan=None):
     reasons = []
     for path in plan["paths"]:
         consumers = {t for p, t in e2e_consumers(path) if p == "hiroute-e2e"}
-        selected = consumers & {"p0_gateway_matrix_coverage", "p0_gateway_protocol", "p0_gateway_runtime"}
+        selected = consumers & {"p0_gateway_matrix_coverage", "p0_gateway_protocol", "p0_gateway_runtime",
+                                "p0_gateway_native_sessions"}
         # These production adapters and the shared model IR feed the protocol matrix.
         # This only adds early checks; their conservative final package scope stays intact.
         if path.startswith(("crates/gateway/src/adapters/", "crates/gateway/src/model_ir/")):
@@ -510,7 +515,7 @@ def integration_preflight(plan, collect_failures=False, context_plan=None):
         context = broad[:] if broad else ["cargo", "test", "--locked", "-p", "hiroute-e2e", "--all-features"]
         if "--workspace" not in context and "hiroute-e2e" not in context:
             context.extend(["-p", "hiroute-e2e"])
-        if "--workspace" not in context and "p0_gateway_runtime" in targets:
+        if "--workspace" not in context and targets & {"p0_gateway_runtime", "p0_gateway_native_sessions"}:
             context.extend(["--features", "serde_json/preserve_order"])
         # First expose stale generated receipts, before even short protocol/runtime tests.
         if "p0_gateway_matrix_coverage" in targets:

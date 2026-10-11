@@ -24,6 +24,50 @@ renderers omit foreign reasoning without inventing signatures. The
 [production protocol matrix](../../tools/e2e-harness/tests/p0_gateway_protocol/production_matrix.rs)
 covers the listener boundary, including tool continuation.
 
+## Native session correlation
+
+[context_hold/identity.rs](src/context_hold/identity.rs) resolves one identity for
+ContextHold, decision history and observation before request content is externalized.
+Verified Worker tasks take precedence. Ordinary clients supply these native fields:
+
+| Client | Accepted native identity |
+| --- | --- |
+| Claude Code | `X-Claude-Code-Session-Id`; Messages also retains the JSON session inside `metadata.user_id` |
+| Codex | `thread-id` / `session-id`, with matching Responses `client_metadata` dimensions |
+| Qoder | `session-id`, retaining its existing generic session namespace |
+| Pi | pi-ai session headers scoped by `pi (...)` User-Agent |
+| DeepSeek Harness | `x-deepseek-harness-session-id`; pi-ai session headers scoped by `deepseek-harness/<version>` User-Agent |
+| OpenCode | `x-opencode-session-id`, including custom providers and all three supported ingress protocols |
+
+OpenCode's [released request producer](https://github.com/anomalyco/opencode/blob/733b2c627e5aec39cb33cc22373bdce33053ef2c/packages/opencode/src/session/llm/request.ts)
+sends the actual session in `x-opencode-session-id`. Its
+[current cache affinity](https://github.com/anomalyco/opencode/blob/d21b0790a6c146815f28fea604e41e922f009590/packages/core/src/session/affinity.ts)
+can share a parent or fork source, so `x-opencode-session`, `x-session-affinity`
+and `X-Session-Id` are not OpenCode identity aliases and need not match that ID.
+Parent, project and request headers also do not identify the current session.
+This input support does not add OpenCode managed configuration or Worker launch.
+
+For pi-ai, Responses sends its native `sessionId` as `x-client-request-id` and
+optionally `session_id`; OpenRouter compatibility uses `x-session-id`. Messages
+can send `x-session-affinity` or `x-session-id` when native affinity is enabled.
+See the pinned [Responses transport](https://github.com/earendil-works/pi/blob/e6b9a6af5d45fd191f8e90b56176a0c41aab3199/packages/ai/src/api/openai-responses.ts)
+and [DSH adapter](https://github.com/deepseek-ai/deepseek-harness/blob/d743267388641bc76f17c45ce8b4c231aed1d32c/packages/llm/llm-pi-ai/src/adapter.ts).
+Branding limits interpretation of these fields; it is not authentication.
+Generic request IDs, prompt cache keys and other clients' affinity headers cannot
+establish a native session. A client that sends no native identity, including
+DSH's current standard pi-ai Messages configuration or disabled pi-ai caching,
+retains the existing conservative first-user inference or request scope.
+
+Recognized IDs must be nonempty, at most 128 bytes, and free of control characters.
+Duplicates, invalid values, conflicting dimensions or competing vendor families
+stay request-scoped. Coherent generic Codex dimensions retain their historical
+namespace, including Pi's Codex transport. Claude header and metadata share the
+existing Claude namespace. Session storage uses the producer's scoped HMAC;
+raw IDs are not persisted and existing observations are not rewritten.
+[p0_gateway_native_sessions.rs](../../tools/e2e-harness/tests/p0_gateway_native_sessions.rs)
+covers the real listener and observation boundary across Responses and Messages,
+plus OpenCode's native identity across Chat Completions and shared cache affinity.
+
 ## Decision operation
 
 [core_runtime/classification.rs](src/core_runtime/classification.rs) owns the
