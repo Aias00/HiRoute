@@ -451,6 +451,9 @@ pub async fn check_registered_model_connection(
     request: RegisteredModelConnectionCheckRequestV1,
 ) -> Result<ModelConnectionCheckViewV1, DesktopFailure> {
     main_window(&window)?;
+    if request.display_name.is_none() {
+        return Err("REQUEST_INVALID".into());
+    }
     let client = state
         .0
         .lock()

@@ -315,6 +315,9 @@ pub(crate) fn dispatch_compute_management(
             else {
                 return failed(ErrorCode::InvalidArguments, request_id);
             };
+            if check.display_name.is_none() {
+                return failed(ErrorCode::InvalidArguments, request_id);
+            }
             let digest = match CanonicalDigest::of(&check) {
                 Ok(value) => value,
                 Err(_) => return failed(ErrorCode::InvalidArguments, request_id),

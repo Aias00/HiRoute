@@ -1,0 +1,60 @@
+{
+  "kind": "registered",
+  "request": {
+    "connection_option_id": "bailian.token-plan.cn.v1",
+    "expected_catalog": {
+      "catalog_binding_id": "client-bundled/current",
+      "connector_registry_digest": "sha256:3da14f731490fcbab5894f4a3417ac1de4534672abfc79e19e20881dfb35aba4",
+      "cross_reference_digest": "sha256:3b1b0c623e2c773273638b9a94dfb7f807fa659221fe45cc2ebcdb5ce1587c8c",
+      "model_data_digest": "sha256:1593b63e8d37520e7269e4c366b69006235dd4b7ae39aaf78e2c1f7360e212c5",
+      "product_release": "mvp-current",
+      "release_sequence": 1
+    },
+    "models": [
+      {
+        "upstream_model_id": "qwen3.6-plus",
+        "display_name": "qwen3.6-plus",
+        "catalog_configuration_id": null,
+        "membership": "user_declared",
+        "capabilities": {
+          "tool": {
+            "value": true,
+            "basis": "user_declared"
+          },
+          "vision": {
+            "value": false,
+            "basis": "user_declared"
+          },
+          "streaming": {
+            "value": true,
+            "basis": "user_declared"
+          },
+          "context_tokens": {
+            "value": 32768,
+            "basis": "user_declared"
+          },
+          "max_output_tokens": {
+            "value": 4096,
+            "basis": "user_declared"
+          },
+          "native_reasoning": {
+            "value": {
+              "kind": "fixed",
+              "profile": "provider-default"
+            },
+            "basis": "user_declared"
+          }
+        }
+      }
+    ],
+    "candidate_ref": "candidate/release030/final",
+    "lineage_ref": "lineage/release030/final",
+    "edit_revision": 1,
+    "check_id": "check/release030/final",
+    "input_candidate": {
+      "candidate_ref": "candidate/release030/final",
+      "candidate_revision": 1
+    },
+    "inference_model_id": null
+  }
+}
