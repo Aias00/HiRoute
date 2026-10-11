@@ -752,13 +752,11 @@ export function DesktopApp() {
           language={language}
           languagePreference={preferences.languagePreference}
           theme={preferences.theme}
-          textScale={preferences.textScale}
           serviceLabel={settingsServiceLabel}
           serviceReady={serviceOperational}
           onServiceChanged={home.refreshDesktop}
           onLanguageChange={preferences.setLanguage}
           onThemeChange={preferences.setTheme}
-          onTextScaleChange={preferences.setTextScale}
           onOpenSessions={() => {
             void (async () => {
               if (!await allowPageChange('sessions')) return;

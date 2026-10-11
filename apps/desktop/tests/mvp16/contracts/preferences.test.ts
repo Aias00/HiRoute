@@ -19,11 +19,11 @@ class MemoryStorage implements StorageLike {
   setItem(key: string, value: string) { this.values.set(key, value); }
 }
 
-test('preferences reuse existing language and text-scale keys', () => {
+test('preferences retain language and normalize the previous enlarged text scale', () => {
   const storage = new MemoryStorage();
   storage.setItem(LANGUAGE_STORAGE_KEY, 'zh');
   storage.setItem(TEXT_SCALE_STORAGE_KEY, '1.5');
-  assert.deepEqual(loadPresentationPreferences(storage), { language: 'zh', theme: 'system', textScale: 1.5 });
+  assert.deepEqual(loadPresentationPreferences(storage), { language: 'zh', theme: 'system', textScale: 1 });
 });
 
 test('language follows the system until an explicit preference is stored', () => {
@@ -48,10 +48,10 @@ test('invalid scale fails closed to 100 percent', () => {
 
 test('explicit preferences persist without business state', () => {
   const storage = new MemoryStorage();
-  savePresentationPreferences(storage, { language: 'en', theme: 'dark', textScale: 2 });
+  savePresentationPreferences(storage, { language: 'en', theme: 'dark', textScale: 1 });
   assert.equal(storage.getItem(LANGUAGE_STORAGE_KEY), 'en');
   assert.equal(storage.getItem(THEME_STORAGE_KEY), 'dark');
-  assert.equal(storage.getItem(TEXT_SCALE_STORAGE_KEY), '2');
+  assert.equal(storage.getItem(TEXT_SCALE_STORAGE_KEY), '1');
   assert.equal(storage.values.size, 3);
 });
 

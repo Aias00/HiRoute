@@ -77,11 +77,11 @@ const scenarios = [
   }),
   scenario('desktop.models.subscription-scan.recommended-login', ['subscription-proxy', 'subscription-login'], 'Scan explains native credential refresh and opens independent sign-in without authorizing or saving', async () => {
     for (const language of ['zh', 'en']) {
-      for (const scale of [1, 2]) {
+      for (const previousScale of [1, 1.5, 2]) {
         await fresh(() => { c().handlers.manage_subscription_login = async () => { await pause(150); return { schema: 'hiroute.subscription-login-result/v1', sessions: [] }; }; });
         const saved = JSON.stringify(c().management);
         localStorage.setItem('hiroute.language', language);
-        localStorage.setItem('hiroute.text-scale', String(scale));
+        localStorage.setItem('hiroute.text-scale', String(previousScale));
         c().remount();
         const label = (zh, en) => language === 'zh' ? zh : en;
         await click(label('模型', 'Models')); await click(label('添加模型', 'Add models'));
@@ -90,6 +90,7 @@ const scenarios = [
         all('.add-choice').find(item => item.textContent.includes(scanLabel)).click();
         const entryLabel = label('连接订阅（推荐）', 'Connect subscription (recommended)');
         await until(() => button(entryLabel), 'recommended independent sign-in entry');
+        assert(document.querySelector('.hr-ui').dataset.textScale === '1', 'Scan retained a previous enlarged text preference');
         const note = document.querySelector('.subscription-reuse-note');
         assert(note.textContent.includes(label('依赖 Codex / Claude Code', 'depends on Codex / Claude Code')) && note.textContent.includes(label('自动刷新登录凭据', 'automatically refresh sign-in credentials')), 'Scan does not explain both credential refresh owners');
         assert(!text().includes('自动续期'), 'Paid-subscription renewal copy remains');
@@ -697,13 +698,23 @@ const scenarios = [
     }
     assert(calls('save_decision_service').length === 0, 'Discard persisted an edit');
   }),
-  scenario('desktop.settings.persisted-scale', ['desktop-presentation'], 'Settings apply and persist all supported text scales through the shell', async () => {
+  scenario('desktop.settings.fixed-scale', ['desktop-presentation'], 'Settings omit text size and normalize old enlarged preferences without losing language or appearance', async () => {
     await fresh(); await click('设置');
-    for (const [label, value] of [['150%', '1.5'], ['200%', '2'], ['100%', '1']]) {
-      await click(label);
-      assert(button(label).getAttribute('aria-pressed') === 'true', 'Scale choice did not become selected');
-      assert(document.querySelector('.hr-ui').dataset.textScale === value, 'Shell did not apply the selected scale');
-      assert(localStorage.getItem('hiroute.text-scale') === value, 'Selected scale was not persisted');
+    const titleSize = getComputedStyle(all('.main .page-title')[0]).fontSize;
+    for (const previousScale of ['1.5', '2']) {
+      localStorage.setItem('hiroute.language', 'zh');
+      localStorage.setItem('hiroute.theme', 'dark');
+      localStorage.setItem('hiroute.text-scale', previousScale);
+      c().remount(); await click('设置');
+      assert(document.querySelector('.hr-ui').dataset.textScale === '1' && getComputedStyle(all('.main .page-title')[0]).fontSize === titleSize, 'Previous text size is still applied by the real shell');
+      assert(localStorage.getItem('hiroute.text-scale') === '1', 'Previous scale was not normalized in storage');
+      assert(!text().includes('文字大小') && !['100%', '150%', '200%'].some(label => button(label)), 'Text size controls remain in Settings');
+      assert(button('深色').getAttribute('aria-pressed') === 'true', 'Normalizing text changed the appearance preference');
+      await click('English'); await click('Light');
+      c().remount(); await click('Settings');
+      assert(document.querySelector('.hr-ui').lang === 'en' && document.querySelector('.hr-ui').dataset.theme === 'light', 'Language or appearance did not survive remount');
+      assert(document.querySelector('.hr-ui').dataset.textScale === '1' && localStorage.getItem('hiroute.text-scale') === '1', 'Remount restored the enlarged scale');
+      assert(!text().includes('Text size') && !['100%', '150%', '200%'].some(label => button(label)), 'English Settings still expose text size controls');
     }
   }),
   scenario('desktop.operation.dismiss-observes', ['operation-feedback'], 'Closing feedback leaves the operation observable and never cancels it', async () => {

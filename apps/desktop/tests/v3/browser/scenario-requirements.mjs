@@ -73,7 +73,7 @@ export const productShellRequired = [
   'desktop.decisions.save-test-revision',
   'desktop.decisions.route-detour',
   'desktop.decisions.discard-navigation',
-  'desktop.settings.persisted-scale',
+  'desktop.settings.fixed-scale',
   'desktop.operation.dismiss-observes',
   'desktop.operation.identity-retry-converges',
   'desktop.operation.repeated-submission',

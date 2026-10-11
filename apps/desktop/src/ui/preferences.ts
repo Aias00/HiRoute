@@ -9,7 +9,7 @@ export type TextScale = 1 | 1.5 | 2;
 export type PresentationPreferences = {
   language: LanguagePreference;
   theme: ThemePreference;
-  textScale: TextScale;
+  textScale: 1;
 };
 
 export type PresentationPreferenceController = Omit<PresentationPreferences, 'language'> & {
@@ -18,7 +18,6 @@ export type PresentationPreferenceController = Omit<PresentationPreferences, 'la
   resolvedTheme: ResolvedTheme;
   setLanguage: (language: LanguagePreference) => void;
   setTheme: (theme: ThemePreference) => void;
-  setTextScale: (scale: TextScale) => void;
 };
 
 export type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
@@ -58,18 +57,16 @@ export function loadPresentationPreferences(
 ): PresentationPreferences {
   let language: string | null = null;
   let theme: string | null = null;
-  let textScale: string | null = null;
   try {
     language = storage?.getItem(LANGUAGE_STORAGE_KEY) ?? null;
     theme = storage?.getItem(THEME_STORAGE_KEY) ?? null;
-    textScale = storage?.getItem(TEXT_SCALE_STORAGE_KEY) ?? null;
   } catch {
     // A denied or damaged localStorage must not prevent the UI from starting.
   }
   return {
     language: parseLanguagePreference(language),
     theme: parseTheme(theme),
-    textScale: parseTextScale(textScale),
+    textScale: 1,
   };
 }
 
@@ -81,7 +78,8 @@ export function savePresentationPreferences(
   try {
     storage.setItem(LANGUAGE_STORAGE_KEY, preferences.language);
     storage.setItem(THEME_STORAGE_KEY, preferences.theme);
-    storage.setItem(TEXT_SCALE_STORAGE_KEY, String(preferences.textScale));
+    // Normalize previously enlarged application text to the fixed default.
+    storage.setItem(TEXT_SCALE_STORAGE_KEY, '1');
   } catch {
     // Preferences remain effective for this session when persistence is unavailable.
   }
@@ -142,6 +140,5 @@ export function usePresentationPreferences(
     resolvedTheme: resolveTheme(preferences.theme, prefersDark),
     setLanguage: (language: LanguagePreference) => setPreferences(current => ({ ...current, language })),
     setTheme: (theme: ThemePreference) => setPreferences(current => ({ ...current, theme })),
-    setTextScale: (textScale: TextScale) => setPreferences(current => ({ ...current, textScale })),
   }), [preferences, prefersDark, systemLanguage]);
 }

@@ -1,11 +1,11 @@
-import type { Language, LanguagePreference, TextScale, ThemePreference } from './preferences';
+import type { Language, LanguagePreference, ThemePreference } from './preferences';
 
 const copy = {
   zh: {
-    language: '显示语言', theme: '外观', scale: '文字大小', system: '跟随系统', light: '浅色', dark: '深色',
+    language: '显示语言', theme: '外观', system: '跟随系统', light: '浅色', dark: '深色',
   },
   en: {
-    language: 'Display language', theme: 'Appearance', scale: 'Text size', system: 'System', light: 'Light', dark: 'Dark',
+    language: 'Display language', theme: 'Appearance', system: 'System', light: 'Light', dark: 'Dark',
   },
 };
 
@@ -13,18 +13,14 @@ export function PresentationControls({
   language,
   languagePreference,
   theme,
-  textScale,
   onLanguageChange,
   onThemeChange,
-  onTextScaleChange,
 }: {
   language: Language;
   languagePreference: LanguagePreference;
   theme: ThemePreference;
-  textScale: TextScale;
   onLanguageChange: (language: LanguagePreference) => void;
   onThemeChange: (theme: ThemePreference) => void;
-  onTextScaleChange: (scale: TextScale) => void;
 }) {
   const text = copy[language];
   return (
@@ -47,14 +43,6 @@ export function PresentationControls({
           ))}
         </div>
       </fieldset>
-      <label>
-        <span>{text.scale}</span>
-        <select value={String(textScale)} onChange={event => onTextScaleChange(Number(event.target.value) as TextScale)}>
-          <option value="1">100%</option>
-          <option value="1.5">150%</option>
-          <option value="2">200%</option>
-        </select>
-      </label>
     </div>
   );
 }

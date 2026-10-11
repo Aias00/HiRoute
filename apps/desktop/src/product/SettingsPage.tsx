@@ -4,16 +4,15 @@ import { DiagnosticsSettings } from '../features/diagnostics/DiagnosticsSettings
 import { UpdatesSettings } from '../features/UpdatesSettings';
 import { safeDiagnosticCode } from '../error-code';
 import { ProductPage } from '../ui';
-import type { Language, LanguagePreference, TextScale, ThemePreference } from '../ui/preferences';
+import type { Language, LanguagePreference, ThemePreference } from '../ui/preferences';
 import { listenerApplyRequest, listenerScopeFromAddress, type GatewayListenerScope } from './gateway-listener-scope';
 
 type SettingsPageProps = {
-  active: boolean; language: Language; languagePreference: LanguagePreference; theme: ThemePreference; textScale: TextScale;
+  active: boolean; language: Language; languagePreference: LanguagePreference; theme: ThemePreference;
   serviceLabel: string; serviceReady: boolean;
   onServiceChanged: () => Promise<void>;
   onLanguageChange: (language: LanguagePreference) => void;
   onThemeChange: (theme: ThemePreference) => void;
-  onTextScaleChange: (scale: TextScale) => void;
   onOpenSessions: (scope?: 'content_only' | 'facts_and_content') => void;
 };
 
@@ -176,9 +175,6 @@ export function SettingsPage(props: SettingsPageProps) {
         </div>
         <div className="settings-row"><div className="settings-copy"><strong>{text('外观', 'Appearance')}</strong><span>{text('默认跟随系统，可随时切换', 'Follows the system by default')}</span></div>
           <div className="segmented">{(['system', 'light', 'dark'] as const).map(theme => <button type="button" key={theme} className={`segment ${props.theme === theme ? 'active' : ''}`} aria-pressed={props.theme === theme} onClick={() => props.onThemeChange(theme)}>{theme === 'system' ? text('跟随系统', 'System') : theme === 'light' ? text('浅色', 'Light') : text('深色', 'Dark')}</button>)}</div>
-        </div>
-        <div className="settings-row"><div className="settings-copy"><strong>{text('文字大小', 'Text size')}</strong><span>{text('标题、正文、提示和控件一起缩放', 'Scales headings, body text, messages, and controls together')}</span></div>
-          <div className="segmented">{([1, 1.5, 2] as const).map(scale => <button type="button" key={scale} className={`segment ${props.textScale === scale ? 'active' : ''}`} aria-pressed={props.textScale === scale} onClick={() => props.onTextScaleChange(scale)}>{Math.round(scale * 100)}%</button>)}</div>
         </div>
       </div></section>
       <section className="settings-group"><h2>Worker</h2><div className="settings-list"><div className="settings-row">
