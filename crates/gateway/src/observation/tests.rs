@@ -206,7 +206,7 @@ fn native_agent_session_derivation_reuses_the_producer_identity_formula() {
     wrong_protocol.ingress_protocol = hiroute_domain::IngressProtocolV1::Unknown;
     assert_eq!(
         derive_native_agent_observation_session_id(&workspace, &key, &wrong_protocol, &opencode),
-        Err(NativeAgentObservationSessionError::UnsupportedIngress)
+        Err(NativeAgentObservationSessionError::InvalidTrust)
     );
 }
 
