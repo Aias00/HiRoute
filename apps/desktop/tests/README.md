@@ -23,6 +23,7 @@ proves native authorization, persistence, process cleanup or real model calls.
 | Publish a smaller budget used by Qoder | `routing.publish.qoder-budget-conflict`, `desktop.routing.qoder-budget-checkpoint` | Both immediate rejection and an accepted operation's checkpoint failure keep edits and explain disabling only Qoder model routing before publication and reconfiguration; neither disables collaboration nor calls models. |
 | Follow a submitted operation | `desktop.operation.dismiss-observes`, `desktop.operation.identity-retry-converges`, `desktop.operation.repeated-submission` in [shell scenarios](v3/browser/product-shell-scenarios.mjs); [operation rules](operation-feedback.test.mjs) | Dismissal does not cancel observation; mismatched identity stays neutral through grace/retry; repeated accepted or unknown saves restart observation; success refreshes and dismisses. Pure tests retain identity, sequence and terminal-state edges. |
 | Adjust presentation | `desktop.settings.persisted-scale`; [preference tests](presentation-preferences.test.mjs) | All supported scales reach the real shell and storage; parsing/storage failure rules remain separately testable. |
+| Configure the shared subscription proxy from a device scan | `desktop.models.subscription-proxy.inline-cancel`, `desktop.models.subscription-proxy.read-retry`, `desktop.models.subscription-proxy.save-retry-return`; [restart hint tests](subscription-proxy-return.test.mjs) | The inline editor preserves scan results and selection, removes the Settings entry, prevents an unread-policy overwrite and retains failed-save input. A simulated restart reloads the scan and saved policy; native restart, persistence and provider transport require production acceptance. |
 | Return to routing or configure a classifier | `desktop.routing.reactivation-models`, `desktop.routing.classifier-protocol` | An existing editor refreshes saved model names; quality uses active models; selection, curl copy and native-save outcomes are visible. |
 | Connect decision models and custom extensions | `desktop.decisions.save-test-revision`, `desktop.decisions.discard-navigation`; [authentication and reference rules](decision-presentation.test.mjs) | Save-and-test uses the newly saved credential revision; failures remain actionable, origin changes clear credentials, and discard clears retained editors. |
 | Correct an invalid collapsed connection field | `desktop.decisions.hidden-invalid-field` | Submission opens and focuses the field, scrolls the complete field and error above sticky actions, and does not save the invalid value. |
@@ -64,7 +65,7 @@ CHROME_BIN=/path/to/chrome node tests/v3/visual/agent-trust.mjs /tmp/hiroute-age
 The full browser run discovers all Agent, routing/Worker and shell scenarios, plus
 the model-to-route scenario. Focused browser flags remain available:
 `--claude-collaboration-only`, `--worker-replacement-only`, `--route-save-only`,
-and `--shell-only` (after the output directory). Unknown flags fail. For selection
+`--subscription-proxy-only`, and `--shell-only` (after the output directory). Unknown flags fail. For selection
 logic alone, run `node --test tests/scenario-selection.test.mjs`.
 
 Choose the configured native Desktop/Pilot entry separately for real authorization,

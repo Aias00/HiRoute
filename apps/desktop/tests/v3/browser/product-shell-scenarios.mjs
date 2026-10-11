@@ -14,6 +14,12 @@ async function until(predicate, label, timeout = 6000) {
   await pause(30);
 }
 async function click(label) { await until(() => button(label), label); button(label).click(); await pause(40); }
+async function deviceScan() {
+  await click('模型'); await click('添加模型');
+  await until(() => all('.add-choice').some(item => item.textContent.includes('扫描本机')), 'scan choice');
+  all('.add-choice').find(item => item.textContent.includes('扫描本机')).click();
+  await until(() => button('设置订阅连接代理') && !button('设置订阅连接代理').disabled, 'ready device scan');
+}
 async function fresh(setup = () => {}) {
   c().reset(); setup(); await until(() => text().includes('仅在本机运行'), 'ready DesktopApp');
 }
@@ -38,6 +44,91 @@ async function routing() {
   await until(() => document.querySelector('.plan-identity-fields input'), 'route editor');
 }
 const scenarios = [
+  scenario('desktop.models.subscription-proxy.inline-cancel', ['subscription-proxy'], 'Proxy editing stays in the scan and cancelling retains its results and selected subscription', async () => {
+    const saved = { config: { revision: 'fixture', policy: { mode: 'manual', url: 'http://proxy.example:8080', no_proxy: 'example.org' } }, applied: true };
+    await fresh(() => { c().handlers.subscription_proxy_status = () => structuredClone(saved); });
+    await click('设置');
+    assert(!text().includes('订阅连接代理') && calls('subscription_proxy_status').length === 0, 'Settings still owns the proxy entry');
+    await deviceScan();
+    await until(() => button('调整模型'), 'scanned subscription');
+    const dialog = document.querySelector('[role="dialog"]');
+    const list = document.querySelector('.oc-scan-list');
+    await click('设置订阅连接代理');
+    await until(() => document.querySelector('[aria-label="订阅代理地址"]'), 'saved manual proxy');
+    assert(document.querySelector('[role="dialog"]') === dialog && document.querySelector('.oc-scan-list') === list, 'Proxy entry replaced the scan');
+    assert(all('.subscription-proxy-scan-content button').every(item => item.matches(':disabled')), 'Scan actions remain enabled during proxy editing');
+    assert(text().includes('全部订阅及订阅检查') && text().includes('正在执行的请求和任务可能中断'), 'Scope or restart impact missing');
+    assert(getComputedStyle(document.querySelector('.subscription-proxy-control')).display === 'flex', 'Proxy form layout is missing from the production stylesheet');
+    assert(getComputedStyle(document.querySelector('.subscription-proxy-scan-content')).borderTopWidth === '0px', 'Disabled scan inherited an unintended fieldset border');
+    const panelBounds = document.querySelector('.subscription-proxy-panel').getBoundingClientRect();
+    const dialogBounds = dialog.getBoundingClientRect();
+    assert(panelBounds.left >= dialogBounds.left && panelBounds.right <= dialogBounds.right, 'Proxy form overflows the scan dialog');
+    for (const label of all('.subscription-proxy-control .field-label')) {
+      const range = document.createRange(); range.selectNodeContents(label.firstChild);
+      const labelText = range.getBoundingClientRect();
+      const control = label.querySelector('input, select').getBoundingClientRect();
+      assert(labelText.height <= parseFloat(getComputedStyle(label).lineHeight) * 2, 'Proxy field label wraps into a narrow column');
+      assert(control.top >= labelText.bottom && control.left >= panelBounds.left && control.right <= panelBounds.right, 'Proxy field collides with its label or panel edge');
+    }
+    assert(document.querySelector('[aria-label="订阅代理地址"]').placeholder === 'http://127.0.0.1:端口', 'Proxy placeholder exposes a fixed port');
+    setInput(document.querySelector('[aria-label="订阅代理地址"]'), 'http://draft.example:9000');
+    await click('取消');
+    assert(document.querySelector('.oc-scan-list') === list && !button('调整模型').matches(':disabled'), 'Cancel lost or locked the scan');
+    assert(calls('subscription_proxy_apply').length === 0, 'Cancel applied a draft');
+    await click('调整模型');
+    const detail = document.querySelector('.oc-scan-detail');
+    await click('设置订阅连接代理');
+    await until(() => document.querySelector('[aria-label="订阅代理地址"]')?.value === saved.config.policy.url, 'discarded draft and saved readback');
+    document.querySelector('[role="dialog"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await until(() => !document.querySelector('.subscription-proxy-panel'), 'Escape collapses editor');
+    assert(document.querySelector('.oc-scan-detail') === detail && document.querySelector('[role="dialog"]') === dialog, 'Escape lost the selected subscription');
+  }),
+  scenario('desktop.models.subscription-proxy.read-retry', ['subscription-proxy'], 'An unread proxy policy cannot be overwritten and retry loads the saved mode', async () => {
+    let attempts = 0;
+    await fresh(() => { c().handlers.subscription_proxy_status = () => {
+      if (++attempts === 1) throw new Error('SUBSCRIPTION_PROXY_UNAVAILABLE');
+      return { config: { revision: 'fixture', policy: { mode: 'direct' } }, applied: false };
+    }; });
+    await deviceScan(); await click('设置订阅连接代理');
+    await until(() => button('重试读取'), 'read failure');
+    assert(button('保存并重启 HiRoute').disabled && !document.querySelector('[aria-label="订阅代理模式"]'), 'Unknown policy can be edited or saved');
+    button('保存并重启 HiRoute').click(); await pause(40);
+    assert(calls('subscription_proxy_apply').length === 0, 'Read failure overwrote the saved policy');
+    await click('重试读取');
+    await until(() => document.querySelector('[aria-label="订阅代理模式"]')?.value === 'direct', 'retried saved policy');
+    assert(!button('保存并重启 HiRoute').disabled && text().includes('等待应用或服务就绪'), 'Retry did not restore editing or misreported application');
+  }),
+  scenario('desktop.models.subscription-proxy.save-retry-return', ['subscription-proxy'], 'Save failure retains the draft and a successful restart returns to a fresh scan with saved configuration', async () => {
+    let saved = { config: { revision: 'fixture', policy: { mode: 'inherit' } }, applied: true };
+    let fail = true;
+    await fresh(() => {
+      c().handlers.subscription_proxy_status = () => structuredClone(saved);
+      c().handlers.subscription_proxy_apply = ({ policy }) => {
+        if (fail) throw new Error('SUBSCRIPTION_PROXY_INVALID_OR_UNAVAILABLE');
+        saved = { config: { revision: 'next', policy }, applied: true };
+        c().remount();
+      };
+    });
+    await deviceScan(); await click('设置订阅连接代理');
+    await until(() => document.querySelector('[aria-label="订阅代理模式"]'), 'proxy modes');
+    const select = document.querySelector('[aria-label="订阅代理模式"]');
+    assert([...select.options].map(item => item.value).join(',') === 'inherit,direct,manual', 'Existing modes changed');
+    select.value = 'manual'; select.dispatchEvent(new Event('change', { bubbles: true })); await pause(40);
+    setInput(document.querySelector('[aria-label="订阅代理地址"]'), 'http://proxy.example:8080');
+    setInput(document.querySelector('[aria-label="订阅代理绕过列表"]'), 'example.org');
+    await click('保存并重启 HiRoute');
+    await until(() => text().includes('输入已保留'), 'failed save');
+    assert(document.querySelector('[aria-label="订阅代理地址"]').value === 'http://proxy.example:8080' && document.querySelector('[aria-label="订阅代理绕过列表"]').value === 'example.org', 'Save failure discarded input');
+    assert(!localStorage.getItem('hiroute.subscription-proxy-return'), 'Failed save left a restart hint');
+    const scans = calls('compute_subscriptions').length;
+    fail = false; await click('保存并重启 HiRoute');
+    await until(() => document.querySelector('.oc-scan-list') && !document.querySelector('.subscription-proxy-panel'), 'restart returned to scan');
+    assert(calls('compute_subscriptions').length > scans && !localStorage.getItem('hiroute.subscription-proxy-return'), 'Restart reused stale scan or retained navigation hint');
+    assert(calls('subscription_proxy_apply').length === 2 && calls('check_subscription').length === 0, 'Save was duplicated or restart automatically checked a subscription');
+    assert(JSON.stringify(calls('subscription_proxy_apply')[1].payload.policy) === JSON.stringify(saved.config.policy), 'Saved policy changed');
+    await click('设置订阅连接代理');
+    await until(() => document.querySelector('[aria-label="订阅代理地址"]')?.value === saved.config.policy.url, 'saved proxy on reopen');
+  }),
   scenario('desktop.models.selection-survives-save-refresh', ['model-connections'], 'Renaming a selected connection does not jump back to the previous save result', async () => {
     let a; let b; let beforeB; let latestChange;
     await fresh(() => {

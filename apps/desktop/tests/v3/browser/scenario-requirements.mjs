@@ -42,6 +42,7 @@ export const routingWorkerRequired = ['routing.capabilities.candidate-vs-fixed',
   'routing.publish.qoder-budget-conflict'];
 
 export const focusedRequirements = {
+  'subscription-proxy': ['desktop.models.subscription-proxy.inline-cancel', 'desktop.models.subscription-proxy.read-retry', 'desktop.models.subscription-proxy.save-retry-return'],
   'claude-collaboration': ['claude.collaboration.check-before-save', 'claude.collaboration.retry-preserves-edit', 'claude.collaboration.obsolete-blocker'],
   'worker-replacement': ['worker.installation.replace', 'worker.installation.latest-edit'],
   'qoder': ['qoder.collaboration.enable-without-model', 'qoder.collaboration.retry-and-restore', 'qoder.routing.additional-plans', 'qoder.routing.adjust-and-restore', 'agent.configuration.shared-interactions', 'qoder.routing.resume-pending', 'qoder.installation.single-cli', 'routing.publish.qoder-budget-conflict', 'desktop.routing.qoder-budget-checkpoint'],
@@ -49,6 +50,9 @@ export const focusedRequirements = {
 };
 
 export const productShellRequired = [
+  'desktop.models.subscription-proxy.inline-cancel',
+  'desktop.models.subscription-proxy.read-retry',
+  'desktop.models.subscription-proxy.save-retry-return',
   'desktop.models.selection-survives-save-refresh',
   'desktop.models.connection-template-directory-layout',
   'desktop.models.connection-rename',
