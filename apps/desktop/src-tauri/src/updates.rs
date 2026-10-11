@@ -39,6 +39,13 @@ impl PreparedUpdate {
         Ok(())
     }
 }
+#[derive(Clone, Copy, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UpdateRecovery {
+    ServiceAvailable,
+    StopPending,
+    RestartRequired,
+}
 #[derive(Clone, Serialize)]
 pub struct UpdateView {
     current_version: String,
@@ -50,6 +57,7 @@ pub struct UpdateView {
     error: Option<String>,
     can_install: bool,
     package_ready: bool,
+    recovery: Option<UpdateRecovery>,
 }
 struct UpdateInner {
     view: UpdateView,
@@ -105,6 +113,7 @@ impl UpdateState {
                     error: None,
                     can_install: current_app.is_some(),
                     package_ready: false,
+                    recovery: None,
                 },
                 prepared: None,
             }),
@@ -144,6 +153,9 @@ impl Updates {
         self.cancelled.store(false, Ordering::SeqCst);
         inner.view.phase = phase.into();
         inner.view.error = None;
+        if matches!(inner.view.recovery, Some(UpdateRecovery::ServiceAvailable)) {
+            inner.view.recovery = None;
+        }
         Ok(inner.view.clone())
     }
     fn fail(&self, error: String) {
@@ -295,6 +307,7 @@ pub async fn update_install(
         let prepared = inner.prepared.clone().ok_or("UPGRADE_INSTALL_NOT_READY")?;
         inner.view.phase = "waiting".into();
         inner.view.error = None;
+        inner.view.recovery = None;
         state.0.cancelled.store(false, Ordering::SeqCst);
         prepared
     };
@@ -303,15 +316,8 @@ pub async fn update_install(
     let handle = window.app_handle().clone();
     tauri::async_runtime::spawn(async move {
         if let Err(error) = install(&updates, &sessions, &handle, prepared).await {
-            // Resume only while the owned daemon is still serving. An already requested
-            // orderly shutdown must finish; it cannot be converted into a new live session.
-            let _ = resident_call(&sessions, |r| {
-                if !r.upgrade_stop_requested() {
-                    r.upgrade_status(UpgradeAction::Cancel)?;
-                }
-                Ok(())
-            })
-            .await;
+            let recovery = recover_precommit(&updates, &sessions, &handle).await;
+            let _ = updates.edit(|view| view.recovery = Some(recovery));
             updates.fail(error);
         }
     });
@@ -382,10 +388,53 @@ async fn install(
         }
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
-    resident_call(sessions, |r| r.stop_for_upgrade()).await?;
-    tokio::task::spawn_blocking(move || installer::launch(&handoff))
+    let installer = tokio::task::spawn_blocking(move || installer::start(&handoff))
         .await
-        .map_err(|_| "UPGRADE_INSTALLER_FAILED")??;
+        .map_err(|_| "UPGRADE_INSTALLER_UNAVAILABLE")??;
+    // Preflight succeeded while the old service was alive. An uncommitted helper is
+    // reaped on every error; it cannot infer authorization from the Desktop disappearing.
+    resident_call(sessions, |r| r.stop_for_upgrade()).await?;
+    tokio::task::spawn_blocking(move || installer.commit())
+        .await
+        .map_err(|_| "UPGRADE_INSTALLER_COMMIT_FAILED")??;
     app.exit(0);
     Ok(())
+}
+
+async fn recover_precommit(
+    updates: &Updates,
+    sessions: &Sessions,
+    app: &tauri::AppHandle,
+) -> UpdateRecovery {
+    let Some(root) = updates.data_root.clone() else {
+        return UpdateRecovery::RestartRequired;
+    };
+    let Ok(executable) = std::env::current_exe() else {
+        return UpdateRecovery::RestartRequired;
+    };
+    let diagnostics = app.state::<crate::bridge::DiagnosticsState>().startup();
+    let handle = app.clone();
+    let mut session = sessions.clone().lock_owned().await;
+    let result = tokio::task::spawn_blocking(move || {
+        let current = session.as_mut().ok_or("RESIDENT_UNAVAILABLE")?;
+        if !current.resident.upgrade_stop_requested() {
+            current.resident.upgrade_status(UpgradeAction::Cancel)?;
+        } else {
+            crate::bridge::expire_window_confirmations(&handle, "main");
+            current.invalidate_confirmation();
+            let resident = current.resident.replacement_after_upgrade_stop(
+                &root,
+                &executable.with_file_name("hirouted"),
+                &diagnostics,
+            )?;
+            *session = Some(crate::session::Session::new(resident));
+        }
+        Ok::<_, String>(())
+    })
+    .await;
+    match result {
+        Ok(Ok(())) => UpdateRecovery::ServiceAvailable,
+        Ok(Err(code)) if code == "UPGRADE_STOP_PENDING" => UpdateRecovery::StopPending,
+        _ => UpdateRecovery::RestartRequired,
+    }
 }

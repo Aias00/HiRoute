@@ -29,10 +29,8 @@ pub(super) async fn observation_delete(
             data_class: input.data_class,
             delete_rollups: false,
         };
-        let preview = state
-            .0
-            .lock()
-            .await
+        let preview = super::confirmation_session(&state, epoch)
+            .await?
             .as_mut()
             .ok_or("RESIDENT_UNAVAILABLE")?
             .deletion_preview(spec)
@@ -66,10 +64,8 @@ pub(super) async fn observation_delete(
         if state.2.load(Ordering::SeqCst) != epoch || !window.is_visible().unwrap_or(false) {
             return Err("CONFIRMATION_STALE".into());
         }
-        let outcome = state
-            .0
-            .lock()
-            .await
+        let outcome = super::confirmation_session(&state, epoch)
+            .await?
             .as_mut()
             .ok_or("RESIDENT_UNAVAILABLE")?
             .deletion_apply(preview)

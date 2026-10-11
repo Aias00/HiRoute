@@ -7,6 +7,7 @@ import type {
   HomePlans,
   HomeRead,
   HomeReads,
+  HomeService,
   HomeSubscriptionCheck,
 } from './types';
 
@@ -60,6 +61,24 @@ export function failDomainRead<T>(
 
 export function visibleData<T>(read: HomeRead<T>): T | undefined {
   return read.status === 'ready' ? read.data : read.previous;
+}
+
+export function deriveHomeServiceStatus(read: HomeRead<HomeService>): {
+  state: 'ready' | 'read_only' | 'unavailable' | 'unknown';
+  operational: boolean;
+} {
+  if (read.status !== 'ready') {
+    return { state: read.status === 'error' ? 'unavailable' : 'unknown', operational: false };
+  }
+  const service = read.data;
+  const running = service.daemon === 'running'
+    && ['ready', 'empty', 'no_new_calls'].includes(service.gateway);
+  return {
+    state: service.daemon === 'read_only' ? 'read_only'
+      : service.daemon === 'unavailable' ? 'unavailable'
+        : running ? 'ready' : 'unknown',
+    operational: running && Boolean(service.recoveryReady),
+  };
 }
 
 function configuredFacet(state: HomeFacetState): boolean {

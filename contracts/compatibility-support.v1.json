@@ -363,6 +363,7 @@
     "hiroute.subscription-maintenance/v2",
     "hiroute.subscription-proxy/v1",
     "hiroute.system-status/v1",
+    "hiroute.upgrade-installer-decision/v1",
     "hiroute.upgrade-installer-started/v1",
     "hiroute.upgrade-source-backup/v1",
     "hiroute.value-ledger-entry/v1",
@@ -908,13 +909,15 @@
         "hiroute.upgrade-recovery-package",
         "hiroute.upgrade-installer-started",
         "hiroute.daemon-upgrade-progress",
-        "hiroute.upgrade-recovery-catalog"
+        "hiroute.upgrade-recovery-catalog",
+        "hiroute.upgrade-installer-decision"
       ],
       "current_contracts": [
         "hiroute.website.releases/v2",
         "hiroute.desktop-upgrade-handoff/v1",
         "hiroute.upgrade-installer-started/v1",
-        "hiroute.daemon-upgrade-progress/v1"
+        "hiroute.daemon-upgrade-progress/v1",
+        "hiroute.upgrade-installer-decision/v1"
       ],
       "legacy_support": []
     },

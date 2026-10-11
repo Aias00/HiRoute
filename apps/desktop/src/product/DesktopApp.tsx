@@ -18,6 +18,7 @@ import {
 import {
   Home,
   HomeNavigation,
+  deriveHomeServiceStatus,
   visibleData,
   type HomeAction,
   type HomeNavigationItem,
@@ -156,7 +157,7 @@ export function DesktopApp() {
     { id: 'sessions', label: text.pages.sessions, icon: 'sessions' },
   ];
 
-  const service = visibleData(home.reads.service);
+  const serviceStatus = deriveHomeServiceStatus(home.reads.service);
   const startupFailure = home.startup?.state === 'failed' ? home.startup : null;
   const upgradePhase = home.startup?.state === 'starting' ? home.startup.upgrade_phase : undefined;
   const upgradePhaseText = upgradePhase ? ({
@@ -166,17 +167,13 @@ export function DesktopApp() {
     validation: language === 'zh' ? '正在校验升级结果' : 'Verifying upgraded data',
     service_recovery: language === 'zh' ? '正在恢复本机服务' : 'Restoring the local service',
   })[upgradePhase] : undefined;
-  const serviceLabel = service?.daemon === 'read_only'
-    ? text.serviceReadOnly
-    : service?.daemon === 'unavailable'
-      ? text.serviceUnavailable
-      : service?.daemon === 'running' && ['ready', 'empty', 'no_new_calls'].includes(service.gateway)
-        ? text.serviceReady
-        : text.serviceUnknown;
-  const serviceReady = service?.daemon === 'running' && service.gateway === 'ready';
-  const serviceOperational = service?.daemon === 'running'
-    && Boolean(service.recoveryReady)
-    && ['ready', 'empty', 'no_new_calls'].includes(service.gateway);
+  const serviceLabel = {
+    read_only: text.serviceReadOnly,
+    unavailable: text.serviceUnavailable,
+    ready: text.serviceReady,
+    unknown: text.serviceUnknown,
+  }[serviceStatus.state];
+  const serviceOperational = serviceStatus.operational;
   const navigationLabel = serviceOperational
       ? language === 'zh' ? '仅在本机运行' : 'Running locally'
       : serviceLabel;
@@ -748,6 +745,7 @@ export function DesktopApp() {
           textScale={preferences.textScale}
           serviceLabel={settingsServiceLabel}
           serviceReady={serviceOperational}
+          onServiceChanged={home.refreshDesktop}
           onLanguageChange={preferences.setLanguage}
           onThemeChange={preferences.setTheme}
           onTextScaleChange={preferences.setTextScale}

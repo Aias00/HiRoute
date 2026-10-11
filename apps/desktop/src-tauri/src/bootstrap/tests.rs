@@ -1,5 +1,129 @@
 use super::*;
 
+/// Native channel fixture for Session/transport checks; never a production daemon substitute.
+pub(crate) fn session_resident(root: &Path, client: Client) -> Resident {
+    use std::io::BufRead;
+    let mut resident = recovery_resident(root, false);
+    resident.client = client;
+    let (capability_reader, capability_writer) = pipe().unwrap();
+    let (ack_reader, mut ack_writer) = pipe().unwrap();
+    let owned = resident.owned.as_mut().unwrap();
+    owned.capability = capability_writer;
+    owned.ack = ack_reader;
+    std::thread::spawn(move || {
+        for line in std::io::BufReader::new(capability_reader).lines() {
+            let registration: serde_json::Value = serde_json::from_str(&line.unwrap()).unwrap();
+            let mut reply = serde_json::to_vec(&serde_json::json!({
+                "schema": "hiroute.protected-apply-ack/v2",
+                "registration_id": registration["registration_id"], "registered": true
+            }))
+            .unwrap();
+            reply.push(b'\n');
+            ack_writer.write_all(&reply).unwrap();
+        }
+    });
+    resident
+}
+
+fn recovery_resident(root: &Path, slow: bool) -> Resident {
+    let (reader, writer) = pipe().unwrap();
+    let (_, capability) = pipe().unwrap();
+    let (ack, _) = pipe().unwrap();
+    let mut command = Command::new(if slow { "/bin/sleep" } else { "/bin/cat" });
+    if slow {
+        command.arg("30");
+    }
+    Resident {
+        client: Client::new(
+            "hiroute-desktop",
+            LocalEndpoint::from_runtime_root(root.join("run")),
+        ),
+        owned: Some(OwnedChild {
+            child: command
+                .stdin(Stdio::from(reader))
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap(),
+            shutdown: Some(writer),
+            capability,
+            ack,
+            authority_healthy: true,
+            manual_input_candidates: BTreeSet::new(),
+            diagnostics: None,
+        }),
+        _lock: acquire_host_lock(root).unwrap(),
+    }
+}
+
+#[test]
+fn recovery_waits_for_exact_child_exit_and_never_drops_a_pending_child() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut resident = recovery_resident(directory.path(), true);
+    assert_eq!(
+        resident
+            .replace_stopped(|_| panic!("startup before shutdown"))
+            .err()
+            .unwrap(),
+        "UPGRADE_RESIDENT_NOT_STOPPED"
+    );
+    drop(resident.owned.as_mut().unwrap().shutdown.take());
+    assert_eq!(
+        resident
+            .replace_stopped(|_| panic!("startup while old child lives"))
+            .err()
+            .unwrap(),
+        "UPGRADE_STOP_PENDING"
+    );
+    assert!(
+        resident
+            .owned
+            .as_mut()
+            .unwrap()
+            .child
+            .try_wait()
+            .unwrap()
+            .is_none()
+    );
+    assert!(acquire_host_lock(directory.path()).is_err());
+    // Explicitly clean up this test's sleeping fixture, not the production stop path.
+    resident.owned.as_mut().unwrap().child.kill().unwrap();
+    resident.owned.as_mut().unwrap().child.wait().unwrap();
+}
+
+#[test]
+fn recovery_preserves_host_lock_across_failed_and_successful_restarts() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut resident = recovery_resident(directory.path(), false);
+    drop(resident.owned.as_mut().unwrap().shutdown.take());
+    resident.owned.as_mut().unwrap().child.wait().unwrap();
+    assert_eq!(
+        resident
+            .replace_stopped(|_| Err("DAEMON_START_FAILED".into()))
+            .err()
+            .unwrap(),
+        "DAEMON_START_FAILED"
+    );
+    assert!(acquire_host_lock(directory.path()).is_err());
+    let replacement = resident
+        .replace_stopped(|lock| {
+            assert!(acquire_host_lock(directory.path()).is_err());
+            Ok(Resident {
+                client: Client::new(
+                    "hiroute-desktop",
+                    LocalEndpoint::from_runtime_root(directory.path().join("run")),
+                ),
+                owned: None,
+                _lock: lock,
+            })
+        })
+        .unwrap();
+    drop(resident);
+    assert!(acquire_host_lock(directory.path()).is_err());
+    drop(replacement);
+    assert!(acquire_host_lock(directory.path()).is_ok());
+}
+
 #[test]
 fn upgrade_prepare_status_cancel_exchange_complete_correlated_frames() {
     use hiroute_host_runtime::{LauncherUpgradeRequest, LauncherUpgradeStatus, UpgradeAction};
