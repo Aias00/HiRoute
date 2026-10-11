@@ -136,10 +136,17 @@ fn native_agent_session_derivation_reuses_the_producer_identity_formula() {
             },
             "deepseek_harness_session",
         ),
+        (
+            NativeAgentObservationIdentityV1::OpenCodeSession {
+                session_id: "opencode-native".into(),
+            },
+            "opencode_session",
+        ),
     ] {
         let raw = match &identity {
             NativeAgentObservationIdentityV1::PiSession { session_id }
-            | NativeAgentObservationIdentityV1::DeepseekHarnessSession { session_id } => session_id,
+            | NativeAgentObservationIdentityV1::DeepseekHarnessSession { session_id }
+            | NativeAgentObservationIdentityV1::OpenCodeSession { session_id } => session_id,
             _ => unreachable!(),
         };
         let expected = SessionId::parse(reliable_observation_session_id(
@@ -175,6 +182,31 @@ fn native_agent_session_derivation_reuses_the_producer_identity_formula() {
     assert!(
         derive_native_agent_observation_session_id(&workspace, &key, &wrong_protocol, &qoder)
             .is_err()
+    );
+    let opencode = NativeAgentObservationIdentityV1::OpenCodeSession {
+        session_id: "opencode-native".into(),
+    };
+    let expected_chat = SessionId::parse(reliable_observation_session_id(
+        &key,
+        workspace.as_str(),
+        &wrong_protocol.authority_id,
+        &wrong_protocol.grant_id,
+        wrong_protocol.agent_plan_id.as_ref().unwrap().as_str(),
+        &wrong_protocol.served_model_id,
+        "chat_completions",
+        "opencode_session",
+        &["opencode-native"],
+    ))
+    .unwrap();
+    assert_eq!(
+        derive_native_agent_observation_session_id(&workspace, &key, &wrong_protocol, &opencode)
+            .unwrap(),
+        expected_chat
+    );
+    wrong_protocol.ingress_protocol = hiroute_domain::IngressProtocolV1::Unknown;
+    assert_eq!(
+        derive_native_agent_observation_session_id(&workspace, &key, &wrong_protocol, &opencode),
+        Err(NativeAgentObservationSessionError::UnsupportedIngress)
     );
 }
 

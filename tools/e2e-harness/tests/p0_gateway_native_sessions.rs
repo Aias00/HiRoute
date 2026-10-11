@@ -43,23 +43,38 @@ fn send(
     body: &Value,
     ordinal: usize,
 ) -> Value {
-    let mut headers = headers.to_vec();
-    headers.push((
-        "X-HiRoute-Token",
-        if messages {
-            runtime_support::MESSAGES_TOKEN
-        } else {
-            runtime_support::TOKEN
-        },
-    ));
-    let response = request(
-        fixture.address,
-        "POST",
+    send_at(
+        fixture,
         if messages {
             "/v1/messages"
         } else {
             "/v1/responses"
         },
+        if messages {
+            runtime_support::MESSAGES_TOKEN
+        } else {
+            runtime_support::TOKEN
+        },
+        headers,
+        body,
+        ordinal,
+    )
+}
+
+fn send_at(
+    fixture: &RuntimeFixture,
+    path: &str,
+    token: &str,
+    headers: &[(&str, &str)],
+    body: &Value,
+    ordinal: usize,
+) -> Value {
+    let mut headers = headers.to_vec();
+    headers.push(("X-HiRoute-Token", token));
+    let response = request(
+        fixture.address,
+        "POST",
+        path,
         &headers,
         &serde_json::to_vec(body).unwrap(),
     );
@@ -174,6 +189,155 @@ fn real_listener_native_sessions_prioritize_ids_and_isolate_identical_content() 
             );
         }
     }
+    assert_eq!(simple.calls() + complex.calls(), ordinal);
+}
+
+#[test]
+fn real_listener_opencode_sessions_keep_children_separate_from_cache_affinity() {
+    let simple = provider(RESPONSE);
+    let complex = provider(RESPONSE);
+    let classifier = provider(DECISION);
+    let fixture = RuntimeFixture::launch_rest_classified_with_observation(
+        &[&simple, &complex, &classifier],
+        1,
+        ObservationFaults::healthy(),
+    );
+    let mut ordinal = 0;
+    for (path, token) in [
+        ("/v1/responses", runtime_support::TOKEN),
+        ("/v1/chat/completions", runtime_support::CHAT_TOKEN),
+        ("/v1/messages", runtime_support::MESSAGES_TOKEN),
+    ] {
+        let ordinary = "identical ordinary first user";
+        let document = |text| body(path != "/v1/responses", text, None);
+        let mut correlations = Vec::new();
+        // OpenCode's current cache routing may share a parent/fork affinity.
+        // Only the dedicated session-id identifies the actual child session.
+        for (id, text, affinity, request_id) in [
+            ("ses_child_a", ordinary, "ses_parent", "msg_initial"),
+            (
+                "ses_child_a",
+                "# AGENTS.md instructions\nrebuilt native context",
+                "ses_other_cache_root",
+                "msg_followup",
+            ),
+            ("ses_child_b", ordinary, "ses_parent", "msg_initial"),
+        ] {
+            ordinal += 1;
+            let correlation = send_at(
+                &fixture,
+                path,
+                token,
+                &[
+                    ("User-Agent", "opencode/1.19.0"),
+                    ("X-OpenCode-Session-Id", id),
+                    ("x-opencode-parent-session-id", "ses_parent"),
+                    ("x-parent-session-id", "ses_parent"),
+                    ("x-opencode-session", affinity),
+                    ("x-session-affinity", affinity),
+                    ("X-Session-Id", affinity),
+                    ("x-opencode-request", request_id),
+                    ("x-opencode-project", "project_shared"),
+                ],
+                &document(text),
+                ordinal,
+            );
+            assert_eq!(correlation["session_scope"], "conversation", "{path}");
+            assert_eq!(
+                correlation["correlation_provenance"], "agent_supplied",
+                "{path}"
+            );
+            assert!(
+                !correlation["conversation_id"]
+                    .as_str()
+                    .unwrap()
+                    .contains(id)
+            );
+            correlations.push(correlation);
+        }
+        assert_eq!(
+            correlations[0]["conversation_id"], correlations[1]["conversation_id"],
+            "{path}: cache and request changes must retain the native session"
+        );
+        assert_ne!(
+            correlations[0]["conversation_id"], correlations[2]["conversation_id"],
+            "{path}: siblings sharing cache affinity must remain separate"
+        );
+
+        let mut inferred = Vec::new();
+        for _ in 0..2 {
+            ordinal += 1;
+            let correlation = send_at(&fixture, path, token, &[], &document(ordinary), ordinal);
+            assert_eq!(correlation["session_scope"], "conversation");
+            assert_eq!(correlation["correlation_provenance"], "gateway_generated");
+            inferred.push(correlation);
+        }
+        assert_eq!(
+            inferred[0]["conversation_id"],
+            inferred[1]["conversation_id"]
+        );
+        let mut invalid_sessions = std::collections::BTreeSet::new();
+        for headers in [
+            vec![("x-opencode-session-id", "")],
+            vec![
+                ("x-opencode-session-id", "same"),
+                ("x-opencode-session-id", "same"),
+            ],
+            vec![
+                ("x-opencode-session-id", "session"),
+                ("session-id", "other"),
+            ],
+        ] {
+            for _ in 0..2 {
+                ordinal += 1;
+                let correlation = send_at(
+                    &fixture,
+                    path,
+                    token,
+                    &headers,
+                    &document(ordinary),
+                    ordinal,
+                );
+                assert_eq!(correlation["session_scope"], "request_scoped", "{path}");
+                assert_eq!(correlation["correlation_provenance"], "unproven", "{path}");
+                assert!(
+                    invalid_sessions
+                        .insert(correlation["conversation_id"].as_str().unwrap().to_owned())
+                );
+            }
+        }
+        let hints = [
+            ("User-Agent", "opencode/1.19.0"),
+            ("x-opencode-session", "ses_parent"),
+            ("x-session-affinity", "ses_parent"),
+            ("X-Session-Id", "ses_parent"),
+            ("x-opencode-parent-session-id", "ses_parent"),
+            ("x-parent-session-id", "ses_parent"),
+            ("x-opencode-request", "msg_request"),
+            ("x-opencode-project", "project_shared"),
+        ];
+        for _ in 0..2 {
+            ordinal += 1;
+            let correlation = send_at(&fixture, path, token, &hints, &document(ordinary), ordinal);
+            assert_eq!(correlation["correlation_provenance"], "gateway_generated");
+            assert_eq!(
+                correlation["conversation_id"],
+                inferred[0]["conversation_id"]
+            );
+        }
+        ordinal += 1;
+        let correlation = send_at(
+            &fixture,
+            path,
+            token,
+            &hints,
+            &document("# AGENTS.md instructions"),
+            ordinal,
+        );
+        assert_eq!(correlation["session_scope"], "request_scoped");
+        assert_eq!(correlation["correlation_provenance"], "unproven");
+    }
+    assert_eq!(ordinal, 42, "every required OpenCode scenario must execute");
     assert_eq!(simple.calls() + complex.calls(), ordinal);
 }
 

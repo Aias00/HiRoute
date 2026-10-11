@@ -37,6 +37,15 @@ Verified Worker tasks take precedence. Ordinary clients supply these native fiel
 | Qoder | `session-id`, retaining its existing generic session namespace |
 | Pi | pi-ai session headers scoped by `pi (...)` User-Agent |
 | DeepSeek Harness | `x-deepseek-harness-session-id`; pi-ai session headers scoped by `deepseek-harness/<version>` User-Agent |
+| OpenCode | `x-opencode-session-id`, including custom providers and all three supported ingress protocols |
+
+OpenCode's [released request producer](https://github.com/anomalyco/opencode/blob/733b2c627e5aec39cb33cc22373bdce33053ef2c/packages/opencode/src/session/llm/request.ts)
+sends the actual session in `x-opencode-session-id`. Its
+[current cache affinity](https://github.com/anomalyco/opencode/blob/d21b0790a6c146815f28fea604e41e922f009590/packages/core/src/session/affinity.ts)
+can share a parent or fork source, so `x-opencode-session`, `x-session-affinity`
+and `X-Session-Id` are not OpenCode identity aliases and need not match that ID.
+Parent, project and request headers also do not identify the current session.
+This input support does not add OpenCode managed configuration or Worker launch.
 
 For pi-ai, Responses sends its native `sessionId` as `x-client-request-id` and
 optionally `session_id`; OpenRouter compatibility uses `x-session-id`. Messages
@@ -56,7 +65,8 @@ namespace, including Pi's Codex transport. Claude header and metadata share the
 existing Claude namespace. Session storage uses the producer's scoped HMAC;
 raw IDs are not persisted and existing observations are not rewritten.
 [p0_gateway_native_sessions.rs](../../tools/e2e-harness/tests/p0_gateway_native_sessions.rs)
-covers the real listener and observation boundary across Responses and Messages.
+covers the real listener and observation boundary across Responses and Messages,
+plus OpenCode's native identity across Chat Completions and shared cache affinity.
 
 ## Decision operation
 

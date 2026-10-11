@@ -118,6 +118,10 @@ pub enum NativeAgentObservationIdentityV1 {
     DeepseekHarnessSession {
         session_id: String,
     },
+    /// Actual OpenCode session from `x-opencode-session-id`, not cache affinity.
+    OpenCodeSession {
+        session_id: String,
+    },
     CodexThreadSession {
         thread_id: String,
         session_id: String,
@@ -190,6 +194,9 @@ pub fn derive_native_agent_observation_session_id(
         }
         NativeAgentObservationIdentityV1::DeepseekHarnessSession { session_id } => {
             ("deepseek_harness_session", vec![session_id.as_str()])
+        }
+        NativeAgentObservationIdentityV1::OpenCodeSession { session_id } => {
+            ("opencode_session", vec![session_id.as_str()])
         }
         NativeAgentObservationIdentityV1::QoderSession { session_id } => {
             if !matches!(

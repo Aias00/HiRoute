@@ -218,6 +218,7 @@ fn native_header_validation_rejects_duplicates_empty_oversized_and_nontext_value
     for name in [
         "x-claude-code-session-id",
         "x-deepseek-harness-session-id",
+        "x-opencode-session-id",
         "session-id",
     ] {
         for value in ["".to_owned(), "x".repeat(129)] {
@@ -249,6 +250,57 @@ fn native_header_validation_rejects_duplicates_empty_oversized_and_nontext_value
         assert!(valid_identity("native\tbad").is_none());
         assert!(valid_identity(&"界".repeat(43)).is_none());
     }
+}
+
+#[test]
+fn opencode_uses_actual_session_without_merging_parent_or_cache_affinity() {
+    for ingress in [
+        IngressProtocol::Responses,
+        IngressProtocol::ChatCompletions,
+        IngressProtocol::Messages,
+    ] {
+        assert_native(
+            native(&[("X-OpenCode-Session-Id", "native")], ingress, Value::Null),
+            "opencode_session",
+            &["native"],
+        );
+        let hints = [
+            ("user-agent", "opencode/1.19.0"),
+            ("x-opencode-session", "shared-cache"),
+            ("x-session-affinity", "shared-cache"),
+            ("x-session-id", "shared-cache"),
+            ("x-opencode-parent-session-id", "parent"),
+            ("x-parent-session-id", "parent"),
+            ("x-opencode-project", "project"),
+            ("x-opencode-request", "request"),
+        ];
+        assert!(matches!(
+            native(&hints, ingress, Value::Null),
+            Field::Absent
+        ));
+        let mut headers = hints.to_vec();
+        headers.push(("x-opencode-session-id", "child"));
+        assert_native(
+            native(&headers, ingress, Value::Null),
+            "opencode_session",
+            &["child"],
+        );
+    }
+    // Pi's OpenCode provider also sends the routing header; it is not another
+    // vendor's identity claim and must preserve Pi's accepted session namespace.
+    assert_native(
+        native(
+            &[
+                ("user-agent", "pi (linux; x64)"),
+                ("x-client-request-id", "pi-session"),
+                ("x-opencode-session", "pi-session"),
+            ],
+            IngressProtocol::Responses,
+            Value::Null,
+        ),
+        "pi_session",
+        &["pi-session"],
+    );
 }
 
 #[test]
@@ -356,6 +408,19 @@ fn native_families_cannot_override_conflicts_or_discard_codex_dimensions() {
     assert_native(
         native(
             &[
+                ("x-opencode-session-id", "native"),
+                ("session-id", "native"),
+                ("thread-id", "thread"),
+            ],
+            IngressProtocol::Responses,
+            Value::Null,
+        ),
+        "codex_thread_session",
+        &["thread", "native"],
+    );
+    assert_native(
+        native(
+            &[
                 ("user-agent", "pi (linux; x64)"),
                 ("session-id", "native"),
                 ("thread-id", "thread"),
@@ -382,6 +447,20 @@ fn native_families_cannot_override_conflicts_or_discard_codex_dimensions() {
     );
     for headers in [
         vec![("session-id", "a"), ("x-claude-code-session-id", "b")],
+        vec![("session-id", "a"), ("x-opencode-session-id", "b")],
+        vec![
+            ("x-claude-code-session-id", "a"),
+            ("x-opencode-session-id", "a"),
+        ],
+        vec![
+            ("x-deepseek-harness-session-id", "a"),
+            ("x-opencode-session-id", "a"),
+        ],
+        vec![
+            ("x-opencode-session-id", "a"),
+            ("user-agent", "pi (browser)"),
+            ("x-client-request-id", "a"),
+        ],
         vec![
             ("x-claude-code-session-id", "a"),
             ("x-deepseek-harness-session-id", "a"),

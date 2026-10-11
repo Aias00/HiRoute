@@ -175,6 +175,15 @@ fn native_identity(
         header_value(headers, "x-deepseek-harness-session-id"),
     );
     let vendor = merge_vendor_identity(claude, dsh);
+    // OpenCode emits the actual session ID even for custom providers. Its
+    // cache-affinity headers may instead identify a shared parent/fork source.
+    let vendor = merge_vendor_identity(
+        vendor,
+        session_identity(
+            "opencode_session",
+            header_value(headers, "x-opencode-session-id"),
+        ),
+    );
     let vendor = merge_vendor_identity(vendor, pi_ai_identity(ingress, headers));
     let generic = codex_identity(ingress, headers, request);
     match (generic, vendor) {
