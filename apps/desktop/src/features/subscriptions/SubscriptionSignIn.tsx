@@ -127,7 +127,7 @@ export function SubscriptionSignIn({ language, trustedAuthority, onReuseNative, 
   }
 
   return <section className="oc-scan-list" aria-label={text('连接订阅', 'Connect subscription')}>
-    <p className="v3-select-intro">{text('独立登录后，HiRoute 可自动刷新登录凭据，无需保持原生客户端运行。登录完成后，检查并选择模型，保存后才会接入。', 'After an independent sign-in, HiRoute can automatically refresh sign-in credentials without keeping the native client running. After signing in, check and choose models, then save to connect them.')}</p>
+    <p className="v3-select-intro" data-autofocus tabIndex={-1}>{text('独立登录后，HiRoute 可自动刷新登录凭据，无需保持原生客户端运行。登录完成后，检查并选择模型，保存后才会接入。', 'After an independent sign-in, HiRoute can automatically refresh sign-in credentials without keeping the native client running. After signing in, check and choose models, then save to connect them.')}</p>
     {providers.map(provider => {
       const name = provider === 'codex' ? 'Codex' : 'Claude Code';
       const accounts = sessions.filter(session => session.provider === provider && !['cancelled', 'forgotten'].includes(session.status));

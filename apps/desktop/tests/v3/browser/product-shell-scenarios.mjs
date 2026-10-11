@@ -21,7 +21,7 @@ async function deviceScan() {
   await until(() => button('设置订阅连接代理') && !button('设置订阅连接代理').disabled, 'ready device scan');
 }
 async function fresh(setup = () => {}) {
-  c().reset(); setup(); await until(() => text().includes('仅在本机运行'), 'ready DesktopApp');
+  c().reset(); setup(); await until(() => visible(document.querySelector('.sidebar-health .status-dot.good')), 'ready DesktopApp');
 }
 function setInput(input, value) {
   assert(input, 'Expected an editable input');
@@ -78,7 +78,7 @@ const scenarios = [
   scenario('desktop.models.subscription-scan.recommended-login', ['subscription-proxy', 'subscription-login'], 'Scan explains native credential refresh and opens independent sign-in without authorizing or saving', async () => {
     for (const language of ['zh', 'en']) {
       for (const scale of [1, 2]) {
-        await fresh(() => { c().handlers.manage_subscription_login = () => ({ schema: 'hiroute.subscription-login-result/v1', sessions: [] }); });
+        await fresh(() => { c().handlers.manage_subscription_login = async () => { await pause(150); return { schema: 'hiroute.subscription-login-result/v1', sessions: [] }; }; });
         const saved = JSON.stringify(c().management);
         localStorage.setItem('hiroute.language', language);
         localStorage.setItem('hiroute.text-scale', String(scale));
@@ -109,7 +109,12 @@ const scenarios = [
         await click(entryLabel);
         await until(() => all('[role="dialog"] h2').some(item => item.textContent === label('连接订阅', 'Connect subscription')), 'independent sign-in dialog');
         await until(() => calls('manage_subscription_login').length > 0, 'existing login session listing');
+        await until(() => all('.oc-scan-detail .btn-primary').some(item => !item.disabled), 'login session list completed');
+        await pause(40);
         assert(text().includes(label('自动刷新登录凭据', 'automatically refresh sign-in credentials')), 'Sign-in copy does not explain automatic credential refresh');
+        const intro = document.querySelector('.v3-select-intro');
+        const body = intro.closest('.modal-body');
+        assert(intro.getBoundingClientRect().top >= body.getBoundingClientRect().top - 1, 'Initial login focus scrolled the credential-refresh explanation out of view');
         assert(calls('close_subscription_check').length === closes + 1, 'Scan check intent was not released');
         assert(calls('manage_subscription_login').every(item => item.payload.request.action === 'list'), 'Opening the recommendation automatically started authorization');
         assert(calls('check_subscription').length === 0 && calls('apply_compute_save').length === 0 && calls('subscription_proxy_apply').length === 0 && JSON.stringify(c().management) === saved, 'Navigation mutated a connection or proxy');
