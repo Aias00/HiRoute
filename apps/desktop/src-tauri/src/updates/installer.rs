@@ -26,15 +26,31 @@ struct Handoff {
 }
 fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
     use std::os::unix::fs::OpenOptionsExt;
-    let mut file = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(path)
-        .map_err(|_| "UPGRADE_INSTALLER_WRITE_FAILED")?;
-    file.write_all(bytes)
-        .and_then(|_| file.sync_all())
-        .map_err(|_| "UPGRADE_INSTALLER_WRITE_FAILED".into())
+    let parent = path.parent().ok_or("UPGRADE_INSTALLER_WRITE_FAILED")?;
+    if fs::symlink_metadata(path).is_ok() {
+        return Err("UPGRADE_INSTALLER_WRITE_FAILED".into());
+    }
+    let temporary = parent.join(format!(".marker-{}.tmp", crate::random_id()?));
+    let result = (|| {
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&temporary)
+            .map_err(|_| "UPGRADE_INSTALLER_WRITE_FAILED")?;
+        file.write_all(bytes)
+            .and_then(|_| file.sync_all())
+            .map_err(|_| "UPGRADE_INSTALLER_WRITE_FAILED")?;
+        // Readers must see the complete decision/ack, never a newly created empty file.
+        fs::rename(&temporary, path).map_err(|_| "UPGRADE_INSTALLER_WRITE_FAILED")?;
+        fs::File::open(parent)
+            .and_then(|file| file.sync_all())
+            .map_err(|_| "UPGRADE_INSTALLER_WRITE_FAILED".into())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result
 }
 pub(super) fn prepare(root: &Path, update: &PreparedUpdate) -> Result<PathBuf, String> {
     let id = crate::random_id()?;
@@ -69,77 +85,49 @@ pub(super) fn prepare(root: &Path, update: &PreparedUpdate) -> Result<PathBuf, S
         .map_err(|_| "UPGRADE_INSTALLER_WRITE_FAILED")?;
     Ok(path)
 }
-pub(super) fn launch(path: &Path) -> Result<(), String> {
-    let directory = path.parent().ok_or("UPGRADE_INSTALLER_INVALID")?;
-    use std::os::unix::fs::OpenOptionsExt;
-    let log = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(directory.join("installer.log"))
-        .map_err(|_| "UPGRADE_INSTALLER_WRITE_FAILED")?;
-    let mut child =
-        Command::new(std::env::current_exe().map_err(|_| "UPGRADE_INSTALLER_UNAVAILABLE")?)
-            .arg("--finish-upgrade")
-            .arg(path)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(log)
-            .spawn()
-            .map_err(|_| "UPGRADE_INSTALLER_UNAVAILABLE")?;
-    let deadline = Instant::now() + Duration::from_secs(10);
-    let private = PrivateDir::open_existing(directory).map_err(|_| "UPGRADE_INSTALLER_INVALID")?;
-    loop {
-        if let Some(mut ack) = private
-            .open_read("started")
-            .map_err(|_| "UPGRADE_INSTALLER_INVALID")?
-        {
-            if ack
-                .read_prefix(64)
-                .map_err(|_| "UPGRADE_INSTALLER_INVALID")?
-                == b"hiroute.upgrade-installer-started/v1\n"
-            {
-                return Ok(());
-            }
-            return Err("UPGRADE_INSTALLER_INVALID".into());
-        }
-        if child
-            .try_wait()
-            .map_err(|_| "UPGRADE_INSTALLER_FAILED")?
-            .is_some()
-            || Instant::now() >= deadline
-        {
-            return Err("UPGRADE_INSTALLER_FAILED".into());
-        }
-        std::thread::sleep(Duration::from_millis(20));
-    }
-}
+mod control;
+pub(super) use control::start;
+
 pub fn finish_update_if_requested() -> Option<Result<(), String>> {
     let mut arguments = std::env::args_os().skip(1);
     if arguments.next().as_deref() != Some(std::ffi::OsStr::new("--finish-upgrade")) {
         return None;
     }
-    Some((|| {
+    let result = (|| {
         let path = PathBuf::from(arguments.next().ok_or("UPGRADE_INSTALLER_INVALID")?);
         if arguments.next().is_some() {
             return Err("UPGRADE_INSTALLER_INVALID".into());
         }
-        // Invalid arguments never authorize creating files beside an arbitrary supplied path.
+        // Only a validated handoff authorizes writing a private result. Every failure,
+        // including load(), still reaches the parent-owned stderr below.
         let record = load(&path)?;
         let result = finish(&path, record);
         if let Err(error) = &result {
-            // Preserve a small, private result beside the handoff. No credentials or database
-            // bytes are involved; the existing manual recovery procedure remains authoritative.
             let _ = write_private(
                 &path.with_file_name("failed.json"),
                 &serde_json::to_vec(&serde_json::json!({"code":error})).unwrap(),
             );
-            eprintln!("{error}");
         }
         result
-    })())
+    })();
+    if let Err(error) = &result {
+        eprintln!("{error}");
+    }
+    Some(result)
 }
+
 fn load(path: &Path) -> Result<Handoff, String> {
+    let executable =
+        fs::canonicalize(std::env::current_exe().map_err(|_| "UPGRADE_INSTALLER_INVALID")?)
+            .map_err(|_| "UPGRADE_INSTALLER_INVALID")?;
+    let current = executable
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .ok_or("UPGRADE_INSTALLER_INVALID")?;
+    load_for_app(path, current)
+}
+fn load_for_app(path: &Path, current: &Path) -> Result<Handoff, String> {
     if !path.is_absolute() || path.file_name() != Some("handoff.json".as_ref()) {
         return Err("UPGRADE_INSTALLER_INVALID".into());
     }
@@ -163,13 +151,7 @@ fn load(path: &Path) -> Result<Handoff, String> {
         || record.parent_pid == 0
         || !record.data_root.is_absolute()
         || !path.starts_with(record.data_root.join("updates"))
-        || record.current
-            != fs::canonicalize(std::env::current_exe().map_err(|_| "UPGRADE_INSTALLER_INVALID")?)
-                .map_err(|_| "UPGRADE_INSTALLER_INVALID")?
-                .parent()
-                .and_then(Path::parent)
-                .and_then(Path::parent)
-                .ok_or("UPGRADE_INSTALLER_INVALID")?
+        || record.current != current
         || record.old_identity.app_path != record.current
         || record.new_identity.app_path != record.staged
         || record.staged.file_name() != Some("HiRoute.app".as_ref())
@@ -189,8 +171,6 @@ fn load(path: &Path) -> Result<Handoff, String> {
         return Err("UPGRADE_INSTALLER_INVALID".into());
     }
     PrivateDir::open_existing(&record.data_root).map_err(|_| "PRIVATE_PATH_INVALID")?;
-    PrivateDir::open_existing(record.staged.parent().unwrap())
-        .map_err(|_| "UPGRADE_INSTALLER_INVALID")?;
     record.release.revision_prefix()?;
     Ok(record)
 }
@@ -198,10 +178,11 @@ fn finish(path: &Path, record: Handoff) -> Result<(), String> {
     if nix::unistd::getppid().as_raw() as u32 != record.parent_pid {
         return Err("UPGRADE_INSTALLER_PARENT_MISMATCH".into());
     }
-    write_private(
-        &path.with_file_name("started"),
-        b"hiroute.upgrade-installer-started/v1\n",
-    )?;
+    verify_packages(&record)?;
+    let directory = PrivateDir::open_existing(path.parent().unwrap())
+        .map_err(|_| "UPGRADE_INSTALLER_INVALID")?;
+    write_private(&path.with_file_name("started"), control::STARTED)?;
+    control::await_commit(&directory, record.parent_pid, Duration::from_secs(60))?;
     let pid = nix::unistd::Pid::from_raw(record.parent_pid as i32);
     let deadline = Instant::now() + Duration::from_secs(45);
     loop {
@@ -216,17 +197,7 @@ fn finish(path: &Path, record: Handoff) -> Result<(), String> {
     }
     // A newly launched host wins the lock and prevents replacement. Never replace underneath it.
     let _lock = crate::bootstrap::acquire_host_lock(&record.data_root)?;
-    if hiroute_host_runtime::verify_desktop_app(&record.current, "ai.hiroute.desktop", None, None)?
-        != record.old_identity
-        || hiroute_host_runtime::verify_desktop_app(
-            &record.staged,
-            "ai.hiroute.desktop",
-            Some(&record.release),
-            None,
-        )? != record.new_identity
-    {
-        return Err("UPGRADE_PACKAGE_CHANGED".into());
-    }
+    verify_packages(&record)?;
     fs::rename(&record.current, &record.previous).map_err(|_| "UPGRADE_REPLACE_FAILED")?;
     if fs::rename(&record.staged, &record.current).is_err() {
         // The data has not been touched. Restore the displaced App name if the second rename
@@ -264,3 +235,21 @@ fn finish(path: &Path, record: Handoff) -> Result<(), String> {
     let _ = fs::remove_dir(record.staged.parent().unwrap());
     Ok(())
 }
+
+fn verify_packages(record: &Handoff) -> Result<(), String> {
+    if hiroute_host_runtime::verify_desktop_app(&record.current, "ai.hiroute.desktop", None, None)?
+        != record.old_identity
+        || hiroute_host_runtime::verify_desktop_app(
+            &record.staged,
+            "ai.hiroute.desktop",
+            Some(&record.release),
+            None,
+        )? != record.new_identity
+    {
+        return Err("UPGRADE_PACKAGE_CHANGED".into());
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests;

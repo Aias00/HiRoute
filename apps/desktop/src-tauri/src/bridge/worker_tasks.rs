@@ -365,9 +365,13 @@ pub async fn worker_dependencies_discover(
 pub async fn worker_dependencies_select_prepare(
     window: WebviewWindow,
     state: State<'_, WorkerDependencyConfirmationState>,
+    desktop: State<'_, DesktopState>,
     input: WorkerDependenciesSelectRequestV1,
 ) -> Result<WorkerDependencyConfirmationV1, DesktopFailure> {
     main_window(&window)?;
+    let epoch = desktop.2.load(std::sync::atomic::Ordering::SeqCst);
+    let session = super::confirmation_session(&desktop, epoch).await?;
+    session.as_ref().ok_or("RESIDENT_UNAVAILABLE")?;
     let selection = normalize_worker_dependency_selection(&input)?;
     state.prepare(window.label(), selection, now_ms()?)
 }
@@ -380,11 +384,10 @@ pub async fn worker_dependencies_select_confirm(
     input: WorkerDependencyConfirmationInput,
 ) -> Result<MachineEnvelopeV2<WorkerDependenciesViewV1>, DesktopFailure> {
     main_window(&window)?;
+    let epoch = state.2.load(std::sync::atomic::Ordering::SeqCst);
+    let mut session = super::confirmation_session(&state, epoch).await?;
     let selection = confirmations.take(window.label(), &input.confirmation_id, now_ms()?)?;
-    state
-        .0
-        .lock()
-        .await
+    session
         .as_mut()
         .ok_or("RESIDENT_UNAVAILABLE")?
         .select_worker_dependencies(selection)

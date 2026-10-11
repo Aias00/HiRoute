@@ -13,14 +13,19 @@ type UpdateView = {
   error: string | null;
   can_install: boolean;
   package_ready: boolean;
+  recovery: 'service_available' | 'stop_pending' | 'restart_required' | null;
 };
 const busyPhases = ['checking', 'downloading', 'verifying', 'waiting', 'installing'];
-export function UpdatesSettings({ active, language }: { active: boolean; language: Language }) {
+export function UpdatesSettings({ active, language, onServiceChanged }: { active: boolean; language: Language; onServiceChanged: () => Promise<void> }) {
   const text = (zh: string, en: string) => language === 'zh' ? zh : en;
   const [view, setView] = useState<UpdateView | null>(null);
   const [error, setError] = useState('');
   const [actionPending, setActionPending] = useState(false);
   const busy = view !== null && busyPhases.includes(view.phase);
+  const recovery = view?.recovery;
+  useEffect(() => {
+    if (recovery) void onServiceChanged();
+  }, [recovery, onServiceChanged]);
   useEffect(() => {
     if (!active && !busy) return;
     let current = true;
@@ -50,17 +55,21 @@ export function UpdatesSettings({ active, language }: { active: boolean; languag
     : text('从官网获取稳定版本', 'Stable releases from the official website');
   const code = view?.error || error;
   const canCancel = view && ['downloading', 'verifying', 'waiting'].includes(view.phase);
+  const restartRequired = recovery === 'stop_pending' || recovery === 'restart_required';
   return <section className="settings-group"><h2>{text('版本升级', 'Updates')}</h2><div className="settings-list">
     <div className="settings-row"><div className="settings-copy"><strong>HiRoute {view?.current_version ?? ''}</strong><span role="status">{status}</span></div>
       <div className="worker-settings-control">
         {!busy && <button className="btn" type="button" disabled={actionPending} onClick={() => void act('update_check')}>{text('检查更新', 'Check for updates')}</button>}
         {view && !busy && view.available && !view.package_ready && <button className="btn" type="button" disabled={actionPending || !view.can_install} onClick={() => void act('update_download')}>{text('下载更新', 'Download update')}</button>}
-        {view?.package_ready && !busy && <button className="btn" type="button" disabled={actionPending} onClick={() => void act('update_install')}>{text('安装并重启', 'Install and restart')}</button>}
+        {view?.package_ready && !busy && <button className="btn" type="button" disabled={actionPending || restartRequired} onClick={() => void act('update_install')}>{text('安装并重启', 'Install and restart')}</button>}
         {canCancel && <button className="btn" type="button" onClick={() => void act('update_cancel')}>{text('取消升级', 'Cancel update')}</button>}
       </div>
     </div>
     {view?.available && !busy && <div className="gateway-risk">{view.available.notes[language]}</div>}
     {view?.phase === 'ready' && <div className="gateway-risk">{text('安装前会等待现有调用和任务结束。安装与首次启动期间，Agent 路由会暂时不可用；需要时可按备份目录中的说明恢复旧 App 和旧数据。', 'Installation waits for current calls and tasks. Agent routing is temporarily unavailable during installation and first startup. If needed, follow the backup instructions to restore the previous App and data.')}</div>}
+    {recovery === 'service_available' && <div className="gateway-risk">{text('升级未完成，旧版本服务已恢复，可继续使用或重试安装。', 'The upgrade did not complete. The previous service is available; continue using HiRoute or retry installation.')}</div>}
+    {recovery === 'stop_pending' && <div className="settings-inline-error" role="status">{text('服务仍在停止，尚未替换应用。请等待服务退出后，完全退出并重新打开 HiRoute。', 'The service is still stopping and the App has not been replaced. Wait for the service to exit, then fully quit and reopen HiRoute.')}</div>}
+    {recovery === 'restart_required' && <div className="settings-inline-error" role="status">{text('尚未替换应用，旧版本服务未能恢复。请完全退出并重新打开 HiRoute，并查看启动页的恢复说明。', 'The App has not been replaced, but the previous service could not be restored. Fully quit and reopen HiRoute and follow the startup recovery instructions.')}</div>}
     {code && <div className="settings-inline-error" role="status">{text(`升级不可用（${code}）。可重试检查，或从官网下载安装包并完全退出 HiRoute 后覆盖安装。`, `Update unavailable (${code}). Check again, or download from the official website and fully quit HiRoute before replacing the App.`)}</div>}
     {view && !view.can_install && <div className="gateway-risk">{text('应用内安装需要使用完整的 HiRoute App。', 'In-app installation requires a complete HiRoute App.')}</div>}
   </div></section>;

@@ -72,7 +72,7 @@ pub async fn check_subscription(
     main_window(&window)?;
     let epoch = state.2.load(Ordering::SeqCst);
     let (client, close_requested) = {
-        let mut guard = state.0.lock().await;
+        let mut guard = super::confirmation_session(&state, epoch).await?;
         let session = guard.as_mut().ok_or("RESIDENT_UNAVAILABLE")?;
         let close_requested = session.resume_subscription_interaction();
         (session.client.clone(), close_requested)
@@ -82,10 +82,8 @@ pub async fn check_subscription(
             .preview_subscription_check(&crate::random_id()?, candidate)
             .await?,
     )?;
-    let context = state
-        .0
-        .lock()
-        .await
+    let context = super::confirmation_session(&state, epoch)
+        .await?
         .as_mut()
         .ok_or("RESIDENT_UNAVAILABLE")?
         .prepare_subscription_check_confirmation(
@@ -550,10 +548,8 @@ pub async fn apply_compute_save(
     let request: ComputeConnectionApplyRequestV1 =
         request.try_into().map_err(DesktopFailure::from)?;
     let epoch = state.2.load(Ordering::SeqCst);
-    let context = state
-        .0
-        .lock()
-        .await
+    let context = super::confirmation_session(&state, epoch)
+        .await?
         .as_mut()
         .ok_or("RESIDENT_UNAVAILABLE")?
         .prepare_model_save_confirmation(request, language)?;

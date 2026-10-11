@@ -67,6 +67,7 @@ INTEGRATION_SHARDS = {
         ("hiroute-e2e", "p0_gateway_commit_boundary"),
         ("hiroute-e2e", "p0_gateway_context_hold"),
         ("hiroute-e2e", "p0_gateway_matrix_coverage"),
+        ("hiroute-e2e", "p0_gateway_native_sessions"),
         ("hiroute-e2e", "p0_gateway_observation"),
         ("hiroute-e2e", "p0_gateway_oracle"),
         ("hiroute-e2e", "p0_gateway_planner"),

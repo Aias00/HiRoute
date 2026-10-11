@@ -1,5 +1,5 @@
 use super::{Session, query, terminal};
-use crate::confirmation::ConfirmationPermit;
+use crate::confirmation::{ConfirmationOwner, ConfirmationPermit};
 use crate::failure::DesktopFailure;
 use crate::operation_observation::{IntentEvidence, SubmittedOperation};
 use hiroute_application_api::*;
@@ -27,6 +27,7 @@ impl SubscriptionCheckConfirmation {
 /// The only shared state is a close signal; no WebView can construct this value.
 #[cfg(any(feature = "desktop-runtime", test))]
 pub(crate) struct PendingSubscriptionCheck {
+    owner: ConfirmationOwner,
     client: hiroute_client_core::Client,
     request_id: String,
     request: ComputeConnectionApplyRequestV1,
@@ -36,6 +37,7 @@ pub(crate) struct PendingSubscriptionCheck {
 
 #[cfg(any(feature = "desktop-runtime", test))]
 pub(crate) struct SubscriptionCheckCompletion {
+    owner: ConfirmationOwner,
     idempotency_key: String,
     accepted_digest: CanonicalDigest,
     outcome: SubscriptionCheckSubmission,
@@ -72,12 +74,29 @@ impl PendingSubscriptionCheck {
             ))
         };
         SubscriptionCheckCompletion {
+            owner: self.owner,
             idempotency_key,
             accepted_digest,
             outcome,
             close_requested: self.close_requested,
         }
     }
+}
+
+/// The submitted operation's completion entry. Window-close epochs expire new intent,
+/// while the originating Session still owns cleanup for work already submitted.
+#[cfg(any(feature = "desktop-runtime", test))]
+pub(crate) async fn complete_subscription_check(
+    sessions: &tokio::sync::Mutex<Option<Session>>,
+    completion: SubscriptionCheckCompletion,
+) -> Result<ComputeSubscriptionCheckResultV2, DesktopFailure> {
+    sessions
+        .lock()
+        .await
+        .as_mut()
+        .ok_or("RESIDENT_UNAVAILABLE")?
+        .finish_subscription_check_confirmation(completion)
+        .await
 }
 
 impl SubscriptionCheckConfirmation {
@@ -219,6 +238,7 @@ impl Session {
         let capability: zeroize::Zeroizing<String> =
             return Err("TRUSTED_AUTHORITY_UNAVAILABLE".into());
         Ok(PendingSubscriptionCheck {
+            owner: self.confirmation.owner(),
             client: self.client.clone(),
             request_id: crate::random_id()?,
             request: context.request,
@@ -234,6 +254,7 @@ impl Session {
         &mut self,
         completion: SubscriptionCheckCompletion,
     ) -> Result<ComputeSubscriptionCheckResultV2, DesktopFailure> {
+        self.confirmation.check_owner(&completion.owner)?;
         let owns_hint = self.subscription_hint.as_ref().is_some_and(|hint| {
             hint.operation_kind == APPLY_SUBSCRIPTION_CHECK_OPERATION_V2
                 && hint.idempotency_key == completion.idempotency_key
@@ -613,6 +634,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let close_requested = Arc::new(AtomicBool::new(false));
         let pending = PendingSubscriptionCheck {
+            owner: ConfirmationGate::default().owner(),
             client: Client::new(
                 "desktop-test",
                 LocalEndpoint::from_runtime_root(root.path()),
@@ -645,3 +667,7 @@ mod tests {
         ));
     }
 }
+
+#[cfg(all(test, unix))]
+#[path = "subscription/completion_tests.rs"]
+mod completion_tests;
