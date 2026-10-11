@@ -1173,7 +1173,7 @@ export function ModelManagementPage({
         computeScanFailed={Boolean(computeScanError)}
         repairingSubscriptionSource={repairingSubscriptionSource}
         trustedAuthority={trustedAuthority}
-        onConnectSubscription={() => { closeSubscriptionView(); setAddStage('subscription-login'); }}
+        onConnectSubscription={() => { closeSubscriptionView(); setAppendingSource(null); setAppendManual(false); setAddStage('subscription-login'); }}
         onOpenSubscription={openSubscription}
         onViewConnectedSubscription={viewConnectedSubscription}
         onOpenDiscoveredConfiguration={item => void prepareDiscoveredConfiguration(item)}

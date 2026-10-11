@@ -44,6 +44,37 @@ async function routing() {
   await until(() => document.querySelector('.plan-identity-fields input'), 'route editor');
 }
 const scenarios = [
+  scenario('desktop.models.subscription-scan.append-to-login', ['subscription-proxy', 'subscription-login'], 'Independent sign-in from an append scan creates a new connection instead of retaining the previous append target', async () => {
+    let previous;
+    await fresh(() => {
+      previous = JSON.stringify(c().management.sources.find(source => source.source_id === 'source/codex/subscription'));
+      const borrowed = c().fixtureResponse('compute_subscriptions', {}).candidates[0];
+      const pending = { ...borrowed, existing_source_id: undefined, display_name: 'New independent account', candidate: { candidate_ref: 'candidate/independent-new-account', candidate_revision: 1 } };
+      const base = c().fixtureResponse('check_subscription', {});
+      const checked = { ...base.checked_candidate, existing_source_id: undefined, display_name: pending.display_name,
+        candidate: { ...pending.candidate, candidate_revision: 2 },
+        models: [{ ...base.checked_candidate.models[0], model_ref: 'model-ref/independent-new-account' }],
+      };
+      c().handlers.compute_subscriptions = () => ({ discovery_state: 'complete', candidates: [borrowed, pending] });
+      c().handlers.manage_subscription_login = ({ request }) => ({ schema: 'hiroute.subscription-login-result/v1', sessions: request.provider === 'codex'
+        ? [{ provider: 'codex', login_ref: 'login/independent-new-account', status: 'authorized', candidate: pending.candidate }]
+        : [] });
+      c().handlers.check_subscription = () => ({ ...base, candidate: checked.candidate, checked_candidate: checked });
+    });
+    await click('模型'); await click('向此接入添加模型');
+    await until(() => button('返回') && text().includes('Codex 本机订阅'), 'append subscription detail');
+    await click('返回'); await click('连接订阅（推荐）');
+    await click('检查并选择模型'); await click('检查订阅');
+    await until(() => button('保存接入'), 'new account checked');
+    await click('保存接入');
+    await until(() => calls('preview_compute_save').length || document.querySelector('[data-error-code]'), 'save outcome');
+    assert(calls('preview_compute_save').length === 1, 'New independent account kept the previous append target and cannot save');
+    const change = calls('preview_compute_save')[0].payload.change;
+    assert(!change.edit && change.subject.candidate.candidate_ref === 'candidate/independent-new-account', 'New login was saved as an append to the old connection');
+    assert(JSON.stringify(change.selected_model_refs) === '["model-ref/independent-new-account"]', 'New login selection reused old membership');
+    await until(() => calls('apply_compute_save').length === 1, 'new connection apply');
+    assert(JSON.stringify(c().management.sources.find(source => source.source_id === 'source/codex/subscription')) === previous, 'Previous connection was changed');
+  }),
   scenario('desktop.models.subscription-scan.recommended-login', ['subscription-proxy', 'subscription-login'], 'Scan explains native credential refresh and opens independent sign-in without authorizing or saving', async () => {
     for (const language of ['zh', 'en']) {
       for (const scale of [1, 2]) {
