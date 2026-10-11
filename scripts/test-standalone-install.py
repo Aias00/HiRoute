@@ -3,10 +3,12 @@
 
 import argparse
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
 import plistlib
+import re
 import sys
 import tempfile
 import unittest
@@ -24,6 +26,17 @@ def load(name, filename):
 
 package = load("package_standalone", "package-standalone.py")
 installer = load("install_standalone", "install-standalone.py")
+
+
+class HTTPSResponse(io.BytesIO):
+    def __init__(self, body, status=200, headers=None, url="https://downloads.example/package"):
+        super().__init__(body)
+        self.status = status
+        self.headers = {"Content-Length": str(len(body)), **(headers or {})}
+        self.url = url
+
+    def geturl(self):
+        return self.url
 
 
 class StandaloneFixture(unittest.TestCase):
@@ -410,6 +423,108 @@ class InstallerTests(StandaloneFixture):
         with self.environment(), patch.object(installer.subprocess, "run"), patch("builtins.print"):
             with self.assertRaisesRegex(ValueError, "checksum"):
                 installer.install(self.install_args(manifest, archive))
+        self.assertFalse((self.home / ".local").exists())
+
+    def https_package(self, manifest, archive, mode):
+        payload = archive.read_bytes()
+        calls = []
+
+        def response(request, **_options):
+            if request.full_url.endswith(manifest.name):
+                return HTTPSResponse(manifest.read_bytes())
+            self.assertTrue(request.full_url.endswith(archive.name))
+            value = request.get_header("Range")
+            calls.append((value, request.get_header("If-match")))
+            if not value or mode == "ignore-ranges":
+                body = payload[:len(payload) // 2] if mode in ("short-once", "always-short") else payload
+                return HTTPSResponse(body, headers={"Content-Length": str(len(payload))})
+            match = re.fullmatch(r"bytes=(\d+)-(\d+)", value)
+            self.assertIsNotNone(match)
+            start, end = map(int, match.groups())
+            body = payload[start:end + 1]
+            headers = {"Content-Range": f"bytes {start}-{end}/{len(payload)}", "ETag": '"fixture-object"'}
+            if mode == "short-once" and len(calls) == 1 or mode == "always-short":
+                headers["Content-Length"] = str(len(body))
+                body = body[:len(body) // 2]
+            if mode == "changed-object" and start > 0:
+                headers["ETag"] = '"different-object"'
+            if mode == "invalid-range" and start > 0:
+                headers["Content-Range"] = f"bytes {start}-{end}/{len(payload) + 1}"
+            if mode == "weak-etag":
+                headers["ETag"] = 'W/"fixture-object"'
+            url = "http://downloads.example/package" if mode == "unsafe-redirect" else "https://downloads.example/package"
+            return HTTPSResponse(body, 206, headers, url)
+
+        args = argparse.Namespace(manifest=None, archive=None,
+                                  manifest_url="https://downloads.example/" + manifest.name)
+        return args, response, calls
+
+    def test_https_partial_transfer_recovers_through_verified_install(self):
+        manifest, archive = self.build()
+        args, response, calls = self.https_package(manifest, archive, "short-once")
+        with self.environment(), patch.object(installer, "DOWNLOAD_CHUNK_SIZE", 128, create=True), \
+                patch.object(installer.urllib.request, "urlopen", side_effect=response), \
+                patch.object(installer.subprocess, "run"), patch("builtins.print"):
+            installer.install(args)
+        marker = json.loads((self.home / ".local/share/hiroute/standalone.json").read_text())
+        self.assertEqual(marker["version"], json.loads(manifest.read_text())["version"])
+        self.assertEqual((Path(marker["install_root"]) / "hiroute").read_bytes(), self.sources["hiroute"].read_bytes())
+        self.assertGreater(len(calls), 2)
+        self.assertEqual(calls[0][0], calls[1][0])
+        self.assertTrue(all(identity == '"fixture-object"' for _, identity in calls[2:]))
+
+    def test_https_changed_object_or_range_preserves_installed_state(self):
+        manifest, archive = self.build()
+        with self.environment(), patch.object(installer.subprocess, "run"), patch("builtins.print"):
+            installer.install(self.install_args(manifest, archive))
+        marker = self.home / ".local/share/hiroute/standalone.json"
+        original = marker.read_bytes()
+        user_data = self.home / ".local/share/hiroute/user-data"
+        user_data.write_bytes(b"preserve user data")
+        manifest, archive = self.build("0.2.0")
+        for mode, message in [("changed-object", "object identity"), ("invalid-range", "byte range")]:
+            args, response, _ = self.https_package(manifest, archive, mode)
+            with self.subTest(mode=mode), self.environment(), \
+                    patch.object(installer, "DOWNLOAD_CHUNK_SIZE", 128, create=True), \
+                    patch.object(installer.urllib.request, "urlopen", side_effect=response), \
+                    patch.object(installer.subprocess, "run"), patch("builtins.print"):
+                with self.assertRaisesRegex(ValueError, message):
+                    installer.install(args)
+            self.assertEqual(marker.read_bytes(), original)
+            self.assertEqual(user_data.read_bytes(), b"preserve user data")
+            self.assertFalse((self.home / ".local/lib/hiroute/0.2.0").exists())
+
+    def test_https_repeated_short_transfer_is_bounded_and_makes_no_install_writes(self):
+        manifest, archive = self.build()
+        args, response, calls = self.https_package(manifest, archive, "always-short")
+        with self.environment(), patch.object(installer, "DOWNLOAD_CHUNK_SIZE", 128, create=True), \
+                patch.object(installer.urllib.request, "urlopen", side_effect=response), \
+                patch.object(installer.subprocess, "run"), patch("builtins.print"):
+            with self.assertRaisesRegex(OSError, "ended"):
+                installer.install(args)
+        self.assertEqual(len(calls), 3)
+        self.assertFalse((self.home / ".local").exists())
+
+    def test_https_whole_file_fallback_retains_verified_install(self):
+        manifest, archive = self.build()
+        for mode in ("ignore-ranges", "weak-etag"):
+            args, response, calls = self.https_package(manifest, archive, mode)
+            with self.subTest(mode=mode), self.environment(), \
+                    patch.object(installer, "DOWNLOAD_CHUNK_SIZE", 128, create=True), \
+                    patch.object(installer.urllib.request, "urlopen", side_effect=response), \
+                    patch.object(installer.subprocess, "run"), patch("builtins.print"):
+                installer.install(args)
+            self.assertIsNone(calls[-1][0])
+            self.assertEqual((self.home / ".local/bin/hiroute").read_bytes(), self.sources["hiroute"].read_bytes())
+
+    def test_https_archive_redirect_cannot_leave_https(self):
+        manifest, archive = self.build()
+        args, response, _ = self.https_package(manifest, archive, "unsafe-redirect")
+        with self.environment(), patch.object(installer, "DOWNLOAD_CHUNK_SIZE", 128, create=True), \
+                patch.object(installer.urllib.request, "urlopen", side_effect=response), \
+                patch.object(installer.subprocess, "run"), patch("builtins.print"):
+            with self.assertRaisesRegex(ValueError, "left HTTPS"):
+                installer.install(args)
         self.assertFalse((self.home / ".local").exists())
 
     def test_manifest_path_escape_is_rejected_and_cross_version_update_converges(self):
