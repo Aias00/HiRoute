@@ -42,7 +42,7 @@ previous decision. Choosing again can also keep the same model; cache reuse depe
 
 ## News
 
-- **2026-10-08 · HiRoute 0.2.0** — Stable release with built-in decision models, expanded Agent integrations, and macOS/Linux packages for x86_64 and ARM64. [Release notes](https://github.com/higress-group/HiRoute/releases/tag/v0.2.0) · [Download](https://hiroute.ai/en/download/)
+- **Latest stable release** — macOS Desktop and Linux headless packages for x86_64 and ARM64. [Release notes](https://github.com/higress-group/HiRoute/releases/latest) · [Download](https://hiroute.ai/en/download/)
 - **2026-10-04** — [GPT-6 Astra × Qwen-3.8 Flash: same quality at 90% lower cost](news/2026-10-04-astra-qwen.en.md). [Website article](https://hiroute.ai/en/news/astra-qwen-smart-routing/) · [Experiments](experiments/README.md)
 - [All news](news/README.md)
 
@@ -66,7 +66,7 @@ for connecting your own decision service.
 
 Download the current DMG from [hiroute.ai](https://hiroute.ai/download/), drag HiRoute into
 Applications, and follow the [self-signed package instructions](docs/macos-installation.md) if
-macOS asks for manual approval. HiRoute 0.2.0 supports macOS 15 or later on Apple silicon
+macOS asks for manual approval. HiRoute supports macOS 15 or later on Apple silicon
 (`arm64`) and Intel (`x86_64`).
 
 ### Linux headless
@@ -191,7 +191,7 @@ production owners and representative tests.
 
 ## Project status
 
-HiRoute 0.2.0 is a stable release with macOS Desktop and Linux headless packages for both
+The latest stable release provides macOS Desktop and Linux headless packages for both
 x86_64 and ARM64. Download the latest version and read the release notes on the
 [website](https://hiroute.ai/en/download/).
 

@@ -35,7 +35,7 @@ python3 scripts/collect-third-party-licenses.py \
   --output /absolute/output/notices
 
 python3 scripts/package-standalone.py build \
-  --version 0.2.0 --revision FULL_COMMIT_SHA \
+  --version RELEASE_VERSION --revision FULL_COMMIT_SHA \
   --target x86_64-unknown-linux-gnu \
   --hiroute /absolute/path/hiroute \
   --hirouted /absolute/path/hirouted \
@@ -49,6 +49,9 @@ python3 scripts/install-standalone.py install \
   --manifest /absolute/output/PACKAGE.tar.gz.json \
   --archive /absolute/output/PACKAGE.tar.gz
 ```
+
+`RELEASE_VERSION` 和 `FULL_COMMIT_SHA` 应分别取同一 committed candidate 的组件版本与
+完整源码 revision。
 
 集成后安装器也接受 `--manifest-url https://.../PACKAGE.tar.gz.json`。重定向和归档必须保持
 HTTPS；安装器会在任何写入前校验平台、归档 SHA-256、闭合集合和逐文件摘要。不要根据本页

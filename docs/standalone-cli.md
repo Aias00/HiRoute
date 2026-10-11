@@ -39,7 +39,7 @@ python3 scripts/collect-third-party-licenses.py \
   --output /absolute/output/notices
 
 python3 scripts/package-standalone.py build \
-  --version 0.2.0 --revision FULL_COMMIT_SHA \
+  --version RELEASE_VERSION --revision FULL_COMMIT_SHA \
   --target x86_64-unknown-linux-gnu \
   --hiroute /absolute/path/hiroute \
   --hirouted /absolute/path/hirouted \
@@ -53,6 +53,9 @@ python3 scripts/install-standalone.py install \
   --manifest /absolute/output/PACKAGE.tar.gz.json \
   --archive /absolute/output/PACKAGE.tar.gz
 ```
+
+Use the component version and full source revision of the same committed candidate for
+`RELEASE_VERSION` and `FULL_COMMIT_SHA`.
 
 After distribution integration, the installer also accepts
 `--manifest-url https://.../PACKAGE.tar.gz.json`. Redirects and archives must remain HTTPS.
