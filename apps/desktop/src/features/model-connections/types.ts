@@ -342,6 +342,7 @@ export type ModelConnectionCheckRequest = {
   input_candidate?: ComputeCandidateRef;
 };
 export type RegisteredModelConnectionCheckRequest = {
+  display_name: string;
   inference_model_id?: string | null;
   models?: Omit<ModelDeclaration, 'client_id'>[];
   connection_option_id: string;

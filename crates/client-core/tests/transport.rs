@@ -275,6 +275,7 @@ async fn registered_model_check_uses_the_protected_closed_operation() {
                 inference_model_id: None,
                 models: Vec::new(),
                 connection_option_id: "bailian.payg.cn.v1".into(),
+                display_name: "Team Bailian".into(),
                 expected_catalog: ComputeCatalogProvenanceViewV1 {
                     product_release: "mvp-current".into(),
                     catalog_binding_id: "fixture-catalog".into(),

@@ -89,12 +89,16 @@ function Harness() {
       if (capture === 'api_failure') {
         clickButton('添加模型');
         await wait(120);
-        clickButton('连接 API');
+        clickButton('新建 API 接入');
         await wait(120);
+        clickButton('百炼');
+        await wait(40);
+        clickButton('百炼 · 按量付费');
+        await wait(40);
         const password = document.querySelector<HTMLInputElement>('.modal input[type="password"]');
         if (password) setNativeValue(password, 'fixture-secret');
         await wait(40);
-        clickButton('检查接入');
+        clickButton('检查并继续');
       } else if (capture === 'all_candidates') {
         await wait(420);
         clickButton('添加模型');

@@ -8,6 +8,8 @@ import type { SubscriptionCandidate, SubscriptionCheckResult } from '../../../sr
 import type { Draft, Plan } from '../../../src/plan-editor';
 import type { DesktopSnapshot } from '../../../src/product/home-projections';
 import { fixture as legacyHomeFixture } from '../../mvp16/browser/fixtures';
+import connectionRegistry from '../../../../../assets/release-facts/current/bundle/connector-registry.json';
+import modelProjection from '../../../../../assets/model-data/current/runtime-projection.json';
 
 export type ProductScenario = 'fresh' | 'ready' | 'collaboration' | 'gap' | 'configured_no_sessions' | 'drift' | 'cooling' | 'free_exhausted' | 'api_failure' | 'unknown_model' | 'agent_blocked' | 'task_cancelled';
 
@@ -469,13 +471,15 @@ export function mockProductInvoke(command: string, payload: Record<string, any> 
       connector_registry_digest: 'sha256:fixture-registry', model_data_digest: 'sha256:fixture-models',
       cross_reference_digest: 'sha256:fixture-cross-reference',
     },
-    options: [{
-      connection_option_id: 'bailian.payg.cn.v1', display_name: 'Bailian Pay As You Go China',
-      connector_id: 'connector.bailian.p0', connector_revision: 1,
-      endpoint_profile_id: 'endpoint.bailian.payg.cn.v1', endpoint_profile_revision: 1,
-      billing_class: 'paid', authentication: 'provider_api_key',
-      model_configuration_ids: ['model.bailian.qwen3-max-2026-01-23'],
-    }],
+    options: connectionRegistry.connection_options.map(option => {
+      const connector = connectionRegistry.connectors.find(item => item.connector_id === option.connector_id)!;
+      const profile = connectionRegistry.endpoint_profiles.find(item => item.endpoint_profile_id === option.endpoint_profile_id)!;
+      const template = modelProjection.connection_templates.find(item => item.connection_option_id === option.connection_option_id);
+      return { ...option, authentication: connector.authentication, registered_check_available: option.origin !== 'agent_subscription',
+        model_configuration_ids: [], endpoints: profile.protocol_endpoints.map(endpoint => ({ ...endpoint,
+          authentication_semantics: template?.endpoint_defaults.find(item => item.protocol_endpoint_id === endpoint.protocol_endpoint_id)?.authentication_semantics ?? { kind: 'bearer' },
+        })) };
+    }),
   };
   if (command === 'compute_subscriptions') return { discovery_state: 'complete', candidates: [{
     ...localSubscriptionCandidate,
@@ -802,7 +806,7 @@ export function mockProductInvoke(command: string, payload: Record<string, any> 
       candidate: {
         candidate: { candidate_ref: 'candidate/protected', candidate_revision: 2 },
         correlation: { candidate_ref: 'candidate/protected', edit_revision: draft.edit_revision, check_id: draft.check_id, input_digest: digest },
-        producer: 'native', provenance: registered ? 'registered' : 'user_configured', display_name: registered ? 'Bailian Pay As You Go China' : draft.display_name,
+        producer: 'native', provenance: registered ? 'registered' : 'user_configured', display_name: draft.display_name,
         models: customUnknown ? declaredModels.map((model: any, index: number) => ({
           model_ref: `model-ref/custom-${index}`,
           upstream_model_id: model.upstream_model_id,

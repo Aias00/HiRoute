@@ -136,6 +136,8 @@ pub struct RegisteredModelConnectionCheckRequestV1 {
     #[serde(default)]
     pub models: Vec<NativeUserModelDeclarationV1>,
     pub connection_option_id: String,
+    /// User-visible label only; product identity and execution facts remain catalog-owned.
+    pub display_name: String,
     pub expected_catalog: crate::ComputeCatalogProvenanceViewV1,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub candidate_ref: Option<String>,
@@ -180,6 +182,7 @@ impl RegisteredModelConnectionCheckRequestV1 {
                 && !value.contains('\0')
         };
         bounded(&self.connection_option_id)
+            && bounded(&self.display_name)
             && self.candidate_ref.as_ref().is_none_or(|candidate_ref| {
                 bounded(candidate_ref) && candidate_ref == &self.input_candidate.candidate_ref
             })
@@ -472,6 +475,7 @@ mod tests {
             inference_model_id: None,
             models: Vec::new(),
             connection_option_id: "bailian.payg.cn.v1".into(),
+            display_name: "团队百炼".into(),
             expected_catalog: crate::ComputeCatalogProvenanceViewV1 {
                 product_release: "release-v1".into(),
                 catalog_binding_id: "client-bundled/current".into(),
@@ -493,6 +497,19 @@ mod tests {
         };
         assert!(request.valid());
         let encoded = serde_json::to_value(&request).unwrap();
+        let mut missing_name = encoded.clone();
+        missing_name.as_object_mut().unwrap().remove("display_name");
+        assert!(
+            serde_json::from_value::<RegisteredModelConnectionCheckRequestV1>(missing_name)
+                .is_err()
+        );
+        for name in ["", " ", " trailing ", "bad\0name"] {
+            request.display_name = name.into();
+            assert!(!request.valid());
+        }
+        request.display_name = "x".repeat(257);
+        assert!(!request.valid());
+        request.display_name = "团队百炼".into();
         for forbidden in [
             "base_url",
             "billing_class",

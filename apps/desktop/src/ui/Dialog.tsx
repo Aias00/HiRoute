@@ -24,6 +24,7 @@ export function Dialog({
   children,
   footer,
   variant = 'modal',
+  className = '',
 }: {
   open: boolean;
   title: string;
@@ -34,6 +35,7 @@ export function Dialog({
   children: React.ReactNode;
   footer?: React.ReactNode;
   variant?: 'modal' | 'drawer';
+  className?: string;
 }) {
   const panel = useRef<HTMLElement>(null);
   const returnTarget = useRef<HTMLElement | null>(null);
@@ -59,7 +61,7 @@ export function Dialog({
       branch = branch.parentElement;
     }
     const frame = requestAnimationFrame(() => {
-      const first = panel.current?.querySelector<HTMLElement>('[data-autofocus]')
+      const first = Array.from(panel.current?.querySelectorAll<HTMLElement>('[data-autofocus]') ?? []).find(element => element.getClientRects().length > 0 && !element.matches(':disabled'))
         ?? Array.from(panel.current?.querySelector<HTMLElement>('.modal-body')?.querySelectorAll<HTMLElement>(focusableSelector) ?? []).find(element => element.getClientRects().length > 0)
         ?? Array.from(panel.current?.querySelector<HTMLElement>('.modal-foot')?.querySelectorAll<HTMLElement>(focusableSelector) ?? []).find(element => element.getClientRects().length > 0)
         ?? Array.from(panel.current?.querySelectorAll<HTMLElement>(focusableSelector) ?? []).find(element => element.getClientRects().length > 0);
@@ -87,7 +89,7 @@ export function Dialog({
     >
       <section
         ref={panel}
-        className={`modal${variant === 'drawer' ? ' oc-drawer-panel' : ''}`}
+        className={`modal${variant === 'drawer' ? ' oc-drawer-panel' : ''} ${className}`.trim()}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

@@ -1,10 +1,10 @@
 import { connectionName, connectionTemplate } from '../../ui/provider-identity';
-import { ConnectionTemplatePicker } from './ConnectionTemplatePicker';
 import { ProviderIcon } from '../../ui/ProviderIcon';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 
 import { Dialog } from '../../ui/Dialog';
+import { Disclosure } from '../../ui/Disclosure';
 import { UiIcon } from '../../ui/UiIcon';
 import { confirmDiscard, useDiscardGuard } from '../../ui/discard-guard';
 import { saveFailureDefinitelyPreAdmission } from '../subscriptions/model';
@@ -39,18 +39,20 @@ import type {
 import { checkFailureCode, modelAvailabilityMessage } from './copy';
 import { metadataModelPrefill } from './metadata-prefill';
 import { customApiPrefillOptions, metadataProviderCandidates, metadataProviderOption, registeredModelCandidates, sortRegisteredOptions, templateEndpointForProtocol } from './registered-metadata';
+import { ConnectionDirectory } from './ConnectionDirectory';
+import { ConnectionEditingSession } from './connection-session';
+import './connection-flow.css';
 import {
   connectionErrorMessage,
   ManualModelEditor,
   manualModelError,
   manualModelIdError,
-  registeredConnectionLabel,
   safeConnectionErrorCode,
   validEndpoint,
 } from './form-support';
 
 type Phase = 'editing' | 'checking' | 'saving';
-type Screen = 'connection' | 'manual' | 'models';
+type Screen = 'catalog' | 'connection' | 'manual' | 'models';
 
 function emptyAdditionalEndpoint(protocol: UpstreamProtocol, authentication: ModelConnectionDraft['authentication']): ModelConnectionEndpointDraft {
   return {
@@ -66,8 +68,11 @@ export function ModelConnectionForm(props: ModelConnectionFormProps) {
   const zh = language === 'zh';
   const [custom, setCustom] = useState(props.initialDraft.entry_kind === 'custom_api');
   const free = props.initialDraft.entry_kind === 'free_api_key';
-  const [draft, setDraft] = useState<ModelConnectionDraft>(props.initialDraft);
-  const [screen, setScreen] = useState<Screen>('connection');
+  const catalogEnabled = props.initialDraft.entry_kind !== 'custom_api' && !props.initialDraft.existing_source_id;
+  const [draft, setDraft] = useState<ModelConnectionDraft>(() => ({ ...props.initialDraft,
+    display_name: props.initialDraft.display_name || (catalogEnabled ? '' : zh ? '自定义 API' : 'Custom API'),
+  }));
+  const [screen, setScreen] = useState<Screen>(catalogEnabled ? 'catalog' : 'connection');
   const [phase, setPhase] = useState<Phase>('editing');
   const [result, setResult] = useState<ModelConnectionCheckView | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -89,14 +94,20 @@ export function ModelConnectionForm(props: ModelConnectionFormProps) {
   const applyDispatchedRef = useRef(false);
   const aliveRef = useRef(true);
   const saveCompletedRef = useRef(false);
-  const dirty = JSON.stringify(draft) !== JSON.stringify(props.initialDraft) || Boolean(protectedInputRef.current);
+  const editingSession = useRef(new ConnectionEditingSession());
+  const editingKey = useRef<string | null>(catalogEnabled ? null : 'custom');
+  const pendingSecret = useRef<string | null>(null);
+  const flow = useRef<HTMLElement>(null);
+  const dirty = JSON.stringify(draft) !== JSON.stringify({ ...props.initialDraft,
+    display_name: props.initialDraft.display_name || (catalogEnabled ? '' : zh ? '自定义 API' : 'Custom API'),
+  })
+    || Boolean(protectedInputRef.current) || editingSession.current.hasDrafts;
   const registeredOptions = useMemo(() => sortRegisteredOptions(connectionOptions?.options.filter(option =>
     option.origin !== 'agent_subscription' && (!free || option.billing_class === 'free')
   ) ?? []), [connectionOptions, free]);
   const registeredOption = registeredOptions.find(option => option.connection_option_id === registeredOptionId)
-    ?? registeredOptions[0]
     ?? null;
-  const registeredLabel = registeredConnectionLabel(registeredOption, zh);
+  const productName = registeredOption ? connectionName(registeredOption.connection_option_id, language, registeredOption.display_name) : '';
   const registeredCandidates = useMemo(() => registeredOption
     ? registeredModelCandidates(registeredOption, connectionOptions?.metadata_catalog)
     : [], [registeredOption, connectionOptions]);
@@ -122,6 +133,11 @@ export function ModelConnectionForm(props: ModelConnectionFormProps) {
     protectedInputRef.current = null;
     if (input && !applyDispatchedRef.current) void backend.releaseProtectedInput(input).catch(() => undefined);
   }, [backend]);
+  const releaseSession = useCallback(() => {
+    editingSession.current.clear(input => { void backend.releaseProtectedInput(input).catch(() => undefined); });
+    pendingSecret.current = null;
+    if (password.current) password.current.value = '';
+  }, [backend]);
 
   const loadConnectionOptions = useCallback(async () => {
     setOptionsLoading(true);
@@ -131,13 +147,7 @@ export function ModelConnectionForm(props: ModelConnectionFormProps) {
       if (!aliveRef.current) return;
       setConnectionOptions(options);
       const executable = sortRegisteredOptions(options.options.filter(option => option.origin !== 'agent_subscription' && (!free || option.billing_class === 'free')));
-      setRegisteredOptionId(current => executable.some(option => option.connection_option_id === current)
-        ? current
-        : executable[0]?.connection_option_id ?? '');
-      if (!custom && executable[0] && !draftRef.current.display_name.trim()) {
-        const name = suggestedName(connectionName(executable[0].connection_option_id, language, executable[0].display_name));
-        setDraft(current => { const next = { ...current, display_name: name }; draftRef.current = next; return next; });
-      }
+      setRegisteredOptionId(current => executable.some(option => option.connection_option_id === current) ? current : '');
       if (!custom && executable.length === 0) {
         setError('MODEL_CONNECTION_OPTION_UNAVAILABLE');
       }
@@ -174,7 +184,7 @@ export function ModelConnectionForm(props: ModelConnectionFormProps) {
         protocol_profile_revision: 1, authentication: value.authentication_semantics ?? { kind: 'bearer' as const } }));
     invalidate(current => ({
       ...current,
-      display_name: provider.display_name,
+      display_name: current.display_name && current.display_name !== (zh ? '自定义 API' : 'Custom API') ? current.display_name : provider.display_name,
       display_template_id: null,
       base_url: endpoint?.base_url ?? provider.base_url_candidates[0],
       base_kind: 'api_root',
@@ -227,6 +237,7 @@ export function ModelConnectionForm(props: ModelConnectionFormProps) {
   }
 
   function selectMetadataPrefill(key: string) {
+    if (key !== metadataPrefillKey && password.current) password.current.value = '';
     setMetadataPrefillKey(key);
     const prefill = metadataPrefills.find(value => value.key === key);
     if (prefill?.kind === 'template') selectRegisteredTemplate(prefill.option);
@@ -234,6 +245,23 @@ export function ModelConnectionForm(props: ModelConnectionFormProps) {
   }
 
   useEffect(() => { draftRef.current = draft; }, [draft]);
+  useLayoutEffect(() => {
+    if (screen === 'connection' && phase === 'editing' && pendingSecret.current !== null && password.current) {
+      password.current.value = pendingSecret.current;
+      pendingSecret.current = null;
+    }
+  }, [screen, phase, registeredOptionId, custom]);
+  useEffect(() => {
+    if (phase !== 'editing') return;
+    const frame = requestAnimationFrame(() => {
+      const visible = (element: HTMLElement) => element.getClientRects().length > 0 && !element.matches(':disabled');
+      const target = Array.from(flow.current?.querySelectorAll<HTMLElement>('[data-autofocus]') ?? []).find(visible)
+        ?? Array.from(flow.current?.querySelectorAll<HTMLElement>('input, button, summary') ?? []).find(visible);
+      target?.focus();
+      flow.current?.closest('.modal-body')?.scrollTo({ top: 0 });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [screen, phase]);
   useEffect(() => {
     if (!error || phase !== 'editing') return;
     requestAnimationFrame(() => errorFeedback.current?.scrollIntoView({ block: 'nearest' }));
@@ -245,8 +273,9 @@ export function ModelConnectionForm(props: ModelConnectionFormProps) {
       const checkId = activeCheckRef.current;
       if (checkId) void backend.cancelModelConnectionCheck(checkId).catch(() => undefined);
       releaseProtectedInput();
+      releaseSession();
     };
-  }, [backend, releaseProtectedInput]);
+  }, [backend, releaseProtectedInput, releaseSession]);
   useEffect(() => { void loadConnectionOptions(); }, [loadConnectionOptions]);
 
   const invalidate = useCallback((
@@ -281,6 +310,42 @@ export function ModelConnectionForm(props: ModelConnectionFormProps) {
     setError('');
     if (nextScreen) setScreen(nextScreen);
   }, [backend, releaseProtectedInput]);
+
+  function retainEditingDraft() {
+    if (!editingKey.current) return;
+    editingSession.current.stash(editingKey.current, {
+      draft: draftRef.current, custom, metadataPrefillKey,
+      secret: password.current?.value ?? '', protectedInput: protectedInputRef.current,
+    });
+    protectedInputRef.current = null;
+    if (password.current) password.current.value = '';
+    editingKey.current = null;
+  }
+
+  function chooseConnection(option: ComputeConnectionOptions['options'][number] | null) {
+    const key = option?.connection_option_id ?? 'custom';
+    retainEditingDraft();
+    const saved = editingSession.current.take(key);
+    const endpoint = [...(option?.endpoints ?? [])].sort((a, b) => a.stable_preference - b.stable_preference)[0];
+    const next = saved?.draft ?? { ...props.initialDraft,
+      entry_kind: option ? (free ? 'free_api_key' as const : 'preset_api' as const) : 'custom_api' as const,
+      display_name: suggestedName(option ? connectionName(option.connection_option_id, language, option.display_name) : (zh ? '自定义 API' : 'Custom API')),
+      lineage_ref: clientOperationId('lineage'), candidate_ref: null, check_id: '', models: [],
+      authentication: endpoint?.authentication_semantics ?? { kind: 'bearer' as const },
+    };
+    setCustom(saved?.custom ?? !option);
+    setRegisteredOptionId(option?.connection_option_id ?? '');
+    setMetadataPrefillKey(saved?.metadataPrefillKey ?? '');
+    protectedInputRef.current = saved?.protectedInput ?? null;
+    pendingSecret.current = saved?.secret ?? '';
+    editingKey.current = key;
+    invalidate(() => next, false, 'connection');
+  }
+
+  function returnToCatalog() {
+    retainEditingDraft();
+    invalidate(current => current, false, 'catalog');
+  }
 
   function updateManualModel(model: ModelDeclaration) {
     invalidate(current => ({ ...current, models: current.models.map(value => value.client_id === model.client_id ? model : value) }), false, 'manual');
@@ -402,6 +467,10 @@ export function ModelConnectionForm(props: ModelConnectionFormProps) {
     if (idError) { setError(idError); return; }
     const passwordElement = password.current;
     const enteredSecret = passwordElement?.value ?? '';
+    if (!current.display_name.trim() || new TextEncoder().encode(current.display_name.trim()).length > 256 || current.display_name.includes('\0')) {
+      setError('MODEL_CONNECTION_NAME_REQUIRED');
+      return;
+    }
     const connectionReady = custom
       ? validEndpoint(current.base_url)
       : Boolean(connectionOptions && registeredOption);
@@ -418,10 +487,12 @@ export function ModelConnectionForm(props: ModelConnectionFormProps) {
       if (validation) { setError(validation); return; }
     }
     const checkId = clientOperationId('check');
-    const checkingDraft = { ...current, display_name: current.display_name.trim() || `${zh ? '自定义 API' : 'Custom API'} · ${custom ? new URL(current.base_url).hostname : ''}`, candidate_ref: enteredSecret ? null : current.candidate_ref, check_id: checkId };
+    const checkingDraft = { ...current, display_name: current.display_name.trim(), candidate_ref: enteredSecret ? null : current.candidate_ref, check_id: checkId };
     draftRef.current = checkingDraft;
     setDraft(checkingDraft);
     activeCheckRef.current = checkId;
+    setResult(null);
+    setSelected(new Set());
     // A manual capability declaration must be checked again before it can be
     // saved. Keep that check cancellable; only lock the dialog after the
     // checked candidate crosses into the save phase.
@@ -430,11 +501,11 @@ export function ModelConnectionForm(props: ModelConnectionFormProps) {
     try {
       if (checkingDraft.authentication.kind !== 'none' && enteredSecret) {
         newlyRegistered = (await backend.registerProtectedInput(enteredSecret)).input_candidate;
-        if (passwordElement) passwordElement.value = '';
         if (activeCheckRef.current !== checkId) {
           await backend.releaseProtectedInput(newlyRegistered);
           return;
         }
+        if (passwordElement) passwordElement.value = '';
         releaseProtectedInput();
         protectedInputRef.current = newlyRegistered;
       }
@@ -445,6 +516,7 @@ export function ModelConnectionForm(props: ModelConnectionFormProps) {
             ...(inputCandidate ? { input_candidate: inputCandidate } : {}),
           })
         : await backend.checkRegisteredModelConnection({
+            display_name: checkingDraft.display_name,
             inference_model_id: inferenceModelId,
             models: checkingDraft.models.filter(model => model.upstream_model_id).map(({ client_id: _clientId, ...model }) => ({ ...model, display_name: model.display_name.trim() || model.upstream_model_id })),
             connection_option_id: registeredOption!.connection_option_id,
@@ -535,6 +607,7 @@ export function ModelConnectionForm(props: ModelConnectionFormProps) {
     if (checkId) void backend.cancelModelConnectionCheck(checkId).catch(() => undefined);
     setPhase('editing');
     setError('');
+    if (screen === 'models') setScreen('connection');
   }
 
   function discardAndClose(kind: 'back' | 'cancel') {
@@ -546,6 +619,7 @@ export function ModelConnectionForm(props: ModelConnectionFormProps) {
       cancelActiveCheck();
     }
     releaseProtectedInput();
+    releaseSession();
     if (kind === 'back') props.onBack(); else props.onCancel();
     props.restoreFocus();
   }
@@ -554,6 +628,12 @@ export function ModelConnectionForm(props: ModelConnectionFormProps) {
     if (dirty && !saveCompletedRef.current && !(await confirmDiscard(language))) return false;
     discardAndClose('cancel');
     return true;
+  }
+
+  async function requestClose(kind: 'back' | 'cancel') {
+    if (phase === 'saving') return;
+    if (dirty && !saveCompletedRef.current && !(await confirmDiscard(language))) return;
+    discardAndClose(kind);
   }
 
   async function openDocumentation(event: React.MouseEvent<HTMLAnchorElement>, url?: string) {
@@ -589,32 +669,36 @@ export function ModelConnectionForm(props: ModelConnectionFormProps) {
   const selectedCount = useMemo(() => result ? selectedModelRefsForSave(result, selected, true).length : 0, [result, selected]);
   const busy = phase !== 'editing';
   const optionUnavailable = error === 'MODEL_CONNECTION_OPTIONS_UNAVAILABLE' || error === 'MODEL_CONNECTION_OPTION_UNAVAILABLE';
-  const title = screen === 'models'
-    ? (zh ? '选择模型' : 'Select models')
-    : screen === 'manual'
-      ? (zh ? '补充未知模型' : 'Complete unknown model details')
-      : props.appendTo ? (zh ? `向「${props.appendTo.display_name}」添加模型` : `Add models to “${props.appendTo.display_name}”`) : custom ? (zh ? '自定义 API' : 'Custom API') : (zh ? '连接 API' : 'Connect an API');
+  const title = props.appendTo ? (zh ? `向「${props.appendTo.display_name}」添加模型` : `Add models to “${props.appendTo.display_name}”`) : zh ? '连接 API' : 'Connect an API';
+  const step = screen === 'catalog' ? 0 : screen === 'connection' ? 1 : 2;
   const footer = busy
-    ? <button className="btn" type="button" disabled={phase === 'saving'} onClick={() => discardAndClose('cancel')}>{phase === 'saving' ? (zh ? '正在保存…' : 'Saving…') : (zh ? '取消检查' : 'Cancel check')}</button>
-    : screen === 'connection'
-      ? <><button className="btn" type="button" onClick={() => discardAndClose('back')}>{zh ? '返回' : 'Back'}</button><button className="btn btn-primary" type="submit" form="mc-connection-form" disabled={!props.mutable || (!custom && (optionsLoading || !registeredOption))}>{zh ? '检查接入' : 'Check connection'}</button></>
+    ? <button className="btn" type="button" disabled={phase === 'saving'} onClick={cancelActiveCheck}>{phase === 'saving' ? (zh ? '正在保存…' : 'Saving…') : (zh ? '取消检查' : 'Cancel check')}</button>
+    : screen === 'catalog'
+      ? <><button className="btn" type="button" onClick={() => void requestClose('back')}>{zh ? '返回' : 'Back'}</button><span className="field-help">{zh ? '选择服务后继续配置' : 'Choose a service to continue'}</span></>
+      : screen === 'connection'
+      ? <><button className="btn" type="button" onClick={() => catalogEnabled ? returnToCatalog() : void requestClose('back')}>{zh ? '返回' : 'Back'}</button><button className="btn btn-primary" type="submit" form="mc-connection-form" disabled={!props.mutable || (!custom && (optionsLoading || !registeredOption))}>{zh ? '检查并继续' : 'Check and continue'}</button></>
       : screen === 'manual'
-        ? <><button className="btn" type="button" onClick={backWithinFlow}>{zh ? '返回' : 'Back'}</button><button className="btn btn-primary" type="submit" form="mc-manual-form" disabled={!props.mutable}>{zh ? '保存接入' : 'Save connection'}</button></>
-        : <><button className="btn" type="button" onClick={backWithinFlow}>{zh ? '返回' : 'Back'}</button><button className="btn btn-primary" type="button" disabled={!props.mutable || !selectedCount} onClick={() => void saveSelected()}>{zh ? '保存接入' : 'Save connection'}</button></>;
+        ? <><button className="btn" type="button" onClick={backWithinFlow}>{zh ? '返回' : 'Back'}</button><button className="btn btn-primary" type="submit" form="mc-manual-form" disabled={!props.mutable}>{zh ? '检查并保存' : 'Check and save'}</button></>
+        : <><button className="btn" type="button" onClick={backWithinFlow}>{zh ? '返回' : 'Back'}</button><span className="connection-selection-count">{zh ? `已选择 ${selectedCount} 个模型` : `${selectedCount} models selected`}</span><button className="btn btn-primary" type="button" disabled={!props.mutable || !selectedCount} onClick={() => void saveSelected()}>{zh ? '保存连接' : 'Save connection'}</button></>;
 
-  return <Dialog open title={title} closeLabel={phase === 'saving' ? (zh ? '正在保存' : 'Saving') : (zh ? '取消添加' : 'Cancel')} closeDisabled={phase === 'saving'} onClose={() => discardAndClose('cancel')} footer={footer}>
-    <section className="connection-flow" aria-label={zh ? '添加模型连接' : 'Add model connection'}>
+  return <Dialog open title={title} className="connection-dialog" closeLabel={phase === 'saving' ? (zh ? '正在保存' : 'Saving') : (zh ? '取消添加' : 'Cancel')} closeDisabled={phase === 'saving'} onClose={() => void requestClose('cancel')} footer={footer}>
+    <section className="connection-flow" ref={flow} aria-label={zh ? '添加模型连接' : 'Add model connection'}>
+      <ol className="connection-steps" aria-label={zh ? '连接步骤' : 'Connection steps'}>{(zh ? ['选择服务', '配置连接', '选择模型'] : ['Choose service', 'Configure', 'Choose models']).map((label, index) => <li key={label} className={index < step ? 'complete' : index === step ? 'current' : ''} aria-current={index === step ? 'step' : undefined}><span>{index < step ? <UiIcon name="check" /> : index + 1}</span>{label}</li>)}</ol>
       {props.appendTo && <p className="field-help">{zh ? '复用此接入的端点和凭据。检查后添加模型，已有模型与启停状态将保留。' : 'Reuse saved endpoints and credentials. Add models after checking; existing models and enabled state are retained.'}</p>}
       {!props.mutable && !busy && <div className="callout warn" role="status"><UiIcon name="warning" /><span>{zh ? '本机服务连接中断。当前输入已保留，重新连接后再保存。' : 'The local service disconnected. Your input is retained; reconnect before saving.'}</span></div>}
-      {busy ? <div className="oc-status-row" role="status"><span className="oc-spinner" /><div className="row-main"><strong>{phase === 'checking' ? (zh ? '正在检查接入' : 'Checking connection') : (zh ? '正在保存接入' : 'Saving connection')}</strong><p>{phase === 'checking' ? (zh ? '检查配置，并在提供目录时读取模型。' : 'Checking configuration and reading the model directory when configured.') : (zh ? '保存所选模型与凭据。' : 'Saving the selected models and credential.')}</p></div></div> : <>
+      {busy && <div className="oc-status-row" role="status"><span className="oc-spinner" /><div className="row-main"><strong>{phase === 'checking' ? (zh ? '正在检查接入' : 'Checking connection') : (zh ? '正在保存接入' : 'Saving connection')}</strong><p>{phase === 'checking' ? (zh ? '检查配置，并在提供目录时读取模型。' : 'Checking configuration and reading the model directory when configured.') : (zh ? '保存所选模型与凭据。' : 'Saving the selected models and credential.')}</p></div></div>}
+      <div className="connection-screen" hidden={busy}>
+        {screen === 'catalog' && <ConnectionDirectory options={registeredOptions} loading={optionsLoading} language={language} free={free} onSelect={chooseConnection} onCustom={() => chooseConnection(null)} onReload={() => void loadConnectionOptions()} />}
         <form hidden={screen !== 'connection'} id="mc-connection-form" onSubmit={event => { event.preventDefault(); void runCheck(false); }}>
           <fieldset className="connection-fields" disabled={!props.mutable || Boolean(props.appendTo)}>
-            {!custom && !free && <button className="btn btn-quiet" type="button" onClick={() => { setCustom(true); invalidate(current => ({ ...current, entry_kind: 'custom_api' }), true, 'connection'); }}>{zh ? '自定义 API' : 'Custom API'}</button>}
+            <div className="connection-config-heading"><ProviderIcon optionId={custom ? draft.display_template_id : registeredOption?.connection_option_id} language={language} /><div><h3>{custom ? (zh ? '自定义 API' : 'Custom API') : productName}</h3><p>{custom ? (zh ? '填写服务地址，连接兼容的模型服务' : 'Connect a compatible model service') : connectionTemplate(registeredOption?.connection_option_id)?.description[language]}</p></div></div>
+            <label className="field"><span className="field-label">{zh ? '连接名称' : 'Connection name'}</span><input className="input" maxLength={60} data-autofocus={screen === 'connection' || undefined} value={draft.display_name} placeholder={zh ? '例如：团队模型服务' : 'e.g. Team models'} onChange={event => invalidate(current => ({ ...current, display_name: event.target.value }), false, 'connection')} /><span className="field-help">{zh ? '用于区分不同账号或用途，保存后可在模型列表中看到。' : 'Distinguish accounts or purposes. This name appears in your model list.'}</span></label>
+            {draft.authentication.kind !== 'none' && <label className="field"><span className="field-label">API Key</span><input className="input" disabled={!custom && (optionsLoading || !registeredOption)} ref={password} type="password" autoComplete="off" spellCheck={false} placeholder={protectedInputRef.current ? '••••••••••••••••' : draft.existing_source_id ? (zh ? '留空使用已保存的 Key' : 'Leave blank to use the saved key') : (zh ? '粘贴此产品的 API Key' : 'Paste this product’s API key')} onChange={() => invalidate(current => ({ ...current, candidate_ref: null }), true, 'connection')} /></label>}
+            {!custom && registeredOption && <div className="connection-key-help"><span className="field-help">{zh ? '请使用上方产品对应的 Key。' : 'Use the key for the product shown above.'}</span>{connectionTemplate(registeredOption.connection_option_id)?.documentation_url && <a href={connectionTemplate(registeredOption.connection_option_id)?.documentation_url} target="_blank" rel="noreferrer" onClick={event => void openDocumentation(event, connectionTemplate(registeredOption.connection_option_id)?.documentation_url)}>{zh ? '获取 API Key' : 'Get an API key'}<UiIcon name="arrow" /></a>}{externalLinkError && <div className="callout warn" role="alert"><UiIcon name="warning" /><span>{zh ? '无法打开默认浏览器；当前表单内容已保留。' : 'The default browser could not be opened. Your form input is retained.'}</span></div>}</div>}
             {custom ? <>
-              <ProviderIcon optionId={draft.display_template_id} language={language} />
-              {!optionsLoading && metadataPrefills.length > 0 && <div className="connection-fields metadata-prefill-fields">
-                <label className="field"><span className="field-label">{zh ? '接入模板（可选）' : 'Connection template (optional)'}</span><select className="select" value={metadataPrefillKey} onChange={event => selectMetadataPrefill(event.target.value)}>
-                  <option value="">{zh ? '手动填写' : 'Enter manually'}</option>
+              {!optionsLoading && metadataPrefills.length > 0 && <Disclosure className="connection-details" language={language} label={zh ? '使用接入资料预填（可选）' : 'Use connection prefill (optional)'}><div className="connection-fields metadata-prefill-fields">
+                <label className="field"><span className="field-label">{zh ? '接入资料预填（可选）' : 'Connection prefill (optional)'}</span><select className="select" value={metadataPrefillKey} onChange={event => selectMetadataPrefill(event.target.value)}>
+                  <option value="">{zh ? '不使用预填' : 'No prefill'}</option>
                   <optgroup label={zh ? '内置接入' : 'Built-in connections'}>
                     {metadataPrefills.filter(prefill => prefill.kind === 'template').map(prefill => <option key={prefill.key} value={prefill.key}>{connectionName(prefill.option.connection_option_id, language, prefill.option.display_name)}</option>)}
                   </optgroup>
@@ -623,8 +707,7 @@ export function ModelConnectionForm(props: ModelConnectionFormProps) {
                 {selectedPrefill && <p className="field-help">{zh
                   ? `已收录 ${metadataCandidates.length} 个模型，检查接入后统一选择；未知能力采用可编辑兜底：上下文 200K、输出 32K、工具与流式开启、视觉关闭、思考开关。`
                   : `${metadataCandidates.length} models in this catalog. Choose after checking the connection; missing capabilities use editable defaults (200K context, 32K output, tools and streaming on, vision off, reasoning toggle).`}</p>}
-              </div>}
-              <label className="field"><span className="field-label">{zh ? '接入名称' : 'Connection name'}</span><input className="input" data-autofocus value={draft.display_name} placeholder={zh ? '例如：团队模型服务' : 'e.g. Team models'} onChange={event => invalidate(current => ({ ...current, display_name: event.target.value }), false, 'connection')} /></label>
+              </div></Disclosure>}
               <label className="field"><span className="field-label">Base URL</span><input className="input" inputMode="url" value={draft.base_url} placeholder="https://example.com/v1" onChange={event => invalidate(current => ({ ...current, base_url: event.target.value }), true, 'connection')} /></label>
               <label className="field"><span className="field-label">{zh ? '协议' : 'Protocol'}</span><select className="select" value={draft.protocol} onChange={event => {
                 const protocol = event.target.value as UpstreamProtocol;
@@ -660,24 +743,9 @@ export function ModelConnectionForm(props: ModelConnectionFormProps) {
             </> : optionsLoading
               ? <div className="oc-status-row" role="status"><span className="oc-spinner" /><div className="row-main"><strong>{zh ? '正在读取接入方式' : 'Loading connection'}</strong><p>{zh ? '从本机可信目录确认当前支持的产品。' : 'Checking supported products in the local trusted catalog.'}</p></div></div>
               : registeredOption
-                ? <ConnectionTemplatePicker options={registeredOptions} value={registeredOption.connection_option_id} language={language} onChange={id => {
-                  setRegisteredOptionId(id);
-                  const option = registeredOptions.find(value => value.connection_option_id === id)!;
-                  invalidate(current => ({ ...current, candidate_ref: null, models: [], display_name: suggestedName(connectionName(id, language, option.display_name)) }), true, 'connection');
-                }} />
+                ? <Disclosure className="connection-details" language={language} label={zh ? '连接配置 · 已自动填写' : 'Connection settings · configured automatically'}><div className="connection-endpoint-list">{registeredOption.endpoints?.map(endpoint => <div key={`${endpoint.protocol}-${endpoint.base_url}-${endpoint.request_path}`}><strong>{({ chat_completions: 'OpenAI Chat Completions', responses: 'OpenAI Responses', messages: 'Anthropic Messages' })[endpoint.protocol]}</strong><code>{endpoint.base_url.replace(/\/+$/, '')}/{endpoint.request_path.replace(/^\/+/, '')}</code></div>)}{Boolean(registeredOption.endpoints?.length) && <button className="btn btn-quiet" type="button" onClick={() => selectRegisteredTemplate(registeredOption, true)}>{zh ? '自定义连接配置' : 'Customize connection settings'}</button>}</div></Disclosure>
                 : <div className="callout warn"><UiIcon name="warning" /><div><strong>{zh ? '当前没有可用的内置接入' : 'No built-in connection is available'}</strong><p>{connectionErrorMessage(error || 'MODEL_CONNECTION_OPTION_UNAVAILABLE', zh)}</p><button className="btn" type="button" onClick={() => void loadConnectionOptions()}>{zh ? '重新读取' : 'Reload'}</button></div></div>}
-            {!custom && <label className="field"><span className="field-label">{zh ? '接入名称' : 'Connection name'}</span><input className="input" maxLength={60} value={draft.display_name} placeholder={zh ? '例如：百炼 · 团队' : 'e.g. Bailian · Team'} onChange={event => invalidate(current => ({ ...current, display_name: event.target.value }), false, 'connection')} /><span className="field-help">{zh ? '同一模板可以保存多份独立接入，分别管理凭据和模型。' : 'Save independent connections from the same template, each with its own keys and models.'}</span></label>}
-            {!custom && registeredOption && <section>
-              <ProviderIcon optionId={registeredOption.connection_option_id} language={language} />
-              <p>{connectionTemplate(registeredOption.connection_option_id)?.description[language]}</p>
-              <a href={connectionTemplate(registeredOption.connection_option_id)?.documentation_url} target="_blank" rel="noreferrer" onClick={event => void openDocumentation(event, connectionTemplate(registeredOption.connection_option_id)?.documentation_url)}>{zh ? '官方说明与获取 Key' : 'Official guide and API keys'}</a>
-              {externalLinkError && <div className="callout warn" role="alert"><UiIcon name="warning" /><span>{zh ? '无法打开默认浏览器；当前表单内容已保留。' : 'The default browser could not be opened. Your form input is retained.'}</span></div>}
-              <p className="field-help">{zh
-                ? `已收录 ${registeredCandidates.length} 个模型，填写 Key 后统一选择。具体可用范围取决于账号和套餐。`
-                : `${registeredCandidates.length} models in this catalog. Enter your key, then choose models. Availability depends on your account and plan.`}</p>
-              {registeredOption.endpoints?.length && <button className="btn btn-quiet" type="button" onClick={() => selectRegisteredTemplate(registeredOption, true)}>{zh ? '自定义此模板的连接配置' : 'Customize this template connection'}</button>}
-            </section>}
-            {custom && <>
+            {custom && <Disclosure className="connection-details" language={language} label={zh ? '高级设置' : 'Advanced settings'}><div className="connection-fields">
               <label className="field"><span className="field-label">{zh ? '请求路径（可选覆盖）' : 'Request path (optional override)'}</span><input className="input" value={draft.request_path_override ?? ''} onChange={event => invalidate(current => ({ ...current, request_path_override: event.target.value || null }), true, 'connection')} /></label>
               <label className="field"><span className="field-label">{zh ? '模型目录路径（可选）' : 'Model directory path (optional)'}</span><input className="input" placeholder="/v1/models" value={draft.inventory_path_override ?? ''} onChange={event => invalidate(current => ({ ...current, inventory_path_override: event.target.value || null }), true, 'connection')} /></label>
               <label className="field"><span className="field-label">{zh ? '认证方式' : 'Authentication'}</span><select className="select" value={draft.authentication.kind} onChange={event => invalidate(current => ({ ...current, authentication: event.target.value === 'api_key_header' ? { kind: 'api_key_header', header: 'x-api-key' } : event.target.value === 'none' ? { kind: 'none' } : { kind: 'bearer' } }), true, 'connection')}><option value="none">{zh ? '无认证' : 'None'}</option><option value="bearer">Bearer Token</option><option value="api_key_header">{zh ? '自定义 Header' : 'Custom header'}</option></select></label>
@@ -704,10 +772,9 @@ export function ModelConnectionForm(props: ModelConnectionFormProps) {
                 }}>{zh ? '添加协议端点' : 'Add protocol endpoint'}</button>}
                 <p className="field-help">{zh ? '这些端点与上方端点共用同一个 API Key；修改端点无需重新输入已保存的 Key。' : 'All endpoints share one API key. Editing endpoints does not require re-entering a saved key.'}</p>
               </div>
-            </>}
-            {draft.authentication.kind !== 'none' && <label className="field"><span className="field-label">API Key</span><input className="input" disabled={!custom && (optionsLoading || !registeredOption)} data-autofocus={!custom || undefined} ref={password} type="password" autoComplete="off" spellCheck={false} placeholder={protectedInputRef.current ? '••••••••••••••••' : undefined} onChange={() => invalidate(current => ({ ...current, candidate_ref: null }), true, 'connection')} /></label>}
+            </div></Disclosure>}
             {!custom && <p className="field-help">{zh ? '检查连接配置；提供目录时读取模型，不发送推理请求。' : 'Checks connection settings and reads the model directory when available, without inference requests.'}</p>}
-            <button className="btn" type="button" onClick={() => invalidate(current => ({ ...current, models: current.models.length ? current.models : [blankModel()] }), false, 'manual')}>{zh ? '手工维护模型' : 'Edit models manually'}</button>
+            <button className="btn btn-quiet connection-manual-entry" type="button" onClick={() => invalidate(current => ({ ...current, models: current.models.length ? current.models : [blankModel()] }), false, 'manual')}>{zh ? '手工维护模型' : 'Edit models manually'}</button>
           </fieldset>
         </form>
 
@@ -717,6 +784,7 @@ export function ModelConnectionForm(props: ModelConnectionFormProps) {
         </form>}
 
         {screen === 'models' && result && <section className="model-selection" aria-live="polite">
+          <div className="connection-config-heading"><ProviderIcon optionId={custom ? draft.display_template_id : registeredOption?.connection_option_id} language={language} /><div><h3>{draft.display_name}</h3><p>{custom ? (zh ? '自定义 API' : 'Custom API') : productName}</p></div></div>
           <p className="v3-select-intro">{zh ? '选择需要接入的模型，已知能力会自动匹配。' : 'Choose models to connect. Known capabilities are matched automatically.'}</p>
           {result.reachability === 'transport_failed' && <p className="field-help">{zh ? '目录连接失败；保留已有模型声明，推理可用性仍未知。' : 'The directory connection failed. Model declarations are retained; inference availability remains unknown.'}</p>}
           {result.authentication === 'unknown' && <p className="field-help">{zh ? '凭据尚未验证。' : 'Credentials have not been verified.'}</p>}
@@ -725,16 +793,16 @@ export function ModelConnectionForm(props: ModelConnectionFormProps) {
           <button className="btn btn-quiet" type="button" onClick={() => invalidate(current => ({ ...current, models: result.candidate.models.filter(model => selected.has(model.model_ref)).map(model => current.models.find(value => value.upstream_model_id === model.upstream_model_id) ?? blankModel(model.upstream_model_id, model.display_name)) }), false, 'manual')}>{zh ? '编辑所选模型 / 添加模型' : 'Edit selected models / add model'}</button>
           {['not_run', 'empty', 'unavailable', 'invalid'].includes(result.directory) && <p className="field-help">{zh ? '未取得模型目录，保留内置或手工声明的模型。' : 'No model directory was obtained. Built-in and manually declared models are retained.'}</p>}
           {result.directory === 'partial' && <div className="callout warn"><UiIcon name="warning" /><span>{zh ? '模型目录只读取到一部分。可以先保存已确认的模型，稍后再重新检查。' : 'Only part of the model catalog was read. You can save confirmed models and check again later.'}</span></div>}
-          <fieldset className="v3-catalog model-result-list" disabled={!props.mutable}><legend className="sr-only">{zh ? '选择保存的模型' : 'Select models to save'}</legend>{result.candidate.models.map(model => {
+          <fieldset className="v3-catalog model-result-list" disabled={!props.mutable}><legend className="sr-only">{zh ? '选择保存的模型' : 'Select models to save'}</legend>{result.candidate.models.map((model, index) => {
             const canSelect = modelCanBeSelected(result, model, true);
-            return <div className="model-result-row" key={model.model_ref}><label className="check-row"><input type="checkbox" disabled={!canSelect} checked={canSelect && selected.has(model.model_ref)} onChange={event => setSelected(current => { const next = new Set(current); if (event.target.checked) next.add(model.model_ref); else next.delete(model.model_ref); setError(''); return next; })} /><div><strong>{model.display_name}</strong><span>{draft.display_name || registeredLabel.title}{model.fact_basis === 'runtime_fallback' ? ` · ${zh ? '运行时保守兜底' : 'Conservative runtime fallback'}` : ''}{!canSelect ? ` · ${modelAvailabilityMessage(model.reason, zh)}` : ''}</span></div></label>{custom && !canSelect && <button className="btn btn-quiet" type="button" onClick={() => {
+            return <div className="model-result-row" key={model.model_ref}><label className="check-row"><input type="checkbox" data-autofocus={index === 0 || undefined} disabled={!canSelect} checked={canSelect && selected.has(model.model_ref)} onChange={event => setSelected(current => { const next = new Set(current); if (event.target.checked) next.add(model.model_ref); else next.delete(model.model_ref); setError(''); return next; })} /><div><strong>{model.display_name}</strong><span>{draft.display_name}{model.fact_basis === 'runtime_fallback' ? ` · ${zh ? '运行时保守兜底' : 'Conservative runtime fallback'}` : ''}{!canSelect ? ` · ${modelAvailabilityMessage(model.reason, zh)}` : ''}</span></div></label>{custom && !canSelect && <button className="btn btn-quiet" type="button" onClick={() => {
               const prefilled = draftRef.current.models.find(value => value.upstream_model_id === model.upstream_model_id);
               const manualDraft = { ...draftRef.current, edit_revision: draftRef.current.edit_revision + 1, check_id: '', models: [prefilled ?? blankModel(model.upstream_model_id, model.display_name)] };
               draftRef.current = manualDraft; setDraft(manualDraft); setResult(null); setScreen('manual'); setError('');
             }}>{zh ? '补充能力' : 'Add capability details'}</button>}</div>;
           })}</fieldset>
         </section>}
-      </>}
+      </div>
       {error && !busy && !optionUnavailable && <div ref={errorFeedback} role="alert" className="callout bad" data-error-code={error}><UiIcon name="warning" /><span>{connectionErrorMessage(error, zh)}</span></div>}
     </section>
   </Dialog>;
