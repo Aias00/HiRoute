@@ -534,6 +534,22 @@ class SelectionTests(unittest.TestCase):
                      'tools/product-e2e/src/smoke/process.rs', 'e2e/schema/current-wire.json']:
             self.assertEqual(plan.select([path])['mode'], 'full')
 
+    def test_native_session_listener_keeps_protocol_consumers_and_serial_feature_context(self):
+        path = 'tools/e2e-harness/tests/p0_gateway_native_sessions.rs'
+        result = plan.select([path])
+        self.assertEqual(result['mode'], 'affected')
+        self.assertFalse(result['frontend'])
+        tests = [c for c in result['commands'] if c[:2] == ['cargo', 'test']]
+        self.assertEqual({c[c.index('--test') + 1] for c in tests},
+                         {'p0_gateway_native_sessions', 'p0_gateway_protocol', 'p0_gateway_matrix_coverage'})
+        native = next(c for c in tests if 'p0_gateway_native_sessions' in c)
+        self.assertIn('serde_json/preserve_order', native)
+        self.assertEqual(native[-2:], ['--', '--test-threads=1'])
+        preflight = plan.integration_preflight(result)
+        behavior = next(c for c in preflight['commands'] if 'p0_gateway_native_sessions' in c)
+        self.assertIn('serde_json/preserve_order', behavior)
+        self.assertIn('--test-threads=1', behavior)
+
     def test_responses_helper_includes_indirect_smoke_consumer(self):
         result = plan.select(['tools/e2e-harness/src/p0/client.rs'])
         commands = result['commands']

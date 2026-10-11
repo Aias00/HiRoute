@@ -96,6 +96,7 @@ pub struct GatewayObservation {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum NativeAgentObservationIdentityV1 {
+    /// Claude Code header or the supported JSON metadata session, with one stable namespace.
     ClaudeMetadataSession {
         session_id: String,
     },
@@ -107,6 +108,14 @@ pub enum NativeAgentObservationIdentityV1 {
     },
     /// Qoder native session UUID from the supported API client `session-id` header.
     QoderSession {
+        session_id: String,
+    },
+    /// Native Pi session carried by its pi-ai transport (without Codex dimensions).
+    PiSession {
+        session_id: String,
+    },
+    /// Native DSH header or its scoped pi-ai transport session.
+    DeepseekHarnessSession {
         session_id: String,
     },
     CodexThreadSession {
@@ -168,6 +177,19 @@ pub fn derive_native_agent_observation_session_id(
         }
         NativeAgentObservationIdentityV1::CodexSession { session_id } => {
             ("codex_session", vec![session_id.as_str()])
+        }
+        NativeAgentObservationIdentityV1::PiSession { session_id } => {
+            if !matches!(
+                trust.ingress_protocol,
+                hiroute_domain::IngressProtocolV1::Responses
+                    | hiroute_domain::IngressProtocolV1::Messages
+            ) {
+                return Err(NativeAgentObservationSessionError::UnsupportedIngress);
+            }
+            ("pi_session", vec![session_id.as_str()])
+        }
+        NativeAgentObservationIdentityV1::DeepseekHarnessSession { session_id } => {
+            ("deepseek_harness_session", vec![session_id.as_str()])
         }
         NativeAgentObservationIdentityV1::QoderSession { session_id } => {
             if !matches!(

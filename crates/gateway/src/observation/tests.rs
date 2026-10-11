@@ -123,6 +123,53 @@ fn native_agent_session_derivation_reuses_the_producer_identity_formula() {
         )
         .unwrap()
     );
+    for (identity, kind) in [
+        (
+            NativeAgentObservationIdentityV1::PiSession {
+                session_id: "pi-native".into(),
+            },
+            "pi_session",
+        ),
+        (
+            NativeAgentObservationIdentityV1::DeepseekHarnessSession {
+                session_id: "dsh-native".into(),
+            },
+            "deepseek_harness_session",
+        ),
+    ] {
+        let raw = match &identity {
+            NativeAgentObservationIdentityV1::PiSession { session_id }
+            | NativeAgentObservationIdentityV1::DeepseekHarnessSession { session_id } => session_id,
+            _ => unreachable!(),
+        };
+        let expected = SessionId::parse(reliable_observation_session_id(
+            &key,
+            workspace.as_str(),
+            &trust.authority_id,
+            &trust.grant_id,
+            trust.agent_plan_id.as_ref().unwrap().as_str(),
+            &trust.served_model_id,
+            "responses",
+            kind,
+            &[raw],
+        ))
+        .unwrap();
+        assert_eq!(
+            derive_native_agent_observation_session_id(&workspace, &key, &trust, &identity)
+                .unwrap(),
+            expected
+        );
+        assert_ne!(
+            derive_native_agent_observation_session_id(
+                &workspace,
+                &key,
+                &messages_trust,
+                &identity
+            )
+            .unwrap(),
+            expected
+        );
+    }
     let mut wrong_protocol = trust;
     wrong_protocol.ingress_protocol = hiroute_domain::IngressProtocolV1::ChatCompletions;
     assert!(

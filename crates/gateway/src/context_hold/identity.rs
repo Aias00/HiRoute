@@ -94,19 +94,10 @@ pub(crate) fn identity_facts(
         return verified_worker_identity(run);
     }
 
-    match codex_identity(ingress, headers, request) {
+    match native_identity(ingress, headers, document, request) {
         Field::Value((kind, parts)) => return reliable(kind, parts, false),
         Field::Invalid => return ContextIdentityFacts::request_scoped(),
         Field::Absent => {}
-    }
-    if ingress == IngressProtocol::Messages {
-        match claude_identity(document) {
-            Field::Value(session_id) => {
-                return reliable("claude_metadata_session", vec![session_id], false);
-            }
-            Field::Invalid => return ContextIdentityFacts::request_scoped(),
-            Field::Absent => {}
-        }
     }
 
     let Some(first_user) = first_user_digest(request, hold_key) else {
@@ -157,6 +148,111 @@ enum Field<T> {
     Invalid,
 }
 
+type NativeIdentity = (&'static str, Vec<String>);
+
+fn native_identity(
+    ingress: IngressProtocol,
+    headers: &HeaderMap,
+    document: &Value,
+    request: &ModelRequestIRV1,
+) -> Field<NativeIdentity> {
+    let claude_metadata = if ingress == IngressProtocol::Messages {
+        claude_metadata_identity(document)
+    } else {
+        Field::Absent
+    };
+    // Keep the metadata namespace so adding the native header does not split an
+    // existing Claude conversation. Conflicting/invalid claims never infer from text.
+    let claude = session_identity(
+        "claude_metadata_session",
+        merge_dimension(
+            header_value(headers, "x-claude-code-session-id"),
+            claude_metadata,
+        ),
+    );
+    let dsh = session_identity(
+        "deepseek_harness_session",
+        header_value(headers, "x-deepseek-harness-session-id"),
+    );
+    let vendor = merge_vendor_identity(claude, dsh);
+    let vendor = merge_vendor_identity(vendor, pi_ai_identity(ingress, headers));
+    let generic = codex_identity(ingress, headers, request);
+    match (generic, vendor) {
+        (Field::Invalid, _) | (_, Field::Invalid) => Field::Invalid,
+        (Field::Absent, value) | (value, Field::Absent) => value,
+        (Field::Value((kind, parts)), Field::Value((_, session)))
+            if matches!(kind, "codex_session" | "codex_thread_session")
+                && parts.last() == session.first() =>
+        {
+            // Pi's Codex transport also sends session-id. Preserve all already
+            // accepted generic dimensions and their historical HMAC namespace.
+            Field::Value((kind, parts))
+        }
+        (Field::Value(_), Field::Value(_)) => Field::Invalid,
+    }
+}
+
+fn session_identity(kind: &'static str, session: Field<String>) -> Field<NativeIdentity> {
+    match session {
+        Field::Absent => Field::Absent,
+        Field::Invalid => Field::Invalid,
+        Field::Value(session) => Field::Value((kind, vec![session])),
+    }
+}
+
+fn merge_vendor_identity(
+    left: Field<NativeIdentity>,
+    right: Field<NativeIdentity>,
+) -> Field<NativeIdentity> {
+    match (left, right) {
+        (Field::Invalid, _) | (_, Field::Invalid) => Field::Invalid,
+        (Field::Absent, value) | (value, Field::Absent) => value,
+        (Field::Value(left), Field::Value(right)) if left == right => Field::Value(left),
+        (Field::Value(_), Field::Value(_)) => Field::Invalid,
+    }
+}
+
+fn pi_ai_identity(ingress: IngressProtocol, headers: &HeaderMap) -> Field<NativeIdentity> {
+    // pi-ai copies options.sessionId into these transport headers. Their names
+    // alone do not imply session semantics for arbitrary API clients. Branding
+    // is still only an Agent claim; authorization comes from the existing grant.
+    let kind = match single_header(headers, "user-agent", 1_024) {
+        Field::Value(agent) if agent.starts_with("pi (") && agent.ends_with(')') => "pi_session",
+        Field::Value(agent)
+            if agent
+                .strip_prefix("deepseek-harness/")
+                .is_some_and(|tail| !tail.is_empty() && !tail.starts_with(char::is_whitespace)) =>
+        {
+            "deepseek_harness_session"
+        }
+        Field::Invalid
+            if [
+                "x-client-request-id",
+                "session_id",
+                "x-session-id",
+                "x-session-affinity",
+            ]
+            .iter()
+            .any(|name| headers.contains_key(*name)) =>
+        {
+            return Field::Invalid;
+        }
+        Field::Absent | Field::Invalid | Field::Value(_) => return Field::Absent,
+    };
+    let session = match ingress {
+        IngressProtocol::Responses => merge_dimension(
+            header_value(headers, "x-client-request-id"),
+            header_value(headers, "session_id"),
+        ),
+        IngressProtocol::Messages => header_value(headers, "x-session-affinity"),
+        IngressProtocol::ChatCompletions => return Field::Absent,
+    };
+    session_identity(
+        kind,
+        merge_dimension(session, header_value(headers, "x-session-id")),
+    )
+}
+
 fn codex_identity(
     ingress: IngressProtocol,
     headers: &HeaderMap,
@@ -187,6 +283,10 @@ fn codex_identity(
 }
 
 fn header_value(headers: &HeaderMap, name: &'static str) -> Field<String> {
+    single_header(headers, name, 128)
+}
+
+fn single_header(headers: &HeaderMap, name: &'static str, max_bytes: usize) -> Field<String> {
     let mut values = headers.get_all(name).iter();
     let Some(value) = values.next() else {
         return Field::Absent;
@@ -197,7 +297,10 @@ fn header_value(headers: &HeaderMap, name: &'static str) -> Field<String> {
     value
         .to_str()
         .ok()
-        .and_then(valid_identity)
+        .filter(|value| {
+            !value.is_empty() && value.len() <= max_bytes && !value.chars().any(char::is_control)
+        })
+        .map(str::to_owned)
         .map_or(Field::Invalid, Field::Value)
 }
 
@@ -223,7 +326,7 @@ fn merge_dimension(header: Field<String>, body: Field<String>) -> Field<String> 
     }
 }
 
-fn claude_identity(document: &Value) -> Field<String> {
+fn claude_metadata_identity(document: &Value) -> Field<String> {
     let Some(metadata) = document.get("metadata") else {
         return Field::Absent;
     };
@@ -314,157 +417,5 @@ fn hex(value: &[u8; 32]) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::server::core_runtime::model_ir::{
-        CanonicalMessage, MODEL_REQUEST_IR_SCHEMA, RequestedReasoningControl,
-        ResponsesRequestOptionsV1, ToolChoice,
-    };
-
-    #[test]
-    fn worker_continue_keeps_conversation_identity_without_joining_other_tasks() {
-        let context = |task: &str, run: &str, native: Option<&str>| {
-            crate::server::request_plan::VerifiedRunObservationContext {
-                task_id: task.into(),
-                run_id: run.into(),
-                plan_id: "plan/one".into(),
-                plan_revision: 1,
-                publication_ref: "publication/one".into(),
-                harness_id: "pi".into(),
-                native_session_id: native.map(str::to_owned),
-                parent_context_ref: None,
-                continued_from_run_id: None,
-            }
-        };
-        let initial = verified_worker_identity(&context("task/one", "run/initial", None));
-        let continued =
-            verified_worker_identity(&context("task/one", "run/continue", Some("native-one")));
-        assert_eq!(initial.hold_identity(), continued.hold_identity());
-        assert_eq!(
-            initial.observation_identity(),
-            continued.observation_identity()
-        );
-        assert_eq!(continued.correlation_provenance(), "protocol_state");
-        assert_eq!(continued.session_scope(), "conversation");
-        let other = verified_worker_identity(&context("task/two", "run/other", Some("native-one")));
-        assert_ne!(initial.hold_identity(), other.hold_identity());
-        assert_ne!(initial.observation_identity(), other.observation_identity());
-        let invalid = verified_worker_identity(&context("", "run/valid", None));
-        assert_eq!(invalid.session_scope(), "request_scoped");
-    }
-
-    fn request(text: &str) -> ModelRequestIRV1 {
-        ModelRequestIRV1 {
-            native_body: None,
-            native_only: false,
-            schema_version: MODEL_REQUEST_IR_SCHEMA.into(),
-            ingress_protocol: IngressProtocol::Responses,
-            served_model_id: "agent/test".into(),
-            stream: false,
-            instructions: Vec::new(),
-            messages: vec![CanonicalMessage {
-                role: MessageRole::User,
-                content: vec![ContentPart::Text { text: text.into() }],
-                name: None,
-            }],
-            tools: Vec::new(),
-            tool_namespaces: Vec::new(),
-            responses_tool_order: Vec::new(),
-            web_search: None,
-            responses_search_history: Default::default(),
-            responses_annotations: Default::default(),
-            responses_message_phases: Default::default(),
-            responses_internal_chat_message_metadata: Default::default(),
-            responses_reasoning_history: Default::default(),
-            tool_choice: ToolChoice::None,
-            parallel_tool_calls: false,
-            requested_reasoning: RequestedReasoningControl::absent(),
-            requested_max_output_tokens: None,
-            provider_state: Vec::new(),
-            responses_options: None,
-            responses_item_ids: Default::default(),
-            responses_item_statuses: Default::default(),
-        }
-    }
-
-    #[test]
-    fn codex_requires_consistent_dimensions_and_keeps_thread_with_session() {
-        let mut headers = HeaderMap::new();
-        headers.insert("thread-id", "thread".parse().unwrap());
-        headers.insert("session-id", "session".parse().unwrap());
-        let mut request = request("hello");
-        request.responses_options = Some(ResponsesRequestOptionsV1 {
-            store: None,
-            include: None,
-            prompt_cache_key: None,
-            client_metadata: Some(
-                [
-                    ("thread_id".into(), "thread".into()),
-                    ("session_id".into(), "session".into()),
-                ]
-                .into_iter()
-                .collect(),
-            ),
-            reasoning_summary: None,
-            reasoning_context: None,
-        });
-        match codex_identity(IngressProtocol::Responses, &headers, &request) {
-            Field::Value((kind, parts)) => {
-                assert_eq!(kind, "codex_thread_session");
-                assert_eq!(parts, ["thread", "session"]);
-            }
-            Field::Absent | Field::Invalid => panic!("consistent identity was not accepted"),
-        }
-        request
-            .responses_options
-            .as_mut()
-            .unwrap()
-            .client_metadata
-            .as_mut()
-            .unwrap()
-            .insert("session_id".into(), "other".into());
-        assert!(matches!(
-            codex_identity(IngressProtocol::Responses, &headers, &request),
-            Field::Invalid
-        ));
-        headers.append("thread-id", "duplicate".parse().unwrap());
-        assert!(matches!(
-            codex_identity(IngressProtocol::Responses, &headers, &request),
-            Field::Invalid
-        ));
-    }
-
-    #[test]
-    fn inferred_anchor_uses_complete_user_and_rejects_public_wrappers() {
-        let key = [3; 32];
-        let common = "x".repeat(4_096);
-        assert_ne!(
-            first_user_digest(&request(&(common.clone() + "a")), &key),
-            first_user_digest(&request(&(common + "b")), &key)
-        );
-        for public in [
-            "# AGENTS.md instructions for /tmp",
-            "<environment_context>cwd</environment_context>",
-            "<system-reminder>rules</system-reminder>",
-            "<recommended_plugins>plugins</recommended_plugins>\n# AGENTS.md instructions for /tmp",
-            "<send_user_message_question_reply>prior answer</send_user_message_question_reply>",
-            "   ",
-        ] {
-            assert!(first_user_digest(&request(public), &key).is_none());
-        }
-    }
-
-    #[test]
-    fn claude_metadata_extracts_only_bounded_json_session() {
-        assert!(matches!(
-            claude_identity(&serde_json::json!({
-                "metadata":{"user_id":"{\"session_id\":\"claude-session\",\"device_id\":\"ignored\"}"}
-            })),
-            Field::Value(value) if value == "claude-session"
-        ));
-        assert!(matches!(
-            claude_identity(&serde_json::json!({"metadata":{"user_id":"not-json"}})),
-            Field::Invalid
-        ));
-    }
-}
+#[path = "identity_tests.rs"]
+mod tests;
