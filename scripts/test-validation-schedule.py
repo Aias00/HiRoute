@@ -45,6 +45,16 @@ sys.exit(101 if bad else 0)
 
 
 class Schedule(unittest.TestCase):
+    def test_gateway_runtime_consumers_require_product_preparation(self):
+        tests = Path(__file__).resolve().parents[1] / 'tools/e2e-harness/tests'
+        consumers = {
+            source.stem for source in tests.glob('*.rs')
+            if 'mod runtime_support;' in source.read_text()
+        }
+        self.assertIn('p0_gateway_native_sessions', consumers)
+        self.assertEqual(consumers - scheduler.PRODUCT_TARGETS, set(),
+                         'Gateway runtime targets must wait for prepared product binaries')
+
     def test_exec_audit_rejects_runtime_cargo_without_storing_arguments(self):
         trace = ('123 execve("/tmp/bin/test", [...], 0x1) = 0\n'
                  '124 execve("/home/user/.cargo/bin/cargo", [...], 0x1) = 0\n'
