@@ -89,6 +89,7 @@ impl LocalControlAdapter {
                 }
             }
         }
+        self.verify_connection_endpoint(&connection, &operation, installation)?;
 
         let stores = self
             .stores
@@ -141,14 +142,6 @@ impl LocalControlAdapter {
             || published_grant.model_grant != model_grant
         {
             return Err(ControlReadError::Denied);
-        }
-        if self
-            .managed_agent_runtime
-            .lock()
-            .map_err(|_| ControlReadError::Unavailable)?
-            .is_none()
-        {
-            return Err(ControlReadError::Unavailable);
         }
         Ok(ActiveJoinV1 {
             connection,
@@ -653,9 +646,7 @@ mod tests {
         );
         let storage = directory.path().join("storage");
         let stores = LocalStorageSet::open_for_daemon_startup(&storage).unwrap();
-        let artifacts = stores
-            .open_managed_artifacts(storage.join("artifacts"), storage.join("restores"))
-            .unwrap();
+        let artifacts = discovery::open_endpoint_test_artifacts(&stores, &scanner, &storage);
         let mut publication =
             serde_json::from_slice::<hiroute_domain::GatewayPublicationV1>(include_bytes!(
                 "../../../../../e2e/product/fixtures/routing/current-publication.v3.json"
@@ -1090,5 +1081,7 @@ mod tests {
         // Replacing the executable invalidates its identity proof, independently of the
         // diagnostic version printed by that executable.
         assert!(adapter.resolve_active_agent_grant(&connection_id).is_err());
+        write_claude(&claude, "2.1.231");
+        discovery::assert_persisted_endpoint_convergence(&adapter, &spec);
     }
 }

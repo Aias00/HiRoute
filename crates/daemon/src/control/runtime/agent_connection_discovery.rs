@@ -1,10 +1,69 @@
 use hiroute_application::control::ControlReadError;
-use hiroute_domain::{ActiveAgentConnectionV1, WorkspaceId};
+use hiroute_domain::{
+    ActiveAgentConnectionV1, AgentActivationModeV1, AgentIngressProtocolV1,
+    SupportedAgentInstallationV1, WorkspaceId,
+};
 use hiroute_integrations::{AgentDiscoveryOutcomeV1, FilesystemAgentDiscoveryV1};
 
 use super::{APPLY_OPERATION, LocalControlAdapter};
 
 impl LocalControlAdapter {
+    pub(super) fn verify_connection_endpoint(
+        &self,
+        connection: &ActiveAgentConnectionV1,
+        operation: &hiroute_local_storage::SucceededAgentOperationV1,
+        installation: &SupportedAgentInstallationV1,
+    ) -> Result<(), ControlReadError> {
+        let runtime = self
+            .managed_agent_runtime
+            .lock()
+            .map_err(|_| ControlReadError::Unavailable)?;
+        let runtime = runtime.as_ref().ok_or(ControlReadError::Unavailable)?;
+        if connection.connection.activation_mode != AgentActivationModeV1::ManagedConfiguration {
+            return Ok(());
+        }
+        let path = &installation
+            .profile
+            .field("base_endpoint")
+            .ok_or(ControlReadError::Corrupt)?
+            .path;
+        let intent = operation
+            .plan
+            .external()
+            .iter()
+            .find(|intent| intent.effect_id() == "agent-connection-managed-configuration")
+            .ok_or(ControlReadError::Corrupt)?;
+        let change = self
+            .native_claude_change(intent)
+            .map_err(super::super::map_port)?
+            .ok_or(ControlReadError::Corrupt)?;
+        // A V1 change is a delta: an already matching endpoint may have no changed field.
+        let endpoint = change
+            .fields
+            .iter()
+            .find(|field| &field.path == path)
+            .and_then(|field| field.after.as_ref())
+            .or_else(|| {
+                installation
+                    .effective_config
+                    .get(path)
+                    .map(|field| &field.value)
+            })
+            .and_then(serde_json::Value::as_str)
+            .ok_or(ControlReadError::Denied)?;
+        let expected = match connection.connection.protocol {
+            AgentIngressProtocolV1::Responses => runtime.gateway_base_url.as_str(),
+            AgentIngressProtocolV1::Messages => runtime
+                .gateway_base_url
+                .strip_suffix("/v1")
+                .ok_or(ControlReadError::Corrupt)?,
+        };
+        if endpoint != expected {
+            return Err(ControlReadError::Denied);
+        }
+        Ok(())
+    }
+
     pub(super) fn latest_connection_operation(
         &self,
         connection_id: &str,
@@ -69,3 +128,11 @@ impl LocalControlAdapter {
             .map(|(connection, _)| connection)
     }
 }
+
+#[cfg(test)]
+#[path = "agent_connection_endpoint_tests.rs"]
+mod endpoint_tests;
+#[cfg(test)]
+pub(super) use endpoint_tests::{
+    assert_persisted_endpoint_convergence, open_endpoint_test_artifacts,
+};

@@ -669,7 +669,27 @@ hiroute gateway recover --output json
 ```
 
 `set` saves desired state, restarts, and advances applied state only after real readiness.
-The first automatically chosen port is persisted. Local management clients see a
+The first automatically chosen port is persisted. Repeating `--port auto`, switching
+from fixed to automatic, or changing the address retains the saved desired port
+(or the last applied port if no desired port has been selected). A port is selected
+only when neither exists; a binding collision fails without choosing a replacement.
+If the service-manager restart fails, desired state remains saved and the operation
+remains failed. A later `hiroute service run` applies that desired state after readiness.
+`recover` selects the current applied listener, not an earlier historical address.
+
+`gateway show` checks public Agent settings status against the current runtime endpoint.
+Its `agent_update.required` hint requests a check/reconfiguration for drift, pending
+changes or unavailable inspection; it does not depend on the last listener operation's
+success. A null `existing_agent_count` means discovery was unavailable. Configured
+targets that agree and collaboration-only targets do not require model updates.
+Unconfigured/restored model targets also check any saved V1 connection; a missing
+old record needs no update, while a disconnected configuration requires a check.
+Current configured settings take precedence over superseded connection history.
+After a real endpoint change, use fresh
+`agents connect preview` / `agents connect apply` with the intended model selection;
+HiRoute does not rewrite native Agent configuration during a listener restart.
+
+Local management clients see a
 `0.0.0.0` listener as `127.0.0.1:<port>`. A non-loopback address requires explicit risk
 acceptance. HiRoute never changes a firewall, configures TLS, or manages a remote Agent.
 IPv6, multiple listeners, and firewall management are not supported.
