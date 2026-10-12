@@ -3,8 +3,9 @@ use std::sync::Mutex;
 
 use hiroute_domain::{
     ComputeManagementRepositoryPort, CredentialRefV1, GatewayAuthenticationSemanticsV1,
-    HeaderSecretLeaseRequestV1, MaterializationState, NativeCredentialAuthorityV1,
-    NativeCredentialAuthorizationCapabilityV1, NativeCredentialCapabilityErrorV1,
+    HeaderSecretLeaseRequestV1, MaterializationState, NativeCredentialAccessDeniedV1,
+    NativeCredentialAuthorityV1, NativeCredentialAuthorizationCapabilityV1,
+    NativeCredentialCapabilityErrorV1, NativeCredentialLeaseErrorV1,
     NativeCredentialLeaseRequestV1, NativeCredentialLeaseV1, PortErrorCode, PortResult,
     ProtectedSecret, SensitiveAuthorizationTargetV1,
 };
@@ -19,7 +20,7 @@ impl crate::LocalStorageSet {
     pub fn lease_native_credential_exact(
         &self,
         request: &NativeCredentialLeaseRequestV1,
-    ) -> PortResult<Option<NativeCredentialLeaseV1>> {
+    ) -> Result<Option<NativeCredentialLeaseV1>, NativeCredentialLeaseErrorV1> {
         self.secrets()
             .lease_native_credential_with_guard(request, |reference| {
                 // Only the current management producer owns this identity namespace.
@@ -30,13 +31,30 @@ impl crate::LocalStorageSet {
                 let Some(source_id) = reference.owner_scope().strip_prefix("source/") else {
                     return Ok(false);
                 };
-                let source = self.control().compute_management_source(source_id)?;
-                Ok(source.is_some_and(|source| {
-                    source.state == MaterializationState::Ready
-                        && source.credentials.iter().any(|credential| {
-                            credential.enabled && credential.credential == *reference
-                        })
-                }))
+                let Some(source) = self.control().compute_management_source(source_id)? else {
+                    return Ok(false);
+                };
+                if source.state == MaterializationState::Disabled {
+                    return Err(NativeCredentialLeaseErrorV1::Denied(
+                        NativeCredentialAccessDeniedV1::SourceDisabled,
+                    ));
+                }
+                if source.state != MaterializationState::Ready {
+                    return Ok(false);
+                }
+                let Some(credential) = source
+                    .credentials
+                    .iter()
+                    .find(|credential| credential.credential == *reference)
+                else {
+                    return Ok(false);
+                };
+                if !credential.enabled {
+                    return Err(NativeCredentialLeaseErrorV1::Denied(
+                        NativeCredentialAccessDeniedV1::CredentialDisabled,
+                    ));
+                }
+                Ok(true)
             })
     }
 }
@@ -64,15 +82,15 @@ impl LocalSecretStore {
     pub fn lease_native_credential_exact(
         &self,
         request: &NativeCredentialLeaseRequestV1,
-    ) -> PortResult<Option<NativeCredentialLeaseV1>> {
+    ) -> Result<Option<NativeCredentialLeaseV1>, NativeCredentialLeaseErrorV1> {
         self.lease_native_credential_with_guard(request, |_| Ok(true))
     }
 
     fn lease_native_credential_with_guard(
         &self,
         request: &NativeCredentialLeaseRequestV1,
-        guard: impl FnOnce(&CredentialRefV1) -> PortResult<bool>,
-    ) -> PortResult<Option<NativeCredentialLeaseV1>> {
+        guard: impl FnOnce(&CredentialRefV1) -> Result<bool, NativeCredentialLeaseErrorV1>,
+    ) -> Result<Option<NativeCredentialLeaseV1>, NativeCredentialLeaseErrorV1> {
         request.validate().map_err(|_| {
             port(
                 PortErrorCode::InvalidData,
@@ -106,7 +124,8 @@ impl LocalSecretStore {
             return Err(port(
                 PortErrorCode::PermissionDenied,
                 "secret.runtime.destination_binding",
-            ));
+            )
+            .into());
         }
         if request
             .excluded_key_ids
@@ -129,7 +148,7 @@ impl LocalSecretStore {
         });
         NativeCredentialLeaseV1::issue(credential_id.clone(), credential_id, generation, capability)
             .map(Some)
-            .map_err(|_| port(PortErrorCode::Corrupt, "secret.runtime.lease"))
+            .map_err(|_| port(PortErrorCode::Corrupt, "secret.runtime.lease").into())
     }
 
     pub fn lease_header_secret_exact(
@@ -201,7 +220,7 @@ impl NativeCredentialAuthorityV1 for LocalNativeCredentialAuthority {
     fn lease_native_credential(
         &self,
         request: &NativeCredentialLeaseRequestV1,
-    ) -> PortResult<Option<NativeCredentialLeaseV1>> {
+    ) -> Result<Option<NativeCredentialLeaseV1>, NativeCredentialLeaseErrorV1> {
         self.store
             .lock()
             .map_err(|_| port(PortErrorCode::Unavailable, "secret.runtime.authority_lock"))?

@@ -1017,10 +1017,18 @@ fn real_hirouted_emits_zero_attempt_when_runtime_state_excludes_the_sealed_candi
         401,
         "seed disabled credential state"
     );
+    let response = fixture.request();
+    assert_eq!(response.status, 502, "all runtime candidates excluded");
     assert_eq!(
-        fixture.request().status,
-        502,
-        "all runtime candidates excluded"
+        response.headers.get("content-type").map(String::as_str),
+        Some("application/json")
+    );
+    assert!(!response.headers.contains_key("retry-after"));
+    assert_eq!(
+        serde_json::from_slice::<Value>(&response.body).unwrap(),
+        serde_json::json!({
+            "schema_version": "hiroute.gateway.error/v1", "code": "CANDIDATE_PREPARATION_FAILED", "phase": "candidate_preparation"
+        })
     );
     assert_eq!(provider.calls(), 1);
 

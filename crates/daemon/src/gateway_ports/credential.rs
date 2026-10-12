@@ -99,11 +99,18 @@ where
                 let Some(lease) = self
                     .native
                     .lease_native_credential(&native_request)
-                    .map_err(|error| match error.code {
-                        hiroute_domain::PortErrorCode::Unavailable => {
-                            PortError::Unavailable("NativeCredentialAuthorityV1")
+                    .map_err(|error| match error {
+                        hiroute_domain::NativeCredentialLeaseErrorV1::Denied(reason) => {
+                            PortError::CredentialDenied(reason)
                         }
-                        _ => PortError::Rejected,
+                        hiroute_domain::NativeCredentialLeaseErrorV1::Authority(error) => {
+                            match error.code {
+                                hiroute_domain::PortErrorCode::Unavailable => {
+                                    PortError::Unavailable("NativeCredentialAuthorityV1")
+                                }
+                                _ => PortError::Rejected,
+                            }
+                        }
                     })?
                 else {
                     return Ok(None);

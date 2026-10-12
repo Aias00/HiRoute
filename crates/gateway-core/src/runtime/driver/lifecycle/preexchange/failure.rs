@@ -170,6 +170,15 @@ where
                 )
                 .map_err(GatewayExecutionError::ProviderTerminalRelease)?;
             let _release_ready = leases.mark_terminal_and_release_ready()?;
+            let local_reply = decision_session
+                .exhaustion_local_reply(Instant::now())
+                .map_err(GatewayExecutionError::Selection)?
+                .unwrap_or_else(|| LocalReply {
+                    status: StatusCode::BAD_GATEWAY,
+                    headers: HeaderMap::new(),
+                    body: Bytes::from_static(b"upstream candidate preparation failed"),
+                    provenance: SemanticProvenance::NonSemantic,
+                });
             let result = emit_local_response(
                 session,
                 final_writer,
@@ -178,12 +187,7 @@ where
                 binding,
                 request_configs,
                 &mut request_filters.filters,
-                LocalReply {
-                    status: StatusCode::BAD_GATEWAY,
-                    headers: HeaderMap::new(),
-                    body: Bytes::from_static(b"upstream candidate preparation failed"),
-                    provenance: SemanticProvenance::NonSemantic,
-                },
+                local_reply,
                 budget,
                 request_id,
                 Some(route_binding),

@@ -12,6 +12,39 @@ use super::super::GatewayExecutionFactSink;
 const DIGEST: &str = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
 #[test]
+fn current_credential_denials_reach_real_product_ingestion_with_released_outcomes() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = Arc::new(
+        LocalObservationStore::open(directory.path(), DigestAuthority::new([32; 32])).unwrap(),
+    );
+    let sink = GatewayExecutionFactSink::new(store);
+    for (index, outcome) in [
+        "leased",
+        "exhausted",
+        "authority_error",
+        "source_disabled",
+        "credential_disabled",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let sequence = u64::try_from(index).unwrap() + 1;
+        let mut payload = execution_payload(sequence, &format!("request-{sequence}"), None);
+        payload.as_object_mut().unwrap().remove("attempt_id");
+        payload["fact"] = json!({
+            "kind": "credential_lease", "stable_binding_id": "binding-main", "credential_ref": "credential-main",
+            "key_id": if outcome == "leased" { json!("key-main") } else { Value::Null },
+            "credential_generation": if outcome == "leased" { json!(1) } else { Value::Null },
+            "excluded_key_count": 0, "outcome": outcome
+        });
+        let result = sink
+            .project_and_ingest_payload_for_test(&serde_json::to_vec(&payload).unwrap())
+            .unwrap();
+        assert!(matches!(result, IngestOutcome::Ack(_)), "outcome {outcome}");
+    }
+}
+
+#[test]
 fn current_gateway_payloads_collect_priced_and_unpriced_attempts_in_one_product_table() {
     let directory = tempfile::tempdir().unwrap();
     let store = Arc::new(
