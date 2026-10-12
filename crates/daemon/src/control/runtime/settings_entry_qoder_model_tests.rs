@@ -313,6 +313,14 @@ fn qoder_restore_rejects_native_default_reference_then_preserves_unrelated_edits
 }
 
 fn smaller_budget_operation(fixture: &QoderFixture) -> (OperationV1, PublicationRecordV1) {
+    budget_change_operation(fixture, None, false)
+}
+
+pub(super) fn budget_change_operation(
+    fixture: &QoderFixture,
+    selected_alias: Option<String>,
+    output_only: bool,
+) -> (OperationV1, PublicationRecordV1) {
     let stores = fixture.runtime.adapter.stores_lock().unwrap();
     let current = stores
         .control()
@@ -320,17 +328,18 @@ fn smaller_budget_operation(fixture: &QoderFixture) -> (OperationV1, Publication
         .unwrap()
         .unwrap();
     let mut next = current.verify().unwrap();
-    let alias = next
-        .grants
-        .iter()
-        .find(|grant| grant.model_grant.protocol == AgentIngressProtocolV1::Responses)
-        .unwrap()
-        .model_grant
-        .routes
-        .keys()
-        .next()
-        .unwrap()
-        .clone();
+    let alias = selected_alias.unwrap_or_else(|| {
+        next.grants
+            .iter()
+            .find(|grant| grant.model_grant.protocol == AgentIngressProtocolV1::Responses)
+            .unwrap()
+            .model_grant
+            .routes
+            .keys()
+            .next()
+            .unwrap()
+            .clone()
+    });
     let index = next
         .plans
         .iter()
@@ -373,8 +382,25 @@ fn smaller_budget_operation(fixture: &QoderFixture) -> (OperationV1, Publication
         .clone();
     let mut body = (*next.plans[index].body).clone();
     let budget = hiroute_integrations::qoder_plan_token_budget(&body.materialized).unwrap();
-    body.materialized.attempt_owned.limits.context_window_tokens =
-        Some(budget.context_window_tokens - 1);
+    if output_only {
+        for candidate in body
+            .materialized
+            .attempt_owned
+            .groups
+            .iter_mut()
+            .flat_map(|group| &mut group.candidates)
+        {
+            for profile in &mut candidate.protocol_profiles {
+                profile.capability.context.max_output_tokens =
+                    hiroute_domain::GatewayCriticalFactV1::Exact(budget.max_output_tokens - 1);
+            }
+            candidate.protocol_profile_digest =
+                hiroute_domain::CanonicalDigest::of(&candidate.protocol_profiles).unwrap();
+        }
+    } else {
+        body.materialized.attempt_owned.limits.context_window_tokens =
+            Some(budget.context_window_tokens - 1);
+    }
     body.agent_plan_revision += 1;
     body.materialized_route_digest = body.materialized.route_digest().unwrap();
     let compiled = hiroute_domain::CompiledAgentPlanV1::seal_current(body).unwrap();

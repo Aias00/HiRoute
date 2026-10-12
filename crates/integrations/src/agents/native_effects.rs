@@ -207,5 +207,5 @@ pub(super) fn replay(
     }
 }
 fn error(code: PortErrorCode, context: &'static str) -> PortError {
-    PortError { code, context }
+    PortError::new(code, context)
 }

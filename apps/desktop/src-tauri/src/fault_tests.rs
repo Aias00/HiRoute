@@ -90,6 +90,7 @@ async fn independent_change(session: &mut Session, key: String) -> String {
             request_id: "independent-apply".into(),
             operation_id: "ApplyAgentPlanChange".into(),
             payload: serde_json::to_value(PlanContentApplyRequestV2 {
+                include_model_budget_conflict: false,
                 change,
                 accept_digest: preview.change_digest,
                 expected_revisions: preview.expected_revisions,
@@ -190,6 +191,7 @@ async fn accepted_apply_response_loss_recovers_without_another_apply() {
             "FindOperationByIdempotency",
             "other-principal",
             &OperationIdempotencyLookupV1 {
+                include_model_budget_conflict: true,
                 principal_kind: PrincipalKind::Desktop,
                 operation_kind: hint.operation_kind,
                 idempotency_key: hint.idempotency_key,

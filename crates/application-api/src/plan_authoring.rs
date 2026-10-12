@@ -83,6 +83,13 @@ pub struct PlanContentApplyRequestV2 {
     pub accept_digest: CanonicalDigest,
     pub expected_revisions: RevisionSetV1,
     pub idempotency_key: String,
+    /// Opt-in diagnostic projection; never part of Plan identity or write authorization.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub include_model_budget_conflict: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !value
 }
 
 /// Ordinary publication confirms the exact editing intent and observed resource versions.

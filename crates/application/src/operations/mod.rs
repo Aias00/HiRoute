@@ -295,6 +295,15 @@ where
                 continue;
             }
             if let Err(error) = self.run_step(&mut operation, kind) {
+                if let Some(conflict) = error.model_budget_conflict() {
+                    operation.step_mut(kind).terminal_result = Some(
+                        serde_json::to_string(conflict).expect("safe capacity facts serialize"),
+                    );
+                    operation.safe_error_code = Some(error.safe_code().to_owned());
+                    // Publication abort checks the durable journal's exact ownership. Persist
+                    // the diagnostic first so rollback observes the same operation snapshot.
+                    self.control.save_operation(&mut operation)?;
+                }
                 if let Some(receipt) = settings_service_receipt(&operation)
                     && matches!(
                         settings_service_completion_digest(
@@ -568,7 +577,9 @@ where
                 }
             }
         }
-        operation.safe_error_code = Some(safe_error_code.to_owned());
+        if safe_error_code != "RECOVERY_ROLLBACK" || operation.model_budget_conflict().is_none() {
+            operation.safe_error_code = Some(safe_error_code.to_owned());
+        }
         if operation.state != OperationState::RollingBack {
             operation.transition(OperationState::RollingBack)?;
         }
@@ -608,7 +619,16 @@ where
                 Ok(()) => {
                     let step = operation.step_mut(kind);
                     step.status = OperationStepStatus::Compensated;
-                    step.terminal_result = Some("compensated".to_owned());
+                    // Keep the frozen rejection through compensation and restart. It has no
+                    // effect ownership or replay authority; status projection validates its schema.
+                    if step
+                        .terminal_result
+                        .as_deref()
+                        .and_then(hiroute_domain::AgentModelBudgetConflictV1::parse)
+                        .is_none()
+                    {
+                        step.terminal_result = Some("compensated".to_owned());
+                    }
                 }
                 Err(_) => {
                     uncertain = true;
@@ -956,7 +976,44 @@ pub enum TransactionError {
 }
 
 impl TransactionError {
+    pub fn model_budget_conflict(&self) -> Option<&hiroute_domain::AgentModelBudgetConflictV1> {
+        match self {
+            Self::Port(error) | Self::Preparation(ChangePreparationError::Port(error))
+                if error.code == hiroute_domain::PortErrorCode::Conflict =>
+            {
+                error
+                    .model_budget_conflict
+                    .as_deref()
+                    .filter(|value| value.is_valid())
+            }
+            _ => None,
+        }
+    }
+
+    pub(crate) fn envelope(
+        &self,
+        request_id: String,
+        include_model_budget_conflict: bool,
+    ) -> hiroute_application_api::MachineEnvelopeV2<serde_json::Value> {
+        let mut error = hiroute_application_api::ErrorV1::new(self.error_code());
+        if include_model_budget_conflict && let Some(conflict) = self.model_budget_conflict() {
+            error.details_schema = hiroute_domain::AGENT_MODEL_BUDGET_CONFLICT_SCHEMA_V1.into();
+            // Released readers deserialize data as the command's success DTO. Keep failures
+            // data-free; ErrorV1 supports additive metadata without changing that DTO.
+            error.model_budget_conflict = Some(Box::new(conflict.clone()));
+        }
+        hiroute_application_api::MachineEnvelopeV2::failed(error, Some(request_id))
+    }
+
     pub fn error_code(&self) -> ErrorCode {
+        if let Some(conflict) = self.model_budget_conflict() {
+            return if conflict.safe_code() == "QODER_MODEL_BUDGET_CONFLICT" {
+                ErrorCode::QoderModelBudgetConflict
+            } else {
+                // Preserve the released closed ErrorCode enum for strict older callers.
+                ErrorCode::RevisionConflict
+            };
+        }
         match self {
             Self::Port(error) | Self::Preparation(ChangePreparationError::Port(error))
                 if error.code == hiroute_domain::PortErrorCode::Conflict
@@ -998,6 +1055,9 @@ impl TransactionError {
     }
 
     fn safe_code(&self) -> &'static str {
+        if let Some(conflict) = self.model_budget_conflict() {
+            return conflict.safe_code();
+        }
         match self {
             Self::Port(error) | Self::Preparation(ChangePreparationError::Port(error))
                 if error.code == hiroute_domain::PortErrorCode::Conflict

@@ -7,7 +7,7 @@ import { requestEditorReplacement } from '../ui/discard-guard';
 import { ProductPage, UiIcon } from '../ui';
 import type { DesktopOperation, DesktopSnapshot } from './home-projections';
 import type { AgentSnapshot } from '../agents';
-import { agentModelStatus } from '../features/agents/status';
+import { agentModelPlanIds, agentModelStatus } from '../features/agents/status';
 import { agentBrand, agentDisplayName } from '../features/agents/ecosystems';
 import { routingEditorEntries } from '../routing-editor-entries';
 
@@ -119,11 +119,7 @@ export function RoutingPage({ language, active = true, refreshVersion = 0, snaps
     const isDefault = model?.mode === 'codex_default'
       && model.default_selection.kind === 'plan'
       && model.default_selection.plan_id === editor.plan!.agent_plan_id;
-    const isAllowed = model?.mode === 'codex_default' || model?.mode === 'qoder_additional'
-      ? model.allowed_plan_ids.includes(editor.plan!.agent_plan_id)
-      : model?.mode === 'claude_launcher'
-        ? Object.values(model.preset_mappings).some(selection => selection.kind === 'plan' && selection.plan_id === editor.plan!.agent_plan_id)
-        : false;
+    const isAllowed = agentModelPlanIds(model).includes(editor.plan!.agent_plan_id);
     return isDefault || isAllowed ? [{ id: agent.agent_id, name: agentDisplayName(agent.agent_id, language), brand: agentBrand(agent.agent_id), isDefault }] : [];
   }) : [];
   const pageLocked = busy || localBusy || editorBusy || !mutable;

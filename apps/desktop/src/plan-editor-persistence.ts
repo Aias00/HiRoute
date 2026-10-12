@@ -24,6 +24,7 @@ export type PersistenceIdentity = {
 };
 
 export type PlanOperation = {
+  model_budget_conflict?: import('./plan-editor-errors').ModelBudgetConflict | null;
   operation_id: string;
   state: string;
   sequence: number;

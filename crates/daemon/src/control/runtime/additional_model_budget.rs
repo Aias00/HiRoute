@@ -4,9 +4,10 @@ use hiroute_application::agent_connection::{
     AdditionalModelFileAction, settings_additional_model_file_for_operation,
 };
 use hiroute_domain::{
-    AgentAccessGrantRefV1, AgentModelRouteV2, ControlRepositoryPort, OperationStepKind, PortError,
-    PortErrorCode, PortResult, PublicationRecordV1, SecretStorePort, WorkspaceId,
-    is_agent_access_grant_effect,
+    AgentAccessGrantRefV1, AgentModelBudgetBlockerV1, AgentModelBudgetConflictV1,
+    AgentModelBudgetReasonV1, AgentModelRouteV2, AgentModelTokenBudgetV1, ControlRepositoryPort,
+    ModelAlias, OperationStepKind, PortError, PortErrorCode, PortResult, PublicationRecordV1,
+    SecretStorePort, WorkspaceId, is_agent_access_grant_effect,
 };
 
 impl LocalControlAdapter {
@@ -20,13 +21,14 @@ impl LocalControlAdapter {
     }
 
     /// Run at admission and again before sealing Install. A published smaller budget would
-    /// otherwise leave Qoder sending requests under a larger persisted native declaration.
+    /// otherwise leave installed clients sending requests under a larger persisted native declaration.
     pub(super) fn validate_additional_installed_model_budgets(
         &self,
         record: &PublicationRecordV1,
     ) -> PortResult<()> {
         let next = record.verify().map_err(|_| invalid())?;
         let stores = self.stores_lock()?;
+        let mut blockers = Vec::new();
         for operation in stores.control().succeeded_agent_operations_for_kind(
             &WorkspaceId::default(),
             "ApplyAgentConnectionChange",
@@ -71,31 +73,69 @@ impl LocalControlAdapter {
                 else {
                     return Err(invalid());
                 };
-                let plan = next
+                let declared = AgentModelTokenBudgetV1 {
+                    context_window_tokens: model.context_window_tokens,
+                    max_output_tokens: model.max_output_tokens,
+                };
+                let projection = next
                     .plans
                     .iter()
                     .find(|plan| plan.agent_plan_id() == plan_id)
-                    .ok_or_else(shrinking)?
-                    .clone()
-                    .into_current()
-                    .map_err(|_| shrinking())?;
-                let budget = (if matches!(
-                    kind,
-                    hiroute_domain::AgentKindV1::Pi | hiroute_domain::AgentKindV1::DeepseekHarness
-                ) {
-                    hiroute_integrations::pi_plan_token_budget(&plan.body.materialized)
-                } else {
-                    hiroute_integrations::qoder_plan_token_budget(&plan.body.materialized)
-                })
-                .map_err(|_| shrinking())?;
-                if budget.context_window_tokens < model.context_window_tokens
-                    || budget.max_output_tokens < model.max_output_tokens
-                {
-                    return Err(shrinking());
-                }
+                    .ok_or(AgentModelBudgetReasonV1::PlanMissing)
+                    .and_then(|plan| {
+                        let plan = plan
+                            .clone()
+                            .into_current()
+                            .map_err(|_| AgentModelBudgetReasonV1::BudgetUnavailable)?;
+                        let budget = if matches!(
+                            kind,
+                            hiroute_domain::AgentKindV1::Pi
+                                | hiroute_domain::AgentKindV1::DeepseekHarness
+                        ) {
+                            hiroute_integrations::pi_plan_token_budget(&plan.body.materialized)
+                        } else {
+                            hiroute_integrations::qoder_plan_token_budget(&plan.body.materialized)
+                        }
+                        .map_err(|_| AgentModelBudgetReasonV1::BudgetUnavailable)?;
+                        Ok(AgentModelTokenBudgetV1 {
+                            context_window_tokens: budget.context_window_tokens,
+                            max_output_tokens: budget.max_output_tokens,
+                        })
+                    });
+                let (reason, proposed) = match projection {
+                    Ok(proposed)
+                        if proposed.context_window_tokens >= declared.context_window_tokens
+                            && proposed.max_output_tokens >= declared.max_output_tokens =>
+                    {
+                        continue;
+                    }
+                    Ok(proposed) => (AgentModelBudgetReasonV1::CapacityReduced, Some(proposed)),
+                    Err(reason) => (reason, None),
+                };
+                blockers.push(AgentModelBudgetBlockerV1 {
+                    agent_kind: kind,
+                    context_id: payload.context_id.clone(),
+                    plan_id: plan_id.clone(),
+                    model_alias: ModelAlias::parse(model.alias).map_err(|_| invalid())?,
+                    reason,
+                    declared,
+                    proposed,
+                });
             }
         }
-        Ok(())
+        if blockers.is_empty() {
+            return Ok(());
+        }
+        let conflict = AgentModelBudgetConflictV1::new(blockers);
+        if !conflict.is_valid() {
+            return Err(invalid());
+        }
+        let context = if conflict.safe_code() == "QODER_MODEL_BUDGET_CONFLICT" {
+            "qoder.model.budget.shrink"
+        } else {
+            "agent.model.budget.conflict"
+        };
+        Err(PortError::new(PortErrorCode::Conflict, context).with_model_budget_conflict(conflict))
     }
 }
 
@@ -131,7 +171,4 @@ pub(super) fn guard_pending_model_change(
 }
 fn invalid() -> PortError {
     PortError::new(PortErrorCode::InvalidData, "qoder.model.budget.binding")
-}
-fn shrinking() -> PortError {
-    PortError::new(PortErrorCode::Conflict, "qoder.model.budget.shrink")
 }

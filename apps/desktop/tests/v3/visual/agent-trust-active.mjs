@@ -92,7 +92,8 @@ try {
         : { requiredIds: productShellRequired });
       const results = [];
       for (const { id } of selected) {
-        const viewport = id === 'desktop.models.subscription-scan.recommended-login'
+        const viewport = ['desktop.models.subscription-scan.recommended-login',
+          'desktop.routing.additional-budget-consumers'].includes(id)
           ? { width: 755, height: 600 } : { width: 1280, height: 900 };
         await client.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
         const batch = await evaluate(client, `import('/product-shell-scenarios.mjs').then(module => module.runProductShellScenarios(${JSON.stringify({ ids: [id], requiredIds: [id] })}))`);

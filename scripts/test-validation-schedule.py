@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Prove phase isolation, exact coverage and shared-slot execution without Rust."""
+import contextlib
 import importlib.util
 import io
 import json
@@ -8,6 +9,8 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import threading
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -45,6 +48,161 @@ sys.exit(101 if bad else 0)
 
 
 class Schedule(unittest.TestCase):
+    def run_dag_isolation_fixture(self, fail_cpa=False, fail_fast=True, omit_cpa=False):
+        """Exercise the real DAG controller with bounded fake build/target processes."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            run = root / 'run'
+            run.mkdir()
+            names = ['hiroute_cpa_bridge', 'hiroute_gateway', 'smoke_cli']
+            if omit_cpa:
+                names.remove('hiroute_cpa_bridge')
+            targets = [dict(name=name, package=name.replace('_', '-'), source=name,
+                            cwd=str(root), test_source='src/lib.rs', label=name)
+                       for name in names]
+            metadata = {'packages': [dict(id=row['package'], name=row['package'])
+                                     for row in targets]}
+            cpa_done = threading.Event()
+            admitted = []
+
+            class FixtureRunner:
+                @staticmethod
+                def save(path, data):
+                    Path(path).write_text(json.dumps(data))
+                @staticmethod
+                def command(_args, _cwd):
+                    return json.dumps(metadata)
+                @staticmethod
+                def reporting():
+                    return reporting
+                @staticmethod
+                def test_summary(_text, _command):
+                    return dict(counts=dict(passed=1, failed=0, ignored=0))
+                @staticmethod
+                def start_locked_command(args, _cwd, _env, output, _handles):
+                    if '--no-run' not in args:
+                        self.assertTrue(cpa_done.is_set(), 'CPA must finish before preparation/doctests')
+                    if '--doc' in args:
+                        output.write('   Doc-tests fixture\nrunning 1 test\n'
+                                     'test fixture_doc ... ok\n'
+                                     'test result: ok. 1 passed; 0 failed; 0 ignored; '
+                                     '0 measured; 0 filtered out; finished in 0.01s\n')
+                    return SimpleNamespace(wait=lambda timeout: 0)
+
+            def run_targets(_runner, _root, _run, selected, *_args, **kwargs):
+                results = []
+                for item in selected:
+                    name = item['name']
+                    if name == 'hiroute_cpa_bridge':
+                        self.assertEqual([row['name'] for row in selected], [name],
+                                         'CPA fixtures must have their own target lane')
+                        self.assertEqual(item.get('test_threads'), 1,
+                                         'CPA port handoffs must not race inside its binary')
+                        cpa_done.set()
+                    else:
+                        self.assertTrue(cpa_done.is_set(), 'No runtime target may overlap CPA')
+                    admitted.append(name)
+                    failed = fail_cpa and name == 'hiroute_cpa_bridge'
+                    path = run / ('fixture-' + name + '.log')
+                    path.write_text(name + '\n')
+                    results.append(dict(name=name, log=str(path), complete=not failed,
+                                        process_exit=int(failed),
+                                        counts=dict(passed=int(not failed), failed=int(failed), ignored=0)))
+                    stop_event = kwargs.get('stop_event', _args[-1] if _args else None)
+                    if failed and fail_fast and stop_event is not None:
+                        stop_event.set()
+                return results
+
+            mocks = dict(dag_catalog=lambda *_args: targets,
+                         dag_list=lambda source, *_args: ['default_two_domain_smoke' if source == 'smoke_cli' else source],
+                         dag_snapshot=lambda *_args: None,
+                         dag_daemon_fixture=lambda *_args: {},
+                         dag_bind_daemon_fixture=lambda *_args: None,
+                         dag_bind_metadata=lambda *_args: None,
+                         dag_toolchain_context=lambda *_args: {'path': '/fixture/toolchain'},
+                         dag_products=lambda *_args: {},
+                         dag_publication_daemon=lambda *_args: root,
+                         dag_run_targets=run_targets)
+            output = io.StringIO()
+            with contextlib.ExitStack() as stack:
+                for name, replacement in mocks.items():
+                    stack.enter_context(patch.object(scheduler, name, side_effect=replacement))
+                command = COMMAND + ([] if fail_fast else ['--no-fail-fast'])
+                result = scheduler.execute_dag(FixtureRunner, root, run, root,
+                                               dict(command=command, timeout=15, sha='a'*40),
+                                               None, output, reserved_handles=[])
+            return result, admitted, output.getvalue()
+
+    def test_cpa_isolation_keeps_every_target_and_case(self):
+        result, admitted, _ = self.run_dag_isolation_fixture()
+        self.assertTrue(result['complete'], result)
+        self.assertEqual(admitted, ['hiroute_cpa_bridge', 'hiroute_gateway', 'smoke_cli'])
+        self.assertEqual(result['expected_tests'], 3)
+        self.assertEqual(result['executed_targets'], 3)
+        self.assertEqual(result['counts'], dict(passed=4, failed=0, ignored=0))
+
+    def test_failed_isolated_target_obeys_fail_fast_and_keeps_its_log(self):
+        result, admitted, log = self.run_dag_isolation_fixture(fail_cpa=True)
+        self.assertFalse(result['complete'])
+        self.assertEqual(admitted, ['hiroute_cpa_bridge'])
+        self.assertEqual(result['executed_targets'], 1)
+        self.assertIn('hiroute_cpa_bridge', log)
+        result, admitted, _ = self.run_dag_isolation_fixture(fail_cpa=True, fail_fast=False)
+        self.assertFalse(result['complete'])
+        self.assertEqual(len(admitted), 3)
+        self.assertEqual(result['counts']['failed'], 1)
+
+    def test_missing_cpa_isolation_target_cannot_silently_narrow_the_schedule(self):
+        result, admitted, _ = self.run_dag_isolation_fixture(omit_cpa=True)
+        self.assertFalse(result['complete'])
+        self.assertEqual(admitted, [])
+        self.assertIn('CPA library target', result['error'])
+
+    def test_isolated_binary_runs_all_cases_with_one_thread_and_exec_audit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            executable = root / 'fixture'
+            executable.write_bytes(b'compiled fixture')
+            item = dict(name='hiroute_cpa_bridge', package_name='hiroute-cpa-bridge',
+                        executable=str(executable), sha256=scheduler.file_digest(executable),
+                        index=0, label='src/lib.rs', cwd=str(root), test_threads=1,
+                        cases=['case_one', 'case_two'])
+            class FixtureRunner:
+                @staticmethod
+                def reporting():
+                    return reporting
+                @staticmethod
+                def save(path, data):
+                    Path(path).write_text(json.dumps(data))
+                @staticmethod
+                def start_locked_command(args, _cwd, _env, output, _handles):
+                    self.assertEqual(args[-2:], [str(executable), '--test-threads=1'])
+                    trace = Path(args[args.index('-o') + 1])
+                    trace.write_text('123 execve("/fixture/test", [...], 0x1) = 0\n')
+                    output.write('running 2 tests\ntest case_one ... ok\n'
+                                 'test case_two ... ignored, fixture\n'
+                                 'test result: ok. 1 passed; 0 failed; 1 ignored; '
+                                 '0 measured; 0 filtered out; finished in 0.01s\n')
+                    return SimpleNamespace(wait=lambda timeout: 0)
+            with patch.object(scheduler.sys, 'platform', 'linux'), \
+                 patch.object(scheduler.shutil, 'which', return_value='/fixture/strace'):
+                results = scheduler.dag_run_targets(
+                    FixtureRunner, root, root, [item], root, None, {},
+                    scheduler.time.monotonic() + 5, workers=1, reserved_handles=[])
+            self.assertEqual(len(results), 1)
+            self.assertTrue(results[0]['complete'], results)
+            self.assertEqual(results[0]['counts'], dict(passed=1, failed=0, ignored=1))
+            self.assertEqual(results[0]['exec_audit']['cargo_rustc_starts'], 0)
+
+    def test_gateway_runtime_consumers_wait_for_prepared_products(self):
+        tests = Path(__file__).resolve().parents[1] / 'tools/e2e-harness/tests'
+        consumers = {source.stem for source in tests.glob('*.rs')
+                     if 'mod runtime_support;' in source.read_text()}
+        self.assertTrue(consumers, 'Gateway runtime consumer inventory must be nonempty')
+        self.assertFalse(consumers - scheduler.PRODUCT_TARGETS,
+                         'Gateway runtime consumers must wait for prepared products: '
+                         + ', '.join(sorted(consumers - scheduler.PRODUCT_TARGETS)))
+
     def test_exec_audit_rejects_runtime_cargo_without_storing_arguments(self):
         trace = ('123 execve("/tmp/bin/test", [...], 0x1) = 0\n'
                  '124 execve("/home/user/.cargo/bin/cargo", [...], 0x1) = 0\n'

@@ -25,6 +25,14 @@ impl QoderFixture {
     }
 
     fn with_kind(models: bool, kind: AgentKindV1) -> Self {
+        Self::with_agents(models, kind, false)
+    }
+
+    fn with_all_models() -> Self {
+        Self::with_agents(true, AgentKindV1::Qoder, true)
+    }
+
+    fn with_agents(models: bool, kind: AgentKindV1, all: bool) -> Self {
         let pi = kind == AgentKindV1::Pi;
         let root = tempfile::tempdir().unwrap();
         fs::set_permissions(root.path(), fs::Permissions::from_mode(0o700)).unwrap();
@@ -66,6 +74,28 @@ impl QoderFixture {
         } else {
             layout.qoder_executable = root.path().join("missing-qoder");
         }
+        if all {
+            let package = root.path().join("all-pi-package");
+            private_file(&package.join("package.json"), br#"{"name":"@earendil-works/pi-coding-agent","version":"1.0.2","bin":{"pi":"dist/bundle/cli.js"}}"#);
+            private_file(&package.join("dist/index.js"), b"fixture SDK location only");
+            private_file(&package.join("dist/bundle/cli.js"), b"#!/bin/sh\nexit 97\n");
+            fs::set_permissions(
+                package.join("dist/bundle/cli.js"),
+                fs::Permissions::from_mode(0o700),
+            )
+            .unwrap();
+            layout.pi_executable = package.join("dist/bundle/cli.js");
+            layout.pi_config_root = home.join("budget-pi");
+            private_file(
+                &layout.pi_config_root.join("settings.json"),
+                br#"{"defaultProvider":"native","defaultModel":"default"}"#,
+            );
+            layout.dsh_executable = root.path().join("dsh-fixture");
+            private_file(&layout.dsh_executable, b"#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'DSH fixture'; else printf '%s\\n' '- id: llm-pi-ai' '- id: skill' '- id: skill-filesystem' '- id: tool-skill' '- id: tool-fs' '- id: tool-bash'; fi\n");
+            fs::set_permissions(&layout.dsh_executable, fs::Permissions::from_mode(0o700)).unwrap();
+            layout.dsh_config_root = home.join("budget-dsh");
+            private_file(&layout.dsh_config_root.join("cordis.patch.yml"), b"[]\n");
+        }
         let registry = serde_json::from_slice(include_bytes!(
             "../../../../../assets/connector-registry/current/registry-seed.json"
         ))
@@ -79,6 +109,10 @@ impl QoderFixture {
             ClaudeRegistrationIndexV1::from_verified_model_data(&registry, &model_data.data)
                 .unwrap(),
         );
+        if all {
+            private_file(&scanner.pi_user_models_target(), br#"{"providers":{}}"#);
+            private_file(&scanner.dsh_user_models_target(), b"[]\n");
+        }
         let native_config = if pi {
             scanner.pi_user_models_target()
         } else {
@@ -663,3 +697,6 @@ fn qoder_borrowed_skill_restore_releases_only_the_reference_after_user_edits() {
 
 #[path = "settings_entry_qoder_model_tests.rs"]
 mod models;
+
+#[path = "settings_entry_model_budget_tests.rs"]
+mod budget_tests;
