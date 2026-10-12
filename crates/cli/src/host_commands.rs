@@ -103,14 +103,14 @@ fn gateway_command(
         .map_err(|_| ErrorCode::GatewayUnavailable)?;
     let store = GatewayListenerStore::new(layout.gateway_config_root());
     match arguments {
-        [verb] if verb == "show" => gateway_status(&store),
+        [verb] if verb == "show" => gateway_status(&store, globals),
         [verb] if verb == "recover" => {
             store.recover().map_err(|_| ErrorCode::GatewayUnavailable)?;
             if service::restart(globals.timeout.unwrap_or(Duration::from_secs(30))).is_err() {
                 let _ = store.mark_failed("SERVICE_RESTART_FAILED");
                 return Err(ErrorCode::DaemonUnavailable);
             }
-            gateway_status(&store)
+            gateway_status(&store, globals)
         }
         [verb, options @ ..] if verb == "set" => {
             let desired = parse_gateway_settings(options)?;
@@ -121,7 +121,7 @@ fn gateway_command(
                 let _ = store.mark_failed("SERVICE_RESTART_FAILED");
                 return Err(ErrorCode::DaemonUnavailable);
             }
-            gateway_status(&store)
+            gateway_status(&store, globals)
         }
         _ => Err(ErrorCode::InvalidArguments),
     }
@@ -172,7 +172,10 @@ fn parse_gateway_settings(options: &[String]) -> Result<GatewayListenerDesiredV1
     Ok(desired)
 }
 
-fn gateway_status(store: &GatewayListenerStore) -> Result<serde_json::Value, ErrorCode> {
+fn gateway_status(
+    store: &GatewayListenerStore,
+    globals: &Globals,
+) -> Result<serde_json::Value, ErrorCode> {
     let config = store
         .load_or_default()
         .map_err(|_| ErrorCode::GatewayUnavailable)?;
@@ -186,7 +189,8 @@ fn gateway_status(store: &GatewayListenerStore) -> Result<serde_json::Value, Err
     let suggested_agent_base_url = connect.map(|value| format!("http://{value}/v1"));
     let client = LocalControlClient::cli_from_environment()
         .ok()
-        .map(|client| client.with_timeout(Duration::from_millis(750)));
+        // Native discovery can run executable probes; use the normal control-call deadline.
+        .map(|client| client.with_timeout(globals.timeout.unwrap_or(Duration::from_secs(30))));
     let (update_required, existing_agent_count) = agent_update_status(|operation_id, payload| {
         let response = client
             .as_ref()

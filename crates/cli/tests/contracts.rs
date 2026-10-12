@@ -289,6 +289,132 @@ fn real_hiroute_launch_rejects_override_before_transport_and_is_stably_unavailab
 
 #[cfg(unix)]
 #[test]
+fn gateway_show_waits_for_native_discovery_and_honors_control_timeout() {
+    use std::io::{BufRead, BufReader, Write};
+    use std::os::unix::net::UnixListener;
+    use std::time::{Duration, Instant};
+
+    use hiroute_application_api::{
+        ClientHelloV1, LocalControlWireRequestV2, MachineEnvelopeV2, negotiate_hello,
+    };
+    use serde_json::json;
+
+    for explicit_timeout in [false, true] {
+        let directory = tempfile::tempdir_in("/tmp").unwrap();
+        let home = directory.path();
+        let marker = home.join(".local/share/hiroute/standalone.json");
+        std::fs::create_dir_all(marker.parent().unwrap()).unwrap();
+        std::fs::write(
+            marker,
+            serde_json::to_vec(&json!({
+                "schema_version": "hiroute.standalone-install/v1", "version": "0.3.1",
+                "target": "fixture", "install_root": home.join("install"),
+                "service_definition": home.join("service"),
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        let runtime = home.join("run");
+        std::fs::create_dir_all(runtime.join("hiroute")).unwrap();
+        let listener = UnixListener::bind(runtime.join("hiroute/control.sock")).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let (finished, completion) = std::sync::mpsc::channel();
+        let server = std::thread::spawn(move || {
+            for operation in ["ListAgents", "GetAgentConnectionStatus"] {
+                let deadline = Instant::now() + Duration::from_secs(10);
+                let stream = loop {
+                    match listener.accept() {
+                        Ok((stream, _)) => break stream,
+                        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                            if completion.try_recv().is_ok() {
+                                return;
+                            }
+                            assert!(Instant::now() < deadline, "CLI never requested {operation}");
+                            std::thread::sleep(Duration::from_millis(5));
+                        }
+                        Err(error) => panic!("{error}"),
+                    }
+                };
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                let mut stream = BufReader::new(stream);
+                let mut line = String::new();
+                stream.read_line(&mut line).unwrap();
+                let hello: ClientHelloV1 = serde_json::from_str(&line).unwrap();
+                let hello = negotiate_hello(&hello).unwrap();
+                writeln!(
+                    stream.get_mut(),
+                    "{}",
+                    serde_json::to_string(&hello).unwrap()
+                )
+                .unwrap();
+                line.clear();
+                stream.read_line(&mut line).unwrap();
+                let request: LocalControlWireRequestV2 = serde_json::from_str(&line).unwrap();
+                assert_eq!(request.operation_id, operation);
+                // Native executable probes legitimately exceed the TCP readiness probe's 750ms.
+                std::thread::sleep(Duration::from_secs(1));
+                if explicit_timeout {
+                    break;
+                }
+                let data = if operation == "ListAgents" {
+                    json!({"agents":[{"context_id":"agent-context/pi",
+                        "agent_id":"agent_pi_default", "profile_id":"pi-default"}]})
+                } else {
+                    assert_eq!(request.payload["context_id"], "agent-context/pi");
+                    json!({"schema":"hiroute.agent-model-settings-status/v2",
+                        "context_id":"agent-context/pi", "state":"configured",
+                        "operation_id":null, "operation_state":null, "restore_point_ref":null,
+                        "applied_revision":null, "surface_results":[], "model_verified":false})
+                };
+                let response = MachineEnvelopeV2::succeeded(data, Some(request.request_id));
+                if writeln!(
+                    stream.get_mut(),
+                    "{}",
+                    serde_json::to_string(&response).unwrap()
+                )
+                .is_err()
+                {
+                    return;
+                }
+            }
+        });
+        let mut command = Command::new(env!("CARGO_BIN_EXE_hiroute"));
+        command
+            .env("HOME", home)
+            .env("HIROUTE_RUNTIME_DIR", &runtime)
+            .env_remove("XDG_STATE_HOME")
+            .env_remove("XDG_DATA_HOME")
+            .env_remove("XDG_RUNTIME_DIR")
+            .args(["gateway", "show", "--output", "json"]);
+        if explicit_timeout {
+            command.args(["--timeout", "50ms"]);
+        }
+        let output = command.output().unwrap();
+        let _ = finished.send(());
+        server.join().unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stdout)
+        );
+        let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        let update = &response["data"]["agent_update"];
+        assert_eq!(update["required"], explicit_timeout);
+        assert_eq!(
+            update["existing_agent_count"],
+            if explicit_timeout {
+                json!(null)
+            } else {
+                json!(1)
+            }
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
 fn real_hidden_helper_uses_only_the_owner_raw_endpoint_and_stdout_token_boundary() {
     use std::io::{Read, Write};
     use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
