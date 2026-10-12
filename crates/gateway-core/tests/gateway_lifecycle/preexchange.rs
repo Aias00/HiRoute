@@ -32,12 +32,12 @@ async fn provisional_termination_uses_product_reply_without_publishing_an_attemp
             materialization_failure: Some(AttemptMaterializationFailure {
                 class: AttemptMaterializationFailureClass::Credential,
                 provider: ProviderClassificationFacts {
-                    error_class: Some(ObservationLabel::new("source_disabled")?),
+                    error_class: Some(ObservationLabel::new("source_disabled").unwrap()),
                     retryability: RetryabilityFact::Retryable,
-                    readiness: ObservationLabel::new("materialization_failed")?,
+                    readiness: ObservationLabel::new("materialization_failed").unwrap(),
                     ..ProviderClassificationFacts::default()
                 },
-                termination_reason: ObservationLabel::new("credential")?,
+                termination_reason: ObservationLabel::new("credential").unwrap(),
             }),
             materialization_failures_remaining: Arc::new(AtomicUsize::new(1)),
             materialization_raw_error: Some(Arc::from("private provider credential detail")),
