@@ -211,3 +211,10 @@ as streaming failures, for both native and converted protocols. Reported usage
 survives fallback; partial response content is not delivered. Attempt/deadline
 limits and fixed-source authority still apply, and unknown completion remains
 separate from an explicit failure.
+
+Successful converted nonstream responses retain their reported usage in the
+provider completion facts before releasing the decoded response. Completion
+publishes that usage before request termination, so its receipt does not depend
+on canonical capture scheduling. Nonstream capture still records delivered
+content but leaves usage to provider completion; converted streaming capture
+continues publishing accepted usage events. Missing usage remains unknown.
