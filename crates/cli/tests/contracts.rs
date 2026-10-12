@@ -301,7 +301,7 @@ fn gateway_show_waits_for_native_discovery_and_honors_control_timeout() {
 
     for explicit_timeout in [false, true] {
         let directory = tempfile::tempdir_in("/tmp").unwrap();
-        let home = directory.path();
+        let home = directory.path().canonicalize().unwrap();
         let marker = home.join(".local/share/hiroute/standalone.json");
         std::fs::create_dir_all(marker.parent().unwrap()).unwrap();
         std::fs::write(
@@ -355,9 +355,6 @@ fn gateway_show_waits_for_native_discovery_and_honors_control_timeout() {
                 assert_eq!(request.operation_id, operation);
                 // Native executable probes legitimately exceed the TCP readiness probe's 750ms.
                 std::thread::sleep(Duration::from_secs(1));
-                if explicit_timeout {
-                    break;
-                }
                 let data = if operation == "ListAgents" {
                     json!({"agents":[{"context_id":"agent-context/pi",
                         "agent_id":"agent_pi_default", "profile_id":"pi-default"}]})
