@@ -109,9 +109,11 @@ impl LocalControlAdapter {
             return Ok(());
         }
         if class == SettingsAgentClass::CodexProfile
-            && (!matches!(spec.collaboration, AgentFacetIntent::Keep)
-                || spec.restore_native_model.is_some())
+            && !matches!(spec.collaboration, AgentFacetIntent::Keep)
         {
+            return Err(ControlReadError::CollaborationRootRequired);
+        }
+        if class == SettingsAgentClass::CodexProfile && spec.restore_native_model.is_some() {
             return Err(ControlReadError::Denied);
         }
         if matches!(spec.model, AgentFacetIntent::Keep) {

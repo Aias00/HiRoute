@@ -740,7 +740,8 @@ fn map_control_error(error: control::ControlReadError) -> ErrorCode {
         control::ControlReadError::Unavailable | control::ControlReadError::Corrupt => {
             ErrorCode::DaemonUnavailable
         }
-        control::ControlReadError::Denied => ErrorCode::CapabilityDenied,
+        control::ControlReadError::Denied
+        | control::ControlReadError::CollaborationRootRequired => ErrorCode::CapabilityDenied,
     }
 }
 

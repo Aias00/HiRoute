@@ -6,6 +6,7 @@
     "hiroute.agent-check-request/v1",
     "hiroute.agent-check/v1",
     "hiroute.agent-collaboration-check-failure/v1",
+    "hiroute.agent-collaboration-cli-receipt/v1",
     "hiroute.agent-collaboration-credential/v1",
     "hiroute.agent-collaboration-grant/v1",
     "hiroute.agent-collaboration-only-settings-status/v2",

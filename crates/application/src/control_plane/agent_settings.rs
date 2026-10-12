@@ -36,7 +36,7 @@ pub(crate) fn preview(
     };
     let input = match port.settings_facts(&payload.spec) {
         Ok(input) => input,
-        Err(error) => return failed(map_control_error(error), request.request_id),
+        Err(error) => return settings_read_failure(error, request.request_id),
     };
     let preview = match preview_agent_settings(payload.spec, &input.facts) {
         Ok(preview) => preview,
@@ -173,7 +173,7 @@ pub(crate) fn apply(
     };
     let input = match port.settings_facts(&payload.spec) {
         Ok(input) => input,
-        Err(error) => return failed(map_control_error(error), request.request_id),
+        Err(error) => return settings_read_failure(error, request.request_id),
     };
     if !input
         .facts
@@ -259,6 +259,28 @@ fn confirmation_error(error: SettingsConfirmationError) -> ErrorCode {
         SettingsConfirmationError::Stale => ErrorCode::ChangePreviewStale,
         SettingsConfirmationError::Blocked => ErrorCode::CapabilityDenied,
     }
+}
+
+fn settings_read_failure(
+    error: crate::control::ControlReadError,
+    request_id: String,
+) -> MachineEnvelopeV2<Value> {
+    let mut response = failed(map_control_error(error), request_id);
+    if error == crate::control::ControlReadError::CollaborationRootRequired {
+        response
+            .error
+            .as_mut()
+            .expect("failed envelope has an error")
+            .message_key = "error.agent_collaboration_root_context_required".into();
+        response
+            .next_actions
+            .push(hiroute_application_api::NextActionV1 {
+                command_id: "agents.scan".into(),
+                input: json!({}),
+                reason_code: "COLLABORATION_ROOT_CONTEXT_REQUIRED".into(),
+            });
+    }
+    response
 }
 
 pub(crate) fn status(

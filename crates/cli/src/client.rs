@@ -133,29 +133,43 @@ impl LocalControlClient {
         &self,
         request: LocalControlWireRequestV2,
     ) -> Result<MachineEnvelopeV2<serde_json::Value>, LocalControlClientError> {
+        self.call_detailed(request)
+            .map_err(|error| match error.code {
+                hiroute_client_core::FailureCode::LocatorUnavailable => {
+                    LocalControlClientError::LocatorUnavailable
+                }
+                hiroute_client_core::FailureCode::TransportUnavailable
+                | hiroute_client_core::FailureCode::Deadline
+                | hiroute_client_core::FailureCode::UnsupportedPlatform => {
+                    LocalControlClientError::Transport
+                }
+                _ => LocalControlClientError::Protocol,
+            })
+    }
+
+    pub(crate) fn call_detailed(
+        &self,
+        request: LocalControlWireRequestV2,
+    ) -> Result<MachineEnvelopeV2<serde_json::Value>, hiroute_client_core::ClientFailure> {
         let client = self.shared_client();
         let execute = move || {
             tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
-                .map_err(|_| LocalControlClientError::Transport)?
+                .map_err(|_| {
+                    hiroute_client_core::ClientFailure::before_send(
+                        hiroute_client_core::FailureCode::TransportUnavailable,
+                    )
+                })?
                 .block_on(client.call_wire(request))
-                .map_err(|error| match error.code {
-                    hiroute_client_core::FailureCode::LocatorUnavailable => {
-                        LocalControlClientError::LocatorUnavailable
-                    }
-                    hiroute_client_core::FailureCode::TransportUnavailable
-                    | hiroute_client_core::FailureCode::Deadline
-                    | hiroute_client_core::FailureCode::UnsupportedPlatform => {
-                        LocalControlClientError::Transport
-                    }
-                    _ => LocalControlClientError::Protocol,
-                })
         };
         if tokio::runtime::Handle::try_current().is_ok() {
             std::thread::spawn(execute)
                 .join()
-                .map_err(|_| LocalControlClientError::Transport)?
+                .map_err(|_| hiroute_client_core::ClientFailure {
+                    code: hiroute_client_core::FailureCode::TransportUnavailable,
+                    submission: hiroute_client_core::SubmissionState::MayHaveReachedServer,
+                })?
         } else {
             execute()
         }
