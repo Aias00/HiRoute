@@ -148,6 +148,49 @@ fn gateway_adapter_projects_lifecycle_exactly_and_rejects_unknown_field() {
 }
 
 #[test]
+fn gateway_adapter_preserves_zero_byte_lifecycle_end_stream_frame() {
+    let payload = json!({
+        "schema_version": LIFECYCLE_FACT_SCHEMA,
+        "schema_digest": LIFECYCLE_FACT_PORT_DIGEST,
+        "channel": "lifecycle",
+        "producer": producer("gateway-lifecycle"),
+        "sequence": 5,
+        "event_id": "lifecycle-end-stream-5",
+        "correlation": correlation(),
+        "occurred_at_unix_nanos": 1,
+        "fact": {
+            "kind": "response_frame_accepted",
+            "frame_id": "frame-empty-end-stream",
+            "byte_count": 0,
+            "downstream_delivery": "full_frame_transport_accepted"
+        },
+        "loss_watermark": null,
+        "completeness_delta": null
+    });
+    // ReplayBodySession reports an accepted empty EOF write through the same
+    // lifecycle DTO as a nonempty body frame; its actual byte count stays zero.
+    let gateway: hiroute_gateway::server::core_runtime::observation::LifecycleFactEnvelopeV1 =
+        serde_json::from_value(payload.clone()).unwrap();
+    let projected = project_lifecycle_payload(&serde_json::to_vec(&gateway).unwrap()).unwrap();
+    assert_eq!(serde_json::to_value(projected).unwrap(), payload);
+
+    for field in ["frame_id", "downstream_delivery"] {
+        let mut invalid = payload.clone();
+        invalid["fact"][field] = json!("");
+        assert_eq!(
+            project_lifecycle_payload(&serde_json::to_vec(&invalid).unwrap()),
+            Err(GatewayProjectionError::InvalidOutput)
+        );
+    }
+    let mut unknown = payload;
+    unknown["fact"]["content"] = json!("not a lifecycle field");
+    assert_eq!(
+        project_lifecycle_payload(&serde_json::to_vec(&unknown).unwrap()),
+        Err(GatewayProjectionError::InvalidInput)
+    );
+}
+
+#[test]
 fn gateway_adapter_projects_flat_execution_receipt_into_frozen_trust() {
     let payload = execution_payload(
         json!({

@@ -69,6 +69,7 @@ pub enum LifecycleFactV2 {
     },
     ResponseFrameAccepted {
         frame_id: String,
+        /// Actual transport-accepted bytes; an accepted empty end-stream frame is zero.
         byte_count: u64,
         downstream_delivery: String,
     },
@@ -141,12 +142,9 @@ impl LifecycleFactEnvelopeV2 {
             }
             LifecycleFactV2::ResponseFrameAccepted {
                 frame_id,
-                byte_count,
                 downstream_delivery,
-            } if frame_id.trim().is_empty()
-                || *byte_count == 0
-                || downstream_delivery.trim().is_empty() =>
-            {
+                ..
+            } if frame_id.trim().is_empty() || downstream_delivery.trim().is_empty() => {
                 Err(LifecycleContractErrorV2::InvalidFact)
             }
             _ => Ok(()),

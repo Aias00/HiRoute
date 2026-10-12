@@ -15,6 +15,13 @@ The standalone `hirouted` entry can attach the same typed diagnostics using
 capture or execution-fact storage. At Info, failed attempts retain the safe
 actual model and reasoning controls, HTTP protocol/status and body commit state.
 
+For operational lifecycle telemetry, [accepted response capture](src/observation/content.rs)
+reports transport writes only after they succeed, including an empty end-stream write.
+[Product lifecycle validation](../domain/src/observation/lifecycle.rs) preserves its actual
+zero byte count and frame identity; the [bounded receiver](../observation/src/writer/lifecycle.rs)
+ACKs it in sequence before RequestFinished. These transport events describe delivery;
+semantic output, usage and the business receipt retain their own facts.
+
 Messages thinking computation is projected in
 [request/native.rs](src/adapters/request/native.rs); request-local `thinking.display`
 is resolved by [ingress.rs](src/adapters/ingress.rs) before Replay externalization.
