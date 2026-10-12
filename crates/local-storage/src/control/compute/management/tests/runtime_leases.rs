@@ -2,7 +2,7 @@ use super::*;
 use hiroute_domain::{
     ComputeManagementRepositoryPort, ComputeManagementSourceV2, ConnectorRuntimeKind,
     GatewayOperationalTargetV1, NATIVE_CREDENTIAL_LEASE_REQUEST_SCHEMA_V1,
-    NativeCredentialLeaseRequestV1,
+    NativeCredentialAccessDeniedV1, NativeCredentialLeaseErrorV1, NativeCredentialLeaseRequestV1,
 };
 
 fn save(
@@ -383,14 +383,18 @@ fn current_pool_uses_saved_order_without_changing_frozen_request_or_lease_identi
         "pool-disable-source",
     );
     assert_eq!(
-        stores.current_native_credential_refs(&request).unwrap(),
-        Some(vec![])
+        stores.current_native_credential_refs(&request),
+        Err(NativeCredentialLeaseErrorV1::Denied(
+            NativeCredentialAccessDeniedV1::SourceDisabled
+        ))
     );
     drop(stores);
     let stores = LocalStorageSet::open_for_daemon_startup(root.path()).unwrap();
     assert_eq!(
-        stores.current_native_credential_refs(&request).unwrap(),
-        Some(vec![])
+        stores.current_native_credential_refs(&request),
+        Err(NativeCredentialLeaseErrorV1::Denied(
+            NativeCredentialAccessDeniedV1::SourceDisabled
+        ))
     );
     save(
         &stores,

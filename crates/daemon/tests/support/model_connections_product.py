@@ -481,16 +481,17 @@ def publish_plan_and_agent(product, binding_id, native_model_mode='preserve_avai
     assert [model['id'] for model in catalog['data']] == expected_models, catalog
 
 
-def gateway_request(product, allowed=True):
+def gateway_request(product, allowed=True, stream=False):
     client = http.client.HTTPConnection('127.0.0.1', product.port, timeout=30)
     try:
         client.request('POST', '/v1/responses', body=encoded({
             'model': product.model_alias,
             'input': 'native product request',
-            'stream': False,
+            'stream': stream,
         }), headers={
             'X-HiRoute-Token': product.bearer(product.agent_connection),
             'Content-Type': 'application/json',
+            'session-id': 'native-product-permission-switches',
         })
         response = client.getresponse()
         body = response.read()
@@ -498,7 +499,13 @@ def gateway_request(product, allowed=True):
         if allowed:
             assert response.status == 200 and b'native product answer' in body, (response.status, body)
         else:
-            assert response.status >= 400 and b'native product answer' not in body, (response.status, body)
+            assert response.status == 502, (response.status, body)
+            assert response.getheader('Content-Type') == 'application/json', response.getheaders()
+            assert response.getheader('Retry-After') is None, response.getheaders()
+            assert json.loads(body) == {
+                'schema_version': 'hiroute.gateway.error/v1',
+                'code': 'SOURCE_DISABLED', 'phase': 'credential_lease',
+            }, body
     finally:
         client.close()
 
@@ -538,7 +545,8 @@ def assert_live_credential_switches(product, upstream, saved):
     def rejected_without_upstream():
         with upstream.lock:
             before = len(upstream.requests)
-        gateway_request(product, allowed=False)
+        for stream in (False, True):
+            gateway_request(product, allowed=False, stream=stream)
         with upstream.lock:
             assert len(upstream.requests) == before, 'disabled credential reached the upstream'
 
@@ -555,7 +563,7 @@ def assert_live_credential_switches(product, upstream, saved):
     gateway_request(product)
 
 
-def assert_session_record(product, started_ms):
+def assert_session_record(product, started_ms, denied_binding=None):
     query = {
         'schema': 'hiroute.observation.query/v2',
         'intent': {'view': 'sessions', 'query': {
@@ -602,8 +610,38 @@ def assert_session_record(product, started_ms):
         accepted = [request for request in requests
                     if request['attempted_model_count'] == 1
                     and request['final_native_model'] == MODEL
-                    and request['outcome'] == 'accepted']
-        if accepted:
+                    and request['outcome'] == 'accepted' and request['receipt_id']]
+        denied = [request for request in requests
+                  if request['attempted_model_count'] == 0
+                  and request['outcome'] == 'failed' and request['receipt_id']]
+        if accepted and (denied_binding is None or len(denied) == 6):
+            receipt = control(product, 'GetRoutingReceipt', {
+                'id': accepted[0]['receipt_id'], 'content': None,
+            })['data']
+            assert receipt['facts_completeness'] == 'complete', receipt
+            leases = [event['fact'] for event in receipt['ordered_facts']
+                      if event['fact']['kind'] == 'credential_lease']
+            assert len(leases) == 1 and leases[0]['outcome'] == 'leased', leases
+            # Reading current membership must not invent another successful lease.
+            if denied_binding is not None:
+                for request in denied:
+                    receipt = control(product, 'GetRoutingReceipt', {
+                        'id': request['receipt_id'], 'content': None,
+                    })['data']
+                    assert receipt['schema'] == 'hiroute.routing-receipt/v1', receipt
+                    assert receipt['outcome'] == 'failed', receipt
+                    assert receipt['facts_completeness'] == 'complete', receipt
+                    assert receipt.get('final_attempt_id') is None, receipt
+                    assert all(event.get('attempt_id') is None for event in receipt['ordered_facts']), receipt
+                    facts = [event['fact'] for event in receipt['ordered_facts']]
+                    leases = [fact for fact in facts if fact['kind'] == 'credential_lease']
+                    assert len(leases) == 1, leases
+                    assert leases[0]['stable_binding_id'] == denied_binding, leases
+                    assert leases[0]['outcome'] == 'source_disabled', leases
+                    assert leases[0]['key_id'] is None and leases[0]['credential_generation'] is None, leases
+                    finished = [fact for fact in facts if fact['kind'] == 'request_finished']
+                    assert len(finished) == 1 and finished[0]['outcome'] == 'failed', finished
+                    assert finished[0]['attempts_started'] == finished[0]['attempts_finished'] == 0, finished
             return session_id, accepted[0]['final_native_model']
         assert time.monotonic() < deadline, requests
         time.sleep(.05)
@@ -648,6 +686,7 @@ def run(repository, expected_sha=None):
         product.start()
         recheck_saved_native_source(product, saved, 3, 'after-restart')
         recheck_saved_native_source(product, unknown, 3, 'unknown-after', unknown=True)
+        assert_session_record(product, started_ms, saved['binding_id'])
         with upstream.lock:
             requests = list(upstream.requests)
         assert [request['path'] for request in requests] == [
@@ -666,7 +705,10 @@ def run(repository, expected_sha=None):
             'saved_binding': saved['binding_id'],
             'saved_source_rechecks': 2,
             'gateway_attempts': 3,
-            'disabled_requests_without_upstream': 3,
+            'disabled_requests_without_upstream': 6,
+            'preparation_error_code': 'SOURCE_DISABLED',
+            'preparation_error_modes': ['nonstream', 'prebody_stream'],
+            'complete_zero_attempt_denial_receipts_after_reopen': 6,
             'credential_resolver_mode': 'saved_bearer',
             'session_record': session_id,
             'session_model': observed_model,

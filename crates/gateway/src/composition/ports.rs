@@ -715,6 +715,8 @@ pub enum PortError {
     Unavailable(&'static str),
     #[error("production port rejected the operation")]
     Rejected,
+    #[error("current managed credential permission was denied: {0:?}")]
+    CredentialDenied(hiroute_domain::NativeCredentialAccessDeniedV1),
     #[error("requested fixed-model reasoning cannot be represented")]
     InvalidReasoningControl,
 }

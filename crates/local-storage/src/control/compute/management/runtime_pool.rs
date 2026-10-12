@@ -1,15 +1,16 @@
 //! Current managed Native membership. This never reads or decrypts Secret material.
 
 use hiroute_domain::{
-    ComputeManagementRepositoryPort, MaterializationState, NativeCredentialLeaseRequestV1,
-    PortError, PortErrorCode, PortResult, WorkspaceId,
+    ComputeManagementRepositoryPort, MaterializationState, NativeCredentialAccessDeniedV1,
+    NativeCredentialLeaseErrorV1, NativeCredentialLeaseRequestV1, PortError, PortErrorCode,
+    WorkspaceId,
 };
 
 impl crate::LocalStorageSet {
     pub fn current_native_credential_refs(
         &self,
         request: &NativeCredentialLeaseRequestV1,
-    ) -> PortResult<Option<Vec<String>>> {
+    ) -> Result<Option<Vec<String>>, NativeCredentialLeaseErrorV1> {
         request.validate().map_err(|_| rejected())?;
         // One transaction binds source state, models, members and ordinal together.
         let snapshot = self
@@ -28,7 +29,7 @@ impl crate::LocalStorageSet {
             .then(Vec::new));
         };
         if owners.next().is_some() || !source.provenance.is_native() {
-            return Err(rejected());
+            return Err(rejected().into());
         }
         let model = source
             .models
@@ -36,7 +37,7 @@ impl crate::LocalStorageSet {
             .find(|model| model.binding_id == request.stable_binding_id)
             .ok_or_else(rejected)?;
         if model.upstream_model_id != request.upstream_model_id {
-            return Err(rejected());
+            return Err(rejected().into());
         }
         let target_matches = std::iter::once((&source.target, &source.authentication))
             .chain(
@@ -72,7 +73,12 @@ impl crate::LocalStorageSet {
                         })
             });
         if !target_matches {
-            return Err(rejected());
+            return Err(rejected().into());
+        }
+        if source.state == MaterializationState::Disabled {
+            return Err(NativeCredentialLeaseErrorV1::Denied(
+                NativeCredentialAccessDeniedV1::SourceDisabled,
+            ));
         }
         if source.state != MaterializationState::Ready {
             return Ok(Some(Vec::new()));
@@ -91,7 +97,7 @@ impl crate::LocalStorageSet {
                 || reference.purpose() != "provider-auth"
                 || reference.allowed_destinations() != &destinations
             {
-                return Err(rejected());
+                return Err(rejected().into());
             }
         }
         Ok(Some(

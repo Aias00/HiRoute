@@ -44,6 +44,7 @@ pub(crate) mod response_diagnostics;
 mod selection;
 
 pub(crate) use materialization::TargetResolver;
+pub(crate) use selection::PreparationFailure;
 pub use selection::{ProductionDecisionSession, ProductionSelection};
 
 const MATERIALIZATION_BINDING_UNAVAILABLE: &str = "binding_unavailable";
@@ -86,6 +87,7 @@ pub struct ProductionRouteContext {
     pub(crate) switch_fallback: Option<ResolvedTargetBindingId>,
     pub(crate) hold_completion: Option<HoldCompletion>,
     pub(crate) reasoning_cleanup: Arc<ReasoningCleanup>,
+    pub(crate) admission_preparation_failure: Option<PreparationFailure>,
 }
 
 /// One request's frozen cleanup opportunity, plus a previously successful

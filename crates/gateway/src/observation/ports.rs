@@ -36,7 +36,35 @@ impl CredentialResolver for ObservedCredentialResolver {
         &self,
         request: CredentialLeaseRequest<'_>,
     ) -> Result<Option<Vec<String>>, PortError> {
-        self.inner.current_credential_refs(request)
+        let stable_binding_id = request.stable_binding_id;
+        let credential_ref = request.credential_ref;
+        let excluded_key_count = request.excluded_key_ids.len();
+        let result = self.inner.current_credential_refs(request);
+        let outcome = match &result {
+            Ok(Some(refs)) if refs.is_empty() => Some("exhausted"),
+            Err(PortError::CredentialDenied(reason)) => Some(match reason {
+                hiroute_domain::NativeCredentialAccessDeniedV1::SourceDisabled => "source_disabled",
+                hiroute_domain::NativeCredentialAccessDeniedV1::CredentialDisabled => {
+                    "credential_disabled"
+                }
+            }),
+            Err(_) => Some("authority_error"),
+            _ => None,
+        };
+        // A successful membership read is not a lease. Only a rejected permission
+        // check contributes a zero-Key/generation request-level preparation fact.
+        if let Some(outcome) = outcome
+            && let Some(observation) = active_request()
+        {
+            observation.credential_lease(
+                stable_binding_id,
+                credential_ref,
+                excluded_key_count,
+                None,
+                outcome,
+            );
+        }
+        result
     }
 
     async fn lease_exact(
@@ -63,6 +91,20 @@ impl CredentialResolver for ObservedCredentialResolver {
                     excluded_key_count,
                     None,
                     "exhausted",
+                ),
+                Err(PortError::CredentialDenied(reason)) => observation.credential_lease(
+                    &stable_binding_id,
+                    &credential_ref,
+                    excluded_key_count,
+                    None,
+                    match reason {
+                        hiroute_domain::NativeCredentialAccessDeniedV1::SourceDisabled => {
+                            "source_disabled"
+                        }
+                        hiroute_domain::NativeCredentialAccessDeniedV1::CredentialDisabled => {
+                            "credential_disabled"
+                        }
+                    },
                 ),
                 Err(_) => observation.credential_lease(
                     &stable_binding_id,

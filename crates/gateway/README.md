@@ -218,3 +218,23 @@ as streaming failures, for both native and converted protocols. Reported usage
 survives fallback; partial response content is not delivered. Attempt/deadline
 limits and fixed-source authority still apply, and unknown completion remains
 separate from an explicit failure.
+
+### Current-pool admission failures
+
+Current-pool admission checks the frozen model and target before reporting a managed
+source denial. It keeps the request's members and order fixed, excludes denied sources
+and records a request-level permission fact without a leased Key or generation. A
+successful membership read does not create a lease fact.
+
+If admission excludes every candidate, HTTP 502 uses `hiroute.gateway.error/v1`:
+
+| Current-pool evidence | `code` | `phase` |
+| --- | --- | --- |
+| Every source is disabled | `SOURCE_DISABLED` | `credential_lease` |
+| Every managed pool is empty/unavailable | `CREDENTIAL_UNAVAILABLE` | `credential_lease` |
+| Mixed causes | `CANDIDATE_PREPARATION_FAILED` | `candidate_preparation` |
+
+Admission exclusions also join the existing request-local preparation summary when
+another candidate remains. Mixed permanent failures do not become a pure cooling
+response, and an actual upstream attempt retains its existing response. These errors
+contain no credentials or provider text and have no `Retry-After`.

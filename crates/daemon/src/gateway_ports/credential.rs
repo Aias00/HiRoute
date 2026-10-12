@@ -64,12 +64,7 @@ where
         let target = validate_request(&request)?;
         self.native
             .current_native_credential_refs(&native_request(&request, target)?)
-            .map_err(|error| match error.code {
-                hiroute_domain::PortErrorCode::Unavailable => {
-                    PortError::Unavailable("NativeCredentialAuthorityV1")
-                }
-                _ => PortError::Rejected,
-            })
+            .map_err(native_error)
     }
 
     async fn lease_exact(
@@ -211,6 +206,20 @@ where
         .map_err(|_| PortError::Rejected)?;
         scope.ensure_active().map_err(|_| PortError::Rejected)?;
         Ok(Some(lease))
+    }
+}
+
+fn native_error(error: hiroute_domain::NativeCredentialLeaseErrorV1) -> PortError {
+    match error {
+        hiroute_domain::NativeCredentialLeaseErrorV1::Denied(reason) => {
+            PortError::CredentialDenied(reason)
+        }
+        hiroute_domain::NativeCredentialLeaseErrorV1::Authority(error) => match error.code {
+            hiroute_domain::PortErrorCode::Unavailable => {
+                PortError::Unavailable("NativeCredentialAuthorityV1")
+            }
+            _ => PortError::Rejected,
+        },
     }
 }
 

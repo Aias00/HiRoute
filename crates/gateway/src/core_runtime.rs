@@ -994,6 +994,8 @@ impl ProductionGatewayRuntime {
             let mut hold_candidates =
                 Vec::with_capacity(planner_output.ledger.ordered_candidates.len());
             let mut agent_turn_candidates = std::collections::BTreeMap::new();
+            let mut admission_preparation_failure: Option<crate::runtime::PreparationFailure> =
+                None;
             for frozen in &planner_output.ledger.ordered_candidates {
                 let facts = fact_by_id
                     .get(frozen.candidate_id.as_str())
@@ -1074,9 +1076,23 @@ impl ProductionGatewayRuntime {
                     profile_digest: facts.profile_digest.clone(),
                     protocol_profile: facts.protocol_profile.clone(),
                 };
-                match credentials::bind_current(&self.ports, &mut authorized, binding, &execution) {
-                    Ok(false) => continue,
-                    Ok(true) => {}
+                let pool = with_active_request(request_observation.clone(), async {
+                    credentials::bind_current(&self.ports, &mut authorized, binding, &execution)
+                })
+                .await;
+                let excluded = match pool {
+                    Ok(false) => Some(crate::runtime::PreparationFailure::CredentialUnavailable),
+                    Err(crate::server::composition::PortError::CredentialDenied(reason)) => {
+                        Some(match reason {
+                            hiroute_domain::NativeCredentialAccessDeniedV1::SourceDisabled => {
+                                crate::runtime::PreparationFailure::SourceDisabled
+                            }
+                            hiroute_domain::NativeCredentialAccessDeniedV1::CredentialDisabled => {
+                                crate::runtime::PreparationFailure::CredentialDisabled
+                            }
+                        })
+                    }
+                    Ok(true) => None,
                     Err(_) => {
                         return write_typed_error_phase(
                             session,
@@ -1086,6 +1102,13 @@ impl ProductionGatewayRuntime {
                         )
                         .await;
                     }
+                };
+                if let Some(cause) = excluded {
+                    admission_preparation_failure = Some(
+                        admission_preparation_failure
+                            .map_or(cause, |previous| previous.merge(cause)),
+                    );
+                    continue;
                 }
                 let attempt = authorized
                     .core_binding()
@@ -1144,13 +1167,11 @@ impl ProductionGatewayRuntime {
             }
             drop(fact_by_id);
             if frozen_candidates.is_empty() {
-                return write_typed_error_phase(
-                    session,
-                    StatusCode::BAD_GATEWAY,
-                    "NO_ELIGIBLE_CANDIDATE",
-                    "credential",
-                )
-                .await;
+                let (code, phase) = admission_preparation_failure
+                    .unwrap_or(crate::runtime::PreparationFailure::Other)
+                    .code_phase();
+                return write_typed_error_phase(session, StatusCode::BAD_GATEWAY, code, phase)
+                    .await;
             }
             let switch_fallback = planner_input
                 .previous_success_candidate_id
@@ -1258,6 +1279,7 @@ impl ProductionGatewayRuntime {
                 context_holds: Arc::clone(&self.context_holds),
                 switch_fallback,
                 reasoning_cleanup,
+                admission_preparation_failure,
                 hold_completion: hold_ticket.map(|ticket| HoldCompletion {
                     ticket: *ticket,
                     candidates: hold_candidates.into(),
