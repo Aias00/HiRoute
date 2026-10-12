@@ -4,9 +4,9 @@ pub use hiroute_domain::{
     ObservationCatalogQueryV2, ObservationContentPageV2, ObservationContentQueryV2,
     ObservationFactsPageV2, ObservationFactsQueryV2, ObservationRequestPage,
     ObservationRequestQuery, ObservationSearchPageV2, ObservationSearchQueryV2,
-    ObservationSessionCorrelationKindV1, ObservationSessionPageV2, ObservationSessionSummaryV2,
-    ObservationValueQueryV2, ObservationValueSummaryV2, PlanCompetenceFilter,
-    PlanQualitySamplesPage, PlanQualitySamplesQuery,
+    ObservationSessionCorrelationKindV1, ObservationSessionPageV2, ObservationSessionSearchPageV1,
+    ObservationSessionSummaryV2, ObservationValueQueryV2, ObservationValueSummaryV2,
+    PlanCompetenceFilter, PlanQualitySamplesPage, PlanQualitySamplesQuery,
 };
 use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -36,6 +36,7 @@ pub enum ObservationReadIntentV2 {
     Content(ObservationContentQueryV2),
     Facts(ObservationFactsQueryV2),
     Search(ObservationSearchQueryV2),
+    SessionSearch(ObservationSearchQueryV2),
     Value(ObservationValueQueryV2),
     HomeValue(ObservationHomeValueQueryV2),
     ValueReport(ObservationValueReportOptionsV2),
@@ -52,7 +53,8 @@ impl ObservationReadRequestV2 {
         match self.intent {
             ObservationReadIntentV2::Status(_)
             | ObservationReadIntentV2::Sessions(_)
-            | ObservationReadIntentV2::Search(_) => "ListSessions",
+            | ObservationReadIntentV2::Search(_)
+            | ObservationReadIntentV2::SessionSearch(_) => "ListSessions",
             ObservationReadIntentV2::PlanQuality(_) => "GetPlanQualitySamples",
             ObservationReadIntentV2::Facts(_) => "GetRoutingReceipt",
             ObservationReadIntentV2::Value(_)
@@ -71,7 +73,9 @@ impl ObservationReadRequestV2 {
             ObservationReadIntentV2::Ancestry(_) => "ReadSessionAncestryV2",
             ObservationReadIntentV2::Content(_) => "ReadSessionContentV2",
             ObservationReadIntentV2::Facts(_) => "ReadSessionFactsV2",
-            ObservationReadIntentV2::Search(_) => "SearchSessionContentV2",
+            ObservationReadIntentV2::Search(_) | ObservationReadIntentV2::SessionSearch(_) => {
+                "SearchSessionContentV2"
+            }
             ObservationReadIntentV2::Value(_)
             | ObservationReadIntentV2::HomeValue(_)
             | ObservationReadIntentV2::ValueReport(_) => "GetValueV2",

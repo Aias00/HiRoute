@@ -53,6 +53,7 @@ export function Sessions({ initialSession = null, initialRequest = null, languag
   const [searchCursor, setSearchCursor] = useState<string | null>(null);
   const [partial, setPartial] = useState(false);
   const [listLoaded, setListLoaded] = useState(false);
+  const [listBusy, setListBusy] = useState(false);
   const [onlySwitch, setOnlySwitch] = useState(false);
   const [listError, setListError] = useState('');
   const [timelineError, setTimelineError] = useState('');
@@ -78,38 +79,44 @@ export function Sessions({ initialSession = null, initialRequest = null, languag
   const timelineGeneration = useRef(0);
   const factGeneration = useRef(0);
   const searchMounted = useRef(false);
+  const keywordTimer = useRef<number | null>(null);
   const initialTarget = useRef(initialSession);
   const initialRequestTarget = useRef(initialRequest);
+  function clearTimelineSelection() {
+    timelineGeneration.current++;
+    setBusy(false); setTimelineError('');
+    setSession(null); setRequests([]); setReadingRequests([]); setRequest(null);
+    setRequestCursor(null); setFocusedRequest(null); setAnchor(null); setFactsOpen(false);
+  }
+  function changeOnlySwitch(value: boolean) {
+    if (keywordTimer.current !== null) { window.clearTimeout(keywordTimer.current); keywordTimer.current = null; }
+    setOnlySwitch(value); setHits([]); setPartial(false); clearTimelineSelection();
+    void load(null, { onlySwitch: value });
+  }
   async function load(cursor: string | null = null, override?: { keyword?: string; onlySwitch?: boolean }) {
     const effectiveKeyword = override?.keyword ?? keyword;
     const effectiveOnlySwitch = override?.onlySwitch ?? onlySwitch;
     const searching = Boolean(effectiveKeyword.trim());
     if (!cursor) {
-      if (searching) { searchQuery.current = currentWindow(); setSearchCursor(null); }
+      if (searching) { searchQuery.current = currentWindow(); setSearchCursor(null); setPartial(false); }
       else { sessionQuery.current = currentWindow(); setSessionCursor(null); }
     }
     const queryWindow = searching ? searchQuery.current : sessionQuery.current;
-    const epoch = ++generation.current; setBusy(true); setListError('');
+    const epoch = ++generation.current; setListBusy(true); setListError('');
     try {
       if (searching) {
-        const page = await read<Page<{ hits: Hit[]; index_partial: boolean; budget_exhausted: boolean }>>('search', { ...queryWindow, session_id: null, keyword: effectiveKeyword.trim(), limit: 50, cursor, agent_id: null, plan_id: null, native_model: null, outcome: null, only_model_switch: effectiveOnlySwitch });
+        const page = await read<Page<{ hits: Hit[]; index_partial: boolean }>>('session_search', { ...queryWindow, session_id: null, keyword: effectiveKeyword.trim(), limit: 50, cursor, agent_id: null, plan_id: null, native_model: null, outcome: null, only_model_switch: effectiveOnlySwitch });
         if (epoch !== generation.current) return;
-        setHits(current => cursor ? [...current, ...page.hits] : page.hits); setSearchCursor(page.next_cursor); setPartial(page.index_partial || page.budget_exhausted);
-        if (!cursor) {
-          const first = page.hits[0];
-          if (first) void timeline(first.session_id, null, first);
-          else {
-            timelineGeneration.current++;
-            setSession(null); setRequests([]); setReadingRequests([]); setRequest(null); setAnchor(null); setFactsOpen(false);
-          }
-        }
+        setHits(current => [...new Map((cursor ? [...current, ...page.hits] : page.hits).map(hit => [hit.session_id, hit])).values()]); setSearchCursor(page.next_cursor); setPartial(page.index_partial);
+        if (!cursor) clearTimelineSelection();
       } else {
         const page = await read<Page<{ sessions: Summary[] }>>('sessions', { ...queryWindow, session_id: null, limit: 50, cursor, agent_id: null, plan_id: null, native_model: null, outcome: null, only_model_switch: effectiveOnlySwitch });
         if (epoch !== generation.current) return;
         setListLoaded(true); setSessions(current => cursor ? [...current, ...page.sessions] : page.sessions); setSessionCursor(page.next_cursor); setHits([]); setPartial(false);
       }
-    } catch (e) { if (epoch === generation.current) setListError(errorCode(e)); }
-    finally { if (epoch === generation.current) setBusy(false); }
+    } catch (e) {
+      if (epoch === generation.current) { setListError(errorCode(e)); setSearchCursor(null); setSessionCursor(null); }
+    } finally { if (epoch === generation.current) setListBusy(false); }
   }
   useEffect(() => {
     if (!active) return;
@@ -123,8 +130,9 @@ export function Sessions({ initialSession = null, initialRequest = null, languag
   }, [reload, refreshVersion, active]);
   useEffect(() => {
     if (!searchMounted.current) { searchMounted.current = true; return; }
-    const timer = window.setTimeout(() => void load(null, { keyword }), 260);
-    return () => window.clearTimeout(timer);
+    const timer = window.setTimeout(() => { keywordTimer.current = null; void load(null, { keyword }); }, 260);
+    keywordTimer.current = timer;
+    return () => { window.clearTimeout(timer); if (keywordTimer.current === timer) keywordTimer.current = null; };
   }, [keyword]);
   async function timeline(id: string, cursor: string | null = null, hit?: Hit, exactRequest?: string | null) {
     const epoch = ++timelineGeneration.current; setBusy(true); setTimelineError('');
@@ -218,7 +226,7 @@ export function Sessions({ initialSession = null, initialRequest = null, languag
   }
   function refresh() {
     if (focusedRequest && session) { initialTarget.current = session; initialRequestTarget.current = focusedRequest; }
-    window.dispatchEvent(new Event('hiroute-content-invalidated')); generation.current++; timelineGeneration.current++; factGeneration.current++; setListError(''); setTimelineError(''); setSession(null); setRequest(null); setReadingRequests([]); setRequests([]); setFactsOpen(false); setFacts([]); setHits([]); setReload(current => current + 1);
+    window.dispatchEvent(new Event('hiroute-content-invalidated')); generation.current++; factGeneration.current++; clearTimelineSelection(); setListError(''); setFacts([]); setHits([]); setReload(current => current + 1);
   }
   const selectedSummary = sessions.find(item => item.session_id === session)
     ?? (focusedSummary?.session_id === session ? focusedSummary : undefined);
@@ -227,7 +235,7 @@ export function Sessions({ initialSession = null, initialRequest = null, languag
     : id.toLowerCase().includes('codex') ? 'Codex'
       : id.toLowerCase().includes('claude') ? 'Claude Code'
         : text('本机 Agent', 'Local Agent');
-  const emptyFirstUse = listLoaded && !busy && !listError && !keyword.trim() && !onlySwitch && sessions.length === 0;
+  const emptyFirstUse = listLoaded && !listBusy && !listError && !keyword.trim() && !onlySwitch && sessions.length === 0;
   const selectedRequest = requests.find(item => item.request_id === request);
   const displayedRequestIds = request ? (readingRequests.length ? readingRequests : [request]) : [];
   const lastDisplayedIndex = requests.findIndex(item => item.request_id === displayedRequestIds.at(-1));
@@ -245,9 +253,9 @@ export function Sessions({ initialSession = null, initialRequest = null, languag
   }, []);
 
   useEffect(() => {
-    if (!listLoaded || busy || listError || session || keyword.trim() || !sessions[0]) return;
+    if (!listLoaded || listBusy || busy || listError || session || keyword.trim() || !sessions[0]) return;
     void timeline(sessions[0].session_id);
-  }, [listLoaded, busy, listError, session, keyword, onlySwitch, sessions]);
+  }, [listLoaded, listBusy, busy, listError, session, keyword, onlySwitch, sessions]);
 
   useEffect(() => {
     setFacts([]); setFactsError(''); setFactCursor(null); setFactPartial(false);
@@ -259,23 +267,35 @@ export function Sessions({ initialSession = null, initialRequest = null, languag
   return <ProductPage
     title={text('会话', 'Sessions')}
     subtitle={text('查看 Agent 实际经过 HiRoute 的对话、请求内回退和运行事实', 'View agent conversations, in-request fallbacks and run details captured by HiRoute')}
-    actions={<>{onReturnToQuality && <button className="btn btn-quiet" type="button" onClick={onReturnToQuality}><UiIcon name="arrowLeft" />{text('返回模型表现', 'Back to model performance')}</button>}{partial && <span className="badge warn">{text('搜索结果可能不完整', 'Search may be incomplete')}</span>}</>}
+    actions={<>{onReturnToQuality && <button className="btn btn-quiet" type="button" onClick={onReturnToQuality}><UiIcon name="arrowLeft" />{text('返回模型表现', 'Back to model performance')}</button>}{partial && <span className="badge warn">{text('部分正文暂不可搜索', 'Some content is not searchable yet')}</span>}</>}
     flush={!emptyFirstUse}
     className="sessions-page"
   >
     <Toast notice={toast} />
-    {!listLoaded && busy && <div className="empty-state" role="status"><div><span className="oc-spinner" /><p>{text('正在读取本机会话…', 'Reading local sessions…')}</p></div></div>}
+    {!listLoaded && listBusy && <div className="empty-state" role="status"><div><span className="oc-spinner" /><p>{text('正在读取本机会话…', 'Reading local sessions…')}</p></div></div>}
     <MaintenanceStatus key={reload} language={language} />
 
-    {!listLoaded && listError ? <div className="empty-state"><div><span className="empty-icon"><UiIcon name="warning" /></span><h3>{text('暂时无法读取会话', 'Sessions are temporarily unavailable')}</h3><p>{text('请确认本机服务正在运行，然后重试。', 'Make sure the local service is running, then retry.')}</p><button className="btn btn-primary" type="button" onClick={refresh}>{text('重试', 'Retry')}</button></div></div> : !listLoaded && busy ? null : emptyFirstUse ? <div className="empty-state"><div><span className="empty-icon"><UiIcon name="sessions" /></span><h3>{text('还没有会话记录', 'No sessions yet')}</h3><p>{text('在已接入的 Agent 中开始使用，经过 HiRoute 的会话会显示在这里。', 'Start in a connected Agent. Sessions routed through HiRoute will appear here.')}</p>{onOpenAgents && <button className="btn btn-primary" type="button" onClick={onOpenAgents}>{text('查看 Agent 接入', 'View Agent connections')}</button>}</div></div> : <div className={`session-layout${session ? ' has-selection' : ''}${factsOpen ? ' with-inspector' : ''}`}>
+    {!listLoaded && listError && !keyword.trim() ? <div className="empty-state"><div><span className="empty-icon"><UiIcon name="warning" /></span><h3>{text('暂时无法读取会话', 'Sessions are temporarily unavailable')}</h3><p>{text('请确认本机服务正在运行，然后重试。', 'Make sure the local service is running, then retry.')}</p><button className="btn btn-primary" type="button" onClick={refresh}>{text('重试', 'Retry')}</button></div></div> : !listLoaded && listBusy ? null : emptyFirstUse ? <div className="empty-state"><div><span className="empty-icon"><UiIcon name="sessions" /></span><h3>{text('还没有会话记录', 'No sessions yet')}</h3><p>{text('在已接入的 Agent 中开始使用，经过 HiRoute 的会话会显示在这里。', 'Start in a connected Agent. Sessions routed through HiRoute will appear here.')}</p>{onOpenAgents && <button className="btn btn-primary" type="button" onClick={onOpenAgents}>{text('查看 Agent 接入', 'View Agent connections')}</button>}</div></div> : <div className={`session-layout${session ? ' has-selection' : ''}${factsOpen ? ' with-inspector' : ''}${keyword.trim() ? ' is-searching' : ''}${listError ? ' with-list-error' : ''}`}>
       <aside className="session-master" aria-label={text('会话列表', 'Session list')}>
         <form onSubmit={event => { event.preventDefault(); void load(); }} className="session-filters">
-          <label className="search-box"><span className="sr-only">{text('搜索会话正文', 'Search session content')}</span><UiIcon name="search" /><input className="input" value={keyword} maxLength={256} onChange={event => { generation.current++; setBusy(false); setKeyword(event.target.value); }} placeholder={text('搜索会话正文', 'Search session content')} /></label>
-          <div className="segmented" role="group" aria-label={text('会话筛选', 'Session filter')}><button className={`segment${!onlySwitch ? ' active' : ''}`} type="button" aria-pressed={!onlySwitch} onClick={() => { setOnlySwitch(false); setSession(null); setRequest(null); setFactsOpen(false); void load(null, { onlySwitch: false }); }}>{text('全部', 'All')}</button><button className={`segment${onlySwitch ? ' active' : ''}`} type="button" aria-pressed={onlySwitch} onClick={() => { setOnlySwitch(true); setSession(null); setRequest(null); setFactsOpen(false); void load(null, { onlySwitch: true }); }}>{text('发生过请求内回退', 'In-request fallbacks')}</button></div>
+          <label className="search-box"><span className="sr-only">{text('搜索会话正文', 'Search session content')}</span><UiIcon name="search" /><input className="input" value={keyword} maxLength={256} onChange={event => { generation.current++; clearTimelineSelection(); setSearchCursor(null); setSessionCursor(null); setHits([]); setPartial(false); setListError(''); setListBusy(true); setKeyword(event.target.value); }} placeholder={text('搜索会话正文', 'Search session content')} /></label>
+          <div className="segmented" role="group" aria-label={text('会话筛选', 'Session filter')}><button className={`segment${!onlySwitch ? ' active' : ''}`} type="button" aria-pressed={!onlySwitch} onClick={() => changeOnlySwitch(false)}>{text('全部', 'All')}</button><button className={`segment${onlySwitch ? ' active' : ''}`} type="button" aria-pressed={onlySwitch} onClick={() => changeOnlySwitch(true)}>{text('发生过请求内回退', 'In-request fallbacks')}</button></div>
         </form>
-        {listError && <div className="callout bad session-local-feedback" role="alert" data-error-code={listError}><UiIcon name="warning" /><div><strong>{text('列表没有刷新', 'The list was not refreshed')}</strong><p>{text('已加载的会话仍然保留。', 'Previously loaded sessions are still available.')}</p><button className="btn" type="button" onClick={() => void load()}>{text('重试', 'Retry')}</button></div></div>}
+        {listError && <div className="callout bad session-local-feedback" role="alert" data-error-code={listError}><UiIcon name="warning" /><div><strong>{keyword.trim() ? text('搜索暂时失败', 'Search is temporarily unavailable') : text('列表没有刷新', 'The list was not refreshed')}</strong><p>{keyword.trim() ? text('请重试，重新读取当前可搜索的会话。', 'Retry to search the currently available sessions.') : text('已加载的会话仍然保留。', 'Previously loaded sessions are still available.')}</p><button className="btn" type="button" disabled={listBusy} onClick={() => void load()}>{text('重试', 'Retry')}</button></div></div>}
         <div className="session-list">
-          {keyword.trim() ? <>{hits.map((hit, index) => { const context = sessions.find(item => item.session_id === hit.session_id); return <button className={`session-item${session === hit.session_id ? ' active' : ''}`} key={`${hit.content_id}-${hit.original_text_offset}-${index}`} aria-current={session === hit.session_id ? 'page' : undefined} onClick={() => void timeline(hit.session_id, null, hit)}><div className="session-item-top"><span className="muted session-item-time">{context ? sessionTimeLabel(context.last_request_at_ms, language) : text('搜索命中', 'Match')}</span></div><div className="session-item-title"><ContentExcerpt hit={hit} language={language} fallback={text('查看命中正文', 'Open matching content')} revision={refreshVersion + reload} /></div><div className="session-item-meta">{context ? <><span>{agentName(context.agent_id)}</span>{sessionRoutes[context.session_id] && <><span>·</span><span>{sessionRoutes[context.session_id]}</span></>}{sessionModels[context.session_id] && <><span>·</span><span>{sessionModels[context.session_id]}</span></>}</> : text('点击读取所在会话', 'Open the matching session')}</div></button>; })}{searchCursor && <button className="btn session-more" disabled={busy} onClick={() => void load(searchCursor)}>{text('加载更多结果', 'Load more results')}</button>}{!busy && !listError && !hits.length && <div className="empty-state session-list-empty"><div><span className="empty-icon"><UiIcon name="search" /></span><h3>{partial || searchCursor ? text('尚未找到匹配', 'No match found yet') : text('没有匹配的会话', 'No matching sessions')}</h3><p>{searchCursor ? text('还有内容待搜索，请继续加载。', 'More content remains to be searched. Continue loading.') : partial ? text('部分内容尚未建立索引，可稍后刷新。', 'Some content is not indexed yet. Refresh later.') : text('试试其他关键词。', 'Try another keyword.')}</p></div></div>}</> : <>{sessions.map(item => { const contentState = sessionContentStates[item.session_id] ?? (['deleted', 'expired'].includes(item.content_completeness) ? 'cleared' : item.content_completeness === 'complete' ? 'recorded' : 'partial'); return <button className={`session-item${session === item.session_id ? ' active' : ''}`} key={item.session_id} aria-current={session === item.session_id ? 'page' : undefined} onClick={() => void timeline(item.session_id)}><div className="session-item-top"><span className="muted session-item-time">{sessionTimeLabel(item.last_request_at_ms, language)}</span>{contentState === 'cleared' ? <span className="badge warn no-dot">{text('正文已清理', 'Content cleared')}</span> : contentState === 'partial' ? <span className="badge warn no-dot">{text('记录不完整', 'Incomplete record')}</span> : item.fallback_request_count > 0 && <span className="badge warn no-dot">{text('请求内回退', 'Request fallback')}</span>}</div><div className="session-item-title"><ContentExcerpt session={item.session_id} language={language} fallback={text('会话记录', 'Session')} limit={48} revision={`${refreshVersion + reload}:${item.last_request_at_ms}:${item.request_count}`} onModel={model => setSessionModels(current => current[item.session_id] === model ? current : { ...current, [item.session_id]: model })} onRoute={route => setSessionRoutes(current => current[item.session_id] === route ? current : { ...current, [item.session_id]: route })} /></div><div className="session-item-meta"><span>{agentName(item.agent_id)}</span>{sessionRoutes[item.session_id] && <><span>·</span><span>{sessionRoutes[item.session_id]}</span></>}{sessionModels[item.session_id] && <><span>·</span><span>{sessionModels[item.session_id]}</span></>}{!sessionRoutes[item.session_id] && !sessionModels[item.session_id] && <><span>·</span><span>{item.request_count} {text('个请求', 'requests')}</span></>}</div></button>; })}{sessionCursor && <button className="btn session-more" disabled={busy} onClick={() => void load(sessionCursor)}>{text('加载更多会话', 'Load more sessions')}</button>}{!busy && !listError && listLoaded && !sessions.length && <div className="empty-state session-list-empty"><div><h3>{text('当前筛选没有会话', 'No sessions match this filter')}</h3><p>{text('切换到全部会话。', 'Show all sessions.')}</p></div></div>}</>}
+          {keyword.trim() ? <>
+            {listBusy && <p className="oc-meta session-local-feedback" role="status"><span className="oc-spinner" />{text('正在搜索…', 'Searching…')}</p>}
+            {hits.map(hit => {
+              const context = sessions.find(item => item.session_id === hit.session_id);
+              return <button className={`session-item${session === hit.session_id ? ' active' : ''}`} key={hit.session_id} aria-current={session === hit.session_id ? 'page' : undefined} onClick={() => void timeline(hit.session_id, null, hit)}>
+                <div className="session-item-top"><span className="muted session-item-time">{context ? sessionTimeLabel(context.last_request_at_ms, language) : text('搜索命中', 'Match')}</span></div>
+                <div className="session-item-title"><ContentExcerpt hit={hit} language={language} fallback={text('查看命中正文', 'Open matching content')} revision={refreshVersion + reload} /></div>
+                <div className="session-item-meta">{context ? <><span>{agentName(context.agent_id)}</span>{sessionRoutes[context.session_id] && <><span>·</span><span>{sessionRoutes[context.session_id]}</span></>}{sessionModels[context.session_id] && <><span>·</span><span>{sessionModels[context.session_id]}</span></>}</> : text('点击读取所在会话', 'Open the matching session')}</div>
+              </button>;
+            })}
+            {searchCursor && !listError && <button className="btn session-more" disabled={listBusy} onClick={() => void load(searchCursor)}>{text('加载更多结果', 'Load more results')}</button>}
+            {!listBusy && !listError && !hits.length && <div className="empty-state session-list-empty"><div><span className="empty-icon"><UiIcon name="search" /></span><h3>{partial ? text('尚未找到匹配', 'No match found yet') : text('没有匹配的会话', 'No matching sessions')}</h3><p>{partial ? text('部分正文暂不可搜索，可稍后刷新。', 'Some content is not searchable yet. Refresh later.') : text('试试其他关键词。', 'Try another keyword.')}</p></div></div>}
+          </> : <>{sessions.map(item => { const contentState = sessionContentStates[item.session_id] ?? (['deleted', 'expired'].includes(item.content_completeness) ? 'cleared' : item.content_completeness === 'complete' ? 'recorded' : 'partial'); return <button className={`session-item${session === item.session_id ? ' active' : ''}`} key={item.session_id} aria-current={session === item.session_id ? 'page' : undefined} onClick={() => void timeline(item.session_id)}><div className="session-item-top"><span className="muted session-item-time">{sessionTimeLabel(item.last_request_at_ms, language)}</span>{contentState === 'cleared' ? <span className="badge warn no-dot">{text('正文已清理', 'Content cleared')}</span> : contentState === 'partial' ? <span className="badge warn no-dot">{text('记录不完整', 'Incomplete record')}</span> : item.fallback_request_count > 0 && <span className="badge warn no-dot">{text('请求内回退', 'Request fallback')}</span>}</div><div className="session-item-title"><ContentExcerpt session={item.session_id} language={language} fallback={text('会话记录', 'Session')} limit={48} revision={`${refreshVersion + reload}:${item.last_request_at_ms}:${item.request_count}`} onModel={model => setSessionModels(current => current[item.session_id] === model ? current : { ...current, [item.session_id]: model })} onRoute={route => setSessionRoutes(current => current[item.session_id] === route ? current : { ...current, [item.session_id]: route })} /></div><div className="session-item-meta"><span>{agentName(item.agent_id)}</span>{sessionRoutes[item.session_id] && <><span>·</span><span>{sessionRoutes[item.session_id]}</span></>}{sessionModels[item.session_id] && <><span>·</span><span>{sessionModels[item.session_id]}</span></>}{!sessionRoutes[item.session_id] && !sessionModels[item.session_id] && <><span>·</span><span>{item.request_count} {text('个请求', 'requests')}</span></>}</div></button>; })}{sessionCursor && !listError && <button className="btn session-more" disabled={listBusy} onClick={() => void load(sessionCursor)}>{text('加载更多会话', 'Load more sessions')}</button>}{!busy && !listError && listLoaded && !sessions.length && <div className="empty-state session-list-empty"><div><h3>{text('当前筛选没有会话', 'No sessions match this filter')}</h3><p>{text('切换到全部会话。', 'Show all sessions.')}</p></div></div>}</>}
         </div>
       </aside>
 

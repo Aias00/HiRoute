@@ -1,10 +1,20 @@
 //! Rebuildable content index. Incomplete or digest-invalid builds never publish
 //! hits. The original content store and its visibility remain authoritative.
 mod block;
+pub(crate) mod lookup;
 mod worker;
 pub(crate) use block::{fold, original_offset};
 use rusqlite::Connection;
 pub use worker::TextIndexBuilder;
+
+#[cfg(test)]
+pub(crate) fn insert_lookup_fixture(
+    db: &Connection,
+    block: i64,
+    folded: &str,
+) -> rusqlite::Result<()> {
+    lookup::insert(db, block, folded)
+}
 
 pub(crate) fn migrate(
     transaction: &Connection,
@@ -19,6 +29,7 @@ pub(crate) fn migrate(
             folded TEXT NOT NULL,offsets BLOB NOT NULL,original TEXT NOT NULL,
             UNIQUE(workspace,digest,ordinal));
          CREATE INDEX IF NOT EXISTS observation_text_blocks_source ON observation_text_blocks_v2(workspace,digest,ordinal);
+         CREATE INDEX IF NOT EXISTS observation_text_index_ready ON observation_text_index_v2(workspace,digest) WHERE state='ready';
          CREATE INDEX IF NOT EXISTS observation_text_index_published ON observation_text_index_v2(published);"
     ).map_err(|_| crate::writer::ObservationStoreError::ActivityUnavailable)?;
     let has_original: bool = {
@@ -37,5 +48,7 @@ pub(crate) fn migrate(
     if !has_original {
         transaction.execute_batch("ALTER TABLE observation_text_blocks_v2 ADD COLUMN original TEXT NOT NULL DEFAULT ''; DELETE FROM observation_text_blocks_v2; DELETE FROM observation_text_index_v2; UPDATE observation_meta SET value=CAST(value AS INTEGER)+1 WHERE key='query_visibility_generation';").map_err(|_|crate::writer::ObservationStoreError::ActivityUnavailable)?;
     }
+    lookup::migrate(transaction)
+        .map_err(|_| crate::writer::ObservationStoreError::ActivityUnavailable)?;
     Ok(())
 }

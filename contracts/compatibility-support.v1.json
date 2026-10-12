@@ -1364,6 +1364,18 @@
       ],
       "reason": "Released public compute connection test callers from supported 0.2.0 and 0.3.0 omit the label. Normalize only that omission to the authenticated catalog option name; current named requests preserve the supplied label and protected Desktop checks still require an explicit label. Explicit null/invalid names, unknown fields and untrusted catalog facts remain rejected.",
       "removal_condition": "Remove only after the supported released public request shape is explicitly retired with a caller migration path under the release support policy. Do not regenerate the frozen released request with the current producer."
+    },
+    {
+      "contract": "hiroute.observation.query/v2",
+      "field": "released V0.3.1 text block cache schema and lowercase offsets",
+      "mode": "frozen_fixture",
+      "owner": "observation-text-index",
+      "reason": "The released 13856abd873da5b4373d39322493b4cc105c4867 SQL and fixed block bytes verify startup keyword-lookup backfill without rewriting retained bodies, offsets, request identities or occurrence-query semantics. These inputs never grant reader authority.",
+      "removal_condition": "Retire only when supported stores and backups can no longer contain the V0.3.1 block cache, preserving an equivalent released-input regression if the cache reader remains.",
+      "allowed_paths": [
+        "crates/observation/tests/fixtures/released-v0.3.1-text-index.sql",
+        "crates/observation/src/query_v2/session_search_tests.rs"
+      ]
     }
   ]
 }

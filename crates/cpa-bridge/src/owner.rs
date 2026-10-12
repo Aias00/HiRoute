@@ -260,14 +260,26 @@ fn open_reclaim_file(parent: &Path) -> Result<fs::File, OwnerError> {
     Ok(file)
 }
 
-fn lock_reclaim(parent: &Path) -> Result<fs::File, OwnerError> {
+#[derive(Debug)]
+struct ReclaimGuard(fs::File);
+
+impl Drop for ReclaimGuard {
+    fn drop(&mut self) {
+        // This lock protects a completed synchronous critical section, not an
+        // inherited descriptor's lifetime. Forked children may retain CLOEXEC
+        // copies until exec; explicitly end the section before closing ours.
+        let _ = fs2::FileExt::unlock(&self.0);
+    }
+}
+
+fn lock_reclaim(parent: &Path) -> Result<ReclaimGuard, OwnerError> {
     let file = open_reclaim_file(parent)?;
     file.try_lock_exclusive()
         .map_err(|error| match error.kind() {
             std::io::ErrorKind::WouldBlock => OwnerError::ReclaimContended,
             _ => OwnerError::Io(error),
         })?;
-    Ok(file)
+    Ok(ReclaimGuard(file))
 }
 
 #[cfg(unix)]
@@ -319,6 +331,27 @@ pub(crate) enum OwnerError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reclaim_critical_section_ends_before_an_unrelated_inherited_descriptor_closes() {
+        let root = tempfile::tempdir().unwrap();
+        let guard = lock_reclaim(root.path()).unwrap();
+        let inherited = guard.0.try_clone().unwrap();
+        assert!(matches!(
+            lock_reclaim(root.path()),
+            Err(OwnerError::ReclaimContended)
+        ));
+        drop(guard);
+        // A fork before exec can retain this descriptor after the synchronous
+        // critical section has completed. It does not own another reclaim.
+        let next = lock_reclaim(root.path());
+        assert!(
+            next.is_ok(),
+            "a completed reclaim retained its lock: {next:?}"
+        );
+        drop(next);
+        drop(inherited);
+    }
 
     #[test]
     fn stale_reclaim_installs_one_exact_replacement_and_rejects_replay() {
