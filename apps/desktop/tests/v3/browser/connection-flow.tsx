@@ -51,7 +51,7 @@ function Harness() {
     source.provenance === 'registered' ? { ...source, display_name: savedName || '团队模型服务' } : source) }), [savedName]);
   return <PresentationRoot language={language} theme={params.get('theme') === 'dark' ? 'dark' : 'light'} textScale={params.get('scale') === '2' ? 2 : 1}>
     <Models language={language} snapshot={management} mutable onRefresh={async () => undefined}
-      onPrepareKeyInput={async () => ({ candidate_ref: 'input/saved', candidate_revision: 1 })}
+      onPrepareKeyInput={async () => ({ input_candidate: { candidate_ref: 'input/saved', candidate_revision: 1 }, key_id: 'credential/test-saved' })}
       onPreview={async () => { throw new Error('Credential editing is outside this fixture'); }}
       onApply={async () => 'saved'} onDiscardProtectedInputs={() => undefined} />
     {open && <ModelConnectionForm language={language} initialDraft={initial} expectedRevisions={readyManagement.revisions} mutable backend={backend}

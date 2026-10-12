@@ -27,6 +27,7 @@
 .oc-meta {font-size:calc(12px * var(--hr-text-scale));color:var(--text-muted);line-height:1.8;}
 .oc-key-row {display:flex;align-items:center;gap:12px;padding:16px;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;}
 .oc-key-row>.row-main {flex:1;}
+.oc-key-mask {margin:5px 0 0;font-family:var(--font-mono,monospace);font-size:calc(12px * var(--hr-text-scale));color:var(--text-muted);overflow-wrap:anywhere;}
 .oc-key-actions {display:flex;gap:4px;}
 .oc-inline-error {color:var(--red);font-size:calc(12px * var(--hr-text-scale));margin:8px 0;}
 .oc-spinner {display:inline-block;width:16px;height:16px;flex:0 0 16px;border:2px solid var(--border-strong);border-top-color:var(--accent);border-radius:50%;animation:oc-spin .8s linear infinite;}

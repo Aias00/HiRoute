@@ -92,6 +92,13 @@ uses the caller's `ExecutionScope`, keeps the existing error categories, and
 does not read credentials or runtime-state stores. E2E configuration remains
 captured at construction, not reloaded on each resolution.
 
+[core_runtime/credentials.rs](src/core_runtime/credentials.rs) binds current managed Native
+Key IDs/order once at request admission. The control authority verifies the saved source,
+model and target; exact attempt leases still enforce current generation and revocation.
+Only the request-owned attempt view changes, leaving shared publication content immutable.
+[publication/lease_target.rs](src/publication/lease_target.rs) derives the same selected
+protocol target for admission and materialization; neither caller may substitute a destination.
+
 [planner.rs](src/planner.rs) validates the selected category and chooses eligible
 groups/candidates under the frozen policy. Availability relay may move execution
 from regular to primary within that category. History and assessment retain the

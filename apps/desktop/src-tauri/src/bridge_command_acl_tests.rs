@@ -3,6 +3,7 @@ use hiroute_application_api::{CanonicalDigest, ClientOperationViewV1};
 
 const MODEL_CONNECTION_COMMANDS: &[&str] = &[
     "compute_management_snapshot",
+    "compute_key_masks",
     "compute_scan",
     "prepare_discovered_model_connection",
     "register_protected_model_input",

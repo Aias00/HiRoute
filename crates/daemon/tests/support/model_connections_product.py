@@ -25,6 +25,8 @@ V2 = {'major': 2, 'minor': 0}
 class NativeUpstream:
     def __init__(self):
         self.requests = []
+        self.rejected_token = None
+        self.reject_reasoning_history = False
         self.lock = threading.Lock()
         owner = self
 
@@ -63,6 +65,16 @@ class NativeUpstream:
                 self.record(body)
                 assert self.path == '/v1/responses', self.path
                 assert body['model'] == MODEL, body
+                if self.headers.get('Authorization') == 'Bearer ' + str(owner.rejected_token):
+                    self.send_json(401, {'error': {'message': 'fixture rejected key', 'type': 'invalid_api_key'}})
+                    return
+                if owner.reject_reasoning_history and any(
+                    isinstance(item, dict) and item.get('encrypted_content')
+                    for item in body.get('input', [])
+                ):
+                    self.send_json(400, {'error': {'code': 'invalid_encrypted_content',
+                                                 'message': 'fixture history rejected'}})
+                    return
                 self.send_json(200, {
                     'id': 'resp_native_product',
                     'object': 'response',
@@ -414,7 +426,8 @@ def assert_saved_recheck_fences_before_network(product, upstream, saved):
         assert len(upstream.requests) == before, upstream.requests
 
 
-def publish_plan_and_agent(product, binding_id, native_model_mode='preserve_available'):
+def publish_plan_and_agent(product, binding_id, native_model_mode='preserve_available',
+                           *, economy_binding=None):
     assert native_model_mode in ('preserve_available', 'hiroute_only')
     product.editor = {
         'schema': 'hiroute.plan-editor/v2',
@@ -431,6 +444,16 @@ def publish_plan_and_agent(product, binding_id, native_model_mode='preserve_avai
         'limits': {'maximum_attempts': 2, 'request_timeout_ms': 30000,
                    'attempt_timeout_ms': 30000},
     }
+    if economy_binding is not None:
+        product.editor['mode'] = 'smart_saving'
+        product.editor['candidates'] = []
+        product.editor['smart'].update({
+            'economy': [{'binding_id': economy_binding}],
+            'primary': [{'binding_id': binding_id}],
+            'reselect_on_user_message': True,
+            'complex_keywords': ['complex-route'],
+        })
+        product.editor['limits']['maximum_attempts'] = 3
     change = {
         'schema': 'hiroute.plan-content-change/v2',
         'target': {'intent': 'create', 'creation_key': 'native-product-plan'},

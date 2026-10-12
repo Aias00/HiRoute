@@ -61,6 +61,16 @@ fn real_process_native_model_save_publishes_and_reaches_gateway() {
 }
 
 #[test]
+fn real_process_current_credential_pool_relays_without_republishing() {
+    run_script("credential_pool_product.py");
+}
+
+#[test]
+fn real_process_filtered_credential_pool_preserves_current_candidate_history() {
+    run_script_case("credential_pool_product.py", Some("filtered-history"));
+}
+
+#[test]
 fn real_process_route_options_preserve_opaque_ids_and_isolate_unavailable_models() {
     run_script("route_options_product.py");
 }

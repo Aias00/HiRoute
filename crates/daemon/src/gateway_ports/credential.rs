@@ -54,6 +54,24 @@ where
         Err(PortError::Unavailable("exact CredentialResolver required"))
     }
 
+    fn current_credential_refs(
+        &self,
+        request: CredentialLeaseRequest<'_>,
+    ) -> Result<Option<Vec<String>>, PortError> {
+        if request.connector_runtime != ConnectorRuntimeKind::BuiltinNative {
+            return Ok(None);
+        }
+        let target = validate_request(&request)?;
+        self.native
+            .current_native_credential_refs(&native_request(&request, target)?)
+            .map_err(|error| match error.code {
+                hiroute_domain::PortErrorCode::Unavailable => {
+                    PortError::Unavailable("NativeCredentialAuthorityV1")
+                }
+                _ => PortError::Rejected,
+            })
+    }
+
     async fn lease_exact(
         &self,
         request: CredentialLeaseRequest<'_>,
@@ -66,36 +84,7 @@ where
                 if request.authentication == &AuthenticationSemantics::None {
                     return Err(PortError::Rejected);
                 }
-                let native_request = NativeCredentialLeaseRequestV1 {
-                    schema_version: NATIVE_CREDENTIAL_LEASE_REQUEST_SCHEMA_V1.into(),
-                    stable_binding_id: request.stable_binding_id.into(),
-                    credential_id: request.credential_ref.into(),
-                    credential_destination_ref: request.credential_destination_ref.into(),
-                    excluded_key_ids: request
-                        .excluded_key_ids
-                        .iter()
-                        .map(ToString::to_string)
-                        .collect(),
-                    connector_runtime: request.connector_runtime,
-                    connector_id: request.connector_id.into(),
-                    upstream_protocol: domain_protocol(request.upstream_protocol),
-                    upstream_model_id: request.upstream_model_id.into(),
-                    native_transport_model: request.native_transport_model.into(),
-                    logical_endpoint: request.logical_endpoint.into(),
-                    operational_target: target,
-                    operational_target_digest: CanonicalDigest::parse(
-                        request.operational_target_digest,
-                    )
-                    .map_err(|_| PortError::Rejected)?,
-                    request_path: request.request_path.into(),
-                    runtime_epoch: request.runtime_epoch,
-                    target_epoch: request.target_epoch,
-                    protocol_profile_digest: CanonicalDigest::parse(
-                        request.protocol_profile_digest,
-                    )
-                    .map_err(|_| PortError::Rejected)?,
-                    authentication: domain_authentication(request.authentication)?,
-                };
+                let native_request = native_request(&request, target)?;
                 let Some(lease) = self
                     .native
                     .lease_native_credential(&native_request)
@@ -223,6 +212,40 @@ where
         scope.ensure_active().map_err(|_| PortError::Rejected)?;
         Ok(Some(lease))
     }
+}
+
+fn native_request(
+    request: &CredentialLeaseRequest<'_>,
+    target: GatewayOperationalTargetV1,
+) -> Result<NativeCredentialLeaseRequestV1, PortError> {
+    let native_request = NativeCredentialLeaseRequestV1 {
+        schema_version: NATIVE_CREDENTIAL_LEASE_REQUEST_SCHEMA_V1.into(),
+        stable_binding_id: request.stable_binding_id.into(),
+        credential_id: request.credential_ref.into(),
+        credential_destination_ref: request.credential_destination_ref.into(),
+        excluded_key_ids: request
+            .excluded_key_ids
+            .iter()
+            .map(ToString::to_string)
+            .collect(),
+        connector_runtime: request.connector_runtime,
+        connector_id: request.connector_id.into(),
+        upstream_protocol: domain_protocol(request.upstream_protocol),
+        upstream_model_id: request.upstream_model_id.into(),
+        native_transport_model: request.native_transport_model.into(),
+        logical_endpoint: request.logical_endpoint.into(),
+        operational_target: target,
+        operational_target_digest: CanonicalDigest::parse(request.operational_target_digest)
+            .map_err(|_| PortError::Rejected)?,
+        request_path: request.request_path.into(),
+        runtime_epoch: request.runtime_epoch,
+        target_epoch: request.target_epoch,
+        protocol_profile_digest: CanonicalDigest::parse(request.protocol_profile_digest)
+            .map_err(|_| PortError::Rejected)?,
+        authentication: domain_authentication(request.authentication)?,
+    };
+    native_request.validate().map_err(|_| PortError::Rejected)?;
+    Ok(native_request)
 }
 
 fn validate_request(

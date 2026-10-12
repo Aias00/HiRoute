@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-compute-key-masks"
+description = "Enables the compute_key_masks command without any pre-configured scope."
+commands.allow = ["compute_key_masks"]
+
+[[permission]]
+identifier = "deny-compute-key-masks"
+description = "Denies the compute_key_masks command without any pre-configured scope."
+commands.deny = ["compute_key_masks"]

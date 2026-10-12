@@ -244,6 +244,16 @@ impl NativeCredentialLeaseV1 {
 /// Replaceable Product authority. Local storage, a Vault client, or a remote authority can
 /// implement this same port; Gateway adapters never depend on SQLite types.
 pub trait NativeCredentialAuthorityV1: Send + Sync {
+    /// Non-secret current order for an already authorized Native candidate. `None` keeps
+    /// legacy exact users unchanged; an empty list means the managed candidate is unavailable.
+    /// This reads no secret and issues no lease. The frozen exact request supplies target proof.
+    fn current_native_credential_refs(
+        &self,
+        _request: &NativeCredentialLeaseRequestV1,
+    ) -> PortResult<Option<Vec<String>>> {
+        Ok(None)
+    }
+
     fn lease_native_credential(
         &self,
         request: &NativeCredentialLeaseRequestV1,

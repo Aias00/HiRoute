@@ -1,4 +1,4 @@
-import type { ManagedSource, ProtectedKeyInput } from './types';
+import type { KeyEdit, ManagedSource, PreparedKeyInput, ProtectedKeyInput } from './types';
 
 export type DraftKey = {
   draftId: string;
@@ -60,6 +60,14 @@ export function moveDraftKey(draft: ModelDraft, draftId: string, offset: -1 | 1)
   return { ...draft, keys };
 }
 
+/** Only the currently entered value; saved material is masked by the service. */
+export function maskEnteredKey(value: string): string {
+  const chars = [...value];
+  if (chars.length <= 2 || /[\u0000-\u001f\u007f-\u009f]/.test(value)) return '••••••••';
+  if (chars.length <= 12) return `••••••••${chars.slice(-2).join('')}`;
+  return `${chars.slice(0, 4).join('')}••••••••${chars.slice(-4).join('')}`;
+}
+
 export function protectedInputs(draft: ModelDraft): ProtectedKeyInput[] {
   return draft.keys
     .filter(key => !key.removed && key.replacement.length > 0)
@@ -77,4 +85,43 @@ export function clearSecrets(draft: ModelDraft): ModelDraft {
     addedSecret: '',
     keys: draft.keys.map(key => ({ ...key, replacement: '' })),
   };
+}
+
+/** Submit the entire final membership and order in the same atomic save. */
+export async function buildCredentialEdits(
+  source: ManagedSource,
+  draft: ModelDraft,
+  prepare: (sourceId: string, input: ProtectedKeyInput) => Promise<PreparedKeyInput>,
+): Promise<KeyEdit[]> {
+  const edits: KeyEdit[] = [];
+  const orderedIds: string[] = [];
+  for (const key of draft.keys) {
+    if (key.removed) {
+      if (key.keyId) edits.push({ action: 'remove', key_id: key.keyId, expected_generation: key.expectedGeneration });
+      continue;
+    }
+    let keyId = key.keyId;
+    if (key.replacement) {
+      const prepared = await prepare(source.source_id, {
+        draft_id: key.draftId, key_id: key.keyId,
+        expected_generation: key.expectedGeneration, value: key.replacement,
+      });
+      if (!prepared.key_id) throw new Error('CREDENTIAL_INPUT_INVALID');
+      keyId ??= prepared.key_id;
+      edits.push(key.keyId
+        ? { action: 'replace', key_id: key.keyId, expected_generation: key.expectedGeneration, input_candidate: prepared.input_candidate }
+        : { action: 'add', input_candidate: prepared.input_candidate });
+    }
+    if (!keyId) throw new Error('CREDENTIAL_INPUT_INVALID');
+    orderedIds.push(keyId);
+    const original = source.keys.find(item => item.key_id === key.keyId);
+    if (original ? original.enabled !== key.enabled : !key.enabled) {
+      edits.push({ action: 'set_enabled', key_id: keyId,
+        expected_generation: original ? key.expectedGeneration : 1, enabled: key.enabled });
+    }
+  }
+  if (edits.length || orderedIds.some((id, index) => id !== source.keys[index]?.key_id)) {
+    edits.push({ action: 'set_order', key_ids: orderedIds });
+  }
+  return edits;
 }

@@ -17,6 +17,8 @@ use super::model_connection_web::{
 #[derive(Serialize)]
 pub struct ProtectedModelInputRegistration {
     input_candidate: ComputeCandidateRefV2,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    key_id: Option<String>,
 }
 
 fn erase_envelope<T: Serialize>(
@@ -181,6 +183,24 @@ pub async fn release_subscription_check(
 }
 
 #[tauri::command]
+pub async fn compute_key_masks(
+    window: WebviewWindow,
+    state: State<'_, DesktopState>,
+    query: ComputeKeyMasksQueryV1,
+) -> Result<ComputeKeyMasksViewV1, DesktopFailure> {
+    main_window(&window)?;
+    let client = state
+        .0
+        .lock()
+        .await
+        .as_ref()
+        .ok_or("RESIDENT_UNAVAILABLE")?
+        .client
+        .clone();
+    crate::session::query(&client, GET_COMPUTE_KEY_MASKS_OPERATION_V1, &query).await
+}
+
+#[tauri::command]
 pub async fn compute_management_snapshot(
     window: WebviewWindow,
     state: State<'_, DesktopState>,
@@ -301,6 +321,7 @@ pub async fn register_protected_model_input(
     window: WebviewWindow,
     state: State<'_, DesktopState>,
     secret: String,
+    source_id: Option<String>,
 ) -> Result<ProtectedModelInputRegistration, DesktopFailure> {
     main_window(&window)?;
     #[cfg(unix)]
@@ -313,13 +334,19 @@ pub async fn register_protected_model_input(
             .ok_or("RESIDENT_UNAVAILABLE")?
             .resident
             .register_model_input(zeroize::Zeroizing::new(secret))?;
+        let key_id = source_id
+            .as_deref()
+            .map(|source| hiroute_domain::managed_key_id(source, &candidate.candidate_ref))
+            .transpose()
+            .map_err(|_| "CREDENTIAL_INPUT_INVALID")?;
         Ok(ProtectedModelInputRegistration {
             input_candidate: candidate,
+            key_id,
         })
     }
     #[cfg(not(unix))]
     {
-        let _ = (state, secret);
+        let _ = (state, secret, source_id);
         Err("TRUSTED_AUTHORITY_UNAVAILABLE".into())
     }
 }
@@ -555,7 +582,8 @@ pub async fn apply_compute_save(
         .await?
         .as_mut()
         .ok_or("RESIDENT_UNAVAILABLE")?
-        .prepare_model_save_confirmation(request, language)?;
+        .prepare_model_save_confirmation(request, language)
+        .await?;
     match confirm(
         &window,
         &state,

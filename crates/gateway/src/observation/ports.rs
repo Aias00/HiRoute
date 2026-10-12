@@ -32,6 +32,13 @@ impl CredentialResolver for ObservedCredentialResolver {
         self.inner.acquire(credential_ref)
     }
 
+    fn current_credential_refs(
+        &self,
+        request: CredentialLeaseRequest<'_>,
+    ) -> Result<Option<Vec<String>>, PortError> {
+        self.inner.current_credential_refs(request)
+    }
+
     async fn lease_exact(
         &self,
         request: CredentialLeaseRequest<'_>,

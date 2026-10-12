@@ -428,13 +428,8 @@ pub(super) fn managed_key_id(
     source_id: &str,
     candidate: &ComputeCandidateRefV2,
 ) -> Result<String, ComputeManagementPlanningErrorV2> {
-    let digest = CanonicalDigest::of(&(
-        "hiroute.compute-management-key/v2",
-        source_id,
-        &candidate.candidate_ref,
-    ))
-    .map_err(|_| ComputeManagementPlanningErrorV2::InvalidKeyEdit)?;
-    Ok(format!("credential/managed-{}", digest_suffix(&digest, 24)))
+    hiroute_domain::managed_key_id(source_id, &candidate.candidate_ref)
+        .map_err(|_| ComputeManagementPlanningErrorV2::InvalidKeyEdit)
 }
 
 pub(super) fn managed_binding_id(

@@ -34,6 +34,7 @@ fn main() {
             "model_reference_query",
             "effective_price_query",
             "compute_management_snapshot",
+            "compute_key_masks",
             "compute_scan",
             "prepare_discovered_model_connection",
             "compute_connection_options",

@@ -46,6 +46,8 @@ use crate::content_ref::{
 };
 use crate::context_hold::{ContextHoldStore, ContextRequest, HoldCompletion, begin_context};
 use crate::replay::{ReplayError, ReplayManager, ReplayReader, ReplayStore};
+#[path = "core_runtime/credentials.rs"]
+mod credentials;
 use crate::runtime::{
     ProductionProvider, ProductionReplaySeed, ProductionReplaySeedEnvelope, ProductionRouteContext,
 };
@@ -393,7 +395,7 @@ impl ProductionGatewayRuntime {
         protocol: IngressProtocol,
         declared_content_length: Option<usize>,
         ingress_prefix: Vec<ChargedBytes>,
-        authorized: Box<AuthorizedRequestPlan>,
+        mut authorized: Box<AuthorizedRequestPlan>,
         budget: StreamBudget,
     ) -> Pin<Box<dyn Future<Output = Result<SessionReuse, TransportError>> + Send + 'a>> {
         Box::pin(async move {
@@ -1058,7 +1060,7 @@ impl ProductionGatewayRuntime {
                         "sealed candidate profile mismatch".into(),
                     ));
                 }
-                let profile = serde_json::to_vec(&SealedCandidateExecutionV1 {
+                let execution = SealedCandidateExecutionV1 {
                     schema_version: SEALED_CANDIDATE_EXECUTION_SCHEMA_V1.into(),
                     stable_target_key: candidate.stable_target_key,
                     credential_destination_ref: candidate.credential_destination_ref,
@@ -1071,8 +1073,29 @@ impl ProductionGatewayRuntime {
                     protocol_set_digest: candidate.protocol_profile_digest,
                     profile_digest: facts.profile_digest.clone(),
                     protocol_profile: facts.protocol_profile.clone(),
-                })
-                .map_err(|_| TransportError::Io("planner profile serialization failed".into()))?;
+                };
+                match credentials::bind_current(&self.ports, &mut authorized, binding, &execution) {
+                    Ok(false) => continue,
+                    Ok(true) => {}
+                    Err(_) => {
+                        return write_typed_error_phase(
+                            session,
+                            StatusCode::BAD_GATEWAY,
+                            "CREDENTIAL_AUTHORITY_FAILED",
+                            "credential",
+                        )
+                        .await;
+                    }
+                }
+                let attempt = authorized
+                    .core_binding()
+                    .resolve_attempt(binding)
+                    .map_err(|_| {
+                        TransportError::Io("current candidate binding unavailable".into())
+                    })?;
+                let profile = serde_json::to_vec(&execution).map_err(|_| {
+                    TransportError::Io("planner profile serialization failed".into())
+                })?;
                 frozen_candidates.push(DecisionCandidateAuthority {
                     binding,
                     stable_target: ObservationLabel::new(frozen.stable_binding_id.clone())
@@ -1120,6 +1143,15 @@ impl ProductionGatewayRuntime {
                 );
             }
             drop(fact_by_id);
+            if frozen_candidates.is_empty() {
+                return write_typed_error_phase(
+                    session,
+                    StatusCode::BAD_GATEWAY,
+                    "NO_ELIGIBLE_CANDIDATE",
+                    "credential",
+                )
+                .await;
+            }
             let switch_fallback = planner_input
                 .previous_success_candidate_id
                 .as_deref()
@@ -1135,7 +1167,22 @@ impl ProductionGatewayRuntime {
                             .get(1)
                             .is_some_and(|second| second.candidate_id == *id)
                 })
-                .and_then(|_| frozen_candidates.get(1).map(|candidate| candidate.binding));
+                .and_then(|id| {
+                    frozen_candidates
+                        .iter()
+                        .find(|candidate| {
+                            candidate
+                                .candidate_id
+                                .as_ref()
+                                .is_some_and(|candidate_id| candidate_id.as_str() == id)
+                        })
+                        .map(|candidate| candidate.binding)
+                })
+                .filter(|binding| {
+                    frozen_candidates
+                        .first()
+                        .is_some_and(|first| first.binding != *binding)
+                });
             let canonical_request = Box::new(planner_input.request);
             let reused_cleanup = hold_ticket.as_ref().and_then(|ticket| {
                 let prefix = ticket.cleaned_prefix_len?;
@@ -1150,14 +1197,15 @@ impl ProductionGatewayRuntime {
                 .filter(|ticket| !ticket.message_history_continues)
                 .and(planner_input.previous_success_candidate_id.as_ref())
                 .and_then(|previous| {
-                    let first = planner_output.ledger.ordered_candidates.first()?;
-                    if first.candidate_id == *previous {
+                    let first = frozen_candidates.first()?;
+                    let first_id = first.candidate_id.as_ref()?.as_str();
+                    if first_id == previous {
                         return None;
                     }
                     let profile = &planner_input
                         .candidates
                         .iter()
-                        .find(|candidate| candidate.candidate_id == first.candidate_id)?
+                        .find(|candidate| candidate.candidate_id == first_id)?
                         .protocol_profile;
                     let normal =
                         adapters::project_candidate_request_template(&canonical_request, profile)
@@ -1168,10 +1216,8 @@ impl ProductionGatewayRuntime {
                         Some(canonical_request.messages.len()),
                     )
                     .ok()?;
-                    (normal.bytes != cleaned.bytes).then_some((
-                        frozen_candidates.first()?.binding,
-                        canonical_request.messages.len(),
-                    ))
+                    (normal.bytes != cleaned.bytes)
+                        .then_some((first.binding, canonical_request.messages.len()))
                 });
             let reasoning_cleanup = Arc::new(crate::runtime::ReasoningCleanup::new(
                 cleanup_eligible,

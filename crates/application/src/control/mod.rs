@@ -438,6 +438,13 @@ pub enum ComputeManagementControlError {
 /// Production adapter boundary for the source-level model connection aggregate. Public payloads
 /// remain closed DTOs; candidate facts and protected input slots stay behind this port.
 pub trait ComputeManagementControlPort: Send + Sync {
+    fn compute_key_masks(
+        &self,
+        _query: &hiroute_application_api::ComputeKeyMasksQueryV1,
+    ) -> Result<hiroute_application_api::ComputeKeyMasksViewV1, ComputeManagementControlError> {
+        Err(ComputeManagementControlError::Unavailable)
+    }
+
     fn manage_subscription_login(
         &self,
         _request: hiroute_application_api::ComputeSubscriptionLoginRequestV1,
