@@ -11,6 +11,7 @@ The parser rejects duplicate object members at every nesting level (including es
 aliases of the same key) and trailing JSON. `src/request_input/fields.rs` audits the
 typed request's declared object fields, including skipped optional fields and tagged
 unit variants; maps/JSON Values keep free keys and typed map values remain checked.
+Serde's existing positional struct arrays remain accepted and checked in field order.
 Current request DTOs have matching Serialize/Deserialize names without aliases or
 flatten; future asymmetric codecs require an explicit adapter and regression tests.
 This CLI boundary must not tighten persisted Domain recovery readers. Command owners

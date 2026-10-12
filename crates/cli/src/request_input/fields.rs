@@ -4,6 +4,7 @@
 //! Serialize exposes both emitted and skipped struct fields, including buffered tagged
 //! variants that can hide ignored fields from a deserializer wrapper. Maps and JSON Values
 //! retain their free keys; typed map values and sequence elements are checked recursively.
+//! Serde's accepted positional struct arrays use the same declared field order.
 
 use serde::Serialize;
 use serde::ser::{self, SerializeMap, SerializeSeq, SerializeStruct};
@@ -222,8 +223,12 @@ impl SerializeStruct for Object<'_> {
         key: &'static str,
         value: &T,
     ) -> Result<(), Error> {
+        let index = self.fields.len();
         self.fields.push(key);
-        if let Some(source) = self.source.and_then(|source| source.get(key)) {
+        if let Some(source) = self.source.and_then(|source| match source {
+            Value::Array(values) => values.get(index),
+            _ => source.get(key),
+        }) {
             validate(value, source)?;
         }
         Ok(())

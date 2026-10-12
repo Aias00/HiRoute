@@ -135,6 +135,18 @@ fn typed_requests_reject_nested_unknowns_and_keep_declared_optional_and_dynamic_
         (vec!["agents", "connect", "preview"], agent.clone(), 6),
         (vec!["decision", "services", "apply"], decision.clone(), 6),
     ];
+    let mut positional_spec = decision.clone();
+    positional_spec["schema_version"] = json!([1, 0]);
+    positional_spec["spec"] = json!([
+        {"major":1,"minor":0}, "decision.services.apply", null, {"arbitrary":1}
+    ]);
+    cases.push((
+        vec!["decision", "services", "apply"],
+        positional_spec.clone(),
+        6,
+    ));
+    positional_spec["spec"][0]["typo"] = Value::Null;
+    cases.push((vec!["decision", "services", "apply"], positional_spec, 2));
     let mut authorization = json!({"action":"result","operation":{
         "operation_id":"operation/one","state":"succeeded","sequence":1,"cancellable":false
     }});
