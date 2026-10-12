@@ -340,17 +340,24 @@ fn gateway_show_waits_for_native_discovery_and_honors_control_timeout() {
                     .unwrap();
                 let mut stream = BufReader::new(stream);
                 let mut line = String::new();
-                stream.read_line(&mut line).unwrap();
+                if !stream.read_line(&mut line).is_ok_and(|count| count > 0) {
+                    return;
+                }
                 let hello: ClientHelloV1 = serde_json::from_str(&line).unwrap();
                 let hello = negotiate_hello(&hello).unwrap();
-                writeln!(
+                if writeln!(
                     stream.get_mut(),
                     "{}",
                     serde_json::to_string(&hello).unwrap()
                 )
-                .unwrap();
+                .is_err()
+                {
+                    return;
+                }
                 line.clear();
-                stream.read_line(&mut line).unwrap();
+                if !stream.read_line(&mut line).is_ok_and(|count| count > 0) {
+                    return;
+                }
                 let request: LocalControlWireRequestV2 = serde_json::from_str(&line).unwrap();
                 assert_eq!(request.operation_id, operation);
                 // Native executable probes legitimately exceed the TCP readiness probe's 750ms.
