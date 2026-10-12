@@ -33,7 +33,7 @@ fn observation_reader_waits_for_complete_rows_and_rejects_closed_corruption() {
         let mut snapshot = prefix.clone();
         snapshot.extend_from_slice(&second_bytes[..end]);
         fs::write(&path, snapshot).unwrap();
-        assert_eq!(read_records(&path), [first.clone()]);
+        assert_eq!(read_records(&path).as_slice(), std::slice::from_ref(&first));
         let mut writer = fs::OpenOptions::new().append(true).open(&path).unwrap();
         writer.write_all(&second_bytes[end..]).unwrap();
         writer.write_all(b"\n").unwrap();
