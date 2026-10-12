@@ -1,6 +1,8 @@
 //! A real Qoder print call selects the persisted provider; no route or credential overlay.
 use super::*;
 
+const NATIVE_LOGIN_REQUIRED: &str = "LIVE_NATIVE_LOGIN_REQUIRED";
+
 impl LocalControlAdapter {
     #[cfg(unix)]
     pub(super) fn execute_qoder_live_attempt(
@@ -113,9 +115,6 @@ impl LocalControlAdapter {
             thread::sleep(Duration::from_millis(20));
         };
         child.stop().map_err(|_| failure(CLIENT_FAILED))?;
-        if !success {
-            return Err(failure(CLIENT_FAILED));
-        }
         let mut bytes = zeroize::Zeroizing::new(Vec::new());
         std::fs::File::open(&output_path)
             .map_err(|_| failure(CLIENT_OUTPUT_INVALID))?
@@ -125,7 +124,7 @@ impl LocalControlAdapter {
         if bytes.len() > OUTPUT_LIMIT {
             return Err(failure(CLIENT_OUTPUT_INVALID));
         }
-        let identity = parse_qoder_output(&bytes).ok_or_else(|| failure(CLIENT_OUTPUT_INVALID))?;
+        let identity = parse_qoder_output(&bytes, success).map_err(failure)?;
         let response_digest = CanonicalDigest::of_bytes(&bytes);
         self.verify_live_receipt(trust, &[identity], &response_digest, deadline)
     }
@@ -145,31 +144,51 @@ impl LocalControlAdapter {
     }
 }
 
-fn parse_qoder_output(bytes: &[u8]) -> Option<NativeAgentObservationIdentityV1> {
+fn parse_qoder_output(
+    bytes: &[u8],
+    process_succeeded: bool,
+) -> Result<NativeAgentObservationIdentityV1, &'static str> {
+    let invalid = if process_succeeded {
+        CLIENT_OUTPUT_INVALID
+    } else {
+        CLIENT_FAILED
+    };
     let mut result = None;
     for line in bytes
         .split(|byte| *byte == b'\n')
         .filter(|line| !line.iter().all(u8::is_ascii_whitespace))
     {
-        let value: serde_json::Value = serde_json::from_slice(line).ok()?;
+        let value: serde_json::Value = serde_json::from_slice(line).map_err(|_| invalid)?;
         if value["type"] == "result" {
-            if result.is_some()
-                || value["subtype"] != "success"
-                || value["is_error"] != false
-                || value["result"].as_str()?.trim() != LIVE_PROMPT_RESPONSE
-            {
-                return None;
+            if result.is_some() || !value["subtype"].is_string() {
+                return Err(invalid);
             }
-            let session_id = value["session_id"].as_str()?;
-            if !valid_native_identity(session_id) {
-                return None;
-            }
-            result = Some(NativeAgentObservationIdentityV1::QoderSession {
-                session_id: session_id.into(),
+            let message = value["result"].as_str().ok_or(invalid)?.trim();
+            result = Some(if value["is_error"].as_bool().ok_or(invalid)? {
+                // Qoder 1.1.65 reports this native prerequisite as a terminal error,
+                // even with subtype=success and exit 0. Never expose its raw output.
+                Err(if message == "Not logged in · Please run /login" {
+                    NATIVE_LOGIN_REQUIRED
+                } else {
+                    CLIENT_FAILED
+                })
+            } else if !process_succeeded {
+                Err(CLIENT_FAILED)
+            } else {
+                if value["subtype"] != "success" || message != LIVE_PROMPT_RESPONSE {
+                    return Err(invalid);
+                }
+                let session_id = value["session_id"].as_str().ok_or(invalid)?;
+                if !valid_native_identity(session_id) {
+                    return Err(invalid);
+                }
+                Ok(NativeAgentObservationIdentityV1::QoderSession {
+                    session_id: session_id.into(),
+                })
             });
         }
     }
-    result
+    result.unwrap_or(Err(invalid))
 }
 
 #[cfg(test)]
@@ -179,7 +198,7 @@ mod tests {
     fn qoder_live_requires_successful_terminal_marker_and_exact_native_identity() {
         let valid = br#"{"type":"result","subtype":"success","is_error":false,"result":"HIROUTE_LIVE_CHECK_OK","session_id":"native-session"}"#;
         assert!(
-            matches!(parse_qoder_output(valid),Some(NativeAgentObservationIdentityV1::QoderSession{session_id}) if session_id=="native-session")
+            matches!(parse_qoder_output(valid, true),Ok(NativeAgentObservationIdentityV1::QoderSession{session_id}) if session_id=="native-session")
         );
         for changed in [
             String::from_utf8(valid.to_vec())
@@ -194,7 +213,47 @@ mod tests {
                 std::str::from_utf8(valid).unwrap()
             ),
         ] {
-            assert!(parse_qoder_output(changed.as_bytes()).is_none());
+            assert!(parse_qoder_output(changed.as_bytes(), true).is_err());
+        }
+        assert_eq!(parse_qoder_output(valid, false).unwrap_err(), CLIENT_FAILED);
+    }
+
+    #[test]
+    fn qoder_live_reports_native_login_failure_regardless_of_exit_status() {
+        let native_failure = "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":true,\"result\":\"Not logged in · Please run /login\",\"duration_ms\":0,\"total_cost_usd\":0}";
+        for process_succeeded in [true, false] {
+            assert_eq!(
+                parse_qoder_output(native_failure.as_bytes(), process_succeeded).unwrap_err(),
+                NATIVE_LOGIN_REQUIRED
+            );
+        }
+        let unknown_error =
+            native_failure.replace("Not logged in · Please run /login", "Model unavailable");
+        assert_eq!(
+            parse_qoder_output(unknown_error.as_bytes(), true).unwrap_err(),
+            CLIENT_FAILED
+        );
+    }
+
+    #[test]
+    fn qoder_live_does_not_infer_login_from_success_or_invalid_output() {
+        let native_failure = "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":true,\"result\":\"Not logged in · Please run /login\"}";
+        for invalid in [
+            native_failure.replace("\"is_error\":true", "\"is_error\":false"),
+            native_failure.replace("\"is_error\":true", "\"is_error\":\"true\""),
+            native_failure.replace("\"subtype\":\"success\",", ""),
+            format!("{native_failure}\n{native_failure}"),
+            format!("{native_failure}\ninvalid json"),
+            "Not logged in · Please run /login".into(),
+        ] {
+            assert_eq!(
+                parse_qoder_output(invalid.as_bytes(), true).unwrap_err(),
+                CLIENT_OUTPUT_INVALID
+            );
+            assert_eq!(
+                parse_qoder_output(invalid.as_bytes(), false).unwrap_err(),
+                CLIENT_FAILED
+            );
         }
     }
 }

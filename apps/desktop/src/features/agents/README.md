@@ -25,6 +25,11 @@ to their production owners and executable contracts.
 Qoder, Pi and DSH share the additional-route editor and explicitly selected Plan IDs
 through `qoder_additional`, `pi_additional` and `dsh_additional`. It does not
 edit the native default or show native catalogs, fixed-source choices or import controls.
+Qoder's editor explains that the selected Qoder CLI must complete its own `/login`
+before using these routes. Saving configuration does not perform native sign-in or
+make a model call. A valid native login rejection in the separate Qoder Live check
+remains a failed surface result with `LIVE_NATIVE_LOGIN_REQUIRED`; other native
+business errors use `LIVE_CLIENT_FAILED`, while malformed output remains distinct.
 Its model configuration uses the existing Preview, protected token and independent
 restore flow. A model restore keeps the collaboration Skill; a collaboration restore
 keeps the model routes. Token updates retain the saved ecosystem-specific selection.
