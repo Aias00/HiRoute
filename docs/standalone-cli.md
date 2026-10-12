@@ -567,6 +567,26 @@ still owned by HiRoute; concurrent user changes conflict instead of being overwr
 Code uses its public profile/launcher contract. Do not configure a Responses-only Codex plan
 for a surface that supports only Messages.
 
+## JSON request input
+
+Every command that accepts `--request-stdin` also accepts `--request-file PATH`:
+
+```sh
+hiroute routing preview --request-file route-preview.json --output json
+# Existing pipelines and shell redirection remain supported:
+hiroute routing preview --request-stdin --output json < route-preview.json
+```
+
+Choose exactly one source. Both use the same bounded UTF-8 JSON parser and typed
+command schema; unknown fields, duplicate object members, trailing JSON, repeated
+sources and mixtures with human options return `INVALID_ARGUMENTS` before contacting
+Local Control. A file must be regular. Relative paths resolve from the calling
+working directory; prefix a filename beginning with `-` with `./`. Quote paths
+containing spaces. Existing byte limits remain in force (normally 1 MiB; operation
+lookup and Worker dependency selection use 64 KiB). A request file never replaces
+the separate protected-input or inherited capability channel. `worker --file`
+continues to carry prompt text under its existing contract.
+
 ## Sessions, actual selection, and usage facts
 
 After an Agent or Worker request completes:
@@ -580,6 +600,25 @@ hiroute value show --routing PLAN_ID --session SESSION_ID --output json
 hiroute observation plan-quality samples --plan-id PLAN_ID --output json
 hiroute observation plan-quality samples --session-id SESSION_ID --limit 50 --output json
 ```
+
+A positional `sessions receipt RECEIPT_ID` retains the v1 RoutingReceipt query.
+To read a v2 Facts page, use the exact logical `request_id` returned by the v2
+session timeline (a session ID or v1 receipt ID is a different locator):
+
+```json
+{
+  "schema": "hiroute.observation.query/v2",
+  "intent": {
+    "view": "facts",
+    "query": {"request_id": "REQUEST_ID_FROM_TIMELINE", "limit": 100, "cursor": null}
+  }
+}
+```
+
+Save this as `facts-request.json`, then run
+`hiroute sessions receipt --request-file facts-request.json --output json`.
+`--request-stdin` accepts the identical request. The response is a v2 Facts page;
+use its returned cursor with the same request ID to read further pages.
 
 `sessions show` returns facts and timeline by default, not conversation bodies. Ordered
 RoutingReceipt facts such as `route_decision`, `attempt_started`, and `usage_and_cache` record

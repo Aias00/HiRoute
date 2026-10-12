@@ -48,6 +48,18 @@ pub(crate) fn split_globals(
             index += 2;
             continue;
         }
+        if arguments[index] == "--request-file" {
+            remaining.push(arguments[index].clone());
+            let Some(path) = arguments
+                .get(index + 1)
+                .filter(|path| crate::request_input::valid_positional(path))
+            else {
+                return Err(split_error(globals, worker));
+            };
+            remaining.push(path.clone());
+            index += 2;
+            continue;
+        }
         if worker {
             if arguments[index] == "--" {
                 remaining.extend(arguments[index..].iter().cloned());

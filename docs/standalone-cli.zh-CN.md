@@ -489,6 +489,24 @@ Standalone daemon 已是 resident service，因此 preview 不要求 Desktop log
 并发用户修改会导致冲突而不是被覆盖。Claude Code 使用其公开 profile/launcher 合同；不要把
 Codex 的 Responses 计划直接配置给只支持 Messages 的 surface。
 
+## JSON 请求输入
+
+所有接受 `--request-stdin` 的命令也接受 `--request-file PATH`：
+
+```sh
+hiroute routing preview --request-file route-preview.json --output json
+# 原有管道和 shell 重定向保持可用：
+hiroute routing preview --request-stdin --output json < route-preview.json
+```
+
+输入来源只能选一个。两种方式共用有大小上限的 UTF-8 JSON 解析器和命令类型校验；
+未知字段、重复 JSON 成员、多段 JSON、重复或混合来源、与人工选项混用均在连接
+Local Control 前返回 `INVALID_ARGUMENTS`。文件必须是普通文件，相对路径以调用者
+工作目录为准；以 `-` 开头的文件名加 `./` 前缀，带空格的路径需要引号。
+保留现有大小限制（通常为 1 MiB，Operation 查找和 Worker 依赖选择为 64 KiB）。
+请求文件不替代独立的 protected-input 或继承的 capability 通道。
+Worker 原有 `--file` 继续读取提示词文本。
+
 ## 会话、实际选择与用量事实
 
 一次 Agent 或 Worker 请求完成后：
@@ -500,6 +518,26 @@ hiroute sessions receipt RECEIPT_ID --output json
 hiroute sessions status --output json
 hiroute value show --routing PLAN_ID --session SESSION_ID --output json
 ```
+
+位置参数 `sessions receipt RECEIPT_ID` 保留 v1 RoutingReceipt 查询。
+查询 v2 Facts 时，使用 v2 session timeline 返回的准确逻辑 `request_id`；
+Session ID、v1 Receipt ID 与此定位符不同：
+
+```json
+{
+  "schema": "hiroute.observation.query/v2",
+  "intent": {
+    "view": "facts",
+    "query": {"request_id": "REQUEST_ID_FROM_TIMELINE", "limit": 100, "cursor": null}
+  }
+}
+```
+
+保存为 `facts-request.json` 后运行
+`hiroute sessions receipt --request-file facts-request.json --output json`。
+`--request-stdin` 接受相同请求，返回 v2 Facts 分页；后续页沿用同一 request ID
+并传入返回的 cursor。
+
 
 `sessions show` 默认只返回事实和 timeline，不返回对话正文。RoutingReceipt 的
 `route_decision`、`attempt_started`、`usage_and_cache` 等有序事实给出实际计划、模型选择、Attempt

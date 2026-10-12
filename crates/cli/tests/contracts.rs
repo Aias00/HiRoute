@@ -91,13 +91,13 @@ fn release_manifest_is_a_strict_subset_of_planned_registry() {
 }
 
 #[test]
-fn released_worker_dependency_selection_declares_only_its_request_stdin_channel() {
+fn released_worker_dependency_selection_declares_both_json_sources() {
     let command = release_manifest()
         .commands
         .into_iter()
         .find(|command| command.command_id == "worker.dependencies.select")
         .unwrap();
-    assert_eq!(command.stdin_channels, ["request_stdin"]);
+    assert_eq!(command.stdin_channels, ["request_stdin", "request_file"]);
     assert!(!command.help.usage.contains("capability"));
     assert!(!command.help.effects.contains("capability"));
     assert!(!command.help_document().contains("--capability-fd"));

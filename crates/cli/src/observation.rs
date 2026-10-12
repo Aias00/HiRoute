@@ -1,5 +1,6 @@
 //! Finite CLI codecs for observation and value reads.
 
+#[cfg(test)]
 use std::io::Read;
 
 use hiroute_application_api::{
@@ -9,11 +10,17 @@ use hiroute_application_api::{
 };
 use serde_json::Value;
 
-use super::{next, read_json};
+use super::next;
+#[cfg(test)]
+use super::read_json;
+use crate::request_input::{MAX_REQUEST_BYTES, RequestInput, valid_positional};
 
 pub(super) fn plan_quality_samples(options: &[String]) -> Result<Value, ErrorCode> {
-    if options == ["--request-stdin"] {
-        return observation_read_payload(ObservationCommand::PlanQuality, std::io::stdin());
+    if let Some(input) = RequestInput::optional(options)? {
+        return observation_value_payload(
+            ObservationCommand::PlanQuality,
+            input.read(MAX_REQUEST_BYTES)?,
+        );
     }
     let mut query = hiroute_application_api::PlanQualitySamplesQuery {
         competence: None,
@@ -71,8 +78,11 @@ pub(super) fn plan_quality_samples(options: &[String]) -> Result<Value, ErrorCod
 }
 
 pub(super) fn sessions_list(options: &[String]) -> Result<Value, ErrorCode> {
-    if options == ["--request-stdin"] {
-        return observation_read_payload(ObservationCommand::Sessions, std::io::stdin());
+    if let Some(input) = RequestInput::optional(options)? {
+        return observation_value_payload(
+            ObservationCommand::Sessions,
+            input.read(MAX_REQUEST_BYTES)?,
+        );
     }
     let mut query = SessionListRequestV1::default();
     let mut index = 0;
@@ -107,10 +117,13 @@ pub(super) fn sessions_list(options: &[String]) -> Result<Value, ErrorCode> {
 }
 
 pub(super) fn session_show(options: &[String]) -> Result<Value, ErrorCode> {
-    if options == ["--request-stdin"] {
-        return observation_read_payload(ObservationCommand::Timeline, std::io::stdin());
+    if let Some(input) = RequestInput::optional(options)? {
+        return observation_value_payload(
+            ObservationCommand::Timeline,
+            input.read(MAX_REQUEST_BYTES)?,
+        );
     }
-    let Some(id) = options.first().filter(|value| !value.is_empty()) else {
+    let Some(id) = options.first().filter(|value| valid_positional(value)) else {
         return Err(ErrorCode::InvalidArguments);
     };
     let content = if options.len() == 1 {
@@ -133,9 +146,18 @@ pub(super) fn session_show(options: &[String]) -> Result<Value, ErrorCode> {
 }
 
 pub(super) fn session_receipt(options: &[String]) -> Result<Value, ErrorCode> {
+    if let Some(input) = RequestInput::optional(options)? {
+        return observation_value_payload(
+            ObservationCommand::Facts,
+            input.read(MAX_REQUEST_BYTES)?,
+        );
+    }
     let [id] = options else {
         return Err(ErrorCode::InvalidArguments);
     };
+    if !valid_positional(id) {
+        return Err(ErrorCode::InvalidArguments);
+    }
     serde_json::to_value(SessionLookupV1 {
         id: id.clone(),
         content: None,
@@ -144,8 +166,11 @@ pub(super) fn session_receipt(options: &[String]) -> Result<Value, ErrorCode> {
 }
 
 pub(super) fn value_show(options: &[String]) -> Result<Value, ErrorCode> {
-    if options == ["--request-stdin"] {
-        return observation_read_payload(ObservationCommand::Value, std::io::stdin());
+    if let Some(input) = RequestInput::optional(options)? {
+        return observation_value_payload(
+            ObservationCommand::Value,
+            input.read(MAX_REQUEST_BYTES)?,
+        );
     }
     let mut query = ObservationValueReportOptionsV2::default();
     let mut index = 0;
@@ -195,19 +220,27 @@ pub(super) fn value_show(options: &[String]) -> Result<Value, ErrorCode> {
 enum ObservationCommand {
     Sessions,
     Timeline,
+    Facts,
     Value,
     PlanQuality,
 }
 
+#[cfg(test)]
 fn observation_read_payload(
     command: ObservationCommand,
     reader: impl Read,
 ) -> Result<Value, ErrorCode> {
-    let value = read_json(reader)?;
-    let request: ObservationReadRequestV2 =
-        serde_json::from_value(value).map_err(|_| ErrorCode::InvalidArguments)?;
+    observation_value_payload(command, read_json(reader)?)
+}
+
+fn observation_value_payload(
+    command: ObservationCommand,
+    value: Value,
+) -> Result<Value, ErrorCode> {
+    let request: ObservationReadRequestV2 = crate::request_input::deserialize(value)?;
     let matches_command = match (command, &request.intent) {
         (ObservationCommand::Sessions, ObservationReadIntentV2::Sessions(_)) => true,
+        (ObservationCommand::Facts, ObservationReadIntentV2::Facts(_)) => true,
         (ObservationCommand::Timeline, ObservationReadIntentV2::Timeline(query)) => {
             query.session_id.is_some()
         }
