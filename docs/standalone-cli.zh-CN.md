@@ -388,6 +388,41 @@ hiroute routing show PLAN_ID --output json
 editor。过期 revision/digest 会返回 conflict，旧发布继续服务；重新读取、编辑、preview 后再 apply。
 普通模型请求只执行路由，不会因为计划启用了 Worker 而隐式启动任务。
 
+## 配置 Agent 协作
+
+协作可独立启用、修改触发方式和关闭，不需要手工选择 context。从 `hiroute agents scan`
+取得精确 Agent ID，然后运行：
+
+```sh
+hiroute agents collaboration configure agent_codex_default --trigger explicit --preview --output json
+hiroute agents collaboration configure agent_codex_default --trigger explicit --idempotency-key codex-collab-1 --output json
+hiroute agents collaboration configure agent_codex_default --trigger delegate-by-default --idempotency-key codex-collab-2 --output json
+hiroute agents collaboration status agent_codex_default --output json
+hiroute agents collaboration disable agent_codex_default --preview --output json
+hiroute agents collaboration disable agent_codex_default --yes --idempotency-key codex-collab-off-1 --output json
+```
+
+`explicit` 只在明确要求时委派；`delegate-by-default` 由 Agent 判断是否委派。入口也接受扫描
+得到的其他受支持 Agent ID。它与 Desktop 一样按协作意图选择位置：Codex 使用
+`codex_access.root_context_id`，模型 profile 已配置时也使用原始 HOME 的 root context；
+其他 Agent 使用自己的 context。模型和访问 token 保持原设置。
+
+`--preview` 不执行本地检查、写入提交记录或保存配置。实际保存仅在预览报告能力证明缺失时
+执行既有的本地有界检查，然后重新预览，不产生上游模型调用。检查失败、文件冲突或仍有
+blocker 时停止保存。关闭使用协作自己的 restore point，并要求 `--yes` 确认。
+
+保存前会在上文 CLI 持久状态目录的 `cli-collaboration/` 写入私有、不含凭据的原始提交记录，
+按 control endpoint 摘要隔离实例；清空运行目录或重启不会丢失记录。提交标识为 1–200 个
+ASCII 字母、数字或 `. _ : -`，不能以 `-` 开头。
+可省略提交标识，由 CLI 生成并在 `data.cli_submission.idempotency_key` 返回；自动化应明确
+传入 `--idempotency-key`。相同意图用同一标识重试时沿用已冻结请求；不同意图需要新标识。
+响应丢失时，读取返回的恢复 action 或用相同标识重试。`accepted` 表示 Operation 已接收，
+须用 `hiroute operations get OPERATION_ID --output json` 和协作 status 确认完成。
+记录损坏或版本不符会停止重试；不要通过删除记录掩盖未确定的提交状态。
+
+下方原始 JSON 接口仍采用显式传入的 context。协作请求误用 Codex model profile 时，保留
+`CAPABILITY_DENIED` 并返回 `COLLABORATION_ROOT_CONTEXT_REQUIRED` 提示，不会自动重定向。
+
 ## 接入、检查和恢复 Codex
 
 ```sh

@@ -45,6 +45,8 @@ pub enum ControlReadError {
     Unavailable,
     Corrupt,
     Denied,
+    /// A model-only Codex profile cannot own the collaboration Skill in the original HOME.
+    CollaborationRootRequired,
 }
 
 pub trait ClassifierDiagnosticPort: Send + Sync {

@@ -232,7 +232,10 @@ fn map_control_read(error: hiroute_application::control::ControlReadError) -> Po
         hiroute_application::control::ControlReadError::SnapshotChanged => PortErrorCode::Conflict,
         hiroute_application::control::ControlReadError::Unavailable => PortErrorCode::Unavailable,
         hiroute_application::control::ControlReadError::NotFound => PortErrorCode::NotFound,
-        hiroute_application::control::ControlReadError::Denied => PortErrorCode::PermissionDenied,
+        hiroute_application::control::ControlReadError::Denied
+        | hiroute_application::control::ControlReadError::CollaborationRootRequired => {
+            PortErrorCode::PermissionDenied
+        }
         hiroute_application::control::ControlReadError::Corrupt => PortErrorCode::Corrupt,
     };
     PortError::new(code, "release.compute.discovery")

@@ -7,6 +7,7 @@
 
 mod args;
 mod client;
+mod collaboration;
 mod control_plane;
 mod host_commands;
 mod managed_launch;
@@ -102,6 +103,9 @@ where
         };
     }
     if let Some(execution) = host_commands::execute(&path_and_options, &globals) {
+        return execution;
+    }
+    if let Some(execution) = collaboration::execute(&path_and_options, &globals) {
         return execution;
     }
     let Some((descriptor, option_start)) = resolve_callable(&path_and_options) else {
@@ -616,6 +620,12 @@ fn render(envelope: MachineEnvelopeV2<Value>) -> CliExecution {
     let stderr = if envelope
         .error
         .as_ref()
+        .is_some_and(|error| error.message_key == "error.agent_collaboration_root_context_required")
+    {
+        "Codex 协作配置属于原始 HOME 的 root context；请使用 agents scan 中的 codex_access.root_context_id，或运行 hiroute agents collaboration configure <AGENT_ID> --trigger explicit。模型 profile context 不支持协作配置。\n".to_owned()
+    } else if envelope
+        .error
+        .as_ref()
         .is_some_and(|error| error.code == ErrorCode::DaemonUnavailable)
     {
         DAEMON_UNAVAILABLE_HINT.to_owned()
@@ -658,7 +668,7 @@ pub fn root_help() -> String {
         .collect::<Vec<_>>()
         .join("\n");
     format!(
-        "HiRoute headless product CLI\n\nUsage\n  hiroute <command> [options]\n\nPublic command families\n{commands}\n\nHost management: run 'hiroute service --help', 'hiroute gateway --help', 'hiroute protected-input --help', or 'hiroute subscription-proxy --help'.\nApplication/Local Control: run 'hiroute schema list --output json' and 'hiroute schema show --command-id <ID> --output json', then append '--help' to a complete command path, for example 'hiroute worker dependencies discover --help'.\n"
+        "HiRoute headless product CLI\n\nUsage\n  hiroute <command> [options]\n\nPublic command families\n{commands}\n\nHost management: run 'hiroute service --help', 'hiroute gateway --help', 'hiroute protected-input --help', or 'hiroute subscription-proxy --help'.\nAgent collaboration workflow: run 'hiroute agents collaboration --help' to enable, edit, disable or inspect collaboration independently of model settings.\nApplication/Local Control: run 'hiroute schema list --output json' and 'hiroute schema show --command-id <ID> --output json', then append '--help' to a complete command path, for example 'hiroute worker dependencies discover --help'.\n"
     )
 }
 

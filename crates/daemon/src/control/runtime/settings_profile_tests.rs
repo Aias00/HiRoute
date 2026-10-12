@@ -91,6 +91,34 @@ fn profile_lifecycle_inheritance_slot_and_safe_restore() {
     fs::write(&root, original).unwrap();
     apply(&service, &runtime, spec.clone(), "create-profile");
     assert_eq!(fs::read_to_string(&root).unwrap(), original);
+    // Scan selects the occupied model profile. Collaboration must stay in the original HOME.
+    let preserved_profile = fs::read(&profile).unwrap();
+    let misplaced_skill = json!({"schema_version":{"major":2,"minor":0},"context_id":context,
+        "model":{"intent":"keep"},"collaboration":{"intent":"configure","settings":{"trigger_mode":"explicit"}}});
+    for operation in ["PreviewAgentConnectionChange", "ApplyAgentConnectionChange"] {
+        let payload = if operation.starts_with("Preview") {
+            json!({"spec":misplaced_skill})
+        } else {
+            let digest = CanonicalDigest::of_bytes(b"misplaced-skill");
+            json!({"spec":misplaced_skill,"accept_digest":digest,"dependency_digest":digest,
+                "expected_revisions":{"target":0,"dependencies":{}},"idempotency_key":"misplaced-skill"})
+        };
+        let rejected = service.dispatch_wire(request(operation, payload, None));
+        let error = rejected.error.unwrap();
+        assert_eq!(error.code, api::ErrorCode::CapabilityDenied);
+        assert_eq!(
+            error.message_key,
+            "error.agent_collaboration_root_context_required"
+        );
+        assert_eq!(rejected.next_actions[0].command_id, "agents.scan");
+        assert_eq!(
+            rejected.next_actions[0].reason_code,
+            "COLLABORATION_ROOT_CONTEXT_REQUIRED"
+        );
+        assert!(rejected.data.is_none());
+        assert_eq!(fs::read(&profile).unwrap(), preserved_profile);
+        assert_eq!(fs::read_to_string(&root).unwrap(), original);
+    }
     let configured = fs::read_to_string(&profile).unwrap();
     assert!(configured.contains("requires_openai_auth = false"));
     // Root and profile have distinct context ids but share the same home slot.

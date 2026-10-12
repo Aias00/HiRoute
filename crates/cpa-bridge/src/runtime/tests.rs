@@ -781,7 +781,10 @@ fn crash_restart_is_bounded_and_reports_child_exit_separately() {
     let backend = Arc::new(FakeBackend::default());
     let control = Arc::new(FakeControl::default());
     control.set_accounts(vec![snapshot(CpaAccountKind::Codex, 'a', "gpt-5.5")]);
-    let runtime = fixture_runtime(&root, Arc::clone(&backend), control, 1);
+    let mut runtime = fixture_runtime(&root, Arc::clone(&backend), control, 1);
+    // Count these crashes within the production window, independently of how long
+    // the real account/file checks between them take on a busy test host.
+    runtime.spec.restart_policy.window = RestartPolicy::default().window;
     runtime.start().unwrap();
     let materialized = runtime
         .materialize_account("connector.cpa.codex", "endpoint.cpa.codex")
@@ -842,11 +845,23 @@ fn crash_restart_is_bounded_and_reports_child_exit_separately() {
     assert_eq!(restarted.address(), target.address());
     assert_eq!(restarted.runtime_epoch(), target.runtime_epoch());
     assert_eq!(restarted.target_epoch(), target.target_epoch());
+    {
+        let mut inner = runtime.inner.lock();
+        assert_eq!(inner.crashes.len(), 1);
+        // Model slow account/file validation between crashes without sleeping or
+        // depending on the host finishing that work within the old one-second window.
+        *inner.crashes.front_mut().unwrap() = std::time::Instant::now() - Duration::from_secs(2);
+    }
     backend.crash_latest(31);
-    assert!(matches!(
-        runtime.discover_registered_sources(),
-        Err(CpaLifecycleError::CrashLoop(CpaExit { code: Some(31) }))
-    ));
+    let outcome = runtime.discover_registered_sources();
+    assert!(
+        matches!(
+            &outcome,
+            Err(CpaLifecycleError::CrashLoop(CpaExit { code: Some(31) }))
+        ),
+        "second crash must exhaust the restart budget: {outcome:?}"
+    );
+    assert_eq!(backend.spawn_count(), 2);
     assert_eq!(runtime.last_exit(), Some(CpaExit { code: Some(31) }));
 }
 

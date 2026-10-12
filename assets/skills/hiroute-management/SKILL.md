@@ -108,6 +108,15 @@ invent capability, reasoning, price, timeout, or delegation choices.
   `agents connect preview` and `agents connect apply`. Standalone already supplies its resident
   service, so do not add Desktop login-item steps. After status is configured, the user continues
   through the original `codex` entry.
+- For collaboration, read `hiroute agents collaboration --help`, then use `configure` with the
+  exact discovered Agent ID and `--trigger explicit` or `--trigger delegate-by-default`.
+  `--preview` is read-only; save performs only missing bounded local checks before Preview/Apply.
+  Use a stable `--idempotency-key` and retry that same intent/key after uncertain delivery.
+  `status` observes collaboration, and `disable --preview` followed by user-authorized
+  `disable --yes` restores only the collaboration facet. Accepted is pending, not completion.
+  The workflow selects Codex's original root context while keeping its model profile unchanged.
+  Advanced JSON collaboration requests must use `codex_access.root_context_id`, never the
+  top-level model profile context. A root-context diagnostic is not a request for another token.
 - Use only profile-compatible plan protocols. Do not attach a Responses-only plan to a
   Messages-only surface.
 - Save the returned restore point. Restore only through `agents restore preview` and

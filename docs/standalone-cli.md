@@ -459,6 +459,45 @@ submit the complete editor. A stale revision/digest returns conflict while the o
 continues serving. Read again, edit, Preview, and Apply. A normal model request performs only
 routing and never starts a Worker implicitly because the plan enables delegation.
 
+## Configure Agent collaboration
+
+Enable, edit or disable collaboration independently of model settings. Copy the exact Agent ID
+from `hiroute agents scan`, then use:
+
+```sh
+hiroute agents collaboration configure agent_codex_default --trigger explicit --preview --output json
+hiroute agents collaboration configure agent_codex_default --trigger explicit --idempotency-key codex-collab-1 --output json
+hiroute agents collaboration configure agent_codex_default --trigger delegate-by-default --idempotency-key codex-collab-2 --output json
+hiroute agents collaboration status agent_codex_default --output json
+hiroute agents collaboration disable agent_codex_default --preview --output json
+hiroute agents collaboration disable agent_codex_default --yes --idempotency-key codex-collab-off-1 --output json
+```
+
+`explicit` delegates only when requested; `delegate-by-default` lets the Agent decide.
+The workflow also accepts other supported Agent IDs returned by scan. Like Desktop, it selects
+the collaboration context: Codex uses `codex_access.root_context_id` even with an occupied
+model profile, and other Agents use their own context. Model and access-token settings remain.
+
+`--preview` runs no local check, writes no submission record and saves no configuration.
+A save runs an existing bounded local check only for missing capabilities reported by Preview,
+then previews again. It makes no provider model call. Failed checks, file conflicts or remaining
+blockers stop the save. Disable uses collaboration's own restore point and requires `--yes`.
+
+Before submission, the CLI freezes the credential-free request in a private file under
+`cli-collaboration/` in the persistent CLI state directory listed above, isolated by control
+endpoint digest. Runtime cleanup or reboot does not discard it. Keys contain 1–200 ASCII
+letters/digits or `. _ : -` and cannot start with `-`. Omit the key to generate one, returned as
+`data.cli_submission.idempotency_key`; automation should supply `--idempotency-key` explicitly.
+A retry with the same intent and key reuses the exact frozen request. A different intent needs
+a new key. After uncertain delivery, follow the returned recovery action or retry with that
+same key. `accepted` means the Operation was admitted: use
+`hiroute operations get OPERATION_ID --output json` and collaboration status to confirm completion.
+A corrupt or incompatible record stops replay; deleting it must not hide uncertain admission.
+
+The advanced JSON interfaces below retain exact context semantics. A collaboration request
+using Codex's model profile still returns `CAPABILITY_DENIED`, with
+`COLLABORATION_ROOT_CONTEXT_REQUIRED` guidance, instead of silently redirecting the request.
+
 ## Connect, check, and restore Codex
 
 ```sh

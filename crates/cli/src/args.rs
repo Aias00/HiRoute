@@ -32,10 +32,22 @@ pub(crate) fn split_globals(
     arguments: Vec<String>,
 ) -> Result<(Vec<String>, Globals), GlobalSplitError> {
     let worker = is_worker_invocation(&arguments);
+    let collaboration = arguments
+        .windows(2)
+        .any(|pair| pair == ["agents", "collaboration"]);
     let mut remaining = Vec::new();
     let mut globals = Globals::default();
     let mut index = 0;
     while index < arguments.len() {
+        if collaboration && matches!(arguments[index].as_str(), "--trigger" | "--idempotency-key") {
+            remaining.push(arguments[index].clone());
+            let Some(value) = arguments.get(index + 1) else {
+                return Err(split_error(globals, worker));
+            };
+            remaining.push(value.clone());
+            index += 2;
+            continue;
+        }
         if worker {
             if arguments[index] == "--" {
                 remaining.extend(arguments[index..].iter().cloned());

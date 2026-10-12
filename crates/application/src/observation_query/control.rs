@@ -360,7 +360,9 @@ fn decode_cursor(cursor: &str) -> Result<SessionCursor<'_>, ObservationQueryErro
 
 fn map_control(error: ControlReadError) -> ObservationQueryError {
     match error {
-        ControlReadError::Denied => ObservationQueryError::Unauthorized,
+        ControlReadError::Denied | ControlReadError::CollaborationRootRequired => {
+            ObservationQueryError::Unauthorized
+        }
         ControlReadError::NotFound => ObservationQueryError::NotFound,
         ControlReadError::Corrupt => ObservationQueryError::Corrupt,
         ControlReadError::Unavailable | ControlReadError::SnapshotChanged => {
