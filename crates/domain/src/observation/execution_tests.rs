@@ -250,6 +250,55 @@ fn legacy_execution_trust_without_plan_display_name_remains_readable() {
 }
 
 #[test]
+fn released_product_execution_digest_is_recovery_only_with_pricing() {
+    // Exact Product contract digest at supported 0.3.0 ce4c4802 and 0.3.1 13856abd.
+    let released_digest = CanonicalDigest::parse(
+        "sha256:80b4ff13af8abc79d7721fea42141300beade2acf1d2659983ceaafcdc6e4799",
+    )
+    .unwrap();
+    for mut envelope in gateway_fact_envelopes() {
+        envelope.schema_digest = released_digest.clone();
+        if matches!(envelope.fact, ExecutionFactV1::AttemptStarted { .. }) {
+            envelope.pricing = Some(
+                serde_json::from_value(serde_json::json!({
+                    "schema_version": "hiroute.observation.execution-pricing/v1",
+                    "request_generation": null,
+                    "captured_at_ms": 0,
+                    "attempt_execution_at_ms": 0,
+                    "quote": null,
+                    "reference_quote": null,
+                    "unknown_reason": "snapshot_unavailable"
+                }))
+                .unwrap(),
+            );
+        }
+        assert_eq!(
+            envelope.validate(),
+            Err(ExecutionFactError::UnsupportedSchema)
+        );
+        envelope.validate_persisted_contract().unwrap();
+        let original = CanonicalDigest::of(&envelope).unwrap();
+        let decoded: ExecutionFactEnvelopeV1 =
+            serde_json::from_slice(&serde_json::to_vec(&envelope).unwrap()).unwrap();
+        assert_eq!(decoded, envelope);
+        assert_eq!(CanonicalDigest::of(&decoded).unwrap(), original);
+    }
+    let mut custom = gateway_fact_envelopes().remove(0);
+    custom.schema_digest = released_digest;
+    let ExecutionFactV1::RouteDecision(route) = &mut custom.fact else {
+        unreachable!()
+    };
+    route.requirements.tool_choice = ToolChoiceRequirementV1::RequiredNamed {
+        tool_kind: ToolKindRequirementV1::Custom,
+        name: "read_number".into(),
+    };
+    assert_eq!(
+        custom.validate_persisted_contract(),
+        Err(ExecutionFactError::InvalidFact)
+    );
+}
+
+#[test]
 fn typed_dynamic_edges_roundtrip_without_an_untyped_field_sink() {
     let mut unavailable = candidate();
     unavailable.ingress_protocol = IngressProtocolV1::Unknown;
@@ -556,6 +605,54 @@ fn candidate() -> CandidateDecisionFactV1 {
         cache_affinity: false,
         compute_scope_order: 0,
         ranking_reasons: vec![RankingReasonCodeV1::StableTieBreak],
+    }
+}
+
+#[test]
+fn released_named_function_choice_preserves_canonical_bytes_and_digest() {
+    // Frozen Product serializer shape at supported 0.2.0 d625e653, 0.3.0 ce4c4802 and
+    // 0.3.1 13856abd. Do not regenerate this input with the current serializer.
+    let released = serde_json::json!({"kind": "required_named", "name": "read_number"});
+    let decoded: ToolChoiceRequirementV1 = serde_json::from_value(released.clone()).unwrap();
+    assert_eq!(
+        decoded,
+        ToolChoiceRequirementV1::RequiredNamed {
+            tool_kind: ToolKindRequirementV1::Function,
+            name: "read_number".into(),
+        }
+    );
+    assert_eq!(serde_json::to_value(&decoded).unwrap(), released);
+    assert_eq!(
+        CanonicalDigest::of(&decoded).unwrap(),
+        CanonicalDigest::of(&released).unwrap()
+    );
+    let mut explicit = released;
+    explicit["tool_kind"] = serde_json::json!("function");
+    assert_eq!(
+        serde_json::from_value::<ToolChoiceRequirementV1>(explicit).unwrap(),
+        decoded
+    );
+}
+
+#[test]
+fn custom_tool_choice_stays_distinct_and_strict() {
+    let custom =
+        serde_json::json!({"kind": "required_named", "tool_kind": "custom", "name": "read_number"});
+    let decoded: ToolChoiceRequirementV1 = serde_json::from_value(custom.clone()).unwrap();
+    assert_eq!(
+        decoded,
+        ToolChoiceRequirementV1::RequiredNamed {
+            tool_kind: ToolKindRequirementV1::Custom,
+            name: "read_number".into(),
+        }
+    );
+    assert_eq!(serde_json::to_value(decoded).unwrap(), custom);
+    for invalid in [
+        serde_json::json!({"kind": "required_named", "tool_kind": "unknown", "name": "read_number"}),
+        serde_json::json!({"kind": "required_named", "tool_kind": null, "name": "read_number"}),
+        serde_json::json!({"kind": "required_named", "tool_kind": "function", "name": "read_number", "extra": true}),
+    ] {
+        assert!(serde_json::from_value::<ToolChoiceRequirementV1>(invalid).is_err());
     }
 }
 

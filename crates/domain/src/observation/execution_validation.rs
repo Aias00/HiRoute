@@ -26,7 +26,11 @@ impl ExecutionFactEnvelopeV1 {
             && self.schema_version == EXECUTION_FACT_SCHEMA_V2
             && self.schema_digest.as_str()
                 == "sha256:de91d4f2333db66f0ec3f8b63ce192267dee0a56b65f34180b06996b232fb2c6";
-        if !(current || persisted_v1 || persisted_pre_branch)
+        let persisted_function_only = allow_persisted_v1
+            && self.schema_version == EXECUTION_FACT_SCHEMA_V2
+            && self.schema_digest.as_str()
+                == "sha256:80b4ff13af8abc79d7721fea42141300beade2acf1d2659983ceaafcdc6e4799";
+        if !(current || persisted_v1 || persisted_pre_branch || persisted_function_only)
             || self.channel != ExecutionFactChannelV1::ExecutionFact
         {
             return Err(ExecutionFactError::UnsupportedSchema);
@@ -51,6 +55,18 @@ impl ExecutionFactEnvelopeV1 {
         }
         self.trust.validate()?;
         self.fact.validate()?;
+        if !current
+            && matches!(
+                &self.fact,
+                ExecutionFactV1::RouteDecision(route)
+                    if matches!(route.requirements.tool_choice,
+                        ToolChoiceRequirementV1::RequiredNamed {
+                            tool_kind: ToolKindRequirementV1::Custom, ..
+                        })
+            )
+        {
+            return Err(ExecutionFactError::InvalidFact);
+        }
         if let ExecutionFactV1::BranchAssessmentRecorded {
             trigger_request_id, ..
         } = &self.fact
@@ -59,7 +75,9 @@ impl ExecutionFactEnvelopeV1 {
             return Err(ExecutionFactError::InvalidFact);
         }
         if let Some(pricing) = &self.pricing {
-            if !current || !matches!(self.fact, ExecutionFactV1::AttemptStarted { .. }) {
+            if !(current || persisted_function_only)
+                || !matches!(self.fact, ExecutionFactV1::AttemptStarted { .. })
+            {
                 return Err(ExecutionFactError::InvalidFact);
             }
             pricing.validate()?;

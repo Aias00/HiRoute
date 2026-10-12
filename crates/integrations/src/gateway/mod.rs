@@ -3,6 +3,8 @@
 //! These functions perform no lookup, caching, queueing, retry, or business inference. Every
 //! input first decodes as the Gateway-owned type and every output validates as the Product-owned
 //! type, so an unknown field or schema drift fails before a receiver or credential authority.
+//! Named tool choices retain kind and name. Product's canonical Function encoding omits the
+//! default kind to preserve released immutable fact/receipt digests; Custom stays explicit.
 
 use hiroute_domain::{
     CONVERSATION_CONTENT_PORT_DIGEST_V2, CONVERSATION_CONTENT_SCHEMA_V2,

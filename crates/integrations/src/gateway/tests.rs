@@ -332,6 +332,60 @@ fn gateway_adapter_tags_provider_native_reasoning_for_product_receipts() {
 }
 
 #[test]
+fn gateway_adapter_preserves_every_tool_choice_identity() {
+    use hiroute_gateway::server::core_runtime::model_ir::{ToolChoice, ToolKindV1};
+
+    for (choice, expected) in [
+        (ToolChoice::None, json!({"kind": "none"})),
+        (ToolChoice::Auto, json!({"kind": "auto"})),
+        (ToolChoice::RequiredAny, json!({"kind": "required_any"})),
+        (
+            ToolChoice::RequiredNamed {
+                tool_kind: ToolKindV1::Function,
+                name: "read_number".into(),
+            },
+            // Product's canonical Function form preserves released fact/receipt digests.
+            json!({"kind": "required_named", "name": "read_number"}),
+        ),
+        (
+            ToolChoice::RequiredNamed {
+                tool_kind: ToolKindV1::Custom,
+                name: "read_number".into(),
+            },
+            json!({"kind": "required_named", "tool_kind": "custom", "name": "read_number"}),
+        ),
+    ] {
+        let mut fact = complete_execution_facts().remove(0);
+        fact["requirements"]["tool_choice"] = serde_json::to_value(&choice).unwrap();
+        let payload = execution_payload(fact, 1, false);
+        let projected = project_execution_payload(&serde_json::to_vec(&payload).unwrap())
+            .unwrap_or_else(|error| panic!("{choice:?} was rejected: {error:?}"));
+        assert_eq!(
+            serde_json::to_value(projected.fact).unwrap()["requirements"]["tool_choice"],
+            expected,
+            "{choice:?} lost its callable identity"
+        );
+    }
+}
+
+#[test]
+fn gateway_adapter_rejects_incomplete_or_unknown_named_tool_identity() {
+    for choice in [
+        json!({"kind": "required_named", "name": "read_number"}),
+        json!({"kind": "required_named", "tool_kind": "unknown", "name": "read_number"}),
+        json!({"kind": "required_named", "tool_kind": "function", "name": "read_number", "extra": true}),
+    ] {
+        let mut fact = complete_execution_facts().remove(0);
+        fact["requirements"]["tool_choice"] = choice;
+        let payload = execution_payload(fact, 1, false);
+        assert_eq!(
+            project_execution_payload(&serde_json::to_vec(&payload).unwrap()),
+            Err(GatewayProjectionError::InvalidInput),
+        );
+    }
+}
+
+#[test]
 fn gateway_adapter_projects_every_execution_fact_variant_without_loss() {
     let facts = complete_execution_facts();
     assert_eq!(facts.len(), 9);
