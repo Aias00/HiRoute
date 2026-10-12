@@ -77,11 +77,29 @@ fn invocation(arguments: &[&str]) -> Invocation {
     )
     .unwrap()
 }
-fn run(script: &Script, arguments: &[&str]) -> MachineEnvelopeV2<Value> {
+fn test_directory() -> tempfile::TempDir {
     let directory = tempfile::tempdir().unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        // A shared state ancestor is legal. Do not let the runner's private umask
+        // hide an incorrectly selected receipt namespace in this fixture.
+        std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    directory
+}
+fn receipt_root(directory: &tempfile::TempDir) -> std::path::PathBuf {
+    receipt::root(
+        &directory.path().join("state"),
+        &directory.path().join("run/control.sock"),
+    )
+    .unwrap()
+}
+fn run(script: &Script, arguments: &[&str]) -> MachineEnvelopeV2<Value> {
+    let directory = test_directory();
     let response = flow::run(
         script,
-        &directory.path().join("receipts"),
+        &receipt_root(&directory),
         invocation(arguments),
         "request".into(),
     );
@@ -163,8 +181,8 @@ fn preview_is_read_only_and_other_agents_use_their_own_context() {
                 ),
             ),
         ]);
-        let directory = tempfile::tempdir().unwrap();
-        let receipts = directory.path().join("receipts");
+        let directory = test_directory();
+        let receipts = receipt_root(&directory);
         let response = flow::run(
             &script,
             &receipts,
@@ -280,7 +298,7 @@ fn uncertain_delivery_replays_the_frozen_request_and_changed_intent_conflicts_be
         SubmissionState::NotSent,
         SubmissionState::MayHaveReachedServer,
     ] {
-        let directory = tempfile::tempdir().unwrap();
+        let directory = test_directory();
         let runtime = directory.path().join("run");
         std::fs::create_dir(&runtime).unwrap();
         let state = directory.path().join("state");
@@ -466,7 +484,7 @@ fn invalid_or_unconfirmed_arguments_are_rejected_without_transport() {
 
 #[test]
 fn concurrent_submissions_preserve_the_first_frozen_request_and_isolate_endpoints() {
-    let directory = tempfile::tempdir().unwrap();
+    let directory = test_directory();
     let state = directory.path().join("state");
     let receipts = receipt::root(&state, &directory.path().join("one/control.sock")).unwrap();
     let selection =
@@ -527,8 +545,8 @@ fn concurrent_submissions_preserve_the_first_frozen_request_and_isolate_endpoint
 
 #[test]
 fn corrupted_or_nonprivate_receipts_never_reconstruct_an_apply() {
-    let directory = tempfile::tempdir().unwrap();
-    let receipts = directory.path().join("receipts");
+    let directory = test_directory();
+    let receipts = receipt_root(&directory);
     let script = Script::new(vec![
         ("ScanAgents", scan("agent_codex_default", true)),
         (
@@ -556,6 +574,22 @@ fn corrupted_or_nonprivate_receipts_never_reconstruct_an_apply() {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
+        let mode =
+            |path: &std::path::Path| std::fs::metadata(path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode(directory.path()), 0o755);
+        for private_directory in [receipts.parent().unwrap(), receipts.as_path()] {
+            assert_eq!(mode(private_directory), 0o700);
+            std::fs::set_permissions(private_directory, std::fs::Permissions::from_mode(0o755))
+                .unwrap();
+            // A nonprivate namespace or endpoint must reject replay before any Control
+            // call and preserve the existing permissions instead of repairing them.
+            let replay = flow::run(&script, &receipts, invocation(&args), "request".into());
+            assert_eq!(replay.status, MachineStatus::Unavailable);
+            assert_eq!(replay.error.unwrap().code, ErrorCode::DaemonUnavailable);
+            assert_eq!(mode(private_directory), 0o755);
+            std::fs::set_permissions(private_directory, std::fs::Permissions::from_mode(0o700))
+                .unwrap();
+        }
         assert_eq!(
             std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
             0o600
