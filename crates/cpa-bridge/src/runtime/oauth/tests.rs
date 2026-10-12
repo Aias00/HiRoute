@@ -8,6 +8,7 @@ fn login(kind: CpaAccountKind) -> Value {
     serde_json::json!({
         "status": "ok",
         "state": "fixture_state",
+        "hiroute_callback_mode": "automatic",
         "url": format!("https://{host}/oauth/authorize?state=fixture_state&code_challenge_method=S256"),
         // Even if upstream adds sensitive metadata, the public DTO is an explicit allowlist.
         "refresh_token": "must-not-be-returned",
@@ -19,6 +20,7 @@ fn oauth_login_projection_returns_only_bound_provider_url_and_state() {
     for kind in [CpaAccountKind::Codex, CpaAccountKind::Claude] {
         let parsed = parse_login(kind, &login(kind)).unwrap();
         assert_eq!(parsed.state, "fixture_state");
+        assert!(!parsed.manual_callback_required);
         assert!(!format!("{parsed:?}").contains("fixture_state"));
         assert!(!parsed.authorization_url.contains("must-not-be-returned"));
         let other = match kind {
@@ -26,6 +28,21 @@ fn oauth_login_projection_returns_only_bound_provider_url_and_state() {
             CpaAccountKind::Claude => CpaAccountKind::Codex,
         };
         assert!(parse_login(kind, &login(other)).is_err());
+    }
+}
+
+#[test]
+fn oauth_callback_mode_is_explicit_and_closed() {
+    let mut value = login(CpaAccountKind::Codex);
+    value["hiroute_callback_mode"] = "manual".into();
+    assert!(
+        parse_login(CpaAccountKind::Codex, &value)
+            .unwrap()
+            .manual_callback_required
+    );
+    for invalid in [Value::Null, true.into(), "unknown".into()] {
+        value["hiroute_callback_mode"] = invalid;
+        assert!(parse_login(CpaAccountKind::Codex, &value).is_err());
     }
 }
 

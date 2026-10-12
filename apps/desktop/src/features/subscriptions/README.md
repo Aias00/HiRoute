@@ -6,6 +6,11 @@ WebView never receives credential files, tokens or provider error bodies. Browse
 only in the current interaction. Manual callback text is cleared on submission and enters
 the native `submit_subscription_login_callback` command, which registers the exact pending
 session's protected input reference before ordinary Local Control submission.
+The pinned CPA receives normal browser callbacks on temporary loopback listeners.
+The existing optional `reason_code` identifies manual fallback when that listener
+is unavailable: show guidance before an explicit browser-open action. A received
+callback alone never establishes login; the existing status observer must confirm
+authorization. The manual completion form remains available in both modes.
 
 List/status recover server-owned sessions after reopening. Closing an interaction cancels
 the pending sessions it started, including a start response that arrives after closing.

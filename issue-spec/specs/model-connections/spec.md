@@ -251,6 +251,27 @@ and stops refresh while retaining credentials; remove-login first revokes saved
 route access, then stops the exact instance and deletes its owned credentials.
 Neither claims provider-global OAuth revocation.
 
+### Requirement: Independent sign-in receives browser callbacks locally
+
+CPA owns temporary browser callback listeners for the existing Codex
+`http://localhost:1455/auth/callback` and Claude `http://localhost:54545/callback`
+redirects. Bind only available IPv4/IPv6 loopback families. Each provider has at
+most one pending sign-in; saved accounts do not retain a callback listener.
+
+Browser and protected manual input MUST share atomic, one-use admission for the
+exact provider/session/state. Invalid, stale and duplicate input cannot replace
+an accepted callback. A failed callback-file publication permits retry. The
+browser acknowledges reception without claiming token exchange or sign-in success.
+Release listeners after reception, cancellation, expiry or failure, before slow
+token exchange. Do not redirect or reflect callback secrets in browser responses.
+
+A port conflict MUST close partial listeners and retain the same pending session
+for manual completion. Desktop explains this mode before the user explicitly opens
+the browser, and accepts the full return URL through the existing protected input.
+Automatic reception opens the browser normally and retains manual completion as
+a fallback. Successful sign-in still requires explicit Check/Save; it does not
+change enabled-account or routing limits.
+
 ### Requirement: Borrowed subscription refresh cannot enlarge saved membership
 
 Only approved, saved, enabled NativeBorrowed sources may maintain their association
