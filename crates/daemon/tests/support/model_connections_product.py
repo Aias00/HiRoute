@@ -564,6 +564,8 @@ def assert_live_credential_switches(product, upstream, saved):
 
 
 def assert_session_record(product, started_ms, denied_binding=None):
+    # Grants survive daemon restarts; the reopened query needs a fresh capability.
+    grant_key = 'native-product-reopened' if denied_binding is not None else 'native-product'
     query = {
         'schema': 'hiroute.observation.query/v2',
         'intent': {'view': 'sessions', 'query': {
@@ -584,7 +586,7 @@ def assert_session_record(product, started_ms, denied_binding=None):
     capability = product.grant('ListSessionsV2', {
         'change_digest': 'sha256:' + hashlib.sha256(encoded(query)).hexdigest(),
         'expected_revisions': revisions,
-    }, 'native-product-sessions')
+    }, grant_key + '-sessions')
     deadline = time.monotonic() + 30
     while True:
         sessions = product.cli('sessions list', query, capability)[1]['data']['sessions']
@@ -603,7 +605,7 @@ def assert_session_record(product, started_ms, denied_binding=None):
     timeline_capability = product.grant('GetSessionTimelineV2', {
         'change_digest': 'sha256:' + hashlib.sha256(encoded(timeline)).hexdigest(),
         'expected_revisions': revisions,
-    }, 'native-product-timeline')
+    }, grant_key + '-timeline')
     while True:
         requests = product.cli(
             'sessions show', timeline, timeline_capability)[1]['data']['requests']
