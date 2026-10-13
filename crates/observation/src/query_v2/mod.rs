@@ -14,6 +14,9 @@ mod search;
 mod search_tests;
 #[cfg(test)]
 mod search_window_tests;
+mod session_search;
+#[cfg(test)]
+mod session_search_tests;
 mod sessions;
 #[cfg(test)]
 mod sessions_tests;

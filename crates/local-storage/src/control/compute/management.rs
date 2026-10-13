@@ -14,6 +14,7 @@ use serde_json::Value;
 
 mod compensation;
 mod references;
+mod runtime_pool;
 
 pub(in crate::control) use compensation::reconcile as reconcile_compensation;
 

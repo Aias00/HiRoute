@@ -25,9 +25,11 @@ mod commands;
 pub use classifier_diagnostic::*;
 pub use client_access::*;
 mod compute_control;
+mod compute_key_masks;
 mod compute_management;
 mod compute_management_v3;
 mod compute_management_view;
+pub use compute_key_masks::*;
 mod generated;
 mod model_catalog;
 mod model_connections;
@@ -230,10 +232,12 @@ mod protocol_tests {
         assert!(discover.help.output.contains("omits the CAS revisions"));
 
         let select = command_by_id("worker.dependencies.select").unwrap();
-        assert_eq!(select.stdin_channels, ["request_stdin"]);
+        assert_eq!(select.stdin_channels, ["request_stdin", "request_file"]);
         assert_eq!(select.idempotency, "deterministic_request_replay");
         let help = select.help_document();
         for required in [
+            "--request-stdin",
+            "--request-file <PATH>",
             "harness",
             "adapter_path",
             "cli_path",

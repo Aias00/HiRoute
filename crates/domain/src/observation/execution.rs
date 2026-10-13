@@ -19,7 +19,7 @@ use super::{
 /// through `validate_persisted_contract`; they are never accepted by live ingestion.
 pub const EXECUTION_FACT_SCHEMA_V2: &str = "hiroute.observation.product-execution-envelope/v2";
 pub const EXECUTION_FACT_PORT_DIGEST_V2: &str =
-    "sha256:80b4ff13af8abc79d7721fea42141300beade2acf1d2659983ceaafcdc6e4799";
+    "sha256:4f0dbcc9f7862133e73e451f64d7a6d6e5de146d958ac8bf3a4d1acc885b6b1d";
 
 /// Gateway profile digests are canonical except on its explicit degraded-observation path.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -362,13 +362,34 @@ pub struct ReasonLedgerEntryV1 {
     pub group_id: Option<String>,
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolKindRequirementV1 {
+    #[default]
+    Function,
+    Custom,
+}
+
+impl ToolKindRequirementV1 {
+    fn is_function(&self) -> bool {
+        *self == Self::Function
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ToolChoiceRequirementV1 {
     None,
     Auto,
     RequiredAny,
-    RequiredNamed { name: String },
+    RequiredNamed {
+        // Released Product facts identify only functions. Keep their canonical bytes and
+        // authenticated digests; Custom must retain its explicit callable discriminator.
+        // Gateway's live DTO still requires tool_kind before the adapter reaches this codec.
+        #[serde(default, skip_serializing_if = "ToolKindRequirementV1::is_function")]
+        tool_kind: ToolKindRequirementV1,
+        name: String,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

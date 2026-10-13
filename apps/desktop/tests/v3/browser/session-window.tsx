@@ -19,6 +19,7 @@ const digestOf = (view: string, query: Record<string, any>) => [view, query.from
 const inWindow = (startedAt: number, query: Record<string, any>) => startedAt >= query.from_ms && startedAt < query.to_ms;
 
 const control = {
+  language: 'zh' as 'zh' | 'en',
   requests: {} as Record<string, RequestRow[]>,
   catalog: {} as Record<string, any[]>,
   texts: {} as Record<string, string>,
@@ -88,13 +89,13 @@ function observationRead(view: string, query: Record<string, any>) {
       const { page, next_cursor } = paginate(sessionSummaries(query), query, digest);
       return { next_cursor, sessions: page };
     }
-    case 'search': {
-      const digest = digestOf('search', query);
+    case 'session_search': {
+      const digest = digestOf('session_search', query);
       const keyword = String(query.keyword ?? '');
-      const visible = new Set(sessionSummaries({ ...query, only_model_switch: false, session_id: null }).map(row => row.session_id));
-      const matched = control.hits.filter(hit => visible.has(hit.session_id) && (control.texts[hit.content_id] ?? '').includes(keyword));
+      const visible = new Set(sessionSummaries(query).map(row => row.session_id));
+      const matched = [...new Map(control.hits.filter(hit => visible.has(hit.session_id) && (control.texts[hit.content_id] ?? '').includes(keyword)).map(hit => [hit.session_id, hit])).values()];
       const { page, next_cursor } = paginate(matched, query, digest);
-      return { hits: page, next_cursor, index_partial: false, budget_exhausted: false };
+      return { hits: page, next_cursor, index_partial: false };
     }
     case 'timeline': {
       const digest = digestOf('timeline', query);
@@ -170,6 +171,7 @@ function Harness() {
     control.handlers = {};
     control.commands = [];
     control.qualityModels = [];
+    control.language = 'zh';
     setQualityVisible(false);
     setHomeVisible(false);
     setRefresh(0);
@@ -191,7 +193,7 @@ function Harness() {
     activity: { status: 'ready', data: homeActivity },
     value: { status: 'loading' },
   };
-  return <PresentationRoot language="zh" theme="dark" textScale={1}>
+  return <PresentationRoot language={control.language} theme="dark" textScale={1}>
     <div className="app-window">
       <header className="titlebar"><div className="window-controls" /><div className="titlebar-main"><div className="window-title"><span>HiRoute</span><span>/</span><span>会话</span></div></div></header>
       <HomeNavigation language="zh" items={[...navItems]} current="sessions" serviceLabel="仅在本机运行" serviceReady onNavigate={() => {}} onOpenSettings={() => {}} />
@@ -199,7 +201,7 @@ function Harness() {
         <p className="sr-only">组件测试：所有 IPC 为 mock；不连接 Tauri、daemon 或真实数据。</p>
         {homeVisible && <Home language="zh" reads={homeReads} onAction={() => {}} />}
         {qualityVisible && <PlanQuality key={'quality-' + generation} planId="plan/quality" planRevision={1} currentModels={control.qualityModels} active={!homeVisible} refreshVersion={refresh} language="zh" />}
-        <div hidden={homeVisible || qualityVisible}><Sessions key={generation} active={!homeVisible && !qualityVisible} language="zh" refreshVersion={refresh} onOpenAgents={() => {}} /></div>
+        <div hidden={homeVisible || qualityVisible}><Sessions key={generation} active={!homeVisible && !qualityVisible} language={control.language} refreshVersion={refresh} onOpenAgents={() => {}} /></div>
       </div></main>
     </div>
   </PresentationRoot>;

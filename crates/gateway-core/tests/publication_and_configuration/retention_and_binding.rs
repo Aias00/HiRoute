@@ -1,6 +1,85 @@
 use crate::fixture::*;
 
 #[test]
+fn current_credentials_are_owned_by_one_request_and_do_not_mutate_publication() {
+    use hiroute_gateway_core::core::execution_plan::CredentialRef;
+    let installer = PublicationInstaller::new();
+    install(&installer, envelope(1, 1));
+    let mut request = installer.bind_request().unwrap();
+    let route = request.ingress_plan().unwrap().routes[0].clone();
+    request.bind_route(&route).unwrap();
+    let original = request.resolve_attempt(route.binding).unwrap();
+    let original_credentials = Arc::clone(&original.plan().credential_refs);
+    let current: Arc<[CredentialRef]> = ["credential/current-b", "credential/current-a"]
+        .into_iter()
+        .map(|id| CredentialRef::new(id).unwrap())
+        .collect::<Vec<_>>()
+        .into();
+    request
+        .bind_candidate_credentials(route.binding, Arc::clone(&current))
+        .unwrap();
+    assert_eq!(
+        request
+            .resolve_attempt(route.binding)
+            .unwrap()
+            .plan()
+            .credential_refs,
+        current
+    );
+    assert_eq!(original.plan().credential_refs, original_credentials);
+    let mut later = installer.bind_request().unwrap();
+    later.bind_route(&route).unwrap();
+    assert_eq!(
+        later
+            .resolve_attempt(route.binding)
+            .unwrap()
+            .plan()
+            .credential_refs,
+        original_credentials
+    );
+    assert!(
+        request
+            .bind_candidate_credentials(route.binding, Arc::from([]))
+            .is_err()
+    );
+    assert!(
+        request
+            .bind_candidate_credentials(
+                route.binding,
+                Arc::from([current[0].clone(), current[0].clone()])
+            )
+            .is_err()
+    );
+    assert!(
+        request
+            .bind_candidate_credentials(ResolvedTargetBindingId::new(PlanRevision(2), 7), current)
+            .is_err()
+    );
+    let maximum: Arc<[CredentialRef]> = (0..64)
+        .map(|index| CredentialRef::new(format!("credential/current-{index}")).unwrap())
+        .collect::<Vec<_>>()
+        .into();
+    request
+        .bind_candidate_credentials(route.binding, Arc::clone(&maximum))
+        .unwrap();
+    let mut too_many = maximum.to_vec();
+    too_many.push(CredentialRef::new("credential/extra").unwrap());
+    assert!(
+        request
+            .bind_candidate_credentials(route.binding, too_many.into())
+            .is_err()
+    );
+    assert_eq!(
+        request
+            .resolve_attempt(route.binding)
+            .unwrap()
+            .plan()
+            .credential_refs,
+        maximum
+    );
+}
+
+#[test]
 fn request_binding_does_not_keep_publication_root_alive() {
     let installer = PublicationInstaller::new();
     install(&installer, envelope(1, 1));

@@ -15,6 +15,13 @@ The standalone `hirouted` entry can attach the same typed diagnostics using
 capture or execution-fact storage. At Info, failed attempts retain the safe
 actual model and reasoning controls, HTTP protocol/status and body commit state.
 
+For operational lifecycle telemetry, [accepted response capture](src/observation/content.rs)
+reports transport writes only after they succeed, including an empty end-stream write.
+[Product lifecycle validation](../domain/src/observation/lifecycle.rs) preserves its actual
+zero byte count and frame identity; the [bounded receiver](../observation/src/writer/lifecycle.rs)
+ACKs it in sequence before RequestFinished. These transport events describe delivery;
+semantic output, usage and the business receipt retain their own facts.
+
 Messages thinking computation is projected in
 [request/native.rs](src/adapters/request/native.rs); request-local `thinking.display`
 is resolved by [ingress.rs](src/adapters/ingress.rs) before Replay externalization.
@@ -92,6 +99,13 @@ uses the caller's `ExecutionScope`, keeps the existing error categories, and
 does not read credentials or runtime-state stores. E2E configuration remains
 captured at construction, not reloaded on each resolution.
 
+[core_runtime/credentials.rs](src/core_runtime/credentials.rs) binds current managed Native
+Key IDs/order once at request admission. The control authority verifies the saved source,
+model and target; exact attempt leases still enforce current generation and revocation.
+Only the request-owned attempt view changes, leaving shared publication content immutable.
+[publication/lease_target.rs](src/publication/lease_target.rs) derives the same selected
+protocol target for admission and materialization; neither caller may substitute a destination.
+
 [planner.rs](src/planner.rs) validates the selected category and chooses eligible
 groups/candidates under the frozen policy. Availability relay may move execution
 from regular to primary within that category. History and assessment retain the
@@ -154,6 +168,41 @@ error message or a substitute for evidence of credential failure.
 
 ## Response failure evidence
 
+### Candidate preparation errors
+
+A published plan freezes candidate selection, while the exact credential authority
+still checks current source and Key permission before decryption. A managed source
+or Key denial retains its closed cause through the daemon adapter; an empty lease
+means only that the exact credential is exhausted. Neither outcome starts an upstream
+attempt or broadens the frozen fallback policy.
+
+When preparation terminates with no upstream attempt, the core asks the existing
+decision-session local-reply port for the product response. HiRoute returns HTTP 502
+with `Content-Type: application/json`, `schema_version: hiroute.gateway.error/v1`,
+and these closed fields:
+
+| Preparation evidence | `code` | `phase` |
+| --- | --- | --- |
+| Every rejected candidate has a managed source disabled | `SOURCE_DISABLED` | `credential_lease` |
+| Every rejected candidate has a managed Key disabled | `CREDENTIAL_DISABLED` | `credential_lease` |
+| Every exact credential lease is exhausted | `CREDENTIAL_UNAVAILABLE` | `credential_lease` |
+| Other or mixed preparation failures | `CANDIDATE_PREPARATION_FAILED` | `candidate_preparation` |
+
+These replies have no `Retry-After`. Pure cooldown/probe exhaustion retains its
+existing HTTP 503 runtime-state response and bounded retry hint. A failure after a
+formal upstream attempt keeps the existing attempt response; this port cannot rewrite
+committed bytes. No provider text, credential identity or authorization material is
+included in these local replies.
+
+Request-level `credential_lease` execution facts retain the denial as `source_disabled`
+or `credential_disabled`; exhausted and authority errors remain distinct. Their
+existing envelope is unchanged; the Domain ingestion enum accepts these two new values
+alongside the original leased, exhausted and authority-error outcomes. With observation enabled and a
+healthy sink, the request finishes as failed with zero started/finished attempts,
+no accepted attempt and no fabricated usage, and can produce a zero-attempt receipt.
+Follow the [live source/Key regression](../daemon/tests/support/model_connections_product.py)
+for disable, restart, independent-source isolation and re-enable evidence.
+
 `runtime/driver/response_diagnostics.rs` owns the closed, payload-free failure
 classification; `adapters/response/decoder.rs` reports SSE event ordinal and
 received-byte upper bound without per-token logs. Unix Debug-only
@@ -211,3 +260,30 @@ as streaming failures, for both native and converted protocols. Reported usage
 survives fallback; partial response content is not delivered. Attempt/deadline
 limits and fixed-source authority still apply, and unknown completion remains
 separate from an explicit failure.
+
+Successful converted nonstream responses retain their reported usage in the
+provider completion facts before releasing the decoded response. Completion
+publishes that usage before request termination, so its receipt does not depend
+on canonical capture scheduling. Nonstream capture still records delivered
+content but leaves usage to provider completion; converted streaming capture
+continues publishing accepted usage events. Missing usage remains unknown.
+
+### Current-pool admission failures
+
+Current-pool admission checks the frozen model and target before reporting a managed
+source denial. It keeps the request's members and order fixed, excludes denied sources
+and records a request-level permission fact without a leased Key or generation. A
+successful membership read does not create a lease fact.
+
+If admission excludes every candidate, HTTP 502 uses `hiroute.gateway.error/v1`:
+
+| Current-pool evidence | `code` | `phase` |
+| --- | --- | --- |
+| Every source is disabled | `SOURCE_DISABLED` | `credential_lease` |
+| Every managed pool is empty/unavailable | `CREDENTIAL_UNAVAILABLE` | `credential_lease` |
+| Mixed causes | `CANDIDATE_PREPARATION_FAILED` | `candidate_preparation` |
+
+Admission exclusions also join the existing request-local preparation summary when
+another candidate remains. Mixed permanent failures do not become a pure cooling
+response, and an actual upstream attempt retains its existing response. These errors
+contain no credentials or provider text and have no `Retry-After`.

@@ -18,6 +18,35 @@ const ACCEPTED_STREAM_TEXT: &[u8] = b"event: response.output_text.delta\ndata: {
 const ACCEPTED_STREAM_COMPLETED: &[u8] = b"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"observation-stream\",\"model\":\"native-observed\",\"status\":\"completed\",\"output\":[{\"type\":\"message\",\"id\":\"observation-message\",\"status\":\"completed\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"accepted-stream-22008\",\"annotations\":[]}]}],\"usage\":{\"input_tokens\":13,\"output_tokens\":5,\"total_tokens\":18,\"input_tokens_details\":{\"cached_tokens\":4},\"output_tokens_details\":{\"reasoning_tokens\":3}}}}\n\n";
 
 #[test]
+fn observation_reader_waits_for_complete_rows_and_rejects_closed_corruption() {
+    use std::io::Write;
+
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("records.jsonl");
+    let first = serde_json::json!({"phase": "begin"});
+    let second = serde_json::json!({"phase": "finish", "text": "尾帧"});
+    let mut prefix = serde_json::to_vec(&first).unwrap();
+    prefix.push(b'\n');
+    let second_bytes = serde_json::to_vec(&second).unwrap();
+    let partial_utf8 = second_bytes.iter().position(|byte| *byte >= 0x80).unwrap() + 1;
+    for end in [9, partial_utf8, second_bytes.len()] {
+        let mut snapshot = prefix.clone();
+        snapshot.extend_from_slice(&second_bytes[..end]);
+        fs::write(&path, snapshot).unwrap();
+        assert_eq!(read_records(&path).as_slice(), std::slice::from_ref(&first));
+        let mut writer = fs::OpenOptions::new().append(true).open(&path).unwrap();
+        writer.write_all(&second_bytes[end..]).unwrap();
+        writer.write_all(b"\n").unwrap();
+        writer.flush().unwrap();
+        assert_eq!(read_records(&path), [first.clone(), second.clone()]);
+    }
+    for corruption in [b"invalid-json\n".as_slice(), &[0xff, b'\n']] {
+        fs::write(&path, corruption).unwrap();
+        assert!(std::panic::catch_unwind(|| read_records(&path)).is_err());
+    }
+}
+
+#[test]
 fn production_info_cross_group_relay_links_only_actual_attempts() {
     for relay_allowed in [true, false] {
         let rejected = NativeProvider::start(vec![ProviderReply::StreamComplete {
@@ -314,11 +343,9 @@ fn production_unknown_completion_retains_transport_usage_and_an_unknown_agent_tu
 fn wait_diagnostic_terminal(path: &Path, outcome: &str) -> (String, Vec<Value>) {
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
-        let log = fs::read_to_string(path).unwrap_or_default();
-        let records = log
-            .lines()
-            .map(|line| serde_json::from_str::<Value>(line).unwrap())
-            .collect::<Vec<_>>();
+        let bytes = fs::read(path).unwrap_or_default();
+        let log = String::from_utf8_lossy(&bytes).into_owned();
+        let records = complete_records(&bytes);
         if records.iter().any(|record| {
             record
                 .pointer("/event/request_end/outcome")
@@ -1017,10 +1044,18 @@ fn real_hirouted_emits_zero_attempt_when_runtime_state_excludes_the_sealed_candi
         401,
         "seed disabled credential state"
     );
+    let response = fixture.request();
+    assert_eq!(response.status, 502, "all runtime candidates excluded");
     assert_eq!(
-        fixture.request().status,
-        502,
-        "all runtime candidates excluded"
+        response.headers.get("content-type").map(String::as_str),
+        Some("application/json")
+    );
+    assert!(!response.headers.contains_key("retry-after"));
+    assert_eq!(
+        serde_json::from_slice::<Value>(&response.body).unwrap(),
+        serde_json::json!({
+            "schema_version": "hiroute.gateway.error/v1", "code": "CANDIDATE_PREPARATION_FAILED", "phase": "candidate_preparation"
+        })
     );
     assert_eq!(provider.calls(), 1);
 
@@ -1503,12 +1538,16 @@ fn content_complete_for_requests(records: &[Value], request_ids: &[String]) -> b
 }
 
 fn read_records(path: &Path) -> Vec<Value> {
-    fs::read_to_string(path)
-        .ok()
-        .into_iter()
-        .flat_map(|contents| contents.lines().map(str::to_owned).collect::<Vec<_>>())
-        .filter(|line| !line.trim().is_empty())
-        .map(|line| serde_json::from_str(&line).unwrap())
+    complete_records(&fs::read(path).unwrap_or_default())
+}
+
+fn complete_records(contents: &[u8]) -> Vec<Value> {
+    // A live JSONL writer may be between its payload and newline writes.
+    contents
+        .split_inclusive(|byte| *byte == b'\n')
+        .filter(|line| line.ends_with(b"\n"))
+        .filter(|line| !line.iter().all(u8::is_ascii_whitespace))
+        .map(|line| serde_json::from_slice(line).unwrap())
         .collect()
 }
 

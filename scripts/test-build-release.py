@@ -35,7 +35,7 @@ class CandidateTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
-        self.root = Path(temporary.name)
+        self.root = Path(temporary.name).resolve()
         self.source = self.root / "cpa-source"
         self.source.mkdir()
         self.addCleanup(patch.stopall)

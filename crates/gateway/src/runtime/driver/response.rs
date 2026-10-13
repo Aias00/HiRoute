@@ -306,9 +306,16 @@ pub(super) fn classify_precommit(
                     }
                 };
                 push_prefix_bytes(state, bytes)?;
+                // The nonstream decoder has already been consumed. Preserve
+                // its known usage for completion before RequestFinished;
+                // canonical capture remains independent of this result.
+                let mut facts = semantic_response_facts(status);
+                if !decoded.response.usage.is_empty() {
+                    facts.usage = Some(model_usage_fact(&decoded.response.usage));
+                }
                 Ok(PrecommitClassification::classified(
                     ClassifiedAttemptResult {
-                        facts: semantic_response_facts(status),
+                        facts,
                         readiness: take_readiness(state, rendered_status, content_type, true)?,
                     },
                 ))
@@ -1135,3 +1142,7 @@ mod terminal_tests;
 #[cfg(test)]
 #[path = "response_budget_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "response_usage_tests.rs"]
+mod usage_tests;

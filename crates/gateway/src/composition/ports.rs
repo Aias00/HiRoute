@@ -344,6 +344,14 @@ impl RuntimePublicationFeed for GatewayPublicationInstaller {
 pub trait CredentialResolver: Send + Sync {
     fn acquire(&self, credential_ref: &str) -> Result<CredentialLease, PortError>;
 
+    /// Request admission only: current non-secret membership for this exact Native binding.
+    fn current_credential_refs(
+        &self,
+        _request: CredentialLeaseRequest<'_>,
+    ) -> Result<Option<Vec<String>>, PortError> {
+        Ok(None)
+    }
+
     async fn lease_exact(
         &self,
         _request: CredentialLeaseRequest<'_>,
@@ -707,6 +715,8 @@ pub enum PortError {
     Unavailable(&'static str),
     #[error("production port rejected the operation")]
     Rejected,
+    #[error("current managed credential permission was denied: {0:?}")]
+    CredentialDenied(hiroute_domain::NativeCredentialAccessDeniedV1),
     #[error("requested fixed-model reasoning cannot be represented")]
     InvalidReasoningControl,
 }

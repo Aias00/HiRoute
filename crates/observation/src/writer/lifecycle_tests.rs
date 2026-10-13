@@ -87,6 +87,48 @@ fn lifecycle_receiver_accepts_every_exact_event_kind_and_replay() {
 }
 
 #[test]
+fn lifecycle_receiver_accepts_empty_end_stream_without_a_sequence_gap() {
+    let receiver = BoundedLifecycleReceiverV2::new(4).unwrap();
+    let events = [
+        LifecycleFactV2::RequestAccepted {
+            ingress_protocol: "responses".into(),
+        },
+        LifecycleFactV2::ResponseFrameAccepted {
+            frame_id: "frame-body".into(),
+            byte_count: 64,
+            downstream_delivery: "full_frame_transport_accepted".into(),
+        },
+        LifecycleFactV2::ResponseFrameAccepted {
+            frame_id: "frame-empty-end-stream".into(),
+            byte_count: 0,
+            downstream_delivery: "full_frame_transport_accepted".into(),
+        },
+        LifecycleFactV2::RequestFinished {
+            outcome: "succeeded".into(),
+        },
+    ];
+    let expected: Vec<_> = events
+        .into_iter()
+        .enumerate()
+        .map(|(index, fact)| envelope(u64::try_from(index + 1).unwrap(), fact))
+        .collect();
+    for event in &expected {
+        let feedback = receiver.receive_lifecycle(event).unwrap();
+        assert!(matches!(
+            feedback,
+            ObservationFeedback::Ack(ref ack)
+                if ack.highest_contiguous_sequence == event.sequence
+                    && ack.highest_accounted_sequence == event.sequence
+        ));
+        if event.sequence == 3 {
+            assert_eq!(receiver.receive_lifecycle(event).unwrap(), feedback);
+            assert_eq!(receiver.accepted_len().unwrap(), 3);
+        }
+    }
+    assert_eq!(receiver.records().unwrap(), expected);
+}
+
+#[test]
 fn bounded_lifecycle_receiver_evicts_after_capacity_and_nacks_sequence_gap() {
     let receiver = BoundedLifecycleReceiverV2::new(1).unwrap();
     receiver

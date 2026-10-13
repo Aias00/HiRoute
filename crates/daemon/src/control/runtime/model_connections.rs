@@ -34,6 +34,7 @@ use super::LocalControlAdapter;
 
 mod discovered;
 mod key_inputs;
+mod key_masks;
 mod pi_discovered;
 mod presentation;
 mod registered;
@@ -522,6 +523,13 @@ impl ComputeManagementControlPort for LocalControlAdapter {
     ) -> Result<ComputeManagementSnapshotV2, ComputeManagementControlError> {
         self.compute_management_snapshot_v3(query)
             .map(|view| view.into_v2())
+    }
+
+    fn compute_key_masks(
+        &self,
+        query: &hiroute_application_api::ComputeKeyMasksQueryV1,
+    ) -> Result<hiroute_application_api::ComputeKeyMasksViewV1, ComputeManagementControlError> {
+        self.saved_key_masks(query)
     }
 
     fn compute_management_snapshot_v3(

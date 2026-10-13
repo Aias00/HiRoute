@@ -1,4 +1,5 @@
 mod cpa_async;
+mod credential_denial;
 
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -410,17 +411,21 @@ async fn gateway_ports_runtime_state_preserves_durable_cas_and_typed_probe_outco
 struct FakeNativeAuthority {
     requests: Mutex<Vec<NativeCredentialLeaseRequestV1>>,
     header_secret_requests: Mutex<Vec<HeaderSecretLeaseRequestV1>>,
+    denial: Option<hiroute_domain::NativeCredentialAccessDeniedV1>,
 }
 
 impl NativeCredentialAuthorityV1 for FakeNativeAuthority {
     fn lease_native_credential(
         &self,
         request: &NativeCredentialLeaseRequestV1,
-    ) -> PortResult<Option<NativeCredentialLeaseV1>> {
+    ) -> Result<Option<NativeCredentialLeaseV1>, hiroute_domain::NativeCredentialLeaseErrorV1> {
         request.validate().map_err(|_| {
             ProductPortError::new(PortErrorCode::InvalidData, "test.native.request")
         })?;
         self.requests.lock().unwrap().push(request.clone());
+        if let Some(reason) = self.denial {
+            return Err(hiroute_domain::NativeCredentialLeaseErrorV1::Denied(reason));
+        }
         NativeCredentialLeaseV1::issue(
             request.credential_id.clone(),
             "native-key",
@@ -430,7 +435,7 @@ impl NativeCredentialAuthorityV1 for FakeNativeAuthority {
             }),
         )
         .map(Some)
-        .map_err(|_| ProductPortError::new(PortErrorCode::Corrupt, "test.native.lease"))
+        .map_err(|_| ProductPortError::new(PortErrorCode::Corrupt, "test.native.lease").into())
     }
 
     fn lease_header_secret(

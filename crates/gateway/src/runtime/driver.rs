@@ -44,10 +44,13 @@ pub(crate) mod response_diagnostics;
 mod selection;
 
 pub(crate) use materialization::TargetResolver;
+pub(crate) use selection::PreparationFailure;
 pub use selection::{ProductionDecisionSession, ProductionSelection};
 
 const MATERIALIZATION_BINDING_UNAVAILABLE: &str = "binding_unavailable";
 const MATERIALIZATION_CREDENTIAL_EXHAUSTED: &str = "credential_exhausted";
+const MATERIALIZATION_SOURCE_DISABLED: &str = "managed_source_disabled";
+const MATERIALIZATION_KEY_DISABLED: &str = "managed_key_disabled";
 const MATERIALIZATION_BINDING_COOLING_PREFIX: &str = "binding_cooling_down:";
 const MATERIALIZATION_CREDENTIAL_COOLING_PREFIX: &str = "credential_cooling_down:";
 const MATERIALIZATION_BINDING_PROBE_BUSY: &str = "binding_probe_busy";
@@ -86,6 +89,7 @@ pub struct ProductionRouteContext {
     pub(crate) switch_fallback: Option<ResolvedTargetBindingId>,
     pub(crate) hold_completion: Option<HoldCompletion>,
     pub(crate) reasoning_cleanup: Arc<ReasoningCleanup>,
+    pub(crate) admission_preparation_failure: Option<PreparationFailure>,
 }
 
 /// One request's frozen cleanup opportunity, plus a previously successful

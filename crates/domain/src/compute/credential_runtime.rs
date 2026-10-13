@@ -244,15 +244,43 @@ impl NativeCredentialLeaseV1 {
 /// Replaceable Product authority. Local storage, a Vault client, or a remote authority can
 /// implement this same port; Gateway adapters never depend on SQLite types.
 pub trait NativeCredentialAuthorityV1: Send + Sync {
+    /// Non-secret current order for an already authorized Native candidate. `None` keeps
+    /// legacy exact users unchanged; an empty list means the managed candidate is unavailable.
+    /// This reads no secret and issues no lease. Current permission denials retain their
+    /// closed cause; the frozen exact request supplies target proof.
+    fn current_native_credential_refs(
+        &self,
+        _request: &NativeCredentialLeaseRequestV1,
+    ) -> Result<Option<Vec<String>>, NativeCredentialLeaseErrorV1> {
+        Ok(None)
+    }
+
+    /// An empty lease means exact exhaustion. Current managed source/Key permission
+    /// denials retain their closed reason before any secret is decrypted.
     fn lease_native_credential(
         &self,
         request: &NativeCredentialLeaseRequestV1,
-    ) -> PortResult<Option<NativeCredentialLeaseV1>>;
+    ) -> Result<Option<NativeCredentialLeaseV1>, NativeCredentialLeaseErrorV1>;
 
     fn lease_header_secret(
         &self,
         request: &HeaderSecretLeaseRequestV1,
     ) -> PortResult<Option<NativeCredentialLeaseV1>>;
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum NativeCredentialAccessDeniedV1 {
+    SourceDisabled,
+    CredentialDisabled,
+}
+
+/// In-process Native permission failure, separate from persisted credential and request schemas.
+#[derive(Clone, Debug, Error, Eq, PartialEq)]
+pub enum NativeCredentialLeaseErrorV1 {
+    #[error("current managed credential permission was denied: {0:?}")]
+    Denied(NativeCredentialAccessDeniedV1),
+    #[error(transparent)]
+    Authority(#[from] crate::PortError),
 }
 
 #[derive(Clone, Copy, Debug, Error, Eq, PartialEq)]

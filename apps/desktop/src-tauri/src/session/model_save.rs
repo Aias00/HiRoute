@@ -35,7 +35,7 @@ pub struct ModelSaveAccepted {
     pub operation: OperationReferenceV1,
 }
 impl Session {
-    pub fn prepare_model_save_confirmation(
+    pub async fn prepare_model_save_confirmation(
         &mut self,
         request: ComputeConnectionApplyRequestV1,
         language: String,
@@ -72,11 +72,19 @@ impl Session {
                     | ComputeKeyEditV2::SetEnabled { .. }
             )
         });
-        let message = if language == "en" {
+        let mut message = if language == "en" {
             "Change existing source credentials?\nThis will replace, remove or change the availability/order of the credentials selected in the editor. Future calls will use the saved settings."
         } else {
             "修改既有来源凭据？\n将替换、移除或调整编辑器中选定凭据的可用性或顺序。后续调用将使用保存后的设置。"
         }.to_owned();
+        if requires_confirmation {
+            let masks = self.confirmation_key_masks(&change).await;
+            message.push_str(&confirmation_key_details(
+                &change,
+                masks.as_ref(),
+                language == "en",
+            ));
+        }
         Ok(ModelSaveConfirmation {
             requires_confirmation,
             permit: self.confirmation.begin()?,
@@ -85,6 +93,38 @@ impl Session {
             language,
             message,
         })
+    }
+
+    async fn confirmation_key_masks(
+        &self,
+        change: &ComputeManagementChangeV2,
+    ) -> Option<ComputeKeyMasksViewV1> {
+        let ComputeManagementSubjectV2::SavedSource { source_id } = &change.subject else {
+            return None;
+        };
+        let snapshot = self
+            .client
+            .compute_management_snapshot_v3(
+                &crate::random_id().ok()?,
+                ComputeManagementQueryV2::default(),
+            )
+            .await
+            .ok()?
+            .data?;
+        let source = snapshot
+            .sources
+            .iter()
+            .find(|source| &source.source_id == source_id)?;
+        super::query(
+            &self.client,
+            GET_COMPUTE_KEY_MASKS_OPERATION_V1,
+            &ComputeKeyMasksQueryV1 {
+                source_id: source_id.clone(),
+                expected_source_revision: source.revision,
+            },
+        )
+        .await
+        .ok()
     }
 
     pub async fn finish_model_save_confirmation(
@@ -202,6 +242,84 @@ impl Session {
         self.pending_model_inputs.remove(idempotency_key);
         Ok(())
     }
+}
+
+fn confirmation_key_details(
+    change: &ComputeManagementChangeV2,
+    masks: Option<&ComputeKeyMasksViewV1>,
+    english: bool,
+) -> String {
+    let label = |id: &str, generation: Option<u64>| {
+        let mask = masks
+            .and_then(|view| {
+                view.keys.iter().find(|key| {
+                    key.key_id == id
+                        && generation.is_none_or(|generation| generation == key.generation)
+                })
+            })
+            .map(|key| key.masked_key.as_str());
+        let suffix: String = id
+            .chars()
+            .rev()
+            .take(8)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+        mask.map_or_else(
+            || format!("ID {suffix}"),
+            |mask| format!("{mask} · {suffix}"),
+        )
+    };
+    let mut details = String::new();
+    for edit in &change.key_edits {
+        let (action, labels) = match edit {
+            ComputeKeyEditV2::Remove {
+                key_id,
+                expected_generation,
+            } => (
+                if english { "Remove" } else { "移除" },
+                label(key_id, Some(*expected_generation)),
+            ),
+            ComputeKeyEditV2::Replace {
+                key_id,
+                expected_generation,
+                ..
+            } => (
+                if english { "Replace" } else { "替换" },
+                label(key_id, Some(*expected_generation)),
+            ),
+            ComputeKeyEditV2::SetEnabled {
+                key_id,
+                expected_generation,
+                enabled,
+            } => (
+                if *enabled {
+                    if english { "Enable" } else { "启用" }
+                } else if english {
+                    "Disable"
+                } else {
+                    "停用"
+                },
+                label(key_id, Some(*expected_generation)),
+            ),
+            ComputeKeyEditV2::SetOrder { key_ids } => (
+                if english {
+                    "Keep in order"
+                } else {
+                    "保存后保留的顺序"
+                },
+                key_ids
+                    .iter()
+                    .map(|id| label(id, None))
+                    .collect::<Vec<_>>()
+                    .join(" → "),
+            ),
+            _ => continue,
+        };
+        details.push_str(&format!("\n{action}: {labels}"));
+    }
+    details
 }
 
 fn operation_reference(operation: &ClientOperationViewV1) -> OperationReferenceV1 {

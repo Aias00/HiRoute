@@ -867,7 +867,8 @@ pub(crate) fn command_request_schema(command_id: &str) -> &'static str {
         "compute.connection.test" => "hiroute.compute-connection-test-request/v1",
         "models.show" => "hiroute.model-catalog-query/v1",
         "sessions.list" => "hiroute.session-list-query/v1",
-        "sessions.show" | "sessions.receipt" => "hiroute.session-lookup/v1",
+        "sessions.show" => "hiroute.session-lookup/v1",
+        "sessions.receipt" => "hiroute.session-receipt-request/union",
         "value.show" => "hiroute.observation.query/v2",
         "observation.plan-quality.samples" => "hiroute.observation.query/v2",
         _ => "hiroute.empty-request/v1",
@@ -933,7 +934,7 @@ pub(crate) fn command_response_schema(command_id: &str) -> &'static str {
         "models.show" => "hiroute.model-catalog-view/v1",
         "sessions.list" => "hiroute.session-list/v1",
         "sessions.show" => "hiroute.session-detail/v1",
-        "sessions.receipt" => "hiroute.routing-receipt/v1",
+        "sessions.receipt" => "hiroute.session-receipt/union",
         "sessions.status" => "hiroute.session-store-status/v1",
         "value.show" => "hiroute.observation.value-report/v2",
         "observation.plan-quality.samples" => "hiroute.plan-quality-samples-page/v1",
@@ -964,13 +965,19 @@ pub(crate) fn command_model_call(command_id: &str) -> &'static str {
 pub(crate) fn command_stdin_channels(command_id: &str) -> &'static [&'static str] {
     match command_id {
         "worker.exec" | "worker.continue" => &["prompt_stdin", "file"],
-        "worker.dependencies.select" => &["request_stdin"],
+        "worker.dependencies.select" => &["request_stdin", "request_file"],
         value if value.starts_with("worker.") => &[],
-        "work-plans.list" => &["request_stdin", "capability_fd"],
-        value if value.starts_with("tasks.") => &["request_stdin", "capability_fd"],
+        "work-plans.list" => &["request_stdin", "request_file", "capability_fd"],
+        value if value.starts_with("tasks.") => &["request_stdin", "request_file", "capability_fd"],
         "setup.preview" => &["spec_stdin"],
         "setup.apply" => &["spec_fd", "capability_fd"],
-        "models.show"
+        "operations.find"
+        | "routing.list"
+        | "prices.effective"
+        | "prices.override.preview"
+        | "prices.override.apply"
+        | "compute.credential.add"
+        | "models.show"
         | "compute.connection.preview"
         | "compute.connection.apply"
         | "compute.connection.authorize"
@@ -984,10 +991,12 @@ pub(crate) fn command_stdin_channels(command_id: &str) -> &'static [&'static str
         | "agents.connect.preview"
         | "agents.connect.apply"
         | "agents.restore.preview"
-        | "agents.restore.apply" => &["request_stdin"],
-        "sessions.list" | "sessions.show" | "value.show" | "observation.plan-quality.samples" => {
-            &["request_stdin", "capability_fd"]
-        }
+        | "agents.restore.apply" => &["request_stdin", "request_file"],
+        "sessions.list"
+        | "sessions.show"
+        | "sessions.receipt"
+        | "value.show"
+        | "observation.plan-quality.samples" => &["request_stdin", "request_file", "capability_fd"],
         "agents.check" | "operations.cancel" => &["capability_fd"],
         _ => &[],
     }
@@ -1043,7 +1052,7 @@ pub(crate) fn staged_coverage(command_id: &str, positive: bool) -> Option<Covera
 }
 
 pub(crate) fn command_usage(command_id: &str, joined_path: &str) -> String {
-    match command_id {
+    let usage: String = match command_id {
         "worker.executors" => "hiroute worker executors [--output <json|text|quiet>]".into(),
         "worker.dependencies.discover" => "hiroute worker dependencies discover [--harness <codex_cli|claude_code|qoder_cli|pi|deepseek_harness>] [--output <json|text|quiet>]".into(),
         "worker.dependencies.select" => "hiroute worker dependencies select --request-stdin [--output <json|text|quiet>]".into(),
@@ -1068,7 +1077,7 @@ pub(crate) fn command_usage(command_id: &str, joined_path: &str) -> String {
         "agent.launch" => "hiroute agent launch --agent claude-code --context <CONTEXT_ID> -- <CLAUDE_SESSION_ARGS...>".to_owned(),
         "schema.show" => "hiroute schema show --command-id <stable-command-id> --non-interactive --output json".to_owned(),
         "operations.find" => "hiroute operations find --request-stdin --output json".to_owned(),
-        "models.show" => "hiroute models show --request-stdin --output json".to_owned(),
+        "models.show" | "prices.effective" | "prices.override.preview" | "prices.override.apply" | "compute.credential.add" => format!("hiroute {joined_path} --request-stdin --output json"),
         "compute.list" => "hiroute compute list --output json".to_owned(),
         "compute.show" => "hiroute compute show <SOURCE_ID> --output json".to_owned(),
         "compute.connection.preview" | "compute.connection.apply" | "compute.connection.authorize" | "compute.connection.login" | "compute.connection.test" => {
@@ -1098,13 +1107,17 @@ pub(crate) fn command_usage(command_id: &str, joined_path: &str) -> String {
             format!("hiroute {joined_path} <OPERATION_ID> [OPTIONS]")
         }
         "agents.check" => "hiroute agents check <AGENT_ID> --scope <configuration|native-authentication|collaboration|live> --suite <quick|tool|conformance> [--target <JSON>] [--allow-model-call]; live requires an explicit context/surface/revision/model target and protected consent; local checks use same-UID trust and make no upstream model call".to_owned(),
-        "sessions.receipt" => "hiroute sessions receipt <RECEIPT_ID>".to_owned(),
+        "sessions.receipt" => "hiroute sessions receipt (<RECEIPT_ID> | --request-stdin) [--capability-fd <FD>] --output json".to_owned(),
         _ => format!("hiroute {joined_path} [typed options] --non-interactive --output json"),
-    }
+    };
+    usage.replace(
+        "--request-stdin",
+        "(--request-stdin | --request-file <PATH>)",
+    )
 }
 
 pub(crate) fn command_arguments(command_id: &str) -> String {
-    match command_id {
+    let arguments: String = match command_id {
         "worker.executors" => "No Agent, Plan, allowlist, capability FD, or request body is accepted. The query checks configured entry metadata and executability, not program contents or compatibility. Ready allows a launch attempt; it does not prove optional capabilities, install, configure, authorize, or admit a run.".into(),
         "worker.dependencies.discover" => "Optionally restrict discovery to one Harness. The query checks the selected path, PATH, common locations, npm globals and npx cache without installing or selecting anything.".into(),
         "worker.dependencies.select" => "Same-UID local management only. --request-stdin reads one strict JSON object with harness (codex_cli, claude_code, qoder_cli, pi, or deepseek_harness), absolute cli_path, and expected_selection_revision copied from the matching selection_revisions entry returned by worker dependencies discover --output json. codex_cli and claude_code require absolute adapter_path and accept optional absolute node_path. pi requires absolute node_path and forbids adapter_path. qoder_cli and deepseek_harness accept only cli_path and forbid adapter_path and node_path. All paths and the revision are validated again before an atomic selection update; the command never installs software or accepts an Apply capability.".into(),
@@ -1145,7 +1158,15 @@ pub(crate) fn command_arguments(command_id: &str) -> String {
         "observation.plan-quality.samples" => "Provide at least --plan-id or --session-id. Use --competence below-floor|meets-floor to compare the latest reliable score with the floor saved for that stage, or --unrated for missing/partial scores. Score bounds remain strict open bounds. Detail filters do not alter full-scope summaries. Facts are same-UID reads; protected evidence content is never returned.".to_owned(),
         "value.show" => "Human options use the current v2 value_report intent; defaults are the last seven days and separate totals for every currency. --group-by day returns UTC day buckets from the same snapshot. --request-stdin accepts strict v2 value, home_value or value_report intents. Same-UID reads retain known/unknown usage, amounts and coverage; missing values are never filled with zero.".to_owned(),
         "sessions.show" => "Human options retain the v1 lookup and content defaults to none. Same-UID facts/timeline reads need no extra token; messages, tool content, catalog, ancestry, content pages, and search still require an exact protected capability.".to_owned(),
-        "sessions.receipt" | "setup.status" | "operations.get" | "operations.watch" | "operations.cancel" => "An exact typed resource ID is required; arbitrary storage keys and SQL are forbidden.".to_owned(),
+        "sessions.receipt" => "A positional RECEIPT_ID retains the released v1 RoutingReceipt lookup. JSON input accepts only hiroute.observation.query/v2 with view facts and the exact logical request_id returned by the session timeline, limit and optional cursor; returns the v2 facts page. Facts use same-UID Local Control; an explicitly supplied protected grant is still validated.".to_owned(),
+        "setup.status" | "operations.get" | "operations.watch" | "operations.cancel" => "An exact typed resource ID is required; arbitrary storage keys and SQL are forbidden.".to_owned(),
         _ => "Only the typed options declared by the generated request schema are accepted; arbitrary patches, URLs, shell, or plaintext Secret argv are forbidden.".to_owned(),
+    };
+    if command_stdin_channels(command_id).contains(&"request_stdin") {
+        format!(
+            "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. {arguments}"
+        )
+    } else {
+        arguments
     }
 }

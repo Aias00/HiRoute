@@ -26,8 +26,12 @@ impl ObservationControl {
                 | ObservationReadIntentV2::Ancestry(_)
                 | ObservationReadIntentV2::Content(_)
                 | ObservationReadIntentV2::Search(_)
+                | ObservationReadIntentV2::SessionSearch(_)
         );
-        let search = matches!(request.intent, ObservationReadIntentV2::Search(_));
+        let search = matches!(
+            request.intent,
+            ObservationReadIntentV2::Search(_) | ObservationReadIntentV2::SessionSearch(_)
+        );
         if grant.is_some() || content {
             self.protected_principal(grant, request.protected_operation(), &request)?;
         }
@@ -97,6 +101,9 @@ impl ObservationControl {
             }
             ObservationReadIntentV2::Search(q) => {
                 serde_json::to_value(self.service.search_observed_text(&reader, &q, now)?)
+            }
+            ObservationReadIntentV2::SessionSearch(q) => {
+                serde_json::to_value(self.service.search_observed_sessions(&reader, &q, now)?)
             }
             ObservationReadIntentV2::Value(q) => {
                 serde_json::to_value(self.service.observed_value_totals(&reader, &q, now)?)

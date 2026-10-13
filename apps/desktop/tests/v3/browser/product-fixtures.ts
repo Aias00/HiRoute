@@ -464,6 +464,12 @@ export function mockProductInvoke(command: string, payload: Record<string, any> 
   fixtureTrace.requests.push({ command, payload: structuredClone(payload) });
   const fresh = scenario === 'fresh';
   if (command === 'compute_management_snapshot') return fresh ? { ...readyManagement, sources: [] } : readyManagement;
+  if (command === 'compute_key_masks') {
+    const query = payload?.query as { source_id: string; expected_source_revision: number };
+    const source = readyManagement.sources.find(source => source.source_id === query.source_id);
+    return { source_id: query.source_id, source_revision: query.expected_source_revision,
+      keys: source?.keys.map(key => ({ key_id: key.key_id, generation: key.generation, masked_key: 'sk-t••••••••72D1' })) ?? [] };
+  }
   if (command === 'compute_connection_options') return {
     schema: 'hiroute.compute-connection-options/v1',
     catalog: {
@@ -658,7 +664,7 @@ export function mockProductInvoke(command: string, payload: Record<string, any> 
         : sessionRows;
       return { sessions: fresh || scenario === 'configured_no_sessions' ? [] : rows.map(row => ({ ...row, content_completeness: row.session_id === 'session/stream-gap' ? 'partial' : 'complete' })), next_cursor: null };
     }
-    if (view === 'search') {
+    if (view === 'search' || view === 'session_search') {
       const needle = String(query.keyword ?? '').trim().toLocaleLowerCase();
       const allowedSessions = new Set((query.only_model_switch
         ? sessionRows.filter(row => row.fallback_request_count > 0)
@@ -679,7 +685,9 @@ export function mockProductInvoke(command: string, payload: Record<string, any> 
           }];
         });
       });
-      return { hits, next_cursor: null, index_partial: false, budget_exhausted: false };
+      return view === 'session_search'
+        ? { hits: [...new Map(hits.map(hit => [hit.session_id, hit])).values()], next_cursor: null, index_partial: false }
+        : { hits, next_cursor: null, index_partial: false, budget_exhausted: false };
     }
     if (view === 'timeline') {
       const requestId = requestBySession[query.session_id];
@@ -824,6 +832,6 @@ export function mockProductInvoke(command: string, payload: Record<string, any> 
     };
   }
   if (command === 'release_protected_model_input' || command === 'cancel_model_connection_check') return undefined;
-  if (command === 'register_protected_model_input') return { input_candidate: { candidate_ref: 'candidate/protected', candidate_revision: 1 } };
+  if (command === 'register_protected_model_input') return { input_candidate: { candidate_ref: 'candidate/protected', candidate_revision: 1 }, key_id: 'credential/fixture-protected' };
   throw new Error(`Unexpected V3 fixture command: ${command}`);
 }

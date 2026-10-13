@@ -153,6 +153,16 @@ impl ObservationQueryPort for LocalObservationStore {
             .map_err(crate::query_v2::ObservationV2Error::into_domain)
     }
 
+    fn search_observed_sessions(
+        &self,
+        reader: &hiroute_domain::ObservationReaderContext,
+        query: &hiroute_domain::ObservationSearchQueryV2,
+        now_ms: i64,
+    ) -> Result<hiroute_domain::ObservationSessionSearchPageV1, ObservationQueryError> {
+        self.search_observed_sessions(reader, query, now_ms)
+            .map_err(crate::query_v2::ObservationV2Error::into_domain)
+    }
+
     fn search_observed_text(
         &self,
         reader: &hiroute_domain::ObservationReaderContext,

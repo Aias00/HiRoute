@@ -3,20 +3,7 @@ use hiroute_application_api::{ErrorCode, WorkPlanListRequestV1};
 use std::io::Read;
 
 pub(crate) fn payload(options: &[String]) -> Result<serde_json::Value, ErrorCode> {
-    if options != ["--request-stdin"] {
-        return Err(ErrorCode::InvalidArguments);
-    }
-    let mut input = String::new();
-    std::io::stdin()
-        .take(4097)
-        .read_to_string(&mut input)
-        .map_err(|_| ErrorCode::InvalidArguments)?;
-    if input.len() > 4096 {
-        return Err(ErrorCode::InvalidArguments);
-    }
-    let query: WorkPlanListRequestV1 =
-        serde_json::from_str(&input).map_err(|_| ErrorCode::InvalidArguments)?;
-    serde_json::to_value(query).map_err(|_| ErrorCode::InvalidArguments)
+    crate::request_input::typed::<WorkPlanListRequestV1>(options, 4096)
 }
 
 /// Same protected capability carrier, constrained to an inherited pipe and bounded on both

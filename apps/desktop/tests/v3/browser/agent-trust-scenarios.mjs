@@ -546,6 +546,7 @@ const scenarios = [
     const pick = () => [...dialog().querySelectorAll('[data-agent-plan-id] input')].slice(0, 2).forEach(input => input.click());
     pick(); await tick();
     assert(dialog().textContent.includes('当前默认模型保持不变') && dialog().textContent.includes('/model'), 'Additional routing does not explain native preservation and selection');
+    assert(dialog().querySelector('[data-qoder-login-prerequisite]')?.textContent.includes('/login'), 'Qoder routing does not explain its native login prerequisite');
     assert(!dialog().querySelector('[data-agent-default], [data-client-model-id], [data-agent-fixed-models]'), 'Qoder borrowed native model, source or default controls');
     assert(dialog().querySelectorAll('[data-plan-protocol] select').length === 2, 'Each selected route needs its own protocol choice');
     [...dialog().querySelectorAll('button')].find(button => button.textContent === '取消').click(); await tick();

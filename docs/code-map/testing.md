@@ -38,6 +38,7 @@ validate the oracle. The real installed management loop is in
 | Observe native routing and rejected attempts | [NativeContextUpstream](../../crates/daemon/tests/support/native_context_fixture.py): count every model POST, including rejected endpoints/models/credentials; keep the ledger for positive route/history assertions |
 | Prove exact Continue, concurrent routes and cancellation | [Native context](../../crates/daemon/tests/support/native_context_product.py), [boundary journey](../../crates/daemon/tests/support/native_context_boundaries.py), [boundary oracle guide](../../crates/daemon/tests/support/NATIVE_CONTEXT_BOUNDARIES.md) |
 | Prove restoration of old durable state | [Frozen producer fixtures](../../crates/local-storage/src/migrations/fixtures/README.md), [crash-boundary tests](../../crates/local-storage/src/migrations/upgrade_batch_recovery_tests.rs): old bytes through the current consumer, not a new serializer pretending to be history |
+| Preserve native probe failure classification | [Pi probe tests](../../crates/integrations/src/agents/pi_runtime_tests.rs), [immutable launcher](../../crates/integrations/tests/fixtures/pi-node-launcher.sh): mutable test bodies are interpreter inputs; executable availability and version/output failures have separate assertions |
 | Exercise actual Desktop controls | [Browser scenario map](../../apps/desktop/tests/README.md) and native acceptance: select stable scenario IDs and require every declared outcome |
 
 The publication fixture leases its listener address across daemon restarts; do

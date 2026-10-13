@@ -108,23 +108,111 @@ const scenarios = [
     completeness = 'complete'; c().bumpRefresh();
     await until(() => rows()[0] && !rows()[0].textContent.includes('记录不完整'), 'recovered authoritative summary');
   }],
-  ['unfinished empty search pages never claim that no match exists', async () => {
+  ['pending indexes and complete empty searches have distinct outcomes', async () => {
     await fresh(control => {
       seedSimple(control);
-      control.views.search = query => query.keyword === 'settled'
-        ? { hits: [], next_cursor: null, index_partial: false, budget_exhausted: false }
-        : query.cursor
-          ? { hits: [], next_cursor: null, index_partial: true, budget_exhausted: false }
-          : { hits: [], next_cursor: 'continue-search', index_partial: false, budget_exhausted: true };
+      control.views.session_search = query => ({ hits: [], next_cursor: null, index_partial: query.keyword !== 'settled' });
     });
     await type('pending');
-    await until(() => button('加载更多结果'), 'unfinished search window');
-    assert(text().includes('尚未找到匹配') && !text().includes('没有匹配的会话'), 'Unsearched history was reported as no matches');
-    button('加载更多结果').click();
-    await until(() => !button('加载更多结果') && text().includes('部分内容尚未建立索引'), 'incomplete index after scanning');
-    assert(!text().includes('没有匹配的会话'), 'An index gap was reported as no matches');
+    await until(() => text().includes('部分正文暂不可搜索'), 'pending-index outcome');
+    assert(text().includes('尚未找到匹配') && !text().includes('没有匹配的会话'), 'An index gap was reported as complete empty');
+    assert(!button('加载更多结果'), 'Pending indexing exposed a scan-window action');
     await type('settled');
     await until(() => text().includes('没有匹配的会话'), 'complete empty search');
+  }],
+  ['failed search continuation withdraws the cursor and retry starts a new query', async () => {
+    const hit = { session_id: 'observation-session/simple', request_id: 'request/simple/0', content_id: 'search-content', original_text_offset: 0 };
+    let attempts = 0;
+    await fresh(control => {
+      seedSimple(control); control.texts['search-content'] = 'needle';
+      control.views.session_search = query => {
+        attempts += 1;
+        if (query.cursor) throw { code: 'CHANGE_PREVIEW_STALE' };
+        return { hits: [hit], next_cursor: attempts === 1 ? 'stale-cursor' : null, index_partial: false };
+      };
+    });
+    await type('needle');
+    await until(() => button('加载更多结果'), 'first matching session');
+    button('加载更多结果').click();
+    await until(() => document.querySelector('[data-error-code="CHANGE_PREVIEW_STALE"]'), 'continuation error');
+    assert(!button('加载更多结果'), 'The failed cursor remained actionable');
+    assert(rows().length === 1, 'A page failure discarded the matching session');
+    button('重试').click();
+    await until(() => attempts === 3 && !document.querySelector('[data-error-code]'), 'fresh successful retry');
+    assert(queryOf(reads('session_search').at(-1)).cursor === null, 'Retry replayed the stale cursor');
+  }],
+  ['keyword edits withdraw old results immediately and ignore delayed pages', async () => {
+    const slow = deferred();
+    const hit = { session_id: 'observation-session/simple', request_id: 'request/simple/0', content_id: 'old-match', original_text_offset: 0 };
+    await fresh(control => {
+      seedSimple(control); control.texts['old-match'] = 'old needle';
+      control.views.session_search = query => query.cursor ? slow.promise : query.keyword === 'old'
+        ? { hits: [hit], next_cursor: 'old-page', index_partial: false }
+        : { hits: [], next_cursor: null, index_partial: false };
+    });
+    await type('old'); await until(() => button('加载更多结果'), 'old results');
+    button('加载更多结果').click(); await until(() => reads('session_search').length === 2, 'delayed continuation');
+    const input = document.querySelector('.session-filters input.input');
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'new');
+    input.dispatchEvent(new Event('input', { bubbles: true })); await tick();
+    assert(!button('加载更多结果') && rows().length === 0, 'An edited keyword retained old cursor/results');
+    slow.resolve({ hits: [hit], next_cursor: 'old-next', index_partial: true });
+    await until(() => reads('session_search').length === 3 && text().includes('没有匹配的会话'), 'new complete search');
+    assert(rows().length === 0 && !button('加载更多结果') && !text().includes('部分正文暂不可搜索'), 'The delayed page contaminated the new keyword');
+  }],
+  ['live pages merge a repeated session once', async () => {
+    const hit = { session_id: 'observation-session/simple', request_id: 'request/simple/0', content_id: 'match', original_text_offset: 0 };
+    await fresh(control => {
+      seedSimple(control); control.texts.match = 'needle';
+      control.views.session_search = query => ({ hits: [hit], next_cursor: query.cursor ? null : 'next', index_partial: false });
+    });
+    await type('needle'); await until(() => button('加载更多结果'), 'first session');
+    button('加载更多结果').click(); await until(() => reads('session_search').length === 2 && !button('加载更多结果'), 'last session page');
+    assert(rows().length === 1, 'A session appeared more than once after live continuation');
+  }],
+  ['clearing search resumes automatic selection after an invalidated detail read', async () => {
+    for (const searchFails of [false, true]) {
+      const slow = deferred();
+      let delayedQuery;
+      let hold = true;
+      await fresh(control => {
+        seedSimple(control);
+        const request = control.requests['observation-session/simple'][0];
+        seedUserText(control, request, 'Recovered automatically after clearing search');
+        control.views.timeline = query => {
+          if (hold && Object.hasOwn(query, 'request_id')) { delayedQuery = query; return slow.promise; }
+          return control.defaultRead('timeline', query);
+        };
+        control.views.session_search = () => {
+          if (searchFails) throw { code: 'DAEMON_UNAVAILABLE' };
+          return { hits: [], next_cursor: null, index_partial: false };
+        };
+      });
+      await until(() => delayedQuery && document.querySelector('.session-detail'), 'in-flight detail read');
+      await type('new');
+      await until(() => searchFails ? document.querySelector('.session-master [role="alert"]') : text().includes('没有匹配的会话'), 'search outcome');
+      hold = false; slow.resolve(c().defaultRead('timeline', delayedQuery)); await tick();
+      assert(!document.querySelector('.session-detail'), 'An invalidated detail read restored the old selection');
+      await type('');
+      await until(() => document.querySelector('.session-detail') && text().includes('Recovered automatically after clearing search'), 'automatic selection after clearing search');
+      assert(!document.querySelector('[aria-label="清理此会话"]').disabled, 'The invalidated read left the detail busy');
+    }
+  }],
+  ['a quick filter change cancels the queued keyword query', async () => {
+    const hit = { session_id: 'observation-session/simple', request_id: 'request/simple/0', content_id: 'match', original_text_offset: 0 };
+    await fresh(control => {
+      seedSimple(control, Date.now() - 1000, { within_request_fallback: true });
+      control.texts.match = 'needle';
+      control.views.session_search = query => ({ hits: query.only_model_switch ? [hit] : [], next_cursor: null, index_partial: false });
+    });
+    const input = document.querySelector('.session-filters input.input');
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'needle');
+    input.dispatchEvent(new Event('input', { bubbles: true })); await tick();
+    button('发生过请求内回退').click();
+    await until(() => reads('session_search').length > 0 && rows().length === 1, 'immediate filtered search');
+    await pause(340);
+    assert(reads('session_search').every(call => queryOf(call).only_model_switch === true), 'A queued query restored the previous filter');
+    assert(button('发生过请求内回退').getAttribute('aria-pressed') === 'true' && rows().length === 1, 'The selected filter disagreed with the displayed results');
   }],
   ['switching from a filtered 21-stage session resets the filter for a two-stage session', async () => {
     const largeSession = 'observation-session/low-21';
@@ -378,26 +466,27 @@ const scenarios = [
     assert(second.from_ms === first.from_ms && second.to_ms === first.to_ms, 'Pagination changed the pinned window');
     assert(!document.querySelector('[data-error-code]'), `Pagination surfaced ${document.querySelector('[data-error-code]')?.outerHTML.slice(0, 300)}`);
   }],
-  ['keyword search starts a new window and keeps it while paging', async () => {
+  ['keyword search pins its window while pages contain distinct matching sessions', async () => {
     await fresh(control => {
       seedSimple(control);
-      control.texts['content/seed'] = '关于路由编译边界的说明';
       control.hits = Array.from({ length: 51 }, (_, index) => {
+        const session = `observation-session/hit-${index}`;
+        const request = control.makeRequest(session, 0, Date.now() - 60_000 + index);
+        control.requests[session] = [request];
         control.texts[`content/hit-${index}`] = '关于路由编译边界的说明';
-        return { session_id: 'observation-session/simple', request_id: 'request/simple/0', content_id: `content/hit-${index}`, original_text_offset: 0 };
+        return { session_id: session, request_id: request.request_id, content_id: `content/hit-${index}`, original_text_offset: 0 };
       });
     });
-    await until(() => rows().length === 1, 'initial row');
+    await until(() => rows().length === 50, 'initial list');
     const mountWindow = queryOf(reads('sessions')[0]);
     await type('路由');
-    await until(() => reads('search').length === 1, 'search query');
-    const searchWindow = queryOf(reads('search')[0]);
+    await until(() => reads('session_search').length === 1 && rows().length === 50 && button('加载更多结果'), 'first matching-session page');
+    const searchWindow = queryOf(reads('session_search')[0]);
     assert(searchWindow.to_ms > mountWindow.to_ms, 'Search reused the mount-time upper bound');
-    await until(() => button('加载更多结果'), 'search pagination');
     button('加载更多结果').click();
-    await until(() => reads('search').length === 2, 'second search page');
-    const second = queryOf(reads('search').at(-1));
-    assert(second.from_ms === searchWindow.from_ms && second.to_ms === searchWindow.to_ms, 'Search pagination recomputed the window');
+    await until(() => reads('session_search').length === 2 && rows().length === 51, 'second matching-session page');
+    const second = queryOf(reads('session_search').at(-1));
+    assert(second.from_ms === searchWindow.from_ms && second.to_ms === searchWindow.to_ms, 'Pagination recomputed the window');
     assert(!document.querySelector('[data-error-code]'), 'Search pagination surfaced an error');
   }],
   ['refreshVersion re-queries with a fresh window', async () => {
@@ -510,34 +599,30 @@ const scenarios = [
   ['a failed search re-query cannot offer its previous cursor for pagination', async () => {
     await fresh(control => {
       seedSimple(control);
-      control.texts['content/seed'] = '关于路由编译边界的说明';
-      control.hits = Array.from({ length: 51 }, (_, index) => {
+            control.hits = Array.from({ length: 51 }, (_, index) => {
+        const session = `observation-session/match-${index}`;
+        const request = control.makeRequest(session, 0, Date.now() - 60_000 + index);
+        control.requests[session] = [request];
         control.texts[`content/hit-${index}`] = '关于路由编译边界的说明';
-        return { session_id: 'observation-session/simple', request_id: 'request/simple/0', content_id: `content/hit-${index}`, original_text_offset: 0 };
+        return { session_id: session, request_id: request.request_id, content_id: `content/hit-${index}`, original_text_offset: 0 };
       });
     });
-    await until(() => rows().length === 1, 'initial row');
+    await until(() => rows().length === 50, 'initial rows');
     await type('路由');
-    await until(() => reads('search').length === 1, 'search query');
+    await until(() => reads('session_search').length === 1, 'search query');
     await until(() => button('加载更多结果'), 'search pagination');
-    c().views.search = () => { throw { code: 'DAEMON_UNAVAILABLE' }; };
+    c().views.session_search = () => { throw { code: 'DAEMON_UNAVAILABLE' }; };
     c().bumpRefresh();
     await until(() => document.querySelector('[data-error-code="DAEMON_UNAVAILABLE"]'), 'failed search re-query error');
     assert(rows().length === 50, 'Failed search re-query dropped the loaded hits');
-    delete c().views.search;
-    const stalePager = button('加载更多结果');
-    if (stalePager) {
-      stalePager.click();
-      await pause(150);
-      const failure = document.querySelector('[data-error-code]')?.getAttribute('data-error-code');
-      assert(failure !== 'CHANGE_PREVIEW_STALE', `A search cursor from before the failed re-query stayed clickable and surfaced ${failure}`);
-    }
+    delete c().views.session_search;
+    assert(!button('加载更多结果'), 'A failed re-query left its old cursor actionable');
     button('重试').click();
     await until(() => !document.querySelector('[data-error-code]') && button('加载更多结果'), 'retry recovered');
-    const retried = queryOf(reads('search').at(-1));
+    const retried = queryOf(reads('session_search').at(-1));
     button('加载更多结果').click();
     await until(() => rows().length === 51, 'second search page after retry');
-    const paged = queryOf(reads('search').at(-1));
+    const paged = queryOf(reads('session_search').at(-1));
     assert(paged.from_ms === retried.from_ms && paged.to_ms === retried.to_ms, 'Search pagination after retry did not reuse the recovered window');
     assert(!document.querySelector('[data-error-code]'), 'Recovered search pagination surfaced an error');
   }],

@@ -8,17 +8,17 @@ import { Dialog, UiIcon } from '../../ui';
 import { confirmDiscard, useDiscardGuard } from '../../ui/discard-guard';
 import type { PriceDisplay } from '../model-reference/types';
 import { clientOperationId } from '../model-connections/state';
-import { addDraftKey, clearSecrets, createDraft, moveDraftKey, type ModelDraft } from './model-draft';
+import { addDraftKey, buildCredentialEdits, clearSecrets, createDraft, maskEnteredKey, moveDraftKey, type ModelDraft } from './model-draft';
 import { subscriptionAttentionCopy } from './subscription-copy';
 import { ConnectionLifecycleDialog } from './ConnectionLifecycleDialog';
 import type {
-  CandidateRef,
-  KeyEdit,
   ManagedModel,
   ManagedSource,
   ManagementChange,
   ManagementSnapshot,
   ProtectedKeyInput,
+  PreparedKeyInput,
+  KeyMasks,
   SavePreview,
 } from './types';
 
@@ -28,7 +28,8 @@ type Props = {
   initialSourceId?: string | null;
   busy?: boolean;
   onRefresh(): Promise<void>;
-  onPrepareKeyInput(sourceId: string, input: ProtectedKeyInput): Promise<CandidateRef>;
+  onPrepareKeyInput(sourceId: string, input: ProtectedKeyInput): Promise<PreparedKeyInput>;
+  onReadKeyMasks?(source: ManagedSource): Promise<KeyMasks>;
   onPreview(change: ManagementChange): Promise<SavePreview>;
   onApply(preview: SavePreview): Promise<'saved' | 'uncertain'>;
   onDiscardProtectedInputs(): void;
@@ -215,34 +216,7 @@ export function Models(props: Props) {
     setSubmitting(true);
     setErrorCode('');
     try {
-      const edits: KeyEdit[] = [];
-      for (const key of draft.keys) {
-        if (key.removed && key.keyId) {
-          edits.push({ action: 'remove', key_id: key.keyId, expected_generation: key.expectedGeneration });
-          continue;
-        }
-        if (key.removed) continue;
-        if (key.replacement) {
-          const candidate = await props.onPrepareKeyInput(source.source_id, {
-            draft_id: key.draftId,
-            key_id: key.keyId,
-            expected_generation: key.expectedGeneration,
-            value: key.replacement,
-          });
-          edits.push(key.keyId
-            ? { action: 'replace', key_id: key.keyId, expected_generation: key.expectedGeneration, input_candidate: candidate }
-            : { action: 'add', input_candidate: candidate });
-        }
-        const original = source.keys.find(item => item.key_id === key.keyId);
-        if (key.keyId && original && original.enabled !== key.enabled) {
-          edits.push({ action: 'set_enabled', key_id: key.keyId, expected_generation: key.expectedGeneration, enabled: key.enabled });
-        }
-      }
-      const retainedIds = draft.keys.filter(key => !key.removed && key.keyId).map(key => key.keyId!);
-      const originalIds = source.keys.map(key => key.key_id);
-      if (retainedIds.length === originalIds.length && retainedIds.some((id, index) => id !== originalIds[index])) {
-        edits.push({ action: 'set_order', key_ids: retainedIds });
-      }
+      const edits = await buildCredentialEdits(source, draft, props.onPrepareKeyInput);
       const change: ManagementChange = {
         schema: 'hiroute.compute-management-change/v2',
         subject: { kind: 'saved_source', source_id: source.source_id },
@@ -470,7 +444,7 @@ export function Models(props: Props) {
       onClose={() => { if (!submitting) cancelCredentials(); }}
       footer={<><button className="btn" type="button" disabled={submitting} onClick={cancelCredentials}>{text('取消', 'Cancel')}</button><span className="mc-footer-spacer" /><button className="btn btn-primary" type="button" disabled={submitting || !props.mutable || !draft?.selectedModels.length} onClick={() => void saveCredentials()}>{submitting ? text('正在保存…', 'Saving…') : text('保存凭据', 'Save credentials')}</button></>}
     >
-      {source && draft && <CredentialEditor language={props.language} source={source} model={model} draft={draft} errorCode={errorCode} onChange={setDraft} onEditingChange={setCredentialEditing} />}
+      {source && draft && <CredentialEditor language={props.language} source={source} model={model} draft={draft} errorCode={errorCode} onChange={setDraft} onEditingChange={setCredentialEditing} readKeyMasks={props.onReadKeyMasks} />}
     </Dialog>
   </section>;
 }
@@ -560,7 +534,7 @@ function ModelPriceSummary({ language, model, billing, contexts }: {
   return <div className="v3-price"><strong>{currency}{trim(rates[0])} / {currency}{trim(rates[1])}</strong><span>{zh ? '输入 / 输出 · 每 100 万 tokens' : 'Input / output · per million tokens'} · {context.currency} · {origin === 'manual' ? (zh ? '人工费率' : 'Manual rates') : (zh ? '目录或参考费率' : 'Catalog or reference rates')}</span></div>;
 }
 
-function CredentialEditor({ language, source, model, draft, errorCode, onChange, onEditingChange }: {
+function CredentialEditor({ language, source, model, draft, errorCode, onChange, onEditingChange, readKeyMasks }: {
   language: 'zh' | 'en';
   source: ManagedSource;
   model: ManagedModel | undefined;
@@ -568,12 +542,30 @@ function CredentialEditor({ language, source, model, draft, errorCode, onChange,
   errorCode: string;
   onChange(value: ModelDraft): void;
   onEditingChange(value: boolean): void;
+  readKeyMasks?: Props['onReadKeyMasks'];
 }) {
   const zh = language === 'zh';
   const text = (cn: string, en: string) => zh ? cn : en;
   const [editing, setEditing] = useState<{ kind: 'add' } | { kind: 'replace'; draftId: string } | null>(null);
   const [secretError, setSecretError] = useState('');
+  const [showSecret, setShowSecret] = useState(false);
+  const [masks, setMasks] = useState<KeyMasks['keys']>([]);
+  useEffect(() => {
+    let active = true;
+    setMasks([]);
+    void readKeyMasks?.(source).then(value => {
+      if (active && value.source_id === source.source_id && value.source_revision === source.revision) setMasks(value.keys);
+    }).catch(() => { /* A mask read never changes save authority or blocks editing. */ });
+    return () => { active = false; };
+  }, [source.source_id, source.revision, readKeyMasks]);
+  useEffect(() => { setShowSecret(false); }, [editing]);
   const visibleKeys = draft.keys.filter(key => !key.removed);
+  function keyLabel(key: ModelDraft['keys'][number]) {
+    return key.replacement ? maskEnteredKey(key.replacement)
+      : masks.find(item => item.key_id === key.keyId && item.generation === key.expectedGeneration)?.masked_key
+        ?? text(`标识 ${key.keyId?.slice(-8) ?? key.draftId.slice(-8)} · 遮罩暂不可用`,
+          `ID ${key.keyId?.slice(-8) ?? key.draftId.slice(-8)} · Mask unavailable`);
+  }
   const affected = source.models.map(item => item.display_name).join('、');
 
   function updateKey(draftId: string, update: (key: ModelDraft['keys'][number]) => ModelDraft['keys'][number]) {
@@ -624,7 +616,7 @@ function CredentialEditor({ language, source, model, draft, errorCode, onChange,
         if (event.altKey && event.key === 'ArrowDown') { event.preventDefault(); onChange(moveDraftKey(draft, key.draftId, 1)); }
       }}>
         <span className="candidate-index">{index + 1}</span>
-        <div className="row-main"><strong>{text(`Key ${index + 1}`, `Key ${index + 1}`)}</strong><p className="oc-meta">{key.keyId ? availability : text('新增，尚未保存', 'New, not saved')}</p></div>
+        <div className="row-main"><strong>{text(`Key ${index + 1}`, `Key ${index + 1}`)}</strong><p className="oc-key-mask" title={key.keyId ? text(`标识 ${key.keyId.slice(-8)}`, `ID ${key.keyId.slice(-8)}`) : undefined}>{keyLabel(key)}</p><p className="oc-meta">{key.keyId ? availability : text('新增，尚未保存', 'New, not saved')}</p></div>
         <div className="oc-key-actions">
           <button className="icon-btn" type="button" aria-label={text('上移', 'Move up')} disabled={index === 0} onClick={() => onChange(moveDraftKey(draft, key.draftId, -1))}><UiIcon name="arrowUp" /></button>
           <button className="icon-btn" type="button" aria-label={text('下移', 'Move down')} disabled={index === visibleKeys.length - 1} onClick={() => onChange(moveDraftKey(draft, key.draftId, 1))}><UiIcon name="arrowDown" /></button>
@@ -634,9 +626,14 @@ function CredentialEditor({ language, source, model, draft, errorCode, onChange,
       </div>;
     })}
     {!visibleKeys.length && <p className="oc-meta">{text('还没有凭据，添加后可用于这个接入。', 'No credentials yet. Add one for this connection.')}</p>}
+    {draft.keys.some(key => key.removed && key.keyId) && <div className="callout warn">
+      <strong>{text('保存后移除', 'Removed on save')}</strong>
+      {draft.keys.filter(key => key.removed && key.keyId).map(key => <p key={key.draftId}>{keyLabel(key)}</p>)}
+    </div>}
     {editing ? <div className="field">
       <label className="field-label" htmlFor="credential-secret">{editing.kind === 'replace' ? text('替换 API Key', 'Replace API key') : 'API Key'}</label>
-      <input id="credential-secret" data-autofocus className="input" type="password" autoComplete="new-password" aria-invalid={Boolean(secretError)} aria-describedby={secretError ? 'credential-secret-error' : undefined} value={editing.kind === 'add' ? draft.addedSecret : draft.keys.find(key => key.draftId === editing.draftId)?.replacement ?? ''} onChange={event => { setSecretError(''); if (editing.kind === 'add') onChange({ ...draft, addedSecret: event.target.value }); else updateKey(editing.draftId, key => ({ ...key, replacement: event.target.value })); }} />
+      <input id="credential-secret" data-autofocus className="input" type={showSecret ? 'text' : 'password'} autoComplete="new-password" aria-invalid={Boolean(secretError)} aria-describedby={secretError ? 'credential-secret-error' : undefined} value={editing.kind === 'add' ? draft.addedSecret : draft.keys.find(key => key.draftId === editing.draftId)?.replacement ?? ''} onChange={event => { setSecretError(''); if (editing.kind === 'add') onChange({ ...draft, addedSecret: event.target.value }); else updateKey(editing.draftId, key => ({ ...key, replacement: event.target.value })); }} />
+      <button className="btn btn-quiet" type="button" aria-pressed={showSecret} onClick={() => setShowSecret(value => !value)}>{showSecret ? text('隐藏', 'Hide') : text('显示', 'Show')}</button>
       {secretError && <p id="credential-secret-error" className="oc-inline-error" role="alert">{secretError}</p>}
       <div className="task-actions"><button className="btn" type="button" onClick={stopEditing}>{text('取消', 'Cancel')}</button><button className="btn btn-primary" type="button" onClick={acceptSecret}>{text('加入待保存修改', 'Add to changes')}</button></div>
     </div> : source.actions.includes('add_key') && <button className="btn" type="button" onClick={() => { setEditing({ kind: 'add' }); setSecretError(''); onEditingChange(true); }}><UiIcon name="plus" />{text('添加 API Key', 'Add API key')}</button>}

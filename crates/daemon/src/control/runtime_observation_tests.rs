@@ -32,6 +32,9 @@ use serde_json::json;
 
 use super::*;
 
+#[path = "runtime_worker_read_empty_tests.rs"]
+mod worker_read_empty_tests;
+
 #[test]
 fn production_writer_store_drives_application_owned_defaults_and_all_plan_scope() {
     #[cfg(unix)]
@@ -158,6 +161,54 @@ fn production_writer_store_drives_application_owned_defaults_and_all_plan_scope(
     v2_wire.payload["intent"]["query"]["limit"] = json!(100);
     assert_eq!(
         application.dispatch(v2_wire).error.unwrap().code,
+        hiroute_application_api::ErrorCode::CapabilityDenied
+    );
+
+    let search = hiroute_application_api::ObservationReadRequestV2::new(
+        hiroute_application_api::ObservationReadIntentV2::SessionSearch(
+            hiroute_application_api::ObservationSearchQueryV2 {
+                from_ms: now_ms - 7 * 86_400_000,
+                to_ms: now_ms + 1000,
+                session_id: None,
+                keyword: "exact-search-test".into(),
+                limit: 50,
+                cursor: None,
+                agent_id: None,
+                plan_id: None,
+                native_model: None,
+                outcome: None,
+                only_model_switch: false,
+            },
+        ),
+    );
+    let mut search_wire = LocalControlRequestV2 {
+        schema_version: LOCAL_CONTROL_SCHEMA_V2,
+        request_id: "production-session-search".into(),
+        principal: PrincipalV1::ambient_local_peer(),
+        operation_id: search.operation().into(),
+        payload: serde_json::to_value(&search).unwrap(),
+        protected_grant: None,
+    };
+    assert_eq!(
+        application
+            .dispatch(search_wire.clone())
+            .error
+            .unwrap()
+            .code,
+        hiroute_application_api::ErrorCode::CapabilityDenied
+    );
+    search_wire.protected_grant = Some(grant(
+        search.protected_operation(),
+        CanonicalDigest::of(&search).unwrap(),
+    ));
+    let searched = application.dispatch(search_wire.clone());
+    assert!(searched.error.is_none(), "{searched:?}");
+    let page = searched.data.unwrap();
+    assert!(page["hits"].is_array() && page["index_partial"].is_boolean());
+    assert!(page.get("budget_exhausted").is_none());
+    search_wire.payload["intent"]["query"]["keyword"] = json!("different");
+    assert_eq!(
+        application.dispatch(search_wire).error.unwrap().code,
         hiroute_application_api::ErrorCode::CapabilityDenied
     );
 
@@ -519,6 +570,16 @@ fn worker_read_uses_signed_run_cursors_reports_gap_and_preserves_b6_privacy() {
         wrong_purpose.error.unwrap().code,
         hiroute_application_api::ErrorCode::InvalidArguments
     );
+
+    let running = worker_read_empty_tests::start_prompt(&runtime, &accepted);
+    let empty = worker_read(&service, run_id, Some(&pending_cursor), Some(32));
+    assert!(empty.error.is_none(), "{empty:?}");
+    let empty: WorkerReadDataV1 = serde_json::from_value(empty.data.unwrap()).unwrap();
+    assert!(empty.valid());
+    assert_eq!(empty.content_state, WorkerReadContentStateV1::Pending);
+    assert_eq!(empty.run_state, running.progress.state);
+    assert_eq!(empty.state_revision, running.progress.revision);
+    assert_eq!(empty.next_cursor.as_deref(), Some(pending_cursor.as_str()));
 
     let target = ManagedTextProgressTarget {
         scope: ManagedTextScope {

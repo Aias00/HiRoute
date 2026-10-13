@@ -826,10 +826,21 @@ pub(crate) struct ControlNativeCredentialAuthority {
 }
 
 impl NativeCredentialAuthorityV1 for ControlNativeCredentialAuthority {
+    fn current_native_credential_refs(
+        &self,
+        request: &NativeCredentialLeaseRequestV1,
+    ) -> Result<Option<Vec<String>>, hiroute_domain::NativeCredentialLeaseErrorV1> {
+        self.adapter
+            .stores
+            .lock()
+            .map_err(|_| PortError::new(PortErrorCode::Unavailable, "control.runtime.pool_lock"))?
+            .current_native_credential_refs(request)
+    }
+
     fn lease_native_credential(
         &self,
         request: &NativeCredentialLeaseRequestV1,
-    ) -> PortResult<Option<NativeCredentialLeaseV1>> {
+    ) -> Result<Option<NativeCredentialLeaseV1>, hiroute_domain::NativeCredentialLeaseErrorV1> {
         self.adapter
             .stores
             .lock()

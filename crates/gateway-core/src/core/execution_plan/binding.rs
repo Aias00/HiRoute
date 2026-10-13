@@ -55,6 +55,34 @@ impl RequestExecutionBinding {
         self.ingress_plan.take();
     }
 
+    /// Bind current credentials to this request's candidate, after Product source/target
+    /// authorization and before execution admission. Shared publication segments stay immutable.
+    pub fn bind_candidate_credentials(
+        &mut self,
+        binding: ResolvedTargetBindingId,
+        credentials: Arc<[CredentialRef]>,
+    ) -> Result<(), PlanError> {
+        if binding.plan_revision() != self.plan_revision
+            || credentials.is_empty()
+            || credentials.len() > 64
+            || credentials
+                .iter()
+                .map(CredentialRef::as_str)
+                .collect::<std::collections::HashSet<_>>()
+                .len()
+                != credentials.len()
+        {
+            return Err(PlanError::InvalidRouteCandidateClosure);
+        }
+        let plan = self
+            .route_attempt_plans
+            .as_mut()
+            .and_then(|plans| plans.get_mut(&binding))
+            .ok_or(PlanError::BindingOutsideRouteClosure(binding))?;
+        Arc::make_mut(plan).credential_refs = credentials;
+        Ok(())
+    }
+
     /// Narrow the publication segments to one matched route and atomically
     /// acquire its complete RequestPinned candidate/accepted closure.
     pub fn bind_route(&mut self, route: &CompiledRoute) -> Result<(), PlanError> {

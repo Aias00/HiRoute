@@ -40,6 +40,78 @@ fn restore_spec(fixture: &QoderFixture, status: &serde_json::Value) -> serde_jso
 }
 
 #[test]
+fn saved_pi_and_qoder_endpoints_drift_until_public_reconfiguration() {
+    let tools = crate::test_support::private_tempdir();
+    let node = tools.path().join("node");
+    private_file(&node, b"#!/bin/sh\nif [ \"$1\" = --version ]; then echo v22.19.0; elif [ \"$2\" = --check ] && [ \"$4\" = models ]; then echo hiroute.pi-sdk-capability/v1:ok; else exit 97; fi\n");
+    fs::set_permissions(&node, fs::Permissions::from_mode(0o700)).unwrap();
+    let path =
+        std::env::join_paths([tools.path(), Path::new("/usr/bin"), Path::new("/bin")]).unwrap();
+    if crate::test_support::isolated_agent_home_with_path(
+        "control::runtime::native_model::tests::settings_entry_tests::qoder::models::saved_pi_and_qoder_endpoints_drift_until_public_reconfiguration",
+        &path,
+    ) {
+        return;
+    }
+    for kind in [AgentKindV1::Pi, AgentKindV1::Qoder] {
+        let fixture = QoderFixture::with_kind(true, kind);
+        let mut spec = model_spec(&fixture);
+        if kind == AgentKindV1::Pi {
+            spec["model"]["settings"]["mode"] = json!("pi_additional");
+        }
+        apply(
+            &fixture.service,
+            &fixture.runtime,
+            spec.clone(),
+            "endpoint-original",
+        );
+        assert_eq!(model_status(&fixture)["state"], "configured");
+        let before = fs::read(&fixture.native_config).unwrap();
+        fixture
+            .runtime
+            .adapter
+            .managed_agent_runtime
+            .lock()
+            .unwrap()
+            .as_mut()
+            .unwrap()
+            .gateway_base_url = "http://127.0.0.1:5838/v1".into();
+        let stale = model_status(&fixture);
+        assert_eq!(stale["state"], "drift");
+        assert!(stale.get("current_selection").is_none());
+        assert_eq!(fs::read(&fixture.native_config).unwrap(), before);
+
+        let refreshed = apply(&fixture.service, &fixture.runtime, spec, "endpoint-refresh");
+        assert_eq!(refreshed["state"], "succeeded");
+        assert_eq!(model_status(&fixture)["state"], "configured");
+        let after: serde_json::Value =
+            serde_json::from_slice(&fs::read(&fixture.native_config).unwrap()).unwrap();
+        let before: serde_json::Value = serde_json::from_slice(&before).unwrap();
+        assert_eq!(after["providers"]["native"], before["providers"]["native"]);
+        assert_eq!(after["unknown"], before["unknown"]);
+        assert_eq!(after["model"], before["model"]);
+        let providers = after["providers"].as_object().unwrap();
+        let (_, provider) = providers
+            .iter()
+            .find(|(name, _)| name.starts_with("hiroute-main-"))
+            .unwrap();
+        assert!(
+            provider["baseUrl"]
+                .as_str()
+                .unwrap()
+                .contains("127.0.0.1:5838/")
+        );
+        let (_, old_provider) = before["providers"]
+            .as_object()
+            .unwrap()
+            .iter()
+            .find(|(name, _)| name.starts_with("hiroute-main-"))
+            .unwrap();
+        assert_eq!(provider["models"], old_provider["models"]);
+    }
+}
+
+#[test]
 fn pi_default_selected_after_prepare_blocks_final_removal_without_losing_models() {
     // Supply only the model-capability receipt, without a machine-wide Node dependency.
     // SDK imports/semantics are independently covered by the SDK contract and native E2E.

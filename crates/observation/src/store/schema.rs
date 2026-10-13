@@ -611,6 +611,12 @@ const CONVERSATION_CONTENT_SCHEMA_V4: &str = r#"
     CREATE INDEX IF NOT EXISTS content_instances_v2_live_blob
         ON content_instances_v2(workspace_id, content_blob_digest) WHERE state='complete';
 
+    -- Cover live-search metadata without loading every content occurrence.
+    -- The implicit rowid preserves the first eligible occurrence per request.
+    CREATE INDEX IF NOT EXISTS content_instances_v2_search_blob
+        ON content_instances_v2(workspace_id, content_blob_digest,
+            content_kind, canonical_media_type, request_id) WHERE state='complete';
+
     CREATE TABLE IF NOT EXISTS content_chunks_v2 (
         workspace_id TEXT NOT NULL,
         content_id TEXT NOT NULL,

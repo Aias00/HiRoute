@@ -199,6 +199,7 @@ class Schedule(unittest.TestCase):
         consumers = {source.stem for source in tests.glob('*.rs')
                      if 'mod runtime_support;' in source.read_text()}
         self.assertTrue(consumers, 'Gateway runtime consumer inventory must be nonempty')
+        self.assertIn('p0_gateway_native_sessions', consumers)
         self.assertFalse(consumers - scheduler.PRODUCT_TARGETS,
                          'Gateway runtime consumers must wait for prepared products: '
                          + ', '.join(sorted(consumers - scheduler.PRODUCT_TARGETS)))
