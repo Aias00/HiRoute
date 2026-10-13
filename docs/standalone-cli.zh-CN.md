@@ -489,6 +489,24 @@ Standalone daemon 已是 resident service，因此 preview 不要求 Desktop log
 并发用户修改会导致冲突而不是被覆盖。Claude Code 使用其公开 profile/launcher 合同；不要把
 Codex 的 Responses 计划直接配置给只支持 Messages 的 surface。
 
+## JSON 请求输入
+
+所有接受 `--request-stdin` 的命令也接受 `--request-file PATH`：
+
+```sh
+hiroute routing preview --request-file route-preview.json --output json
+# 原有管道和 shell 重定向保持可用：
+hiroute routing preview --request-stdin --output json < route-preview.json
+```
+
+输入来源只能选一个。两种方式共用有大小上限的 UTF-8 JSON 解析器和命令类型校验；
+未知字段、重复 JSON 成员、多段 JSON、重复或混合来源、与人工选项混用均在连接
+Local Control 前返回 `INVALID_ARGUMENTS`。文件必须是普通文件，相对路径以调用者
+工作目录为准；以 `-` 开头的文件名加 `./` 前缀，带空格的路径需要引号。
+保留现有大小限制（通常为 1 MiB，Operation 查找和 Worker 依赖选择为 64 KiB）。
+请求文件不替代独立的 protected-input 或继承的 capability 通道。
+Worker 原有 `--file` 继续读取提示词文本。
+
 ## 会话、实际选择与用量事实
 
 一次 Agent 或 Worker 请求完成后：
@@ -500,6 +518,26 @@ hiroute sessions receipt RECEIPT_ID --output json
 hiroute sessions status --output json
 hiroute value show --routing PLAN_ID --session SESSION_ID --output json
 ```
+
+位置参数 `sessions receipt RECEIPT_ID` 保留 v1 RoutingReceipt 查询。
+查询 v2 Facts 时，使用 v2 session timeline 返回的准确逻辑 `request_id`；
+Session ID、v1 Receipt ID 与此定位符不同：
+
+```json
+{
+  "schema": "hiroute.observation.query/v2",
+  "intent": {
+    "view": "facts",
+    "query": {"request_id": "REQUEST_ID_FROM_TIMELINE", "limit": 100, "cursor": null}
+  }
+}
+```
+
+保存为 `facts-request.json` 后运行
+`hiroute sessions receipt --request-file facts-request.json --output json`。
+`--request-stdin` 接受相同请求，返回 v2 Facts 分页；后续页沿用同一 request ID
+并传入返回的 cursor。
+
 
 `sessions show` 默认只返回事实和 timeline，不返回对话正文。RoutingReceipt 的
 `route_decision`、`attempt_started`、`usage_and_cache` 等有序事实给出实际计划、模型选择、Attempt
@@ -572,7 +610,21 @@ hiroute gateway set --address 192.0.2.10 --port 8317 \
 hiroute gateway recover --output json
 ```
 
-`set` 保存 desired 后重启，并只在真实 ready 后推进 applied。自动端口首次选定后持久化；
+`set` 保存 desired 后重启，并只在真实 ready 后推进 applied。自动端口首次选定后持久化。
+重复 `--port auto`、固定转自动或只修改地址时，优先保留已保存的 desired 端口；
+desired 尚未选定端口时复用最近 applied 的端口，两者都没有才首次选择。
+端口冲突会明确失败，不另选端口。服务管理器重启失败后 desired 仍保留，操作仍为 failed；
+随后通过 `hiroute service run` 启动时，真实 ready 后记录该 desired 为 applied。
+`recover` 使用当前 applied 地址，不会恢复任意历史端口。
+
+`gateway show` 通过公开 Agent settings status 核对配置与当前运行地址。
+`agent_update.required` 在配置偏移、变更待完成或无法完成检查时提示核查/重新配置，
+不依赖最近监听器操作是否成功；`existing_agent_count` 为 null 表示发现不可用。
+配置已一致和仅启用协作的目标无需更新模型。未配置/已恢复模型还会检查已保存的 V1 接入：
+没有旧记录时无需更新；旧配置已断开时提示核查。当前已配置状态优先于已被取代的历史接入。
+地址实际变化后，保留所需模型选择，重新执行 `agents connect preview` / `agents connect apply`；
+监听器重启不会自动改写原生 Agent 配置。
+
 `0.0.0.0` 对本机管理客户端显示为 `127.0.0.1:<port>`。非 loopback 配置要求显式风险确认。
 HiRoute 不自动修改防火墙、TLS 或远端 Agent。暂不支持 IPv6、多监听器和防火墙管理。
 

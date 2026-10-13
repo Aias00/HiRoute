@@ -1,6 +1,92 @@
 use crate::fixture::*;
 
 #[tokio::test]
+async fn provisional_termination_uses_product_reply_without_publishing_an_attempt()
+-> Result<(), TestError> {
+    let _network_guard = NETWORK_TEST_LOCK.lock().await;
+    for product_reply in [true, false] {
+        let listener = TcpListener::bind("127.0.0.1:0").await?;
+        let plan = PlanRevision(7591);
+        let binding = ResolvedTargetBindingId::new(plan, 1);
+        let publications =
+            install_publication(BootstrapPublicationBuilder::new(plan.0, 59).route(
+                "gateway.test",
+                "/preparation-denied",
+                1,
+                plain_target(listener.local_addr()?, 59),
+            )?)?;
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            http::header::CONTENT_TYPE,
+            http::HeaderValue::from_static("application/json"),
+        );
+        let reply = LocalReply {
+            status: StatusCode::BAD_GATEWAY,
+            headers,
+            body: Bytes::from_static(br#"{"schema_version":"hiroute.gateway.error/v1","code":"SOURCE_DISABLED","phase":"credential_lease"}"#),
+            provenance: SemanticProvenance::NonSemantic,
+        };
+        let selection = TestSelection::new([binding])
+            .with_provisional_reply(product_reply.then_some(reply.clone()));
+        let provider = PassthroughProvider {
+            materialization_failure: Some(AttemptMaterializationFailure {
+                class: AttemptMaterializationFailureClass::Credential,
+                provider: ProviderClassificationFacts {
+                    error_class: Some(ObservationLabel::new("source_disabled").unwrap()),
+                    retryability: RetryabilityFact::Retryable,
+                    readiness: ObservationLabel::new("materialization_failed").unwrap(),
+                    ..ProviderClassificationFacts::default()
+                },
+                termination_reason: ObservationLabel::new("credential").unwrap(),
+            }),
+            materialization_failures_remaining: Arc::new(AtomicUsize::new(1)),
+            materialization_raw_error: Some(Arc::from("private provider credential detail")),
+            ..PassthroughProvider::default()
+        };
+        let finalized = Arc::clone(&provider.finalized_attempts);
+        let gateway = lifecycle_with_provider(
+            publications,
+            selection.clone(),
+            provider,
+            TrackingFilters::default(),
+        )?;
+        let mut session = RecordingSession::new(
+            "gateway.test",
+            "/preparation-denied",
+            Bytes::from_static(b"prompt"),
+            HttpProtocol::Http1,
+        );
+        assert_eq!(gateway.process(&mut session).await?, SessionReuse::Reusable);
+        assert_eq!(
+            session.response_head.as_ref().unwrap().status,
+            StatusCode::BAD_GATEWAY
+        );
+        if product_reply {
+            assert_eq!(session.response_body, reply.body);
+            assert_eq!(
+                session.response_head.as_ref().unwrap().headers[http::header::CONTENT_TYPE],
+                "application/json"
+            );
+        } else {
+            assert_eq!(
+                session.response_body,
+                b"upstream candidate preparation failed"
+            );
+        }
+        assert_eq!(selection.failures(), [AttemptFailureClass::Credential]);
+        assert!(selection.completed().is_empty());
+        assert!(selection.published().is_empty());
+        assert_eq!(finalized.load(Ordering::Relaxed), 0);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(50), listener.accept())
+                .await
+                .is_err()
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn materialized_attempt_filter_failure_finalizes_before_fallback_selection()
 -> Result<(), TestError> {
     let _network_guard = NETWORK_TEST_LOCK.lock().await;

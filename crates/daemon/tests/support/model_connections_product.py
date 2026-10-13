@@ -458,13 +458,13 @@ def publish_plan_and_agent(product, binding_id, native_model_mode='preserve_avai
     assert [model['id'] for model in catalog['data']] == expected_models, catalog
 
 
-def gateway_request(product, allowed=True):
+def gateway_request(product, allowed=True, stream=False):
     client = http.client.HTTPConnection('127.0.0.1', product.port, timeout=30)
     try:
         client.request('POST', '/v1/responses', body=encoded({
             'model': product.model_alias,
             'input': 'native product request',
-            'stream': False,
+            'stream': stream,
         }), headers={
             'X-HiRoute-Token': product.bearer(product.agent_connection),
             'Content-Type': 'application/json',
@@ -475,7 +475,13 @@ def gateway_request(product, allowed=True):
         if allowed:
             assert response.status == 200 and b'native product answer' in body, (response.status, body)
         else:
-            assert response.status >= 400 and b'native product answer' not in body, (response.status, body)
+            assert response.status == 502, (response.status, body)
+            assert response.getheader('Content-Type') == 'application/json', response.getheaders()
+            assert response.getheader('Retry-After') is None, response.getheaders()
+            assert json.loads(body) == {
+                'schema_version': 'hiroute.gateway.error/v1',
+                'code': 'SOURCE_DISABLED', 'phase': 'credential_lease',
+            }, body
     finally:
         client.close()
 
@@ -515,7 +521,8 @@ def assert_live_credential_switches(product, upstream, saved):
     def rejected_without_upstream():
         with upstream.lock:
             before = len(upstream.requests)
-        gateway_request(product, allowed=False)
+        for stream in (False, True):
+            gateway_request(product, allowed=False, stream=stream)
         with upstream.lock:
             assert len(upstream.requests) == before, 'disabled credential reached the upstream'
 
@@ -643,7 +650,9 @@ def run(repository, expected_sha=None):
             'saved_binding': saved['binding_id'],
             'saved_source_rechecks': 2,
             'gateway_attempts': 3,
-            'disabled_requests_without_upstream': 3,
+            'disabled_requests_without_upstream': 6,
+            'preparation_error_code': 'SOURCE_DISABLED',
+            'preparation_error_modes': ['nonstream', 'prebody_stream'],
             'credential_resolver_mode': 'saved_bearer',
             'session_record': session_id,
             'session_model': observed_model,

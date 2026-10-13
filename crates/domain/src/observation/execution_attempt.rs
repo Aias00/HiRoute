@@ -28,6 +28,8 @@ pub enum CredentialLeaseOutcomeV1 {
     Leased,
     Exhausted,
     AuthorityError,
+    SourceDisabled,
+    CredentialDisabled,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]

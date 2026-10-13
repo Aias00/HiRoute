@@ -20,6 +20,10 @@ const NATIVE_CAPTURE_PENDING_LIMIT: usize = 1024 * 1024;
 #[path = "memory_tests.rs"]
 mod memory_tests;
 
+#[cfg(test)]
+#[path = "usage_tests.rs"]
+mod usage_tests;
+
 pub(super) struct CanonicalResponseTracker {
     budget: StreamBudget,
     profile: Arc<CandidateProtocolProfile>,
@@ -303,10 +307,12 @@ impl CanonicalResponseTracker {
                 .transpose()
                 .map_err(|_| "canonical_response_render_failed")?
                 .unwrap_or_default();
-            // Same-protocol Native delivery records usage from the main
-            // projector in provider completion. The strict decoder here is a
-            // capture-only sidecar and must not create a second usage fact.
+            // Native delivery and converted nonstream responses retain usage
+            // in the main provider's completion facts. This capture sidecar
+            // must not report it again, including for Delta pricing semantics.
+            // Converted streams still publish their accepted usage events.
             if !self.native_output
+                && self.streaming
                 && let ModelEvent::UsageUpdated { usage } = &event.event
             {
                 self.pending_delivery.merge_usage(usage);

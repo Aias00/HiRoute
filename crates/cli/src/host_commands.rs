@@ -1,9 +1,11 @@
 use std::time::Duration;
 
 use hiroute_application_api::{
-    ErrorCode, LOCAL_CONTROL_SCHEMA_V2, LocalControlWireRequestV2, MachineStatus,
-    STANDALONE_PROTECTED_INPUT_RESPONSE_SCHEMA_V1, StandaloneProtectedInputRequestV1,
-    release_manifest,
+    AGENT_CONNECTION_STATUS_SCHEMA_V1, AGENT_SETTINGS_SCHEMA_V2, AgentConnectionStateV1,
+    AgentConnectionStatusRequestV1, AgentConnectionStatusV1, AgentModelSettingsStateV2,
+    AgentSettingsStatusRequestV2, AgentSettingsStatusV2, ErrorCode, LOCAL_CONTROL_SCHEMA_V2,
+    LocalControlWireRequestV2, MachineStatus, STANDALONE_PROTECTED_INPUT_RESPONSE_SCHEMA_V1,
+    StandaloneProtectedInputRequestV1, release_manifest,
 };
 use hiroute_host_runtime::{
     GatewayListenerDesiredV1, GatewayListenerStore, StandaloneLayout, connect_address,
@@ -101,14 +103,14 @@ fn gateway_command(
         .map_err(|_| ErrorCode::GatewayUnavailable)?;
     let store = GatewayListenerStore::new(layout.gateway_config_root());
     match arguments {
-        [verb] if verb == "show" => gateway_status(&store),
+        [verb] if verb == "show" => gateway_status(&store, globals),
         [verb] if verb == "recover" => {
             store.recover().map_err(|_| ErrorCode::GatewayUnavailable)?;
             if service::restart(globals.timeout.unwrap_or(Duration::from_secs(30))).is_err() {
                 let _ = store.mark_failed("SERVICE_RESTART_FAILED");
                 return Err(ErrorCode::DaemonUnavailable);
             }
-            gateway_status(&store)
+            gateway_status(&store, globals)
         }
         [verb, options @ ..] if verb == "set" => {
             let desired = parse_gateway_settings(options)?;
@@ -119,7 +121,7 @@ fn gateway_command(
                 let _ = store.mark_failed("SERVICE_RESTART_FAILED");
                 return Err(ErrorCode::DaemonUnavailable);
             }
-            gateway_status(&store)
+            gateway_status(&store, globals)
         }
         _ => Err(ErrorCode::InvalidArguments),
     }
@@ -170,7 +172,10 @@ fn parse_gateway_settings(options: &[String]) -> Result<GatewayListenerDesiredV1
     Ok(desired)
 }
 
-fn gateway_status(store: &GatewayListenerStore) -> Result<serde_json::Value, ErrorCode> {
+fn gateway_status(
+    store: &GatewayListenerStore,
+    globals: &Globals,
+) -> Result<serde_json::Value, ErrorCode> {
     let config = store
         .load_or_default()
         .map_err(|_| ErrorCode::GatewayUnavailable)?;
@@ -182,11 +187,30 @@ fn gateway_status(store: &GatewayListenerStore) -> Result<serde_json::Value, Err
         std::net::TcpStream::connect_timeout(&address, Duration::from_millis(750)).is_ok()
     });
     let suggested_agent_base_url = connect.map(|value| format!("http://{value}/v1"));
-    let existing_agent_count = discovered_agent_count();
-    let update_required = existing_agent_count.is_some_and(|count| count > 0)
-        && config.operation.as_ref().is_some_and(|operation| {
-            operation.state == hiroute_host_runtime::GatewayListenerOperationStateV1::Succeeded
-        });
+    let client = LocalControlClient::cli_from_environment()
+        .ok()
+        // Native discovery can run executable probes; use the normal control-call deadline.
+        .map(|client| client.with_timeout(globals.timeout.unwrap_or(Duration::from_secs(30))));
+    let (update_required, existing_agent_count) = agent_update_status(|operation_id, payload| {
+        let response = client
+            .as_ref()
+            .ok_or(ErrorCode::DaemonUnavailable)?
+            .call(LocalControlWireRequestV2 {
+                schema_version: LOCAL_CONTROL_SCHEMA_V2,
+                request_id: format!("gateway-agents-{}", std::process::id()),
+                operation_id: operation_id.into(),
+                payload,
+                protected_grant: None,
+            })
+            .map_err(|_| ErrorCode::DaemonUnavailable)?;
+        if response.status == MachineStatus::Succeeded {
+            response.data.ok_or(ErrorCode::Internal)
+        } else {
+            Err(response
+                .error
+                .map_or(ErrorCode::Internal, |error| error.code))
+        }
+    });
     let (preview_command_id, apply_command_id) = public_agent_update_commands();
     Ok(json!({
         "schema": "hiroute.gateway-listener-status/v1",
@@ -219,32 +243,115 @@ fn public_agent_update_commands() -> (Option<&'static str>, Option<&'static str>
     }
 }
 
-fn discovered_agent_count() -> Option<usize> {
-    let request = LocalControlWireRequestV2 {
-        schema_version: LOCAL_CONTROL_SCHEMA_V2,
-        request_id: format!("gateway-agents-{}", std::process::id()),
-        operation_id: "ListAgents".into(),
-        payload: json!({}),
-        protected_grant: None,
+fn agent_update_status(
+    mut query: impl FnMut(&str, serde_json::Value) -> Result<serde_json::Value, ErrorCode>,
+) -> (bool, Option<usize>) {
+    let Ok(list) = query("ListAgents", json!({})) else {
+        return (true, None);
     };
-    let response = LocalControlClient::cli_from_environment()
-        .ok()?
-        .with_timeout(Duration::from_millis(750))
-        .call(request)
-        .ok()?;
-    if response.status != MachineStatus::Succeeded {
-        return None;
+    let Some(agents) = list.get("agents").and_then(serde_json::Value::as_array) else {
+        return (true, None);
+    };
+    let mut contexts = std::collections::BTreeSet::new();
+    let mut legacy_connections = std::collections::BTreeSet::new();
+    for agent in agents {
+        match agent.get("context_id") {
+            None | Some(serde_json::Value::Null) => {}
+            Some(serde_json::Value::String(context)) if !context.is_empty() => {
+                contexts.insert(context.clone());
+                let Some(agent_id) = agent
+                    .get("agent_id")
+                    .and_then(serde_json::Value::as_str)
+                    .filter(|id| !id.is_empty())
+                else {
+                    return (true, None);
+                };
+                let Some(profile_id) = agent
+                    .get("profile_id")
+                    .and_then(serde_json::Value::as_str)
+                    .filter(|id| !id.is_empty())
+                else {
+                    return (true, None);
+                };
+                legacy_connections.insert((
+                    context,
+                    format!("agent-connection/{agent_id}/{profile_id}"),
+                    agent_id,
+                    profile_id,
+                ));
+            }
+            _ => return (true, None),
+        }
     }
-    response.data?.get("agents")?.as_array().map(|agents| {
-        agents
-            .iter()
-            .filter(|agent| {
-                agent
-                    .get("context_id")
-                    .is_some_and(|value| !value.is_null())
+    let mut required = false;
+    let mut legacy_contexts = std::collections::BTreeSet::new();
+    for context in &contexts {
+        let status = query(
+            "GetAgentConnectionStatus",
+            json!(AgentSettingsStatusRequestV2 {
+                schema_version: AGENT_SETTINGS_SCHEMA_V2,
+                context_id: context.clone(),
+            }),
+        )
+        .ok()
+        .and_then(|value| serde_json::from_value::<AgentSettingsStatusV2>(value).ok())
+        .filter(|status| status.valid() && status.context_id() == context);
+        // Unavailable inspection is not evidence that installed endpoints are current.
+        if status
+            .as_ref()
+            .and_then(AgentSettingsStatusV2::model)
+            .is_some_and(|model| {
+                matches!(
+                    model.state,
+                    AgentModelSettingsStateV2::NotConfigured | AgentModelSettingsStateV2::Restored
+                )
             })
-            .count()
-    })
+        {
+            legacy_contexts.insert(context.clone());
+        }
+        required |= status.is_none_or(|status| {
+            status.model().is_some_and(|model| {
+                matches!(
+                    model.state,
+                    AgentModelSettingsStateV2::Drift
+                        | AgentModelSettingsStateV2::Pending
+                        | AgentModelSettingsStateV2::NeedsAttention
+                )
+            })
+        });
+    }
+    // Released V1 connections use installation/profile IDs, not V2 context IDs. An absent
+    // journal is normal for a fresh installation; an unreadable journal is not a clean result.
+    // A current configured V2 target has already proved convergence. Its superseded V1
+    // grant can remain in history, so only unconfigured/restored targets need this fallback.
+    for (context, connection_id, agent_id, profile_id) in legacy_connections {
+        if !legacy_contexts.contains(context) {
+            continue;
+        }
+        let status = query(
+            "GetAgentConnectionStatus",
+            json!(AgentConnectionStatusRequestV1 {
+                connection_id: connection_id.clone(),
+            }),
+        );
+        if matches!(status, Err(ErrorCode::ResourceNotFound)) {
+            continue;
+        }
+        let status = status
+            .ok()
+            .and_then(|value| serde_json::from_value::<AgentConnectionStatusV1>(value).ok())
+            .filter(|status| {
+                status.schema == AGENT_CONNECTION_STATUS_SCHEMA_V1
+                    && status.connection_id == connection_id
+                    && status.agent_id == agent_id
+                    && status.profile_id == profile_id
+            });
+        required |= status.is_none_or(|status| {
+            status.state == AgentConnectionStateV1::Disconnected
+                || (status.state == AgentConnectionStateV1::Active && !status.launch_ready)
+        });
+    }
+    (required, Some(contexts.len()))
 }
 
 fn protected_input_command(
@@ -415,5 +522,159 @@ mod tests {
             public_agent_update_commands(),
             (Some("agents.connect.preview"), Some("agents.connect.apply"))
         );
+    }
+
+    #[test]
+    fn agent_update_hint_tracks_current_model_state_and_unknown_reads() {
+        let context = "agent-context/pi";
+        for (state, required) in [
+            ("not_configured", false),
+            ("restored", false),
+            ("configured", false),
+            ("drift", true),
+            ("pending", true),
+            ("needs_attention", true),
+        ] {
+            let status = json!({
+                "schema":"hiroute.agent-model-settings-status/v2", "context_id":context,
+                "state":state, "operation_id":null, "operation_state":null,
+                "restore_point_ref":null, "applied_revision":null,
+                "surface_results":[], "model_verified":false,
+            });
+            assert_eq!(
+                agent_update_status(|operation, payload| {
+                    if operation == "ListAgents" {
+                        Ok(discovered_agent(context))
+                    } else if payload.get("connection_id").is_some() {
+                        Err(ErrorCode::ResourceNotFound)
+                    } else {
+                        assert_eq!(operation, "GetAgentConnectionStatus");
+                        assert_eq!(payload["context_id"], context);
+                        Ok(status.clone())
+                    }
+                }),
+                (required, Some(1)),
+                "{state}"
+            );
+        }
+        assert_eq!(
+            agent_update_status(|_, _| Err(ErrorCode::DaemonUnavailable)),
+            (true, None)
+        );
+        assert_eq!(
+            agent_update_status(|operation, _| {
+                if operation == "ListAgents" {
+                    Ok(discovered_agent(context))
+                } else {
+                    Err(ErrorCode::DaemonUnavailable)
+                }
+            }),
+            (true, Some(1))
+        );
+        assert_eq!(
+            agent_update_status(|_, _| Ok(json!({"agents":[{}, {"context_id":null}]}))),
+            (false, Some(0))
+        );
+    }
+
+    #[test]
+    fn collaboration_only_and_duplicate_targets_do_not_require_model_updates() {
+        let context = "agent-context/qoder";
+        let (required, count) = agent_update_status(|operation, payload| {
+            assert!(
+                payload.get("connection_id").is_none(),
+                "collaboration-only has no model fallback"
+            );
+            Ok(if operation == "ListAgents" {
+                let mut list = discovered_agent(context);
+                let agent = list["agents"][0].clone();
+                list["agents"].as_array_mut().unwrap().push(agent);
+                list
+            } else {
+                json!({"schema":"hiroute.agent-collaboration-only-settings-status/v2",
+                "context_id":context, "collaboration":{
+                    "schema":"hiroute.agent-collaboration-settings-status/v2",
+                    "state":"configured", "operation_id":null,"operation_state":null,
+                    "restore_point_ref":null,
+                }})
+            })
+        });
+        assert!(!required);
+        assert_eq!(count, Some(1));
+        assert_eq!(
+            agent_update_status(|operation, _| Ok(if operation == "ListAgents" {
+                discovered_agent(context)
+            } else {
+                json!({"schema":"unknown","context_id":context})
+            })),
+            (true, Some(1))
+        );
+    }
+
+    fn discovered_agent(context: &str) -> serde_json::Value {
+        json!({"agents":[{"context_id":context,"agent_id":"agent_claude_default","profile_id":"claude-messages-v1"}, {"context_id":null}]})
+    }
+
+    #[test]
+    fn legacy_connections_are_checked_after_unconfigured_or_restored_settings() {
+        let context = "agent-context/claude";
+        let connection = "agent-connection/agent_claude_default/claude-messages-v1";
+        for current in ["not_configured", "restored", "configured"] {
+            for (legacy, ready, expected) in [
+                ("active", true, false),
+                ("active", false, true),
+                ("disconnected", false, true),
+                ("revoked", false, false),
+            ] {
+                let mut legacy_reads = 0;
+                let result = agent_update_status(|operation, payload| {
+                    if operation == "ListAgents" {
+                        Ok(discovered_agent(context))
+                    } else if payload.get("context_id").is_some() {
+                        Ok(
+                            json!({"schema":"hiroute.agent-model-settings-status/v2","context_id":context,"state":current,
+                            "operation_id":null,"operation_state":null,"restore_point_ref":null,"applied_revision":null,
+                            "surface_results":[],"model_verified":false}),
+                        )
+                    } else {
+                        legacy_reads += 1;
+                        assert_eq!(payload, json!({"connection_id":connection}));
+                        Ok(
+                            json!({"schema":AGENT_CONNECTION_STATUS_SCHEMA_V1,"connection_id":connection,
+                            "agent_id":"agent_claude_default","profile_id":"claude-messages-v1","installed_version":"fixture",
+                            "state":legacy,"activation_mode":"managed_configuration","revision":1,"launch_ready":ready}),
+                        )
+                    }
+                });
+                assert_eq!(
+                    result,
+                    (current != "configured" && expected, Some(1)),
+                    "{current}/{legacy}/{ready}"
+                );
+                assert_eq!(legacy_reads, usize::from(current != "configured"));
+            }
+        }
+        for (legacy, expected) in [
+            (Err(ErrorCode::ResourceNotFound), false),
+            (Err(ErrorCode::DaemonUnavailable), true),
+            (Ok(json!({"schema":"unknown"})), true),
+        ] {
+            assert_eq!(
+                agent_update_status(|operation, payload| {
+                    if operation == "ListAgents" {
+                        Ok(discovered_agent(context))
+                    } else if payload.get("context_id").is_some() {
+                        Ok(
+                            json!({"schema":"hiroute.agent-model-settings-status/v2","context_id":context,"state":"not_configured",
+                        "operation_id":null,"operation_state":null,"restore_point_ref":null,"applied_revision":null,
+                        "surface_results":[],"model_verified":false}),
+                        )
+                    } else {
+                        legacy.clone()
+                    }
+                }),
+                (expected, Some(1))
+            );
+        }
     }
 }

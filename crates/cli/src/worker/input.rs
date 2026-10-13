@@ -46,19 +46,9 @@ pub(super) fn parse_dependencies_discover(
 pub(super) fn parse_dependency_selection(
     options: &[String],
 ) -> Result<WorkerDependenciesSelectRequestV1, ErrorCode> {
-    if options != ["--request-stdin"] {
-        return Err(ErrorCode::InvalidArguments);
-    }
-    let mut bytes = Vec::new();
-    std::io::stdin()
-        .take(MAX_DEPENDENCY_SELECTION_BYTES + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|_| ErrorCode::InvalidArguments)?;
-    if bytes.is_empty() || bytes.len() as u64 > MAX_DEPENDENCY_SELECTION_BYTES {
-        return Err(ErrorCode::InvalidArguments);
-    }
-    let request: WorkerDependenciesSelectRequestV1 =
-        serde_json::from_slice(&bytes).map_err(|_| ErrorCode::InvalidArguments)?;
+    let request: WorkerDependenciesSelectRequestV1 = crate::request_input::deserialize(
+        crate::request_input::read(options, MAX_DEPENDENCY_SELECTION_BYTES)?,
+    )?;
     request
         .valid()
         .then_some(request)

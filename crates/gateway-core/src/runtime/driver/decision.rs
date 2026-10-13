@@ -456,9 +456,10 @@ pub trait DecisionSessionPort: Send {
         request: SelectionRequest<'_>,
     ) -> Result<Option<SelectedGatewayAttempt>, Arc<str>>;
 
-    /// Optional product-owned response when selection ended before any
-    /// upstream attempt. Core keeps its generic 502 when no exact response is
-    /// available.
+    /// Optional product-owned response when selection is exhausted or a provisional
+    /// candidate terminates before an upstream attempt. Core keeps its generic 502
+    /// when no exact response is available. This does not change failure disposition
+    /// or publish a formal attempt for a provisional candidate.
     fn exhaustion_local_reply(&mut self, _now: Instant) -> Result<Option<LocalReply>, Arc<str>> {
         Ok(None)
     }

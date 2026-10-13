@@ -77,9 +77,10 @@ impl LocalControlAdapter {
             truncated: None,
         };
         match read {
+            // Prompt intent is execution evidence, not evidence that public text was saved.
             ManagedTextProgressRead::Missing {
                 visibility_generation,
-            } if !run.progress.prompt_may_have_executed => {
+            } => {
                 let cursor = ManagedTextProgressCursor {
                     visibility_generation,
                     segment: 0,
@@ -94,7 +95,6 @@ impl LocalControlAdapter {
                 data.truncated = Some(false);
                 Ok(data)
             }
-            ManagedTextProgressRead::Missing { .. } => Err(WorkerReadErrorV1::Unavailable),
             ManagedTextProgressRead::Available(page) => {
                 let cursor = ManagedTextProgressCursor {
                     visibility_generation: page.visibility_generation,

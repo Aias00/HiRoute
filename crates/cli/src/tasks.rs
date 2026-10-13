@@ -1,115 +1,114 @@
+use crate::request_input::{MAX_REQUEST_BYTES, RequestInput, valid_positional};
 use hiroute_application_api::{
     DelegationCancelRequestV1, DelegationContinueRequestV1, DelegationGetRequestV1,
     DelegationListRequestV1, DelegationResultRequestV1, DelegationStartRequestV1,
     DelegationWaitRequestV1, ErrorCode,
 };
-use std::io::Read;
 
 pub(crate) fn payload(command: &str, options: &[String]) -> Result<serde_json::Value, ErrorCode> {
-    let mut bytes = Vec::new();
-    std::io::stdin()
-        .take(1024 * 1024 + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|_| ErrorCode::InvalidArguments)?;
-    if bytes.len() > 1024 * 1024 {
+    let source_start = if options.last().is_some_and(|flag| flag == "--request-stdin") {
+        options.len() - 1
+    } else if options.len() >= 2 && options[options.len() - 2] == "--request-file" {
+        options.len() - 2
+    } else {
         return Err(ErrorCode::InvalidArguments);
-    }
-    let value = parse(command, &bytes)?;
-    validate_options(command, options, &value)?;
+    };
+    let input = RequestInput::parse(&options[source_start..])?;
+    let selectors = &options[..source_start];
+    validate_selectors(command, selectors, None)?;
+    let value = parse_value(command, input.read(MAX_REQUEST_BYTES)?)?;
+    validate_selectors(command, selectors, Some(&value))?;
     Ok(value)
 }
 
-fn validate_options(
+fn validate_selectors(
     command: &str,
     options: &[String],
-    value: &serde_json::Value,
+    value: Option<&serde_json::Value>,
 ) -> Result<(), ErrorCode> {
-    let invalid = || Err(ErrorCode::InvalidArguments);
+    let matches =
+        |key: &str, expected: &str| value.is_none_or(|value| value[key].as_str() == Some(expected));
     match (command, options) {
-        ("tasks.list" | "tasks.start" | "tasks.continue", [stdin])
-            if stdin == "--request-stdin" =>
+        ("tasks.list" | "tasks.start" | "tasks.continue", []) => Ok(()),
+        ("tasks.wait" | "tasks.result" | "tasks.cancel", [flag, run])
+            if flag == "--run" && valid_positional(run) && matches("run_id", run) =>
         {
             Ok(())
         }
-        ("tasks.wait" | "tasks.result" | "tasks.cancel", [flag, run, stdin])
-            if flag == "--run"
-                && !run.is_empty()
-                && stdin == "--request-stdin"
-                && value["run_id"].as_str() == Some(run.as_str()) =>
+        ("tasks.show", [flag, task])
+            if flag == "--task"
+                && valid_positional(task)
+                && matches("task_id", task)
+                && value.is_none_or(|value| value.get("run_id").is_none()) =>
         {
             Ok(())
         }
-        ("tasks.show", [task_flag, task, stdin])
-            if task_flag == "--task"
-                && !task.is_empty()
-                && stdin == "--request-stdin"
-                && value["task_id"].as_str() == Some(task.as_str())
-                && value.get("run_id").is_none() =>
-        {
-            Ok(())
-        }
-        ("tasks.show", [task_flag, task, run_flag, run, stdin])
+        ("tasks.show", [task_flag, task, run_flag, run])
             if task_flag == "--task"
                 && run_flag == "--run"
-                && !task.is_empty()
-                && !run.is_empty()
-                && stdin == "--request-stdin"
-                && value["task_id"].as_str() == Some(task.as_str())
-                && value["run_id"].as_str() == Some(run.as_str()) =>
+                && valid_positional(task)
+                && valid_positional(run)
+                && matches("task_id", task)
+                && matches("run_id", run) =>
         {
             Ok(())
         }
-        ("tasks.show", [key_flag, key, operation_flag, operation, stdin])
+        ("tasks.show", [key_flag, key, operation_flag, operation])
             if key_flag == "--submission-key"
                 && operation_flag == "--operation"
                 && !key.is_empty()
                 && matches!(operation.as_str(), "start" | "continue")
-                && stdin == "--request-stdin"
-                && value["submission_key"].as_str() == Some(key.as_str())
-                && value["submission_operation"].as_str() == Some(operation.as_str()) =>
+                && matches("submission_key", key)
+                && matches("submission_operation", operation) =>
         {
             Ok(())
         }
-        _ => invalid(),
+        _ => Err(ErrorCode::InvalidArguments),
     }
 }
 
+#[cfg(test)]
 fn parse(command: &str, bytes: &[u8]) -> Result<serde_json::Value, ErrorCode> {
+    parse_value(
+        command,
+        crate::request_input::read_json(bytes, MAX_REQUEST_BYTES)?,
+    )
+}
+
+fn parse_value(command: &str, value: serde_json::Value) -> Result<serde_json::Value, ErrorCode> {
     let invalid = |_| ErrorCode::InvalidArguments;
     match command {
-        "tasks.list" => typed::<DelegationListRequestV1>(bytes, invalid),
-        "tasks.show" => typed::<DelegationGetRequestV1>(bytes, invalid),
+        "tasks.list" => typed::<DelegationListRequestV1>(value, invalid),
+        "tasks.show" => typed::<DelegationGetRequestV1>(value, invalid),
         "tasks.start" => {
-            let request: DelegationStartRequestV1 =
-                serde_json::from_slice(bytes).map_err(invalid)?;
+            let request: DelegationStartRequestV1 = crate::request_input::deserialize(value)?;
             if !request.valid() {
                 return Err(ErrorCode::InvalidArguments);
             }
             serde_json::to_value(request).map_err(invalid)
         }
-        "tasks.wait" => typed::<DelegationWaitRequestV1>(bytes, invalid),
+        "tasks.wait" => typed::<DelegationWaitRequestV1>(value, invalid),
         "tasks.result" => {
-            let request: DelegationResultRequestV1 =
-                serde_json::from_slice(bytes).map_err(invalid)?;
+            let request: DelegationResultRequestV1 = crate::request_input::deserialize(value)?;
             if !request.valid() {
                 return Err(ErrorCode::InvalidArguments);
             }
             serde_json::to_value(request).map_err(invalid)
         }
-        "tasks.cancel" => typed::<DelegationCancelRequestV1>(bytes, invalid),
-        "tasks.continue" => typed::<DelegationContinueRequestV1>(bytes, invalid),
+        "tasks.cancel" => typed::<DelegationCancelRequestV1>(value, invalid),
+        "tasks.continue" => typed::<DelegationContinueRequestV1>(value, invalid),
         _ => Err(ErrorCode::UnknownCommand),
     }
 }
 
 fn typed<T>(
-    bytes: &[u8],
+    value: serde_json::Value,
     invalid: fn(serde_json::Error) -> ErrorCode,
 ) -> Result<serde_json::Value, ErrorCode>
 where
     T: serde::de::DeserializeOwned + serde::Serialize + ValidRequest,
 {
-    let request: T = serde_json::from_slice(bytes).map_err(invalid)?;
+    let request: T = crate::request_input::deserialize(value)?;
     if !request.valid() {
         return Err(ErrorCode::InvalidArguments);
     }
@@ -160,30 +159,28 @@ mod tests {
         .unwrap();
         let value = parse("tasks.show", &bytes).unwrap();
         assert!(
-            validate_options(
+            validate_selectors(
                 "tasks.show",
                 &[
                     "--submission-key".into(),
                     "continue/one".into(),
                     "--operation".into(),
                     "continue".into(),
-                    "--request-stdin".into(),
                 ],
-                &value,
+                Some(&value),
             )
             .is_ok()
         );
         assert_eq!(
-            validate_options(
+            validate_selectors(
                 "tasks.show",
                 &[
                     "--submission-key".into(),
                     "different".into(),
                     "--operation".into(),
                     "continue".into(),
-                    "--request-stdin".into(),
                 ],
-                &value,
+                Some(&value),
             ),
             Err(ErrorCode::InvalidArguments)
         );
@@ -200,18 +197,18 @@ mod tests {
         .unwrap();
         let value = parse("tasks.wait", &bytes).unwrap();
         assert!(
-            validate_options(
+            validate_selectors(
                 "tasks.wait",
-                &["--run".into(), "run/one".into(), "--request-stdin".into()],
-                &value,
+                &["--run".into(), "run/one".into()],
+                Some(&value),
             )
             .is_ok()
         );
         assert_eq!(
-            validate_options(
+            validate_selectors(
                 "tasks.wait",
-                &["--run".into(), "run/two".into(), "--request-stdin".into()],
-                &value,
+                &["--run".into(), "run/two".into()],
+                Some(&value),
             ),
             Err(ErrorCode::InvalidArguments)
         );

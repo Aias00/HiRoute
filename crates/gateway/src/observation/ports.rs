@@ -57,6 +57,20 @@ impl CredentialResolver for ObservedCredentialResolver {
                     None,
                     "exhausted",
                 ),
+                Err(PortError::CredentialDenied(reason)) => observation.credential_lease(
+                    &stable_binding_id,
+                    &credential_ref,
+                    excluded_key_count,
+                    None,
+                    match reason {
+                        hiroute_domain::NativeCredentialAccessDeniedV1::SourceDisabled => {
+                            "source_disabled"
+                        }
+                        hiroute_domain::NativeCredentialAccessDeniedV1::CredentialDisabled => {
+                            "credential_disabled"
+                        }
+                    },
+                ),
                 Err(_) => observation.credential_lease(
                     &stable_binding_id,
                     &credential_ref,

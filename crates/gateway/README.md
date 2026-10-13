@@ -15,6 +15,13 @@ The standalone `hirouted` entry can attach the same typed diagnostics using
 capture or execution-fact storage. At Info, failed attempts retain the safe
 actual model and reasoning controls, HTTP protocol/status and body commit state.
 
+For operational lifecycle telemetry, [accepted response capture](src/observation/content.rs)
+reports transport writes only after they succeed, including an empty end-stream write.
+[Product lifecycle validation](../domain/src/observation/lifecycle.rs) preserves its actual
+zero byte count and frame identity; the [bounded receiver](../observation/src/writer/lifecycle.rs)
+ACKs it in sequence before RequestFinished. These transport events describe delivery;
+semantic output, usage and the business receipt retain their own facts.
+
 Messages thinking computation is projected in
 [request/native.rs](src/adapters/request/native.rs); request-local `thinking.display`
 is resolved by [ingress.rs](src/adapters/ingress.rs) before Replay externalization.
@@ -154,6 +161,41 @@ error message or a substitute for evidence of credential failure.
 
 ## Response failure evidence
 
+### Candidate preparation errors
+
+A published plan freezes candidate selection, while the exact credential authority
+still checks current source and Key permission before decryption. A managed source
+or Key denial retains its closed cause through the daemon adapter; an empty lease
+means only that the exact credential is exhausted. Neither outcome starts an upstream
+attempt or broadens the frozen fallback policy.
+
+When preparation terminates with no upstream attempt, the core asks the existing
+decision-session local-reply port for the product response. HiRoute returns HTTP 502
+with `Content-Type: application/json`, `schema_version: hiroute.gateway.error/v1`,
+and these closed fields:
+
+| Preparation evidence | `code` | `phase` |
+| --- | --- | --- |
+| Every rejected candidate has a managed source disabled | `SOURCE_DISABLED` | `credential_lease` |
+| Every rejected candidate has a managed Key disabled | `CREDENTIAL_DISABLED` | `credential_lease` |
+| Every exact credential lease is exhausted | `CREDENTIAL_UNAVAILABLE` | `credential_lease` |
+| Other or mixed preparation failures | `CANDIDATE_PREPARATION_FAILED` | `candidate_preparation` |
+
+These replies have no `Retry-After`. Pure cooldown/probe exhaustion retains its
+existing HTTP 503 runtime-state response and bounded retry hint. A failure after a
+formal upstream attempt keeps the existing attempt response; this port cannot rewrite
+committed bytes. No provider text, credential identity or authorization material is
+included in these local replies.
+
+Request-level `credential_lease` execution facts retain the denial as `source_disabled`
+or `credential_disabled`; exhausted and authority errors remain distinct. Their
+existing envelope is unchanged; the Domain ingestion enum accepts these two new values
+alongside the original leased, exhausted and authority-error outcomes. With observation enabled and a
+healthy sink, the request finishes as failed with zero started/finished attempts,
+no accepted attempt and no fabricated usage, and can produce a zero-attempt receipt.
+Follow the [live source/Key regression](../daemon/tests/support/model_connections_product.py)
+for disable, restart, independent-source isolation and re-enable evidence.
+
 `runtime/driver/response_diagnostics.rs` owns the closed, payload-free failure
 classification; `adapters/response/decoder.rs` reports SSE event ordinal and
 received-byte upper bound without per-token logs. Unix Debug-only
@@ -211,3 +253,10 @@ as streaming failures, for both native and converted protocols. Reported usage
 survives fallback; partial response content is not delivered. Attempt/deadline
 limits and fixed-source authority still apply, and unknown completion remains
 separate from an explicit failure.
+
+Successful converted nonstream responses retain their reported usage in the
+provider completion facts before releasing the decoded response. Completion
+publishes that usage before request termination, so its receipt does not depend
+on canonical capture scheduling. Nonstream capture still records delivered
+content but leaves usage to provider completion; converted streaming capture
+continues publishing accepted usage events. Missing usage remains unknown.
