@@ -11,9 +11,8 @@ use windows_sys::Win32::Foundation::{
     CloseHandle, GENERIC_ALL, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE, LocalFree,
 };
 use windows_sys::Win32::Security::Authorization::{
-    EXPLICIT_ACCESS_W, GetNamedSecurityInfoW, GetSecurityInfo, NO_MULTIPLE_TRUSTEE, SE_FILE_OBJECT,
-    SET_ACCESS, SetEntriesInAclW, SetNamedSecurityInfoW, TRUSTEE_IS_SID, TRUSTEE_IS_USER,
-    TRUSTEE_W,
+    EXPLICIT_ACCESS_W, GetSecurityInfo, NO_MULTIPLE_TRUSTEE, SE_FILE_OBJECT, SET_ACCESS,
+    SetEntriesInAclW, SetNamedSecurityInfoW, TRUSTEE_IS_SID, TRUSTEE_IS_USER, TRUSTEE_W,
 };
 use windows_sys::Win32::Security::{
     ACCESS_ALLOWED_ACE, ACL, ACL_SIZE_INFORMATION, AclSizeInformation, DACL_SECURITY_INFORMATION,
@@ -77,6 +76,11 @@ pub(crate) fn verify_process_user(pid: u32) -> io::Result<()> {
 /// Open the actual object without following a junction or sharing deletion.
 /// The returned handle pins its identity until the caller drops it.
 pub fn open_identity(path: &Path, directory: bool) -> io::Result<File> {
+    let _parents = hold_parents(path)?;
+    open_leaf(path, directory)
+}
+
+fn open_leaf(path: &Path, directory: bool) -> io::Result<File> {
     let mut options = OpenOptions::new();
     options
         .read(true)
@@ -103,6 +107,34 @@ pub fn open_identity(path: &Path, directory: bool) -> io::Result<File> {
     Ok(file)
 }
 
+fn hold_parents(path: &Path) -> io::Result<Vec<File>> {
+    if !path.is_absolute()
+        || path.components().any(|part| {
+            matches!(
+                part,
+                std::path::Component::ParentDir | std::path::Component::CurDir
+            )
+        })
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "absolute normalized path required",
+        ));
+    }
+    // Acquire from the volume root downwards. Each parent is already pinned
+    // against deletion/rename before opening the next path component; checking
+    // only the leaf would permit traversal through an ancestor junction.
+    let mut paths = path
+        .parent()
+        .map(|parent| parent.ancestors().collect::<Vec<_>>())
+        .unwrap_or_default();
+    paths.reverse();
+    paths
+        .into_iter()
+        .map(|parent| open_leaf(parent, true))
+        .collect()
+}
+
 /// Open an existing private object and check security on the held handle.
 pub fn open_owner_only(path: &Path, directory: bool) -> io::Result<File> {
     let file = open_identity(path, directory)?;
@@ -111,6 +143,7 @@ pub fn open_owner_only(path: &Path, directory: bool) -> io::Result<File> {
 }
 
 pub fn create_owner_only_directory(path: &Path) -> io::Result<File> {
+    let _parents = hold_parents(path)?;
     let mut security = OwnerSecurity::new(true)?;
     let attributes = security.attributes()?;
     let wide = wide_path(path)?;
@@ -133,6 +166,7 @@ pub fn create_owner_only_directory(path: &Path) -> io::Result<File> {
 }
 
 pub fn create_owner_only_file(path: &Path) -> io::Result<File> {
+    let _parents = hold_parents(path)?;
     let mut security = OwnerSecurity::new(false)?;
     let attributes = security.attributes()?;
     let wide = wide_path(path)?;
@@ -190,6 +224,8 @@ pub fn file_identity(file: &File) -> io::Result<(u32, u64)> {
 }
 
 pub fn set_owner_only(path: &Path, directory: bool) -> io::Result<()> {
+    let _parents = hold_parents(path)?;
+    let _object = open_leaf(path, directory)?;
     let user = CurrentUser::load()?;
     let wide = wide_path(path)?;
     let mut acl: *mut ACL = null_mut();
@@ -323,29 +359,8 @@ impl Drop for OwnerSecurity {
 }
 
 pub fn verify_owner_only(path: &Path, directory: bool) -> io::Result<()> {
-    let user = CurrentUser::load()?;
-    let wide = wide_path(path)?;
-    let mut owner: PSID = null_mut();
-    let mut dacl: *mut ACL = null_mut();
-    let mut descriptor = null_mut();
-    // SAFETY: all out-pointers are valid and `wide` is NUL terminated. The
-    // returned descriptor owns the owner/DACL views and is freed below.
-    let status = unsafe {
-        GetNamedSecurityInfoW(
-            wide.as_ptr(),
-            SE_FILE_OBJECT,
-            OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
-            &mut owner,
-            null_mut(),
-            &mut dacl,
-            null_mut(),
-            &mut descriptor,
-        )
-    };
-    if status != 0 {
-        return Err(win32_error(status));
-    }
-    validate_security_descriptor(&user, owner, dacl, descriptor, directory)
+    let file = open_identity(path, directory)?;
+    verify_owner_only_handle(&file, directory)
 }
 
 pub fn verify_owner_only_handle(file: &impl AsRawHandle, directory: bool) -> io::Result<()> {

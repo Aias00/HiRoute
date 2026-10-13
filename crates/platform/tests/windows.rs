@@ -1,6 +1,36 @@
 #![cfg(windows)]
 
 use hiroute_platform::windows::{pipe, security};
+
+#[test]
+fn ancestor_junction_cannot_redirect_private_read_or_creation() {
+    let fixture = tempfile::tempdir().unwrap();
+    let outside = fixture.path().join("outside");
+    let held = security::create_owner_only_directory(&outside).unwrap();
+    let original = outside.join("original");
+    let file = security::create_owner_only_file(&original).unwrap();
+    drop(file);
+    let alias = fixture.path().join("alias");
+    let cmd =
+        std::path::PathBuf::from(std::env::var_os("SystemRoot").unwrap()).join("System32/cmd.exe");
+    let result = std::process::Command::new(cmd)
+        .args(["/D", "/C", "mklink", "/J"])
+        .arg(&alias)
+        .arg(&outside)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "owned junction fixture must be created"
+    );
+    assert!(security::open_owner_only(&alias.join("original"), false).is_err());
+    assert!(security::create_owner_only_file(&alias.join("new")).is_err());
+    assert!(pipe::name(&alias.join("control.sock")).is_err());
+    assert!(!outside.join("new").exists());
+    assert!(original.exists());
+    std::fs::remove_dir(&alias).unwrap();
+    drop(held);
+}
 use std::io::{Read, Write};
 use std::time::Duration;
 
