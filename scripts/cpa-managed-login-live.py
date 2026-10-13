@@ -125,7 +125,6 @@ def isolated_environment(root):
                XDG_DATA_HOME=str(home / '.local/share'), TMPDIR=str(Path(root) / 'tmp'),
                PATH=str(Path(root) / 'bin') + ':/usr/local/bin:/usr/bin:/bin',
                HIROUTE_RUNTIME_DIR=str(Path(root) / 'runtime'),
-               HIROUTE_WORKER_RECEIPT_DIR=str(Path(root) / 'worker-receipts'),
                HIROUTE_REPLAY_ROOT=str(Path(root) / 'replay'))
     return env
 

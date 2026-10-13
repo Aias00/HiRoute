@@ -220,7 +220,7 @@ def run(repository, label):
     # inherited alternative configuration is admitted to this regression process.
     product.env = {key: value for key, value in product.env.items() if key in (
         'HOME', 'CODEX_HOME', 'CLAUDE_CONFIG_DIR', 'QODER_CONFIG_DIR', 'PI_CODING_AGENT_DIR',
-        'DSH_HOME', 'PATH', 'HIROUTE_RUNTIME_DIR', 'HIROUTE_WORKER_RECEIPT_DIR', 'HIROUTE_REPLAY_ROOT',
+        'DSH_HOME', 'PATH', 'HIROUTE_RUNTIME_DIR', 'HIROUTE_REPLAY_ROOT',
         'LANG', 'LC_ALL', 'LC_CTYPE', 'TZ', 'SSL_CERT_FILE', 'SSL_CERT_DIR')}
     home = Path(product.env['HOME'])
     product.env.update(XDG_CONFIG_HOME=str(home / '.config'), XDG_CACHE_HOME=str(home / '.cache'),

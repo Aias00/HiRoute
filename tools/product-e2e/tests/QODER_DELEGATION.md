@@ -83,10 +83,11 @@ context and CLI version; do not generalize this observation to other accounts or
 versions. A no-login result from a dedicated acceptance HOME says nothing about
 the user's separately logged-in daily HOME.
 
-HiRoute's CLI submission receipts always use the Product's explicit private
-`HIROUTE_WORKER_RECEIPT_DIR`, even when native HOME is borrowed. Repeated submissions
-within one journey keep that directory so replay/conflict behavior remains real;
-separate acceptance runs must not reuse the daily client's journal.
+HiRoute CLI submissions write no local receipt, including when native HOME is borrowed.
+Each Product owns its runtime/storage namespace. A retry uses the original literal
+submission key and unchanged request; a new journey gets a fresh key. Recovery queries
+that key first, with title/detail lookup only as an aid. Never resubmit an uncertain
+request merely because a title search is empty or ambiguous.
 
 The real collaboration Skill must be installed by the production settings
 operation at `<QODER_CONFIG_DIR>/skills/hiroute-collaboration/SKILL.md`. There is no

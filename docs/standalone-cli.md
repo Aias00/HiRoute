@@ -697,6 +697,16 @@ through the same `worker exec`; never replace the key. Duplicate submission retu
 run and does not execute twice. `selection_revision` is the concurrency revision for Worker
 installation selection, not a Codex, Claude, or HiRoute CLI/package version.
 
+The CLI writes no local submission receipt, needs no writable receipt directory, and ignores
+`HIROUTE_WORKER_RECEIPT_DIR`. Existing receipt files are left untouched. Prefer a unique literal
+`--submission-key` chosen before each new submission and retain it with the original request.
+An omitted key is generated and returned by the CLI; a crash before receiving that output can
+lose it. If the key is lost, `hiroute worker list --title TITLE --output json` can help locate a
+task: follow all pages and verify its time, Plan, cwd and details. Titles can repeat and are
+visible only while the initial input remains available (seven days, or until earlier content
+deletion), including after completion. If no unambiguous match exists, ask for confirmation;
+never automatically create a replacement task from an empty search result.
+
 ## Gateway listener
 
 ```sh

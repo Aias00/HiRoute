@@ -129,6 +129,8 @@ fn v2_settings_skill_only_enable_change_and_disable_keep_model_untouched() {
     let content = fs::read_to_string(&skill).unwrap();
     assert!(content.contains("Delegate suitable executable work by default"));
     assert!(content.contains("hiroute worker plans"));
+    assert!(content.contains("literal value in `--submission-key`"));
+    assert!(content.contains("An empty list or unclear match"));
     assert!(!content.contains("--agent"));
     assert!(content.contains(
         "use a restricted policy only when the user asks for one and the selected harness supports it"

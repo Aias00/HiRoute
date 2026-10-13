@@ -388,12 +388,10 @@
     "hiroute.worker-plans-request/v1",
     "hiroute.worker-read-data/v1",
     "hiroute.worker-read-request/v1",
-    "hiroute.worker-receipt/v1",
     "hiroute.worker-residual-confirm-request/v1",
     "hiroute.worker-result-request/v1",
     "hiroute.worker-settings/v1",
     "hiroute.worker-status-request/v1",
-    "hiroute.worker-submission-receipt/v1",
     "hiroute.worker-wait-request/v1"
   ],
   "subjects": [

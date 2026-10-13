@@ -7,21 +7,19 @@ use hiroute_application_api::{
     WorkerContinueRequestV1, WorkerExecRequestV1, WorkerListRequestV1, WorkerPlansRequestV1,
     WorkerResultRequestV1, WorkerWaitRequestV1,
 };
-use hiroute_client_core::{ClientFailure, FailureCode, SubmissionState};
+use hiroute_client_core::{ClientFailure, FailureCode};
 use serde_json::json;
 
 use crate::args::{Globals, OutputMode};
 use crate::{CliExecution, LocalControlClient};
 
 mod input;
-mod receipt;
 mod render;
 
 use input::{
     parse_cancel, parse_dependencies_discover, parse_dependency_selection, parse_list, parse_read,
     parse_residual_confirm, parse_result, parse_status, parse_submission, parse_wait,
 };
-use receipt::{ReceiptError, SubmissionReceipt};
 use render::{
     CommandData, command_data, erase, render_cancel, render_erased, render_result, render_status,
     render_transport, render_wait, render_worker_data, uncertain_submission,
@@ -224,55 +222,9 @@ fn exec(
             Some(request_id),
         );
     }
-    let selectors = json!({"plan_id":request.plan_id,"cwd":request.cwd});
-    let receipt =
-        match SubmissionReceipt::prepare("exec", &request.submission_key, selectors, &request) {
-            Ok(receipt) => receipt,
-            Err(ReceiptError::Conflict) => {
-                return failure(
-                    ErrorCode::RevisionConflict,
-                    globals.output,
-                    Some(request_id),
-                );
-            }
-            Err(ReceiptError::Unavailable) => {
-                return failure(
-                    ErrorCode::CapabilityUnavailable,
-                    globals.output,
-                    Some(request_id),
-                );
-            }
-        };
-    let response = call(client.shared_client().worker_exec(&request_id, &request));
-    let response = match response {
-        Ok(response) => {
-            let locator = response
-                .data
-                .as_ref()
-                .map(|accepted| (accepted.task_id.as_str(), accepted.run_id.as_str()));
-            let _ = receipt.record(
-                if response.status == MachineStatus::Succeeded
-                    || response.status == MachineStatus::Accepted
-                {
-                    "accepted"
-                } else {
-                    "rejected"
-                },
-                locator.map(|(task, _)| task),
-                locator.map(|(_, run)| run),
-            );
-            response
-        }
+    let response = match call(client.shared_client().worker_exec(&request_id, &request)) {
+        Ok(response) => response,
         Err(error) => {
-            let _ = receipt.record(
-                if error.submission == SubmissionState::MayHaveReachedServer {
-                    "delivery_uncertain"
-                } else {
-                    "not_sent"
-                },
-                None,
-                None,
-            );
             return uncertain_submission(
                 "exec",
                 &request.submission_key,
@@ -340,68 +292,13 @@ fn continue_task(
             Some(request_id),
         );
     }
-    let selectors = json!({
-        "task_id":request.task_id,
-        "expected_latest_run_id":request.expected_latest_run_id,
-        "cwd":request.cwd,
-    });
-    let receipt = match SubmissionReceipt::prepare(
-        "continue",
-        &request.submission_key,
-        selectors,
-        &request,
-    ) {
-        Ok(receipt) => receipt,
-        Err(ReceiptError::Conflict) => {
-            return failure(
-                ErrorCode::RevisionConflict,
-                globals.output,
-                Some(request_id),
-            );
-        }
-        Err(ReceiptError::Unavailable) => {
-            return failure(
-                ErrorCode::CapabilityUnavailable,
-                globals.output,
-                Some(request_id),
-            );
-        }
-    };
-    let response = call(
+    let response = match call(
         client
             .shared_client()
             .worker_continue(&request_id, &request),
-    );
-    let response = match response {
-        Ok(response) => {
-            let locator = response
-                .data
-                .as_ref()
-                .map(|accepted| (accepted.task_id.as_str(), accepted.run_id.as_str()));
-            let _ = receipt.record(
-                if matches!(
-                    response.status,
-                    MachineStatus::Succeeded | MachineStatus::Accepted
-                ) {
-                    "accepted"
-                } else {
-                    "rejected"
-                },
-                locator.map(|(task, _)| task),
-                locator.map(|(_, run)| run),
-            );
-            response
-        }
+    ) {
+        Ok(response) => response,
         Err(error) => {
-            let _ = receipt.record(
-                if error.submission == SubmissionState::MayHaveReachedServer {
-                    "delivery_uncertain"
-                } else {
-                    "not_sent"
-                },
-                None,
-                None,
-            );
             return uncertain_submission(
                 "continue",
                 &request.submission_key,

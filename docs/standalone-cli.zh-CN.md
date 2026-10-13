@@ -600,6 +600,13 @@ hiroute worker list --output json
 `worker exec`；不要换 key。重复提交返回同一个 run，不会执行两次。`selection_revision` 是 Worker
 选择配置的并发版本，不是 Codex、Claude 或 HiRoute 软件版本。
 
+CLI 不写本地提交收据，无需可写的收据目录，也不再使用 `HIROUTE_WORKER_RECEIPT_DIR`；
+已有收据文件保留原样。每次新提交优先预先选定唯一编号，将其字面值传入 `--submission-key`，
+并在对话或工具调用记录里保留编号和原请求。未指定编号时 CLI 仍会生成并返回，但在响应到达前
+崩溃可能丢失编号。编号丢失时可用 `hiroute worker list --title TITLE --output json` 辅助找回：
+遍历分页并核对时间、Plan、目录和任务详情。标题可能重名，随首次输入内容保留七天或在提前
+删除内容后隐藏，完成任务也遵守同一规则。不能明确匹配时请求确认，不因列表为空自动新建任务。
+
 ## Gateway 监听器
 
 ```sh

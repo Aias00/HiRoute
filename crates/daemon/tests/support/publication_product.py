@@ -192,7 +192,6 @@ finally:
                         DSH_HOME=str(home / '.dsh'),
                         PATH=str(bin_dir) + ':/usr/bin:/bin',
                         HIROUTE_RUNTIME_DIR=str(self.root / 'runtime'),
-                        HIROUTE_WORKER_RECEIPT_DIR=str(self.root / 'worker-receipts'),
                         HIROUTE_REPLAY_ROOT=str(self.root / 'replay'))
         self.listener_port_lease, self.port = fixture_listener_port()
         self.process = None
