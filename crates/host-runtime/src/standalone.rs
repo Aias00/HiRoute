@@ -13,6 +13,89 @@ pub fn protected_input_socket(runtime_root: impl AsRef<Path>) -> PathBuf {
     runtime_root.as_ref().join("hiroute/input.sock")
 }
 
+pub fn standalone_cli_binary(install_root: &Path) -> PathBuf {
+    install_root.join(if cfg!(windows) {
+        "hiroute.exe"
+    } else {
+        "hiroute"
+    })
+}
+
+pub fn standalone_daemon_binary(install_root: &Path) -> PathBuf {
+    install_root.join(if cfg!(windows) {
+        "hirouted.exe"
+    } else {
+        "hirouted"
+    })
+}
+
+pub fn standalone_host_target() -> String {
+    let suffix = if cfg!(windows) {
+        "pc-windows-msvc"
+    } else if cfg!(target_os = "macos") {
+        "apple-darwin"
+    } else {
+        "unknown-linux-gnu"
+    };
+    format!("{}-{suffix}", std::env::consts::ARCH)
+}
+
+/// Install recovery is owned by the installer; business startup must not admit
+/// a marker/files/manager tuple while that transaction is still prepared.
+pub fn standalone_maintenance_pending(
+    layout: &StandaloneLayout,
+) -> Result<bool, StandaloneLayoutError> {
+    #[cfg(windows)]
+    {
+        let path = layout.data_root.join("service/install-journal.json");
+        let mut file = match hiroute_platform::windows::security::open_owner_only(&path, false) {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+            Err(_) => return Err(StandaloneLayoutError),
+        };
+        let mut bytes = Vec::new();
+        Read::by_ref(&mut file)
+            .take(64 * 1024 + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|_| StandaloneLayoutError)?;
+        if bytes.len() > 64 * 1024 {
+            return Err(StandaloneLayoutError);
+        }
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Journal {
+            schema: String,
+            operation: String,
+            phase: String,
+            old_marker: serde_json::Value,
+            new_marker: serde_json::Value,
+            old_definition: serde_json::Value,
+            new_definition: serde_json::Value,
+            files: serde_json::Value,
+        }
+        let journal: Journal = serde_json::from_slice(&bytes).map_err(|_| StandaloneLayoutError)?;
+        if journal.schema != "hiroute.windows-install-journal/v1"
+            || !matches!(journal.operation.as_str(), "install" | "uninstall")
+            || !matches!(journal.phase.as_str(), "prepared" | "committed")
+            || !journal.files.is_array()
+        {
+            return Err(StandaloneLayoutError);
+        }
+        let _ = (
+            journal.old_marker,
+            journal.new_marker,
+            journal.old_definition,
+            journal.new_definition,
+        );
+        return Ok(journal.phase == "prepared");
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = layout;
+        Ok(false)
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StandaloneLayout {
     pub home: PathBuf,
@@ -24,6 +107,22 @@ pub struct StandaloneLayout {
 
 impl StandaloneLayout {
     pub fn from_environment() -> Result<Self, StandaloneLayoutError> {
+        #[cfg(windows)]
+        {
+            let home = hiroute_platform::windows::background::profile()
+                .map_err(|_| StandaloneLayoutError)?;
+            let state_root = hiroute_platform::windows::background::local_app_data()
+                .map_err(|_| StandaloneLayoutError)?
+                .join("HiRoute/cli");
+            return Ok(Self {
+                marker_path: home.join(".local/share/hiroute/standalone.json"),
+                data_root: home.join(".local/share/hiroute"),
+                runtime_root: state_root.join("run"),
+                home,
+                state_root,
+            });
+        }
+        #[cfg(not(windows))]
         Self::from_values(
             cfg!(target_os = "macos"),
             std::env::var_os("HOME").map(PathBuf::from),
@@ -86,6 +185,10 @@ impl StandaloneLayout {
 
     pub fn protected_input_socket(&self) -> PathBuf {
         protected_input_socket(&self.runtime_root)
+    }
+
+    pub fn lifecycle_endpoint(&self) -> PathBuf {
+        self.runtime_root.join("hiroute/lifecycle-v1.sock")
     }
 }
 
@@ -178,7 +281,13 @@ fn marker_file(path: &Path) -> Result<std::fs::File, StandaloneLayoutError> {
     Ok(file)
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn marker_file(path: &Path) -> Result<std::fs::File, StandaloneLayoutError> {
+    hiroute_platform::windows::security::open_owner_only(path, false)
+        .map_err(|_| StandaloneLayoutError)
+}
+
+#[cfg(not(any(unix, windows)))]
 fn marker_file(path: &Path) -> Result<std::fs::File, StandaloneLayoutError> {
     std::fs::File::open(path).map_err(|_| StandaloneLayoutError)
 }
@@ -192,6 +301,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(unix)]
     fn linux_and_macos_layouts_are_isolated_and_absolute() {
         let linux = StandaloneLayout::from_values(
             false,
@@ -229,5 +339,30 @@ mod tests {
             StandaloneLayout::from_values(false, Some("relative".into()), None, None, None)
                 .is_err()
         );
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn windows_layout_uses_native_account_profile_and_executable_suffix() {
+        let layout = StandaloneLayout::from_environment().unwrap();
+        assert!(layout.home.is_absolute());
+        assert!(layout.state_root.is_absolute());
+        assert_eq!(
+            layout.home,
+            hiroute_platform::windows::background::profile().unwrap()
+        );
+        assert_eq!(
+            standalone_cli_binary(&layout.data_root)
+                .file_name()
+                .unwrap(),
+            "hiroute.exe"
+        );
+        assert_eq!(
+            standalone_daemon_binary(&layout.data_root)
+                .file_name()
+                .unwrap(),
+            "hirouted.exe"
+        );
+        assert!(standalone_host_target().ends_with("-pc-windows-msvc"));
     }
 }

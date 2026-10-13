@@ -16,7 +16,10 @@ use windows_sys::Win32::System::Console::{
     GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
 };
 use windows_sys::Win32::System::JobObjects::*;
-use windows_sys::Win32::System::Pipes::{CreatePipe, SetNamedPipeHandleState, PIPE_NOWAIT};
+use windows_sys::Win32::System::Pipes::{
+    ConnectNamedPipe, CreateNamedPipeW, CreatePipe, PIPE_NOWAIT, PIPE_READMODE_BYTE,
+    PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, SetNamedPipeHandleState,
+};
 use windows_sys::Win32::System::Threading::*;
 
 pub enum Stream<'a> {
@@ -51,13 +54,25 @@ pub struct Child {
 /// would interrupt durable shutdown. Kernel process teardown closes it and kills children.
 pub fn initialize_resident() -> io::Result<()> {
     static RESIDENT: OnceLock<Mutex<Option<OwnedHandle>>> = OnceLock::new();
-    let mut resident = RESIDENT.get_or_init(|| Mutex::new(None)).lock()
+    let mut resident = RESIDENT
+        .get_or_init(|| Mutex::new(None))
+        .lock()
         .map_err(|_| io::Error::other("resident job initialization"))?;
-    if resident.is_some() { return Ok(()); }
+    if resident.is_some() {
+        return Ok(());
+    }
     let job = owned(unsafe { CreateJobObjectW(null(), null()) })?;
     let mut limits: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = unsafe { zeroed() };
     limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-    if unsafe { SetInformationJobObject(job.as_raw_handle(), JobObjectExtendedLimitInformation, (&limits as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(), size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32) } == 0 {
+    if unsafe {
+        SetInformationJobObject(
+            job.as_raw_handle(),
+            JobObjectExtendedLimitInformation,
+            (&limits as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
+            size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+        )
+    } == 0
+    {
         return Err(io::Error::last_os_error());
     }
     // Nested jobs are supported on the Windows 11 headless target. Never enable breakaway.
@@ -73,7 +88,9 @@ pub fn process_is_running(pid: u32) -> io::Result<bool> {
     let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, 0, pid) };
     if handle.is_null() {
         let error = io::Error::last_os_error();
-        if error.raw_os_error() == Some(ERROR_INVALID_PARAMETER as i32) { return Ok(false); }
+        if error.raw_os_error() == Some(ERROR_INVALID_PARAMETER as i32) {
+            return Ok(false);
+        }
         return Err(error);
     }
     let process = owned(handle)?;
@@ -87,13 +104,72 @@ pub fn process_is_running(pid: u32) -> io::Result<bool> {
 /// An inherited credential transport is a non-stdio pipe, never a regular file.
 pub fn prepare_inherited_pipe(file: &File) -> io::Result<()> {
     let handle = file.as_raw_handle();
-    if [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE].into_iter().any(|standard| unsafe { GetStdHandle(standard) } == handle)
-        || unsafe { GetFileType(handle) } != FILE_TYPE_PIPE {
+    if [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE]
+        .into_iter()
+        .any(|standard| unsafe { GetStdHandle(standard) } == handle)
+        || unsafe { GetFileType(handle) } != FILE_TYPE_PIPE
+    {
         return Err(io::Error::other("inherited pipe required"));
     }
     let mode = PIPE_NOWAIT;
-    if unsafe { SetNamedPipeHandleState(handle, &mode, null(), null()) } == 0 { return Err(io::Error::last_os_error()); }
+    if unsafe { SetNamedPipeHandleState(handle, &mode, null(), null()) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
     Ok(())
+}
+
+/// A private bounded bootstrap channel. Both endpoints have the attributes access
+/// required to set nonblocking mode; a CreatePipe read endpoint need not have it.
+/// These handles start non-inheritable. The launcher owns any explicit duplication.
+pub fn credential_pipe_pair() -> io::Result<(File, File)> {
+    let mut nonce = [0u8; 32];
+    getrandom::fill(&mut nonce).map_err(|_| io::Error::other("credential pipe nonce"))?;
+    let name = format!(
+        "\\\\.\\pipe\\hiroute-credential-{}",
+        nonce
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    );
+    let name = wide(OsStr::new(&name))?;
+    let mut security = super::security::OwnerSecurity::new(false)?;
+    let attributes = security.attributes()?;
+    // The name is random and first-instance exclusive. Creation attaches the
+    // caller SID's protected ACL before another process can observe the pipe.
+    let server = owned(unsafe {
+        CreateNamedPipeW(
+            name.as_ptr(),
+            PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE,
+            PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_NOWAIT | PIPE_REJECT_REMOTE_CLIENTS,
+            1,
+            4096,
+            4096,
+            0,
+            &attributes,
+        )
+    })?;
+    let client = owned(unsafe {
+        CreateFileW(
+            name.as_ptr(),
+            GENERIC_READ | GENERIC_WRITE,
+            0,
+            &attributes,
+            OPEN_EXISTING,
+            0,
+            null_mut(),
+        )
+    })?;
+    if unsafe { ConnectNamedPipe(server.as_raw_handle(), null_mut()) } == 0
+        && io::Error::last_os_error().raw_os_error() != Some(ERROR_PIPE_CONNECTED as i32)
+    {
+        return Err(io::Error::last_os_error());
+    }
+    let (server, client) = (File::from(server), File::from(client));
+    super::security::verify_owner_only_handle(&server, false)?;
+    super::security::verify_owner_only_handle(&client, false)?;
+    prepare_inherited_pipe(&server)?;
+    prepare_inherited_pipe(&client)?;
+    Ok((server, client))
 }
 
 fn owned(handle: HANDLE) -> io::Result<OwnedHandle> {
@@ -372,23 +448,35 @@ impl Child {
         let flags = EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW;
         let created = unsafe {
             if let Some(token) = token {
-                CreateProcessAsUserW(token, program.as_ptr(), command.as_mut_ptr(), null(), null(), 1, flags,
-                    environment.as_ptr().cast(), cwd.as_ref().map_or(null(), |cwd| cwd.as_ptr()), &startup.StartupInfo, &mut information)
-            } else { CreateProcessW(
-                program.as_ptr(),
-                command.as_mut_ptr(),
-                null(),
-                null(),
-                1,
-                flags,
-                environment.as_ptr().cast(),
-                cwd.as_ref().map_or(null(), |cwd| cwd.as_ptr()),
-                &startup.StartupInfo,
-                &mut information,
-            ) }
+                CreateProcessAsUserW(
+                    token,
+                    program.as_ptr(),
+                    command.as_mut_ptr(),
+                    null(),
+                    null(),
+                    1,
+                    flags,
+                    environment.as_ptr().cast(),
+                    cwd.as_ref().map_or(null(), |cwd| cwd.as_ptr()),
+                    &startup.StartupInfo,
+                    &mut information,
+                )
+            } else {
+                CreateProcessW(
+                    program.as_ptr(),
+                    command.as_mut_ptr(),
+                    null(),
+                    null(),
+                    1,
+                    flags,
+                    environment.as_ptr().cast(),
+                    cwd.as_ref().map_or(null(), |cwd| cwd.as_ptr()),
+                    &startup.StartupInfo,
+                    &mut information,
+                )
+            }
         };
-        if created == 0
-        {
+        if created == 0 {
             return Err(io::Error::last_os_error());
         }
         let process = owned(information.hProcess)?;
@@ -404,7 +492,9 @@ impl Child {
     }
 
     /// The held process object remains authoritative even after its numeric PID is reused.
-    pub fn id(&self) -> u32 { self.pid }
+    pub fn id(&self) -> u32 {
+        self.pid
+    }
 
     pub fn exit_code(&self) -> io::Result<Option<i32>> {
         match unsafe { WaitForSingleObject(self.process.as_raw_handle(), 0) } {

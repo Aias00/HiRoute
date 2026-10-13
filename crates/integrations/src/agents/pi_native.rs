@@ -207,7 +207,7 @@ impl FilesystemAgentScannerV1 {
             managed_launch: None,
         }
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub fn check_pi_collaboration(&self, cli: &Path) -> Result<(), AgentFilesystemScanError> {
         *self
             .pi_collaboration_cli
@@ -234,7 +234,7 @@ impl FilesystemAgentScannerV1 {
         Ok(())
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub fn check_pi_model_configuration(&self) -> Result<(), AgentFilesystemScanError> {
         let executable = self
             .pi_executable_target()
@@ -242,7 +242,7 @@ impl FilesystemAgentScannerV1 {
         self.check_pi_capability(&executable, super::super::PiSdkCapability::Models)
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     fn check_pi_capability(
         &self,
         executable: &Path,

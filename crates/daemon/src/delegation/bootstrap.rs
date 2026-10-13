@@ -79,10 +79,17 @@ fn protected_channel(channel: &File) -> Result<(), DelegationErrorV1> {
             return Ok(());
         }
     }
-    // Existing launcher has no Windows inherited-channel implementation at this baseline.
-    // Do not quietly use a regular file or expose a selector-to-secret API as a fallback.
-    let _ = channel;
-    Err(DelegationErrorV1::CapabilityUnavailable)
+    #[cfg(windows)]
+    {
+        hiroute_platform::windows::job::prepare_inherited_pipe(channel)
+            .map_err(|_| DelegationErrorV1::CapabilityUnavailable)?;
+        return Ok(());
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = channel;
+        Err(DelegationErrorV1::CapabilityUnavailable)
+    }
 }
 
 fn read_frame(
@@ -109,7 +116,10 @@ fn transfer(
             Ok((_, true)) => return Ok(()),
             Ok((0, false)) => return Err(DelegationErrorV1::PermissionDenied),
             Ok(_) => {}
-            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+            Err(error)
+                if error.kind() == std::io::ErrorKind::WouldBlock
+                    || cfg!(windows) && error.raw_os_error() == Some(232) =>
+            {
                 std::thread::sleep(Duration::from_millis(2))
             }
             Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}

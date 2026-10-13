@@ -77,7 +77,7 @@ pub enum PiSdkCapability {
 
 /// Load only the SDK exported by the selected CLI's package. No native prompt,
 /// user credential store, helper, extension or network model refresh is used.
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub fn check_pi_sdk_capability(
     cli: &Path,
     node: &Path,
@@ -131,7 +131,7 @@ pub fn check_pi_sdk_capability(
 pub const PI_NODE_MINIMUM: (u32, u32, u32) = (22, 19, 0);
 
 /// One bounded native version read; neither stdout nor stderr reaches product diagnostics.
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub fn validate_pi_node(node: &Path) -> Result<(), NativeDependencyFailureV1> {
     use std::process::Command;
     use std::time::Duration;
@@ -166,7 +166,7 @@ pub fn validate_pi_node(node: &Path) -> Result<(), NativeDependencyFailureV1> {
     Ok(())
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use hiroute_domain::delegation::{
     NativeDependencyCheckV1, NativeDependencyFailureReasonV1, NativeDependencyFailureV1,
 };
@@ -213,6 +213,34 @@ fn bounded_check(
     // A failed check also stops and accounts for its owned scope before returning.
     child.stop().map_err(|_| failure(Reason::CleanupFailed))?;
     result
+}
+
+#[cfg(windows)]
+fn bounded_check(
+    mut command: std::process::Command,
+    check: NativeDependencyCheckV1,
+    timeout: std::time::Duration,
+    output_limit: usize,
+) -> Result<zeroize::Zeroizing<Vec<u8>>, NativeDependencyFailureV1> {
+    command
+        .env_remove("NODE_OPTIONS")
+        .env_remove("HIROUTE_RUN_TOKEN");
+    super::windows_runtime::bounded(&command, true, timeout, output_limit).map_err(|error| {
+        NativeDependencyFailureV1 {
+            check,
+            reason: if super::windows_runtime::cleanup_unknown(&error) {
+                NativeDependencyFailureReasonV1::CleanupFailed
+            } else {
+                match error.kind() {
+                    std::io::ErrorKind::TimedOut => NativeDependencyFailureReasonV1::Timeout,
+                    std::io::ErrorKind::InvalidData => {
+                        NativeDependencyFailureReasonV1::InvalidOutput
+                    }
+                    _ => NativeDependencyFailureReasonV1::Unavailable,
+                }
+            },
+        }
+    })
 }
 
 #[cfg(all(test, unix))]

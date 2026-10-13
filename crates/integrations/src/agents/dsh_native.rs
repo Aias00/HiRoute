@@ -186,12 +186,12 @@ impl FilesystemAgentScannerV1 {
             managed_launch: None,
         }
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub fn check_dsh_model_configuration(&self) -> Result<(), AgentFilesystemScanError> {
         self.dsh_native_contract(true)?;
         self.check_dsh_public_cli(&["llm-pi-ai"])
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub fn check_dsh_collaboration(&self, cli: &Path) -> Result<(), AgentFilesystemScanError> {
         *self
             .dsh_collaboration_cli
@@ -202,7 +202,11 @@ impl FilesystemAgentScannerV1 {
             "skill-filesystem",
             "tool-skill",
             "tool-fs",
-            "tool-bash",
+            if cfg!(windows) {
+                "tool-pwsh"
+            } else {
+                "tool-bash"
+            },
             "skill",
         ])?;
         let cli = super::super::executable::resolve(cli)
@@ -262,6 +266,40 @@ impl FilesystemAgentScannerV1 {
             .map_err(|_| AgentFilesystemScanError::SourceUnavailable)?;
         let bytes = super::super::native_probe_process::read_bounded(&output, 2 * 1024 * 1024)
             .map_err(|_| AgentFilesystemScanError::InvalidConfig)?;
+        let text =
+            std::str::from_utf8(&bytes).map_err(|_| AgentFilesystemScanError::InvalidConfig)?;
+        if required.iter().any(|id| {
+            !text
+                .lines()
+                .any(|line| line.trim() == format!("- id: {id}"))
+        }) {
+            return Err(AgentFilesystemScanError::InvalidConfig);
+        }
+        Ok(())
+    }
+    #[cfg(windows)]
+    fn check_dsh_public_cli(&self, required: &[&str]) -> Result<(), AgentFilesystemScanError> {
+        let root = tempfile::tempdir().map_err(|_| AgentFilesystemScanError::SourceUnavailable)?;
+        let mut command = std::process::Command::new(
+            self.dsh_executable_target()
+                .ok_or(AgentFilesystemScanError::SourceUnavailable)?,
+        );
+        command
+            .args(["--profile", "acp", "--dump-default-config"])
+            .env("DSH_HOME", root.path());
+        let result = super::super::windows_runtime::bounded(
+            &command,
+            true,
+            std::time::Duration::from_secs(15),
+            2 * 1024 * 1024,
+        );
+        if result
+            .as_ref()
+            .is_err_and(super::super::windows_runtime::cleanup_unknown)
+        {
+            let _ = root.keep();
+        }
+        let bytes = result.map_err(|_| AgentFilesystemScanError::SourceUnavailable)?;
         let text =
             std::str::from_utf8(&bytes).map_err(|_| AgentFilesystemScanError::InvalidConfig)?;
         if required.iter().any(|id| {

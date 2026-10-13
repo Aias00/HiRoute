@@ -185,7 +185,24 @@ impl ManagedClaudeProcessV1 {
             .map_err(|_| ManagedClaudeProcessError::Unavailable)?;
         verify_claude_executable(&descriptor)?;
         let overlay = TemporaryLaunchOverlay::create(&descriptor, user_settings)?;
+        #[cfg(not(windows))]
         let mut command = Command::new(&descriptor.executable);
+        #[cfg(windows)]
+        let mut command = {
+            let search = std::env::var_os("PATH")
+                .unwrap_or_default()
+                .into_string()
+                .map_err(|_| ManagedClaudeProcessError::Unavailable)?;
+            let (binary, prefix) = super::windows_runtime::windows_agent_command(
+                Path::new(&descriptor.executable),
+                &[],
+                &search,
+            )
+            .map_err(|_| ManagedClaudeProcessError::Unavailable)?;
+            let mut command = Command::new(binary);
+            command.args(prefix);
+            command
+        };
         configure_command(&mut command, &descriptor, overlay.path(), child_arguments);
         Ok(Self {
             command,
@@ -278,7 +295,22 @@ impl TemporaryLaunchOverlay {
         descriptor: &ManagedClaudeLaunchDescriptorV2,
         user_settings: &Value,
     ) -> Result<Self, ManagedClaudeProcessError> {
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        {
+            let root = super::probe_files::temporary("hiroute-claude-launch-")
+                .map_err(|_| ManagedClaudeProcessError::Unavailable)?;
+            let directory = root.path().to_owned();
+            let path = directory.join("settings.json");
+            let mut file = super::probe_files::file(&path)
+                .map_err(|_| ManagedClaudeProcessError::Unavailable)?;
+            write_overlay(&mut file, descriptor, user_settings)?;
+            file.sync_all()
+                .map_err(|_| ManagedClaudeProcessError::Unavailable)?;
+            drop(file);
+            let directory = root.keep();
+            Ok(Self { directory, path })
+        }
+        #[cfg(not(any(unix, windows)))]
         {
             let _ = (descriptor, user_settings);
             return Err(ManagedClaudeProcessError::Unavailable);
@@ -344,14 +376,23 @@ fn write_overlay(
     descriptor: &ManagedClaudeLaunchDescriptorV2,
     user_settings: &Value,
 ) -> Result<(), ManagedClaudeProcessError> {
-    let mut components = Vec::with_capacity(1 + descriptor.helper_argv.len());
-    components.push(descriptor.helper_executable.as_str());
-    components.extend(descriptor.helper_argv.iter().map(String::as_str));
-    let helper_command = components
-        .into_iter()
-        .map(shell_quote)
-        .collect::<Vec<_>>()
-        .join(" ");
+    #[cfg(not(windows))]
+    let helper_command = {
+        let mut components = Vec::with_capacity(1 + descriptor.helper_argv.len());
+        components.push(descriptor.helper_executable.as_str());
+        components.extend(descriptor.helper_argv.iter().map(String::as_str));
+        components
+            .into_iter()
+            .map(shell_quote)
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    #[cfg(windows)]
+    let helper_command = hiroute_platform::windows::launcher::managed_helper_command(
+        Path::new(&descriptor.helper_executable),
+        &descriptor.helper_argv,
+    )
+    .map_err(|_| ManagedClaudeProcessError::Unavailable)?;
     let mut overlay = match user_settings {
         Value::Object(fields) => fields.clone(),
         _ => Map::new(),
@@ -362,6 +403,9 @@ fn write_overlay(
         .and_then(|value| value.as_object().cloned())
         .unwrap_or_default();
     for name in MANAGED_CLAUDE_ENVIRONMENT {
+        #[cfg(windows)]
+        env.retain(|key, _| !key.eq_ignore_ascii_case(name));
+        #[cfg(not(windows))]
         env.remove(name);
     }
     let mut managed_env = Map::new();

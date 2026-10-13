@@ -805,12 +805,17 @@ fn explicit_native_mode_runs_without_universal_confinement_flags() {
 mod materials_tests;
 
 fn private_fixture() -> tempfile::TempDir {
-    let fixture = tempfile::tempdir().unwrap();
+    // macOS /var is an alias of /private/var. Profiles bind canonical ancestry,
+    // so create the fixture in that physical parent instead of mixing spellings.
+    let parent = std::fs::canonicalize(std::env::temp_dir()).unwrap();
+    let fixture = tempfile::Builder::new().tempdir_in(parent).unwrap();
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(fixture.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
     }
+    #[cfg(windows)]
+    hiroute_platform::windows::security::set_owner_only(fixture.path(), true).unwrap();
     fixture
 }
 

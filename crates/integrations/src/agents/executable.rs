@@ -78,18 +78,45 @@ fn probe(path: &Path, timeout: Duration) -> ExecutableProbe {
 
 pub(super) fn resolve(path: &Path) -> Result<Option<PathBuf>, ProbeFailure> {
     let candidates = if path.is_absolute() || path.components().count() > 1 {
+        #[cfg(windows)]
+        if path.extension().is_none() {
+            vec![
+                path.with_extension("exe"),
+                path.with_extension("cmd"),
+                path.to_owned(),
+            ]
+        } else {
+            vec![path.to_owned()]
+        }
+        #[cfg(not(windows))]
         vec![path.to_owned()]
     } else {
         let mut directories = std::env::var_os("PATH")
             .map(|search| std::env::split_paths(&search).collect::<Vec<_>>())
             .unwrap_or_default();
-        if let Some(home) = std::env::var_os("HOME") {
+        if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
             directories.push(PathBuf::from(home).join(".local/bin"));
         }
         directories.extend([PathBuf::from("/usr/local/bin"), PathBuf::from("/usr/bin")]);
         #[cfg(target_os = "macos")]
         directories.push(PathBuf::from("/opt/homebrew/bin"));
-        directories.into_iter().map(|dir| dir.join(path)).collect()
+        directories
+            .into_iter()
+            .flat_map(|dir| {
+                let candidate = dir.join(path);
+                #[cfg(windows)]
+                {
+                    if path.extension().is_none() {
+                        return vec![
+                            candidate.with_extension("exe"),
+                            candidate.with_extension("cmd"),
+                            candidate,
+                        ];
+                    }
+                }
+                vec![candidate]
+            })
+            .collect()
     };
     for candidate in candidates {
         match std::fs::symlink_metadata(&candidate) {
@@ -261,7 +288,53 @@ fn bounded_version(path: &Path, timeout: Duration) -> Result<Vec<u8>, ProbeFailu
     result
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn bounded_version(path: &Path, timeout: Duration) -> Result<Vec<u8>, ProbeFailure> {
+    let home = tempfile::Builder::new()
+        .prefix("hiroute-version-")
+        .tempdir()
+        .map_err(|_| ProbeFailure::Unavailable)?;
+    let home_path = std::fs::canonicalize(home.path()).map_err(|_| ProbeFailure::Unavailable)?;
+    hiroute_platform::windows::security::set_owner_only(&home_path, true)
+        .map_err(|_| ProbeFailure::Unavailable)?;
+    let mut command = std::process::Command::new(path);
+    command
+        .arg("--version")
+        .env_clear()
+        .env("HOME", &home_path)
+        .env("USERPROFILE", &home_path)
+        .current_dir(&home_path);
+    for (key, relative) in [
+        ("CODEX_HOME", ".codex"),
+        ("CLAUDE_CONFIG_DIR", ".claude"),
+        ("QODER_CONFIG_DIR", ".qoder"),
+        ("DSH_HOME", ".dsh"),
+        ("PI_CODING_AGENT_DIR", ".pi/agent"),
+    ] {
+        std::fs::create_dir_all(home_path.join(relative)).map_err(|_| ProbeFailure::Unavailable)?;
+        command.env(key, home_path.join(relative));
+    }
+    if let Some(path) = std::env::var_os("PATH") {
+        command.env("PATH", path);
+    }
+    let result = super::windows_runtime::bounded(&command, false, timeout, OUTPUT_LIMIT);
+    if result
+        .as_ref()
+        .is_err_and(super::windows_runtime::cleanup_unknown)
+    {
+        let _ = home.keep();
+    }
+    let bytes = result.map_err(|error| {
+        if error.kind() == std::io::ErrorKind::TimedOut {
+            ProbeFailure::TimedOut
+        } else {
+            ProbeFailure::Unavailable
+        }
+    })?;
+    Ok(bytes.to_vec())
+}
+
+#[cfg(not(any(unix, windows)))]
 fn bounded_version(_path: &Path, _timeout: Duration) -> Result<Vec<u8>, ProbeFailure> {
     Err(ProbeFailure::Unavailable)
 }

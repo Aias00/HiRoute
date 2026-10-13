@@ -1,8 +1,12 @@
 use super::super::platform::{WorkerObservation as Observation, WorkerStopScope as Scope};
+#[cfg(windows)]
+use hiroute_platform::windows::job::{Child, Launch, Stream};
 use std::io;
 #[cfg(unix)]
 use std::time::{Duration, Instant};
-use tokio::process::{Child, Command};
+#[cfg(not(windows))]
+use tokio::process::Child;
+use tokio::process::Command;
 
 /// Never expose a numeric process identifier as an operation capability.
 pub(super) struct Process {
@@ -16,6 +20,34 @@ pub(super) struct Process {
 }
 
 impl Process {
+    pub(super) fn spawn(command: &mut Command) -> io::Result<Self> {
+        Self::configure(command);
+        #[cfg(not(windows))]
+        let child = command.spawn()?;
+        #[cfg(windows)]
+        let child = {
+            let command = command.as_std();
+            let args = command
+                .get_args()
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>();
+            let env = command
+                .get_envs()
+                .filter_map(|(key, value)| value.map(|value| (key.to_owned(), value.to_owned())))
+                .collect::<Vec<_>>();
+            Child::spawn(Launch {
+                program: std::path::Path::new(command.get_program()),
+                args: &args,
+                env: &env,
+                cwd: command.get_current_dir(),
+                stdin: Stream::Piped,
+                stdout: Stream::Piped,
+                stderr: Stream::Null,
+            })?
+        };
+        Self::new(child)
+    }
+
     pub(super) fn configure(command: &mut Command) {
         command.kill_on_drop(true);
         #[cfg(unix)]
@@ -42,12 +74,26 @@ impl Process {
 
     pub(super) fn pipes(
         &mut self,
-    ) -> Option<(tokio::process::ChildStdin, tokio::process::ChildStdout)> {
-        Some((self.child.stdin.take()?, self.child.stdout.take()?))
+    ) -> Option<(
+        super::super::platform::WorkerStdin,
+        super::super::platform::WorkerStdout,
+    )> {
+        #[cfg(not(windows))]
+        return Some((
+            Box::pin(self.child.stdin.take()?),
+            Box::pin(self.child.stdout.take()?),
+        ));
+        #[cfg(windows)]
+        Some((
+            Box::pin(tokio::fs::File::from_std(self.child.stdin.take()?)),
+            Box::pin(tokio::fs::File::from_std(self.child.stdout.take()?)),
+        ))
     }
 
     pub(super) fn scope(&self) -> Scope {
-        if cfg!(unix) {
+        if cfg!(windows) {
+            Scope::Job
+        } else if cfg!(unix) {
             Scope::ProcessGroup
         } else {
             Scope::Root
@@ -73,7 +119,19 @@ impl Process {
                 Err(_) => Observation::Unknown,
             }
         }
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        {
+            match self.child.exit_code() {
+                Ok(Some(code)) => {
+                    let observation = Observation::Exited { code: Some(code) };
+                    self.reaped = Some(observation);
+                    observation
+                }
+                Ok(None) => Observation::Running,
+                Err(_) => Observation::Unknown,
+            }
+        }
+        #[cfg(not(any(unix, windows)))]
         {
             match self.child.try_wait() {
                 Ok(Some(status)) => {
@@ -112,7 +170,9 @@ impl Process {
             }
             self.signal_group(rustix::process::Signal::KILL)?;
         }
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        self.child.terminate()?;
+        #[cfg(not(any(unix, windows)))]
         {
             if self.observe() == Observation::Running {
                 self.child.start_kill()?;
@@ -145,6 +205,10 @@ impl Process {
         if !self.stop_sent {
             return false;
         }
+        #[cfg(windows)]
+        return matches!(self.observe(), Observation::Exited { .. })
+            && self.child.empty().unwrap_or(false);
+        #[cfg(not(windows))]
         if self.reaped.is_none() {
             match self.child.try_wait() {
                 Ok(Some(status)) => {
@@ -163,7 +227,7 @@ impl Process {
                 Err(rustix::io::Errno::SRCH)
             )
         }
-        #[cfg(not(unix))]
+        #[cfg(not(any(unix, windows)))]
         {
             true
         }

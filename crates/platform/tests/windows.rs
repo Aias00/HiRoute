@@ -1,6 +1,8 @@
 #![cfg(windows)]
 
 use hiroute_platform::windows::{pipe, security};
+#[path = "support/windows_junction.rs"]
+mod junction;
 
 #[test]
 fn ancestor_junction_cannot_redirect_private_read_or_creation() {
@@ -11,24 +13,11 @@ fn ancestor_junction_cannot_redirect_private_read_or_creation() {
     let file = security::create_owner_only_file(&original).unwrap();
     drop(file);
     // Child creation above must succeed while its DELETE-capable parent is held.
-    // Release that pin only for mklink's independent target inspection, then
+    // Release that pin only for the independent junction fixture setup, then
     // exercise rejection of the published alias.
     drop(held);
     let alias = fixture.path().join("alias");
-    let cmd =
-        std::path::PathBuf::from(std::env::var_os("SystemRoot").unwrap()).join("System32/cmd.exe");
-    let result = std::process::Command::new(cmd)
-        .args(["/D", "/C", "mklink", "/J"])
-        .arg(&alias)
-        .arg(&outside)
-        .output()
-        .unwrap();
-    assert!(
-        result.status.success(),
-        "owned junction fixture must be created: stdout={:?}, stderr={:?}",
-        String::from_utf8_lossy(&result.stdout),
-        String::from_utf8_lossy(&result.stderr)
-    );
+    junction::create(&alias, &outside).expect("owned junction fixture must be created");
     assert!(security::open_owner_only(&alias.join("original"), false).is_err());
     assert!(security::create_owner_only_file(&alias.join("new")).is_err());
     assert!(pipe::name(&alias.join("control.sock")).is_err());

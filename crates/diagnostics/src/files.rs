@@ -4,6 +4,8 @@
 //! `mkdirat`, `renameat`, `unlinkat`) with `O_NOFOLLOW`, and each opened file is verified
 //! by `fstat`: regular file, exactly one hard link, with no owner or mode admission gate. Directory and file identities (`dev`, `ino`) are re-checked
 //! before destructive operations, so a replaced path is refused instead of followed.
+//! Windows uses reparse-free, held-directory native handles, single-link file identity
+//! checks and write-through namespace changes; payload writes still call `sync_all`.
 //!
 //! Platforms without equivalent private-path primitives report
 //! [`FileSafetyError::UnsupportedPlatform`]; this module never silently falls back to
@@ -693,7 +695,12 @@ mod unix {
 #[cfg(unix)]
 pub use unix::{FileIdentity, PrivateDir, VerifiedFile};
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+mod windows;
+#[cfg(windows)]
+pub use windows::{FileIdentity, PrivateDir, VerifiedFile};
+
+#[cfg(not(any(unix, windows)))]
 mod other {
     use std::path::Path;
 
@@ -804,5 +811,5 @@ mod other {
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 pub use other::{FileIdentity, PrivateDir, VerifiedFile};

@@ -205,10 +205,8 @@ impl WorkerPlatformPort for LocalWorkerPlatform {
         for (key, value) in &request.profile.env {
             command.env(key, value.as_str());
         }
-        Process::configure(&mut command);
         // No await between spawn, ownership registration and stdio delivery.
-        let child = command.spawn().map_err(|_| Error::CapabilityUnavailable)?;
-        let mut process = Process::new(child).map_err(|_| Error::CapabilityUnavailable)?;
+        let mut process = Process::spawn(&mut command).map_err(|_| Error::CapabilityUnavailable)?;
         let pipes = process.pipes();
         materials.retain();
         let record = Arc::new(Mutex::new(Record {
@@ -222,8 +220,8 @@ impl WorkerPlatformPort for LocalWorkerPlatform {
         match pipes {
             Some((stdin, stdout)) => Ok(ReadyWorker {
                 identity,
-                stdin: Box::pin(stdin),
-                stdout: Box::pin(stdout),
+                stdin,
+                stdout,
             }),
             None => {
                 let _ = self.terminate(&identity, 1_000).await;
@@ -278,9 +276,8 @@ impl WorkerPlatformPort for LocalWorkerPlatform {
             scope: record.process.scope(),
             observation: record.process.observe(),
             scope_stopped: record.scope_stopped,
-            // Windows root-only remains insufficient evidence for ordinary descendants.
             residual_unknown: !record.scope_stopped
-                || !cfg!(unix)
+                || !cfg!(any(unix, windows))
                 || record.cleanup != MaterialCleanup::Complete,
         })
     }

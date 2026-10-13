@@ -202,6 +202,13 @@ fn initialize_storage_meta(
 }
 
 fn prepare_owner_directory(path: &Path) -> Result<(), LocalStorageError> {
+    #[cfg(windows)]
+    {
+        let _held = hiroute_platform::windows::security::ensure_private_directory(path)?;
+        return Ok(());
+    }
+    #[cfg(not(windows))]
+    {
     if path.exists() {
         let metadata = fs::symlink_metadata(path)?;
         if metadata.file_type().is_symlink() || !metadata.file_type().is_dir() {
@@ -216,6 +223,7 @@ fn prepare_owner_directory(path: &Path) -> Result<(), LocalStorageError> {
         }
     }
     Ok(())
+    }
 }
 
 pub(crate) fn prepare_storage_root(path: &Path) -> Result<(), LocalStorageError> {
@@ -223,6 +231,8 @@ pub(crate) fn prepare_storage_root(path: &Path) -> Result<(), LocalStorageError>
 }
 
 pub(crate) fn validate_owner_file(path: &Path) -> Result<(), LocalStorageError> {
+    #[cfg(windows)]
+    let _held = hiroute_platform::windows::security::open_identity(path, false)?;
     let metadata = fs::symlink_metadata(path)?;
     if metadata.file_type().is_symlink() || !metadata.file_type().is_file() {
         return Err(LocalStorageError::Permission);
@@ -231,6 +241,8 @@ pub(crate) fn validate_owner_file(path: &Path) -> Result<(), LocalStorageError> 
 }
 
 fn set_owner_file_permissions(path: &Path) -> Result<(), LocalStorageError> {
+    #[cfg(windows)]
+    hiroute_platform::windows::security::set_owner_only(path, false)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;

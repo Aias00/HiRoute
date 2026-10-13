@@ -33,7 +33,7 @@ pub(super) fn render(
         json!({"id":"session-persistence-jsonl","config":{"root":state.join("sessions"),"compression":"none"}}),
         json!({"id":"attachment-local","config":{"dshHome":state}}),
         // Keep native Skill roots and customSkillDirs from the borrowed composition.
-        json!({"id":"tool-bash","config":{"enableRunInBackground":false,"promoteOnTimeout":false}}),
+        json!({"id":if cfg!(windows) { "tool-pwsh" } else { "tool-bash" },"config":{"enableRunInBackground":false,"promoteOnTimeout":false}}),
         json!({"id":"tool-terminal","config":{"enableRunInBackground":false}}),
         json!({"id":"session-log-deepseek","config":{"enabled":false}}),
     ];

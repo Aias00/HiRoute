@@ -1,7 +1,6 @@
 //! An explicitly requested native compatibility check. Configuration overrides exist only in
 //! the child process; no managed or daily configuration file is created or restored.
 use super::*;
-use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
 
 impl CodexNativeIngressProbe {
     pub fn run_ephemeral(
@@ -33,25 +32,16 @@ impl CodexNativeIngressProbe {
         {
             return Err(fail("organization configuration isolation"));
         }
-        let root = tempfile::Builder::new()
-            .prefix("hiroute-native-auth-")
-            .permissions(fs::Permissions::from_mode(0o700))
-            .tempdir()
+        let root = super::super::probe_files::temporary("hiroute-native-auth-")
             .map_err(|_| fail("private check directory"))?;
         let root_path =
             fs::canonicalize(root.path()).map_err(|_| fail("private check directory"))?;
-        fs::set_permissions(&root_path, fs::Permissions::from_mode(0o700))
-            .map_err(|_| fail("private check directory"))?;
         private_directory(&root_path)?;
         let home = root_path.join("home");
         let codex_home = home.join(".codex");
         let workspace = root_path.join("workspace");
         for path in [&home, &codex_home, &workspace] {
-            fs::DirBuilder::new()
-                .mode(0o700)
-                .create(path)
-                .map_err(|_| fail("private check directory"))?;
-            fs::set_permissions(path, fs::Permissions::from_mode(0o700))
+            super::super::probe_files::directory(path)
                 .map_err(|_| fail("private check directory"))?;
             private_directory(path)?;
         }
@@ -71,7 +61,7 @@ impl CodexNativeIngressProbe {
         );
         let mut command = Command::new(&binary);
         command.arg("exec").arg("--ignore-rules");
-        let mut child = command
+        command
             .args([
                 "--ephemeral",
                 "--skip-git-repo-check",
@@ -100,10 +90,22 @@ impl CodexNativeIngressProbe {
             .current_dir(&workspace)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stderr(Stdio::null());
+        #[cfg(unix)]
+        let child = command
             .process_group(0)
             .spawn()
             .map_err(|_| fail("native launch"))?;
+        #[cfg(windows)]
+        let child = super::super::windows_runtime::spawn(
+            &command,
+            false,
+            hiroute_platform::windows::job::Stream::Null,
+            hiroute_platform::windows::job::Stream::Null,
+            hiroute_platform::windows::job::Stream::Null,
+        )
+        .map_err(|_| fail("native launch"))?;
+        let mut child = super::super::NativeProbeProcess::new(child);
         let started = Instant::now();
         let mut requests = 0;
         let result = (|| {
@@ -125,8 +127,8 @@ impl CodexNativeIngressProbe {
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
                     Err(_) => return Err(fail("loopback accept")),
                 }
-                if let Some(status) = child.try_wait().map_err(|_| fail("native wait"))? {
-                    return if status.success()
+                if let Some(success) = child.observe().map_err(|_| fail("native wait"))? {
+                    return if success
                         && requests > 0
                         && challenge.as_ref().is_none_or(|check| check.complete())
                     {
@@ -142,13 +144,10 @@ impl CodexNativeIngressProbe {
             }
         })();
         // Reap the process before the private directory is reclaimed on either outcome.
-        if child.try_wait().ok().flatten().is_none() {
-            let _ = nix::sys::signal::killpg(
-                nix::unistd::Pid::from_raw(child.id() as i32),
-                nix::sys::signal::Signal::SIGKILL,
-            );
+        if child.stop().is_err() {
+            let _ = root.keep();
+            return Err(fail("native cleanup"));
         }
-        let _ = child.wait();
         result?;
         Ok(CodexIngressEvidence {
             observed: Instant::now(),

@@ -9,12 +9,11 @@ use thiserror::Error;
 
 use super::GatewayLauncher;
 #[cfg(unix)]
-use super::{GatewayLauncherError, GatewayMode, ListenerRunStyle};
+use super::ListenerRunStyle;
+use super::{GatewayLauncherError, GatewayMode};
 use hiroute_host_runtime::{connect_address, validate_gateway_listen};
 
-#[cfg(unix)]
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(10);
-#[cfg(unix)]
 const STARTUP_CLEANUP_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// The externally meaningful phase of a managed Gateway listener.
@@ -160,7 +159,6 @@ impl ShutdownRequest {
         }
     }
 
-    #[cfg(unix)]
     async fn wait(&self) {
         loop {
             if self.requested.load(std::sync::atomic::Ordering::Acquire) {
@@ -185,7 +183,7 @@ impl pingora_core::server::ShutdownSignalWatch for ManagedShutdownSignal {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub(super) fn start(
     launcher: GatewayLauncher,
 ) -> Result<ManagedGatewayHandle, ManagedGatewayError> {
@@ -200,7 +198,10 @@ pub(super) fn start(
         .map_err(|source| ManagedGatewayError::ListenerUnavailable { listen, source })?;
     drop(reservation);
 
+    #[cfg(unix)]
     let server = launcher.into_server(ListenerRunStyle::Managed)?;
+    #[cfg(windows)]
+    let services = launcher.into_services();
     let phase = Arc::new(Mutex::new(ManagedGatewayPhase::Starting));
     let shutdown = Arc::new(ShutdownRequest::default());
     let (completion_tx, completion) = std::sync::mpsc::channel();
@@ -210,11 +211,14 @@ pub(super) fn start(
         .name("hiroute-managed-gateway".to_owned())
         .spawn(move || {
             let outcome = if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                #[cfg(unix)]
                 server.run(pingora_core::server::RunArgs {
                     shutdown_signal: Box::new(ManagedShutdownSignal {
                         request: worker_shutdown,
                     }),
                 });
+                #[cfg(windows)]
+                run_windows_services(services, worker_shutdown);
             }))
             .is_ok()
             {
@@ -245,11 +249,59 @@ pub(super) fn start(
     Ok(handle)
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 pub(super) fn start(
     _launcher: GatewayLauncher,
 ) -> Result<ManagedGatewayHandle, ManagedGatewayError> {
     Err(ManagedGatewayError::UnsupportedPlatform)
+}
+
+#[cfg(windows)]
+fn run_windows_services(
+    services: Vec<Box<dyn pingora_core::services::ServiceWithDependents>>,
+    shutdown: Arc<ShutdownRequest>,
+) {
+    // Public Pingora services preserve the same GatewayHttpApp, listener and production ports.
+    // Its Server Windows loop ignores RunArgs and waits for process Ctrl-C, so embedding it
+    // would leave RoleAll.shutdown()/join() unable to stop this listener.
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(super::LISTENER_WORKER_THREADS)
+        .thread_name("hiroute-gateway-io")
+        .enable_all()
+        .build()
+        .expect("cannot create managed Gateway runtime");
+    runtime.block_on(async move {
+        let (send_shutdown, receive_shutdown) = tokio::sync::watch::channel(false);
+        let mut tasks = tokio::task::JoinSet::new();
+        for mut service in services {
+            let watch = receive_shutdown.clone();
+            let (ready, _) = tokio::sync::watch::channel(false);
+            let notifier = pingora_core::services::ServiceReadyNotifier::new(ready);
+            tasks.spawn(async move { service.start_service(watch, 1, notifier).await });
+        }
+        tokio::select! {
+            _ = shutdown.wait() => {}
+            outcome = tasks.join_next() => {
+                panic!("managed Gateway service stopped before shutdown: {outcome:?}");
+            }
+        }
+        let _ = send_shutdown.send(true);
+        let drained = tokio::time::timeout(Duration::from_secs(1), async {
+            while let Some(outcome) = tasks.join_next().await {
+                outcome.expect("managed Gateway service failed during shutdown");
+            }
+        })
+        .await;
+        if drained.is_err() {
+            tasks.abort_all();
+            while tasks.join_next().await.is_some() {}
+            panic!("managed Gateway service exceeded its shutdown deadline");
+        }
+        // Match the Unix managed listener's one-second graceful connection window.
+        // Runtime shutdown then cancels stalled connection tasks instead of waiting forever.
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    });
+    runtime.shutdown_timeout(Duration::from_secs(1));
 }
 
 fn production_ready(listen: SocketAddr) -> bool {
@@ -302,7 +354,7 @@ pub enum ManagedGatewayError {
     Launcher(#[from] GatewayLauncherError),
     #[error("managed Gateway startup requires a production launcher")]
     ProductionOnly,
-    #[error("managed Gateway lifecycle is currently supported only on Unix")]
+    #[error("managed Gateway lifecycle is unavailable on this platform")]
     UnsupportedPlatform,
     #[error("cannot spawn managed Gateway worker: {0}")]
     WorkerSpawn(#[source] io::Error),
@@ -328,7 +380,7 @@ pub enum ManagedGatewayError {
     WorkerPanicked(SocketAddr),
 }
 
-#[cfg(all(test, unix))]
+#[cfg(all(test, any(unix, windows)))]
 mod tests {
     use super::*;
 
@@ -376,6 +428,43 @@ mod tests {
         handle.shutdown();
         handle.join(Duration::from_secs(5)).unwrap();
         std::net::TcpListener::bind(listen).expect("wildcard listener must be released");
+    }
+
+    #[test]
+    fn shutdown_cancels_a_client_that_never_completes_its_http_request() {
+        use std::io::{Read, Write};
+
+        let listen = reserved_loopback_address();
+        let lkg = std::env::temp_dir().join(format!(
+            "hiroute-managed-gateway-stalled-missing-lkg-{}-{}.json",
+            std::process::id(),
+            listen.port()
+        ));
+        let mut handle = GatewayLauncher::production(listen, lkg)
+            .unwrap()
+            .start_managed()
+            .unwrap();
+        let mut client = std::net::TcpStream::connect(listen).unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        client
+            .write_all(b"GET /_hiroute/ready HTTP/1.1\r\nHost: localhost\r\n")
+            .unwrap();
+        handle.shutdown();
+        handle.join(Duration::from_secs(5)).unwrap();
+        let closed = client.read(&mut [0u8; 1]);
+        assert!(
+            matches!(closed, Ok(0))
+                || closed.as_ref().is_err_and(|error| {
+                    matches!(
+                        error.kind(),
+                        std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::ConnectionAborted
+                    )
+                }),
+            "stalled connection must close after managed join: {closed:?}"
+        );
+        std::net::TcpListener::bind(listen).expect("shutdown must release a stalled listener");
     }
 
     #[test]

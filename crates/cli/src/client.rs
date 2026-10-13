@@ -121,7 +121,61 @@ impl LocalControlClient {
         Ok(response)
     }
 
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    fn protected_stream(
+        &self,
+        endpoint: &Path,
+    ) -> Result<hiroute_platform::windows::pipe::Stream, LocalControlClientError> {
+        let deadline = std::time::Instant::now()
+            .checked_add(self.timeout)
+            .ok_or(LocalControlClientError::Transport)?;
+        let stream =
+            hiroute_platform::windows::pipe::Stream::connect_timeout(endpoint, self.timeout)
+                .map_err(|_| LocalControlClientError::Transport)?;
+        stream
+            .set_deadline(Some(deadline))
+            .map_err(|_| LocalControlClientError::Transport)?;
+        Ok(stream)
+    }
+
+    #[cfg(windows)]
+    pub(crate) fn call_protected_input(
+        &self,
+        request: StandaloneProtectedInputRequestV1,
+    ) -> Result<StandaloneProtectedInputResponseV1, LocalControlClientError> {
+        use hiroute_platform::local_record::{self, Channel, Direction};
+        let mut stream = self.protected_stream(&self.protected_input_endpoint())?;
+        let bytes = Zeroizing::new(
+            serde_json::to_vec(&request).map_err(|_| LocalControlClientError::Protocol)?,
+        );
+        local_record::write(
+            &mut stream,
+            Channel::ProtectedInput,
+            Direction::Request,
+            &bytes,
+            STANDALONE_PROTECTED_INPUT_MAX_FRAME_BYTES_V1 as usize,
+        )
+        .map_err(|_| LocalControlClientError::Transport)?;
+        let bytes = local_record::read(
+            &mut stream,
+            Channel::ProtectedInput,
+            Direction::Response,
+            STANDALONE_PROTECTED_INPUT_MAX_FRAME_BYTES_V1 as usize,
+        )
+        .map_err(|_| LocalControlClientError::Transport)?;
+        let response: StandaloneProtectedInputResponseV1 =
+            serde_json::from_slice(&bytes).map_err(|_| LocalControlClientError::Protocol)?;
+        if response.schema != STANDALONE_PROTECTED_INPUT_RESPONSE_SCHEMA_V1
+            || !response.registered
+            || response.action != request.action
+        {
+            return Err(LocalControlClientError::Protocol);
+        }
+        local_record::acknowledge(&mut stream).map_err(|_| LocalControlClientError::Transport)?;
+        Ok(response)
+    }
+
+    #[cfg(not(any(unix, windows)))]
     pub(crate) fn call_protected_input(
         &self,
         _request: StandaloneProtectedInputRequestV1,
@@ -223,7 +277,44 @@ impl LocalControlClient {
         Ok(material)
     }
 
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    pub(crate) fn read_agent_grant(
+        &self,
+        connection_id: &str,
+    ) -> Result<AgentGrantMaterial, LocalControlClientError> {
+        use hiroute_platform::local_record::{self, Channel, Direction};
+        let mut stream = self.protected_stream(&self.agent_grant_endpoint())?;
+        let frame = AgentGrantRawRequestV1::new(connection_id)
+            .map_err(|_| LocalControlClientError::Protocol)?
+            .encode();
+        local_record::write(
+            &mut stream,
+            Channel::AgentGrant,
+            Direction::Request,
+            &frame,
+            12 + hiroute_application_api::MAX_AGENT_GRANT_CONNECTION_ID_BYTES_V1,
+        )
+        .map_err(|_| LocalControlClientError::Transport)?;
+        let bytes = local_record::read(
+            &mut stream,
+            Channel::AgentGrant,
+            Direction::Response,
+            MAX_AGENT_GRANT_TOKEN_BYTES_V1 + 1,
+        )
+        .map_err(|_| LocalControlClientError::Transport)?;
+        if bytes.len() < 2
+            || bytes.last() != Some(&b'\n')
+            || bytes[..bytes.len() - 1]
+                .iter()
+                .any(|byte| !(byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_')))
+        {
+            return Err(LocalControlClientError::Protocol);
+        }
+        local_record::acknowledge(&mut stream).map_err(|_| LocalControlClientError::Transport)?;
+        Ok(AgentGrantMaterial(bytes.to_vec()))
+    }
+
+    #[cfg(not(any(unix, windows)))]
     pub(crate) fn read_agent_grant(
         &self,
         _connection_id: &str,

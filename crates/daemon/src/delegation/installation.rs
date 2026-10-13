@@ -157,7 +157,7 @@ pub(super) fn check_installation(
             check_entry(Path::new(node), true)?;
             hiroute_integrations::agents::pi_cli_installation(Path::new(cli))
                 .map_err(|_| DelegationErrorV1::CapabilityUnavailable)?;
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             hiroute_integrations::check_pi_sdk_capability(
                 Path::new(cli),
                 Path::new(node),
@@ -224,17 +224,25 @@ fn create_private_child(parent: &Path, name: &str) -> Result<PathBuf, Delegation
     }
     let parent = fs::canonicalize(parent).map_err(|_| DelegationErrorV1::StorageUnavailable)?;
     let path = parent.join(name);
+    #[cfg(not(windows))]
     let mut builder = fs::DirBuilder::new();
     #[cfg(unix)]
     {
         use std::os::unix::fs::DirBuilderExt;
         builder.mode(0o700);
     }
-    match builder.create(&path) {
+    #[cfg(not(windows))]
+    let created = builder.create(&path);
+    #[cfg(windows)]
+    let created = hiroute_platform::windows::security::create_owner_only_directory(&path).map(drop);
+    match created {
         Ok(()) => {}
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
         Err(_) => return Err(DelegationErrorV1::StorageUnavailable),
     }
+    #[cfg(windows)]
+    hiroute_platform::windows::security::verify_owner_only(&path, true)
+        .map_err(|_| DelegationErrorV1::PermissionDenied)?;
     let metadata =
         fs::symlink_metadata(&path).map_err(|_| DelegationErrorV1::StorageUnavailable)?;
     if metadata.file_type().is_symlink() || !metadata.is_dir() || !private(&metadata) {

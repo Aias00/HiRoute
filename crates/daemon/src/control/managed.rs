@@ -12,7 +12,7 @@ use hiroute_application_api::{
 
 use super::{
     AgentGrantResolverPort, ControlConnectionAdmission, ControlConnectionBudgets, EndpointGuard,
-    LocalControlDaemon, bind_listener, spawn_control_connection,
+    LocalControlDaemon, LocalListener, LocalStream, bind_listener, spawn_control_connection,
 };
 
 const ACCEPT_POLL: Duration = Duration::from_millis(20);
@@ -184,8 +184,8 @@ fn start_control_inner(
 }
 
 fn run_listener(
-    listener: std::os::unix::net::UnixListener,
-    raw_listener: Option<std::os::unix::net::UnixListener>,
+    listener: LocalListener,
+    raw_listener: Option<LocalListener>,
     resolver: Option<Arc<dyn AgentGrantResolverPort>>,
     daemon: LocalControlDaemon,
     shutdown: &AtomicBool,
@@ -245,9 +245,10 @@ fn run_listener(
     Ok(())
 }
 
+#[cfg(unix)]
 fn bind_agent_grant_listener(
     runtime_root: &Path,
-) -> Result<(std::os::unix::net::UnixListener, EndpointGuard), String> {
+) -> Result<(LocalListener, EndpointGuard), String> {
     use std::fs;
     use std::os::unix::fs::{FileTypeExt, PermissionsExt};
     use std::os::unix::net::{UnixListener, UnixStream};
@@ -286,9 +287,18 @@ fn bind_agent_grant_listener(
     Ok((listener, EndpointGuard(path)))
 }
 
+#[cfg(windows)]
+fn bind_agent_grant_listener(
+    runtime_root: &Path,
+) -> Result<(LocalListener, EndpointGuard), String> {
+    let path = runtime_root.join("hiroute/agent-grant-v1.sock");
+    let listener = LocalListener::bind(&path).map_err(|error| error.to_string())?;
+    Ok((listener, EndpointGuard(path)))
+}
+
 fn serve_agent_grant_connection(
     resolver: &dyn AgentGrantResolverPort,
-    mut stream: std::os::unix::net::UnixStream,
+    mut stream: LocalStream,
     mut admission: ControlConnectionAdmission,
 ) -> Result<(), ()> {
     use std::io::{Read, Write};
@@ -299,31 +309,69 @@ fn serve_agent_grant_connection(
     stream
         .set_write_timeout(Some(super::FRAME_TIMEOUT))
         .map_err(|_| ())?;
-    let mut header = [0_u8; 12];
-    stream.read_exact(&mut header).map_err(|_| ())?;
-    let length = usize::from(u16::from_be_bytes([header[10], header[11]]));
-    if length == 0 || length > MAX_AGENT_GRANT_CONNECTION_ID_BYTES_V1 {
-        return Err(());
-    }
-    let mut frame = Vec::with_capacity(header.len() + length);
-    frame.extend_from_slice(&header);
-    frame.resize(header.len() + length, 0);
+    #[cfg(windows)]
     stream
-        .read_exact(&mut frame[header.len()..])
+        .set_deadline(Some(Instant::now() + super::FRAME_TIMEOUT))
         .map_err(|_| ())?;
-    let mut trailing = [0_u8; 1];
-    if stream.read(&mut trailing).map_err(|_| ())? != 0 {
-        return Err(());
-    }
+    #[cfg(unix)]
+    let frame = {
+        let mut header = [0_u8; 12];
+        stream.read_exact(&mut header).map_err(|_| ())?;
+        let length = usize::from(u16::from_be_bytes([header[10], header[11]]));
+        if length == 0 || length > MAX_AGENT_GRANT_CONNECTION_ID_BYTES_V1 {
+            return Err(());
+        }
+        let mut frame = Vec::with_capacity(header.len() + length);
+        frame.extend_from_slice(&header);
+        frame.resize(header.len() + length, 0);
+        stream
+            .read_exact(&mut frame[header.len()..])
+            .map_err(|_| ())?;
+        let mut trailing = [0_u8; 1];
+        if stream.read(&mut trailing).map_err(|_| ())? != 0 {
+            return Err(());
+        }
+        frame
+    };
+    #[cfg(windows)]
+    let frame = {
+        use hiroute_platform::local_record::{self, Channel, Direction};
+        local_record::read(
+            &mut stream,
+            Channel::AgentGrant,
+            Direction::Request,
+            12 + MAX_AGENT_GRANT_CONNECTION_ID_BYTES_V1,
+        )
+        .map_err(|_| ())?
+    };
     let request = AgentGrantRawRequestV1::decode(&frame).map_err(|_| ())?;
     admission.classified_non_wait();
     let material = resolver.resolve_agent_grant(request.connection_id())?;
     if material.expose().is_empty() || material.expose().len() > MAX_AGENT_GRANT_TOKEN_BYTES_V1 {
         return Err(());
     }
-    stream.write_all(material.expose()).map_err(|_| ())?;
-    stream.write_all(b"\n").map_err(|_| ())?;
-    stream.flush().map_err(|_| ())
+    #[cfg(unix)]
+    {
+        stream.write_all(material.expose()).map_err(|_| ())?;
+        stream.write_all(b"\n").map_err(|_| ())?;
+        stream.flush().map_err(|_| ())
+    }
+    #[cfg(windows)]
+    {
+        use hiroute_platform::local_record::{self, Channel, Direction};
+        use zeroize::Zeroizing;
+        let mut response = Zeroizing::new(material.expose().to_vec());
+        response.push(b'\n');
+        local_record::write(
+            &mut stream,
+            Channel::AgentGrant,
+            Direction::Response,
+            &response,
+            MAX_AGENT_GRANT_TOKEN_BYTES_V1 + 1,
+        )
+        .map_err(|_| ())?;
+        local_record::await_acknowledgement(&mut stream).map_err(|_| ())
+    }
 }
 
 #[derive(Clone, Debug, thiserror::Error, Eq, PartialEq)]
@@ -336,7 +384,7 @@ pub enum ManagedControlError {
     JoinTimeout,
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use std::io::{Read, Write};
     use std::os::unix::net::UnixStream;

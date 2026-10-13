@@ -180,20 +180,38 @@ fn create_owner_only_at(
 
 /// Open one existing child for identity-bound deletion; no path is re-resolved.
 pub fn open_delete_at(parent: &File, name: &std::ffi::OsStr, directory: bool) -> io::Result<File> {
-    super::path::relative(parent, name, directory, GENERIC_READ | DELETE,
-        FILE_SHARE_READ | FILE_SHARE_WRITE, false, None)
+    super::path::relative(
+        parent,
+        name,
+        directory,
+        GENERIC_READ | DELETE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+        false,
+        None,
+    )
 }
 
 pub fn open_delete(path: &Path, directory: bool) -> io::Result<File> {
-    super::path::open(path, directory, GENERIC_READ | DELETE,
-        FILE_SHARE_READ | FILE_SHARE_WRITE, false, None)
+    super::path::open(
+        path,
+        directory,
+        GENERIC_READ | DELETE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+        false,
+        None,
+    )
 }
 
 /// Writable identity for payload flush and handle-relative namespace changes.
 pub fn open_write_through(path: &Path, directory: bool) -> io::Result<File> {
-    super::path::open(path, directory,
+    super::path::open(
+        path,
+        directory,
         GENERIC_READ | DELETE | if directory { 0 } else { GENERIC_WRITE },
-        super::path::SHARE_ALL, false, None)
+        super::path::SHARE_ALL,
+        false,
+        None,
+    )
 }
 
 pub fn delete_by_handle(file: &File) -> io::Result<()> {
@@ -225,6 +243,15 @@ pub fn file_identity(file: &File) -> io::Result<(u32, u64)> {
         information.dwVolumeSerialNumber,
         (u64::from(information.nFileIndexHigh) << 32) | u64::from(information.nFileIndexLow),
     ))
+}
+
+pub fn file_link_count(file: &File) -> io::Result<u32> {
+    let mut information = BY_HANDLE_FILE_INFORMATION::default();
+    // SAFETY: the file and exact output structure remain live through the query.
+    if unsafe { GetFileInformationByHandle(file.as_raw_handle().cast(), &mut information) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(information.nNumberOfLinks)
 }
 
 pub fn set_owner_only(path: &Path, directory: bool) -> io::Result<()> {
@@ -381,6 +408,31 @@ pub fn verify_owner_only(path: &Path, directory: bool) -> io::Result<()> {
 
 pub fn verify_owner_only_handle(file: &impl AsRawHandle, directory: bool) -> io::Result<()> {
     let user = CurrentUser::load()?;
+    verify_owner_only_handle_with_sid(file, directory, user.sid())
+}
+
+/// Explicit identity is for authenticated service-owner operations. Callers
+/// must obtain it from the retained LogonUser token, never a requested SID.
+pub fn verify_owner_only_handle_for_sid(
+    file: &impl AsRawHandle,
+    directory: bool,
+    owner_sid: &[u8],
+) -> io::Result<()> {
+    if owner_sid.len() < 8
+        || owner_sid[0] != 1
+        || owner_sid[1] > 15
+        || owner_sid.len() != 8 + usize::from(owner_sid[1]) * 4
+    {
+        return Err(permission_error());
+    }
+    verify_owner_only_handle_with_sid(file, directory, owner_sid.as_ptr().cast_mut().cast())
+}
+
+fn verify_owner_only_handle_with_sid(
+    file: &impl AsRawHandle,
+    directory: bool,
+    expected_sid: PSID,
+) -> io::Result<()> {
     let mut owner: PSID = null_mut();
     let mut dacl: *mut ACL = null_mut();
     let mut descriptor = null_mut();
@@ -401,11 +453,11 @@ pub fn verify_owner_only_handle(file: &impl AsRawHandle, directory: bool) -> io:
     if status != 0 {
         return Err(win32_error(status));
     }
-    validate_security_descriptor(&user, owner, dacl, descriptor, directory)
+    validate_security_descriptor(expected_sid, owner, dacl, descriptor, directory)
 }
 
 fn validate_security_descriptor(
-    user: &CurrentUser,
+    expected_sid: PSID,
     owner: PSID,
     dacl: *mut ACL,
     descriptor: *mut c_void,
@@ -424,7 +476,7 @@ fn validate_security_descriptor(
         return Err(permission_error());
     }
     // SAFETY: both SIDs are live for the duration of this function.
-    if unsafe { EqualSid(owner, user.sid()) } == 0 {
+    if unsafe { EqualSid(owner, expected_sid) } == 0 {
         return Err(permission_error());
     }
     let mut information = ACL_SIZE_INFORMATION::default();
@@ -463,7 +515,7 @@ fn validate_security_descriptor(
     }
     let ace_sid = addr_of!(ace.SidStart).cast_mut().cast::<c_void>();
     // SAFETY: ACCESS_ALLOWED_ACE stores its variable-length SID at SidStart.
-    if unsafe { EqualSid(ace_sid, user.sid()) } == 0 {
+    if unsafe { EqualSid(ace_sid, expected_sid) } == 0 {
         return Err(permission_error());
     }
     drop(descriptor);

@@ -3,7 +3,7 @@
 //! Codex/Qoder availability is established by exact session/load, not a shared-history scan.
 use super::*;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use std::io::{Read, Write};
+use std::io::Read;
 use unicode_normalization::UnicodeNormalization;
 
 const CONTEXT_FILE: &str = "borrowed-native-context.json";
@@ -339,7 +339,7 @@ fn canonical_context_path(path: &Path, allow_missing: bool) -> Result<PathBuf, D
         return Err(DelegationErrorV1::InvalidArguments);
     }
     match fs::canonicalize(path) {
-        Ok(path) if path.is_dir() => Ok(path),
+        Ok(path) if path.is_dir() => Ok(super::super::native_context::native_path(&path)),
         Err(error) if allow_missing && error.kind() == std::io::ErrorKind::NotFound => {
             // Clients may create a default config root on their first run. Resolve its existing
             // prefix without creating, chmodding, copying or adopting anything in the user root.
@@ -361,6 +361,9 @@ fn read_owned_json<T: DeserializeOwned>(root: &Path, name: &str) -> Result<T, De
         return Err(DelegationErrorV1::ResumeUnavailable);
     }
     let file = open_marker(&path)?;
+    #[cfg(windows)]
+    hiroute_platform::windows::security::verify_owner_only_handle(&file, false)
+        .map_err(|_| DelegationErrorV1::ResumeUnavailable)?;
     let metadata = file
         .metadata()
         .map_err(|_| DelegationErrorV1::ResumeUnavailable)?;
@@ -394,22 +397,8 @@ fn write_owned_json<T: Serialize + DeserializeOwned + PartialEq>(
     if bytes.len() as u64 > METADATA_LIMIT {
         return Err(DelegationErrorV1::InvalidArguments);
     }
-    let mut options = fs::OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    match options.open(root.join(name)) {
-        Ok(mut file) => {
-            file.write_all(&bytes)
-                .and_then(|()| file.sync_all())
-                .map_err(|_| DelegationErrorV1::StorageUnavailable)?;
-            fs::File::open(root)
-                .and_then(|directory| directory.sync_all())
-                .map_err(|_| DelegationErrorV1::StorageUnavailable)
-        }
+    match hiroute_platform::durable::write_private_new(&root.join(name), &bytes) {
+        Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
             if read_owned_json::<T>(root, name)? == *value {
                 Ok(())

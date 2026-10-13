@@ -28,6 +28,53 @@ impl LocalEndpoint {
     }
 
     #[cfg(unix)]
+    pub(crate) async fn connect(&self) -> Result<tokio::net::UnixStream, FailureCode> {
+        tokio::net::UnixStream::connect(self.path())
+            .await
+            .map_err(|_| FailureCode::TransportUnavailable)
+    }
+
+    #[cfg(windows)]
+    pub(crate) async fn connect(
+        &self,
+    ) -> Result<tokio::net::windows::named_pipe::NamedPipeClient, FailureCode> {
+        use tokio::net::windows::named_pipe::ClientOptions;
+        let name = hiroute_platform::windows::pipe::name(self.path())
+            .map_err(|_| FailureCode::PeerRejected)?;
+        loop {
+            match ClientOptions::new().open(&name) {
+                Ok(stream) => return Ok(stream),
+                // The overall call deadline covers this contention retry too.
+                Err(error) if error.raw_os_error() == Some(231) => {
+                    tokio::time::sleep(std::time::Duration::from_millis(10)).await
+                }
+                Err(_) => return Err(FailureCode::TransportUnavailable),
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    pub(crate) fn validate_path(&self) -> Result<(), FailureCode> {
+        hiroute_platform::windows::pipe::name(self.path())
+            .map(|_| ())
+            .map_err(|_| FailureCode::PeerRejected)
+    }
+
+    #[cfg(windows)]
+    pub(crate) fn validate_peer(
+        &self,
+        stream: &tokio::net::windows::named_pipe::NamedPipeClient,
+    ) -> Result<(), FailureCode> {
+        use hiroute_platform::windows::{pipe, security};
+        security::verify_owner_only_handle(stream, false).map_err(|_| FailureCode::PeerRejected)?;
+        let pid = pipe::peer_pid(stream, false).map_err(|_| FailureCode::PeerRejected)?;
+        if self.expected_pid.is_some_and(|expected| expected != pid) {
+            return Err(FailureCode::PeerRejected);
+        }
+        Ok(())
+    }
+
+    #[cfg(unix)]
     pub(crate) fn validate_path(&self) -> Result<(), FailureCode> {
         use std::os::unix::fs::FileTypeExt;
         let parent = self.path.parent().ok_or(FailureCode::LocatorUnavailable)?;

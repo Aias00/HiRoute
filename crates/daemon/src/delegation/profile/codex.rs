@@ -67,19 +67,64 @@ pub(super) fn render(
         native_model_id: input.alias.to_owned(),
         ..Default::default()
     };
-    let codex_path = if borrowed {
+    let codex_path = if borrowed || cfg!(windows) {
         // codex-acp starts CODEX_PATH with only `app-server`. Session CODEX_CONFIG is
         // applied after account/read, so the launcher must install these flags first.
-        if !cfg!(unix) {
+        if !cfg!(any(unix, windows)) {
             return Err(DelegationErrorV1::CapabilityUnavailable);
         }
-        let relative_path = PathBuf::from("codex-worker-launcher");
-        rendered.files.push(RunMaterialFile {
-            relative_path: relative_path.clone(),
-            contents: Zeroizing::new(render_launcher(input.harness_binary, &config)?.into_bytes()),
-            executable: true,
-        });
-        input.private_root.join(relative_path)
+        #[cfg(unix)]
+        {
+            let relative_path = PathBuf::from("codex-worker-launcher");
+            rendered.files.push(RunMaterialFile {
+                relative_path: relative_path.clone(),
+                contents: Zeroizing::new(
+                    render_launcher(input.harness_binary, &config)?.into_bytes(),
+                ),
+                executable: true,
+            });
+            input.private_root.join(relative_path)
+        }
+        #[cfg(windows)]
+        {
+            input
+                .node_binary
+                .ok_or(DelegationErrorV1::CapabilityUnavailable)?;
+            let mut overrides = Vec::new();
+            collect_overrides("", &config, &mut overrides)?;
+            let search = worker_path(input.harness_binary, input.node_binary, input.adapter)?;
+            let (binary, prefix) = hiroute_integrations::agents::windows_agent_command(
+                input.harness_binary,
+                &[],
+                &search,
+            )
+            .map_err(|_| DelegationErrorV1::CapabilityUnavailable)?;
+            let contents =
+                hiroute_platform::windows::launcher::descriptor(&binary, &prefix, &overrides)
+                    .map_err(|_| DelegationErrorV1::CapabilityUnavailable)?;
+            let relative_path = PathBuf::from("codex-launch-descriptor.json");
+            rendered.files.push(RunMaterialFile {
+                relative_path: relative_path.clone(),
+                contents: Zeroizing::new(contents),
+                executable: false,
+            });
+            rendered.env.insert(
+                hiroute_platform::windows::launcher::DESCRIPTOR_ENV.into(),
+                Zeroizing::new(path_string(&input.private_root.join(relative_path))?),
+            );
+            let bootstrap = PathBuf::from("codex-adapter-bootstrap.mjs");
+            rendered.files.push(RunMaterialFile {
+                relative_path: bootstrap.clone(),
+                contents: Zeroizing::new(include_bytes!("codex_adapter_bootstrap.mjs").to_vec()),
+                executable: false,
+            });
+            rendered.adapter_bootstrap = Some(bootstrap);
+            std::env::current_exe().map_err(|_| DelegationErrorV1::CapabilityUnavailable)?
+        }
+        #[cfg(not(any(unix, windows)))]
+        {
+            unreachable!()
+        }
     } else {
         input.harness_binary.to_owned()
     };

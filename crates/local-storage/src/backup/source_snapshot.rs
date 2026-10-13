@@ -3,7 +3,6 @@ use super::*;
 use crate::migrations::{prepare_storage_root as prepare_owner_directory, validate_owner_file};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
-use std::io::Write;
 
 const MANIFEST: &str = "source-backup.json";
 
@@ -45,11 +44,11 @@ fn copy_tree(source: &Path, target: &Path) -> Result<(), LocalStorageError> {
             let entry = entry?;
             copy_tree(&entry.path(), &target.join(entry.file_name()))?;
         }
-        std::fs::File::open(target)?.sync_all()?;
+        hiroute_platform::durable::directory_barrier(target)?;
     } else if metadata.is_file() {
         fs::copy(source, target)?;
         fs::set_permissions(target, metadata.permissions())?;
-        std::fs::File::open(target)?.sync_all()?;
+        hiroute_platform::durable::sync_file(target)?;
     } else {
         return Err(LocalStorageError::InvalidData);
     }
@@ -63,16 +62,7 @@ fn excluded(name: &str) -> bool {
         || name.ends_with(".sock")
 }
 fn write_private(path: &Path, bytes: &[u8]) -> Result<(), LocalStorageError> {
-    let mut options = fs::OpenOptions::new();
-    options.create_new(true).write(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    let mut file = options.open(path)?;
-    file.write_all(bytes)?;
-    file.sync_all()?;
+    hiroute_platform::durable::write_private_new(path, bytes)?;
     Ok(())
 }
 pub(super) fn publish(
@@ -91,7 +81,7 @@ pub(super) fn publish(
         let mut id = [0u8; 8];
         getrandom::fill(&mut id).map_err(|_| LocalStorageError::Crypto)?;
         let id = CanonicalDigest::of_bytes(&id);
-        fs::rename(
+        hiroute_platform::durable::rename(
             &stage,
             backup.join(format!("source-incomplete.{}", &id.as_str()[7..23])),
         )?;
@@ -171,9 +161,9 @@ pub(super) fn publish(
         &stage.join(MANIFEST),
         &serde_json::to_vec_pretty(&manifest).map_err(|_| LocalStorageError::InvalidData)?,
     )?;
-    std::fs::File::open(&stage)?.sync_all()?;
-    fs::rename(stage, &source)?;
-    std::fs::File::open(backup)?.sync_all()?;
+    hiroute_platform::durable::directory_barrier(&stage)?;
+    hiroute_platform::durable::rename(stage, &source)?;
+    hiroute_platform::durable::directory_barrier(backup)?;
     verify(backup)
 }
 fn collect(

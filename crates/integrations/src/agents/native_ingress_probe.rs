@@ -9,7 +9,9 @@ use hiroute_domain::{
 };
 use std::fs;
 use std::net::TcpListener;
+#[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
+#[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -35,6 +37,7 @@ fn probe_path(path: Option<&std::ffi::OsStr>) -> std::ffi::OsString {
         .flatten()
         .filter(|path| path.is_absolute())
         .collect::<Vec<_>>();
+    #[cfg(unix)]
     for system in ["/usr/bin", "/bin"] {
         let system = std::path::PathBuf::from(system);
         if !directories.contains(&system) {
@@ -151,7 +154,8 @@ impl CodexNativeIngressProbe {
         if bytes.as_slice() != expected.rendered.as_bytes() || *stored != *bytes {
             return Err(fail("native target binding"));
         }
-        let mut child = Command::new(&binary)
+        let mut command = Command::new(&binary);
+        command
             .args([
                 "exec",
                 "--ephemeral",
@@ -172,10 +176,22 @@ impl CodexNativeIngressProbe {
             .current_dir(workspace)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stderr(Stdio::null());
+        #[cfg(unix)]
+        let child = command
             .process_group(0)
             .spawn()
             .map_err(|_| fail("native launch"))?;
+        #[cfg(windows)]
+        let child = super::windows_runtime::spawn(
+            &command,
+            false,
+            hiroute_platform::windows::job::Stream::Null,
+            hiroute_platform::windows::job::Stream::Null,
+            hiroute_platform::windows::job::Stream::Null,
+        )
+        .map_err(|_| fail("native launch"))?;
+        let mut child = super::NativeProbeProcess::new(child);
         let started = Instant::now();
         let mut requests = 0;
         let result = (|| {
@@ -192,8 +208,8 @@ impl CodexNativeIngressProbe {
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
                     Err(_) => return Err(fail("loopback accept")),
                 }
-                if let Some(status) = child.try_wait().map_err(|_| fail("native wait"))? {
-                    return if status.success() && requests > 0 {
+                if let Some(success) = child.observe().map_err(|_| fail("native wait"))? {
+                    return if success && requests > 0 {
                         Ok(())
                     } else {
                         Err(fail("authenticated native completion"))
@@ -205,13 +221,7 @@ impl CodexNativeIngressProbe {
                 std::thread::sleep(Duration::from_millis(10));
             }
         })();
-        if child.try_wait().ok().flatten().is_none() {
-            let _ = nix::sys::signal::killpg(
-                nix::unistd::Pid::from_raw(child.id() as i32),
-                nix::sys::signal::Signal::SIGKILL,
-            );
-        }
-        let _ = child.wait();
+        child.stop().map_err(|_| fail("native cleanup"))?;
         result?;
         Ok(PendingCodexIngressEvidence {
             observed: Instant::now(),
@@ -353,7 +363,8 @@ pub(super) fn binary_identity(
         .map_err(|_| fail("trusted executable"))?
         .ok_or_else(|| fail("executable"))?;
     let meta = fs::metadata(&path).map_err(|_| fail("executable metadata"))?;
-    CanonicalDigest::of(&(
+    #[cfg(unix)]
+    return CanonicalDigest::of(&(
         path,
         meta.dev(),
         meta.ino(),
@@ -366,14 +377,30 @@ pub(super) fn binary_identity(
         meta.ctime(),
         meta.ctime_nsec(),
     ))
-    .map_err(|_| fail("executable identity"))
+    .map_err(|_| fail("executable identity"));
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        let file = hiroute_platform::windows::security::open_identity(&path, false)
+            .map_err(|_| fail("executable identity"))?;
+        let identity = hiroute_platform::windows::security::file_identity(&file)
+            .map_err(|_| fail("executable identity"))?;
+        CanonicalDigest::of(&(
+            path,
+            identity,
+            meta.file_size(),
+            meta.creation_time(),
+            meta.last_write_time(),
+        ))
+        .map_err(|_| fail("executable identity"))
+    }
 }
 
 pub(super) fn cache_error() -> NativeIngressProbeError {
     fail("native evidence cache")
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
 

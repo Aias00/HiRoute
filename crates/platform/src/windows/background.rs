@@ -1,17 +1,15 @@
 //! Current-account background identity; this file never contains credentials.
-use std::io::{self, Read, Write};
-use std::os::windows::ffi::OsStrExt;
+use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use windows::Win32::System::Com::CoTaskMemFree;
-use windows::Win32::UI::Shell::{FOLDERID_LocalAppData, FOLDERID_Profile, FOLDERID_ProgramFiles, SHGetKnownFolderPath};
+use windows::Win32::UI::Shell::{
+    FOLDERID_LocalAppData, FOLDERID_Profile, FOLDERID_ProgramFiles, SHGetKnownFolderPath,
+};
 use windows_sys::Win32::Foundation::LocalFree;
 use windows_sys::Win32::Security::Authorization::ConvertSidToStringSidW;
-use windows_sys::Win32::Storage::FileSystem::{
-    MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
-};
 
 pub const SCHEMA: &str = "hiroute.windows-background/v1";
 
@@ -40,36 +38,72 @@ pub struct Definition {
 impl Definition {
     pub fn new(manager: Manager, daemon: PathBuf) -> io::Result<Self> {
         let owner_sid = current_sid_string()?;
+        let mut image = super::security::open_identity(&daemon, false)?;
+        Self::from_owner_image(manager, daemon, &owner_sid, &mut image)
+    }
+
+    /// The caller authenticates this SID and opens the image while impersonating
+    /// that owner. This constructor hashes the retained object, never its path.
+    pub fn from_owner_image(
+        manager: Manager,
+        daemon: PathBuf,
+        owner_sid: &str,
+        image: &mut std::fs::File,
+    ) -> io::Result<Self> {
         let name = name_for_sid(&owner_sid);
-        let file = super::security::open_identity(&daemon, false)?;
-        let daemon_sha256 = digest(file)?;
+        image.seek(SeekFrom::Start(0))?;
+        let daemon_sha256 = digest(&mut *image)?;
+        image.seek(SeekFrom::Start(0))?;
         let (service_host, service_host_sha256) = if manager == Manager::Scm {
-            (Some(program_files()?.join("HiRoute/service-host").join(&daemon_sha256).join("hirouted.exe")), Some(daemon_sha256.clone()))
-        } else { (None, None) };
+            (
+                Some(
+                    program_files()?
+                        .join("HiRoute/service-host")
+                        .join(&daemon_sha256)
+                        .join("hirouted.exe"),
+                ),
+                Some(daemon_sha256.clone()),
+            )
+        } else {
+            (None, None)
+        };
         let value = Self {
             schema: SCHEMA.into(),
             manager,
             name,
-            owner_sid,
+            owner_sid: owner_sid.into(),
             daemon,
             daemon_sha256,
             service_host,
             service_host_sha256,
         };
-        value.validate()?;
+        value.validate_for_owner_sid(owner_sid)?;
         Ok(value)
     }
 
     pub fn validate(&self) -> io::Result<()> {
+        self.validate_for_owner_sid(&current_sid_string()?)
+    }
+
+    pub fn validate_for_owner_sid(&self, owner_sid: &str) -> io::Result<()> {
         if self.schema != SCHEMA
-            || self.owner_sid != current_sid_string()?
+            || self.owner_sid != owner_sid
             || self.name != name_for_sid(&self.owner_sid)
             || !self.daemon.is_absolute()
             || self.daemon.file_name().and_then(|v| v.to_str()) != Some("hirouted.exe")
             || self.daemon_sha256.len() != 64
             || !self.daemon_sha256.bytes().all(|v| v.is_ascii_hexdigit())
-            || (self.manager == Manager::Task && (self.service_host.is_some() || self.service_host_sha256.is_some()))
-            || (self.manager == Manager::Scm && (self.service_host.as_ref() != Some(&program_files()?.join("HiRoute/service-host").join(&self.daemon_sha256).join("hirouted.exe")) || self.service_host_sha256.as_deref() != Some(self.daemon_sha256.as_str())))
+            || (self.manager == Manager::Task
+                && (self.service_host.is_some() || self.service_host_sha256.is_some()))
+            || (self.manager == Manager::Scm
+                && (self.service_host.as_ref()
+                    != Some(
+                        &program_files()?
+                            .join("HiRoute/service-host")
+                            .join(&self.daemon_sha256)
+                            .join("hirouted.exe"),
+                    )
+                    || self.service_host_sha256.as_deref() != Some(self.daemon_sha256.as_str())))
         {
             return Err(io::Error::new(
                 io::ErrorKind::PermissionDenied,
@@ -104,7 +138,14 @@ fn name_for_sid(sid: &str) -> String {
 }
 
 pub fn current_sid_string() -> io::Result<String> {
-    let mut sid = super::security::current_user_sid()?;
+    sid_string(&super::security::current_user_sid()?)
+}
+
+pub fn sid_string(sid: &[u8]) -> io::Result<String> {
+    if sid.len() < 8 || sid[0] != 1 || sid[1] > 15 || sid.len() != 8 + usize::from(sid[1]) * 4 {
+        return Err(io::Error::from(io::ErrorKind::InvalidInput));
+    }
+    let mut sid = sid.to_vec();
     let mut value = std::ptr::null_mut();
     // SAFETY: the validated SID buffer and output remain live until conversion.
     if unsafe { ConvertSidToStringSidW(sid.as_mut_ptr().cast(), &mut value) } == 0 {
@@ -112,7 +153,7 @@ pub fn current_sid_string() -> io::Result<String> {
     }
     let mut length = 0;
     // SAFETY: Windows returned a NUL-terminated SID string allocated by LocalAlloc.
-    while unsafe { *value.add(length) } != 0 && length < 200 {
+    while length < 200 && unsafe { *value.add(length) } != 0 {
         length += 1;
     }
     // SAFETY: conversion returned `length` UTF-16 units; free only after copying.
@@ -132,7 +173,9 @@ pub fn profile() -> io::Result<PathBuf> {
 pub fn local_app_data() -> io::Result<PathBuf> {
     known_folder(&FOLDERID_LocalAppData)
 }
-pub fn program_files() -> io::Result<PathBuf> { known_folder(&FOLDERID_ProgramFiles) }
+pub fn program_files() -> io::Result<PathBuf> {
+    known_folder(&FOLDERID_ProgramFiles)
+}
 
 fn known_folder(id: &windows::core::GUID) -> io::Result<PathBuf> {
     // SAFETY: a null token selects the current process account, not LocalSystem.
@@ -153,7 +196,9 @@ fn known_folder(id: &windows::core::GUID) -> io::Result<PathBuf> {
 pub fn read_definition(path: &Path) -> io::Result<Definition> {
     let mut file = super::security::open_owner_only(path, false)?;
     let mut bytes = Vec::new();
-    Read::by_ref(&mut file).take(16 * 1024 + 1).read_to_end(&mut bytes)?;
+    Read::by_ref(&mut file)
+        .take(16 * 1024 + 1)
+        .read_to_end(&mut bytes)?;
     if bytes.len() > 16 * 1024 {
         return Err(io::Error::from(io::ErrorKind::InvalidData));
     }
@@ -163,9 +208,9 @@ pub fn read_definition(path: &Path) -> io::Result<Definition> {
 }
 
 /// Publish one bounded owner-only record. Full contents are flushed before a
-/// same-volume replacement; installation journal provides process-crash replay.
-/// MOVEFILE_WRITE_THROUGH is used without COPY_ALLOWED. This is not a promise
-/// that a consumer disk/controller honors flushes through sudden power loss.
+/// Held-object, same-volume replacement and a flushed source; the installation
+/// journal supplies process-crash replay. Consumer disk/controller behavior
+/// through sudden power loss remains outside this publication guarantee.
 pub fn write_private_record(path: &Path, bytes: &[u8]) -> io::Result<()> {
     if bytes.is_empty() || bytes.len() > 64 * 1024 {
         return Err(io::Error::from(io::ErrorKind::InvalidInput));
@@ -173,37 +218,44 @@ pub fn write_private_record(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let parent = path
         .parent()
         .ok_or_else(|| io::Error::from(io::ErrorKind::InvalidInput))?;
-    let _held_parent = super::security::ensure_private_directory(parent)?;
+    let held_parent = super::security::ensure_private_directory(parent)?;
     if path.try_exists()? {
         super::security::open_owner_only(path, false)?;
     }
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    let temp = parent.join(format!(
-        ".hiroute-record-{}-{}.tmp",
-        std::process::id(),
-        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-    ));
-    let mut file = super::security::create_owner_only_file(&temp)?;
-    file.write_all(bytes)?;
-    file.sync_all()?;
-    drop(file);
-    let old: Vec<_> = temp.as_os_str().encode_wide().chain(Some(0)).collect();
-    let new: Vec<_> = path.as_os_str().encode_wide().chain(Some(0)).collect();
-    // SAFETY: both absolute UTF-16 paths are live. No cross-volume copy or
-    // delayed-reboot action is allowed; replacement is a current rename.
-    if unsafe {
-        MoveFileExW(
-            old.as_ptr(),
-            new.as_ptr(),
-            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
-        )
-    } == 0
-    {
-        let error = io::Error::last_os_error();
-        let _ = std::fs::remove_file(&temp);
-        return Err(error);
+    let epoch = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(io::Error::other)?
+        .as_nanos();
+    let mut file = loop {
+        let leaf = std::ffi::OsString::from(format!(
+            ".hiroute-record-{}-{epoch}-{}.tmp",
+            std::process::id(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        match super::security::create_owner_only_file_at(&held_parent, &leaf) {
+            Ok(file) => break file,
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error),
+        }
+    };
+    let leaf = path
+        .file_name()
+        .ok_or_else(|| io::Error::from(io::ErrorKind::InvalidInput))?;
+    let mut published = false;
+    let result = (|| {
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        super::durable::rename_file_at(&file, &held_parent, leaf, true)?;
+        published = true;
+        file.sync_all()?;
+        super::security::verify_owner_only_handle(&file, false)
+    })();
+    if result.is_err() && !published {
+        // Clean only the object created here, even if an ancestor was renamed.
+        let _ = super::security::delete_by_handle(&file);
     }
-    super::security::verify_owner_only(path, false)
+    result
 }
 
 pub fn write_definition(path: &Path, definition: &Definition) -> io::Result<()> {
@@ -214,7 +266,7 @@ pub fn write_definition(path: &Path, definition: &Definition) -> io::Result<()> 
     )
 }
 
-pub(crate) fn digest(mut file: std::fs::File) -> io::Result<String> {
+pub(crate) fn digest(mut file: impl Read) -> io::Result<String> {
     let mut hash = Sha256::new();
     let mut buffer = [0; 64 * 1024];
     loop {

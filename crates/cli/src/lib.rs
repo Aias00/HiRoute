@@ -662,6 +662,20 @@ pub fn root_help() -> String {
 
 pub fn main_entry() -> u8 {
     let arguments = std::env::args_os().skip(1).collect::<Vec<_>>();
+    #[cfg(windows)]
+    if arguments
+        .first()
+        .is_some_and(|argument| argument == service::windows_background_finalize_verb())
+    {
+        return service::windows_background_finalize(&arguments[1..]);
+    }
+    #[cfg(windows)]
+    if arguments
+        .first()
+        .is_some_and(|argument| argument == service::windows_scm_owner_helper_verb())
+    {
+        return service::windows_scm_owner_helper(&arguments[1..]);
+    }
     if arguments.as_slice() == [OsString::from("service"), OsString::from("run")] {
         return service::foreground_run();
     }

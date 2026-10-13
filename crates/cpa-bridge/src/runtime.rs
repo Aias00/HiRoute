@@ -751,7 +751,10 @@ impl ManagedCpaRuntime {
                     self.spec.control_timeout,
                 )
                 .map_err(|error| self.map_control_error(error))?;
-            let mut process = self.backend.attach_authenticated(transferred.cpa_pid)?;
+            let mut process = crate::process::attach_recovered_process(
+                self.backend.as_ref(),
+                transferred.cpa_pid,
+            )?;
             self.control
                 .probe_ready(
                     transferred.address,

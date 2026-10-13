@@ -1,5 +1,7 @@
 pub(crate) mod source_snapshot;
-use std::fs::{self, File};
+use std::fs;
+#[cfg(test)]
+use std::fs::File;
 use std::path::{Path, PathBuf};
 
 use hiroute_domain::CanonicalDigest;
@@ -83,7 +85,7 @@ impl SqliteBackup {
             params![stage.to_string_lossy().as_ref()],
         )?;
         set_owner_file_permissions(&stage)?;
-        File::open(&stage)?.sync_all()?;
+        hiroute_platform::durable::sync_file(&stage)?;
         validate_database(&stage)?;
         let identity = database_identity(connection)?;
         if identity
@@ -105,7 +107,7 @@ impl SqliteBackup {
             attempt_id: attempt_id.clone(),
         };
         write_manifest(&stage_manifest, &manifest)?;
-        File::open(parent)?.sync_all()?;
+        hiroute_platform::durable::directory_barrier(parent)?;
 
         let final_manifest = manifest_path(path);
         if path.exists() || final_manifest.exists() {
@@ -123,24 +125,24 @@ impl SqliteBackup {
             // Preserve stale or half-published finals for forensic recovery; they never block a
             // fresh exact attempt and are never silently reused for a different source snapshot.
             if path.exists() {
-                fs::rename(
+                hiroute_platform::durable::rename(
                     path,
                     parent.join(format!(".{file_name}.{attempt_id}.stale.db")),
                 )?;
             }
             if final_manifest.exists() {
-                fs::rename(
+                hiroute_platform::durable::rename(
                     &final_manifest,
                     parent.join(format!(".{file_name}.{attempt_id}.stale.manifest.json")),
                 )?;
             }
-            File::open(parent)?.sync_all()?;
+            hiroute_platform::durable::directory_barrier(parent)?;
         }
 
-        fs::rename(&stage, path)?;
-        File::open(parent)?.sync_all()?;
-        fs::rename(&stage_manifest, &final_manifest)?;
-        File::open(parent)?.sync_all()?;
+        hiroute_platform::durable::rename(&stage, path)?;
+        hiroute_platform::durable::directory_barrier(parent)?;
+        hiroute_platform::durable::rename(&stage_manifest, &final_manifest)?;
+        hiroute_platform::durable::directory_barrier(parent)?;
         let backup = Self::open(path)?;
         cleanup_orphan_stages(parent, file_name)?;
         Ok(backup)
@@ -209,13 +211,13 @@ impl SqliteBackup {
         let temporary = parent.join(format!(".restore-{attempt}.stage.db"));
         fs::copy(&self.path, &temporary)?;
         set_owner_file_permissions(&temporary)?;
-        File::open(&temporary)?.sync_all()?;
+        hiroute_platform::durable::sync_file(&temporary)?;
         validate_database(&temporary)?;
         if file_digest(&temporary)? != self.manifest.source_digest {
             return Err(LocalStorageError::InvalidData);
         }
-        fs::rename(&temporary, destination)?;
-        File::open(parent)?.sync_all()?;
+        hiroute_platform::durable::rename(&temporary, destination)?;
+        hiroute_platform::durable::directory_barrier(parent)?;
         validate_database(destination)?;
         if file_digest(destination)? != self.manifest.source_digest {
             return Err(LocalStorageError::InvalidData);
@@ -561,9 +563,9 @@ impl BackupSet {
         }
         write_set_manifest(&stage.join(BACKUP_SET_MANIFEST_NAME), &expected)?;
         validate_restored_set(&stage, &expected)?;
-        File::open(&stage)?.sync_all()?;
-        fs::rename(&stage, destination)?;
-        File::open(parent)?.sync_all()?;
+        hiroute_platform::durable::directory_barrier(&stage)?;
+        hiroute_platform::durable::rename(&stage, destination)?;
+        hiroute_platform::durable::directory_barrier(parent)?;
         validate_restored_set(destination, &expected)
     }
 
@@ -602,12 +604,12 @@ impl BackupSet {
             if previous.exists() {
                 return Err(LocalStorageError::InvalidData);
             }
-            fs::rename(live_root, &previous)?;
-            File::open(parent)?.sync_all()?;
+            hiroute_platform::durable::rename(live_root, &previous)?;
+            hiroute_platform::durable::directory_barrier(parent)?;
         }
         if !live_root.exists() {
-            fs::rename(&ready, live_root)?;
-            File::open(parent)?.sync_all()?;
+            hiroute_platform::durable::rename(&ready, live_root)?;
+            hiroute_platform::durable::directory_barrier(parent)?;
         }
         validate_restored_set(live_root, &expected)?;
         self.persist_phase(barrier, BackupSetPhase::Restored)
@@ -1064,15 +1066,15 @@ fn publish_set_manifest(
     // The committed name is the durable proof that the complete JSON bytes were fsynced. A
     // writing name can therefore always be discarded after a crash without attempting to parse
     // bytes that may be empty or truncated.
-    File::open(root)?.sync_all()?;
-    fs::rename(&writing, &committed)?;
-    File::open(root)?.sync_all()?;
+    hiroute_platform::durable::directory_barrier(root)?;
+    hiroute_platform::durable::rename(&writing, &committed)?;
+    hiroute_platform::durable::directory_barrier(root)?;
     let final_path = set_manifest_path(root);
     if !replace && final_path.exists() {
         return Err(LocalStorageError::InvalidData);
     }
-    fs::rename(&committed, &final_path)?;
-    File::open(root)?.sync_all()?;
+    hiroute_platform::durable::rename(&committed, &final_path)?;
+    hiroute_platform::durable::directory_barrier(root)?;
     validate_owner_file(&final_path)
 }
 
@@ -1084,7 +1086,7 @@ fn reconcile_set_manifest_publication(root: &Path) -> Result<bool, LocalStorageE
         for (stage, _) in stages {
             tighten_and_remove_owner_orphan(&stage)?;
         }
-        File::open(root)?.sync_all()?;
+        hiroute_platform::durable::directory_barrier(root)?;
         return Ok(true);
     }
 
@@ -1096,7 +1098,7 @@ fn reconcile_set_manifest_publication(root: &Path) -> Result<bool, LocalStorageE
         }
     }
     if committed.is_empty() {
-        File::open(root)?.sync_all()?;
+        hiroute_platform::durable::directory_barrier(root)?;
         return Ok(false);
     }
     if committed.len() != 1 {
@@ -1108,8 +1110,8 @@ fn reconcile_set_manifest_publication(root: &Path) -> Result<bool, LocalStorageE
         serde_json::from_slice(&fs::read(&stage)?).map_err(|_| LocalStorageError::InvalidData)?;
     validate_set_manifest_shape(&manifest)?;
     validate_manifest_against_backups(root, &manifest)?;
-    fs::rename(stage, &final_path)?;
-    File::open(root)?.sync_all()?;
+    hiroute_platform::durable::rename(stage, &final_path)?;
+    hiroute_platform::durable::directory_barrier(root)?;
     validate_owner_file(&final_path)?;
     Ok(true)
 }
@@ -1125,17 +1127,7 @@ fn write_set_manifest(path: &Path, manifest: &BackupSetManifest) -> Result<(), L
 }
 
 fn write_owner_file(path: &Path, bytes: &[u8]) -> Result<(), LocalStorageError> {
-    let mut options = fs::OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    let mut file = options.open(path)?;
-    use std::io::Write as _;
-    file.write_all(bytes)?;
-    file.sync_all()?;
+    hiroute_platform::durable::write_private_new(path, bytes)?;
     validate_owner_file(path)
 }
 
@@ -1170,7 +1162,7 @@ fn cleanup_orphan_stages(parent: &Path, file_name: &str) -> Result<(), LocalStor
             tighten_and_remove_owner_orphan(&entry.path())?;
         }
     }
-    File::open(parent)?.sync_all()?;
+    hiroute_platform::durable::directory_barrier(parent)?;
     Ok(())
 }
 
@@ -1205,6 +1197,13 @@ fn validate_database(path: &Path) -> Result<(), LocalStorageError> {
 }
 
 fn prepare_owner_directory(path: &Path) -> Result<(), LocalStorageError> {
+    #[cfg(windows)]
+    {
+        let _held = hiroute_platform::windows::security::ensure_private_directory(path)?;
+        return Ok(());
+    }
+    #[cfg(not(windows))]
+    {
     if path.exists() {
         let metadata = fs::symlink_metadata(path)?;
         if metadata.file_type().is_symlink() || !metadata.file_type().is_dir() {
@@ -1215,9 +1214,12 @@ fn prepare_owner_directory(path: &Path) -> Result<(), LocalStorageError> {
         set_owner_directory_permissions(path)?;
     }
     Ok(())
+    }
 }
 
 fn set_owner_directory_permissions(path: &Path) -> Result<(), LocalStorageError> {
+    #[cfg(windows)]
+    hiroute_platform::windows::security::set_owner_only(path, true)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -1231,6 +1233,8 @@ fn set_owner_directory_permissions(path: &Path) -> Result<(), LocalStorageError>
 }
 
 fn set_owner_file_permissions(path: &Path) -> Result<(), LocalStorageError> {
+    #[cfg(windows)]
+    hiroute_platform::windows::security::set_owner_only(path, false)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -1240,6 +1244,8 @@ fn set_owner_file_permissions(path: &Path) -> Result<(), LocalStorageError> {
 }
 
 fn validate_owner_file(path: &Path) -> Result<(), LocalStorageError> {
+    #[cfg(windows)]
+    let _held = hiroute_platform::windows::security::open_owner_only(path, false)?;
     let metadata = fs::symlink_metadata(path)?;
     if metadata.file_type().is_symlink() || !metadata.file_type().is_file() {
         return Err(LocalStorageError::Permission);

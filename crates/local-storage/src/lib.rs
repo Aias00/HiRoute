@@ -107,10 +107,9 @@ impl LocalStorageSet {
             if backup_root.exists() {
                 return Err(LocalStorageError::InvalidData);
             }
-            std::fs::rename(previous, &backup_root)?;
-            std::fs::File::open(storage_root)?.sync_all()?;
-            std::fs::File::open(backup_root.parent().ok_or(LocalStorageError::InvalidData)?)?
-                .sync_all()?;
+            hiroute_platform::durable::rename(previous, &backup_root)?;
+            hiroute_platform::durable::directory_barrier(storage_root)?;
+            hiroute_platform::durable::directory_barrier(backup_root.parent().ok_or(LocalStorageError::InvalidData)?)?;
         }
         let master_key_path = storage_root.join("master-key");
         let control_path = live_root.join("control.db");

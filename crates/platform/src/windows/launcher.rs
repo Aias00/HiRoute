@@ -19,7 +19,9 @@ pub fn descriptor(binary: &Path, prefix: &[PathBuf], overrides: &[String]) -> io
     let (volume, index) = security::file_identity(&file)?;
     let mut entries = Vec::new();
     for path in prefix {
-        if !path.is_absolute() { return Err(io::Error::other("launcher entry")); }
+        if !path.is_absolute() {
+            return Err(io::Error::other("launcher entry"));
+        }
         let file = security::open_identity(path, false)?;
         let (volume, index) = security::file_identity(&file)?;
         entries.push(serde_json::json!({"path":path,"volume":volume,"index":index}));
@@ -74,11 +76,21 @@ pub fn run_from_environment() -> io::Result<i32> {
     let mut argv = Vec::new();
     let mut entries = Vec::new();
     for entry in value["prefix"].as_array().ok_or_else(invalid)? {
-        if entry.as_object().is_none_or(|entry| entry.len() != 3) { return Err(invalid()); }
+        if entry.as_object().is_none_or(|entry| entry.len() != 3) {
+            return Err(invalid());
+        }
         let path = PathBuf::from(entry["path"].as_str().ok_or_else(invalid)?);
-        let identity = (entry["volume"].as_u64().and_then(|value| u32::try_from(value).ok()).ok_or_else(invalid)?, entry["index"].as_u64().ok_or_else(invalid)?);
+        let identity = (
+            entry["volume"]
+                .as_u64()
+                .and_then(|value| u32::try_from(value).ok())
+                .ok_or_else(invalid)?,
+            entry["index"].as_u64().ok_or_else(invalid)?,
+        );
         let file = security::open_identity(&path, false)?;
-        if security::file_identity(&file)? != identity { return Err(invalid()); }
+        if security::file_identity(&file)? != identity {
+            return Err(invalid());
+        }
         entries.push(file);
         argv.push(path.into_os_string());
     }
@@ -122,4 +134,74 @@ pub fn run_from_environment() -> io::Result<i32> {
         std::thread::sleep(Duration::from_millis(5));
     }
     Ok(code)
+}
+
+/// Produce Claude's shell-mediated apiKeyHelper command without evaluating user paths
+/// in cmd.exe. PowerShell receives one UTF-16LE program containing literal native argv.
+/// Only a system-directory executable appears in the outer command language.
+pub fn managed_helper_command(executable: &Path, args: &[String]) -> io::Result<String> {
+    use base64::Engine;
+    if !executable.is_absolute() || args.len() > 32 {
+        return Err(io::Error::other("helper arguments"));
+    }
+    let path = executable
+        .to_str()
+        .ok_or_else(|| io::Error::other("helper path encoding"))?;
+    let quote = |value: &str| -> io::Result<String> {
+        if value.contains(['\0', '\r', '\n']) || value.len() > 32768 {
+            return Err(io::Error::other("helper argument"));
+        }
+        Ok(format!("'{}'", value.replace('\'', "''")))
+    };
+    let mut script = format!("$ErrorActionPreference='Stop'; try {{ & {}", quote(path)?);
+    for arg in args {
+        script.push(' ');
+        script.push_str(&quote(arg)?);
+    }
+    script.push_str("; exit $LASTEXITCODE } catch { exit 1 }");
+    let payload: Vec<u8> = script.encode_utf16().flat_map(u16::to_le_bytes).collect();
+    let encoded = base64::engine::general_purpose::STANDARD.encode(payload);
+    let powershell = system_executable(Path::new("WindowsPowerShell/v1.0/powershell.exe"))?;
+    let path = powershell
+        .to_str()
+        .ok_or_else(|| io::Error::other("system executable encoding"))?;
+    // cmd expansion can precede quotation; reject those characters in its one path.
+    if path.contains(['%', '!', '"', '&', '|', '<', '>', '^', '\r', '\n', '\0']) {
+        return Err(io::Error::other("system executable command path"));
+    }
+    let command =
+        format!("\"{path}\" -NoLogo -NoProfile -NonInteractive -EncodedCommand {encoded}");
+    if command.encode_utf16().count() >= 8191 {
+        return Err(io::Error::other("helper command bound"));
+    }
+    Ok(command)
+}
+
+/// Use the kernel's system directory, never an ambient SystemRoot/COMSPEC/PATH selector.
+pub fn system_executable(relative: &Path) -> io::Result<PathBuf> {
+    use windows_sys::Win32::System::SystemInformation::GetSystemDirectoryW;
+    if relative
+        .components()
+        .any(|part| !matches!(part, std::path::Component::Normal(_)))
+    {
+        return Err(io::Error::other("system executable leaf"));
+    }
+    let mut buffer = vec![0u16; 32768];
+    let length = unsafe { GetSystemDirectoryW(buffer.as_mut_ptr(), buffer.len() as u32) } as usize;
+    if length == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    if length >= buffer.len() {
+        return Err(io::Error::other("system directory bound"));
+    }
+    let root = PathBuf::from(
+        String::from_utf16(&buffer[..length])
+            .map_err(|_| io::Error::other("system directory encoding"))?,
+    );
+    let path = root.join(relative);
+    let file = security::open_identity(&path, false)?;
+    if !file.metadata()?.is_file() {
+        return Err(io::Error::other("system executable kind"));
+    }
+    Ok(path)
 }

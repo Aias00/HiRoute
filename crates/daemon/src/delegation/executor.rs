@@ -758,7 +758,16 @@ fn checked_workspace_path(
         }
         Ok(canonical)
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        let path = path.to_str().ok_or(DelegationErrorV1::InvalidArguments)?;
+        let (actual, canonical) = super::profile::windows_workspace(path)?;
+        if &actual != expected {
+            return Err(DelegationErrorV1::PermissionDenied);
+        }
+        Ok(PathBuf::from(canonical))
+    }
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (path, expected);
         Err(DelegationErrorV1::CapabilityUnavailable)

@@ -1,15 +1,20 @@
 //! Narrow ownership for a synchronous native check and its read-only CLI baseline.
 //! Exit observation retains the group leader until all mutating group signals are finished.
+#[cfg(windows)]
+use hiroute_platform::windows::job::Child;
+#[cfg(unix)]
 use rustix::process::{
     Pid, Signal, WaitId, WaitIdOptions, kill_process_group, test_kill_process_group, waitid,
 };
 use std::io::{self, Read};
 use std::path::Path;
+#[cfg(unix)]
 use std::process::Child;
 use std::time::{Duration, Instant};
 
 pub struct NativeProbeProcess {
     child: Child,
+    #[cfg(unix)]
     group: Pid,
     signals_closed: bool,
     stopped: bool,
@@ -19,6 +24,7 @@ impl NativeProbeProcess {
     /// The caller must spawn this child with process_group(0).
     pub fn new(child: Child) -> Self {
         Self {
+            #[cfg(unix)]
             group: Pid::from_child(&child),
             child,
             signals_closed: false,
@@ -30,6 +36,12 @@ impl NativeProbeProcess {
         if self.signals_closed {
             return Err(io::Error::other("native process ownership closed"));
         }
+        #[cfg(windows)]
+        return self
+            .child
+            .exit_code()
+            .map(|code| code.map(|code| code == 0));
+        #[cfg(unix)]
         waitid(
             WaitId::Pid(self.group),
             WaitIdOptions::EXITED | WaitIdOptions::NOHANG | WaitIdOptions::NOWAIT,
@@ -38,6 +50,7 @@ impl NativeProbeProcess {
         .map_err(Into::into)
     }
 
+    #[cfg(unix)]
     fn signal(&self, signal: Signal) -> io::Result<()> {
         self.observe()?;
         match kill_process_group(self.group, signal) {
@@ -49,6 +62,7 @@ impl NativeProbeProcess {
         }
     }
 
+    #[cfg(unix)]
     pub fn stop(&mut self) -> io::Result<()> {
         if self.stopped {
             return Ok(());
@@ -86,6 +100,24 @@ impl NativeProbeProcess {
             std::thread::sleep(Duration::from_millis(5));
         }
     }
+
+    #[cfg(windows)]
+    pub fn stop(&mut self) -> io::Result<()> {
+        if self.stopped {
+            return Ok(());
+        }
+        self.child.terminate()?;
+        let start = Instant::now();
+        while !self.child.empty()? || self.child.exit_code()?.is_none() {
+            if start.elapsed() >= Duration::from_secs(1) {
+                return Err(io::Error::other("native process scope remains"));
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        self.signals_closed = true;
+        self.stopped = true;
+        Ok(())
+    }
 }
 
 impl Drop for NativeProbeProcess {
@@ -106,7 +138,7 @@ pub(super) fn read_bounded(path: &Path, limit: usize) -> io::Result<zeroize::Zer
     Ok(bytes)
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use std::os::unix::process::CommandExt;

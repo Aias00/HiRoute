@@ -1,13 +1,7 @@
 //! One local challenge: native Skill discovery, its contents read, and the installed CLI run.
 //! The endpoint issues only this fixed read-only command; it never forwards model requests.
 use serde_json::{Value, json};
-use std::{
-    fs,
-    io::Write,
-    os::unix::fs::{DirBuilderExt, OpenOptionsExt},
-    path::Path,
-    process::Command,
-};
+use std::{io::Write, path::Path, process::Command};
 
 pub(crate) struct CollaborationChallenge {
     discovery: String,
@@ -21,11 +15,8 @@ pub(crate) struct CollaborationChallenge {
 impl CollaborationChallenge {
     pub(crate) fn prepare(home: &Path, cli: &Path) -> Result<Self, &'static str> {
         let parent = home.join(".agents");
-        fs::DirBuilder::new()
-            .mode(0o700)
-            .create(&parent)
-            .map_err(|_| "private skill directory")?;
-        Self::prepare_in(&parent.join("skills"), home, cli)
+        super::probe_files::directory(&parent).map_err(|_| "private skill directory")?;
+        Self::prepare_in(&parent.join("skills"), home, cli, cfg!(windows))
     }
 
     pub(crate) fn prepare_claude(
@@ -36,24 +27,25 @@ impl CollaborationChallenge {
         let plugin = config.join("hiroute-native-probe");
         let manifest = plugin.join(".claude-plugin");
         for directory in [&plugin, &manifest] {
-            fs::DirBuilder::new()
-                .mode(0o700)
-                .create(directory)
-                .map_err(|_| "private Skill plugin")?;
+            super::probe_files::directory(directory).map_err(|_| "private Skill plugin")?;
         }
-        fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .mode(0o600)
-            .open(manifest.join("plugin.json"))
+        super::probe_files::file(&manifest.join("plugin.json"))
             .and_then(|mut file| {
                 file.write_all(br#"{"name":"hiroute-native-probe","version":"0.1.0"}"#)
             })
             .map_err(|_| "private Skill plugin")?;
-        Ok((Self::prepare_in(&plugin.join("skills"), home, cli)?, plugin))
+        Ok((
+            Self::prepare_in(&plugin.join("skills"), home, cli, false)?,
+            plugin,
+        ))
     }
 
-    fn prepare_in(skills: &Path, home: &Path, cli: &Path) -> Result<Self, &'static str> {
+    fn prepare_in(
+        skills: &Path,
+        home: &Path,
+        cli: &Path,
+        powershell: bool,
+    ) -> Result<Self, &'static str> {
         let mut entropy = [0u8; 16];
         getrandom::fill(&mut entropy).map_err(|_| "challenge entropy")?;
         let suffix: String = entropy.iter().map(|byte| format!("{byte:02x}")).collect();
@@ -61,32 +53,41 @@ impl CollaborationChallenge {
         let contents = format!("hiroute-contents-{suffix}");
         let root = skills.join("hiroute-probe");
         for directory in [skills, root.as_path()] {
-            fs::DirBuilder::new()
-                .mode(0o700)
-                .create(directory)
-                .map_err(|_| "private skill directory")?;
+            super::probe_files::directory(directory).map_err(|_| "private skill directory")?;
         }
         let path = root.join("SKILL.md");
         let text = format!(
             "---\nname: hiroute-probe\ndescription: Read-only HiRoute compatibility check {discovery}\n---\n\nRead this file and run the installed hiroute schema list --output json.\nContent receipt: {contents}\n"
         );
-        fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .mode(0o600)
-            .open(&path)
+        super::probe_files::file(&path)
             .and_then(|mut file| file.write_all(text.as_bytes()))
             .map_err(|_| "private skill")?;
-        let output = Command::new(cli)
+        let mut command = Command::new(cli);
+        command
             .args(["schema", "list", "--output", "json"])
             .env_clear()
             .env("HOME", home)
-            .env("PATH", "/usr/bin:/bin")
-            .output()
-            .map_err(|_| "trusted CLI baseline")?;
-        let expected_cli = String::from_utf8(output.stdout).map_err(|_| "CLI output encoding")?;
+            .env("PATH", super::native_ingress_probe::native_probe_path());
+        #[cfg(unix)]
+        let (bytes, success) = {
+            let output = command.output().map_err(|_| "trusted CLI baseline")?;
+            (output.stdout, output.status.success())
+        };
+        #[cfg(windows)]
+        let (bytes, success) = (
+            super::windows_runtime::bounded(
+                &command,
+                false,
+                std::time::Duration::from_secs(3),
+                256 * 1024,
+            )
+            .map_err(|_| "trusted CLI baseline")?
+            .to_vec(),
+            true,
+        );
+        let expected_cli = String::from_utf8(bytes).map_err(|_| "CLI output encoding")?;
         let envelope: Value = serde_json::from_str(&expected_cli).map_err(|_| "CLI contract")?;
-        if !output.status.success()
+        if !success
             || envelope["status"] != "succeeded"
             || !envelope["data"]["commands"]
                 .as_array()
@@ -106,14 +107,46 @@ impl CollaborationChallenge {
                     .replace('\'', "'\\''")
             ))
         }
+        let command = if powershell {
+            let quote = |path: &Path| {
+                path.to_str()
+                    .map(|path| format!("'{}'", path.replace('\'', "''")))
+                    .ok_or("CLI path encoding")
+            };
+            format!(
+                "Get-Content -Raw -LiteralPath {}; & {} schema list --output json",
+                quote(&path)?,
+                quote(cli)?
+            )
+        } else {
+            let path = if cfg!(windows) {
+                std::path::PathBuf::from(
+                    path.to_string_lossy()
+                        .trim_start_matches(r"\\?\")
+                        .replace('\\', "/"),
+                )
+            } else {
+                path.clone()
+            };
+            let cli = if cfg!(windows) {
+                std::path::PathBuf::from(
+                    cli.to_string_lossy()
+                        .trim_start_matches(r"\\?\")
+                        .replace('\\', "/"),
+                )
+            } else {
+                cli.to_owned()
+            };
+            format!(
+                "/bin/cat {}; {} schema list --output json",
+                quote(&path)?,
+                quote(&cli)?
+            )
+        };
         Ok(Self {
             discovery,
             contents,
-            command: format!(
-                "/bin/cat {}; {} schema list --output json",
-                quote(&path)?,
-                quote(cli)?
-            ),
+            command,
             expected_cli: expected_cli.trim().into(),
             issued: false,
             completed: false,

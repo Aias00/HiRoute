@@ -5,12 +5,12 @@
 pub mod control;
 pub mod delegation;
 mod release_catalog;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub mod role_all;
 
 pub mod gateway_ports;
 pub use control::{ControlEndpoint, LocalControlDaemon, serve_production_control};
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub use role_all::{RoleAllConfig, RoleAllCpaConfig, RoleAllError, RoleAllHandle, start_role_all};
 mod publication_failpoint;
 

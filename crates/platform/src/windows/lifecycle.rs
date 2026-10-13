@@ -112,7 +112,7 @@ impl DaemonProcess {
         }
     }
 
-    fn terminate(&self) -> io::Result<()> {
+    pub fn terminate(&self) -> io::Result<()> {
         // SAFETY: handle is the authenticated daemon retained before stop; its
         // resident kill-on-close Job cleans children when this process exits.
         if unsafe { TerminateProcess(self.file.as_raw_handle().cast(), 1) } == 0 {
@@ -127,11 +127,12 @@ fn exchange(
     image: &Path,
     action: &str,
     timeout: Duration,
+    allow_terminate: bool,
 ) -> io::Result<DaemonProcess> {
     let deadline = Instant::now() + timeout;
     let mut stream = pipe::Stream::connect_timeout(endpoint, timeout)?;
     stream.set_deadline(Some(deadline))?;
-    let process = DaemonProcess::from_pipe(&stream, image, action == "stop")?;
+    let process = DaemonProcess::from_pipe(&stream, image, allow_terminate)?;
     let request = serde_json::to_vec(&Request {
         schema: SCHEMA.into(),
         action: action.into(),
@@ -166,14 +167,30 @@ fn exchange(
 }
 
 pub fn query(endpoint: &Path, image: &Path, timeout: Duration) -> io::Result<DaemonProcess> {
-    exchange(endpoint, image, "status", timeout)
+    exchange(endpoint, image, "status", timeout, false)
+}
+
+/// Retain the authenticated daemon before asking SCM to stop its trusted host.
+/// Unlike `stop`, this query does not race the host's own graceful request.
+pub fn retain_for_stop(
+    endpoint: &Path,
+    image: &Path,
+    timeout: Duration,
+) -> io::Result<DaemonProcess> {
+    exchange(endpoint, image, "status", timeout, true)
 }
 
 /// One deadline covers graceful acknowledgement and actual daemon exit. An
 /// unresponsive accepted daemon is terminated through its retained handle.
 pub fn stop(endpoint: &Path, image: &Path, timeout: Duration) -> io::Result<()> {
     let deadline = Instant::now() + timeout;
-    let process = exchange(endpoint, image, "stop", timeout.min(Duration::from_secs(2)))?;
+    let process = exchange(
+        endpoint,
+        image,
+        "stop",
+        timeout.min(Duration::from_secs(2)),
+        true,
+    )?;
     if process.wait(deadline.saturating_duration_since(Instant::now()))? {
         return Ok(());
     }

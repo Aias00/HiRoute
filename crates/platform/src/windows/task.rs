@@ -201,7 +201,10 @@ pub fn force_stop(definition: &Definition) -> io::Result<()> {
 pub fn active(definition: &Definition) -> io::Result<bool> {
     with_folder(definition, |folder, definition| unsafe {
         let task = match folder.GetTask(&BSTR::from(&definition.name)) {
-            Ok(task) => { verify_task(&task, definition)?; task },
+            Ok(task) => {
+                verify_task(&task, definition)?;
+                task
+            }
             Err(error) if missing(&error) => return Ok(false),
             Err(error) => return Err(com_error(error)),
         };
@@ -387,4 +390,44 @@ fn foreign() -> io::Error {
         io::ErrorKind::PermissionDenied,
         "background task differs from owned definition",
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn registration_preserves_demand_start_and_logon_policy_across_reopen() {
+        let temporary = tempfile::tempdir().unwrap();
+        let image = temporary.path().join("hirouted.exe");
+        std::fs::copy(std::env::current_exe().unwrap(), &image).unwrap();
+        let definition = Definition::new(Manager::Task, image).unwrap();
+        struct Remove(Definition);
+        impl Drop for Remove {
+            fn drop(&mut self) {
+                let _ = unregister(&self.0);
+            }
+        }
+        // A foreign/active registration with this user's name is never adopted.
+        register(&definition, None).unwrap();
+        let _remove = Remove(definition.clone());
+        assert!(!autostart(&definition).unwrap());
+        assert!(!active(&definition).unwrap());
+        set_autostart(&definition, true).unwrap();
+        assert!(autostart(&definition).unwrap());
+        register(&definition, Some(&definition)).unwrap();
+        assert!(autostart(&definition).unwrap());
+        set_autostart(&definition, false).unwrap();
+        assert!(!autostart(&definition).unwrap());
+        with_folder(&definition, |folder, definition| unsafe {
+            let registered = owned_task(folder, definition)?;
+            assert_eq!(registered.Enabled().map_err(com_error)?, VARIANT_TRUE);
+            Ok(())
+        })
+        .unwrap();
+        let mut foreign = definition.clone();
+        foreign.daemon = temporary.path().join("unowned/hirouted.exe");
+        assert!(active(&foreign).is_err());
+        unregister(&definition).unwrap();
+        assert!(!active(&definition).unwrap());
+    }
 }

@@ -50,12 +50,171 @@ pub(crate) fn delete_native_root_batch(
     {
         unix::delete(Path::new(base), &root.relative_root, identity, root, budget)
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        windows::delete(Path::new(base), &root.relative_root, identity, root, budget)
+    }
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (base, identity);
         NativeDeletionOutcome::Blocked {
             kind: DelegationNativeCleanupFailureKindV1::UnsupportedPlatform,
             processed_entries: 0,
+        }
+    }
+}
+
+#[cfg(windows)]
+mod windows {
+    use super::*;
+    use hiroute_domain::delegation::{
+        DELEGATION_NATIVE_ROOT_MARKER_FILE_V1 as MARKER, DelegationNativeFilesystemIdentityV1,
+        DelegationNativeRootMarkerV1,
+    };
+    use hiroute_platform::windows::security::{
+        delete_by_handle, file_identity, open_delete_at, open_owner_only, verify_owner_only_handle,
+    };
+    use std::{
+        fs::{self, File},
+        io::Read,
+        path::Path,
+    };
+    type Failure = DelegationNativeCleanupFailureKindV1;
+
+    fn identity(file: &File) -> Result<(u64, u64), Failure> {
+        file_identity(file)
+            .map(|(volume, index)| (u64::from(volume), index))
+            .map_err(|_| Failure::IoUnavailable)
+    }
+    fn marker(
+        root: &File,
+        expected: &DelegationNativeFilesystemIdentityV1,
+        record: &DelegationNativeRootV1,
+    ) -> Result<File, Failure> {
+        let file = open_delete_at(root, std::ffi::OsStr::new(MARKER), false)
+            .map_err(|_| Failure::IdentityMismatch)?;
+        verify_owner_only_handle(&file, false).map_err(|_| Failure::IdentityMismatch)?;
+        if identity(&file)? != (expected.marker_device, expected.marker_inode)
+            || file.metadata().map_err(|_| Failure::IoUnavailable)?.len() > 4096
+        {
+            return Err(Failure::IdentityMismatch);
+        }
+        let mut bytes = Vec::new();
+        (&file)
+            .take(4097)
+            .read_to_end(&mut bytes)
+            .map_err(|_| Failure::IoUnavailable)?;
+        let actual: DelegationNativeRootMarkerV1 =
+            serde_json::from_slice(&bytes).map_err(|_| Failure::IdentityMismatch)?;
+        if bytes.len() > 4096 || actual != record.ownership_marker() {
+            return Err(Failure::IdentityMismatch);
+        }
+        Ok(file)
+    }
+    fn children(
+        directory: &File,
+        display_path: &Path,
+        volume: u64,
+        remaining: &mut usize,
+        depth: usize,
+        preserve_marker: bool,
+    ) -> Result<bool, Failure> {
+        if depth > DELETE_DIRECTORY_DEPTH_LIMIT {
+            return Err(Failure::UnsafeEntry);
+        }
+        // Names are suggestions only: every operation resolves from the held directory object.
+        // An ancestor rename can make enumeration unavailable, but cannot redirect deletion.
+        let entries = fs::read_dir(display_path).map_err(|_| Failure::IoUnavailable)?;
+        for entry in entries {
+            let entry = entry.map_err(|_| Failure::IoUnavailable)?;
+            let name = entry.file_name();
+            if preserve_marker && name == MARKER {
+                continue;
+            }
+            if *remaining == 0 {
+                return Ok(false);
+            }
+            let metadata = entry.file_type().map_err(|_| Failure::IoUnavailable)?;
+            let directory_entry = metadata.is_dir();
+            let file = open_delete_at(directory, &name, directory_entry)
+                .map_err(|_| Failure::UnsafeEntry)?;
+            if identity(&file)?.0 != volume {
+                return Err(Failure::IdentityMismatch);
+            }
+            if directory_entry
+                && !children(&file, &entry.path(), volume, remaining, depth + 1, false)?
+            {
+                return Ok(false);
+            }
+            *remaining -= 1;
+            match delete_by_handle(&file) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::DirectoryNotEmpty => {
+                    return Ok(false);
+                }
+                Err(_) => return Err(Failure::IoUnavailable),
+            }
+        }
+        Ok(true)
+    }
+    pub(super) fn delete(
+        base_path: &Path,
+        name: &str,
+        expected: &DelegationNativeFilesystemIdentityV1,
+        record: &DelegationNativeRootV1,
+        budget: usize,
+    ) -> NativeDeletionOutcome {
+        let mut remaining = budget;
+        let result = (|| {
+            if expected.scheme != "windows-volume-file-index-v1"
+                || name.is_empty()
+                || name.contains(['/', '\\', ':', '\0'])
+            {
+                return Err(Failure::UnsupportedIdentity);
+            }
+            let base = open_owner_only(base_path, true).map_err(|_| Failure::BaseUnavailable)?;
+            if identity(&base)? != (expected.base_device, expected.base_inode) {
+                return Err(Failure::IdentityMismatch);
+            }
+            let root = match open_delete_at(&base, std::ffi::OsStr::new(name), true) {
+                Ok(file) => file,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(true),
+                Err(_) => return Err(Failure::BaseUnavailable),
+            };
+            verify_owner_only_handle(&root, true).map_err(|_| Failure::IdentityMismatch)?;
+            if identity(&root)? != (expected.root_device, expected.root_inode)
+                || expected.root_device != expected.base_device
+            {
+                return Err(Failure::IdentityMismatch);
+            }
+            drop(marker(&root, expected, record)?);
+            if !children(
+                &root,
+                &base_path.join(name),
+                expected.root_device,
+                &mut remaining,
+                0,
+                true,
+            )? || remaining < 2
+            {
+                return Ok(false);
+            }
+            let marker = marker(&root, expected, record)?;
+            remaining -= 1;
+            delete_by_handle(&marker).map_err(|_| Failure::IoUnavailable)?;
+            drop(marker);
+            remaining -= 1;
+            delete_by_handle(&root).map_err(|_| Failure::IoUnavailable)?;
+            Ok(true)
+        })();
+        let processed_entries = budget - remaining;
+        match result {
+            Ok(true) => NativeDeletionOutcome::Removed { processed_entries },
+            Ok(false) => NativeDeletionOutcome::Deferred { processed_entries },
+            Err(kind) => NativeDeletionOutcome::Blocked {
+                kind,
+                processed_entries,
+            },
         }
     }
 }

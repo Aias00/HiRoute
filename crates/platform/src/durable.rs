@@ -3,10 +3,10 @@
 //! barriers validate identity there, rather than attempting unsupported directory
 //! FlushFileBuffers. Callers retain writing/committed/final recovery checkpoints.
 
-#[cfg(not(windows))]
-use std::fs::{File, OpenOptions};
 #[cfg(any(not(windows), test))]
 use std::fs;
+#[cfg(not(windows))]
+use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
 use std::path::Path;
 
@@ -27,7 +27,9 @@ pub fn directory_barrier(path: impl AsRef<Path>) -> io::Result<()> {
         Ok(())
     }
     #[cfg(not(windows))]
-    { File::open(path)?.sync_all() }
+    {
+        File::open(path)?.sync_all()
+    }
 }
 
 pub fn rename(source: impl AsRef<Path>, target: impl AsRef<Path>) -> io::Result<()> {
@@ -36,17 +38,28 @@ pub fn rename(source: impl AsRef<Path>, target: impl AsRef<Path>) -> io::Result<
 
 fn rename_inner(source: &Path, target: &Path, replace: bool) -> io::Result<()> {
     #[cfg(windows)]
-    { crate::windows::durable::rename(source, target, replace) }
+    {
+        crate::windows::durable::rename(source, target, replace)
+    }
     #[cfg(not(windows))]
     {
-        if replace { fs::rename(source, target)?; }
-        else {
+        if replace {
+            fs::rename(source, target)?;
+        } else {
             // Atomic no-clobber publication for complete initial key files.
             fs::hard_link(source, target)?;
-            directory_barrier(target.parent().ok_or_else(|| io::Error::other("missing parent"))?)?;
+            directory_barrier(
+                target
+                    .parent()
+                    .ok_or_else(|| io::Error::other("missing parent"))?,
+            )?;
             fs::remove_file(source)?;
         }
-        directory_barrier(target.parent().ok_or_else(|| io::Error::other("missing parent"))?)
+        directory_barrier(
+            target
+                .parent()
+                .ok_or_else(|| io::Error::other("missing parent"))?,
+        )
     }
 }
 
@@ -63,13 +76,23 @@ fn write_private(path: &Path, bytes: &[u8], replace: bool) -> io::Result<()> {
 }
 
 #[cfg(windows)]
-pub fn write_windows_atomic(path: &Path, bytes: &[u8], permissions: &crate::file_security::WindowsPermissions) -> io::Result<()> {
+pub fn write_windows_atomic(
+    path: &Path,
+    bytes: &[u8],
+    permissions: &crate::file_security::WindowsPermissions,
+) -> io::Result<()> {
     write_with_permissions(path, bytes, true, Some(permissions))
 }
 
-fn write_with_permissions(path: &Path, bytes: &[u8], replace: bool,
-    permissions: Option<&crate::file_security::WindowsPermissions>) -> io::Result<()> {
-    let parent = path.parent().ok_or_else(|| io::Error::other("missing parent"))?;
+fn write_with_permissions(
+    path: &Path,
+    bytes: &[u8],
+    replace: bool,
+    permissions: Option<&crate::file_security::WindowsPermissions>,
+) -> io::Result<()> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| io::Error::other("missing parent"))?;
     let mut nonce = [0; 16];
     getrandom::fill(&mut nonce).map_err(|error| io::Error::other(error.to_string()))?;
     let suffix: String = nonce.iter().map(|byte| format!("{byte:02x}")).collect();
@@ -97,17 +120,37 @@ fn write_with_permissions(path: &Path, bytes: &[u8], replace: bool,
         if let Some(permissions) = permissions {
             crate::windows::file_security::apply_read_only(&file, permissions.read_only)?;
             if crate::file_security::capture(&file)? != *permissions {
-                return Err(io::Error::new(io::ErrorKind::PermissionDenied, "native permissions differ"));
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "native permissions differ",
+                ));
             }
         }
-        crate::windows::durable::rename_file(&file, path, replace)?;
+        if let Err(error) = crate::windows::durable::rename_file(&file, path, replace) {
+            if error.kind() == io::ErrorKind::AlreadyExists {
+                // Definite no-clobber failure: remove this exact uncommitted
+                // stage through its retained handle, never a replacement path.
+                crate::windows::security::delete_by_handle(&file)?;
+            }
+            return Err(error);
+        }
         file.sync_all()?;
     }
     #[cfg(not(windows))]
     {
         let _ = permissions;
-        drop(file);
-        rename_inner(&temporary, path, replace)?;
+        if let Err(error) = rename_inner(&temporary, path, replace) {
+            if error.kind() == io::ErrorKind::AlreadyExists {
+                use std::os::unix::fs::MetadataExt;
+                let held = file.metadata()?;
+                let named = fs::symlink_metadata(&temporary)?;
+                if held.dev() == named.dev() && held.ino() == named.ino() {
+                    fs::remove_file(&temporary)?;
+                    directory_barrier(parent)?;
+                }
+            }
+            return Err(error);
+        }
     }
     // A failed write leaves an uncommitted uniquely named private stage. Existing
     // journals never interpret that stage as a committed key or target.
@@ -124,6 +167,11 @@ mod tests {
         write_private_new(&key, b"complete-key-one").unwrap();
         assert!(write_private_new(&key, b"different-key").is_err());
         assert_eq!(fs::read(&key).unwrap(), b"complete-key-one");
+        assert_eq!(
+            fs::read_dir(fixture.path()).unwrap().count(),
+            1,
+            "definite no-clobber conflict must remove only its own unpublished stage"
+        );
         write_private_atomic(&key, b"complete-replacement").unwrap();
         assert_eq!(fs::read(&key).unwrap(), b"complete-replacement");
     }

@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::collections::BTreeSet;
-use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Write};
+use std::fs::{self, File};
+use std::io::Read;
 use std::path::Path;
 #[cfg(test)]
 use std::path::PathBuf;
@@ -1750,6 +1750,9 @@ fn load_key_material(path: &Path) -> Result<Option<KeyMaterial>, LocalStorageErr
     match fs::symlink_metadata(path) {
         Ok(metadata) => {
             validate_owner_file(&metadata)?;
+            #[cfg(windows)]
+            let mut file = hiroute_platform::windows::security::open_owner_only(path, false)?;
+            #[cfg(not(windows))]
             let mut file = File::open(path)?;
             let mut header = [0_u8; 8];
             file.read_exact(&mut header)?;
@@ -1804,21 +1807,13 @@ fn create_key_material(path: &Path) -> Result<KeyMaterial, LocalStorageError> {
     let store_uuid = hex_bytes(&uuid);
     let key_id = key_id_for(&bytes);
     let verifier = key_verifier_for(&bytes);
-    let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    let mut file = options.open(path)?;
-    file.write_all(MASTER_KEY_HEADER)?;
-    file.write_all(store_uuid.as_bytes())?;
-    file.write_all(key_id.as_str().as_bytes())?;
-    file.write_all(verifier.as_str().as_bytes())?;
-    file.write_all(&bytes)?;
-    file.sync_all()?;
-    File::open(parent)?.sync_all()?;
+    let mut complete = Zeroizing::new(Vec::new());
+    complete.extend_from_slice(MASTER_KEY_HEADER);
+    complete.extend_from_slice(store_uuid.as_bytes());
+    complete.extend_from_slice(key_id.as_str().as_bytes());
+    complete.extend_from_slice(verifier.as_str().as_bytes());
+    complete.extend_from_slice(&bytes);
+    hiroute_platform::durable::write_private_new(path, &complete)?;
     validate_owner_file(&fs::metadata(path)?)?;
     Ok(KeyMaterial {
         bytes,
@@ -1841,6 +1836,13 @@ fn key_verifier_for(bytes: &[u8]) -> CanonicalDigest {
 }
 
 fn prepare_owner_directory(path: &Path) -> Result<(), LocalStorageError> {
+    #[cfg(windows)]
+    {
+        let _held = hiroute_platform::windows::security::ensure_private_directory(path)?;
+        return Ok(());
+    }
+    #[cfg(not(windows))]
+    {
     if path.exists() {
         let metadata = fs::symlink_metadata(path)?;
         if metadata.file_type().is_symlink() || !metadata.file_type().is_dir() {
@@ -1855,6 +1857,7 @@ fn prepare_owner_directory(path: &Path) -> Result<(), LocalStorageError> {
         }
     }
     Ok(())
+    }
 }
 
 fn validate_owner_file(metadata: &fs::Metadata) -> Result<(), LocalStorageError> {

@@ -9,7 +9,12 @@ use std::{
 use crate::delegation::profile::RunMaterials;
 pub(super) struct OwnedRoot {
     path: PathBuf,
+    #[cfg(not(windows))]
     identity: same_file::Handle,
+    #[cfg(windows)]
+    identity: (u32, u64),
+    #[cfg(windows)]
+    held: Option<std::fs::File>,
     cleanup_on_drop: bool,
 }
 
@@ -46,13 +51,20 @@ fn relative(path: &Path) -> bool {
 }
 
 fn directory(path: &Path) -> Result<(), Error> {
-    let mut builder = fs::DirBuilder::new();
-    #[cfg(unix)]
+    #[cfg(windows)]
+    return hiroute_platform::windows::security::create_owner_only_directory(path)
+        .map(drop)
+        .map_err(|_| Error::StorageUnavailable);
+    #[cfg(not(windows))]
     {
-        use std::os::unix::fs::DirBuilderExt;
-        builder.mode(0o700);
+        let mut builder = fs::DirBuilder::new();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        builder.create(path).map_err(|_| Error::StorageUnavailable)
     }
-    builder.create(path).map_err(|_| Error::StorageUnavailable)
 }
 
 pub(super) fn prepare(
@@ -112,12 +124,22 @@ pub(super) fn prepare(
         }
     }
     // create, never create_dir_all(root): an existing root is never ours to delete.
+    #[cfg(not(windows))]
     directory(&actual_root)?;
+    #[cfg(windows)]
+    let held = hiroute_platform::windows::security::create_owner_only_directory(&actual_root)
+        .map_err(|_| Error::StorageUnavailable)?;
+    #[cfg(not(windows))]
     let identity =
         same_file::Handle::from_path(&actual_root).map_err(|_| Error::StorageUnavailable)?;
+    #[cfg(windows)]
+    let identity = hiroute_platform::windows::security::file_identity(&held)
+        .map_err(|_| Error::StorageUnavailable)?;
     let owned = OwnedRoot {
         path: actual_root,
         identity,
+        #[cfg(windows)]
+        held: Some(held),
         cleanup_on_drop: true,
     };
     let mut dirs: Vec<_> = materials.directories.into_iter().collect();
@@ -126,21 +148,32 @@ pub(super) fn prepare(
         directory(&owned.path.join(dir))?;
     }
     for file in materials.files {
-        let mut options = fs::OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
+        #[cfg(windows)]
         {
-            use std::os::unix::fs::OpenOptionsExt;
-            // The profile may provide a token-free native launcher. Only that explicitly
-            // declared material is executable; ordinary configuration stays private data.
-            options.mode(if file.executable { 0o700 } else { 0o600 });
+            hiroute_platform::durable::write_private_new(
+                &owned.path.join(file.relative_path),
+                &file.contents,
+            )
+            .map_err(|_| Error::StorageUnavailable)?;
         }
-        let mut output = options
-            .open(owned.path.join(file.relative_path))
-            .map_err(|_| Error::StorageUnavailable)?;
-        output
-            .write_all(&file.contents)
-            .map_err(|_| Error::StorageUnavailable)?;
+        #[cfg(not(windows))]
+        {
+            let mut options = fs::OpenOptions::new();
+            options.write(true).create_new(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                // The profile may provide a token-free native launcher. Only that explicitly
+                // declared material is executable; ordinary configuration stays private data.
+                options.mode(if file.executable { 0o700 } else { 0o600 });
+            }
+            let mut output = options
+                .open(owned.path.join(file.relative_path))
+                .map_err(|_| Error::StorageUnavailable)?;
+            output
+                .write_all(&file.contents)
+                .map_err(|_| Error::StorageUnavailable)?;
+        }
     }
     Ok(owned)
 }
@@ -152,27 +185,92 @@ impl OwnedRoot {
     }
 
     pub(super) fn cleanup(&mut self) -> Result<(), Error> {
-        let meta = match fs::symlink_metadata(&self.path) {
-            Ok(meta) => meta,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-            Err(_) => return Err(Error::StorageUnavailable),
-        };
-        if !meta.is_dir() || meta.file_type().is_symlink() {
-            return Err(Error::StorageUnavailable);
-        }
         #[cfg(windows)]
         {
-            use std::os::windows::fs::MetadataExt;
-            if meta.file_attributes() & 0x400 != 0 {
+            use hiroute_platform::windows::security::{
+                delete_by_handle, file_identity, open_delete_at,
+            };
+            fn children(
+                parent: &std::fs::File,
+                display: &Path,
+                remaining: &mut usize,
+                depth: usize,
+            ) -> Result<(), Error> {
+                if depth > 32 {
+                    return Err(Error::StorageUnavailable);
+                }
+                for entry in fs::read_dir(display).map_err(|_| Error::StorageUnavailable)? {
+                    if *remaining == 0 {
+                        return Err(Error::StorageUnavailable);
+                    }
+                    let entry = entry.map_err(|_| Error::StorageUnavailable)?;
+                    let directory = entry
+                        .file_type()
+                        .map_err(|_| Error::StorageUnavailable)?
+                        .is_dir();
+                    let child = open_delete_at(parent, &entry.file_name(), directory)
+                        .map_err(|_| Error::StorageUnavailable)?;
+                    if file_identity(&child)
+                        .map_err(|_| Error::StorageUnavailable)?
+                        .0
+                        != file_identity(parent)
+                            .map_err(|_| Error::StorageUnavailable)?
+                            .0
+                    {
+                        return Err(Error::StorageUnavailable);
+                    }
+                    if directory {
+                        children(&child, &entry.path(), remaining, depth + 1)?;
+                    }
+                    *remaining -= 1;
+                    delete_by_handle(&child).map_err(|_| Error::StorageUnavailable)?;
+                }
+                Ok(())
+            }
+            let Some(held) = self.held.as_ref() else {
+                return Ok(());
+            };
+            if file_identity(held).map_err(|_| Error::StorageUnavailable)? != self.identity {
                 return Err(Error::StorageUnavailable);
             }
+            let current = hiroute_platform::windows::security::open_identity(&self.path, true)
+                .map_err(|_| Error::StorageUnavailable)?;
+            if file_identity(&current).map_err(|_| Error::StorageUnavailable)? != self.identity {
+                return Err(Error::StorageUnavailable);
+            }
+            drop(current);
+            // All mutations resolve from the held owner-created directory. An ancestor
+            // rename can only make enumeration fail; it cannot redirect deletion.
+            children(held, &self.path, &mut 4096, 0)?;
+            delete_by_handle(held).map_err(|_| Error::StorageUnavailable)?;
+            drop(self.held.take());
+            self.cleanup_on_drop = false;
+            return Ok(());
         }
-        let current =
-            same_file::Handle::from_path(&self.path).map_err(|_| Error::StorageUnavailable)?;
-        if current != self.identity {
-            return Err(Error::StorageUnavailable);
+        #[cfg(not(windows))]
+        {
+            let meta = match fs::symlink_metadata(&self.path) {
+                Ok(meta) => meta,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+                Err(_) => return Err(Error::StorageUnavailable),
+            };
+            if !meta.is_dir() || meta.file_type().is_symlink() {
+                return Err(Error::StorageUnavailable);
+            }
+            #[cfg(windows)]
+            {
+                use std::os::windows::fs::MetadataExt;
+                if meta.file_attributes() & 0x400 != 0 {
+                    return Err(Error::StorageUnavailable);
+                }
+            }
+            let current =
+                same_file::Handle::from_path(&self.path).map_err(|_| Error::StorageUnavailable)?;
+            if current != self.identity {
+                return Err(Error::StorageUnavailable);
+            }
+            fs::remove_dir_all(&self.path).map_err(|_| Error::StorageUnavailable)
         }
-        fs::remove_dir_all(&self.path).map_err(|_| Error::StorageUnavailable)
     }
 }
 

@@ -2374,6 +2374,7 @@ dependencies = [
  "sha2",
  "tempfile",
  "thiserror 2.0.20",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2558,6 +2559,7 @@ dependencies = [
 name = "hiroute-platform"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "getrandom 0.3.4",
  "serde",
  "serde_json",

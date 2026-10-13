@@ -21,6 +21,16 @@ impl NativeWorkerContext {
         lookup: impl Fn(&str) -> Option<OsString>,
     ) -> Result<Self, DelegationErrorV1> {
         let home = lookup("HOME")
+            .or_else(|| {
+                #[cfg(windows)]
+                {
+                    lookup("USERPROFILE")
+                }
+                #[cfg(not(windows))]
+                {
+                    None
+                }
+            })
             .map(PathBuf::from)
             .ok_or(DelegationErrorV1::CapabilityUnavailable)?;
         let (variable, default) = match harness {
@@ -132,5 +142,111 @@ mod tests {
                 Err(DelegationErrorV1::InvalidArguments)
             );
         }
+    }
+}
+
+#[cfg(windows)]
+pub(crate) fn windows_workspace(
+    path: &str,
+) -> Result<(hiroute_domain::delegation::DelegationWorkspaceV1, String), DelegationErrorV1> {
+    use hiroute_platform::windows::security::{file_identity, open_identity};
+    // Inspect each absolute component through held directory handles before accepting it.
+    let requested = std::path::Path::new(path);
+    let handle = open_identity(requested, true).map_err(|_| DelegationErrorV1::InvalidArguments)?;
+    let (volume, index) =
+        file_identity(&handle).map_err(|_| DelegationErrorV1::InvalidArguments)?;
+    let canonical = native_path(
+        &std::fs::canonicalize(requested).map_err(|_| DelegationErrorV1::InvalidArguments)?,
+    );
+    let current =
+        open_identity(&canonical, true).map_err(|_| DelegationErrorV1::InvalidArguments)?;
+    if file_identity(&current).map_err(|_| DelegationErrorV1::InvalidArguments)? != (volume, index)
+    {
+        return Err(DelegationErrorV1::InvalidArguments);
+    }
+    let mut ancestry = Vec::new();
+    for ancestor in canonical.ancestors() {
+        let file =
+            open_identity(ancestor, true).map_err(|_| DelegationErrorV1::InvalidArguments)?;
+        let (volume, index) =
+            file_identity(&file).map_err(|_| DelegationErrorV1::InvalidArguments)?;
+        ancestry.push(format!("file/{volume}/{index}"));
+    }
+    ancestry.reverse();
+    let root_identity = format!("file/{volume}/{index}");
+    if ancestry.last() != Some(&root_identity) {
+        return Err(DelegationErrorV1::InvalidArguments);
+    }
+    let workspace = hiroute_domain::delegation::DelegationWorkspaceV1 {
+        root_identity,
+        volume_identity: format!("volume/{volume}"),
+        ancestry,
+    };
+    workspace.validate()?;
+    Ok((
+        workspace,
+        canonical
+            .to_str()
+            .ok_or(DelegationErrorV1::InvalidArguments)?
+            .to_owned(),
+    ))
+}
+
+/// Native Node/CLI cwd and history encoders use ordinary Win32 path spelling.
+/// Rust canonicalize's verbatim prefix is an I/O detail, not native history identity.
+pub(super) fn native_path(path: &Path) -> PathBuf {
+    #[cfg(windows)]
+    if let Some(text) = path.to_str() {
+        if let Some(path) = text.strip_prefix(r"\\?\UNC\") {
+            return PathBuf::from(format!(r"\\{path}"));
+        }
+        if let Some(path) = text.strip_prefix(r"\\?\") {
+            return PathBuf::from(path);
+        }
+    }
+    path.to_owned()
+}
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    use super::*;
+
+    #[test]
+    fn windows_context_respects_home_and_only_falls_back_to_current_userprofile() {
+        let fixture = tempfile::tempdir().unwrap();
+        let explicit = fixture.path().join("explicit-home");
+        let profile = fixture.path().join("userprofile");
+        let context =
+            NativeWorkerContext::from_lookup(WorkerHarnessV1::CodexCli, |name| match name {
+                "HOME" => Some(explicit.clone().into_os_string()),
+                "USERPROFILE" => panic!("HOME takes precedence"),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(context.home(), explicit);
+        let context =
+            NativeWorkerContext::from_lookup(WorkerHarnessV1::CodexCli, |name| match name {
+                "HOME" => None,
+                "USERPROFILE" => Some(profile.clone().into_os_string()),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(context.home(), profile);
+        assert_eq!(context.config_root(), profile.join(".codex"));
+    }
+
+    #[test]
+    fn workspace_identity_uses_native_objects_without_verbatim_history_prefix() {
+        let fixture = tempfile::tempdir().unwrap();
+        let path = fixture.path().join("workspace % ! 空 格");
+        std::fs::create_dir(&path).unwrap();
+        let extended = std::fs::canonicalize(&path).unwrap();
+        let (first, native) = windows_workspace(extended.to_str().unwrap()).unwrap();
+        assert!(!native.starts_with(r"\\?\"));
+        assert_eq!(windows_workspace(&native).unwrap().0, first);
+        let renamed = fixture.path().join("old-workspace");
+        std::fs::rename(&path, &renamed).unwrap();
+        std::fs::create_dir(&path).unwrap();
+        assert_ne!(windows_workspace(path.to_str().unwrap()).unwrap().0, first);
     }
 }

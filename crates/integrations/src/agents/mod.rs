@@ -11,24 +11,29 @@ mod codex_catalog_source;
 mod codex_config;
 mod codex_layers;
 mod codex_sources;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 mod collaboration_probe;
 mod discovery;
 mod emulator;
 mod executable;
+mod probe_files;
 pub use executable::codex_subscription_client_version;
 mod filesystem;
 mod filesystem_config;
 mod managed_launch;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 mod native_claude_ingress_probe;
 mod native_effects;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 mod native_ingress_probe;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 mod native_probe_process;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub use native_probe_process::NativeProbeProcess;
+#[cfg(windows)]
+pub(crate) mod windows_runtime;
+#[cfg(windows)]
+pub use windows_runtime::{windows_agent_command, windows_claude_version, windows_npm_entry};
 mod dsh_config;
 mod dsh_sources;
 #[cfg(test)]
@@ -43,7 +48,7 @@ mod additional_native;
 mod additional_native_effects;
 mod qoder_provider;
 pub use additional_native_effects::*;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 mod qoder_probe;
 mod registration;
 mod registry;
@@ -64,13 +69,13 @@ pub use hiroute_domain::{
     AgentDiscoveryError, EffectiveConfigFieldV1, SupportedAgentInstallationV1,
 };
 pub use managed_launch::*;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub use native_claude_ingress_probe::*;
 pub use native_effects::*;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub use native_ingress_probe::*;
 pub use qoder::*;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub use qoder_probe::*;
 pub use registration::*;
 pub use registry::*;

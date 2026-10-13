@@ -53,7 +53,7 @@ pub(crate) fn execute(arguments: &[String], globals: &Globals) -> Option<CliExec
 fn host_help(family: &str) -> &'static str {
     match family {
         "service" => {
-            "Usage\n  hiroute service start|stop|restart|status|logs|doctor --output json\n  hiroute service autostart enable|disable|status --output json\n  hiroute service run\n"
+            "Usage\n  hiroute service start|stop|restart|status|logs|doctor --output json\n  hiroute service autostart enable|disable|status --output json\n  hiroute service run\n  Windows package maintenance:\n  hiroute service install --manager task --output json\n  hiroute service install --manager scm --password-stdin --output json\n  hiroute service uninstall --output json\n  hiroute service layout --output json\n  hiroute service publish-install --request-stdin --output json\n  hiroute service write-record --path <PATH> --request-stdin --output json\n"
         }
         "gateway" => {
             "Usage\n  hiroute gateway show --output json\n  hiroute gateway set --address <IPV4> --port auto|<PORT> [--accept-remote-risk] --output json\n  hiroute gateway recover --output json\n"
@@ -80,6 +80,35 @@ fn service_command(
         [verb] if verb == "status" => json_value(service::status().map_err(map)?)?,
         [verb] if verb == "logs" => service::logs().map_err(map)?,
         [verb] if verb == "doctor" => service::doctor(),
+        [verb] if verb == "layout" => service::windows_layout().map_err(map)?,
+        [verb] if verb == "prepare-install" => service::prepare_windows_install().map_err(map)?,
+        [verb, manager_flag, manager, daemon_flag, daemon]
+            if verb == "describe-install"
+                && manager_flag == "--manager"
+                && daemon_flag == "--daemon" =>
+        {
+            service::describe_windows_manager(manager, std::path::Path::new(daemon)).map_err(map)?
+        }
+        [verb, source] if verb == "publish-install" && source == "--request-stdin" => {
+            service::publish_install_record().map_err(map)?
+        }
+        [verb, path_flag, path, source]
+            if verb == "write-record" && path_flag == "--path" && source == "--request-stdin" =>
+        {
+            service::write_private_record(std::path::Path::new(path)).map_err(map)?
+        }
+        [verb, flag, manager] if verb == "install" && flag == "--manager" && manager == "task" => {
+            service::install_manager(manager, false).map_err(map)?
+        }
+        [verb, flag, manager, password]
+            if verb == "install"
+                && flag == "--manager"
+                && manager == "scm"
+                && password == "--password-stdin" =>
+        {
+            service::install_manager(manager, true).map_err(map)?
+        }
+        [verb] if verb == "uninstall" => service::uninstall_manager(timeout).map_err(map)?,
         [autostart, verb] if autostart == "autostart" && verb == "enable" => {
             json_value(service::set_autostart(true).map_err(map)?)?
         }

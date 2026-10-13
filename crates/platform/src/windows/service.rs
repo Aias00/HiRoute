@@ -1,38 +1,29 @@
 //! SCM boundary: owned service handles, same-account credentials and dispatcher.
-use std::ffi::OsString;
-use std::ffi::c_void;
 use std::fs::File;
 use std::io;
-use std::os::windows::io::{AsRawHandle, FromRawHandle};
 use std::ptr::{null, null_mut};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use windows_sys::Win32::Foundation::{
     ERROR_SERVICE_ALREADY_RUNNING, ERROR_SERVICE_DOES_NOT_EXIST, ERROR_SERVICE_MARKED_FOR_DELETE,
     ERROR_SERVICE_NOT_ACTIVE, LocalFree,
 };
+use windows_sys::Win32::Security::Authentication::Identity::{
+    LSA_OBJECT_ATTRIBUTES, LSA_UNICODE_STRING, LsaAddAccountRights, LsaClose,
+    LsaNtStatusToWinError, LsaOpenPolicy, POLICY_CREATE_ACCOUNT, POLICY_LOOKUP_NAMES,
+};
 use windows_sys::Win32::Security::Authorization::{
-    ConvertStringSecurityDescriptorToSecurityDescriptorW, ConvertStringSidToSidW, SDDL_REVISION_1,
+    ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
 };
-use windows_sys::Win32::Security::{
-    CreateRestrictedToken, CreateWellKnownSid, DACL_SECURITY_INFORMATION, DISABLE_MAX_PRIVILEGE,
-    EqualSid, GetLengthSid, GetTokenInformation, LOGON32_LOGON_INTERACTIVE,
-    LOGON32_PROVIDER_DEFAULT, LogonUserW, LookupAccountSidW, SID_AND_ATTRIBUTES, SID_NAME_USE,
-    SetTokenInformation, TOKEN_ADJUST_DEFAULT, TOKEN_ASSIGN_PRIMARY, TOKEN_DUPLICATE,
-    TOKEN_MANDATORY_LABEL, TOKEN_QUERY, TOKEN_USER, TokenIntegrityLevel, TokenUser,
-    WinBuiltinAdministratorsSid,
-};
+use windows_sys::Win32::Security::{DACL_SECURITY_INFORMATION, LookupAccountSidW, SID_NAME_USE};
 use windows_sys::Win32::System::Services::*;
-use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 use zeroize::Zeroizing;
 
 use super::background::{Definition, Manager, quote_argument};
 
-// WinNT.h: SE_GROUP_INTEGRITY. windows-sys places this SDK bit behind the
-// unrelated SystemServices feature; no additional API is needed for this flag.
-const SE_GROUP_INTEGRITY: u32 = 0x0000_0020;
+mod host;
+mod token;
+pub use host::{ServiceShutdown, run_service};
 
 struct Handle(SC_HANDLE);
 impl Handle {
@@ -65,6 +56,16 @@ fn manager(access: u32) -> io::Result<Handle> {
 }
 fn open(definition: &Definition, access: u32) -> io::Result<Handle> {
     definition.validate()?;
+    open_for_owner(definition, &definition.owner_sid, &account_name()?, access)
+}
+
+fn open_for_owner(
+    definition: &Definition,
+    owner_sid: &str,
+    account: &str,
+    access: u32,
+) -> io::Result<Handle> {
+    definition.validate_for_owner_sid(owner_sid)?;
     if definition.manager != Manager::Scm {
         return Err(io::Error::from(io::ErrorKind::InvalidInput));
     }
@@ -73,12 +74,17 @@ fn open(definition: &Definition, access: u32) -> io::Result<Handle> {
     // SAFETY: SCM and NUL-terminated service name outlive this call.
     let handle =
         Handle::new(unsafe { OpenServiceW(scm.0, name.as_ptr(), access | SERVICE_QUERY_CONFIG) })?;
-    verify(&handle, definition)?;
+    verify_for_owner(&handle, definition, owner_sid, account)?;
     Ok(handle)
 }
 
 pub fn account_name() -> io::Result<String> {
-    let mut sid = super::security::current_user_sid()?;
+    account_name_for_sid(&super::security::current_user_sid()?)
+}
+
+pub fn account_name_for_sid(sid: &[u8]) -> io::Result<String> {
+    super::background::sid_string(sid)?;
+    let mut sid = sid.to_vec();
     let mut name = vec![0_u16; 1024];
     let mut domain = vec![0_u16; 1024];
     let mut names = name.len() as u32;
@@ -111,7 +117,10 @@ fn command_line(definition: &Definition) -> io::Result<String> {
     Ok(format!(
         "{} {}",
         quote_argument(
-            definition.service_host.as_ref().ok_or_else(|| io::Error::from(io::ErrorKind::InvalidInput))?
+            definition
+                .service_host
+                .as_ref()
+                .ok_or_else(|| io::Error::from(io::ErrorKind::InvalidInput))?
                 .to_str()
                 .ok_or_else(|| io::Error::from(io::ErrorKind::InvalidInput))?
         )?,
@@ -127,16 +136,45 @@ pub fn register(
     password: &str,
 ) -> io::Result<()> {
     definition.verify_image()?;
-    super::sealed_host::install(definition)?;
+    let mut image = super::security::open_identity(&definition.daemon, false)?;
+    register_for_owner(
+        definition,
+        previous,
+        &super::security::current_user_sid()?,
+        &account_name()?,
+        password,
+        &mut image,
+    )
+}
+
+/// The privileged helper authenticates owner credentials and holds the actual
+/// owner image across impersonation/reversion. This entry verifies those same
+/// credentials/SID again, seals the held bytes and registers the fixed account.
+pub fn register_for_owner(
+    definition: &Definition,
+    previous: Option<&Definition>,
+    owner_sid: &[u8],
+    account_name: &str,
+    password: &str,
+    image: &mut File,
+) -> io::Result<()> {
+    let sid = super::background::sid_string(owner_sid)?;
+    definition.validate_for_owner_sid(&sid)?;
+    let expected_account = account_name_for_sid(owner_sid)?;
+    if !account_name.eq_ignore_ascii_case(&expected_account) {
+        return Err(io::Error::from(io::ErrorKind::PermissionDenied));
+    }
     if password.is_empty() {
         return Err(io::Error::from(io::ErrorKind::InvalidInput));
     }
     let scm = manager(SC_MANAGER_CONNECT | SC_MANAGER_CREATE_SERVICE)?;
     let name = wide(&definition.name)?;
-    let account = wide(&account_name()?)?;
+    let account = wide(&expected_account)?;
     let command = wide(&command_line(definition)?)?;
     let password = Zeroizing::new(wide(password)?);
-    verify_credentials(&account, &password)?;
+    token::verify_credentials(&account, &password, owner_sid)?;
+    super::sealed_host::install_for_owner(definition, &sid, image)?;
+    grant_service_logon(owner_sid)?;
     let access = SERVICE_QUERY_CONFIG | SERVICE_QUERY_STATUS | SERVICE_CHANGE_CONFIG | 0x40000; // WRITE_DAC
     // SAFETY: no credentials are formatted into this process command line.
     let current = unsafe { OpenServiceW(scm.0, name.as_ptr(), access) };
@@ -165,7 +203,16 @@ pub fn register(
         })?
     } else {
         let service = Handle(current);
-        if verify(&service, previous.unwrap_or(definition)).is_err() { verify(&service, definition)?; }
+        if verify_for_owner(
+            &service,
+            previous.unwrap_or(definition),
+            &sid,
+            &expected_account,
+        )
+        .is_err()
+        {
+            verify_for_owner(&service, definition, &sid, &expected_account)?;
+        }
         // A stopped registration is required: an old executable cannot be
         // overwritten or reinterpreted while its service still runs.
         if state(&service)?.dwCurrentState != SERVICE_STOPPED {
@@ -193,155 +240,96 @@ pub fn register(
         service
     };
     owner_control_dacl(&service, &definition.owner_sid)?;
-    verify(&service, definition)
+    failure_restart(&service)?;
+    verify_for_owner(&service, definition, &sid, &expected_account)
 }
 
-fn verify_credentials(account: &[u16], password: &[u16]) -> io::Result<()> {
-    let mut token = null_mut();
-    // SAFETY: a qualified DOMAIN\\name and live zeroizing password select only
-    // the recorded owner; an account mismatch never falls back to SYSTEM.
-    if unsafe {
-        LogonUserW(
-            account.as_ptr(),
+fn grant_service_logon(owner_sid: &[u8]) -> io::Result<()> {
+    let attributes = LSA_OBJECT_ATTRIBUTES {
+        Length: std::mem::size_of::<LSA_OBJECT_ATTRIBUTES>() as u32,
+        ..Default::default()
+    };
+    let mut policy = 0_isize;
+    let status = unsafe {
+        LsaOpenPolicy(
             null(),
-            password.as_ptr(),
-            LOGON32_LOGON_INTERACTIVE,
-            LOGON32_PROVIDER_DEFAULT,
-            &mut token,
+            &attributes,
+            (POLICY_CREATE_ACCOUNT | POLICY_LOOKUP_NAMES) as u32,
+            &mut policy,
         )
-    } == 0
-    {
-        return Err(io::Error::last_os_error());
+    };
+    if status != 0 {
+        return Err(io::Error::from_raw_os_error(
+            unsafe { LsaNtStatusToWinError(status) } as i32,
+        ));
     }
-    let token = owned_token(token)?;
-    let mut needed = 0;
+    let mut sid = owner_sid.to_vec();
+    let mut right: Vec<_> = "SeServiceLogonRight".encode_utf16().collect();
+    let text = LSA_UNICODE_STRING {
+        Length: (right.len() * 2) as u16,
+        MaximumLength: (right.len() * 2) as u16,
+        Buffer: right.as_mut_ptr(),
+    };
+    let status = unsafe { LsaAddAccountRights(policy, sid.as_mut_ptr().cast(), &text, 1) };
     unsafe {
-        GetTokenInformation(
-            token.as_raw_handle().cast(),
-            TokenUser,
-            null_mut(),
-            0,
-            &mut needed,
-        );
+        LsaClose(policy);
     }
-    if needed == 0 || needed > 64 * 1024 {
-        return Err(io::Error::from(io::ErrorKind::InvalidData));
+    if status != 0 {
+        return Err(io::Error::from_raw_os_error(
+            unsafe { LsaNtStatusToWinError(status) } as i32,
+        ));
     }
-    let mut words = vec![0_usize; (needed as usize).div_ceil(std::mem::size_of::<usize>())];
-    if unsafe {
-        GetTokenInformation(
-            token.as_raw_handle().cast(),
-            TokenUser,
-            words.as_mut_ptr().cast(),
-            needed,
-            &mut needed,
-        )
-    } == 0
-    {
-        return Err(io::Error::last_os_error());
-    }
-    let mut owner = super::security::current_user_sid()?;
-    // SAFETY: TOKEN_USER populated by LogonUser/GetTokenInformation owns its SID.
-    if unsafe {
-        EqualSid(
-            (*words.as_ptr().cast::<TOKEN_USER>()).User.Sid,
-            owner.as_mut_ptr().cast(),
-        )
-    } == 0
-    {
-        return Err(io::Error::from(io::ErrorKind::PermissionDenied));
-    }
+    // This account policy may support other services; never revoke their shared
+    // service-logon right or alter account password expiration on uninstall.
     Ok(())
 }
 
-fn owned_token(handle: windows_sys::Win32::Foundation::HANDLE) -> io::Result<File> {
-    if handle.is_null() {
-        return Err(io::Error::last_os_error());
-    }
-    // SAFETY: native token API transferred this newly owned kernel handle.
-    Ok(unsafe { File::from_raw_handle(handle.cast()) })
-}
-
-fn restricted_token() -> io::Result<File> {
-    let mut current = null_mut();
-    // SAFETY: current process token; exact rights needed for restriction/spawn.
-    if unsafe {
-        OpenProcessToken(
-            GetCurrentProcess(),
-            TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY | TOKEN_ADJUST_DEFAULT,
-            &mut current,
-        )
-    } == 0
-    {
-        return Err(io::Error::last_os_error());
-    }
-    let current = owned_token(current)?;
-    let mut administrators = vec![0_usize; 68_usize.div_ceil(std::mem::size_of::<usize>())];
-    let mut length = (administrators.len() * std::mem::size_of::<usize>()) as u32;
-    // SAFETY: well-known SID output is aligned and has SECURITY_MAX_SID_SIZE bytes.
-    if unsafe {
-        CreateWellKnownSid(
-            WinBuiltinAdministratorsSid,
-            null_mut(),
-            administrators.as_mut_ptr().cast(),
-            &mut length,
-        )
-    } == 0
-    {
-        return Err(io::Error::last_os_error());
-    }
-    let disabled = SID_AND_ATTRIBUTES {
-        Sid: administrators.as_mut_ptr().cast(),
-        Attributes: 0,
-    };
-    let mut token = null_mut();
-    // SAFETY: primary token creation disables administrator authority and every
-    // privilege except traversal. It retains the account SID/private-file access.
-    if unsafe {
-        CreateRestrictedToken(
-            current.as_raw_handle().cast(),
-            DISABLE_MAX_PRIVILEGE,
-            1,
-            &disabled,
-            0,
-            null(),
-            0,
-            null(),
-            &mut token,
-        )
-    } == 0
-    {
-        return Err(io::Error::last_os_error());
-    }
-    let token = owned_token(token)?;
-    let medium = wide("S-1-16-8192")?;
-    let mut sid = null_mut();
-    if unsafe { ConvertStringSidToSidW(medium.as_ptr(), &mut sid) } == 0 {
-        return Err(io::Error::last_os_error());
-    }
-    let label = TOKEN_MANDATORY_LABEL {
-        Label: SID_AND_ATTRIBUTES {
-            Sid: sid,
-            Attributes: SE_GROUP_INTEGRITY,
+fn failure_restart(service: &Handle) -> io::Result<()> {
+    let mut actions = [
+        SC_ACTION {
+            Type: SC_ACTION_RESTART,
+            Delay: 60_000,
         },
+        SC_ACTION {
+            Type: SC_ACTION_RESTART,
+            Delay: 60_000,
+        },
+        SC_ACTION {
+            Type: SC_ACTION_NONE,
+            Delay: 0,
+        },
+    ];
+    let policy = SERVICE_FAILURE_ACTIONSW {
+        dwResetPeriod: 86_400,
+        lpRebootMsg: null_mut(),
+        lpCommand: null_mut(),
+        cActions: actions.len() as u32,
+        lpsaActions: actions.as_mut_ptr(),
     };
-    // SAFETY: label SID remains live until SetTokenInformation copies it.
-    let success = unsafe {
-        SetTokenInformation(
-            token.as_raw_handle().cast(),
-            TokenIntegrityLevel,
-            (&label as *const TOKEN_MANDATORY_LABEL).cast(),
-            std::mem::size_of::<TOKEN_MANDATORY_LABEL>() as u32 + GetLengthSid(sid),
+    if unsafe {
+        ChangeServiceConfig2W(
+            service.0,
+            SERVICE_CONFIG_FAILURE_ACTIONS,
+            (&policy as *const SERVICE_FAILURE_ACTIONSW).cast(),
         )
+    } == 0
+    {
+        return Err(io::Error::last_os_error());
+    }
+    let flag = SERVICE_FAILURE_ACTIONS_FLAG {
+        fFailureActionsOnNonCrashFailures: 1,
     };
-    let error = io::Error::last_os_error();
-    unsafe {
-        LocalFree(sid);
+    if unsafe {
+        ChangeServiceConfig2W(
+            service.0,
+            SERVICE_CONFIG_FAILURE_ACTIONS_FLAG,
+            (&flag as *const SERVICE_FAILURE_ACTIONS_FLAG).cast(),
+        )
+    } == 0
+    {
+        return Err(io::Error::last_os_error());
     }
-    if success == 0 {
-        return Err(error);
-    }
-    Ok(token)
+    Ok(())
 }
 
 fn owner_control_dacl(service: &Handle, sid: &str) -> io::Result<()> {
@@ -417,15 +405,20 @@ impl Config {
     }
 }
 
-fn verify(service: &Handle, definition: &Definition) -> io::Result<()> {
-    definition.validate()?;
+fn verify_for_owner(
+    service: &Handle,
+    definition: &Definition,
+    sid: &str,
+    account: &str,
+) -> io::Result<()> {
+    definition.validate_for_owner_sid(sid)?;
     let config = Config::load(service)?;
     let value = config.value();
     if value.dwServiceType != SERVICE_WIN32_OWN_PROCESS
         || config.text(value.lpBinaryPathName)? != command_line(definition)?
         || !config
             .text(value.lpServiceStartName)?
-            .eq_ignore_ascii_case(&account_name()?)
+            .eq_ignore_ascii_case(account)
         || !matches!(value.dwStartType, SERVICE_DEMAND_START | SERVICE_AUTO_START)
     {
         return Err(io::Error::new(
@@ -481,14 +474,54 @@ pub fn request_stop(definition: &Definition) -> io::Result<()> {
 }
 
 pub fn active(definition: &Definition) -> io::Result<bool> {
-    Ok(state(&open(definition, SERVICE_QUERY_STATUS)?)?.dwCurrentState != SERVICE_STOPPED)
+    match open(definition, SERVICE_QUERY_STATUS) {
+        Ok(service) => Ok(state(&service)?.dwCurrentState != SERVICE_STOPPED),
+        Err(error) if error.raw_os_error() == Some(ERROR_SERVICE_DOES_NOT_EXIST as i32) => {
+            Ok(false)
+        }
+        Err(error) => Err(error),
+    }
+}
+
+/// Unprivileged owner finalization verifies the real machine registration and
+/// protected deployment before publishing its private manager record.
+pub fn verify_registration(definition: &Definition) -> io::Result<()> {
+    definition.verify_image()?;
+    super::sealed_host::verify_definition(definition)?;
+    let service = open(definition, SERVICE_QUERY_STATUS)?;
+    if state(&service)?.dwCurrentState != SERVICE_STOPPED {
+        return Err(io::ErrorKind::WouldBlock.into());
+    }
+    Ok(())
+}
+
+pub fn registration_absent(definition: &Definition) -> io::Result<bool> {
+    match open(definition, SERVICE_QUERY_STATUS) {
+        Ok(_) => Ok(false),
+        Err(error) if error.raw_os_error() == Some(ERROR_SERVICE_DOES_NOT_EXIST as i32) => {
+            super::sealed_host::descriptor_absent(definition)
+        }
+        Err(error) => Err(error),
+    }
 }
 pub fn autostart(definition: &Definition) -> io::Result<bool> {
     let service = open(definition, SERVICE_QUERY_CONFIG)?;
     Ok(Config::load(&service)?.value().dwStartType == SERVICE_AUTO_START)
 }
 pub fn set_autostart(definition: &Definition, enabled: bool) -> io::Result<()> {
-    let service = open(definition, SERVICE_CHANGE_CONFIG)?;
+    definition.validate()?;
+    set_autostart_for_owner(definition, &definition.owner_sid, &account_name()?, enabled)
+}
+
+/// Administrator helper has authenticated `owner_sid` and resolved this account
+/// from the token SID; the ordinary same-account entry remains strict above.
+pub fn set_autostart_for_owner(
+    definition: &Definition,
+    owner_sid: &str,
+    account: &str,
+    enabled: bool,
+) -> io::Result<()> {
+    let service = open_for_owner(definition, owner_sid, account, SERVICE_CHANGE_CONFIG)?;
     // SAFETY: only start policy changes; caller needs administrator-held change rights.
     if unsafe {
         ChangeServiceConfigW(
@@ -516,11 +549,26 @@ pub fn set_autostart(definition: &Definition, enabled: bool) -> io::Result<()> {
 }
 
 pub fn unregister(definition: &Definition, timeout: Duration) -> io::Result<()> {
-    let service = match open(definition, SERVICE_QUERY_STATUS | 0x10000) {
+    definition.validate()?;
+    unregister_for_owner(definition, &definition.owner_sid, &account_name()?, timeout)
+}
+
+pub fn unregister_for_owner(
+    definition: &Definition,
+    owner_sid: &str,
+    account: &str,
+    timeout: Duration,
+) -> io::Result<()> {
+    let service = match open_for_owner(
+        definition,
+        owner_sid,
+        account,
+        SERVICE_QUERY_STATUS | 0x10000,
+    ) {
         // DELETE
         Ok(service) => service,
         Err(error) if error.raw_os_error() == Some(ERROR_SERVICE_DOES_NOT_EXIST as i32) => {
-            return Ok(());
+            return super::sealed_host::remove_descriptor_for_owner(definition, owner_sid);
         }
         Err(error) => return Err(error),
     };
@@ -541,7 +589,7 @@ pub fn unregister(definition: &Definition, timeout: Duration) -> io::Result<()> 
         if raw.is_null() {
             let error = io::Error::last_os_error();
             if error.raw_os_error() == Some(ERROR_SERVICE_DOES_NOT_EXIST as i32) {
-                return Ok(());
+                return super::sealed_host::remove_descriptor_for_owner(definition, owner_sid);
             }
             if error.raw_os_error() != Some(ERROR_SERVICE_MARKED_FOR_DELETE as i32) {
                 return Err(error);
@@ -556,272 +604,5 @@ pub fn unregister(definition: &Definition, timeout: Duration) -> io::Result<()> 
             ));
         }
         std::thread::sleep(Duration::from_millis(50));
-    }
-}
-
-#[derive(Clone)]
-pub struct ServiceShutdown {
-    inner: Arc<Inner>,
-}
-struct Inner {
-    requested: AtomicBool,
-    finished: AtomicBool,
-    status: Mutex<Status>,
-}
-struct Status {
-    handle: usize,
-    state: u32,
-    checkpoint: u32,
-}
-type Run = Box<dyn FnOnce(ServiceShutdown) -> Result<(), String> + Send>;
-struct Host {
-    name: Vec<u16>,
-    inner: Arc<Inner>,
-    run: Mutex<Option<Run>>,
-    outcome: Mutex<Option<Result<(), String>>>,
-}
-static HOST: OnceLock<Host> = OnceLock::new();
-
-impl ServiceShutdown {
-    pub fn is_requested(&self) -> bool {
-        self.inner.requested.load(Ordering::Acquire)
-    }
-    pub fn mark_running(&self) -> io::Result<()> {
-        self.inner.report(SERVICE_RUNNING, 0)
-    }
-    pub fn wait_timeout(&self, timeout: Duration) -> bool {
-        let deadline = Instant::now() + timeout;
-        while !self.is_requested() && Instant::now() < deadline {
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        self.is_requested()
-    }
-}
-impl Inner {
-    fn report(&self, state: u32, exit: u32) -> io::Result<()> {
-        let mut value = self
-            .status
-            .lock()
-            .map_err(|_| io::Error::other("service status poisoned"))?;
-        if value.handle == 0 {
-            return Err(io::Error::other("service handler unavailable"));
-        }
-        if matches!(state, SERVICE_START_PENDING | SERVICE_STOP_PENDING) {
-            value.checkpoint = value.checkpoint.saturating_add(1);
-        } else {
-            value.checkpoint = 0;
-        }
-        value.state = state;
-        let status = SERVICE_STATUS {
-            dwServiceType: SERVICE_WIN32_OWN_PROCESS,
-            dwCurrentState: state,
-            dwControlsAccepted: if state == SERVICE_RUNNING {
-                SERVICE_ACCEPT_STOP | SERVICE_ACCEPT_SHUTDOWN
-            } else {
-                0
-            },
-            dwWin32ExitCode: exit,
-            dwServiceSpecificExitCode: 0,
-            dwCheckPoint: value.checkpoint,
-            dwWaitHint: if matches!(state, SERVICE_START_PENDING | SERVICE_STOP_PENDING) {
-                20_000
-            } else {
-                0
-            },
-        };
-        // SAFETY: registered status handle remains valid through dispatcher return.
-        if unsafe { SetServiceStatus(value.handle as SERVICE_STATUS_HANDLE, &status) } == 0 {
-            return Err(io::Error::last_os_error());
-        }
-        Ok(())
-    }
-}
-
-/// Dispatch before role-all startup. The callback owns the sole business runtime
-/// and marks RUNNING only after Local Control/Gateway have actually become ready.
-pub fn run_service(
-    name: &str,
-    _run: impl FnOnce(ServiceShutdown) -> Result<(), String> + Send + 'static,
-) -> Result<(), String> {
-    if !name.starts_with("HiRoute-")
-        || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
-    {
-        return Err("invalid service name".into());
-    }
-    let host = Host {
-        name: wide(name).map_err(|e| e.to_string())?,
-        inner: Arc::new(Inner {
-            requested: AtomicBool::new(false),
-            finished: AtomicBool::new(false),
-            status: Mutex::new(Status {
-                handle: 0,
-                state: SERVICE_START_PENDING,
-                checkpoint: 0,
-            }),
-        }),
-        run: Mutex::new(Some(Box::new(run_restricted_child))),
-        outcome: Mutex::new(None),
-    };
-    HOST.set(host)
-        .map_err(|_| "service dispatcher already initialized".to_owned())?;
-    let host = HOST
-        .get()
-        .ok_or_else(|| "service dispatcher missing".to_owned())?;
-    let table = [
-        SERVICE_TABLE_ENTRYW {
-            lpServiceName: host.name.as_ptr().cast_mut(),
-            lpServiceProc: Some(service_main),
-        },
-        SERVICE_TABLE_ENTRYW::default(),
-    ];
-    // SAFETY: static host/name live through dispatcher; table has a null terminator.
-    if unsafe { StartServiceCtrlDispatcherW(table.as_ptr()) } == 0 {
-        return Err(io::Error::last_os_error().to_string());
-    }
-    host.outcome
-        .lock()
-        .map_err(|_| "service outcome poisoned".to_owned())?
-        .take()
-        .unwrap_or_else(|| Err("service callback was not executed".into()))
-}
-
-fn run_restricted_child(shutdown: ServiceShutdown) -> Result<(), String> {
-    use super::job::{Child, Launch, Stream};
-    let run = || -> io::Result<()> {
-        let name = String::from_utf16(&HOST.get().ok_or_else(|| io::Error::other("service host absent"))?.name[..HOST.get().unwrap().name.len() - 1]).map_err(io::Error::other)?;
-        let definition = super::sealed_host::load_for_dispatch(&name)?;
-        let binary = definition.daemon;
-        let token = restricted_token()?;
-        let args = [
-            OsString::from("--role"),
-            OsString::from("all"),
-            OsString::from("--standalone"),
-        ];
-        let environment: Vec<_> = std::env::vars_os()
-            .filter(|(key, _)| {
-                !key.to_string_lossy()
-                    .eq_ignore_ascii_case(super::launcher::DESCRIPTOR_ENV)
-            })
-            .collect();
-        let child = Child::spawn_as_token(
-            Launch {
-                program: &binary,
-                args: &args,
-                env: &environment,
-                cwd: binary.parent(),
-                stdin: Stream::Null,
-                stdout: Stream::Null,
-                stderr: Stream::Null,
-            },
-            &token,
-        )?;
-        let endpoint =
-            super::background::local_app_data()?.join("HiRoute/cli/run/hiroute/lifecycle-v1.sock");
-        let startup_deadline = Instant::now() + Duration::from_secs(30);
-        while !shutdown.is_requested() {
-            if let Some(code) = child.exit_code()? {
-                return Err(io::Error::other(format!(
-                    "service business child exited {code}"
-                )));
-            }
-            if super::lifecycle::query(&endpoint, &binary, Duration::from_millis(250)).is_ok() {
-                break;
-            }
-            if Instant::now() >= startup_deadline {
-                child.terminate()?;
-                return Err(io::Error::from(io::ErrorKind::TimedOut));
-            }
-            std::thread::sleep(Duration::from_millis(50));
-        }
-        if !shutdown.is_requested() {
-            shutdown.mark_running()?;
-        }
-        while !shutdown.is_requested() {
-            if let Some(code) = child.exit_code()? {
-                return if code == 0 {
-                    Ok(())
-                } else {
-                    Err(io::Error::other(format!(
-                        "service business child exited {code}"
-                    )))
-                };
-            }
-            std::thread::sleep(Duration::from_millis(50));
-        }
-        let _ = super::lifecycle::stop(&endpoint, &binary, Duration::from_secs(15));
-        if child.exit_code()?.is_none() {
-            child.terminate()?;
-        }
-        let deadline = Instant::now() + Duration::from_secs(3);
-        while !child.empty()? {
-            if Instant::now() >= deadline {
-                return Err(io::Error::from(io::ErrorKind::TimedOut));
-            }
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        Ok(())
-    };
-    run().map_err(|error| error.to_string())
-}
-
-unsafe extern "system" fn handler(control: u32, _: u32, _: *mut c_void, _: *mut c_void) -> u32 {
-    let Some(host) = HOST.get() else {
-        return 120;
-    };
-    match control {
-        SERVICE_CONTROL_STOP | SERVICE_CONTROL_SHUTDOWN => {
-            host.inner.requested.store(true, Ordering::Release);
-            let _ = host.inner.report(SERVICE_STOP_PENDING, 0);
-            0
-        }
-        SERVICE_CONTROL_INTERROGATE => 0,
-        _ => 120,
-    }
-}
-
-unsafe extern "system" fn service_main(_: u32, _: *mut *mut u16) {
-    let Some(host) = HOST.get() else {
-        return;
-    };
-    let handle =
-        unsafe { RegisterServiceCtrlHandlerExW(host.name.as_ptr(), Some(handler), null()) };
-    if handle.is_null() {
-        if let Ok(mut outcome) = host.outcome.lock() {
-            *outcome = Some(Err(io::Error::last_os_error().to_string()));
-        }
-        return;
-    }
-    if let Ok(mut status) = host.inner.status.lock() {
-        status.handle = handle as usize;
-    }
-    let _ = host.inner.report(SERVICE_START_PENDING, 0);
-    let inner = Arc::clone(&host.inner);
-    let monitor = std::thread::spawn(move || {
-        while !inner.finished.load(Ordering::Acquire) {
-            if inner.requested.load(Ordering::Acquire) {
-                let _ = inner.report(SERVICE_STOP_PENDING, 0);
-            }
-            std::thread::sleep(Duration::from_millis(250));
-        }
-    });
-    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let run = host
-            .run
-            .lock()
-            .map_err(|_| "service callback poisoned".to_owned())?
-            .take()
-            .ok_or_else(|| "service callback missing".to_owned())?;
-        run(ServiceShutdown {
-            inner: Arc::clone(&host.inner),
-        })
-    }))
-    .unwrap_or_else(|_| Err("service callback panicked".into()));
-    host.inner.finished.store(true, Ordering::Release);
-    let _ = monitor.join();
-    let _ = host
-        .inner
-        .report(SERVICE_STOPPED, if outcome.is_ok() { 0 } else { 1066 });
-    if let Ok(mut value) = host.outcome.lock() {
-        *value = Some(outcome);
     }
 }
