@@ -5,7 +5,7 @@
   },
   "product_contract_revision": "487a807c8dc25cfb24e8b097882cd3bb9716a009",
   "proposal_map_revision": "ab4da93cc49c6ec56a01e046230411ff1ca82300",
-  "descriptor_digest": "sha256:1bdd37be3354af88208d5c9f91945f23b392c2bce3eb8ceb5677fa945126d4c5",
+  "descriptor_digest": "sha256:3ae32fc9b7da19b9d8b23ffefd8a25bc221dc86adc3bdbaca761f176928508b9",
   "visibility": "release",
   "commands": [
     {
@@ -1379,7 +1379,7 @@
       "help": {
         "purpose": "Submit one local Worker task with an explicit cwd and run-scoped permission policy.",
         "usage": "hiroute worker exec --plan <ID> --cwd <PATH> [--title <TITLE>] [--permission-policy <approve-all|approve-reads|deny-all>] [--run-timeout <1..86400>] [--no-wait | --wait-timeout <1..30>] [--submission-key <KEY>] (-- <TEXT> | --file <PATH> | < stdin)",
-        "arguments_and_options": "Plan, cwd, and exactly one text source are required. Permission policy defaults to approve-all; approve-reads and deny-all are explicit run restrictions and fail unavailable unless the exact Harness mapping proves them. cwd is scheduling context, not directory authorization. A private receipt is saved before transmission; uncertain delivery keeps the same submission key.",
+        "arguments_and_options": "Plan, cwd, and exactly one text source are required. Permission policy defaults to approve-all; approve-reads and deny-all are explicit run restrictions and fail unavailable unless the exact Harness mapping proves them. cwd is scheduling context, not directory authorization. Submits directly to the daemon without a local receipt. Choose a unique --submission-key before sending; after uncertain delivery, query or retry with that original key and the identical request.",
         "effects": "Durably admits one bounded Worker run after current Plan eligibility, exact Plan, canonical cwd, idempotency, and resource checks.",
         "network_and_model_use": "The selected Worker may send model traffic only through its run-bound numeric-loopback Gateway route; native tools follow the run-scoped permission policy.",
         "automation": "The command durably admits a bounded Worker run; that Worker may make model requests only through its exact run-bound loopback Gateway route.",

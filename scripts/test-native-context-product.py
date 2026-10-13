@@ -284,16 +284,7 @@ with patch('publication_product.secrets.SystemRandom') as chooser:
         self.assertEqual(product.env['CLAUDE_CONFIG_DIR'], str(home / '.claude'))
         self.assertEqual(product.env['QODER_CONFIG_DIR'], str(home / '.qoder'))
         self.assertEqual(product.env['PI_CODING_AGENT_DIR'], str(home / '.pi/agent'))
-        receipt_root = str(product.root / 'worker-receipts')
-        self.assertEqual(product.env['HIROUTE_WORKER_RECEIPT_DIR'], receipt_root)
-        # Borrowing a normally logged-in native HOME must not borrow HiRoute's
-        # client submission journal or collide with earlier acceptance runs.
-        product.env['HOME'] = '/explicitly-borrowed/native-home'
-        self.assertEqual(product.env['HIROUTE_WORKER_RECEIPT_DIR'], receipt_root)
-        neighbor = Product(REPO, root=self.root / 'neighbor-product')
-        self.addCleanup(neighbor.close)
-        neighbor.env['HOME'] = product.env['HOME']
-        self.assertNotEqual(neighbor.env['HIROUTE_WORKER_RECEIPT_DIR'], receipt_root)
+        self.assertNotIn('HIROUTE_WORKER_RECEIPT_DIR', product.env)
         for key in ('CLAUDE_CODE_OAUTH_TOKEN', 'CODEX_CONFIG', 'AWS_PROFILE', 'QODER_PERSONAL_ACCESS_TOKEN',
                     'DEEPSEEK_API_KEY', 'GROQ_API_KEY', 'MISTRAL_API_KEY', 'XAI_API_KEY', 'CEREBRAS_API_KEY'):
             self.assertNotIn(key, product.env)

@@ -48,8 +48,11 @@ mutations. Main-Agent delegation must separately invoke the actual public CLI.
 
 Keep borrowed user resources, writable native acceptance configuration, fresh
 product storage and per-run materials separate. Each product instance needs a
-private `HIROUTE_WORKER_RECEIPT_DIR`, propagated to public CLI subprocesses and
-stable for retries. Expose the selected CLI and Pi's selected Node consistently
+private runtime/storage namespace. CLI submissions have no local receipt directory;
+recovery uses the original key and request, with title/detail lookup only as an aid.
+[CLI submission regressions](../../crates/cli/tests/worker_submission.rs) cover denied local
+writes and uncertain responses; durable admission and native Main journeys remain separate.
+Expose the selected CLI and Pi's selected Node consistently
 to main-Agent checks and Worker launch. Never repair permissions on pre-existing
 user directories to satisfy a fixture; cleanup verifies the owned object's
 identity and preserves foreign files.

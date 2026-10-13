@@ -959,6 +959,7 @@ fn request(
 struct FixtureFacts {
     adapter: Arc<LocalControlAdapter>,
     fixture_worker_metadata: bool,
+    released_skill: Option<(&'static str, &'static str)>,
 }
 
 impl FixtureFacts {
@@ -966,6 +967,7 @@ impl FixtureFacts {
         Self {
             adapter,
             fixture_worker_metadata: false,
+            released_skill: None,
         }
     }
 
@@ -973,6 +975,18 @@ impl FixtureFacts {
         Self {
             adapter,
             fixture_worker_metadata: true,
+            released_skill: None,
+        }
+    }
+
+    fn released_collaboration(
+        adapter: Arc<LocalControlAdapter>,
+        revision: &'static str,
+        content: &'static str,
+    ) -> Self {
+        Self {
+            released_skill: Some((revision, content)),
+            ..Self::collaboration(adapter)
         }
     }
 }
@@ -997,6 +1011,19 @@ impl AgentConnectionControlPort for FixtureFacts {
         spec: &api::AgentSettingsSpecV2,
     ) -> Result<AgentSettingsPlanningInput, ControlReadError> {
         let mut input = self.adapter.capture_settings_facts(spec)?;
+        if let Some((revision, content)) = self.released_skill {
+            input.skill_file.template =
+                hiroute_application::agent_connection::CollaborationSkillTemplate::bundled(
+                    revision, content,
+                )
+                .map_err(|_| ControlReadError::Corrupt)?;
+            input.facts.dependency_digest = CanonicalDigest::of(&(
+                revision,
+                &input.skill_file.template.digest,
+                &input.facts.dependency_digest,
+            ))
+            .map_err(|_| ControlReadError::Corrupt)?;
+        }
         // The fixture proves the public settings transaction and catalog capability boundary;
         // native fixed-source associations are not supplied by this isolated environment.
         if self.fixture_worker_metadata {

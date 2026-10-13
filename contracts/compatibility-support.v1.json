@@ -389,12 +389,10 @@
     "hiroute.worker-plans-request/v1",
     "hiroute.worker-read-data/v1",
     "hiroute.worker-read-request/v1",
-    "hiroute.worker-receipt/v1",
     "hiroute.worker-residual-confirm-request/v1",
     "hiroute.worker-result-request/v1",
     "hiroute.worker-settings/v1",
     "hiroute.worker-status-request/v1",
-    "hiroute.worker-submission-receipt/v1",
     "hiroute.worker-wait-request/v1"
   ],
   "subjects": [
@@ -1390,6 +1388,21 @@
         "crates/domain/src/observation/execution_validation.rs",
         "crates/domain/src/observation/execution_tests.rs",
         "crates/observation/src/store/tests/store_flow.rs"
+      ]
+    },
+    {
+      "contract": "hiroute.managed-collaboration-skill/v2",
+      "field": "released v0.3.1 worker-instance-explicit-v1 and worker-instance-default-v1 installed Skill bytes",
+      "mode": "frozen_fixture",
+      "owner": "agent-collaboration-settings",
+      "reason": "Freeze public stable source 13856abd873da5b4373d39322493b4cc105c4867 templates as upgrade input. Install through the existing Preview/Apply Operation and owned file writer, then current Configure replaces the exact owned generation without changing model settings or rewriting original Operation bytes. Startup alone does not refresh an installed Skill; borrowed or modified files keep the existing conflict boundary.",
+      "removal_condition": "Retire only when v0.3.1 installed Skill upgrade support ends through an explicit product decision with replacement ownership and recovery evidence; never regenerate the old bytes from current templates.",
+      "allowed_paths": [
+        "crates/daemon/tests/fixtures/collaboration-skill-v0.3.1/explicit.md",
+        "crates/daemon/tests/fixtures/collaboration-skill-v0.3.1/default.md",
+        "crates/daemon/tests/fixtures/collaboration-skill-v0.3.1/README.md",
+        "crates/daemon/src/control/runtime/settings_entry_tests.rs",
+        "crates/daemon/src/control/runtime/settings_entry_collaboration_tests.rs"
       ]
     }
   ]

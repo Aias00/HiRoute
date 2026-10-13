@@ -478,6 +478,10 @@ The workflow also accepts other supported Agent IDs returned by scan. Like Deskt
 the collaboration context: Codex uses `codex_access.root_context_id` even with an occupied
 model profile, and other Agents use their own context. Model and access-token settings remain.
 
+After upgrading HiRoute, save collaboration configuration again with the same trigger and a
+new configuration idempotency key to update a HiRoute-owned installed Skill. Startup alone
+does not replace it. Modified or user-owned Skill files retain the existing conflict rules.
+
 `--preview` runs no local check, writes no submission record and saves no configuration.
 A save runs an existing bounded local check only for missing capabilities reported by Preview,
 then previews again. It makes no provider model call. Failed checks, file conflicts or remaining
@@ -696,6 +700,16 @@ uncertain response, query with the original submission key or replay that exact 
 through the same `worker exec`; never replace the key. Duplicate submission returns the same
 run and does not execute twice. `selection_revision` is the concurrency revision for Worker
 installation selection, not a Codex, Claude, or HiRoute CLI/package version.
+
+The CLI writes no local submission receipt, needs no writable receipt directory, and ignores
+`HIROUTE_WORKER_RECEIPT_DIR`. Existing receipt files are left untouched. Prefer a unique literal
+`--submission-key` chosen before each new submission and retain it with the original request.
+An omitted key is generated and returned by the CLI; a crash before receiving that output can
+lose it. If the key is lost, `hiroute worker list --title TITLE --output json` can help locate a
+task: follow all pages and verify its time, Plan, cwd and details. Titles can repeat and are
+visible only while the initial input remains available (seven days, or until earlier content
+deletion), including after completion. If no unambiguous match exists, ask for confirmation;
+never automatically create a replacement task from an empty search result.
 
 ## Gateway listener
 
