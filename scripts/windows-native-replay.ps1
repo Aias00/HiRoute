@@ -81,6 +81,7 @@ if ($Scope -eq 'agents') {
     [Environment]::SetEnvironmentVariable($property.Name, [string]$property.Value, 'Process')
   }
   $env:PATH = (@($clients.discovery_path) + @($env:PATH)) -join [IO.Path]::PathSeparator
+  $env:HIROUTE_NATIVE_CODEX = $env:HIROUTE_WORKER_CODEX_BINARY
 }
 
 $failures = [System.Collections.Generic.List[string]]::new()

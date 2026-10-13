@@ -147,6 +147,16 @@ and the five native Agent adapters. Subscription/provider tests use controlled e
 actual account login/refresh and upstream native clients require their own authorized
 acceptance evidence and pinned version records.
 
+The installed business journey covers fixed, smart-saving and custom plans,
+decision revisions, model ratings, Gateway receipts and observation after restart.
+Background login tests use the actual packaged CPA to check official authorization
+URLs, PKCE, cancellation and expiry after restart. Completing provider authorization,
+refresh and paid or free provider inference needs a real authorized account.
+Qoder's fixed ACP client also requires its own official login; custom model settings
+do not establish that login. A temporary PAT does not create a persistent profile
+for a separately isolated Worker. These account gates remain separate from native
+OS and account-free business acceptance.
+
 Future features use the shared business owner and extend the affected platform adapter
 and native gate together. CI catches deterministic OS and contract regressions without
 a personal Windows computer. Fresh runner profiles do not represent every enterprise

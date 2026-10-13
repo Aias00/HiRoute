@@ -116,13 +116,27 @@ function Invoke-LibraryTests {
     $optIn = @()
     if ($Package -eq 'hiroute-integrations') {
       $optIn = @(
-        'agents::ephemeral_ingress_probe::tests::real_codex_ephemeral_authentication_without_managed_configuration',
+        'agents::native_ingress_probe::ephemeral::tests::real_codex_ephemeral_authentication_without_managed_configuration',
         'agents::qoder_probe::tests::real_qoder_discovers_skill_and_runs_read_only_cli_in_selected_context',
         'agents::windows_runtime::tests::windows_native_environment_fixture',
         'agents::windows_runtime::tests::windows_selected_node_version_uses_the_private_capture_and_held_job',
+        'agents::windows_runtime::tests::windows_selected_pi_sdk_capabilities_load_the_actual_package',
         'agents::windows_collaboration_tests::actual_windows_codex_native_skill_executes_the_public_cli',
         'agents::windows_collaboration_tests::actual_windows_claude_native_skill_executes_the_public_cli',
         'agents::windows_collaboration_tests::actual_windows_qoder_native_skill_executes_the_public_cli_without_synthesized_account')
+    }
+    if ($Package -eq 'hiroute-cpa-bridge') {
+      $optIn = @(
+        'accounts::stock::pin_tests::live_managed_cpa_pin_reads',
+        'runtime::tests::borrowed_stock::stock_cpa_v7_2_140_accepts_managed_auth_ready_and_shutdown_contract',
+        'runtime::tests::borrowed_stock::stock_cpa_v7_2_140_real_borrowed_codex_responses_smoke')
+      foreach ($case in @(
+        'windows_private::tests::private_publication_and_owner_claim_use_actual_native_owner_and_acl',
+        'windows_private::tests::private_io_rejects_foreign_acl_hardlink_and_junction_without_adoption',
+        'windows_private::tests::generated_auth_files_keep_user_owner_and_inherited_private_acl',
+        'windows_private::tests::damaged_private_record_is_preserved_and_never_rebuilt')) {
+        if ($inventory -notmatch "(?m)^$([regex]::Escape($case)): test`r?$") { throw "Required CPA private case missing: $case" }
+      }
     }
     $required = @([regex]::Matches($inventory, '(?m)^(\S+): test\r?$') | ForEach-Object { $_.Groups[1].Value } | Where-Object { $_ -notin $optIn })
     if ($required.Count -eq 0) { throw "$Package selected no native library tests" }
@@ -141,7 +155,9 @@ if ($Scope -eq 'components') {
     'ancestor_junction_cannot_redirect_private_read_or_creation',
     'pipe_exclusivity_bidirectional_frames_and_peer_identity',
     'pipe_deadline_cancels_read_without_consuming_the_next_frame',
-    'native_permissions_survive_atomic_restore_and_detect_acl_changes')
+    'native_permissions_survive_atomic_restore_and_detect_acl_changes',
+    'sealed_readonly_artifact_rename_preserves_bytes_identity_and_native_permissions',
+    'readonly_atomic_restore_preserves_permissions_and_requires_target_write_attributes')
   Invoke-RequiredTests 'platform-unit' @('-p','hiroute-platform','--lib') @(
     'durable::tests::initial_private_publication_never_replaces_a_committed_key',
     'local_record::tests::rejects_wrong_channel_direction_truncation_end_and_oversize',
@@ -184,10 +200,13 @@ if ($Scope -eq 'components') {
     'process::windows_tests::native_bootstrap_delivers_stdin_eof_and_minimal_windows_environment',
     'process::windows_tests::native_root_exit_cannot_report_stopped_until_descendant_job_is_empty',
     'process::windows_tests::numeric_pid_is_never_an_orphan_termination_capability')
+  Invoke-LibraryTests 'hiroute-cpa-bridge'
   cargo build --locked -p hiroute-cli --bin hiroute -p hiroute-daemon --bin hirouted 2>&1 | Tee-Object "$evidence/headless-link.log"
   if ($LASTEXITCODE -ne 0) { throw 'Production headless binaries failed to build' }
-  Invoke-RequiredTests 'headless' @('-p','hiroute-daemon','--test','windows_headless') @(
-    'installed_native_headless_roundtrip_and_graceful_then_forced_restart')
+  $headless = 'installed_native_headless_roundtrip_and_graceful_then_forced_restart'
+  $fragmented = 'server::core_runtime::adapters::tests::replay_ten_thousand_small_fields_use_one_stream_and_linear_template_scan'
+  Invoke-RequiredTests 'replay-fragmentation' @('-p','hiroute-gateway','--lib',$fragmented) @($fragmented) @('--exact')
+  Invoke-RequiredTests 'headless' @('-p','hiroute-daemon','--test','windows_headless',$headless) @($headless) @('--exact')
   Invoke-RequiredTests 'credential-options' @('-p','hiroute-cli','--lib','windows_handle_carrier_') @(
     'args::tests::windows_handle_carrier_rejects_missing_invalid_and_conflicting_authority',
     'args::tests::windows_handle_carrier_is_separate_from_a_typed_request_source')
@@ -252,8 +271,21 @@ if ($Scope -eq 'components') {
     [Environment]::SetEnvironmentVariable($property.Name, [string]$property.Value, 'Process')
   }
   $env:PATH = (@($clients.discovery_path) + @($env:PATH)) -join [IO.Path]::PathSeparator
+  $env:HIROUTE_NATIVE_CODEX = $env:HIROUTE_WORKER_CODEX_BINARY
   $privateNode = 'agents::windows_runtime::tests::windows_selected_node_version_uses_the_private_capture_and_held_job'
   Invoke-RequiredTests 'agent-private-node' @('-p','hiroute-integrations','--lib',$privateNode) @($privateNode) @('--ignored','--exact','--nocapture')
+  $pathIdentity = 'delegation::installation::installation_probe::windows_isolated_profile_uses_one_native_path_identity'
+  Invoke-RequiredTests 'agent-path-identity' @('-p','hiroute-daemon','--lib',$pathIdentity) @($pathIdentity) @('--exact')
+  $piSdk = 'agents::windows_runtime::tests::windows_selected_pi_sdk_capabilities_load_the_actual_package'
+  Invoke-RequiredTests 'agent-pi-sdk' @('-p','hiroute-integrations','--lib',$piSdk) @($piSdk) @('--ignored','--exact','--nocapture')
+  $codexIngress = 'agents::native_ingress_probe::ephemeral::tests::real_codex_ephemeral_authentication_without_managed_configuration'
+  Invoke-RequiredTests 'agent-native-codex-ingress' @('-p','hiroute-integrations','--lib',$codexIngress) @($codexIngress) @('--ignored','--exact','--nocapture')
+  Invoke-RequiredTests 'agent-business-oracle' @('-p','hiroute-daemon','--test','windows_headless','windows_worker_business::oracle::tests::') @(
+    'windows_worker_business::oracle::tests::a_prompt_or_unrelated_or_error_tool_result_cannot_supply_a_native_receipt',
+    'windows_worker_business::oracle::tests::a_running_native_shell_does_not_complete_even_after_printing_json',
+    'windows_worker_business::oracle::tests::ambiguous_native_cli_stdout_is_rejected')
+  $publicBusiness = 'actual_windows_complete_public_headless_business'
+  Invoke-RequiredTests 'agent-public-business' @('-p','hiroute-daemon','--test','windows_headless',$publicBusiness) @($publicBusiness) @('--ignored','--exact','--nocapture')
   foreach ($case in (Get-WindowsDaemonAgentCases)) {
     $name = 'agent-' + ($case -split 'actual_')[1] -replace '_','-'
     Invoke-RequiredTests $name @('-p','hiroute-daemon','--lib',$case) @($case) @('--ignored','--exact','--nocapture')

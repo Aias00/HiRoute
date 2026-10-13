@@ -85,6 +85,42 @@ pub(super) fn relative(
     create: bool,
     descriptor: Option<&SECURITY_DESCRIPTOR>,
 ) -> io::Result<File> {
+    relative_with_write_policy(
+        parent, leaf, directory, access, share, create, descriptor, true,
+    )
+}
+
+/// Buffered creation is reserved for temporary payloads whose publication
+/// boundary explicitly flushes the completed file.
+pub(super) fn create_buffered_file_relative(
+    parent: &File,
+    leaf: &OsStr,
+    access: u32,
+    descriptor: &SECURITY_DESCRIPTOR,
+) -> io::Result<File> {
+    relative_with_write_policy(
+        parent,
+        leaf,
+        false,
+        access,
+        0,
+        true,
+        Some(descriptor),
+        false,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn relative_with_write_policy(
+    parent: &File,
+    leaf: &OsStr,
+    directory: bool,
+    access: u32,
+    share: u32,
+    create: bool,
+    descriptor: Option<&SECURITY_DESCRIPTOR>,
+    write_through: bool,
+) -> io::Result<File> {
     check_type(parent, true)?;
     if leaf.is_empty()
         || leaf == OsStr::new(".")
@@ -131,7 +167,7 @@ pub(super) fn relative(
             if create { FILE_CREATE } else { FILE_OPEN },
             FILE_OPEN_REPARSE_POINT
                 | FILE_SYNCHRONOUS_IO_NONALERT
-                | FILE_WRITE_THROUGH
+                | if write_through { FILE_WRITE_THROUGH } else { 0 }
                 | if directory {
                     FILE_DIRECTORY_FILE
                 } else {

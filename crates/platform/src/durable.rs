@@ -84,11 +84,42 @@ pub fn write_windows_atomic(
     write_with_permissions(path, bytes, true, Some(permissions))
 }
 
+/// Stream a stopped native snapshot into an unpublished stage. The producer
+/// must validate its held source before returning success. An error cannot
+/// replace the target; flushing and native permission verification precede rename.
+#[cfg(windows)]
+pub fn write_windows_atomic_with(
+    path: &Path,
+    permissions: &crate::file_security::WindowsPermissions,
+    write: impl FnOnce(&mut std::fs::File) -> io::Result<()>,
+) -> io::Result<()> {
+    publish_with_permissions(path, true, Some(permissions), write)
+}
+
+/// Move an already flushed native artifact without reopening it for data writes.
+/// Its authenticated publication owner has admitted the source/target facts.
+/// The kernel checks target WRITE_ATTRIBUTES before replacing a read-only file;
+/// target attributes are never cleared through a separately resolved pathname.
+#[cfg(windows)]
+pub fn rename_windows_sealed_file(source: &Path, target: &Path) -> io::Result<()> {
+    let file = crate::windows::security::open_delete(source, false)?;
+    crate::windows::durable::rename_native_file(&file, target)
+}
+
 fn write_with_permissions(
     path: &Path,
     bytes: &[u8],
     replace: bool,
     permissions: Option<&crate::file_security::WindowsPermissions>,
+) -> io::Result<()> {
+    publish_with_permissions(path, replace, permissions, |file| file.write_all(bytes))
+}
+
+fn publish_with_permissions(
+    path: &Path,
+    replace: bool,
+    permissions: Option<&crate::file_security::WindowsPermissions>,
+    write: impl FnOnce(&mut std::fs::File) -> io::Result<()>,
 ) -> io::Result<()> {
     let parent = path
         .parent()
@@ -113,7 +144,7 @@ fn write_with_permissions(
         }
         options.open(&temporary)?
     };
-    file.write_all(bytes)?;
+    write(&mut file)?;
     file.sync_all()?;
     #[cfg(windows)]
     {
@@ -126,7 +157,12 @@ fn write_with_permissions(
                 ));
             }
         }
-        if let Err(error) = crate::windows::durable::rename_file(&file, path, replace) {
+        let renamed = if permissions.is_some() && replace {
+            crate::windows::durable::rename_native_file(&file, path)
+        } else {
+            crate::windows::durable::rename_file(&file, path, replace)
+        };
+        if let Err(error) = renamed {
             if error.kind() == io::ErrorKind::AlreadyExists {
                 // Definite no-clobber failure: remove this exact uncommitted
                 // stage through its retained handle, never a replacement path.

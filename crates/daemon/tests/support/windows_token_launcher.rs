@@ -271,7 +271,10 @@ impl StagedFixture {
         use std::os::windows::fs::OpenOptionsExt;
         use windows_sys::Win32::Security::Authorization::ConvertStringSecurityDescriptorToSecurityDescriptorW;
         use windows_sys::Win32::Security::{ImpersonateLoggedOnUser, RevertToSelf};
-        use windows_sys::Win32::Storage::FileSystem::{CreateDirectoryW, FILE_SHARE_READ};
+        use windows_sys::Win32::Storage::FileSystem::{
+            CREATE_NEW, CreateDirectoryW, CreateFileW, FILE_ATTRIBUTE_NORMAL,
+            FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_READ,
+        };
         let sid_bytes = super::windows_account::token_sid(token);
         let sid = background::sid_string(&sid_bytes).unwrap();
         let directory = super::windows_account::profile_for_token(token).join(format!(
@@ -344,13 +347,49 @@ impl StagedFixture {
             token: token.try_clone().unwrap(),
             image: None,
         };
-        let mut target = std::fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create_new(true)
-            .share_mode(FILE_SHARE_READ)
-            .open(&path)
-            .unwrap();
+        // This is an authenticated alternate account, while OwnerSecurity
+        // deliberately reads the process token. Supply the held account SID
+        // explicitly, and protect the file DACL from the directory's OICI ACE.
+        let file_sddl = super::windows_account::wide(&format!("O:{sid}G:{sid}D:P(A;;FA;;;{sid})"));
+        let mut file_descriptor = null_mut();
+        assert_ne!(
+            unsafe {
+                ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                    file_sddl.as_ptr(),
+                    1,
+                    &mut file_descriptor,
+                    null_mut(),
+                )
+            },
+            0
+        );
+        struct Descriptor(*mut std::ffi::c_void);
+        impl Drop for Descriptor {
+            fn drop(&mut self) {
+                unsafe {
+                    LocalFree(self.0);
+                }
+            }
+        }
+        let _descriptor = Descriptor(file_descriptor);
+        let file_attributes = SECURITY_ATTRIBUTES {
+            nLength: size_of::<SECURITY_ATTRIBUTES>() as u32,
+            lpSecurityDescriptor: file_descriptor,
+            bInheritHandle: 0,
+        };
+        let file_path = super::windows_account::wide(path.to_str().unwrap());
+        let mut target = owned(unsafe {
+            CreateFileW(
+                file_path.as_ptr(),
+                GENERIC_READ | GENERIC_WRITE,
+                FILE_SHARE_READ,
+                &file_attributes,
+                CREATE_NEW,
+                FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT,
+                null_mut(),
+            )
+        })
+        .expect("owned fixture executable must be created with explicit native security");
         assert_eq!(
             std::io::copy(&mut source, &mut target).unwrap(),
             expected_len

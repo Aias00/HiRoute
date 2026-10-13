@@ -118,6 +118,21 @@ fn windows_backup_authentication_binds_native_permission_facts() {
         .load_marker(&operation, intent.effect_id())
         .unwrap()
         .unwrap();
+    // A restore record is private authority, not an external Agent artifact.
+    // Native held reads must reject aliasing without rewriting the record.
+    let marker_path = store.marker_path(&operation, intent.effect_id());
+    let marker_bytes = fs::read(&marker_path).unwrap();
+    let marker_permissions = permissions(&marker_path);
+    let alias = restore.join("marker-alias");
+    fs::hard_link(&marker_path, &alias).unwrap();
+    assert!(matches!(
+        store.load_marker(&operation, intent.effect_id()),
+        Err(LocalStorageError::Permission)
+    ));
+    assert_eq!(fs::read(&marker_path).unwrap(), marker_bytes);
+    assert_eq!(permissions(&marker_path), marker_permissions);
+    fs::remove_file(alias).unwrap();
+
     let private = hiroute_platform::file_security::private_defaults(false).unwrap();
     assert_ne!(marker.before_windows_permissions.as_ref(), Some(&private));
     marker.before_windows_permissions = Some(private);

@@ -311,6 +311,8 @@ impl QoderCollaborationProbe {
         );
         let mut child = NativeProbeProcess::new(child.map_err(|_| qoder_error("native launch"))?);
         let started = Instant::now();
+        #[cfg(test)]
+        let mut requests = 0;
         let result = (|| {
             loop {
                 if started.elapsed() > Duration::from_secs(45) {
@@ -325,8 +327,19 @@ impl QoderCollaborationProbe {
                     return Err(qoder_error("native output bound"));
                 }
                 match listener.accept() {
-                    Ok((mut stream, _)) => http::serve(&mut stream, MARKER, MODEL, &mut challenge)
-                        .map_err(qoder_error)?,
+                    Ok((mut stream, _)) => {
+                        #[cfg(test)]
+                        {
+                            requests += 1;
+                        }
+                        http::serve(&mut stream, MARKER, MODEL, &mut challenge)
+                            .map_err(qoder_error)?;
+                        #[cfg(test)]
+                        eprintln!(
+                            "native Qoder acceptance stage=model-served requests={requests} challenge-step={}",
+                            challenge.step
+                        );
+                    }
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
                     Err(_) => return Err(qoder_error("loopback accept")),
                 }
@@ -339,6 +352,15 @@ impl QoderCollaborationProbe {
         if child.stop().is_err() {
             let _ = root.keep();
             return Err(qoder_error("native process scope"));
+        }
+        #[cfg(test)]
+        if result
+            .as_ref()
+            .is_err_and(|error| error.stage == "native output bound")
+        {
+            // A duplicated File shares its seek pointer. Inspect only after the actual
+            // owned scope has stopped, never disturb a live native stdout writer.
+            safe_output_bound(&observer, challenge.step, requests, started.elapsed());
         }
         let status = result?;
         let output = read_bounded(&root_path.join("output.private"), 512 * 1024)
@@ -641,6 +663,40 @@ fn cli_baseline(cli: &Path, root: &Path) -> Result<String, QoderNativeError> {
         return Err(qoder_error("trusted CLI contract"));
     }
     Ok(text.trim().to_owned())
+}
+
+#[cfg(test)]
+fn safe_output_bound(file: &File, step: usize, requests: usize, elapsed: Duration) {
+    use std::io::{Seek, SeekFrom};
+    let Ok(mut file) = file.try_clone() else {
+        return;
+    };
+    if file.seek(SeekFrom::Start(0)).is_err() {
+        return;
+    }
+    let mut bytes = zeroize::Zeroizing::new(Vec::new());
+    if file.take(512 * 1024).read_to_end(&mut bytes).is_err() {
+        return;
+    }
+    let mut types = [0usize; 7];
+    for line in bytes.split(|byte| *byte == b'\n') {
+        let parsed = serde_json::from_slice::<Value>(line).ok();
+        let index = match parsed.as_ref().and_then(|value| value["type"].as_str()) {
+            Some("system") => 0,
+            Some("assistant") => 1,
+            Some("user") => 2,
+            Some("result") => 3,
+            Some("stream_event") => 4,
+            Some(_) => 5,
+            None => 6,
+        };
+        types[index] += 1;
+    }
+    eprintln!(
+        "native Qoder acceptance stage=output-bound challenge-step={step} requests={requests} elapsed-ms={} sampled-bytes={} record-counts-system-assistant-user-result-stream-other-invalid={types:?}",
+        elapsed.as_millis(),
+        bytes.len()
+    );
 }
 
 #[cfg(all(test, unix))]

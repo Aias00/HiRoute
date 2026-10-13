@@ -1,10 +1,24 @@
 #![cfg(windows)]
 //! Real installed binaries on a disposable Windows user profile. No mocked HiRoute runtime.
 
+#[path = "support/windows_business_http.rs"]
+mod windows_business_http;
+#[path = "support/windows_claude_connection.rs"]
+mod windows_claude_connection;
+#[path = "support/windows_decision_business.rs"]
+mod windows_decision_business;
 #[path = "support/windows_execution_host.rs"]
 mod windows_execution_host;
 #[path = "support/windows_headless_business.rs"]
 mod windows_headless_business;
+#[path = "support/windows_model_ratings.rs"]
+mod windows_model_ratings;
+#[path = "support/windows_routing_business.rs"]
+mod windows_routing_business;
+#[path = "support/windows_routing_modes.rs"]
+mod windows_routing_modes;
+#[path = "support/windows_worker_business.rs"]
+mod windows_worker_business;
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
@@ -627,4 +641,80 @@ fn installed_native_headless_roundtrip_and_graceful_then_forced_restart() {
     .unwrap();
     recovered.wait(true);
     assert!(product.cli.is_file());
+}
+
+/// Required separately after exact pinned native clients and their discovery PATH
+/// are prepared. Missing artifacts/login/versions are failures, never optional skips.
+#[test]
+#[ignore = "requires explicit pinned real Codex, Claude, Pi and Node artifacts"]
+fn actual_windows_complete_public_headless_business() {
+    let product = InstalledProduct::create();
+    let mut first = product.start();
+    gateway_ready(first.listen);
+    assert_eq!(product.cli(&["system", "status"])["status"], "succeeded");
+    let schema = product.cli(&["schema", "list"]);
+    let manifest = &schema["data"];
+    assert!(
+        manifest["descriptor_digest"]
+            .as_str()
+            .unwrap()
+            .starts_with("sha256:")
+    );
+    assert_eq!(manifest["commands"].as_array().unwrap().len(), 51);
+    let descriptor = product.cli(&["schema", "show", "--command-id", "compute.connection.login"]);
+    assert_eq!(descriptor["data"]["command_id"], "compute.connection.login");
+    assert_eq!(descriptor["data"]["lifecycle"], "released");
+
+    // A single installed owner/runtime now carries all public business leaves.
+    // Referenced sources stay alive because retained plan revisions own them.
+    windows_decision_business::roundtrip(&product);
+    let routing = windows_routing_business::Routing::setup(&product);
+    let modes = windows_routing_modes::Modes::setup(&product);
+    let ratings = windows_model_ratings::Ratings::run(&product);
+    let mut workers = windows_worker_business::WorkerBusiness::run(
+        &product,
+        &[
+            &routing.plan.plan_id,
+            &modes.smart.plan_id,
+            &modes.custom.plan_id,
+        ],
+    );
+    let claude =
+        windows_claude_connection::ClaudeConnection::configure(&product, &routing.plan.plan_id);
+    routing.traffic_and_observe(
+        &product,
+        first.listen,
+        workers.connection_id(),
+        &claude.connection_id(),
+    );
+    claude.launch(&product, &routing.plan.alias);
+    routing.assert_native_launch_reached_upstream();
+    modes.traffic(&product, first.listen, workers.connection_id());
+    lifecycle::stop(
+        &product.layout.lifecycle_endpoint(),
+        &product.daemon,
+        Duration::from_secs(30),
+    )
+    .unwrap();
+    first.wait(true);
+    let mut business_recovered = product.start();
+    gateway_ready(business_recovered.listen);
+    ratings.recovered(&product);
+    modes.recovered(&product, business_recovered.listen, workers.connection_id());
+    workers.recovered(&product);
+    claude.recovered(&product);
+    workers.restore(&product);
+    claude.restore(&product);
+
+    lifecycle::stop(
+        &product.layout.lifecycle_endpoint(),
+        &product.daemon,
+        Duration::from_secs(30),
+    )
+    .unwrap();
+    business_recovered.wait(true);
+    assert!(product.cli.is_file());
+    println!(
+        "Windows public headless: exact pinned native clients, Compute, Decision, plan preview/apply/list/show, independent Responses/Messages grants, streaming, safe facts/usage/value, real managed Claude launch, actual Main Skill to public Worker, durable restart and native settings restore"
+    );
 }

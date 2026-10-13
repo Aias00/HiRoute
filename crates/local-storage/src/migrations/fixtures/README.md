@@ -34,3 +34,27 @@ current-format selection test also covers the Qoder single-CLI form.
 Do not regenerate this fixture from the new producer to make a failing migration
 pass. Its removal requires an explicit end to schema 23 upgrade support, retaining
 a documented supported recovery path.
+
+
+## Windows path matrix
+
+`schema23-worker-operations-windows.json` is a **test-only platform projection**,
+not an export from a released Windows product. Windows cannot admit the original
+Unix `/opt` paths as native absolute paths. The original fixture above remains
+unchanged and its byte SHA is asserted on every host.
+
+`derive-windows-schema23.py` changes only `/opt/...` installation paths to
+`C:/opt/...` and their accepted, step-input and exact-selection-byte SHA-256
+proofs. It first independently verifies those formulas against every original
+frozen proof. It retains all SQL columns, state/checkpoint coverage, row order,
+Operation identities, opaque request digests, timestamps and JSON member order;
+it does not invoke the current Rust serializer or producer. The explicit
+`producer_revision` identifies the projection. This tests the same raw SQL
+migration/replay/compensation boundaries under valid native Windows paths,
+without treating an invalid path as a production admission exception.
+
+Frozen projected fixture SHA-256:
+`5876ea437bd9160de1e0c179b4e78ae19d9cac54fea0756f5031d95c9d3543b2`.
+Run the independent derivation twice when editing its rules; the second run must
+leave the fixture bytes unchanged. Actual native Windows execution is required
+for the typed consumer; this derived fixture is not evidence of a past release.

@@ -290,7 +290,7 @@ pub fn list_names(directory: &File) -> io::Result<Vec<String>> {
             let bytes = unsafe {
                 std::ptr::read_unaligned(buffer.as_ptr().cast::<u8>().add(offset + 8).cast::<u32>())
             } as usize;
-            if bytes % 2 != 0
+            if !bytes.is_multiple_of(2)
                 || offset
                     .checked_add(prefix)
                     .and_then(|start| start.checked_add(bytes))
@@ -320,7 +320,7 @@ pub fn list_names(directory: &File) -> io::Result<Vec<String>> {
                 break;
             }
             let next = next_entry as usize;
-            if next < prefix + bytes || next % 4 != 0 {
+            if next < prefix + bytes || !next.is_multiple_of(4) {
                 return Err(invalid_directory_data());
             }
             offset = offset

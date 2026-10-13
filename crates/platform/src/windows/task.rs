@@ -347,7 +347,7 @@ unsafe fn verify_task(registered: &IRegisteredTask, expected: &Definition) -> io
         action.Arguments(&mut arguments).map_err(com_error)?;
         action.WorkingDirectory(&mut working).map_err(com_error)?;
         if !same_path(&path.to_string(), &expected.daemon, false)?
-            || arguments.to_string() != expected.arguments()
+            || arguments != expected.arguments().as_str()
             || !same_path(
                 &working.to_string(),
                 expected.daemon.parent().ok_or_else(foreign)?,
@@ -387,10 +387,7 @@ unsafe fn verify_task(registered: &IRegisteredTask, expected: &Definition) -> io
         settings.ExecutionTimeLimit(&mut limit).map_err(com_error)?;
         settings.MultipleInstances(&mut policy).map_err(com_error)?;
         settings.AllowDemandStart(&mut demand).map_err(com_error)?;
-        if limit.to_string() != "PT0S"
-            || policy != TASK_INSTANCES_IGNORE_NEW
-            || demand != VARIANT_TRUE
-        {
+        if limit != "PT0S" || policy != TASK_INSTANCES_IGNORE_NEW || demand != VARIANT_TRUE {
             let limit = limit.to_string();
             return Err(io::Error::new(
                 io::ErrorKind::PermissionDenied,

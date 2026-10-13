@@ -74,6 +74,12 @@ retain identity but do not promise to prevent a rename. Replay child creation
 uses the caller-owned parent directly. Pipe names hash the held parent volume /
 file identity and endpoint leaf instead of reopening its pathname.
 
+`create_owner_only_buffered_file_at` is the separate temporary Replay payload
+factory. It preserves the same private descriptor, exclusive sharing and relative
+identity checks, while allowing filesystem caching during fragmented writes.
+Replay flushes the complete payload with `sync_all` before sealing it. Persistent
+keys, journals and namespace transitions retain their write-through factories.
+
 `durable` publishes complete payloads through unique private stages. Initial key
 publication cannot replace an existing key. Windows stages and namespace
 transitions use write-through handles; file payloads use `FlushFileBuffers` before
@@ -83,6 +89,15 @@ backup journals keep their writing, committed and final checkpoints. This follow
 [Windows file caching](https://learn.microsoft.com/en-us/windows/win32/fileio/file-caching)
 and [handle-relative rename](https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_rename_info).
 Process interruption tests do not establish behavior under hardware power loss.
+
+Native configuration restoration has a separate sealed-file namespace operation.
+It opens an already flushed source without requesting data-write access, retains
+its read-only facts, and asks the kernel to check `WRITE_ATTRIBUTES` when replacing
+a read-only target. General durable renames retain their ordinary replacement
+rules; neither path clears target attributes by name or bypasses sharing checks.
+`write_windows_atomic_with` lets stopped-snapshot owners stream into the same
+unpublished descriptor-bound stage and validate their held source before the
+platform flushes and publishes it.
 
 `file_security` captures the actual Windows owner/DACL SDDL and read-only flag
 from a held file. Conditional native restoration authenticates these facts along

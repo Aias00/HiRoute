@@ -40,6 +40,46 @@ fn environment(mode: &str, root: &Path) -> Vec<(OsString, OsString)> {
     }
     env
 }
+
+const MANAGED_HELPER_LITERAL: &str = "literal %PATH% !bang! & | ' Unicode 空 格";
+
+fn managed_helper_probe_args() -> [String; 6] {
+    [
+        "--exact",
+        "job_probe",
+        "--ignored",
+        "--nocapture",
+        "--skip",
+        MANAGED_HELPER_LITERAL,
+    ]
+    .map(String::from)
+}
+
+// This driver enters an atomic held Job before creating cmd. Keep the actual
+// node:child_process.exec wrapping verbatim; ordinary argv quoting is different.
+fn managed_helper_driver(root: &Path) {
+    use std::os::windows::process::CommandExt;
+    let binary = root.join("helper % ! & '.exe");
+    let command = launcher::managed_helper_command(&binary, &managed_helper_probe_args()).unwrap();
+    assert!(!command.contains(MANAGED_HELPER_LITERAL));
+    let cmd = launcher::system_executable(Path::new("cmd.exe")).unwrap();
+    let status = std::process::Command::new(cmd)
+        .raw_arg(format!("/d /s /c \"{command}\""))
+        .env_clear()
+        .envs(environment("argv", root))
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
+        .status()
+        .unwrap();
+    std::fs::write(
+        root.join("cmd.exited.json"),
+        serde_json::to_vec(&serde_json::json!({"exit_code": status.code()})).unwrap(),
+    )
+    .unwrap();
+    assert!(status.success(), "managed helper cmd exit");
+}
+
 fn spawn(mode: &str, root: &Path) -> Child {
     let binary = std::env::current_exe().unwrap();
     let args = ["--exact", "job_probe", "--ignored", "--nocapture"].map(OsString::from);
@@ -66,6 +106,10 @@ fn stop(child: &Child) {
 fn job_probe() {
     let mode = std::env::var("HIROUTE_JOB_MODE").unwrap();
     let root = PathBuf::from(std::env::var_os("HIROUTE_JOB_ROOT").unwrap());
+    if mode == "managed-helper-driver" {
+        managed_helper_driver(&root);
+        return;
+    }
     if mode == "defaults" {
         hiroute_platform::windows::security::initialize_current_process_private_defaults().unwrap();
         std::fs::write(root.join("defaults.receipt"), "user-owned").unwrap();
@@ -296,46 +340,63 @@ fn token_defaults() -> (Vec<u8>, Vec<u8>) {
 
 #[test]
 fn managed_helper_executes_from_cmd_with_literal_special_character_path_and_argv() {
-    use std::os::windows::process::CommandExt;
     hiroute_platform::windows::job::initialize_resident().unwrap();
     let root = tempfile::tempdir().unwrap();
     let directory = root.path().join("helper 路径 % ! & ' 空格");
     std::fs::create_dir(&directory).unwrap();
     let binary = directory.join("helper % ! & '.exe");
     std::fs::copy(std::env::current_exe().unwrap(), &binary).unwrap();
-    let literal = "literal %PATH% !bang! & | ' Unicode 空 格";
-    let args = [
-        "--exact",
-        "job_probe",
-        "--ignored",
-        "--nocapture",
-        "--skip",
-        literal,
-    ]
-    .map(String::from);
-    let command = launcher::managed_helper_command(&binary, &args).unwrap();
-    assert!(!command.contains(literal));
-    let cmd = launcher::system_executable(Path::new("cmd.exe")).unwrap();
+    let args = managed_helper_probe_args();
     let stdout_path = directory.join("helper.stdout");
     let stderr_path = directory.join("helper.stderr");
     let stdout = std::fs::File::create(&stdout_path).unwrap();
     let stderr = std::fs::File::create(&stderr_path).unwrap();
-    // Match node:child_process.exec's Windows /d /s /c wrapping and verbatim command.
-    let mut child = std::process::Command::new(cmd)
-        .raw_arg(format!("/d /s /c \"{command}\""))
-        .env_clear()
-        .envs(environment("argv", &directory))
-        .stdout(stdout)
-        .stderr(stderr)
-        .spawn()
-        .unwrap();
+    let driver = std::env::current_exe().unwrap();
+    let driver_args = ["--exact", "job_probe", "--ignored", "--nocapture"].map(OsString::from);
+    let env = environment("managed-helper-driver", &directory);
     let started = Instant::now();
-    let status = loop {
-        if let Some(status) = child.try_wait().unwrap() {
-            break Some(status);
+    let child = Child::spawn(Launch {
+        program: &driver,
+        args: &driver_args,
+        env: &env,
+        cwd: Some(&directory),
+        stdin: Stream::Null,
+        stdout: Stream::File(&stdout),
+        stderr: Stream::File(&stderr),
+    })
+    .unwrap();
+    // These are platform-independent TEST budgets, not a changed production
+    // helper timeout or an OS startup SLA. Win11 evidence placed system
+    // PowerShell startup at the former whole-chain five-second bound.
+    // Do not warm it first. Once the actual argv child writes its independent
+    // entry marker, retain the original five seconds for execution AND exit.
+    const COLD_ENTRY_BUDGET: Duration = Duration::from_secs(30);
+    const NATIVE_COMPLETION_BUDGET: Duration = Duration::from_secs(5);
+    let absolute_deadline = started + COLD_ENTRY_BUDGET + NATIVE_COMPLETION_BUDGET;
+    let mut entered_at = None;
+    let failure = loop {
+        let now = Instant::now();
+        if entered_at.is_none() && directory.join("child.started").exists() {
+            entered_at = Some(now);
         }
-        if started.elapsed() >= Duration::from_secs(5) {
-            break None;
+        let exit_code = child.exit_code().unwrap();
+        if let Some(code) = exit_code {
+            if code != 0 {
+                break Some("driver_exit");
+            }
+            if child.empty().unwrap() {
+                break entered_at.is_none().then_some("exit_without_native_entry");
+            }
+        }
+        let phase_deadline = entered_at.map_or(started + COLD_ENTRY_BUDGET, |entered| {
+            entered + NATIVE_COMPLETION_BUDGET
+        });
+        if now >= phase_deadline || now >= absolute_deadline {
+            break Some(if entered_at.is_some() {
+                "native_completion_deadline"
+            } else {
+                "cold_entry_deadline"
+            });
         }
         std::thread::sleep(Duration::from_millis(10));
     };
@@ -347,26 +408,67 @@ fn managed_helper_executes_from_cmd_with_literal_special_character_path_and_argv
             .take(8192)
             .read_to_end(&mut bytes)
             .unwrap();
-        String::from_utf8_lossy(&bytes).into_owned()
+        bytes
     };
-    if status.is_none_or(|status| !status.success()) {
-        let native_entered = directory.join("child.started").exists();
-        let receipt_written = directory.join("argv.json").exists();
+    if let Some(phase) = failure {
+        let entry_at_first_failure_sample = directory.join("child.started").exists();
+        let receipt_at_first_failure_sample = directory.join("argv.json").exists();
         let elapsed_ms = started.elapsed().as_millis();
         let descendants = windows_helper_diagnostics::descendants(child.id());
-        let _ = child.kill();
-        let _ = child.wait();
+        child.terminate().unwrap();
+        let cleanup_deadline = Instant::now() + Duration::from_secs(5);
+        while !child.empty().unwrap() || child.exit_code().unwrap().is_none() {
+            assert!(Instant::now() < cleanup_deadline, "held helper Job cleanup");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        // Snapshotting is not atomic with child completion. Record the last
+        // markers too, rather than falsely claiming it never reached the child.
+        let entry_after_cleanup = directory.join("child.started").exists();
+        let receipt_after_cleanup = directory.join("argv.json").exists();
+        let stdout = read_log(&stdout_path);
+        let stderr = read_log(&stderr_path);
+        let stdout_contains_probe_success = stdout
+            .windows(b"test job_probe ... ok".len())
+            .any(|bytes| bytes == b"test job_probe ... ok");
         let powershell =
             windows_helper_diagnostics::post_failure_powershell(&environment("argv", &directory));
         panic!(
-            "managed helper phase: cmd_status={status:?}; elapsed_ms={elapsed_ms}; native_fixture_entered={native_entered}; receipt_written={receipt_written}; descendants={descendants}; post_failure_system_powershell={powershell}; stdout={:?}; stderr={:?}",
-            read_log(&stdout_path),
-            read_log(&stderr_path)
+            "managed helper phase={phase}; elapsed_ms={elapsed_ms}; entry_at_first_failure_sample={entry_at_first_failure_sample}; receipt_at_first_failure_sample={receipt_at_first_failure_sample}; entry_after_cleanup={entry_after_cleanup}; receipt_after_cleanup={receipt_after_cleanup}; stdout_contains_probe_success={stdout_contains_probe_success}; driver_exit={:?}; job_empty={}; descendants={descendants}; post_failure_system_powershell={powershell}; stdout_bytes={}; stderr_bytes={}",
+            child.exit_code().unwrap(),
+            child.empty().unwrap(),
+            stdout.len(),
+            stderr.len()
         );
     }
+    let completed_at = Instant::now();
+    let entered_at = entered_at.unwrap();
+    eprintln!(
+        "managed helper phases: cold_entry_ms={}; native_completion_ms={}; total_ms={}; driver_exit={:?}; job_empty={}",
+        entered_at.duration_since(started).as_millis(),
+        completed_at.duration_since(entered_at).as_millis(),
+        completed_at.duration_since(started).as_millis(),
+        child.exit_code().unwrap(),
+        child.empty().unwrap()
+    );
+    assert!(entered_at.duration_since(started) < COLD_ENTRY_BUDGET);
+    assert!(completed_at.duration_since(entered_at) < NATIVE_COMPLETION_BUDGET);
+    assert!(completed_at < absolute_deadline);
+    assert_eq!(child.exit_code().unwrap(), Some(0));
+    assert!(
+        child.empty().unwrap(),
+        "helper Job must contain no survivors"
+    );
+    let cmd_receipt: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(directory.join("cmd.exited.json")).unwrap()).unwrap();
+    assert_eq!(cmd_receipt, serde_json::json!({"exit_code": 0}));
     let record: serde_json::Value =
         serde_json::from_slice(&std::fs::read(directory.join("argv.json")).unwrap()).unwrap();
-    assert_eq!(record["args"].as_array().unwrap().last().unwrap(), literal);
+    assert_eq!(record["binary"], serde_json::to_value(&binary).unwrap());
+    assert_eq!(record["args"], serde_json::to_value(args).unwrap());
+    assert_eq!(
+        record["args"].as_array().unwrap().last().unwrap(),
+        MANAGED_HELPER_LITERAL
+    );
 }
 
 #[test]

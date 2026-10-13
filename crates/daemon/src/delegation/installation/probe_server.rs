@@ -121,7 +121,9 @@ impl ProbeServer {
                 {
                     match listener.accept() {
                         Ok((mut stream, _)) => {
-                            serve_probe_request(&mut stream, &endpoint)?;
+                            serve_probe_request(&mut stream, &endpoint).inspect_err(|error| {
+                                eprintln!("native acceptance loopback stage=request-rejected code={error:?} model-requests={}", endpoint.requests.load(Ordering::Acquire));
+                            })?;
                         }
                         Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                             thread::sleep(Duration::from_millis(5));

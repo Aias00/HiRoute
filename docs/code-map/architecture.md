@@ -117,6 +117,11 @@ initialization in the [Job launcher](../../crates/platform/src/windows/job.rs).
 The [CPA private-object leaf](../../crates/cpa-bridge/src/windows_private.rs) uses those
 primitives for managed files; borrowed native credentials retain their own admission
 boundary. Follow these owners for elevated-account defaults or third-party file creation.
+Stopped Windows source snapshots preserve native permissions through
+[streamed backup copying](../../crates/local-storage/src/backup/source_snapshot.rs)
+and the [durable stage owner](../../crates/platform/src/durable.rs). Native artifact
+activation uses a sealed-file transition; it does not reopen read-only payloads
+for data writes or clear a target's attributes before replacement.
 
 Keep a change with the owner that can enforce it. Extend a native leaf for a real
 ecosystem difference; reuse settings, admission, lifecycle and observation owners.

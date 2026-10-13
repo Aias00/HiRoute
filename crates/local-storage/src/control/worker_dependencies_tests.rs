@@ -11,13 +11,14 @@ fn change(
     before_revision: u64,
     suffix: &str,
 ) -> WorkerDependencySelectionChangeV1 {
+    let prefix = if cfg!(windows) { "C:/opt" } else { "/opt" };
     WorkerDependencySelectionChangeV1::new(
         before_revision,
         WorkerDependencySelectionRecordV1::new(
             harness,
-            (harness != WorkerHarnessV1::QoderCli).then(|| format!("/opt/{suffix}/adapter.js")),
-            format!("/opt/{suffix}/cli"),
-            (harness != WorkerHarnessV1::QoderCli).then(|| format!("/opt/{suffix}/node")),
+            (harness != WorkerHarnessV1::QoderCli).then(|| format!("{prefix}/{suffix}/adapter.js")),
+            format!("{prefix}/{suffix}/cli"),
+            (harness != WorkerHarnessV1::QoderCli).then(|| format!("{prefix}/{suffix}/node")),
         )
         .unwrap(),
     )

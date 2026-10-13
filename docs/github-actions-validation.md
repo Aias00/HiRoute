@@ -12,7 +12,7 @@ native Windows acceptance uses `scripts/windows-headless-ci.ps1`.
 | `gateway-core-dedicated.yml` | Manual or reusable | Hosted Linux production stability and socket churn |
 | `p0-gateway-final-gates.yml` | Manual | Aggregate the three current hosted workflows |
 | `build-release.yml` | Manual, exact dispatch SHA | Native macOS ARM64/Intel DMGs and Linux/Windows x86_64/ARM64 archives; uploads candidate assets and integrity evidence for the existing release publisher |
-| `windows-headless.yml` | PR, main push, manual, reusable | Native MSVC primitives, full shared business libraries, foreground control/Gateway, real Task/SCM installation and fixed upstream Agent clients |
+| `windows-headless.yml` | PR, main push, manual, reusable | Native MSVC primitives, full shared business libraries, foreground control/Gateway, real Task/SCM installation and fixed upstream Agent clients; complete x64 artifact replay on Windows 11 ARM64 |
 
 Normal Rust checks select the organization `Default` runner group with the
 `cncf-ubuntu-16-64-x86` label. The organization must permit this public repository

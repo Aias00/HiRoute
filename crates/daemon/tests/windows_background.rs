@@ -14,6 +14,8 @@ mod windows_background_upgrade;
 mod windows_candidate_source;
 #[path = "support/windows_execution_host.rs"]
 mod windows_execution_host;
+#[path = "support/windows_subscription_login.rs"]
+mod windows_subscription_login;
 #[path = "support/windows_token_launcher.rs"]
 mod windows_token_launcher;
 
@@ -263,6 +265,38 @@ fn assert_status(token: &File, cli: &std::path::Path, manager: &str, active: boo
     status
 }
 
+/// Keep real CPA authorization URLs and their opaque state in memory. The
+/// ordinary fixture::accepted diagnostic prints envelopes, so OAuth operations
+/// use fixed diagnostics and return only the actual parsed public envelope.
+fn subscription_cli(
+    token: &File,
+    cli: &std::path::Path,
+    arguments: &[&str],
+    request: Option<&Value>,
+) -> Value {
+    let arguments = arguments
+        .iter()
+        .map(OsString::from)
+        .chain([OsString::from("--timeout"), OsString::from("45s")])
+        .collect::<Vec<_>>();
+    let input = request.map(|value| serde_json::to_vec(value).unwrap());
+    let result = fixture::process(
+        Some(token),
+        cli,
+        &arguments,
+        input.as_deref(),
+        false,
+        Duration::from_secs(60),
+        false,
+    );
+    assert!(result["code"] == 0, "public subscription command failed");
+    assert!(
+        result["result"].is_object(),
+        "public subscription result is missing"
+    );
+    result["result"].clone()
+}
+
 fn assert_native_service_absent(name: &str) {
     use std::ptr::null;
     use windows_sys::Win32::Foundation::{ERROR_SERVICE_DOES_NOT_EXIST, GetLastError};
@@ -383,6 +417,9 @@ fn task_native_background_lua_gateway_control_stop_crash_recovery_and_autostart(
     assert_eq!(first["sid"], sid);
     assert_eq!(first["session"], expected_session);
     assert_status(&token, &cli, "windows-task-user", true);
+    let oauth_pending = windows_subscription_login::run_before_restart(&mut |args, request| {
+        subscription_cli(&token, &cli, args, request)
+    });
     assert_eq!(
         fixture::cli(&token, &cli, &["service", "stop"])["local_control_ready"],
         false
@@ -404,6 +441,10 @@ fn task_native_background_lua_gateway_control_stop_crash_recovery_and_autostart(
     thread::sleep(Duration::from_secs(2));
     assert_status(&token, &cli, "windows-task-user", false);
     fixture::cli(&token, &cli, &["service", "start"]);
+    windows_subscription_login::assert_after_restart(
+        &mut |args, request| subscription_cli(&token, &cli, args, request),
+        oauth_pending,
+    );
     let crashed = fixture::inspect(&token, true);
     let recovered = await_actual_restart(&token, &cli, "windows-task-user", &crashed);
     assert_eq!(recovered["session"], expected_session);
@@ -588,9 +629,16 @@ fn scm_standard_owner_pending_admin_finalize_session_zero_gateway_control_and_de
         "real SCM business runtime must operate without an interactive owner logon"
     );
     assert_status(token, &cli, "windows-scm-user", true);
+    let oauth_pending = windows_subscription_login::run_before_restart(&mut |args, request| {
+        subscription_cli(token, &cli, args, request)
+    });
     fixture::cli(token, &cli, &["service", "stop"]);
     assert_status(token, &cli, "windows-scm-user", false);
     fixture::cli(token, &cli, &["service", "start"]);
+    windows_subscription_login::assert_after_restart(
+        &mut |args, request| subscription_cli(token, &cli, args, request),
+        oauth_pending,
+    );
     let crashed = fixture::inspect(token, true);
     let recovered = await_actual_restart(token, &cli, "windows-scm-user", &crashed);
     assert_eq!(recovered["session"], 0);

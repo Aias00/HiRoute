@@ -51,7 +51,7 @@ impl Definition {
         owner_sid: &str,
         image: &mut std::fs::File,
     ) -> io::Result<Self> {
-        let name = name_for_sid(&owner_sid);
+        let name = name_for_sid(owner_sid);
         image.seek(SeekFrom::Start(0))?;
         let daemon_sha256 = digest(&mut *image)?;
         image.seek(SeekFrom::Start(0))?;

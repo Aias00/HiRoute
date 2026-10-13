@@ -511,7 +511,9 @@ fn checked_directory(path: &Path) -> Result<PathBuf, DelegationErrorV1> {
     #[cfg(windows)]
     hiroute_platform::windows::security::verify_owner_only(path, true)
         .map_err(|_| DelegationErrorV1::PermissionDenied)?;
-    fs::canonicalize(path).map_err(|_| DelegationErrorV1::CapabilityUnavailable)
+    fs::canonicalize(path)
+        .map(|path| super::native_context::native_path(&path))
+        .map_err(|_| DelegationErrorV1::CapabilityUnavailable)
 }
 
 fn linked(metadata: &fs::Metadata) -> bool {

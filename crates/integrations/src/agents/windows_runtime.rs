@@ -296,7 +296,7 @@ pub(super) fn bounded(
                 } else {
                     #[cfg(test)]
                     eprintln!("native acceptance process stage=job-exit status={code}");
-                    Err(io::Error::other("native check failed"))
+                    Err(io::Error::other(ProcessExit(code)))
                 };
             }
             if start.elapsed() >= timeout {
@@ -365,6 +365,17 @@ fn native_probe_stage(stage: &'static str, error: io::Error) -> io::Error {
     #[cfg(not(test))]
     let _ = stage;
     error
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("native process failed")]
+struct ProcessExit(i32);
+
+pub(super) fn process_exit_code(error: &io::Error) -> Option<i32> {
+    error
+        .get_ref()
+        .and_then(|source| source.downcast_ref::<ProcessExit>())
+        .map(|failure| failure.0)
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -438,6 +449,39 @@ mod tests {
         .unwrap();
         for (key, value) in windows_native_system_environment().unwrap() {
             assert_eq!(values[key], value.to_str().unwrap());
+        }
+    }
+
+    #[test]
+    #[ignore = "required pinned Pi SDK native acceptance gate"]
+    fn windows_selected_pi_sdk_capabilities_load_the_actual_package() {
+        let selected = |name| {
+            std::env::var_os(name)
+                .map(PathBuf::from)
+                .filter(|path| path.is_absolute() && path.is_file())
+                .expect("the required pinned native Pi and Node entries must exist")
+        };
+        let cli = selected("HIROUTE_WORKER_PI_BINARY");
+        let cli = if cli
+            .extension()
+            .is_some_and(|value| value.as_encoded_bytes().eq_ignore_ascii_case(b"cmd"))
+        {
+            windows_npm_entry(&cli).unwrap()
+        } else {
+            cli
+        };
+        let node = selected("HIROUTE_WORKER_NODE");
+        use super::super::pi_runtime::{PiSdkCapability, check_pi_sdk_capability};
+        for (scope, capability) in [
+            ("worker", PiSdkCapability::Worker),
+            ("continue", PiSdkCapability::Continue),
+            ("collaboration", PiSdkCapability::Collaboration),
+            ("models", PiSdkCapability::Models),
+        ] {
+            eprintln!("native acceptance Pi SDK scope={scope}");
+            check_pi_sdk_capability(&cli, &node, capability).unwrap_or_else(|failure| {
+                panic!("the selected actual SDK must satisfy scope={scope}: {failure:?}")
+            });
         }
     }
 

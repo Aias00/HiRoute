@@ -13,10 +13,24 @@ pub(crate) struct CollaborationChallenge {
 }
 
 impl CollaborationChallenge {
-    pub(crate) fn prepare(home: &Path, cli: &Path) -> Result<Self, &'static str> {
-        let parent = home.join(".agents");
-        super::probe_files::directory(&parent).map_err(|_| "private skill directory")?;
-        Self::prepare_in(&parent.join("skills"), home, cli, cfg!(windows))
+    pub(crate) fn prepare(
+        home: &Path,
+        codex_home: &Path,
+        cli: &Path,
+    ) -> Result<Self, &'static str> {
+        // a956835d ext/skills/src/host_roots.rs binds .agents to dirs::home_dir().
+        // Windows resolves that through KnownFolder Profile, ignoring this private HOME.
+        // The same upstream supports the selected CODEX_HOME/skills as a user root.
+        #[cfg(windows)]
+        let skills = codex_home.join("skills");
+        #[cfg(not(windows))]
+        let skills = {
+            let _ = codex_home;
+            let parent = home.join(".agents");
+            super::probe_files::directory(&parent).map_err(|_| "private skill directory")?;
+            parent.join("skills")
+        };
+        Self::prepare_in(&skills, home, cli, cfg!(windows))
     }
 
     pub(crate) fn prepare_claude(

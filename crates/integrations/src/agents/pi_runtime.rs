@@ -95,13 +95,16 @@ pub fn check_pi_sdk_capability(
         reason: NativeDependencyFailureReasonV1::Unsupported,
     })?;
     validate_pi_node(node)?;
-    let mut script = tempfile::Builder::new()
-        .suffix(".mjs")
-        .tempfile()
+    let scripts = super::probe_files::temporary("hiroute-pi-sdk-")
         .map_err(|_| failure(NativeDependencyFailureReasonV1::Unavailable))?;
-    script
-        .write_all(PI_SDK_CONTRACT.as_bytes())
-        .map_err(|_| failure(NativeDependencyFailureReasonV1::Unavailable))?;
+    let script = scripts.path().join("capability.mjs");
+    {
+        let mut output = super::probe_files::file(&script)
+            .map_err(|_| failure(NativeDependencyFailureReasonV1::Unavailable))?;
+        output
+            .write_all(PI_SDK_CONTRACT.as_bytes())
+            .map_err(|_| failure(NativeDependencyFailureReasonV1::Unavailable))?;
+    }
     let scope = match capability {
         PiSdkCapability::Models => "models",
         PiSdkCapability::Collaboration => "collaboration",
@@ -110,7 +113,7 @@ pub fn check_pi_sdk_capability(
     };
     let mut command = Command::new(node);
     command
-        .arg(script.path())
+        .arg(&script)
         .arg("--check")
         .arg(cli)
         .arg(scope)
@@ -230,6 +233,8 @@ fn bounded_check(
             check,
             reason: if super::windows_runtime::cleanup_unknown(&error) {
                 NativeDependencyFailureReasonV1::CleanupFailed
+            } else if super::windows_runtime::process_exit_code(&error).is_some() {
+                NativeDependencyFailureReasonV1::ProcessFailed
             } else {
                 match error.kind() {
                     std::io::ErrorKind::TimedOut => NativeDependencyFailureReasonV1::Timeout,

@@ -1217,6 +1217,21 @@
       ]
     },
     {
+      "contract": "hiroute.worker-dependency-selection-confirmation/v1",
+      "field": "test-only Windows path projection of frozen schema23 Worker journals",
+      "mode": "frozen_fixture",
+      "owner": "local-storage",
+      "reason": "Exercise original schema23 SQL migration and recovery with valid Windows absolute paths. An independent derivation first authenticates the unchanged original fixture and its digest formulas, then changes only installation paths and dependent proofs. This fixture is synthetic and does not establish a historical Windows release or cross-platform backup migration.",
+      "removal_condition": "Retire together with the schema23 native-path recovery matrix and its replacement evidence; preserve the original historical producer fixture independently.",
+      "allowed_paths": [
+        "crates/local-storage/src/migrations/fixtures/schema23-worker-operations-windows.json",
+        "crates/local-storage/src/migrations/fixtures/derive-windows-schema23.py",
+        "crates/local-storage/src/migrations/fixtures/README.md",
+        "crates/local-storage/src/migrations/worker_dependencies_v24_tests.rs",
+        "crates/local-storage/src/migrations/upgrade_batch_recovery_tests.rs"
+      ]
+    },
+    {
       "contract": "hiroute.worker-settings/v1",
       "field": "Qoder CLI 1.1.65 exact native-session history and compaction witnesses in acceptance fixtures",
       "mode": "frozen_fixture",

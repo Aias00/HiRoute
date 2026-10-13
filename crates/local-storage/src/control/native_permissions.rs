@@ -80,3 +80,22 @@ pub(super) fn read_windows_artifact(
         windows_permissions: Some(permissions),
     }))
 }
+
+/// Restore metadata and encrypted bytes are HiRoute-private, unlike the external
+/// Agent target. Read them through one verified native handle on Windows.
+#[cfg(windows)]
+pub(super) fn read_private_restore_file(path: &Path) -> Result<Vec<u8>, LocalStorageError> {
+    let mut file = hiroute_platform::windows::security::open_owner_only(path, false)?;
+    if hiroute_platform::windows::security::file_link_count(&file)? != 1 {
+        return Err(LocalStorageError::Permission);
+    }
+    let before = file.metadata()?;
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)?;
+    let after = file.metadata()?;
+    hiroute_platform::windows::security::verify_owner_only_handle(&file, false)?;
+    if before.len() != after.len() || before.modified()? != after.modified()? {
+        return Err(LocalStorageError::InvalidData);
+    }
+    Ok(bytes)
+}

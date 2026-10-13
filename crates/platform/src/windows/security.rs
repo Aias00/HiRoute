@@ -363,6 +363,24 @@ pub fn create_owner_only_file_at(parent: &File, name: &std::ffi::OsStr) -> io::R
     create_owner_only_at(parent, name, false)
 }
 
+/// Create a private temporary payload with filesystem buffering. The caller
+/// must call `sync_all` before publishing its completed contents. Ownership,
+/// exclusive sharing and handle-relative traversal match the durable factory.
+pub fn create_owner_only_buffered_file_at(
+    parent: &File,
+    name: &std::ffi::OsStr,
+) -> io::Result<File> {
+    let security = OwnerSecurity::new(false)?;
+    let file = super::path::create_buffered_file_relative(
+        parent,
+        name,
+        GENERIC_READ | GENERIC_WRITE | DELETE,
+        &security.descriptor,
+    )?;
+    verify_owner_only_handle(&file, false)?;
+    Ok(file)
+}
+
 fn create_owner_only_at(
     parent: &File,
     name: &std::ffi::OsStr,

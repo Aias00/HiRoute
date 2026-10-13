@@ -89,6 +89,8 @@ impl NativeWorkerContext {
     }
 
     fn new(home: PathBuf, config_root: PathBuf, borrowed: bool) -> Result<Self, DelegationErrorV1> {
+        let home = native_path(&home);
+        let config_root = native_path(&config_root);
         for path in [&home, &config_root] {
             if !path.is_absolute()
                 || path

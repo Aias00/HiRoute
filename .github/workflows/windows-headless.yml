@@ -59,16 +59,56 @@ jobs:
       - name: Required native cases on the exact checked out revision
         shell: pwsh
         run: |
-          & scripts/windows-headless-ci.ps1 -Scope '${{ matrix.scope }}' -ExpectedSha $env:GITHUB_SHA -Evidence artifacts/windows -CpaSource "$env:RUNNER_TEMP/cpa" -Plan windows-headless -Phase focused
+          & scripts/windows-headless-ci.ps1 -Scope '${{ matrix.scope }}' -ExpectedSha $env:GITHUB_SHA -Evidence artifacts/windows -CpaSource "$env:RUNNER_TEMP/cpa" -Plan windows-headless -Phase focused -CaptureArtifacts
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: windows-${{ matrix.scope }}-${{ github.sha }}-${{ github.run_attempt }}
-          path: |
-            artifacts/windows/*.log
-            artifacts/windows/*.json
-            artifacts/windows/feedback
-            artifacts/windows/clients/clients.json
-            artifacts/windows/package/package-evidence.json
+          path: artifacts/windows
+          if-no-files-found: error
+          retention-days: 14
+  windows11:
+    name: windows11-x64 (${{ matrix.scope }})
+    needs: native
+    if: always()
+    strategy:
+      fail-fast: false
+      matrix:
+        scope: [components, core, product, background, agents]
+    runs-on: windows-11-arm
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - uses: actions/setup-node@v4
+        if: matrix.scope == 'agents'
+        with:
+          node-version: '22.19.0'
+          architecture: x64
+      - name: Locked x64 upstream clients
+        if: matrix.scope == 'agents'
+        shell: pwsh
+        working-directory: tools/windows-agent-fixtures
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'Locked x64 client fixtures unavailable' }
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-${{ matrix.scope }}-${{ github.sha }}-${{ github.run_attempt }}
+          path: artifacts/producer
+      - name: Complete Windows 11 runtime replay
+        shell: pwsh
+        run: |
+          & scripts/windows-native-replay.ps1 -Scope '${{ matrix.scope }}' -ExpectedSha $env:GITHUB_SHA -Bundle artifacts/producer -Evidence artifacts/windows11 -Plan windows-headless -Phase focused -RelatedRun $env:GITHUB_RUN_ID
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows11-${{ matrix.scope }}-${{ github.sha }}-${{ github.run_attempt }}
+          path: artifacts/windows11
           if-no-files-found: error
           retention-days: 14

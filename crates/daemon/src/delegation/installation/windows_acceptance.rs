@@ -75,7 +75,11 @@ fn profile(
     };
     let profile = CandidateWorkerProfile::build(ProfileInput {
         protocol: hiroute_domain::AgentIngressProtocolV1::Responses,
-        context_window_tokens: Some(32_768),
+        context_window_tokens: Some(if config.harness == WorkerHarnessV1::ClaudeCode {
+            200_000
+        } else {
+            32_768
+        }),
         max_output_tokens: Some(4_096),
         harness: config.harness,
         adapter: config.adapter.as_deref(),

@@ -411,7 +411,7 @@ impl Config {
         let begin = self.words.as_ptr() as usize;
         let end = begin + self.words.len() * std::mem::size_of::<usize>();
         let address = value as usize;
-        if address < begin || address >= end || address % 2 != 0 {
+        if address < begin || address >= end || !address.is_multiple_of(2) {
             return Err(io::Error::from(io::ErrorKind::InvalidData));
         }
         let maximum = (end - address) / 2;

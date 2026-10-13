@@ -52,11 +52,11 @@ mod native_artifacts;
 #[path = "../agents/native_directories.rs"]
 mod native_directories;
 mod native_permissions;
-#[cfg(windows)]
-use native_permissions::windows_artifact_fingerprint;
 use native_permissions::{
     current_artifact_aad, current_artifact_schema, desired_windows_permissions,
 };
+#[cfg(windows)]
+use native_permissions::{read_private_restore_file, windows_artifact_fingerprint};
 #[path = "../agents/native_restoration_ack.rs"]
 mod native_restoration_ack;
 mod operation_status;
@@ -2223,6 +2223,9 @@ impl ManagedArtifactStore {
         match fs::symlink_metadata(&path) {
             Ok(metadata) => {
                 validate_owner_regular_file(&metadata)?;
+                #[cfg(windows)]
+                let bytes = read_private_restore_file(&path)?;
+                #[cfg(not(windows))]
                 let bytes = fs::read(path)?;
                 let encoded: Value =
                     serde_json::from_slice(&bytes).map_err(|_| LocalStorageError::InvalidData)?;
@@ -2231,7 +2234,7 @@ impl ManagedArtifactStore {
                 }
                 let marker: ArtifactMarker =
                     serde_json::from_value(encoded).map_err(|_| LocalStorageError::InvalidData)?;
-                if marker.schema != "hiroute.managed-artifact-marker/v4"
+                if marker.schema != current_artifact_schema()
                     || marker.operation_id != operation_id.as_str()
                     || marker.effect_id != effect_id
                     || marker.restore_store_uuid != self.restore_store_uuid
@@ -2259,8 +2262,12 @@ impl ManagedArtifactStore {
             }
             let metadata = fs::symlink_metadata(&path)?;
             validate_owner_regular_file(&metadata).map_err(|_| LocalStorageError::Locked)?;
+            #[cfg(windows)]
+            let bytes = read_private_restore_file(&path)?;
+            #[cfg(not(windows))]
+            let bytes = fs::read(&path)?;
             let encoded: Value =
-                serde_json::from_slice(&fs::read(&path)?).map_err(|_| LocalStorageError::Locked)?;
+                serde_json::from_slice(&bytes).map_err(|_| LocalStorageError::Locked)?;
             let has_backup_aad = encoded.get("backup_aad").is_some();
             let mut marker: ArtifactMarker =
                 serde_json::from_value(encoded).map_err(|_| LocalStorageError::Locked)?;
@@ -2325,9 +2332,13 @@ impl ManagedArtifactStore {
             }
             let metadata = fs::symlink_metadata(&path)?;
             validate_owner_regular_file(&metadata)?;
+            #[cfg(windows)]
+            let bytes = read_private_restore_file(&path)?;
+            #[cfg(not(windows))]
+            let bytes = fs::read(path)?;
             let marker: ArtifactMarker =
-                serde_json::from_slice(&fs::read(path)?).map_err(|_| LocalStorageError::Locked)?;
-            if marker.schema != "hiroute.managed-artifact-marker/v4"
+                serde_json::from_slice(&bytes).map_err(|_| LocalStorageError::Locked)?;
+            if marker.schema != current_artifact_schema()
                 || marker.restore_store_uuid != self.restore_store_uuid
                 || marker.restore_key_id != self.restore_key_id
                 || marker.external_path_digest != self.external_path_digest(&marker.target)?
@@ -2426,6 +2437,9 @@ impl ManagedArtifactStore {
         let path = self.restore_root.join(name);
         let metadata = fs::symlink_metadata(&path)?;
         validate_owner_regular_file(&metadata)?;
+        #[cfg(windows)]
+        let sealed = read_private_restore_file(&path)?;
+        #[cfg(not(windows))]
         let sealed = fs::read(path)?;
         if sealed.len() <= RESTORE_BACKUP_HEADER.len() + RESTORE_NONCE_BYTES
             || &sealed[..RESTORE_BACKUP_HEADER.len()] != RESTORE_BACKUP_HEADER
@@ -2864,6 +2878,10 @@ impl ManagedArtifactStore {
             // Clear before the first target mutation, including uncertain I/O failures.
             untouched.remove(&(marker.operation_id.clone(), marker.effect_id.clone()));
             if marker.after_exists {
+                #[cfg(windows)]
+                hiroute_platform::durable::rename_windows_sealed_file(&stage, &target)
+                    .map_err(|_| port(PortErrorCode::Unavailable, "artifact.activate.rename"))?;
+                #[cfg(not(windows))]
                 hiroute_platform::durable::rename(&stage, &target)
                     .map_err(|_| port(PortErrorCode::Unavailable, "artifact.activate.rename"))?;
             } else {

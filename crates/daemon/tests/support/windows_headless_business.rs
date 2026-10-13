@@ -13,12 +13,13 @@ use std::time::{Duration, Instant};
 use hiroute_platform::windows::job::{Child, Launch, Stream};
 use serde_json::{Value, json};
 
-use super::{CANDIDATE, InstalledProduct, SECRET, assert_no_secret};
+use super::{InstalledProduct, SECRET, assert_no_secret};
 
 const MODEL: &str = "windows-native-api-model";
 const NAME: &str = "Windows public Native API";
 const RENAMED: &str = "Windows public Native API renamed";
 const KEY: &str = "windows-public-native-save";
+const NATIVE_CANDIDATE: &str = "candidate/native/windows-public-native";
 const BOUND: u64 = 1024 * 1024;
 
 pub struct Business {
@@ -33,7 +34,14 @@ pub struct Business {
 impl Business {
     pub fn save(product: &InstalledProduct) -> Self {
         let upstream = Upstream::start();
-        Self::save_at(product, CANDIDATE, KEY, upstream.address, Some(upstream))
+        Self::save_at(
+            product,
+            NATIVE_CANDIDATE,
+            KEY,
+            upstream.address,
+            32768,
+            Some(upstream),
+        )
     }
 
     /// The caller retains an independent real upstream oracle for routing/Worker.
@@ -43,7 +51,20 @@ impl Business {
         key: &str,
         address: SocketAddr,
     ) -> Self {
-        Self::save_at(product, candidate_ref, key, address, None)
+        Self::save_on_with_context(product, candidate_ref, key, address, 32768)
+    }
+
+    /// Explicit user-declared loopback model capacity; callers still use the real
+    /// Compute Check/Save path. Claude mappings require a supported >=100k window.
+    pub fn save_on_with_context(
+        product: &InstalledProduct,
+        candidate_ref: &str,
+        key: &str,
+        address: SocketAddr,
+        context_tokens: u64,
+    ) -> Self {
+        assert!((16384..=1_000_000).contains(&context_tokens));
+        Self::save_at(product, candidate_ref, key, address, context_tokens, None)
     }
 
     pub fn binding_id(&self) -> &str {
@@ -58,8 +79,14 @@ impl Business {
         candidate_ref: &str,
         key: &str,
         address: SocketAddr,
+        context_tokens: u64,
         upstream: Option<Upstream>,
     ) -> Self {
+        assert!(
+            candidate_ref.starts_with("candidate/native/")
+                && !candidate_ref.starts_with("candidate/native/agent-token-"),
+            "Native source input must use the model credential domain"
+        );
         assert_eq!(
             product.register_inherited_secret_for(candidate_ref, SECRET)["data"]["registered"],
             true
@@ -76,7 +103,7 @@ impl Business {
             &["compute", "connection", "test"],
             Some(&json!({
                 "kind":"native", "request":{
-                    "draft":draft(address, candidate_ref),
+                    "draft":draft(address, candidate_ref, context_tokens),
                     "input_candidate":{"candidate_ref":candidate_ref,"candidate_revision":1}
                 }
             })),
@@ -325,7 +352,7 @@ pub(crate) fn assert_operation(product: &InstalledProduct, operation_id: &str) {
         }
         assert!(
             !matches!(state, "failed" | "cancelled" | "unknown"),
-            "public management operation did not succeed: {result}"
+            "public management operation did not succeed"
         );
         assert!(
             Instant::now() < deadline,
@@ -335,7 +362,7 @@ pub(crate) fn assert_operation(product: &InstalledProduct, operation_id: &str) {
     }
 }
 
-fn draft(address: SocketAddr, candidate_ref: &str) -> Value {
+fn draft(address: SocketAddr, candidate_ref: &str, context_tokens: u64) -> Value {
     let declared = |value: Value| json!({"value":value,"basis":"user_declared"});
     json!({
         "inference_model_id":MODEL,"candidate_ref":candidate_ref,"lineage_ref":format!("lineage/{candidate_ref}"),
@@ -346,7 +373,7 @@ fn draft(address: SocketAddr, candidate_ref: &str) -> Value {
         "models":[{"upstream_model_id":MODEL,"display_name":"Windows Native model","catalog_configuration_id":null,
             "membership":"user_declared","capabilities":{
                 "tool":declared(json!(true)),"vision":declared(json!(false)),"streaming":declared(json!(true)),
-                "context_tokens":declared(json!(32768)),"max_output_tokens":declared(json!(4096)),
+                "context_tokens":declared(json!(context_tokens)),"max_output_tokens":declared(json!(4096)),
                 "native_reasoning":declared(json!({"kind":"fixed","profile":"provider-default"}))
             }}]
     })
@@ -354,15 +381,94 @@ fn draft(address: SocketAddr, candidate_ref: &str) -> Value {
 
 pub(crate) fn cli(product: &InstalledProduct, args: &[&str], payload: Option<&Value>) -> Value {
     let (exit, value) = command(product, args, payload);
+    let (command, stage) = checkpoint(args, payload);
     assert_eq!(
         exit, 0,
-        "actual public Windows business CLI failed: {value}"
+        "actual public Windows business CLI failed: command={command}, stage={stage}"
     );
     assert!(matches!(
         value["status"].as_str(),
         Some("succeeded" | "accepted")
     ));
     value
+}
+
+/// Closed command/stage labels identify a failing business entry without
+/// reflecting resource IDs, request JSON, endpoint URLs or provider output.
+fn checkpoint(args: &[&str], payload: Option<&Value>) -> (&'static str, &'static str) {
+    let command = [
+        (
+            "compute.connection.test",
+            &["compute", "connection", "test"][..],
+        ),
+        (
+            "compute.connection.preview",
+            &["compute", "connection", "preview"][..],
+        ),
+        (
+            "compute.connection.apply",
+            &["compute", "connection", "apply"][..],
+        ),
+        (
+            "compute.connection.options",
+            &["compute", "connection", "options"][..],
+        ),
+        ("compute.list", &["compute", "list"][..]),
+        ("compute.show", &["compute", "show"][..]),
+        ("operations.find", &["operations", "find"][..]),
+        ("operations.get", &["operations", "get"][..]),
+        ("routing.options", &["routing", "options"][..]),
+        ("routing.preview", &["routing", "preview"][..]),
+        ("routing.apply", &["routing", "apply"][..]),
+        ("routing.list", &["routing", "list"][..]),
+        ("routing.show", &["routing", "show"][..]),
+        (
+            "decision.services.list",
+            &["decision", "services", "list"][..],
+        ),
+        (
+            "decision.services.apply",
+            &["decision", "services", "apply"][..],
+        ),
+        (
+            "decision.services.test",
+            &["decision", "services", "test"][..],
+        ),
+        ("models.show", &["models", "show"][..]),
+        ("sessions.list", &["sessions", "list"][..]),
+        ("sessions.show", &["sessions", "show"][..]),
+        ("sessions.receipt", &["sessions", "receipt"][..]),
+        ("sessions.status", &["sessions", "status"][..]),
+        (
+            "observation.plan-quality.samples",
+            &["observation", "plan-quality", "samples"][..],
+        ),
+        ("value.show", &["value", "show"][..]),
+    ]
+    .into_iter()
+    .find_map(|(label, prefix)| args.starts_with(prefix).then_some(label))
+    .unwrap_or("other-public-command");
+    let stage = payload
+        .and_then(|value| value.get("kind"))
+        .and_then(Value::as_str)
+        .and_then(|kind| match kind {
+            "native" => Some("native-model-check"),
+            "saved" => Some("saved-model-recheck"),
+            "reference" => Some("model-reference"),
+            "ratings" => Some("model-ratings"),
+            _ => None,
+        })
+        .or_else(|| {
+            payload.and_then(|value| {
+                match value.pointer("/change/edit/action").and_then(Value::as_str) {
+                    Some("rename") => Some("saved-source-rename"),
+                    Some("delete") => Some("saved-source-delete"),
+                    _ => None,
+                }
+            })
+        })
+        .unwrap_or("ordinary");
+    (command, stage)
 }
 
 pub(crate) fn failure(product: &InstalledProduct, args: &[&str], payload: &Value, expected: &str) {
@@ -379,6 +485,8 @@ pub(crate) fn command(
     args: &[&str],
     payload: Option<&Value>,
 ) -> (i32, Value) {
+    let (command, stage) = checkpoint(args, payload);
+    eprintln!("Windows public business checkpoint: command={command}, stage={stage}");
     let mut args: Vec<OsString> = args.iter().map(OsString::from).collect();
     if payload.is_some() {
         args.push("--request-stdin".into());

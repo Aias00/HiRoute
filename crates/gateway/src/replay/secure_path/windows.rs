@@ -35,8 +35,10 @@ pub(super) fn create_directory(
 }
 
 pub(super) fn create_file(parent: &File, _path: &Path, name: &str) -> Result<File, ReplayError> {
-    let file =
-        hiroute_platform::windows::security::create_owner_only_file_at(parent, name.as_ref())?;
+    let file = hiroute_platform::windows::security::create_owner_only_buffered_file_at(
+        parent,
+        name.as_ref(),
+    )?;
     validate_file(&file)?;
     Ok(file)
 }

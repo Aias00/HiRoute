@@ -526,12 +526,18 @@ mod locator_tests {
                     .into()
                 ),
                 true,
-                Some(PathBuf::from(
+                Some(PathBuf::from(if cfg!(windows) {
+                    "C:/Users/test/Library/Application Support/ai.hiroute.cli/run"
+                } else {
                     "/Users/test/Library/Application Support/ai.hiroute.cli/run"
-                )),
+                })),
             )
             .unwrap(),
-            PathBuf::from("/Users/test/Library/Application Support/ai.hiroute.cli/run")
+            PathBuf::from(if cfg!(windows) {
+                "C:/Users/test/Library/Application Support/ai.hiroute.cli/run"
+            } else {
+                "/Users/test/Library/Application Support/ai.hiroute.cli/run"
+            })
         );
         assert_eq!(
             resolve_runtime_root(None, None, Some("relative".into()), true, None),

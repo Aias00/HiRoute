@@ -1926,11 +1926,8 @@ mod tests {
                 let ready = storage_root.join(format!(".live.{}.restore-ready", set.set_id()));
                 let previous = storage_root.join(format!(".live.{}.pre-migration", set.set_id()));
                 set.restore_to_new_root(&barrier, &ready).unwrap();
-                fs::rename(&live, &previous).unwrap();
-                std::fs::File::open(&storage_root)
-                    .unwrap()
-                    .sync_all()
-                    .unwrap();
+                hiroute_platform::durable::rename(&live, &previous).unwrap();
+                hiroute_platform::durable::directory_barrier(&storage_root).unwrap();
             }
             drop(set);
 

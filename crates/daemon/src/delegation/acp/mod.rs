@@ -44,7 +44,8 @@ pub struct AcpRunInput {
     pub identity_contract: AcpNativeIdentityContract,
     pub session_meta: Map<String, Value>,
     /// Exact adapter-owned native mode selected after new/load and before the first prompt.
-    /// Production profiles always set this; `None` exists for protocol-only test fixtures.
+    /// Profiles with a native mode set this. DSH has no mode mutation; protocol fixtures
+    /// may also omit it.
     pub native_session_mode: Option<String>,
     /// Profile's exact native model selector ID, confirmed before prompting. The frozen
     /// Plan/Gateway alias remains separate when the native client adds a provider prefix.
@@ -220,6 +221,7 @@ async fn run_session(
     progress: Option<ProgressSink>,
 ) -> Result<AcpRunOutcome, DelegationErrorV1> {
     let initialized = phase(
+        "initialize",
         &input.cancellation,
         input.deadline,
         connection.send_request(initialize_request()?).block_task(),
@@ -243,6 +245,7 @@ async fn run_session(
         let request: AuthenticateRequest = serde_json::from_value(authentication)
             .map_err(|_| DelegationErrorV1::InvalidArguments)?;
         phase(
+            "authenticate",
             &input.cancellation,
             input.deadline,
             connection.send_request(request).block_task(),
@@ -256,6 +259,7 @@ async fn run_session(
             }))
             .map_err(|_| DelegationErrorV1::InvalidArguments)?;
             let response = phase(
+                "new-session",
                 &input.cancellation,
                 input.deadline,
                 connection.send_request(request).block_task(),
@@ -293,6 +297,7 @@ async fn run_session(
             }))
             .map_err(|_| DelegationErrorV1::InvalidArguments)?;
             let response = phase(
+                "resume-session",
                 &input.cancellation,
                 input.deadline,
                 connection.send_request(request).block_task(),
@@ -321,6 +326,7 @@ async fn run_session(
                 "sessionId":expected.acp_session_id,"cwd":input.cwd,"mcpServers":[],"_meta":input.session_meta,
             })).map_err(|_| DelegationErrorV1::InvalidArguments)?;
             let response = phase(
+                "load-session",
                 &input.cancellation,
                 input.deadline,
                 connection.send_request(request).block_task(),
@@ -370,6 +376,7 @@ async fn run_session(
             return Err(DelegationErrorV1::CapabilityUnavailable);
         }
         phase(
+            "set-mode",
             &input.cancellation,
             input.deadline,
             connection
@@ -558,15 +565,22 @@ fn prompt_session_failure(meta: Option<&Map<String, Value>>) -> Result<bool, Del
 }
 
 async fn phase<T>(
+    stage: &'static str,
     cancellation: &CancellationToken,
     deadline: Instant,
     future: impl Future<Output = Result<T, agent_client_protocol::Error>>,
 ) -> Result<T, DelegationErrorV1> {
+    #[cfg(not(test))]
+    let _ = stage;
     tokio::select! {
         biased;
         _ = cancellation.cancelled() => Err(DelegationErrorV1::Cancelled),
         _ = tokio::time::sleep_until(deadline) => Err(DelegationErrorV1::DeadlineExceeded),
-        result = future => result.map_err(pi_failure::map_error),
+        result = future => result.map_err(|error| {
+            #[cfg(test)]
+            eprintln!("native acceptance ACP stage={} request-error-code={}", stage, i32::from(error.code));
+            pi_failure::map_error(error)
+        }),
     }
 }
 

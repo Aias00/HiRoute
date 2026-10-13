@@ -46,7 +46,7 @@ impl CodexNativeIngressProbe {
             private_directory(path)?;
         }
         let mut challenge = cli
-            .map(|cli| http::CollaborationChallenge::prepare(&home, cli))
+            .map(|cli| http::CollaborationChallenge::prepare(&home, &codex_home, cli))
             .transpose()
             .map_err(fail)?;
         // No shell interpolation, secret argv, inherited auth, project rules or managed file.

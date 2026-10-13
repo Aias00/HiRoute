@@ -404,7 +404,8 @@ fn run_normal_prompt(
     let cwd = profile.cwd.clone();
     let identity_contract = profile.identity_contract.clone();
     let session_meta = profile.session_meta.clone();
-    let native_session_mode = Some(profile.native_session_mode().to_owned());
+    let native_session_mode = (!profile.native_session_mode().is_empty())
+        .then(|| profile.native_session_mode().to_owned());
     let expected_model = Some(profile.native_selected_model_id().to_owned());
     let nonce = nonce.to_owned();
     let prompt = prompt.to_owned();
@@ -479,7 +480,8 @@ fn run_cancel_session(
     let cwd = profile.cwd.clone();
     let identity_contract = profile.identity_contract.clone();
     let session_meta = profile.session_meta.clone();
-    let native_session_mode = Some(profile.native_session_mode().to_owned());
+    let native_session_mode = (!profile.native_session_mode().is_empty())
+        .then(|| profile.native_session_mode().to_owned());
     let expected_model = Some(profile.native_selected_model_id().to_owned());
     let nonce = nonce.to_owned();
     let expected_request = server.begin_stall();
@@ -536,6 +538,12 @@ fn release_probe(
     platform: &LocalWorkerPlatform,
     result: &lifecycle::WorkerRunResult,
 ) -> Result<(), DelegationErrorV1> {
+    // Fixed enums and booleans only: never a session id, native message, output or bearer.
+    eprintln!(
+        "native acceptance lifecycle execution={:?} stop={:?}",
+        result.execution.as_ref().err(),
+        result.stop
+    );
     if result
         .stop
         .as_ref()
@@ -684,6 +692,48 @@ fn windows_probe_root_creates_strict_private_directories_before_native_launch() 
     assert_ne!(root.sessions.parent().unwrap(), root._root.path());
 }
 
+#[cfg(windows)]
+#[test]
+fn windows_isolated_profile_uses_one_native_path_identity() {
+    let root = ProbeRoot::new().unwrap();
+    let ordinary_runs = root.runs.clone();
+    let canonical_runs = fs::canonicalize(&ordinary_runs).unwrap();
+    assert_ne!(
+        canonical_runs, ordinary_runs,
+        "exercise the verbatim Win32 spelling"
+    );
+    let session = TaskSessionRoot::prepare(
+        &fs::canonicalize(&root.sessions).unwrap(),
+        &WorkspaceId::parse("worker-probe").unwrap(),
+        "root",
+        "task",
+        WorkerHarnessV1::ClaudeCode,
+        SessionRootUse::New,
+    )
+    .unwrap();
+    let first = ordinary_runs.join("first");
+    let context =
+        NativeWorkerContext::isolated(&canonical_runs.join("first"), session.path()).unwrap();
+    assert_eq!(context.home(), first.join("home"));
+    let binary = std::env::current_exe().unwrap();
+    // Build production materials without executing a stand-in native client. Before the
+    // fix, canonicalizing the checked run parent reintroduced \?\ and rejected this profile.
+    let profile = build_profile(
+        WorkerHarnessV1::ClaudeCode,
+        &binary,
+        &binary,
+        &binary,
+        &root.workspace,
+        &first,
+        &session,
+        "127.0.0.1:1".parse().unwrap(),
+        protected_challenge(b"noncredential-regression").unwrap(),
+    )
+    .unwrap();
+    assert_eq!(profile.private_root, first);
+    assert_eq!(profile.session_root, session.path());
+}
+
 #[derive(Default)]
 struct ProbeJournal {
     completed: AtomicBool,
@@ -705,7 +755,11 @@ impl ProbeJournal {
 }
 
 impl AcpRunJournal for ProbeJournal {
+    fn initialized(&self) {
+        eprintln!("native acceptance ACP stage=initialized");
+    }
     fn session_bound(&self, _: &DelegationSessionBindingV1) -> Result<(), DelegationErrorV1> {
+        eprintln!("native acceptance ACP stage=session-bound");
         if let Some(watch) = &self.session_watch
             && !watch.seen.swap(true, Ordering::AcqRel)
         {
@@ -718,6 +772,7 @@ impl AcpRunJournal for ProbeJournal {
         Ok(())
     }
     fn before_prompt(&self) -> Result<(), DelegationErrorV1> {
+        eprintln!("native acceptance ACP stage=before-prompt");
         Ok(())
     }
     fn text_update(&self, text: &str) -> Result<(), DelegationErrorV1> {
@@ -744,6 +799,7 @@ impl WorkerRunJournal for ProbeJournal {
         &self,
         _: &hiroute_domain::delegation::DelegationProcessBindingV1,
     ) -> Result<(), DelegationErrorV1> {
+        eprintln!("native acceptance lifecycle stage=process-spawned");
         Ok(())
     }
     fn stop_intent(&self) -> Result<(), DelegationErrorV1> {
@@ -753,7 +809,8 @@ impl WorkerRunJournal for ProbeJournal {
         self.completed.store(true, Ordering::Release);
         Ok(())
     }
-    fn execution_failed(&self, _: DelegationErrorV1) -> Result<(), DelegationErrorV1> {
+    fn execution_failed(&self, error: DelegationErrorV1) -> Result<(), DelegationErrorV1> {
+        eprintln!("native acceptance lifecycle stage=execution-failed code={error:?}");
         Ok(())
     }
     fn spawned_unrecorded(&self) -> Result<(), DelegationErrorV1> {
@@ -777,7 +834,7 @@ mod tests {
     #[test]
     fn probe_root_is_private_before_it_holds_child_configuration() {
         let root = ProbeRoot::new().expect("probe root must be private");
-        private_directory(root._root.path()).expect("top-level root must be private");
+        private_directory(root.sessions.parent().unwrap()).expect("top-level root must be private");
         private_directory(&root.sessions).expect("session root must be private");
         private_directory(&root.runs).expect("run root must be private");
         private_directory(&root.workspace).expect("workspace root must be private");

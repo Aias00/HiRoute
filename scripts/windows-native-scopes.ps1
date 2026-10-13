@@ -27,13 +27,14 @@ function Get-WindowsRequiredRecipes {
   param([Parameter(Mandatory)][string]$Scope)
   switch ($Scope) {
     'components' { return @('platform','platform-unit','jobs','diagnostics','scm-owner') }
-    'product' { return @('artifacts','cpa','headless','credential-options','worker-materials',
+    'product' { return @('artifacts','cpa','core-cpa-bridge','replay-fragmentation','headless','credential-options','worker-materials',
       'worker-cleanup','authority-key','native-endpoint','native-home','startup-admission','live-capture') }
     'core' { return @(Get-WindowsCorePackages | ForEach-Object { $_ -replace '^hiroute-','core-' }) }
     'background' { return @('background') }
     'upgrade' { return @('upgrade') }
     'agents' {
-      return @('agent-private-root','agent-private-node') +
+      return @('agent-private-root','agent-private-node','agent-path-identity','agent-pi-sdk',
+        'agent-native-codex-ingress','agent-business-oracle','agent-public-business') +
         @(Get-WindowsDaemonAgentCases | ForEach-Object { 'agent-' + (($_ -split 'actual_')[1] -replace '_','-') }) +
         @(Get-WindowsMainAgentCases | ForEach-Object { 'main-' + (($_ -split 'actual_windows_')[1] -replace '_','-') })
     }

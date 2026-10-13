@@ -53,7 +53,9 @@ impl ToolsFixture {
             WorkerHarnessV1::Pi => ".pi",
             WorkerHarnessV1::DeepseekHarness => ".dsh",
         };
-        let user_root = if harness == WorkerHarnessV1::CodexCli {
+        // Codex's .agents user root is the actual KnownFolder on Windows, not an
+        // environment-selected probe HOME. Use its supported private CODEX_HOME user root.
+        let user_root = if harness == WorkerHarnessV1::CodexCli && !cfg!(windows) {
             home.join(".agents/skills")
         } else {
             config.join("skills")

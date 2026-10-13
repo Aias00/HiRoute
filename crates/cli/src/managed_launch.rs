@@ -419,11 +419,14 @@ mod tests {
     }
 
     fn trusted_helper() -> String {
-        std::fs::canonicalize(std::env::current_exe().unwrap())
-            .unwrap()
-            .into_os_string()
-            .into_string()
-            .unwrap()
+        let canonical = std::fs::canonicalize(std::env::current_exe().unwrap()).unwrap();
+        let text = canonical.to_str().unwrap();
+        // The frozen descriptor carries native drive paths. Canonicalization's
+        // Rust verbatim spelling must not alter this fixture's native path contract.
+        #[cfg(windows)]
+        let text = text.strip_prefix(r"\\?\").unwrap_or(text);
+        assert_eq!(std::fs::canonicalize(text).unwrap(), canonical);
+        text.to_owned()
     }
 
     #[test]
@@ -664,7 +667,7 @@ mod tests {
 
     #[test]
     fn configured_child_carries_routing_environment_without_empty_setting_sources() {
-        let executable = std::env::current_exe().unwrap().canonicalize().unwrap();
+        let executable = std::path::PathBuf::from(trusted_helper());
         let descriptor = descriptor(executable.to_str().unwrap(), &trusted_helper());
         let invocation = ManagedLaunchInvocation {
             connection_id: descriptor.connection_id.clone(),
