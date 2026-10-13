@@ -12,13 +12,13 @@ use std::path::{Path, PathBuf};
 use std::ptr::{null, null_mut};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use sha2::{Digest, Sha256};
 use windows_sys::Win32::Foundation::{
     ERROR_BROKEN_PIPE, ERROR_IO_INCOMPLETE, ERROR_IO_PENDING, ERROR_OPERATION_ABORTED,
-    ERROR_PIPE_CONNECTED, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0,
-    WAIT_TIMEOUT,
+    ERROR_PIPE_BUSY, ERROR_PIPE_CONNECTED, GENERIC_READ, GENERIC_WRITE, HANDLE,
+    INVALID_HANDLE_VALUE, WAIT_OBJECT_0, WAIT_TIMEOUT,
 };
 use windows_sys::Win32::Storage::FileSystem::{
     CreateFileW, FILE_FLAG_FIRST_PIPE_INSTANCE, FILE_FLAG_OVERLAPPED, OPEN_EXISTING,
@@ -28,6 +28,7 @@ use windows_sys::Win32::System::IO::{CancelIoEx, GetOverlappedResult, OVERLAPPED
 use windows_sys::Win32::System::Pipes::{
     ConnectNamedPipe, CreateNamedPipeW, GetNamedPipeClientProcessId, GetNamedPipeServerProcessId,
     PIPE_READMODE_BYTE, PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES,
+    WaitNamedPipeW,
 };
 use windows_sys::Win32::System::Threading::{CreateEventW, INFINITE, WaitForSingleObject};
 
@@ -262,6 +263,10 @@ impl Listener {
         Ok(())
     }
 
+    pub fn incoming(&self) -> impl Iterator<Item = io::Result<Stream>> + '_ {
+        std::iter::from_fn(|| Some(self.accept().map(|(stream, ())| stream)))
+    }
+
     pub fn accept(&self) -> io::Result<(Stream, ())> {
         let mut pending = self
             .pending
@@ -293,6 +298,7 @@ pub struct Stream {
     handle: Arc<File>,
     read_timeout: Mutex<Option<Duration>>,
     write_timeout: Mutex<Option<Duration>>,
+    deadline: Mutex<Option<Instant>>,
 }
 
 impl Stream {
@@ -301,28 +307,80 @@ impl Stream {
             handle,
             read_timeout: Mutex::new(None),
             write_timeout: Mutex::new(None),
+            deadline: Mutex::new(None),
         }
     }
 
     pub fn connect(endpoint: &Path) -> io::Result<Self> {
+        Self::connect_timeout(endpoint, Duration::from_secs(5))
+    }
+
+    pub fn connect_timeout(endpoint: &Path, timeout: Duration) -> io::Result<Self> {
+        let deadline = Instant::now()
+            .checked_add(timeout)
+            .filter(|_| !timeout.is_zero())
+            .ok_or_else(|| io::Error::from(io::ErrorKind::InvalidInput))?;
         let name = wide(&name(endpoint)?)?;
-        // SAFETY: the NUL-terminated name lives through creation. Identification
-        // QOS prevents the server from impersonating this client for effects.
-        let handle = owned(unsafe {
-            CreateFileW(
-                name.as_ptr(),
-                GENERIC_READ | GENERIC_WRITE,
-                0,
-                null(),
-                OPEN_EXISTING,
-                FILE_FLAG_OVERLAPPED | SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION,
-                null_mut(),
-            )
-        })?;
+        let handle = loop {
+            // SAFETY: name lives through creation; identification QOS prevents
+            // the server from impersonating the caller for business effects.
+            let handle = owned(unsafe {
+                CreateFileW(
+                    name.as_ptr(),
+                    GENERIC_READ | GENERIC_WRITE,
+                    0,
+                    null(),
+                    OPEN_EXISTING,
+                    FILE_FLAG_OVERLAPPED | SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION,
+                    null_mut(),
+                )
+            });
+            match handle {
+                Ok(handle) => break handle,
+                Err(error) if error.raw_os_error() == Some(ERROR_PIPE_BUSY as i32) => {}
+                Err(error) => return Err(error),
+            }
+            let remaining = deadline
+                .checked_duration_since(Instant::now())
+                .filter(|duration| !duration.is_zero())
+                .ok_or_else(|| io::Error::from(io::ErrorKind::TimedOut))?;
+            // SAFETY: the name remains live. A short bounded wait allows other
+            // clients to race the newly available instance; loop keeps one deadline.
+            unsafe { WaitNamedPipeW(name.as_ptr(), remaining.as_millis().clamp(1, 10) as u32) };
+        };
         verify_owner_only_handle(&handle, false)?;
         let stream = Self::new(Arc::new(handle));
         peer_pid(&stream, false)?;
         Ok(stream)
+    }
+
+    /// One deadline covers all fragments of a protected record and its receipt.
+    pub fn set_deadline(&self, value: Option<Instant>) -> io::Result<()> {
+        *self
+            .deadline
+            .lock()
+            .map_err(|_| io::Error::other("pipe deadline poisoned"))? = value;
+        Ok(())
+    }
+
+    fn io_timeout(&self, configured: &Mutex<Option<Duration>>) -> io::Result<Option<Duration>> {
+        let configured = timeout(configured)?;
+        let deadline = *self
+            .deadline
+            .lock()
+            .map_err(|_| io::Error::other("pipe deadline poisoned"))?;
+        match deadline {
+            None => Ok(configured),
+            Some(deadline) => {
+                let remaining = deadline
+                    .checked_duration_since(Instant::now())
+                    .filter(|duration| !duration.is_zero())
+                    .ok_or_else(|| io::Error::from(io::ErrorKind::TimedOut))?;
+                Ok(Some(
+                    configured.map_or(remaining, |value| value.min(remaining)),
+                ))
+            }
+        }
     }
 
     pub fn try_clone(&self) -> io::Result<Self> {
@@ -330,6 +388,12 @@ impl Stream {
             handle: Arc::clone(&self.handle),
             read_timeout: Mutex::new(timeout(&self.read_timeout)?),
             write_timeout: Mutex::new(timeout(&self.write_timeout)?),
+            deadline: Mutex::new(
+                *self
+                    .deadline
+                    .lock()
+                    .map_err(|_| io::Error::other("pipe deadline poisoned"))?,
+            ),
         })
     }
 
@@ -360,7 +424,7 @@ impl Read for Stream {
         if buffer.is_empty() {
             return Ok(0);
         }
-        let timeout = timeout(&self.read_timeout)?;
+        let timeout = self.io_timeout(&self.read_timeout)?;
         let mut operation = Operation::new()?;
         let handle = self.as_raw_handle().cast();
         let length = u32::try_from(buffer.len()).unwrap_or(u32::MAX);
@@ -399,7 +463,7 @@ impl Write for Stream {
         if buffer.is_empty() {
             return Ok(0);
         }
-        let timeout = timeout(&self.write_timeout)?;
+        let timeout = self.io_timeout(&self.write_timeout)?;
         let mut operation = Operation::new()?;
         let handle = self.as_raw_handle().cast();
         let length = u32::try_from(buffer.len()).unwrap_or(u32::MAX);

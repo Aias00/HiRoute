@@ -17,6 +17,9 @@ serde.workspace = true
 serde_json.workspace = true
 zeroize.workspace = true
 
+[target.'cfg(windows)'.dependencies]
+hiroute-platform = { path = "../platform" }
+
 [dev-dependencies]
 hiroute-application = { path = "../application" }
 hiroute-daemon = { path = "../daemon" }

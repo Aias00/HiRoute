@@ -94,6 +94,28 @@ pub fn open_owner_only(path: &Path, directory: bool) -> io::Result<File> {
     Ok(file)
 }
 
+/// Create missing directories with private defaults; retain the native ACL of
+/// an existing accessible directory. Every object is reparse-free and held.
+pub fn ensure_private_directory(path: &Path) -> io::Result<File> {
+    match open_identity(path, true) {
+        Ok(file) => return Ok(file),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error),
+    }
+    let parent = path
+        .parent()
+        .ok_or_else(|| io::Error::other("directory has no parent"))?;
+    let parent = ensure_private_directory(parent)?;
+    let name = path
+        .file_name()
+        .ok_or_else(|| io::Error::other("directory has no name"))?;
+    match create_owner_only_directory_at(&parent, name) {
+        Ok(file) => Ok(file),
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => open_identity(path, true),
+        Err(error) => Err(error),
+    }
+}
+
 pub fn create_owner_only_directory(path: &Path) -> io::Result<File> {
     create_owner_only(path, true)
 }
@@ -156,6 +178,24 @@ fn create_owner_only_at(
     Ok(file)
 }
 
+/// Open one existing child for identity-bound deletion; no path is re-resolved.
+pub fn open_delete_at(parent: &File, name: &std::ffi::OsStr, directory: bool) -> io::Result<File> {
+    super::path::relative(parent, name, directory, GENERIC_READ | DELETE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE, false, None)
+}
+
+pub fn open_delete(path: &Path, directory: bool) -> io::Result<File> {
+    super::path::open(path, directory, GENERIC_READ | DELETE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE, false, None)
+}
+
+/// Writable identity for payload flush and handle-relative namespace changes.
+pub fn open_write_through(path: &Path, directory: bool) -> io::Result<File> {
+    super::path::open(path, directory,
+        GENERIC_READ | DELETE | if directory { 0 } else { GENERIC_WRITE },
+        super::path::SHARE_ALL, false, None)
+}
+
 pub fn delete_by_handle(file: &File) -> io::Result<()> {
     let disposition = FILE_DISPOSITION_INFO { DeleteFile: true };
     // SAFETY: `file` owns a DELETE-capable handle and the buffer exactly
@@ -203,7 +243,7 @@ pub fn set_owner_only(path: &Path, directory: bool) -> io::Result<()> {
     let user = CurrentUser::load()?;
     let mut acl: *mut ACL = null_mut();
     let access = EXPLICIT_ACCESS_W {
-        grfAccessPermissions: GENERIC_ALL,
+        grfAccessPermissions: FILE_ALL_ACCESS,
         grfAccessMode: SET_ACCESS,
         grfInheritance: if directory {
             SUB_CONTAINERS_AND_OBJECTS_INHERIT
@@ -252,11 +292,14 @@ pub(crate) struct OwnerSecurity {
 }
 
 impl OwnerSecurity {
+    pub(crate) fn descriptor(&self) -> *const c_void {
+        (&self.descriptor as *const SECURITY_DESCRIPTOR).cast()
+    }
     pub(crate) fn new(directory: bool) -> io::Result<Self> {
         let user = CurrentUser::load()?;
         let mut acl: *mut ACL = null_mut();
         let access = EXPLICIT_ACCESS_W {
-            grfAccessPermissions: GENERIC_ALL,
+            grfAccessPermissions: FILE_ALL_ACCESS,
             grfAccessMode: SET_ACCESS,
             grfInheritance: if directory {
                 SUB_CONTAINERS_AND_OBJECTS_INHERIT

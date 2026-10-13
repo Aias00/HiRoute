@@ -13,7 +13,7 @@ use std::ptr::{null, null_mut};
 use windows_sys::Wdk::Foundation::OBJECT_ATTRIBUTES;
 use windows_sys::Wdk::Storage::FileSystem::{
     FILE_CREATE, FILE_DIRECTORY_FILE, FILE_NON_DIRECTORY_FILE, FILE_OPEN, FILE_OPEN_REPARSE_POINT,
-    FILE_SYNCHRONOUS_IO_NONALERT, NtCreateFile,
+    FILE_SYNCHRONOUS_IO_NONALERT, FILE_WRITE_THROUGH, NtCreateFile,
 };
 use windows_sys::Win32::Foundation::{
     GENERIC_READ, OBJ_CASE_INSENSITIVE, OBJ_DONT_REPARSE, RtlNtStatusToDosError, UNICODE_STRING,
@@ -131,6 +131,7 @@ pub(super) fn relative(
             if create { FILE_CREATE } else { FILE_OPEN },
             FILE_OPEN_REPARSE_POINT
                 | FILE_SYNCHRONOUS_IO_NONALERT
+                | FILE_WRITE_THROUGH
                 | if directory {
                     FILE_DIRECTORY_FILE
                 } else {

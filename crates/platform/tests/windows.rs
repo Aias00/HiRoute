@@ -10,6 +10,10 @@ fn ancestor_junction_cannot_redirect_private_read_or_creation() {
     let original = outside.join("original");
     let file = security::create_owner_only_file(&original).unwrap();
     drop(file);
+    // Child creation above must succeed while its DELETE-capable parent is held.
+    // Release that pin only for mklink's independent target inspection, then
+    // exercise rejection of the published alias.
+    drop(held);
     let alias = fixture.path().join("alias");
     let cmd =
         std::path::PathBuf::from(std::env::var_os("SystemRoot").unwrap()).join("System32/cmd.exe");
@@ -21,7 +25,9 @@ fn ancestor_junction_cannot_redirect_private_read_or_creation() {
         .unwrap();
     assert!(
         result.status.success(),
-        "owned junction fixture must be created"
+        "owned junction fixture must be created: stdout={:?}, stderr={:?}",
+        String::from_utf8_lossy(&result.stdout),
+        String::from_utf8_lossy(&result.stderr)
     );
     assert!(security::open_owner_only(&alias.join("original"), false).is_err());
     assert!(security::create_owner_only_file(&alias.join("new")).is_err());
@@ -29,7 +35,6 @@ fn ancestor_junction_cannot_redirect_private_read_or_creation() {
     assert!(!outside.join("new").exists());
     assert!(original.exists());
     std::fs::remove_dir(&alias).unwrap();
-    drop(held);
 }
 use std::io::{Read, Write};
 use std::time::Duration;
@@ -37,6 +42,28 @@ use std::time::Duration;
 #[test]
 fn private_file_identity_is_held_and_reparse_free() {
     let fixture = tempfile::tempdir().unwrap();
+    let directory_path = fixture.path().join("held parent");
+    let directory = security::create_owner_only_directory(&directory_path).unwrap();
+    let mut child = security::create_owner_only_file_at(&directory, "child".as_ref()).unwrap();
+    child.write_all(b"owned-child").unwrap();
+    assert!(std::fs::rename(&directory_path, fixture.path().join("moved parent")).is_err());
+    security::delete_by_handle(&child).unwrap();
+    drop(child);
+    security::delete_by_handle(&directory).unwrap();
+    drop(directory);
+    assert!(!directory_path.exists());
+    // An existing traversal handle may permit rename; relative operations must
+    // still address that object, never a replacement at its original path.
+    std::fs::create_dir(&directory_path).unwrap();
+    let identity = security::open_identity(&directory_path, true).unwrap();
+    let moved_path = fixture.path().join("moved parent");
+    std::fs::rename(&directory_path, &moved_path).unwrap();
+    std::fs::create_dir(&directory_path).unwrap();
+    let child = security::create_owner_only_file_at(&identity, "bound-child".as_ref()).unwrap();
+    assert!(moved_path.join("bound-child").exists());
+    assert!(!directory_path.join("bound-child").exists());
+    drop(child);
+    drop(identity);
     let path = fixture.path().join("私有 文件");
     let mut file = security::create_owner_only_file(&path).unwrap();
     file.write_all(b"synthetic-private-data").unwrap();
@@ -122,4 +149,19 @@ fn pipe_deadline_cancels_read_without_consuming_the_next_frame() {
     client.write_all(b"x").unwrap();
     server.read_exact(&mut byte).unwrap();
     assert_eq!(&byte, b"x");
+}
+#[test]
+fn native_permissions_survive_atomic_restore_and_detect_acl_changes() {
+    use hiroute_platform::{durable, file_security};
+    let fixture = tempfile::tempdir().unwrap();
+    let target = fixture.path().join("native.json");
+    std::fs::write(&target, b"original").unwrap();
+    let original = file_security::capture(&security::open_identity(&target, false).unwrap()).unwrap();
+    durable::write_private_atomic(&target, b"managed").unwrap();
+    let managed = file_security::capture(&security::open_owner_only(&target, false).unwrap()).unwrap();
+    assert_eq!(managed, file_security::private_defaults(false).unwrap());
+    assert_ne!(managed.descriptor, original.descriptor);
+    durable::write_windows_atomic(&target, b"original", &original).unwrap();
+    assert_eq!(std::fs::read(&target).unwrap(), b"original");
+    assert_eq!(file_security::capture(&security::open_identity(&target, false).unwrap()).unwrap(), original);
 }
