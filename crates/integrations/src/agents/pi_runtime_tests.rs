@@ -2,18 +2,24 @@ use super::*;
 use std::os::unix::fs::PermissionsExt;
 
 fn native_fixture(root: &Path, body: &str) -> PathBuf {
-    let path = root.join("node-body.sh");
-    std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let input = root.join("node-body.sh");
+    std::fs::write(&input, format!("#!/bin/sh\n{body}\n")).unwrap();
+    std::fs::set_permissions(&input, std::fs::Permissions::from_mode(0o600)).unwrap();
+    // The executable is immutable; writable test bodies are interpreter inputs.
+    // This avoids turning a version/output assertion into an executable-busy failure.
+    let path = root.join("node");
+    std::os::unix::fs::symlink(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/pi-node-launcher.sh"),
+        &path,
+    )
+    .unwrap();
     path
 }
 
 #[test]
 fn supported_cold_pi_node_is_not_rejected_after_two_seconds() {
     let root = tempfile::tempdir().unwrap();
-    let node = root.path().join("node");
-    std::fs::write(&node, "#!/bin/sh\nsleep 3; printf 'v24.19.0\\n'\n").unwrap();
-    std::fs::set_permissions(&node, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let node = native_fixture(root.path(), "sleep 3; printf 'v24.19.0\\n'");
     assert!(validate_pi_node(&node).is_ok());
 }
 
