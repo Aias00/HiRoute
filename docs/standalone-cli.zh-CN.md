@@ -407,6 +407,9 @@ hiroute agents collaboration disable agent_codex_default --yes --idempotency-key
 `codex_access.root_context_id`，模型 profile 已配置时也使用原始 HOME 的 root context；
 其他 Agent 使用自己的 context。模型和访问 token 保持原设置。
 
+升级 HiRoute 后，以相同触发方式和新的配置提交标识重新保存协作配置，才能更新 HiRoute
+管理的已安装 Skill；仅启动不会替换它。用户修改或自行维护的 Skill 仍遵守原有冲突规则。
+
 `--preview` 不执行本地检查、写入提交记录或保存配置。实际保存仅在预览报告能力证明缺失时
 执行既有的本地有界检查，然后重新预览，不产生上游模型调用。检查失败、文件冲突或仍有
 blocker 时停止保存。关闭使用协作自己的 restore point，并要求 `--yes` 确认。

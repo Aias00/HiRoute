@@ -8,7 +8,6 @@ use hiroute_application_api::{
     WorkerResultRequestV1, WorkerWaitRequestV1,
 };
 use hiroute_client_core::{ClientFailure, FailureCode};
-use serde_json::json;
 
 use crate::args::{Globals, OutputMode};
 use crate::{CliExecution, LocalControlClient};

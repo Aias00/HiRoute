@@ -478,6 +478,10 @@ The workflow also accepts other supported Agent IDs returned by scan. Like Deskt
 the collaboration context: Codex uses `codex_access.root_context_id` even with an occupied
 model profile, and other Agents use their own context. Model and access-token settings remain.
 
+After upgrading HiRoute, save collaboration configuration again with the same trigger and a
+new configuration idempotency key to update a HiRoute-owned installed Skill. Startup alone
+does not replace it. Modified or user-owned Skill files retain the existing conflict rules.
+
 `--preview` runs no local check, writes no submission record and saves no configuration.
 A save runs an existing bounded local check only for missing capabilities reported by Preview,
 then previews again. It makes no provider model call. Failed checks, file conflicts or remaining

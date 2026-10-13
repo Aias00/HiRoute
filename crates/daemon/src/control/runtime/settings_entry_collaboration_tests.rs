@@ -1,4 +1,10 @@
 use super::*;
+use std::os::unix::fs::MetadataExt;
+
+const RELEASED_EXPLICIT_SKILL: &str =
+    include_str!("../../../tests/fixtures/collaboration-skill-v0.3.1/explicit.md");
+const RELEASED_DEFAULT_SKILL: &str =
+    include_str!("../../../tests/fixtures/collaboration-skill-v0.3.1/default.md");
 
 #[test]
 fn v2_settings_skill_only_enable_change_and_disable_keep_model_untouched() {
@@ -122,10 +128,38 @@ fn v2_settings_skill_only_enable_change_and_disable_keep_model_untouched() {
     fs::write(&legacy, sealed.as_bytes()).unwrap();
     fs::set_permissions(&legacy, fs::Permissions::from_mode(0o600)).unwrap();
 
+    let skill = home.join(".agents/skills/hiroute-collaboration/SKILL.md");
+    let install_released = |spec: serde_json::Value,
+                            revision: &'static str,
+                            content: &'static str,
+                            key: &str| {
+        let released = LocalControlDaemon::new(ApplicationService::new(
+            runtime.application_ports().with_agent_connection(Arc::new(
+                FixtureFacts::released_collaboration(runtime.adapter.clone(), revision, content),
+            )),
+        ));
+        let accepted = apply(&released, &runtime, spec, key);
+        assert_eq!(fs::read_to_string(&skill).unwrap(), content);
+        let id: OperationId = serde_json::from_value(accepted["operation_id"].clone()).unwrap();
+        let operation = runtime
+            .adapter
+            .stores_lock()
+            .unwrap()
+            .control()
+            .load_operation(&id)
+            .unwrap()
+            .unwrap();
+        (id, serde_json::to_vec(&operation).unwrap())
+    };
+    let (released_id, released_operation) = install_released(
+        enable.clone(),
+        "worker-instance-default-v1",
+        RELEASED_DEFAULT_SKILL,
+        "released-default-skill",
+    );
     let enabled = apply(&service, &runtime, enable, "skill-enable");
     assert!(!legacy.exists());
     assert_local_worker_collaboration_management(&service, &context, "delegate_by_default");
-    let skill = home.join(".agents/skills/hiroute-collaboration/SKILL.md");
     let content = fs::read_to_string(&skill).unwrap();
     assert!(content.contains("Delegate suitable executable work by default"));
     assert!(content.contains("hiroute worker plans"));
@@ -136,6 +170,13 @@ fn v2_settings_skill_only_enable_change_and_disable_keep_model_untouched() {
         "use a restricted policy only when the user asks for one and the selected harness supports it"
     ));
     assert_eq!(fs::read(&model).unwrap(), original_model);
+    assert_skill_upgrade(
+        &runtime,
+        &released_id,
+        &released_operation,
+        "default",
+        &content,
+    );
 
     fs::write(&legacy, b"not a sealed HiRoute artifact").unwrap();
     fs::set_permissions(&legacy, fs::Permissions::from_mode(0o600)).unwrap();
@@ -161,7 +202,13 @@ fn v2_settings_skill_only_enable_change_and_disable_keep_model_untouched() {
         "schema_version":{"major":2,"minor":0}, "context_id":context,
         "collaboration":{"intent":"configure","settings":{"trigger_mode":"explicit"}}
     });
-    let changed = apply(&service, &runtime, change, "skill-change");
+    let (released_id, released_operation) = install_released(
+        change.clone(),
+        "worker-instance-explicit-v1",
+        RELEASED_EXPLICIT_SKILL,
+        "released-explicit-skill",
+    );
+    let changed = apply(&service, &runtime, change.clone(), "skill-change");
     let changed_id: OperationId = serde_json::from_value(changed["operation_id"].clone()).unwrap();
     let changed_operation = runtime
         .adapter
@@ -173,18 +220,32 @@ fn v2_settings_skill_only_enable_change_and_disable_keep_model_untouched() {
         .unwrap();
     assert!(
         !changed_operation.plan.external().is_empty(),
-        "changing the trigger mode rewrites the owned Skill content"
+        "changing the template revision rewrites the owned Skill content"
     );
     let changed_content = fs::read_to_string(&skill).unwrap();
     assert_ne!(changed_content, content);
     assert!(changed_content.contains("only when the user explicitly asks"));
+    assert!(changed_content.contains("literal value in `--submission-key`"));
+    assert_skill_upgrade(
+        &runtime,
+        &released_id,
+        &released_operation,
+        "explicit",
+        &changed_content,
+    );
+    let inode = fs::metadata(&skill).unwrap().ino();
+    let reapplied = apply(&service, &runtime, change, "skill-reapply-identical");
+    let reapplied_id: OperationId =
+        serde_json::from_value(reapplied["operation_id"].clone()).unwrap();
+    assert_eq!(fs::read_to_string(&skill).unwrap(), changed_content);
+    assert_eq!(fs::metadata(&skill).unwrap().ino(), inode);
     assert_local_worker_collaboration_management(&service, &context, "explicit");
     assert_eq!(fs::read(&model).unwrap(), original_model);
     assert_worker_plans_empty(&service, "worker-plans-after-change");
 
     let disable = json!({
         "schema_version":{"major":2,"minor":0}, "context_id":context,
-        "collaboration":{"intent":"restore","restore_point_ref":codex_model_restore_point_ref(&changed_id)}
+        "collaboration":{"intent":"restore","restore_point_ref":codex_model_restore_point_ref(&reapplied_id)}
     });
     apply(&service, &runtime, disable, "skill-disable");
     assert!(!skill.exists());
@@ -201,6 +262,40 @@ fn v2_settings_skill_only_enable_change_and_disable_keep_model_untouched() {
     assert_worker_plans_empty(&service, "worker-plans-after-disable");
 }
 
+fn assert_skill_upgrade(
+    runtime: &ProductionControlRuntime,
+    released_id: &OperationId,
+    released_operation: &[u8],
+    mode: &str,
+    content: &str,
+) {
+    let stores = runtime.adapter.stores_lock().unwrap();
+    let record = stores
+        .control()
+        .skill_installation(&WorkspaceId::default(), "skill-root/agent_codex_default")
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        record.template_revision,
+        format!("worker-instance-{mode}-v2")
+    );
+    assert!(record.revision > 1);
+    assert_eq!(
+        record.content_digest,
+        CanonicalDigest::of_bytes(content.as_bytes())
+    );
+    assert_eq!(
+        record.file_ownership,
+        hiroute_domain::CollaborationSkillFileOwnership::Managed
+    );
+    let unchanged = stores
+        .control()
+        .load_operation(released_id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(serde_json::to_vec(&unchanged).unwrap(), released_operation);
+}
+
 #[test]
 fn v2_settings_releases_borrowed_skill_after_user_file_drift() {
     if crate::test_support::isolated_agent_home(
@@ -208,7 +303,6 @@ fn v2_settings_releases_borrowed_skill_after_user_file_drift() {
     ) {
         return;
     }
-    use std::os::unix::fs::MetadataExt;
 
     let root = tempfile::tempdir().unwrap();
     fs::set_permissions(root.path(), fs::Permissions::from_mode(0o700)).unwrap();
