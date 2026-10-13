@@ -20,6 +20,7 @@
     "allow-model-reference-query",
     "allow-effective-price-query",
     "allow-compute-management-snapshot",
+    "allow-compute-key-masks",
     "allow-compute-scan",
     "allow-prepare-discovered-model-connection",
     "allow-compute-connection-options",

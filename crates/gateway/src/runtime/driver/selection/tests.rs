@@ -96,6 +96,67 @@ fn materialization_failure(
 }
 
 #[test]
+fn admitted_pool_denial_combines_with_later_preparation_but_preserves_real_attempts() {
+    for (class, expected_code) in [
+        ("source_disabled", "SOURCE_DISABLED"),
+        ("credential_exhausted", "CANDIDATE_PREPARATION_FAILED"),
+        ("runtime_state_cooling_down", "CANDIDATE_PREPARATION_FAILED"),
+    ] {
+        for formal_attempt in [false, true] {
+            let now = Instant::now();
+            let candidates: Arc<[DecisionCandidateAuthority]> =
+                vec![candidate(2, &["key-b"])].into();
+            let request = DecisionSessionRequest {
+                request_id: RequestId(1),
+                route_binding: candidates[0].binding,
+                candidate_bindings: vec![candidates[0].binding].into(),
+                route_context: ProductionRouteContext {
+                    ingress: crate::server::request_plan::IngressProtocol::Responses,
+                    context_holds: Arc::new(ContextHoldStore::default()),
+                    switch_fallback: None,
+                    hold_completion: None,
+                    reasoning_cleanup: Arc::new(super::super::super::ReasoningCleanup::new(
+                        None, None,
+                    )),
+                    admission_preparation_failure: Some(PreparationFailure::SourceDisabled),
+                },
+                overall_deadline: now + Duration::from_secs(10),
+                max_attempts: 3,
+            };
+            let mut session = ProductionSelection
+                .begin_authorized_session(request, candidates)
+                .unwrap();
+            let realtime = RealtimeRoutingFacts::default();
+            let mut selected = session
+                .select_next(selection_request(now, 1, 3, &realtime))
+                .unwrap()
+                .unwrap();
+            if formal_attempt {
+                selected.attempt_id = AttemptId(1);
+            }
+            session
+                .decide_failure(&selected, &materialization_failure(now, class, None))
+                .unwrap();
+            let reply = session.exhaustion_local_reply(now).unwrap();
+            if formal_attempt {
+                assert!(
+                    reply.is_none(),
+                    "an earlier admission denial cannot rewrite an upstream reply"
+                );
+            } else {
+                let reply = reply.unwrap();
+                assert_eq!(reply.status, StatusCode::BAD_GATEWAY);
+                assert!(!reply.headers.contains_key(RETRY_AFTER));
+                assert_eq!(
+                    serde_json::from_slice::<serde_json::Value>(&reply.body).unwrap()["code"],
+                    expected_code
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn uniform_provisional_denials_retain_the_closed_code_without_retry_or_attempts() {
     for (class, code) in [
         ("source_disabled", "SOURCE_DISABLED"),

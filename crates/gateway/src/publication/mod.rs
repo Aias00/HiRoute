@@ -3,6 +3,7 @@
 mod catalog;
 mod compiler;
 mod installer;
+pub(crate) mod lease_target;
 mod run;
 mod schema;
 mod trust;

@@ -247,3 +247,217 @@ fn frozen_native_requests_obey_current_source_and_key_switches_after_restart() {
         assert_eq!(lease.credential_id(), request.credential_id);
     }
 }
+
+#[test]
+fn current_pool_uses_saved_order_without_changing_frozen_request_or_lease_identity() {
+    let root = tempdir().unwrap();
+    let registry = TrustedComputeCandidateRegistry::new();
+    let primary = candidate("candidate/pool-primary", "slot/primary");
+    let secondary = candidate("candidate/pool-secondary", "slot/secondary");
+    let replacement = candidate("candidate/pool-replacement", "slot/replacement");
+    for facts in [&primary, &secondary, &replacement] {
+        registry.register_compute_candidate(facts.clone()).unwrap();
+    }
+    let stores = LocalStorageSet::open_for_daemon_startup(root.path()).unwrap();
+    let source = save(
+        &stores,
+        &registry,
+        ComputeManagementSubjectV2::Candidate {
+            candidate: primary.candidate,
+        },
+        ComputeManagementIntentV2::SaveReady,
+        vec![],
+        "pool-create",
+    );
+    let request = frozen_request(&source, 0, 0);
+    let first = source.credentials[0].key_id.clone();
+    let subject = ComputeManagementSubjectV2::SavedSource {
+        source_id: source.source_id.clone(),
+    };
+    let second =
+        hiroute_domain::managed_key_id(&source.source_id, &secondary.candidate.candidate_ref)
+            .unwrap();
+    save(
+        &stores,
+        &registry,
+        subject.clone(),
+        ComputeManagementIntentV2::SaveReady,
+        vec![
+            ComputeKeyEditV2::Add {
+                input_candidate: secondary.candidate,
+            },
+            ComputeKeyEditV2::SetOrder {
+                key_ids: vec![second.clone(), first.clone()],
+            },
+        ],
+        "pool-add-and-order",
+    );
+    let bound_members = stores
+        .current_native_credential_refs(&request)
+        .unwrap()
+        .unwrap();
+    assert_eq!(bound_members, [second.clone(), first.clone()]);
+    assert_eq!(request.credential_id, first);
+    assert_eq!(
+        stores
+            .lease_native_credential_exact(&request)
+            .unwrap()
+            .unwrap()
+            .credential_id(),
+        first
+    );
+
+    save(
+        &stores,
+        &registry,
+        subject.clone(),
+        ComputeManagementIntentV2::SaveReady,
+        vec![
+            ComputeKeyEditV2::Replace {
+                key_id: second.clone(),
+                expected_generation: 1,
+                input_candidate: replacement.candidate,
+            },
+            ComputeKeyEditV2::SetOrder {
+                key_ids: vec![first.clone(), second.clone()],
+            },
+        ],
+        "pool-replace-and-order",
+    );
+    assert_eq!(
+        stores
+            .current_native_credential_refs(&request)
+            .unwrap()
+            .unwrap(),
+        [first.clone(), second.clone()]
+    );
+    assert_eq!(
+        bound_members,
+        [second.clone(), first.clone()],
+        "an admitted request's owned list stays fixed"
+    );
+    let mut bound_second = request.clone();
+    bound_second.credential_id = second.clone();
+    let lease = stores
+        .lease_native_credential_exact(&bound_second)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        lease.generation(),
+        2,
+        "a later exact lease sees the current generation of the same key"
+    );
+    assert_eq!(lease.credential_id(), second);
+
+    save(
+        &stores,
+        &registry,
+        subject.clone(),
+        ComputeManagementIntentV2::SaveReady,
+        vec![ComputeKeyEditV2::SetEnabled {
+            key_id: second.clone(),
+            expected_generation: 2,
+            enabled: false,
+        }],
+        "pool-disable-second",
+    );
+    assert_eq!(
+        stores
+            .current_native_credential_refs(&request)
+            .unwrap()
+            .unwrap(),
+        std::slice::from_ref(&first)
+    );
+    assert_eq!(
+        stores
+            .lease_native_credential_exact(&bound_second)
+            .err()
+            .expect("a disabled key denies an exact lease"),
+        NativeCredentialLeaseErrorV1::Denied(NativeCredentialAccessDeniedV1::CredentialDisabled)
+    );
+    save(
+        &stores,
+        &registry,
+        subject.clone(),
+        ComputeManagementIntentV2::SaveDisabled,
+        vec![],
+        "pool-disable-source",
+    );
+    assert_eq!(
+        stores.current_native_credential_refs(&request),
+        Err(NativeCredentialLeaseErrorV1::Denied(
+            NativeCredentialAccessDeniedV1::SourceDisabled
+        ))
+    );
+    drop(stores);
+    let stores = LocalStorageSet::open_for_daemon_startup(root.path()).unwrap();
+    assert_eq!(
+        stores.current_native_credential_refs(&request),
+        Err(NativeCredentialLeaseErrorV1::Denied(
+            NativeCredentialAccessDeniedV1::SourceDisabled
+        ))
+    );
+    save(
+        &stores,
+        &registry,
+        subject,
+        ComputeManagementIntentV2::SaveReady,
+        vec![],
+        "pool-restore-source",
+    );
+    assert_eq!(
+        stores
+            .current_native_credential_refs(&request)
+            .unwrap()
+            .unwrap(),
+        [first]
+    );
+}
+
+#[test]
+fn current_pool_rejects_frozen_requests_for_other_models_targets_or_authentication() {
+    let root = tempdir().unwrap();
+    let registry = TrustedComputeCandidateRegistry::new();
+    let primary = candidate("candidate/pool-target", "slot/primary");
+    registry
+        .register_compute_candidate(primary.clone())
+        .unwrap();
+    let stores = LocalStorageSet::open_for_daemon_startup(root.path()).unwrap();
+    let source = save(
+        &stores,
+        &registry,
+        ComputeManagementSubjectV2::Candidate {
+            candidate: primary.candidate,
+        },
+        ComputeManagementIntentV2::SaveReady,
+        vec![],
+        "pool-target-create",
+    );
+    let request = frozen_request(&source, 0, 0);
+    let mut other_model = request.clone();
+    other_model.upstream_model_id = "other-model".into();
+    other_model.native_transport_model = "other-model".into();
+    let mut other_destination = request.clone();
+    other_destination.credential_destination_ref = "compute-target/other".into();
+    let mut other_endpoint = request.clone();
+    other_endpoint.logical_endpoint = "https://evil.example.test/v1/responses".into();
+    other_endpoint.operational_target = GatewayOperationalTargetV1::UserConfiguredNative {
+        uri: other_endpoint.logical_endpoint.clone(),
+    };
+    other_endpoint.operational_target_digest =
+        CanonicalDigest::of(&other_endpoint.operational_target).unwrap();
+    let mut other_auth = request.clone();
+    other_auth.authentication = GatewayAuthenticationSemanticsV1::Bearer;
+    for changed in [other_model, other_destination, other_endpoint, other_auth] {
+        assert!(changed.validate().is_ok());
+        assert!(stores.current_native_credential_refs(&changed).is_err());
+    }
+    let mut deleted_source = request;
+    deleted_source.stable_binding_id = "binding/managed-deleted".into();
+    assert_eq!(
+        stores
+            .current_native_credential_refs(&deleted_source)
+            .unwrap(),
+        Some(vec![])
+    );
+}

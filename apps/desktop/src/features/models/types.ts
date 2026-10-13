@@ -1,5 +1,8 @@
 export type RevisionSet = { target: number; dependencies: Record<string, number> };
 export type CandidateRef = { candidate_ref: string; candidate_revision: number };
+export type PreparedKeyInput = { input_candidate: CandidateRef; key_id: string };
+export type KeyMasks = { source_id: string; source_revision: number;
+  keys: { key_id: string; generation: number; masked_key: string }[] };
 export type MaterializationState = 'needs_credential' | 'needs_authorization' | 'ready' | 'disabled';
 export type Provenance = 'registered' | 'user_configured' | 'connector_owned';
 export type KeyAvailability = 'available' | 'cooling_down' | 'disabled' | 'unavailable' | 'unknown';

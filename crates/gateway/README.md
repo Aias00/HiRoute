@@ -99,6 +99,13 @@ uses the caller's `ExecutionScope`, keeps the existing error categories, and
 does not read credentials or runtime-state stores. E2E configuration remains
 captured at construction, not reloaded on each resolution.
 
+[core_runtime/credentials.rs](src/core_runtime/credentials.rs) binds current managed Native
+Key IDs/order once at request admission. The control authority verifies the saved source,
+model and target; exact attempt leases still enforce current generation and revocation.
+Only the request-owned attempt view changes, leaving shared publication content immutable.
+[publication/lease_target.rs](src/publication/lease_target.rs) derives the same selected
+protocol target for admission and materialization; neither caller may substitute a destination.
+
 [planner.rs](src/planner.rs) validates the selected category and chooses eligible
 groups/candidates under the frozen policy. Availability relay may move execution
 from regular to primary within that category. History and assessment retain the
@@ -260,3 +267,23 @@ publishes that usage before request termination, so its receipt does not depend
 on canonical capture scheduling. Nonstream capture still records delivered
 content but leaves usage to provider completion; converted streaming capture
 continues publishing accepted usage events. Missing usage remains unknown.
+
+### Current-pool admission failures
+
+Current-pool admission checks the frozen model and target before reporting a managed
+source denial. It keeps the request's members and order fixed, excludes denied sources
+and records a request-level permission fact without a leased Key or generation. A
+successful membership read does not create a lease fact.
+
+If admission excludes every candidate, HTTP 502 uses `hiroute.gateway.error/v1`:
+
+| Current-pool evidence | `code` | `phase` |
+| --- | --- | --- |
+| Every source is disabled | `SOURCE_DISABLED` | `credential_lease` |
+| Every managed pool is empty/unavailable | `CREDENTIAL_UNAVAILABLE` | `credential_lease` |
+| Mixed causes | `CANDIDATE_PREPARATION_FAILED` | `candidate_preparation` |
+
+Admission exclusions also join the existing request-local preparation summary when
+another candidate remains. Mixed permanent failures do not become a pure cooling
+response, and an actual upstream attempt retains its existing response. These errors
+contain no credentials or provider text and have no `Retry-After`.

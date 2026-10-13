@@ -708,10 +708,16 @@ export function ModelManagementPage({
     }
   }
 
-  async function prepareKeyInput(_sourceId: string, input: ProtectedKeyInput): Promise<CandidateRef> {
-    const registration = await backend.registerProtectedInput(input.value);
+  const readKeyMasks = useMemo(() => (source: ManagedSource) => invoke<import('../features/models/types').KeyMasks>(
+    'compute_key_masks', { query: { source_id: source.source_id, expected_source_revision: source.revision } },
+  ), []);
+
+  async function prepareKeyInput(sourceId: string, input: ProtectedKeyInput) {
+    const registration = await invoke<ProtectedInputRegistration & { key_id: string }>(
+      'register_protected_model_input', { secret: input.value, sourceId },
+    );
     protectedInputs.current.push(registration.input_candidate);
-    return registration.input_candidate;
+    return registration;
   }
 
   async function applyExisting(preview: SavePreview): Promise<'saved' | 'uncertain'> {
@@ -1200,6 +1206,7 @@ export function ModelManagementPage({
       busy={loading}
       onRefresh={refreshManagement}
       onPrepareKeyInput={prepareKeyInput}
+      onReadKeyMasks={readKeyMasks}
       onPreview={(change: ManagementChange) => invoke<SavePreview>('preview_compute_save', { change })}
       onApply={applyExisting}
       onDiscardProtectedInputs={discardProtectedInputs}

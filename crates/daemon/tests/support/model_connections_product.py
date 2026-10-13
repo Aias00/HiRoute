@@ -25,6 +25,8 @@ V2 = {'major': 2, 'minor': 0}
 class NativeUpstream:
     def __init__(self):
         self.requests = []
+        self.rejected_token = None
+        self.reject_reasoning_history = False
         self.lock = threading.Lock()
         owner = self
 
@@ -63,6 +65,16 @@ class NativeUpstream:
                 self.record(body)
                 assert self.path == '/v1/responses', self.path
                 assert body['model'] == MODEL, body
+                if self.headers.get('Authorization') == 'Bearer ' + str(owner.rejected_token):
+                    self.send_json(401, {'error': {'message': 'fixture rejected key', 'type': 'invalid_api_key'}})
+                    return
+                if owner.reject_reasoning_history and any(
+                    isinstance(item, dict) and item.get('encrypted_content')
+                    for item in body.get('input', [])
+                ):
+                    self.send_json(400, {'error': {'code': 'invalid_encrypted_content',
+                                                 'message': 'fixture history rejected'}})
+                    return
                 self.send_json(200, {
                     'id': 'resp_native_product',
                     'object': 'response',
@@ -414,7 +426,8 @@ def assert_saved_recheck_fences_before_network(product, upstream, saved):
         assert len(upstream.requests) == before, upstream.requests
 
 
-def publish_plan_and_agent(product, binding_id, native_model_mode='preserve_available'):
+def publish_plan_and_agent(product, binding_id, native_model_mode='preserve_available',
+                           *, economy_binding=None):
     assert native_model_mode in ('preserve_available', 'hiroute_only')
     product.editor = {
         'schema': 'hiroute.plan-editor/v2',
@@ -431,6 +444,16 @@ def publish_plan_and_agent(product, binding_id, native_model_mode='preserve_avai
         'limits': {'maximum_attempts': 2, 'request_timeout_ms': 30000,
                    'attempt_timeout_ms': 30000},
     }
+    if economy_binding is not None:
+        product.editor['mode'] = 'smart_saving'
+        product.editor['candidates'] = []
+        product.editor['smart'].update({
+            'economy': [{'binding_id': economy_binding}],
+            'primary': [{'binding_id': binding_id}],
+            'reselect_on_user_message': True,
+            'complex_keywords': ['complex-route'],
+        })
+        product.editor['limits']['maximum_attempts'] = 3
     change = {
         'schema': 'hiroute.plan-content-change/v2',
         'target': {'intent': 'create', 'creation_key': 'native-product-plan'},
@@ -468,6 +491,7 @@ def gateway_request(product, allowed=True, stream=False):
         }), headers={
             'X-HiRoute-Token': product.bearer(product.agent_connection),
             'Content-Type': 'application/json',
+            'session-id': 'native-product-permission-switches',
         })
         response = client.getresponse()
         body = response.read()
@@ -539,7 +563,9 @@ def assert_live_credential_switches(product, upstream, saved):
     gateway_request(product)
 
 
-def assert_session_record(product, started_ms):
+def assert_session_record(product, started_ms, denied_binding=None):
+    # Grants survive daemon restarts; the reopened query needs a fresh capability.
+    grant_key = 'native-product-reopened' if denied_binding is not None else 'native-product'
     query = {
         'schema': 'hiroute.observation.query/v2',
         'intent': {'view': 'sessions', 'query': {
@@ -560,7 +586,7 @@ def assert_session_record(product, started_ms):
     capability = product.grant('ListSessionsV2', {
         'change_digest': 'sha256:' + hashlib.sha256(encoded(query)).hexdigest(),
         'expected_revisions': revisions,
-    }, 'native-product-sessions')
+    }, grant_key + '-sessions')
     deadline = time.monotonic() + 30
     while True:
         sessions = product.cli('sessions list', query, capability)[1]['data']['sessions']
@@ -579,15 +605,45 @@ def assert_session_record(product, started_ms):
     timeline_capability = product.grant('GetSessionTimelineV2', {
         'change_digest': 'sha256:' + hashlib.sha256(encoded(timeline)).hexdigest(),
         'expected_revisions': revisions,
-    }, 'native-product-timeline')
+    }, grant_key + '-timeline')
     while True:
         requests = product.cli(
             'sessions show', timeline, timeline_capability)[1]['data']['requests']
         accepted = [request for request in requests
                     if request['attempted_model_count'] == 1
                     and request['final_native_model'] == MODEL
-                    and request['outcome'] == 'accepted']
-        if accepted:
+                    and request['outcome'] == 'accepted' and request['receipt_id']]
+        denied = [request for request in requests
+                  if request['attempted_model_count'] == 0
+                  and request['outcome'] == 'failed' and request['receipt_id']]
+        if accepted and (denied_binding is None or len(denied) == 6):
+            receipt = control(product, 'GetRoutingReceipt', {
+                'id': accepted[0]['receipt_id'], 'content': None,
+            })['data']
+            assert receipt['facts_completeness'] == 'complete', receipt
+            leases = [event['fact'] for event in receipt['ordered_facts']
+                      if event['fact']['kind'] == 'credential_lease']
+            assert len(leases) == 1 and leases[0]['outcome'] == 'leased', leases
+            # Reading current membership must not invent another successful lease.
+            if denied_binding is not None:
+                for request in denied:
+                    receipt = control(product, 'GetRoutingReceipt', {
+                        'id': request['receipt_id'], 'content': None,
+                    })['data']
+                    assert receipt['schema'] == 'hiroute.routing-receipt/v1', receipt
+                    assert receipt['outcome'] == 'failed', receipt
+                    assert receipt['facts_completeness'] == 'complete', receipt
+                    assert receipt.get('final_attempt_id') is None, receipt
+                    assert all(event.get('attempt_id') is None for event in receipt['ordered_facts']), receipt
+                    facts = [event['fact'] for event in receipt['ordered_facts']]
+                    leases = [fact for fact in facts if fact['kind'] == 'credential_lease']
+                    assert len(leases) == 1, leases
+                    assert leases[0]['stable_binding_id'] == denied_binding, leases
+                    assert leases[0]['outcome'] == 'source_disabled', leases
+                    assert leases[0]['key_id'] is None and leases[0]['credential_generation'] is None, leases
+                    finished = [fact for fact in facts if fact['kind'] == 'request_finished']
+                    assert len(finished) == 1 and finished[0]['outcome'] == 'failed', finished
+                    assert finished[0]['attempts_started'] == finished[0]['attempts_finished'] == 0, finished
             return session_id, accepted[0]['final_native_model']
         assert time.monotonic() < deadline, requests
         time.sleep(.05)
@@ -632,6 +688,7 @@ def run(repository, expected_sha=None):
         product.start()
         recheck_saved_native_source(product, saved, 3, 'after-restart')
         recheck_saved_native_source(product, unknown, 3, 'unknown-after', unknown=True)
+        assert_session_record(product, started_ms, saved['binding_id'])
         with upstream.lock:
             requests = list(upstream.requests)
         assert [request['path'] for request in requests] == [
@@ -653,6 +710,7 @@ def run(repository, expected_sha=None):
             'disabled_requests_without_upstream': 6,
             'preparation_error_code': 'SOURCE_DISABLED',
             'preparation_error_modes': ['nonstream', 'prebody_stream'],
+            'complete_zero_attempt_denial_receipts_after_reopen': 6,
             'credential_resolver_mode': 'saved_bearer',
             'session_record': session_id,
             'session_model': observed_model,

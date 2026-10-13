@@ -35,8 +35,7 @@ use crate::server::core_runtime::profiles::{
 };
 
 use super::response::{connector_error_profile, failure_facts};
-#[path = "materialization/lease_target.rs"]
-mod lease_target;
+use crate::server::publication::lease_target;
 
 use super::{
     MATERIALIZATION_AUTHORITY_FAILED, MATERIALIZATION_BINDING_COOLING_PREFIX,

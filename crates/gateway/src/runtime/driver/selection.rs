@@ -23,7 +23,7 @@ use crate::context_hold::{ContextHoldStore, HoldCompletion};
 use super::ProductionRouteContext;
 
 mod preparation;
-use preparation::PreparationFailure;
+pub(crate) use preparation::PreparationFailure;
 
 #[derive(Clone, Default)]
 pub struct ProductionSelection;
@@ -365,9 +365,9 @@ impl SelectionPublicationPort<ProductionRouteContext> for ProductionSelection {
             temporary_block_seen: false,
             probe_busy_seen: false,
             earliest_retry_at: None,
-            non_temporary_block_seen: false,
+            non_temporary_block_seen: route_context.admission_preparation_failure.is_some(),
             upstream_attempted: false,
-            preparation_failure: None,
+            preparation_failure: route_context.admission_preparation_failure,
         })
     }
 }
