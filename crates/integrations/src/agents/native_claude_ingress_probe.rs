@@ -14,7 +14,9 @@ use std::io::Write;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::Command;
+#[cfg(unix)]
+use std::process::Stdio;
 use std::time::{Duration, Instant};
 
 use super::collaboration_probe as collaboration;
@@ -333,6 +335,7 @@ impl ClaudeIngressEvidence {
     }
 }
 
+#[cfg(unix)]
 fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
 }

@@ -215,14 +215,14 @@ fn execute_control(
     options: &[String],
     globals: Globals,
 ) -> CliExecution {
-    let request_id = globals.request_id.unwrap_or_else(next_request_id);
+    let request_id = globals.request_id.clone().unwrap_or_else(next_request_id);
     if globals.agent.is_some()
         && descriptor.command_id != "work-plans.list"
         && !descriptor.command_id.starts_with("tasks.")
     {
         return failure(ErrorCode::InvalidArguments, Some(request_id));
     }
-    if globals.capability_fd.is_some()
+    if globals.has_capability()
         && !descriptor
             .stdin_channels
             .iter()
@@ -245,6 +245,22 @@ fn execute_control(
         Ok(client) => client,
         Err(_) => return failure(ErrorCode::DaemonUnavailable, Some(request_id)),
     };
+    #[cfg(windows)]
+    let native_capability = match globals.capability_handle {
+        Some(handle) => match if descriptor.command_id == "work-plans.list"
+            || descriptor.command_id.starts_with("tasks.")
+        {
+            work_plans::credential_handle(handle)
+        } else {
+            client::read_protected_handle(handle, 512)
+        } {
+            Ok(value) => Some(value),
+            Err(_) => return failure(ErrorCode::CapabilityDenied, Some(request_id)),
+        },
+        None => None,
+    };
+    #[cfg(not(windows))]
+    let native_capability: Option<String> = None;
     let mutation_capability = match globals.capability_fd {
         Some(fd) => match if descriptor.command_id == "work-plans.list"
             || descriptor.command_id.starts_with("tasks.")
@@ -257,19 +273,26 @@ fn execute_control(
             Err(_) => return failure(ErrorCode::CapabilityDenied, Some(request_id)),
         },
         None => {
-            if let Some(agent) = globals.agent.as_deref() {
-                let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
-                match home.and_then(|home| {
-                    hiroute_integrations::collaboration_artifact::read_sealed_collaboration(
-                        &home, agent,
-                    )
-                    .ok()
-                }) {
-                    Some(mut material) => Some(std::mem::take(&mut *material)),
-                    None => return failure(ErrorCode::CapabilityDenied, Some(request_id)),
-                }
+            if native_capability.is_some() {
+                native_capability
             } else {
-                None
+                if let Some(agent) = globals.agent.as_deref() {
+                    #[cfg(not(windows))]
+                    let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
+                    #[cfg(windows)]
+                    let home = hiroute_platform::windows::background::profile().ok();
+                    match home.and_then(|home| {
+                        hiroute_integrations::collaboration_artifact::read_sealed_collaboration(
+                            &home, agent,
+                        )
+                        .ok()
+                    }) {
+                        Some(mut material) => Some(std::mem::take(&mut *material)),
+                        None => return failure(ErrorCode::CapabilityDenied, Some(request_id)),
+                    }
+                } else {
+                    None
+                }
             }
         }
     };
@@ -399,6 +422,22 @@ fn setup_apply(options: &[String]) -> Result<Value, ErrorCode> {
                     std::fs::File::open(format!("/dev/fd/{fd}"))
                         .map_err(|_| ErrorCode::InvalidArguments)?,
                 )?);
+            }
+            #[cfg(windows)]
+            "--spec-handle" => {
+                let handle = next(options, &mut index)?
+                    .parse::<u64>()
+                    .map_err(|_| ErrorCode::InvalidArguments)?;
+                let bytes = hiroute_platform::windows::job::read_inherited_credential(
+                    handle,
+                    1024 * 1024,
+                    std::time::Duration::from_secs(2),
+                )
+                .map_err(|_| ErrorCode::InvalidArguments)?;
+                if spec.is_some() {
+                    return Err(ErrorCode::InvalidArguments);
+                }
+                spec = Some(read_json(bytes.as_slice())?);
             }
             "--accept-digest" => {
                 digest = Some(

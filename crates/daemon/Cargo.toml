@@ -47,7 +47,17 @@ name = "hirouted"
 path = "src/control/bin.rs"
 
 [dev-dependencies]
-command-fds = "0.3.3"
 hiroute-client-core = { path = "../client-core" }
 tokio.workspace = true
 tokio-util.workspace = true
+
+[target.'cfg(unix)'.dev-dependencies]
+command-fds = "0.3.3"
+
+[target.'cfg(windows)'.dev-dependencies]
+windows = { version = "=0.62.2", features = ["Win32_Foundation", "Win32_UI_Shell"] }
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation", "Win32_Security", "Win32_Security_Authorization",
+    "Win32_System_Threading", "Win32_System_JobObjects", "Win32_System_Console",
+    "Win32_System_RemoteDesktop", "Win32_NetworkManagement_NetManagement",
+] }

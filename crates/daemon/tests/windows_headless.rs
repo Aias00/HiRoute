@@ -363,11 +363,13 @@ fn gateway_ready(listen: SocketAddr) {
     let mut response = Vec::new();
     client.read_to_end(&mut response).unwrap();
     assert!(response.starts_with(b"HTTP/1.1 200"));
-    assert!(
-        response
-            .windows(b"hiroute.gateway.ready/v1".len())
-            .any(|window| window == b"hiroute.gateway.ready/v1")
-    );
+    let body_start = response
+        .windows(4)
+        .position(|value| value == b"\r\n\r\n")
+        .unwrap();
+    let body: Value = serde_json::from_slice(&response[body_start + 4..]).unwrap();
+    assert_eq!(body["schema_version"], "hiroute.gateway.ready/v2");
+    assert_eq!(body["status"], "ready");
 }
 
 #[test]

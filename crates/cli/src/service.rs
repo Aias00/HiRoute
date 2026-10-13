@@ -43,12 +43,17 @@ pub(crate) fn status() -> Result<ServiceStatus, ServiceFailure> {
 }
 
 pub(crate) fn start(timeout: Duration) -> Result<ServiceStatus, ServiceFailure> {
+    #[cfg(windows)]
+    let deadline = Instant::now() + timeout;
     let (layout, _) = installed()?;
     ensure_not_maintaining(&layout)?;
     if !manager_active(&layout) {
         capture_proxy_environment(&layout)?;
     }
     manager_start(&layout)?;
+    #[cfg(windows)]
+    wait_ready(deadline.saturating_duration_since(Instant::now()))?;
+    #[cfg(not(windows))]
     wait_ready(timeout)?;
     status()
 }
@@ -66,6 +71,8 @@ pub(crate) fn stop(timeout: Duration) -> Result<ServiceStatus, ServiceFailure> {
 }
 
 pub(crate) fn restart(timeout: Duration) -> Result<ServiceStatus, ServiceFailure> {
+    #[cfg(windows)]
+    let deadline = Instant::now() + timeout;
     let (layout, _) = installed()?;
     ensure_not_maintaining(&layout)?;
     capture_proxy_environment(&layout)?;
@@ -73,6 +80,9 @@ pub(crate) fn restart(timeout: Duration) -> Result<ServiceStatus, ServiceFailure
     windows::restart(&layout, timeout)?;
     #[cfg(not(windows))]
     manager_restart(&layout)?;
+    #[cfg(windows)]
+    wait_ready(deadline.saturating_duration_since(Instant::now()))?;
+    #[cfg(not(windows))]
     wait_ready(timeout)?;
     status()
 }
@@ -310,7 +320,11 @@ fn ensure_not_maintaining(layout: &StandaloneLayout) -> Result<(), ServiceFailur
 fn wait_ready(timeout: Duration) -> Result<(), ServiceFailure> {
     let deadline = Instant::now() + timeout;
     while Instant::now() < deadline {
-        if control_ready(Duration::from_millis(750)) {
+        if control_ready(
+            deadline
+                .saturating_duration_since(Instant::now())
+                .min(Duration::from_millis(750)),
+        ) {
             return Ok(());
         }
         std::thread::sleep(Duration::from_millis(100));
@@ -735,12 +749,6 @@ fn executable(path: &Path) -> bool {
     {
         path.is_file()
     }
-
-    #[cfg(windows)]
-    fn success_status() -> std::process::ExitStatus {
-        use std::os::windows::process::ExitStatusExt;
-        std::process::ExitStatus::from_raw(0)
-    }
 }
 
 fn check(checks: &mut Vec<serde_json::Value>, healthy: &mut bool, name: &str, ok: bool) {
@@ -785,6 +793,12 @@ mod tests {
     #[cfg(unix)]
     fn success_status() -> std::process::ExitStatus {
         use std::os::unix::process::ExitStatusExt;
+        std::process::ExitStatus::from_raw(0)
+    }
+
+    #[cfg(windows)]
+    fn success_status() -> std::process::ExitStatus {
+        use std::os::windows::process::ExitStatusExt;
         std::process::ExitStatus::from_raw(0)
     }
 }

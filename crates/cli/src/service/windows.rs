@@ -100,10 +100,13 @@ pub(super) fn definition_path(layout: &StandaloneLayout) -> PathBuf {
 fn definition(layout: &StandaloneLayout) -> Result<Definition, ServiceFailure> {
     let record = hiroute_host_runtime::read_standalone_install_record(&layout.marker_path)
         .map_err(failure)?;
-    let value = background::read_definition(&record.service_definition).map_err(failure)?;
     if record.service_definition != definition_path(layout)
-        || value.daemon != standalone_daemon_binary(&record.install_root)
+        || record.target != hiroute_host_runtime::standalone_host_target()
     {
+        return Err(ServiceFailure::Unavailable);
+    }
+    let value = background::read_definition(&record.service_definition).map_err(failure)?;
+    if value.daemon != standalone_daemon_binary(&record.install_root) {
         return Err(ServiceFailure::Unavailable);
     }
     Ok(value)
@@ -198,7 +201,9 @@ pub(super) fn stop(layout: &StandaloneLayout, timeout: Duration) -> Result<(), S
         }
         return Err(ServiceFailure::Unavailable);
     }
-    match lifecycle::stop(&endpoint, &value.daemon, timeout) {
+    match lifecycle::stop_with_fallback(&endpoint, &value.daemon, timeout, || {
+        task::force_stop(&value)
+    }) {
         Ok(()) => {}
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             if !active(layout)? {
@@ -263,7 +268,9 @@ pub(super) fn install(
     let layout = StandaloneLayout::from_environment().map_err(failure)?;
     let record = hiroute_host_runtime::read_standalone_install_record(&layout.marker_path)
         .map_err(failure)?;
-    if record.service_definition != definition_path(&layout) {
+    if record.service_definition != definition_path(&layout)
+        || record.target != hiroute_host_runtime::standalone_host_target()
+    {
         return Err(ServiceFailure::Unavailable);
     }
     let manager = match manager {

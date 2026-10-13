@@ -27,6 +27,11 @@ then select the permitted schema/intent and retain semantic checks:
 Keep each existing limit: 1 MiB by default, 64 KiB for Operation idempotency lookup
 and dependency selection, 4 KiB for staged WorkPlan listing. Protected secret and
 capability readers are independent; JSON/file selectors do not grant authority.
+Windows uses `--capability-handle`, setup `--spec-handle`, and protected-input
+`--secret-handle` for pointer-width inherited private pipes. The platform duplicates
+the borrowed handle without taking the caller's ownership, rejects stdio and non-pipes,
+and bounds EOF reads in time and bytes. Unix descriptor flags retain their contracts;
+neither a request-file selector nor native handle text contains the credential itself.
 The shared reader does not execute a shell, alter requests or choose a business schema.
 
 `sessions receipt RECEIPT_ID` continues to serialize `SessionLookupV1` and read the v1

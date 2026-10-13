@@ -52,10 +52,7 @@ pub(crate) fn execute(arguments: &[String], globals: &Globals) -> Option<CliExec
         .request_id
         .clone()
         .unwrap_or_else(crate::next_request_id);
-    if globals.agent.is_some()
-        || globals.capability_fd.is_some()
-        || globals.output != OutputMode::Json
-    {
+    if globals.agent.is_some() || globals.has_capability() || globals.output != OutputMode::Json {
         return Some(failure(ErrorCode::InvalidArguments, Some(request_id)));
     }
     let invocation = match parse(&arguments[2..]) {

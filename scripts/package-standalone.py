@@ -147,6 +147,7 @@ def validate_notices(directory):
 def payload(args, notices):
     skill = checked_source(REPO / "assets/skills/hiroute-management/SKILL.md")
     names = executable_names(args.target)
+    guide = "standalone-windows.md" if args.target.endswith("-pc-windows-msvc") else "standalone-cli.md"
     files = {
         names["hiroute"]: checked_source(args.hiroute, not args.target.endswith("-pc-windows-msvc")),
         names["hirouted"]: checked_source(args.hirouted, not args.target.endswith("-pc-windows-msvc")),
@@ -154,7 +155,7 @@ def payload(args, notices):
         "licenses/CLIProxyAPI-LICENSE": checked_source(args.cpa_license),
         "licenses/HiRoute-LICENSE": checked_source(REPO / "LICENSE"),
         "skills/hiroute-management/SKILL.md": skill,
-        "docs/standalone-cli.md": checked_source(REPO / "docs/standalone-cli.md"),
+        "docs/standalone-cli.md": checked_source(REPO / "docs" / guide),
     }
     for name in sorted(NOTICE_FILES):
         files[f"licenses/{name}"] = checked_source(notices / name)

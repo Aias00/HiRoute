@@ -183,6 +183,18 @@ pub fn retain_for_stop(
 /// One deadline covers graceful acknowledgement and actual daemon exit. An
 /// unresponsive accepted daemon is terminated through its retained handle.
 pub fn stop(endpoint: &Path, image: &Path, timeout: Duration) -> io::Result<()> {
+    stop_with_fallback(endpoint, image, timeout, || Ok(()))
+}
+
+/// Task Scheduler must receive its own stop intent before a forced daemon exit;
+/// otherwise its failure-restart policy can reinterpret a requested stop as a
+/// crash. The callback operates only on the caller's verified registration.
+pub fn stop_with_fallback(
+    endpoint: &Path,
+    image: &Path,
+    timeout: Duration,
+    fallback: impl FnOnce() -> io::Result<()>,
+) -> io::Result<()> {
     let deadline = Instant::now() + timeout;
     let process = exchange(
         endpoint,
@@ -191,11 +203,17 @@ pub fn stop(endpoint: &Path, image: &Path, timeout: Duration) -> io::Result<()> 
         timeout.min(Duration::from_secs(2)),
         true,
     )?;
-    if process.wait(deadline.saturating_duration_since(Instant::now()))? {
+    let graceful_deadline = deadline
+        .checked_sub(Duration::from_secs(2))
+        .unwrap_or(deadline);
+    if process.wait(graceful_deadline.saturating_duration_since(Instant::now()))? {
         return Ok(());
     }
-    process.terminate()?;
-    if !process.wait(Duration::from_secs(2))? {
+    fallback()?;
+    if !process.exited()? {
+        process.terminate()?;
+    }
+    if !process.wait(deadline.saturating_duration_since(Instant::now()))? {
         return Err(io::Error::from(io::ErrorKind::TimedOut));
     }
     Ok(())

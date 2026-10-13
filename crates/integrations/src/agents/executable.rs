@@ -1,7 +1,9 @@
 //! Read-only, bounded probes of explicitly selected or PATH-resolved installations.
 //! No configuration helper or caller-supplied arguments are executed. Raw output stays private.
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+#[cfg(unix)]
+use std::time::Instant;
 
 const OUTPUT_LIMIT: usize = 64 * 1024;
 
@@ -37,8 +39,11 @@ pub(super) enum ProbeFailure {
     NotExecutable,
     Unavailable,
     LaunchFailed(Option<i32>),
+    #[cfg(unix)]
     PipeSetupFailed(i32),
+    #[cfg(unix)]
     PipeReadFailed(Option<i32>),
+    #[cfg(unix)]
     WaitFailed(Option<i32>),
     CleanupFailed,
     Failed,
@@ -325,7 +330,9 @@ fn bounded_version(path: &Path, timeout: Duration) -> Result<Vec<u8>, ProbeFailu
         let _ = home.keep();
     }
     let bytes = result.map_err(|error| {
-        if error.kind() == std::io::ErrorKind::TimedOut {
+        if let Some(code) = super::windows_runtime::launch_failure_code(&error) {
+            ProbeFailure::LaunchFailed(code)
+        } else if error.kind() == std::io::ErrorKind::TimedOut {
             ProbeFailure::TimedOut
         } else {
             ProbeFailure::Unavailable

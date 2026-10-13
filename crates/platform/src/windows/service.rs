@@ -452,6 +452,9 @@ pub fn start(definition: &Definition) -> io::Result<()> {
     definition.verify_image()?;
     super::sealed_host::verify_definition(definition)?;
     let service = open(definition, SERVICE_START | SERVICE_QUERY_STATUS)?;
+    if state(&service)?.dwCurrentState == SERVICE_STOP_PENDING {
+        return Err(io::ErrorKind::WouldBlock.into());
+    }
     // SAFETY: no service arguments, service configuration is already verified.
     if unsafe { StartServiceW(service.0, 0, null()) } == 0
         && io::Error::last_os_error().raw_os_error() != Some(ERROR_SERVICE_ALREADY_RUNNING as i32)
@@ -463,6 +466,12 @@ pub fn start(definition: &Definition) -> io::Result<()> {
 
 pub fn request_stop(definition: &Definition) -> io::Result<()> {
     let service = open(definition, SERVICE_STOP | SERVICE_QUERY_STATUS)?;
+    if matches!(
+        state(&service)?.dwCurrentState,
+        SERVICE_STOPPED | SERVICE_STOP_PENDING
+    ) {
+        return Ok(());
+    }
     let mut status = SERVICE_STATUS::default();
     // SAFETY: service owns its handler; ControlService only requests bounded stop.
     if unsafe { ControlService(service.0, SERVICE_CONTROL_STOP, &mut status) } == 0
@@ -505,7 +514,13 @@ pub fn registration_absent(definition: &Definition) -> io::Result<bool> {
     }
 }
 pub fn autostart(definition: &Definition) -> io::Result<bool> {
-    let service = open(definition, SERVICE_QUERY_CONFIG)?;
+    let service = match open(definition, SERVICE_QUERY_CONFIG) {
+        Ok(service) => service,
+        Err(error) if error.raw_os_error() == Some(ERROR_SERVICE_DOES_NOT_EXIST as i32) => {
+            return Ok(false);
+        }
+        Err(error) => return Err(error),
+    };
     Ok(Config::load(&service)?.value().dwStartType == SERVICE_AUTO_START)
 }
 pub fn set_autostart(definition: &Definition, enabled: bool) -> io::Result<()> {
@@ -566,21 +581,24 @@ pub fn unregister_for_owner(
         SERVICE_QUERY_STATUS | 0x10000,
     ) {
         // DELETE
-        Ok(service) => service,
+        Ok(service) => Some(service),
         Err(error) if error.raw_os_error() == Some(ERROR_SERVICE_DOES_NOT_EXIST as i32) => {
             return super::sealed_host::remove_descriptor_for_owner(definition, owner_sid);
         }
+        Err(error) if error.raw_os_error() == Some(ERROR_SERVICE_MARKED_FOR_DELETE as i32) => None,
         Err(error) => return Err(error),
     };
-    if state(&service)?.dwCurrentState != SERVICE_STOPPED {
-        return Err(io::Error::from(io::ErrorKind::WouldBlock));
+    if let Some(service) = service {
+        if state(&service)?.dwCurrentState != SERVICE_STOPPED {
+            return Err(io::Error::from(io::ErrorKind::WouldBlock));
+        }
+        // SAFETY: deletion is requested only for the verified stopped service.
+        if unsafe { DeleteService(service.0) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        // Our handle would itself keep DeleteService's deletion pending.
+        drop(service);
     }
-    // SAFETY: deletion is requested only for the verified stopped service.
-    if unsafe { DeleteService(service.0) } == 0 {
-        return Err(io::Error::last_os_error());
-    }
-    // DeleteService marks deletion; our handle would itself keep it pending.
-    drop(service);
     let deadline = Instant::now() + timeout;
     loop {
         let scm = manager(SC_MANAGER_CONNECT)?;

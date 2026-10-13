@@ -215,6 +215,7 @@
     "hiroute.header-secret-lease-request/v1",
     "hiroute.launcher-upgrade-status/v1",
     "hiroute.launcher-upgrade/v1",
+    "hiroute.local-pipe/v1",
     "hiroute.machine-envelope/v2",
     "hiroute.managed-artifact-backup/v2",
     "hiroute.managed-artifact-compensation/v1",
@@ -237,6 +238,7 @@
     "hiroute.native-credential-lease-request/v1",
     "hiroute.native-field-restore/v1",
     "hiroute.native-files/v1",
+    "hiroute.native-launch/v1",
     "hiroute.native-observation/v2",
     "hiroute.native-restoration-ack/v1",
     "hiroute.observation-retention/v1",
@@ -373,6 +375,17 @@
     "hiroute.value-view/v1",
     "hiroute.web-confirmation/v1",
     "hiroute.website.releases/v2",
+    "hiroute.windows-artifact-fingerprint/v1",
+    "hiroute.windows-background-install/v1",
+    "hiroute.windows-background/v1",
+    "hiroute.windows-install-journal/v1",
+    "hiroute.windows-install-layout/v1",
+    "hiroute.windows-lifecycle/v1",
+    "hiroute.windows-managed-artifact-marker/v5",
+    "hiroute.windows-owner-finalize-request/v1",
+    "hiroute.windows-owner-finalize-result/v1",
+    "hiroute.windows-scm-owner-request/v1",
+    "hiroute.windows-scm-owner-result/v1",
     "hiroute.work-plan-list-request/v1",
     "hiroute.work-plan-list/v1",
     "hiroute.worker-cancel-request/v1",
@@ -1042,6 +1055,16 @@
       "current_contracts": [
         "hiroute.compute-management-snapshot/v2",
         "hiroute.compute-management-snapshot/v3"
+      ],
+      "legacy_support": []
+    },
+    {
+      "subject": "windows_managed_artifact_marker",
+      "audited_prefixes": [
+        "hiroute.windows-managed-artifact-marker"
+      ],
+      "current_contracts": [
+        "hiroute.windows-managed-artifact-marker/v5"
       ],
       "legacy_support": []
     }

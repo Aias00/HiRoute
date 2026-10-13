@@ -1,8 +1,9 @@
 use hiroute_domain::delegation::DelegationErrorV1 as Error;
+#[cfg(not(windows))]
+use std::io::Write;
 use std::{
     collections::BTreeSet,
     fs,
-    io::Write,
     path::{Component, Path, PathBuf},
 };
 

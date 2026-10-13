@@ -75,6 +75,11 @@ pub fn register(definition: &Definition, previous: Option<&Definition>) -> io::R
                     if verify_task(&task, previous.as_ref().unwrap_or(definition)).is_err() {
                         verify_task(&task, definition)?;
                     }
+                    let instances = task.GetInstances(0).map_err(com_error)?;
+                    let running = instances.Count().map_err(com_error)?;
+                    if running != 0 {
+                        return Err(io::ErrorKind::WouldBlock.into());
+                    }
                     autostart = trigger_enabled(&task)?;
                     TASK_UPDATE.0 | TASK_IGNORE_REGISTRATION_TRIGGERS.0
                 }
@@ -220,7 +225,15 @@ pub fn active(definition: &Definition) -> io::Result<bool> {
 
 pub fn autostart(definition: &Definition) -> io::Result<bool> {
     with_folder(definition, |folder, definition| unsafe {
-        trigger_enabled(&owned_task(folder, definition)?)
+        let registered = match folder.GetTask(&BSTR::from(&definition.name)) {
+            Ok(task) => {
+                verify_task(&task, definition)?;
+                task
+            }
+            Err(error) if missing(&error) => return Ok(false),
+            Err(error) => return Err(com_error(error)),
+        };
+        trigger_enabled(&registered)
     })
 }
 
@@ -306,13 +319,21 @@ unsafe fn verify_task(registered: &IRegisteredTask, expected: &Definition) -> io
         let actions = task.Actions().map_err(com_error)?;
         let mut count = 0;
         actions.Count(&mut count).map_err(com_error)?;
-        if sid.to_string() != expected.owner_sid
+        let owner_matches = same_owner(&sid.to_string(), &expected.owner_sid)?;
+        let enabled = registered.Enabled().map_err(com_error)?;
+        if !owner_matches
             || logon_type != TASK_LOGON_INTERACTIVE_TOKEN
             || level != TASK_RUNLEVEL_LUA
             || count != 1
-            || registered.Enabled().map_err(com_error)? != VARIANT_TRUE
+            || enabled != VARIANT_TRUE
         {
-            return Err(foreign());
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!(
+                    "background task principal differs: owner_match={owner_matches}, logon={}, level={}, actions={count}, enabled={}",
+                    logon_type.0, level.0, enabled.0
+                ),
+            ));
         }
         let action: IExecAction = actions
             .get_Item(1)
@@ -325,24 +346,26 @@ unsafe fn verify_task(registered: &IRegisteredTask, expected: &Definition) -> io
         action.Path(&mut path).map_err(com_error)?;
         action.Arguments(&mut arguments).map_err(com_error)?;
         action.WorkingDirectory(&mut working).map_err(com_error)?;
-        if PathCompare::new(&path.to_string())
-            != PathCompare::new(expected.daemon.to_str().ok_or_else(foreign)?)
+        if !same_path(&path.to_string(), &expected.daemon, false)?
             || arguments.to_string() != expected.arguments()
-            || PathCompare::new(&working.to_string())
-                != PathCompare::new(
-                    expected
-                        .daemon
-                        .parent()
-                        .and_then(|p| p.to_str())
-                        .ok_or_else(foreign)?,
-                )
+            || !same_path(
+                &working.to_string(),
+                expected.daemon.parent().ok_or_else(foreign)?,
+                true,
+            )?
         {
-            return Err(foreign());
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "background task action image, arguments or working directory differs",
+            ));
         }
         let triggers = task.Triggers().map_err(com_error)?;
         triggers.Count(&mut count).map_err(com_error)?;
         if count != 1 {
-            return Err(foreign());
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!("background task trigger count differs: {count}"),
+            ));
         }
         let logon: ILogonTrigger = triggers
             .get_Item(1)
@@ -351,8 +374,11 @@ unsafe fn verify_task(registered: &IRegisteredTask, expected: &Definition) -> io
             .map_err(com_error)?;
         let mut trigger_sid = BSTR::new();
         logon.UserId(&mut trigger_sid).map_err(com_error)?;
-        if trigger_sid.to_string() != expected.owner_sid {
-            return Err(foreign());
+        if !same_owner(&trigger_sid.to_string(), &expected.owner_sid)? {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "background task logon trigger owner differs",
+            ));
         }
         let settings = task.Settings().map_err(com_error)?;
         let mut limit = BSTR::new();
@@ -365,19 +391,73 @@ unsafe fn verify_task(registered: &IRegisteredTask, expected: &Definition) -> io
             || policy != TASK_INSTANCES_IGNORE_NEW
             || demand != VARIANT_TRUE
         {
-            return Err(foreign());
+            let limit = limit.to_string();
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!(
+                    "background task settings differ: limit={:?}, instances={}, demand={}",
+                    limit.chars().take(128).collect::<String>(),
+                    policy.0,
+                    demand.0
+                ),
+            ));
         }
         Ok(())
     }
 }
 
-// Task Scheduler may canonicalize casing, but it must not retarget an image.
-#[derive(Eq, PartialEq)]
-struct PathCompare(String);
-impl PathCompare {
-    fn new(value: &str) -> Self {
-        Self(value.replace('/', "\\").to_lowercase())
+// Scheduler may expose a resolved account name after registration. Authorize
+// that value only by resolving its SID, never by display name or casing alone.
+fn same_owner(actual: &str, expected: &str) -> io::Result<bool> {
+    if actual == expected {
+        return Ok(true);
     }
+    if actual.is_empty() || actual.len() > 512 || actual.contains('\0') {
+        return Ok(false);
+    }
+    use windows_sys::Win32::Security::{LookupAccountNameW, SID_NAME_USE};
+    let name: Vec<u16> = actual.encode_utf16().chain(Some(0)).collect();
+    let mut sid = [0_u8; 68];
+    let mut sid_length = sid.len() as u32;
+    let mut domain = [0_u16; 1024];
+    let mut domain_length = domain.len() as u32;
+    let mut usage: SID_NAME_USE = 0;
+    if unsafe {
+        LookupAccountNameW(
+            std::ptr::null(),
+            name.as_ptr(),
+            sid.as_mut_ptr().cast(),
+            &mut sid_length,
+            domain.as_mut_ptr(),
+            &mut domain_length,
+            &mut usage,
+        )
+    } == 0
+    {
+        return Ok(false);
+    }
+    if sid_length > sid.len() as u32 {
+        return Ok(false);
+    }
+    Ok(super::background::sid_string(&sid[..sid_length as usize])? == expected)
+}
+
+// Exact persisted spelling remains usable for uninstalling a damaged bundle.
+// A casing change can be accepted only after matching held object identities;
+// case-sensitive Windows directories must not turn casing into a new image.
+fn same_path(actual: &str, expected: &std::path::Path, directory: bool) -> io::Result<bool> {
+    let expected_text = expected.to_str().ok_or_else(foreign)?;
+    let actual_text = actual.replace('/', "\\");
+    let expected_text = expected_text.replace('/', "\\");
+    if actual_text == expected_text {
+        return Ok(true);
+    }
+    if !actual_text.eq_ignore_ascii_case(&expected_text) {
+        return Ok(false);
+    }
+    let actual = super::security::open_identity(std::path::Path::new(actual), directory)?;
+    let expected = super::security::open_identity(expected, directory)?;
+    Ok(super::security::file_identity(&actual)? == super::security::file_identity(&expected)?)
 }
 fn boolean(value: bool) -> VARIANT_BOOL {
     if value { VARIANT_TRUE } else { VARIANT_FALSE }
@@ -429,5 +509,6 @@ mod tests {
         assert!(active(&foreign).is_err());
         unregister(&definition).unwrap();
         assert!(!active(&definition).unwrap());
+        assert!(!autostart(&definition).unwrap());
     }
 }

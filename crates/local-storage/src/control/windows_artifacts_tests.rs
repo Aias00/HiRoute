@@ -42,7 +42,7 @@ fn windows_artifact_restart_restores_original_content_and_native_acl() {
         .load_marker(&operation, intent.effect_id())
         .unwrap()
         .unwrap();
-    assert_eq!(marker.schema, "hiroute.managed-artifact-marker/windows-v5");
+    assert_eq!(marker.schema, "hiroute.windows-managed-artifact-marker/v5");
     assert_eq!(marker.before_windows_permissions.as_ref(), Some(&original));
     assert!(marker.after_windows_permissions.is_some());
     drop(store);

@@ -362,8 +362,13 @@ fn read_owned_json<T: DeserializeOwned>(root: &Path, name: &str) -> Result<T, De
     }
     let file = open_marker(&path)?;
     #[cfg(windows)]
-    hiroute_platform::windows::security::verify_owner_only_handle(&file, false)
-        .map_err(|_| DelegationErrorV1::ResumeUnavailable)?;
+    {
+        use hiroute_platform::windows::security::{file_link_count, verify_owner_only_handle};
+        verify_owner_only_handle(&file, false).map_err(|_| DelegationErrorV1::ResumeUnavailable)?;
+        if file_link_count(&file).map_err(|_| DelegationErrorV1::ResumeUnavailable)? != 1 {
+            return Err(DelegationErrorV1::ResumeUnavailable);
+        }
+    }
     let metadata = file
         .metadata()
         .map_err(|_| DelegationErrorV1::ResumeUnavailable)?;

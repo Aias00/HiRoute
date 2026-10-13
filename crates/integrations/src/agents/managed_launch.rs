@@ -1,6 +1,8 @@
 use std::collections::BTreeSet;
 use std::ffi::{OsStr, OsString};
-use std::fs::{File, OpenOptions};
+use std::fs::File;
+#[cfg(not(windows))]
+use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -444,6 +446,7 @@ fn write_overlay(
         .map_err(|_| ManagedClaudeProcessError::Unavailable)
 }
 
+#[cfg(not(windows))]
 fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
 }

@@ -101,28 +101,29 @@ mod tests {
 
     #[test]
     fn instance_home_and_explicit_native_roots_are_respected_without_reading_other_env() {
+        #[cfg(windows)]
+        let (home, root) = ("C:\\isolated-pilot", "C:\\explicit-native-root");
+        #[cfg(not(windows))]
+        let (home, root) = ("/isolated-pilot", "/explicit-native-root");
         for (harness, variable, default) in [
             (WorkerHarnessV1::CodexCli, "CODEX_HOME", ".codex"),
             (WorkerHarnessV1::ClaudeCode, "CLAUDE_CONFIG_DIR", ".claude"),
             (WorkerHarnessV1::QoderCli, "QODER_CONFIG_DIR", ".qoder"),
         ] {
             let lookup = |name: &str| match name {
-                "HOME" => Some(OsString::from("/isolated-pilot")),
-                key if key == variable => Some(OsString::from("/explicit-native-root")),
+                "HOME" => Some(OsString::from(home)),
+                key if key == variable => Some(OsString::from(root)),
                 unexpected => panic!("unexpected ambient environment read: {unexpected}"),
             };
             let explicit = NativeWorkerContext::from_lookup(harness, lookup).unwrap();
-            assert_eq!(explicit.home(), Path::new("/isolated-pilot"));
-            assert_eq!(explicit.config_root(), Path::new("/explicit-native-root"));
+            assert_eq!(explicit.home(), Path::new(home));
+            assert_eq!(explicit.config_root(), Path::new(root));
             assert!(explicit.is_borrowed());
             let fallback = NativeWorkerContext::from_lookup(harness, |name| {
-                (name == "HOME").then(|| OsString::from("/isolated-pilot"))
+                (name == "HOME").then(|| OsString::from(home))
             })
             .unwrap();
-            assert_eq!(
-                fallback.config_root(),
-                Path::new("/isolated-pilot").join(default)
-            );
+            assert_eq!(fallback.config_root(), Path::new(home).join(default));
         }
     }
 

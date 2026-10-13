@@ -72,7 +72,8 @@ mod windows {
         DelegationNativeRootMarkerV1,
     };
     use hiroute_platform::windows::security::{
-        delete_by_handle, file_identity, open_delete_at, open_owner_only, verify_owner_only_handle,
+        delete_by_handle, file_identity, file_link_count, open_delete_at, open_owner_only,
+        verify_owner_only_handle,
     };
     use std::{
         fs::{self, File},
@@ -94,7 +95,8 @@ mod windows {
         let file = open_delete_at(root, std::ffi::OsStr::new(MARKER), false)
             .map_err(|_| Failure::IdentityMismatch)?;
         verify_owner_only_handle(&file, false).map_err(|_| Failure::IdentityMismatch)?;
-        if identity(&file)? != (expected.marker_device, expected.marker_inode)
+        if file_link_count(&file).map_err(|_| Failure::IdentityMismatch)? != 1
+            || identity(&file)? != (expected.marker_device, expected.marker_inode)
             || file.metadata().map_err(|_| Failure::IoUnavailable)?.len() > 4096
         {
             return Err(Failure::IdentityMismatch);

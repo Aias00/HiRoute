@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+#[cfg(not(windows))]
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -631,6 +632,7 @@ pub(super) fn same_file_identity(left: &std::fs::Metadata, right: &std::fs::Meta
     }
 }
 
+#[cfg(not(windows))]
 fn validate_config_file(
     path: &Path,
 ) -> Result<Option<std::fs::Metadata>, AgentFilesystemScanError> {
@@ -766,7 +768,10 @@ fn metadata_revision(metadata: &std::fs::Metadata, digest: &CanonicalDigest) -> 
         revision_from_digest(&revision)
     }
     #[cfg(not(unix))]
-    revision_from_digest(digest)
+    {
+        let _ = metadata;
+        revision_from_digest(digest)
+    }
 }
 
 #[cfg(unix)]
@@ -790,6 +795,7 @@ fn stable_identity_from_metadata(metadata: &std::fs::Metadata) -> CanonicalDiges
     )
 }
 
+#[cfg(unix)]
 fn permission_revision(identity: &CanonicalDigest, mode: u32) -> u64 {
     let digest = CanonicalDigest::of_bytes(
         format!("agent-config-permission/v1\0{identity}\0{}", mode & 0o777).as_bytes(),

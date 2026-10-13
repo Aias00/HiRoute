@@ -2,13 +2,14 @@
 //! No PID, job name, or caller-supplied locator is a destructive capability.
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io;
+use std::io::{self, Read};
 use std::mem::{size_of, zeroed};
 use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 use std::path::Path;
 use std::ptr::{null, null_mut};
 use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 use windows_sys::Win32::Foundation::*;
 use windows_sys::Win32::Security::SECURITY_ATTRIBUTES;
 use windows_sys::Win32::Storage::FileSystem::*;
@@ -172,6 +173,86 @@ pub fn credential_pipe_pair() -> io::Result<(File, File)> {
     Ok((server, client))
 }
 
+/// Make one explicit non-stdio pipe capability inheritable. The duplicate's number
+/// is the locator to put in the child arguments, and its lifetime remains caller-owned.
+pub fn duplicate_inheritable_pipe(pipe: &File) -> io::Result<File> {
+    prepare_inherited_pipe(pipe)?;
+    super::security::verify_owner_only_handle(pipe, false)?;
+    Ok(File::from(duplicate(pipe.as_raw_handle())?))
+}
+
+/// Read the caller's explicitly inherited, private pipe through a non-inheritable
+/// duplicate. The raw numeric locator never becomes ownership of the original handle.
+/// Callers retain their text/framing rules; the transport enforces EOF, time and size.
+pub fn read_inherited_credential(
+    handle: u64,
+    limit: usize,
+    timeout: Duration,
+) -> io::Result<zeroize::Zeroizing<Vec<u8>>> {
+    let invalid = || io::Error::new(io::ErrorKind::InvalidInput, "protected pipe input");
+    if limit == 0 || limit > 1024 * 1024 || timeout.is_zero() || timeout > Duration::from_secs(30) {
+        return Err(invalid());
+    }
+    let handle = usize::try_from(handle).map_err(|_| invalid())? as HANDLE;
+    if handle.is_null()
+        || handle == INVALID_HANDLE_VALUE
+        || [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE]
+            .into_iter()
+            .any(|standard| unsafe { GetStdHandle(standard) } == handle)
+    {
+        return Err(invalid());
+    }
+    let mut flags = 0;
+    if unsafe { GetHandleInformation(handle, &mut flags) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    if flags & HANDLE_FLAG_INHERIT == 0 {
+        return Err(invalid());
+    }
+    let mut file = File::from(duplicate_with_inheritance(handle, false)?);
+    // Validate the duplicated object, not a locator that another thread might close.
+    if unsafe { GetFileType(file.as_raw_handle()) } != FILE_TYPE_PIPE {
+        return Err(invalid());
+    }
+    super::security::verify_owner_only_handle(&file, false)?;
+    prepare_inherited_pipe(&file)?;
+    let deadline = Instant::now() + timeout;
+    let mut bytes = zeroize::Zeroizing::new(Vec::new());
+    let mut block = zeroize::Zeroizing::new(vec![0u8; (limit + 1).min(8192)]);
+    loop {
+        if Instant::now() >= deadline {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "protected pipe deadline",
+            ));
+        }
+        let remaining = (limit + 1 - bytes.len()).min(block.len());
+        match file.read(&mut block[..remaining]) {
+            Ok(0) => return Ok(bytes),
+            Ok(count) => {
+                bytes.extend_from_slice(&block[..count]);
+                if bytes.len() > limit {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "protected pipe bound",
+                    ));
+                }
+            }
+            Err(error) if error.raw_os_error() == Some(ERROR_BROKEN_PIPE as i32) => {
+                return Ok(bytes);
+            }
+            Err(error)
+                if error.kind() == io::ErrorKind::WouldBlock
+                    || error.raw_os_error() == Some(ERROR_NO_DATA as i32) =>
+            {
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+            Err(error) => return Err(error),
+        }
+    }
+}
+
 fn owned(handle: HANDLE) -> io::Result<OwnedHandle> {
     if handle.is_null() || handle == INVALID_HANDLE_VALUE {
         Err(io::Error::last_os_error())
@@ -219,6 +300,10 @@ fn argument(value: &OsStr, output: &mut Vec<u16>) -> io::Result<()> {
 }
 
 fn duplicate(handle: HANDLE) -> io::Result<OwnedHandle> {
+    duplicate_with_inheritance(handle, true)
+}
+
+fn duplicate_with_inheritance(handle: HANDLE, inheritable: bool) -> io::Result<OwnedHandle> {
     let mut output = null_mut();
     // SAFETY: process pseudo handles are valid; only the new handle is inheritable.
     if unsafe {
@@ -228,7 +313,7 @@ fn duplicate(handle: HANDLE) -> io::Result<OwnedHandle> {
             GetCurrentProcess(),
             &mut output,
             0,
-            1,
+            i32::from(inheritable),
             DUPLICATE_SAME_ACCESS,
         )
     } == 0
@@ -332,16 +417,44 @@ impl Drop for Attributes {
 
 impl Child {
     pub fn spawn(launch: Launch<'_>) -> io::Result<Self> {
-        Self::spawn_with_token(launch, None)
+        Self::spawn_with_token(launch, None, &[])
+    }
+
+    /// Include only these caller-held private pipe capabilities in the same atomic
+    /// handle list as stdio and Job assignment. No ambient inheritable handle is added.
+    pub fn spawn_with_inherited_pipes(launch: Launch<'_>, pipes: &[&File]) -> io::Result<Self> {
+        Self::spawn_with_token(launch, None, pipes)
     }
 
     /// Borrow a caller-owned primary token. Job assignment and the explicit handle list
     /// use the same atomic CreateProcess contract as the ordinary current-user launch.
     pub fn spawn_as_token(launch: Launch<'_>, token: &impl AsRawHandle) -> io::Result<Self> {
-        Self::spawn_with_token(launch, Some(token.as_raw_handle()))
+        Self::spawn_with_token(launch, Some(token.as_raw_handle()), &[])
     }
 
-    fn spawn_with_token(launch: Launch<'_>, token: Option<HANDLE>) -> io::Result<Self> {
+    fn spawn_with_token(
+        launch: Launch<'_>,
+        token: Option<HANDLE>,
+        pipes: &[&File],
+    ) -> io::Result<Self> {
+        if pipes.len() > 8 {
+            return Err(io::Error::other("inherited pipe count"));
+        }
+        for (index, pipe) in pipes.iter().enumerate() {
+            prepare_inherited_pipe(pipe)?;
+            super::security::verify_owner_only_handle(*pipe, false)?;
+            let mut flags = 0;
+            if unsafe { GetHandleInformation(pipe.as_raw_handle(), &mut flags) } == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            if flags & HANDLE_FLAG_INHERIT == 0
+                || pipes[..index]
+                    .iter()
+                    .any(|old| old.as_raw_handle() == pipe.as_raw_handle())
+            {
+                return Err(io::Error::other("explicit inherited pipe required"));
+            }
+        }
         if !launch.program.is_absolute()
             || launch
                 .program
@@ -410,11 +523,12 @@ impl Child {
         }
         let mut attributes = Attributes::new()?;
         let mut job_handles = [job.as_raw_handle()];
-        let mut inherited = [
+        let mut inherited = vec![
             input.as_raw_handle(),
             output.as_raw_handle(),
             error.as_raw_handle(),
         ];
+        inherited.extend(pipes.iter().map(|file| file.as_raw_handle()));
         // SAFETY: handle arrays, jobs and attribute storage outlive CreateProcessW.
         for (attribute, handles) in [
             (PROC_THREAD_ATTRIBUTE_JOB_LIST, &mut job_handles[..]),
@@ -441,6 +555,15 @@ impl Child {
         startup.StartupInfo.hStdInput = input.as_raw_handle();
         startup.StartupInfo.hStdOutput = output.as_raw_handle();
         startup.StartupInfo.hStdError = error.as_raw_handle();
+        // A restricted business token must choose its own noninteractive logon
+        // station. NULL would inherit a parent station whose ACL/IL may require
+        // the elevated groups we deliberately removed from the child token.
+        // The empty, live UTF-16 string requests the documented logon selection;
+        // it neither modifies desktop ACLs nor selects an interactive desktop.
+        let mut desktop = [0u16];
+        if token.is_some() {
+            startup.StartupInfo.lpDesktop = desktop.as_mut_ptr();
+        }
         startup.lpAttributeList = attributes.pointer();
         let mut information: PROCESS_INFORMATION = unsafe { zeroed() };
         // The kernel assigns the job before allowing the initial thread to execute.

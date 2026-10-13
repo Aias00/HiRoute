@@ -7,6 +7,8 @@ import struct
 import tempfile
 import unittest
 from unittest.mock import patch
+from contextlib import nullcontext
+from types import SimpleNamespace
 
 
 def load(name, filename):
@@ -45,6 +47,32 @@ class WindowsPackage(unittest.TestCase):
             path.write_bytes(b"not an executable")
             with self.assertRaises(ValueError):
                 package.verify_windows_image(path, "x86_64-pc-windows-msvc")
+
+    def test_external_archive_cannot_hide_another_pe_machine_behind_matching_hashes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve(); target = "x86_64-pc-windows-msvc"
+            files = {}
+            for index, name in enumerate(sorted(package.expected_files(target))):
+                path = root / str(index)
+                if name in package.executable_names(target).values():
+                    body = bytearray(70); body[:2] = b"MZ"; struct.pack_into("<I", body, 0x3C, 64)
+                    body[64:68] = b"PE\0\0"; struct.pack_into("<H", body, 68, 0xAA64)
+                    path.write_bytes(body)
+                else:
+                    path.write_bytes(b"synthetic package fixture")
+                files[name] = path
+            archive = root / "candidate.tar.gz"; again = root / "again.tar.gz"
+            package.deterministic_archive(archive, files); package.deterministic_archive(again, files)
+            self.assertEqual(archive.read_bytes(), again.read_bytes())
+            inventory = {name: {"sha256": package.digest(path), "size": path.stat().st_size,
+                         "mode": "executable" if name.startswith(("bin/", "libexec/")) else "read_only"} for name, path in files.items()}
+            manifest = {"schema": package.SCHEMA, "version": "0.1.0", "revision": "fixture",
+                        "target": target, "distribution": "integration-candidate", "files": inventory,
+                        "archive": {"filename": archive.name, "sha256": package.digest(archive), "size": archive.stat().st_size},
+                        "cpa": {"version": "fixture", "sha256": inventory[package.executable_names(target)["cpa"]]["sha256"]}}
+            path = root / "manifest.json"; path.write_text(json.dumps(manifest))
+            with self.assertRaisesRegex(ValueError, "architecture"):
+                package.verify(path, archive)
 
 
 class WindowsRecovery(unittest.TestCase):
@@ -114,6 +142,45 @@ class WindowsRecovery(unittest.TestCase):
                 installer.recover(Path(directory) / "hiroute.exe", layout, None)
             native.assert_not_called(); self.assertEqual(destination.read_bytes(), b"new")
             self.assertFalse(path.exists()); self.assertFalse(Path(journal["files"][0]["backup"]).exists())
+
+    def test_external_scm_reopen_replays_publication_but_keeps_admission_journal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            layout, journal, path, destination = self.fixture(directory)
+            journal["new_definition"] = {"manager": "scm", "owner_sid": "S-1-5-21-fixture"}
+            path.write_text(json.dumps(journal)); Path(layout["marker_path"]).write_text(json.dumps(journal["old_marker"]))
+            destination.write_bytes(b"old")
+            with patch.object(installer, "native", return_value={}) as native, patch.object(installer, "publish_marker", lambda cli, value: self.write_record(cli, layout["marker_path"], value)), patch.object(installer, "pending_admin") as pending:
+                self.assertTrue(installer.recover(Path(directory) / "hiroute.exe", layout, None, external_manager=True))
+            native.assert_called_once_with(Path(directory) / "hiroute.exe", ["stop"])
+            pending.assert_called_once(); self.assertEqual(destination.read_bytes(), b"new")
+            self.assertEqual(installer.read_json(path)["phase"], "prepared")
+            self.assertEqual(installer.read_json(layout["marker_path"]), journal["new_marker"])
+
+    def test_owner_finalize_requires_native_machine_proof_before_commit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            layout, journal, path, destination = self.fixture(directory)
+            journal["new_definition"] = {"manager": "scm", "owner_sid": "S-1-5-21-fixture"}; path.write_text(json.dumps(journal))
+            cli = Path(directory) / "hiroute.exe"; cli.write_bytes(b"fixture")
+            args = SimpleNamespace(cli=cli)
+            with patch.object(installer, "native", return_value=layout), patch.object(installer, "maintenance_lock", lambda _data: nullcontext()), patch.object(installer, "publish_marker", lambda cli, value: self.write_record(cli, layout["marker_path"], value)), patch.object(installer, "owner_finalize", side_effect=ValueError("SCM not actually registered")):
+                with self.assertRaises(ValueError):
+                    installer.finalize(args)
+            self.assertEqual(installer.read_json(path)["phase"], "prepared")
+            self.assertTrue(Path(journal["files"][0]["backup"]).exists())
+
+    def test_internal_admin_credentials_are_stdin_only_and_response_is_closed(self):
+        password = 'literal"; $(must-not-run) & no-shell'
+        request = {"schema": "request", "operation": "install", "password": password}
+        response = {"schema": "response", "operation": "install", "definition": {}, "completed": True}
+        process = SimpleNamespace(returncode=0, stdout=json.dumps(response).encode())
+        with patch.object(installer.subprocess, "run", return_value=process) as run:
+            installer.internal(Path("trusted-cli.exe"), "fixed-internal-verb", request, "response", "install")
+        argv = run.call_args.args[0]; self.assertNotIn(password, argv)
+        self.assertEqual(json.loads(run.call_args.kwargs["input"])["password"], password)
+        self.assertNotIn("shell", run.call_args.kwargs)
+        process.stdout = json.dumps({**response, "password": password}).encode()
+        with patch.object(installer.subprocess, "run", return_value=process), self.assertRaises(ValueError):
+            installer.internal(Path("trusted-cli.exe"), "fixed-internal-verb", request, "response", "install")
 
     def test_partial_publish_rolls_back_exact_old_bytes_and_preserves_foreign_edit(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -35,7 +35,9 @@ module before extending it; a local feature does not require a facade-wide rewri
 CLI secret entry uses the shared local [protected input socket](../../crates/daemon/src/control/standalone.rs)
 in both standalone and Desktop-owned `role=all` processes. The [CLI input owner](../../crates/cli/src/host_commands.rs)
 reads inherited descriptors; ordinary control requests never carry secret bytes.
-All current hosts and the CLI resolve its `hiroute/input.sock` path through host-runtime.
+All current hosts and the CLI resolve its logical `hiroute/input.sock` endpoint through host-runtime.
+Windows maps it to a private named pipe bound to the held runtime directory and account SID;
+it does not create a filesystem socket. Follow [native ownership](../../crates/platform/README.md).
 The name must fit any runtime root that supports `hiroute/control.sock`, including macOS.
 
 | User step | Owners to follow | Representative guard |

@@ -31,12 +31,14 @@ pub(super) fn native_probe_path() -> std::ffi::OsString {
 }
 
 fn probe_path(path: Option<&std::ffi::OsStr>) -> std::ffi::OsString {
-    let mut directories = path
+    let directories = path
         .map(std::env::split_paths)
         .into_iter()
         .flatten()
         .filter(|path| path.is_absolute())
         .collect::<Vec<_>>();
+    #[cfg(unix)]
+    let mut directories = directories;
     #[cfg(unix)]
     for system in ["/usr/bin", "/bin"] {
         let system = std::path::PathBuf::from(system);
@@ -44,7 +46,7 @@ fn probe_path(path: Option<&std::ffi::OsStr>) -> std::ffi::OsString {
             directories.push(system);
         }
     }
-    std::env::join_paths(directories).expect("split absolute Unix paths remain joinable")
+    std::env::join_paths(directories).expect("split absolute paths remain joinable")
 }
 
 #[derive(Clone, Copy, Debug, thiserror::Error)]

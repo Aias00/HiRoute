@@ -1,9 +1,13 @@
 #![cfg(windows)]
 
 use hiroute_platform::windows::{
-    job::{Child, Launch, Stream},
+    job::{
+        Child, Launch, Stream, credential_pipe_pair, duplicate_inheritable_pipe,
+        read_inherited_credential,
+    },
     launcher,
 };
+use std::os::windows::io::AsRawHandle;
 use std::{
     ffi::OsString,
     io::Write,
@@ -59,6 +63,14 @@ fn stop(child: &Child) {
 fn job_probe() {
     let mode = std::env::var("HIROUTE_JOB_MODE").unwrap();
     let root = PathBuf::from(std::env::var_os("HIROUTE_JOB_ROOT").unwrap());
+    if mode == "credential" {
+        let handle: u64 = std::env::args().last().unwrap().parse().unwrap();
+        let credential = read_inherited_credential(handle, 256, Duration::from_secs(2)).unwrap();
+        assert_eq!(&credential[..], b"public-test-carrier\n");
+        // The fixture has reached the real child reader, not merely process creation.
+        std::fs::write(root.join("credential.receipt"), "verified").unwrap();
+        return;
+    }
     if mode == "argv" {
         let record = serde_json::json!({"binary": std::env::current_exe().unwrap(), "args": std::env::args_os().skip(1).map(|arg| arg.into_string().unwrap()).collect::<Vec<_>>()});
         std::fs::write(root.join("argv.json"), serde_json::to_vec(&record).unwrap()).unwrap();
@@ -226,4 +238,123 @@ fn duplicate_windows_environment_keys_are_rejected_before_launch() {
         })
         .is_err()
     );
+}
+
+fn inherited(file: &std::fs::File) -> u64 {
+    use windows_sys::Win32::Foundation::{HANDLE_FLAG_INHERIT, SetHandleInformation};
+    assert_ne!(
+        unsafe {
+            SetHandleInformation(
+                file.as_raw_handle(),
+                HANDLE_FLAG_INHERIT,
+                HANDLE_FLAG_INHERIT,
+            )
+        },
+        0
+    );
+    file.as_raw_handle() as usize as u64
+}
+
+#[test]
+fn inherited_credential_pipe_roundtrips_and_preserves_original_handle() {
+    use windows_sys::Win32::Foundation::GetHandleInformation;
+    let (read, mut write) = credential_pipe_pair().unwrap();
+    let handle = inherited(&read);
+    // No secret or model invocation: exercise actual native pipe transport and EOF.
+    write.write_all(b"fixture-public-credential\n").unwrap();
+    drop(write);
+    let bytes = read_inherited_credential(handle, 256, Duration::from_secs(2)).unwrap();
+    assert_eq!(&bytes[..], b"fixture-public-credential\n");
+    let mut flags = 0;
+    assert_ne!(
+        unsafe { GetHandleInformation(read.as_raw_handle(), &mut flags) },
+        0
+    );
+}
+
+#[test]
+fn inherited_credential_rejects_invalid_stdio_file_and_noninherited_handles() {
+    use windows_sys::Win32::{
+        Foundation::{ERROR_INVALID_HANDLE, INVALID_HANDLE_VALUE},
+        System::Console::{GetStdHandle, STD_INPUT_HANDLE},
+    };
+    for handle in
+        [
+            0,
+            INVALID_HANDLE_VALUE as usize as u64,
+            unsafe { GetStdHandle(STD_INPUT_HANDLE) } as usize as u64,
+        ]
+    {
+        assert!(read_inherited_credential(handle, 256, Duration::from_secs(1)).is_err());
+    }
+    let file = tempfile::tempfile().unwrap();
+    assert!(read_inherited_credential(inherited(&file), 256, Duration::from_secs(1)).is_err());
+    let (read, _write) = credential_pipe_pair().unwrap();
+    assert!(
+        read_inherited_credential(
+            read.as_raw_handle() as usize as u64,
+            256,
+            Duration::from_secs(1)
+        )
+        .is_err()
+    );
+    // A fabricated high pointer must fail validation before any borrowed ownership is taken.
+    let error = read_inherited_credential(0x1_0000_0001, 256, Duration::from_secs(1)).unwrap_err();
+    assert_eq!(error.raw_os_error(), Some(ERROR_INVALID_HANDLE as i32));
+}
+
+#[test]
+fn inherited_credential_pipe_timeout_and_byte_limit_are_bounded() {
+    let (read, mut write) = credential_pipe_pair().unwrap();
+    let handle = inherited(&read);
+    let start = Instant::now();
+    let error = read_inherited_credential(handle, 256, Duration::from_millis(50)).unwrap_err();
+    assert_eq!(error.kind(), std::io::ErrorKind::TimedOut);
+    assert!(start.elapsed() < Duration::from_secs(1));
+    write.write_all(&[b'x'; 257]).unwrap();
+    let error = read_inherited_credential(handle, 256, Duration::from_secs(1)).unwrap_err();
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+    assert!(read_inherited_credential(handle, 1024 * 1024 + 1, Duration::from_secs(1)).is_err());
+    assert!(read_inherited_credential(handle, 256, Duration::from_secs(31)).is_err());
+}
+
+#[test]
+fn inherited_credential_crosses_an_explicit_job_child_handle_list() {
+    let root = tempfile::tempdir().unwrap();
+    let (read, mut write) = credential_pipe_pair().unwrap();
+    let carrier = duplicate_inheritable_pipe(&read).unwrap();
+    let binary = std::env::current_exe().unwrap();
+    let handle = (carrier.as_raw_handle() as usize as u64).to_string();
+    let args = [
+        "--exact",
+        "job_probe",
+        "--ignored",
+        "--nocapture",
+        "--skip",
+        &handle,
+    ]
+    .map(OsString::from);
+    let env = environment("credential", root.path());
+    let child = Child::spawn_with_inherited_pipes(
+        Launch {
+            program: &binary,
+            args: &args,
+            env: &env,
+            cwd: Some(root.path()),
+            stdin: Stream::Null,
+            stdout: Stream::Null,
+            stderr: Stream::Null,
+        },
+        &[&carrier],
+    )
+    .unwrap();
+    write.write_all(b"public-test-carrier\n").unwrap();
+    drop(write);
+    await_condition(|| child.exit_code().unwrap().is_some());
+    assert_eq!(child.exit_code().unwrap(), Some(0));
+    assert_eq!(
+        std::fs::read_to_string(root.path().join("credential.receipt")).unwrap(),
+        "verified"
+    );
+    stop(&child);
 }

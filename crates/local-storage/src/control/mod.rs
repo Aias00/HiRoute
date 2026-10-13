@@ -2290,7 +2290,7 @@ impl ManagedArtifactStore {
                     true
                 }
                 #[cfg(windows)]
-                "hiroute.managed-artifact-marker/windows-v5" if has_backup_aad => false,
+                "hiroute.windows-managed-artifact-marker/v5" if has_backup_aad => false,
                 "hiroute.managed-artifact-marker/v4" if has_backup_aad => false,
                 "hiroute.managed-artifact-marker/v4" => return Err(LocalStorageError::Locked),
                 _ => return Err(LocalStorageError::Locked),

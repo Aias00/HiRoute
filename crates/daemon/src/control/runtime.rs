@@ -1,6 +1,4 @@
 use std::collections::BTreeMap;
-use std::fs::{self, OpenOptions};
-use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Weak};
@@ -78,6 +76,8 @@ mod mutation;
 mod native_additional_model;
 mod native_claude_model;
 mod native_model;
+mod observation_key;
+use observation_key::observation_workspace_key;
 mod plan_content;
 mod plan_content_snapshot;
 mod plan_versions;
@@ -722,7 +722,7 @@ impl ProductionControlRuntime {
         Arc::clone(&self.adapter.delegation_run_authority)
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub(crate) fn agent_grant_resolver(&self) -> Arc<dyn super::AgentGrantResolverPort> {
         self.adapter.clone()
     }
@@ -1449,71 +1449,6 @@ fn map_port(error: PortError) -> ControlReadError {
         PortErrorCode::Corrupt | PortErrorCode::InvalidData => ControlReadError::Corrupt,
         _ => ControlReadError::Unavailable,
     }
-}
-
-fn observation_workspace_key(storage_root: &Path) -> Result<Zeroizing<[u8; 32]>, String> {
-    let key_path = storage_root.join("observation-hmac-key");
-    let mut key = [0_u8; 32];
-    match OpenOptions::new().read(true).open(&key_path) {
-        Ok(mut file) => {
-            file.read_exact(&mut key)
-                .map_err(|error| error.to_string())?;
-            let mut trailing = [0_u8; 1];
-            if file
-                .read(&mut trailing)
-                .map_err(|error| error.to_string())?
-                != 0
-            {
-                return Err("observation authority key has an invalid length".to_owned());
-            }
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            fs::create_dir_all(storage_root).map_err(|error| error.to_string())?;
-            getrandom::fill(&mut key).map_err(|error| error.to_string())?;
-            create_owner_key(&key_path, &key)?;
-        }
-        Err(error) => return Err(error.to_string()),
-    }
-    validate_owner_key(&key_path)?;
-    Ok(Zeroizing::new(key))
-}
-
-#[cfg(unix)]
-fn create_owner_key(path: &Path, key: &[u8; 32]) -> Result<(), String> {
-    use std::os::unix::fs::OpenOptionsExt;
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(path)
-        .map_err(|error| error.to_string())?;
-    file.write_all(key).map_err(|error| error.to_string())?;
-    file.sync_all().map_err(|error| error.to_string())
-}
-
-#[cfg(not(unix))]
-fn create_owner_key(path: &Path, key: &[u8; 32]) -> Result<(), String> {
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path)
-        .map_err(|error| error.to_string())?;
-    file.write_all(key).map_err(|error| error.to_string())?;
-    file.sync_all().map_err(|error| error.to_string())
-}
-
-#[cfg(unix)]
-fn validate_owner_key(path: &Path) -> Result<(), String> {
-    let metadata = fs::symlink_metadata(path).map_err(|error| error.to_string())?;
-    if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
-        return Err("observation authority key is not a regular file".to_owned());
-    }
-    Ok(())
-}
-
-#[cfg(not(unix))]
-fn validate_owner_key(_path: &Path) -> Result<(), String> {
-    Ok(())
 }
 
 #[cfg(test)]

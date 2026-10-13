@@ -31,10 +31,7 @@ pub(crate) fn execute(arguments: &[String], globals: &Globals) -> Option<CliExec
         });
     }
     let request_id = globals.request_id.clone();
-    if globals.agent.is_some()
-        || globals.capability_fd.is_some()
-        || globals.output != OutputMode::Json
-    {
+    if globals.agent.is_some() || globals.has_capability() || globals.output != OutputMode::Json {
         return Some(failure(ErrorCode::InvalidArguments, request_id));
     }
     let result = match family {
@@ -62,6 +59,11 @@ fn host_help(family: &str) -> &'static str {
             "Usage\n  hiroute subscription-proxy show --output json\n  hiroute subscription-proxy set --mode inherit|direct|manual [--url <HTTP_PROXY_URL>] [--no-proxy <BYPASS_LIST>] --output json\n  Restart the service to apply saved settings: hiroute service restart --output json\n"
         }
         "protected-input" => {
+            #[cfg(windows)]
+            {
+                return "Usage\n  hiroute protected-input register --candidate <REF> --secret-handle <INHERITED_HANDLE> --output json\n  hiroute protected-input release --candidate <REF> --output json\nThe inherited handle must name a private non-stdio pipe; payload and EOF are bounded.\n";
+            }
+            #[cfg(not(windows))]
             "Usage\n  hiroute protected-input register --candidate <REF> --secret-fd <FD> --output json\n  hiroute protected-input release --candidate <REF> --output json\n"
         }
         _ => unreachable!(),
@@ -391,6 +393,19 @@ fn protected_input_command(
         .map(|client| client.with_timeout(globals.timeout.unwrap_or(Duration::from_secs(30))))
         .map_err(|_| ErrorCode::DaemonUnavailable)?;
     let request = match arguments {
+        #[cfg(windows)]
+        [verb, candidate_flag, candidate, secret_flag, handle]
+            if verb == "register"
+                && candidate_flag == "--candidate"
+                && secret_flag == "--secret-handle" =>
+        {
+            let handle = handle
+                .parse::<u64>()
+                .map_err(|_| ErrorCode::InvalidArguments)?;
+            let secret = crate::client::read_protected_handle(handle, 512)
+                .map_err(|_| ErrorCode::InvalidArguments)?;
+            StandaloneProtectedInputRequestV1::register(candidate.clone(), secret)
+        }
         [verb, candidate_flag, candidate, secret_flag, fd]
             if verb == "register"
                 && candidate_flag == "--candidate"

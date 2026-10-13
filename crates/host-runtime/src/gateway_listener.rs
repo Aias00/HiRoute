@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::Read;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener};
 use std::path::{Path, PathBuf};
 
@@ -258,6 +258,12 @@ impl GatewayListenerStore {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(_) => return Err(GatewayListenerError::InvalidConfiguration),
         };
+        let metadata = file
+            .metadata()
+            .map_err(|_| GatewayListenerError::InvalidConfiguration)?;
+        if !metadata.is_file() || metadata.len() > MAX_RECORD_BYTES as u64 {
+            return Err(GatewayListenerError::InvalidConfiguration);
+        }
         let mut bytes = Vec::new();
         Read::by_ref(&mut file)
             .take(MAX_RECORD_BYTES as u64 + 1)
@@ -283,17 +289,13 @@ impl GatewayListenerStore {
         if !metadata.is_dir() || metadata.file_type().is_symlink() {
             return Err(GatewayListenerError::Unavailable);
         }
+        #[cfg(windows)]
+        let _root = hiroute_platform::windows::security::open_identity(&self.root, true)
+            .map_err(|_| GatewayListenerError::Unavailable)?;
         let bytes = serde_json::to_vec_pretty(config)
             .map_err(|_| GatewayListenerError::InvalidConfiguration)?;
-        let temporary = self.root.join(format!(
-            ".gateway-listener-{}.tmp",
-            random_hex().map_err(|_| GatewayListenerError::Unavailable)?
-        ));
-        let result = write_atomic(&temporary, &self.path(), &bytes);
-        if result.is_err() {
-            let _ = std::fs::remove_file(&temporary);
-        }
-        result
+        hiroute_platform::durable::write_private_atomic(&self.path(), &bytes)
+            .map_err(|_| GatewayListenerError::Unavailable)
     }
 
     pub fn configure(
@@ -494,43 +496,22 @@ fn open_no_follow(path: &Path) -> std::io::Result<File> {
     use std::os::unix::fs::OpenOptionsExt;
     std::fs::OpenOptions::new()
         .read(true)
-        .custom_flags(nix::libc::O_NOFOLLOW)
+        .custom_flags(nix::libc::O_NOFOLLOW | nix::libc::O_NONBLOCK)
         .open(path)
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
 fn open_no_follow(path: &Path) -> std::io::Result<File> {
-    std::fs::OpenOptions::new().read(true).open(path)
+    let file = hiroute_platform::windows::security::open_identity(path, false)?;
+    if hiroute_platform::windows::security::file_link_count(&file)? != 1 {
+        return Err(std::io::Error::other("listener record alias"));
+    }
+    Ok(file)
 }
 
-fn write_atomic(temporary: &Path, target: &Path, bytes: &[u8]) -> Result<(), GatewayListenerError> {
-    let mut options = std::fs::OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    let mut file = options
-        .open(temporary)
-        .map_err(|_| GatewayListenerError::Unavailable)?;
-    file.write_all(bytes)
-        .and_then(|_| file.sync_all())
-        .map_err(|_| GatewayListenerError::Unavailable)?;
-    drop(file);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(temporary, std::fs::Permissions::from_mode(0o600))
-            .map_err(|_| GatewayListenerError::Unavailable)?;
-    }
-    std::fs::rename(temporary, target).map_err(|_| GatewayListenerError::Unavailable)?;
-    if let Some(parent) = target.parent() {
-        File::open(parent)
-            .and_then(|directory| directory.sync_all())
-            .map_err(|_| GatewayListenerError::Unavailable)?;
-    }
-    Ok(())
+#[cfg(not(any(unix, windows)))]
+fn open_no_follow(path: &Path) -> std::io::Result<File> {
+    std::fs::OpenOptions::new().read(true).open(path)
 }
 
 #[cfg(test)]

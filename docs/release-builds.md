@@ -1,8 +1,9 @@
 # Release candidate builds
 
-The release scope is two macOS Desktop DMGs (`arm64`, `x86_64`) and two Linux
-headless archives (`x86_64`, `aarch64`). Windows and Linux Desktop are outside this
-build entry. All components of one release must come from the same clean,
+The candidate entry builds macOS Desktop DMGs (`arm64`, `x86_64`) and Linux or Windows
+headless archives (`x86_64`, `aarch64`). Desktop for Windows/Linux is outside this
+build entry. A target's package integrity is separate from its required native runtime
+acceptance and does not by itself authorize publishing that target. All components of one release must come from the same clean,
 committed source revision, with CPA built from `vendor/cpa/source.json` and its
 checked patch.
 
@@ -32,7 +33,14 @@ python3 scripts/build-release.py \
   --target aarch64-unknown-linux-gnu --cpa-source-repo /path/to/CLIProxyAPI
 ```
 
-The same entry accepts `aarch64-apple-darwin` and `x86_64-unknown-linux-gnu`.
+The same entry accepts `aarch64-apple-darwin`, `x86_64-unknown-linux-gnu`,
+`x86_64-pc-windows-msvc` and `aarch64-pc-windows-msvc`. Windows builds require the
+matching native MSVC host, Python, Go and sccache; PE machine identity is checked for
+CLI, daemon and CPA. Its builder uses a checkout-local native file lock; it does not
+import the Unix workbench lock implementation. The CPA probe retains the actual native
+SystemRoot and uses isolated profile/temp paths. Windows candidates remain
+`awaiting_runtime` until the installed foreground/background and feature gates pass;
+see [Windows operating and evidence boundaries](standalone-windows.md).
 macOS candidates keep the existing macOS 15 minimum and self-signed trial
 distribution. Developer ID signing and cross-building on a Mac remain available
 through [package-desktop.py](../scripts/package-desktop.py) as documented in the

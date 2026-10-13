@@ -42,7 +42,7 @@ pub(crate) fn execute(command: &str, options: &[String], globals: Globals) -> Cl
         .request_id
         .clone()
         .unwrap_or_else(super::next_request_id);
-    if globals.agent.is_some() || globals.capability_fd.is_some() {
+    if globals.agent.is_some() || globals.has_capability() {
         return failure(
             ErrorCode::InvalidArguments,
             globals.output,

@@ -56,6 +56,11 @@ pub(crate) fn credential(_: u32) -> Result<String, LocalControlClientError> {
     Err(LocalControlClientError::ProtectedInput)
 }
 
+#[cfg(windows)]
+pub(crate) fn credential_handle(handle: u64) -> Result<String, LocalControlClientError> {
+    crate::client::read_protected_handle(handle, 256)
+}
+
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;

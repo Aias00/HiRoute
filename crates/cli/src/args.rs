@@ -15,6 +15,8 @@ pub(crate) struct Globals {
     pub(crate) request_id: Option<String>,
     pub(crate) help: bool,
     pub(crate) capability_fd: Option<u32>,
+    #[cfg(windows)]
+    pub(crate) capability_handle: Option<u64>,
     pub(crate) timeout: Option<Duration>,
     pub(crate) agent: Option<String>,
     pub(crate) output: OutputMode,
@@ -26,6 +28,16 @@ pub(crate) struct GlobalSplitError {
     pub(crate) code: ErrorCode,
     pub(crate) globals: Globals,
     pub(crate) worker: bool,
+}
+
+impl Globals {
+    pub(crate) fn has_capability(&self) -> bool {
+        #[cfg(windows)]
+        if self.capability_handle.is_some() {
+            return true;
+        }
+        self.capability_fd.is_some()
+    }
 }
 
 pub(crate) fn split_globals(
@@ -141,6 +153,20 @@ pub(crate) fn split_globals(
                 globals.capability_fd = Some(fd);
                 index += 2;
             }
+            #[cfg(windows)]
+            "--capability-handle" => {
+                let Some(handle) = arguments
+                    .get(index + 1)
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .filter(|value| *value != 0 && usize::try_from(*value).is_ok())
+                else {
+                    return Err(split_error(globals, worker));
+                };
+                if globals.capability_handle.replace(handle).is_some() {
+                    return Err(split_error(globals, worker));
+                }
+                index += 2;
+            }
             value if worker && value.starts_with('-') => {
                 // An unknown Worker option has unknown arity. Preserve the rest for the typed
                 // parser and do not reinterpret any later token as a global flag.
@@ -153,7 +179,11 @@ pub(crate) fn split_globals(
             }
         }
     }
-    if globals.agent.is_some() && globals.capability_fd.is_some() {
+    #[cfg(windows)]
+    if globals.capability_fd.is_some() && globals.capability_handle.is_some() {
+        return Err(split_error(globals, worker));
+    }
+    if globals.agent.is_some() && globals.has_capability() {
         return Err(split_error(globals, worker));
     }
     if worker && !globals.output_explicit {

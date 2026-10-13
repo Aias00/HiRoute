@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build one native release candidate; never publish or modify an installation."""
 import argparse
+from contextlib import contextmanager
 from datetime import datetime, timezone
 import importlib.util
 import json
@@ -20,6 +21,7 @@ REPO = Path(__file__).resolve().parent.parent
 TARGETS = (
     "aarch64-apple-darwin", "x86_64-apple-darwin",
     "x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu",
+    "x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc",
 )
 
 
@@ -32,7 +34,8 @@ def module(name):
 
 def host_target():
     arch = {"arm64": "aarch64", "AMD64": "x86_64"}.get(platform.machine(), platform.machine())
-    suffix = {"Darwin": "apple-darwin", "Linux": "unknown-linux-gnu"}.get(platform.system())
+    suffix = {"Darwin": "apple-darwin", "Linux": "unknown-linux-gnu",
+              "Windows": "pc-windows-msvc"}.get(platform.system())
     return f"{arch}-{suffix}"
 
 
@@ -43,6 +46,35 @@ def inspect_elf(path, target):
     if (len(header) != 20 or header[:6] != b"\x7fELF\x02\x01"
             or struct.unpack_from("<H", header, 18)[0] != machine):
         raise ValueError(f"binary architecture differs from {target}: {path.name}")
+
+
+@contextmanager
+def windows_build_lock():
+    import msvcrt
+    path = REPO / "target/release-candidate/windows-build.lock"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a+b") as handle:
+        if handle.tell() == 0:
+            handle.write(b"0")
+            handle.flush()
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        try:
+            yield
+        finally:
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+
+
+def windows_probe_environment(directory):
+    import ctypes
+    buffer = ctypes.create_unicode_buffer(32768)
+    size = ctypes.windll.kernel32.GetWindowsDirectoryW(buffer, len(buffer))
+    if not 0 < size < len(buffer):
+        raise OSError("Cannot resolve native Windows directory")
+    root = Path(buffer.value).resolve(strict=True)
+    return {"SYSTEMROOT": str(root), "WINDIR": str(root), "PATH": str(root / "System32"),
+            "TEMP": directory, "TMP": directory, "USERPROFILE": directory}
 
 
 class Candidate:
@@ -115,28 +147,34 @@ class Candidate:
         return artifact, [dmg]
 
     def standalone(self):
-        cpa = self.output / "cliproxyapi"
+        windows = self.target.endswith("-pc-windows-msvc")
+        cpa = self.output / ("cliproxyapi.exe" if windows else "cliproxyapi")
         provenance = json.loads(self.script("build-cpa", "--source-repo", self.source_repo,
                                            "--target", self.target, "--output", cpa))
         pin = module("build-cpa").pinned_source()[0]
         # The helper version probe has no service side effects and no user config.
         with tempfile.TemporaryDirectory(prefix="hiroute-release-probe-") as directory:
-            probe = self.run(cpa, "--help", env={"HOME": directory, "PATH": "/usr/bin:/bin",
-                                               "TMPDIR": directory}, timeout=60)
+            environment = windows_probe_environment(directory) if windows else {
+                "HOME": directory, "PATH": "/usr/bin:/bin", "TMPDIR": directory}
+            probe = self.run(cpa, "--help", env=environment, timeout=60)
         match = re.search(r"CLIProxyAPI Version: ([^,]+), Commit: ([0-9a-f]{7,40}), BuiltAt: ([^\r\n]+)", probe)
         if not match or match[1] != pin["version"] or not pin["commit"].startswith(match[2]) or match[3] != pin["built_at"]:
             raise ValueError("CPA release version/commit/build date mismatch")
         self.run("cargo", "build", "--locked", "--release", "--target", self.target,
                  "-p", "hiroute-cli", "-p", "hiroute-daemon", "--bin", "hiroute", "--bin", "hirouted")
         binaries = REPO / "target" / self.target / "release"
-        for binary in (binaries / "hiroute", binaries / "hirouted", cpa):
-            inspect_elf(binary, self.target)
+        suffix = ".exe" if windows else ""
+        for binary in (binaries / ("hiroute" + suffix), binaries / ("hirouted" + suffix), cpa):
+            if windows:
+                module("package-standalone").verify_windows_image(binary, self.target)
+            else:
+                inspect_elf(binary, self.target)
         notices = self.output / "notices"
         self.script("collect-third-party-licenses", "--cargo-target", self.target,
                     "--cpa-source-repo", self.source_repo, "--output", notices)
         packaged = json.loads(self.script(
             "package-standalone", "build", "--version", self.version, "--revision", self.revision,
-            "--target", self.target, "--hiroute", binaries / "hiroute", "--hirouted", binaries / "hirouted",
+            "--target", self.target, "--hiroute", binaries / ("hiroute" + suffix), "--hirouted", binaries / ("hirouted" + suffix),
             "--cpa-binary", cpa, "--cpa-version", pin["version"], "--cpa-license", cpa.with_suffix(".LICENSE"),
             "--notices", notices, "--output", self.output))
         archive, manifest = Path(packaged["archive"]), Path(packaged["manifest"])
@@ -145,11 +183,12 @@ class Candidate:
         if any(verified[key] != expected for key, expected in (
                 ("revision", self.revision), ("version", self.version), ("target", self.target))):
             raise ValueError("standalone package differs from candidate identity")
-        abi = module("linux-release-abi").archive(manifest, archive, packager, self.run)
-        (self.output / "linux-abi.json").write_text(json.dumps(abi, indent=2) + "\n")
-        self.result["linux_abi"] = abi
+        if not windows:
+            abi = module("linux-release-abi").archive(manifest, archive, packager, self.run)
+            (self.output / "linux-abi.json").write_text(json.dumps(abi, indent=2) + "\n")
+            self.result["linux_abi"] = abi
         self.result["cpa_source"] = provenance
-        artifact = {"kind": "standalone", "platform": "Linux", "architecture": self.target.split("-")[0],
+        artifact = {"kind": "standalone", "platform": "Windows" if windows else "Linux", "architecture": self.target.split("-")[0],
                     "target": self.target, "format": "tar.gz", "distribution": "unsigned",
                     **verified["archive"], "manifest_filename": manifest.name,
                     "manifest_sha256": packager.digest(manifest), "manifest_size": manifest.stat().st_size}
@@ -162,13 +201,14 @@ class Candidate:
                 artifact, files = self.desktop()  # The Desktop packager owns its existing lock.
             else:
                 module("package-desktop").ensure_sccache_server()
-                with module("local-rust").Store().locked(REPO):
+                lock = windows_build_lock() if self.target.endswith("-pc-windows-msvc") else module("local-rust").Store().locked(REPO)
+                with lock:
                     artifact, files = self.standalone()
             assets = self.output / "assets"
             assets.mkdir()
             for path in files:
                 shutil.copyfile(path, assets / path.name)
-            status = "awaiting_runtime" if self.target.endswith("linux-gnu") else "completed"
+            status = "completed" if self.target.endswith("apple-darwin") else "awaiting_runtime"
             self.result.update(status=status, package_integrity="green",
                                website_artifact=artifact, assets=str(assets))
             return self.result

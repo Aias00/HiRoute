@@ -248,7 +248,19 @@ mod tests {
             .take(65536)
             .read_to_string(&mut output)
             .unwrap();
-        assert_eq!(code, 0, "restricted child failed: {output}");
+        let mut errors = String::new();
+        child
+            .stderr
+            .take()
+            .unwrap()
+            .take(65536)
+            .read_to_string(&mut errors)
+            .unwrap();
+        assert_eq!(
+            code, 0,
+            "restricted child failed (exit=0x{:08x}, primary token remained restricted): stdout={output:?}; stderr={errors:?}",
+            code as u32
+        );
         assert!(
             output.contains("HIRoute restricted child identity verified"),
             "child test was not selected: {output}"

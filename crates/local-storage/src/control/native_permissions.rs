@@ -5,7 +5,7 @@ use hiroute_platform::file_security::WindowsPermissions;
 
 pub(super) const fn current_artifact_schema() -> &'static str {
     if cfg!(windows) {
-        "hiroute.managed-artifact-marker/windows-v5"
+        "hiroute.windows-managed-artifact-marker/v5"
     } else {
         "hiroute.managed-artifact-marker/v4"
     }

@@ -430,6 +430,28 @@ pub(crate) fn read_protected_fd(fd: u32) -> Result<String, LocalControlClientErr
     }
 }
 
+#[cfg(windows)]
+pub(crate) fn read_protected_handle(
+    handle: u64,
+    limit: usize,
+) -> Result<String, LocalControlClientError> {
+    let bytes = hiroute_platform::windows::job::read_inherited_credential(
+        handle,
+        limit,
+        std::time::Duration::from_secs(2),
+    )
+    .map_err(|_| LocalControlClientError::ProtectedInput)?;
+    let value = std::str::from_utf8(&bytes).map_err(|_| LocalControlClientError::ProtectedInput)?;
+    let value = value
+        .strip_suffix("\r\n")
+        .or_else(|| value.strip_suffix('\n'))
+        .unwrap_or(value);
+    if value.is_empty() || value.contains('\0') {
+        return Err(LocalControlClientError::ProtectedInput);
+    }
+    Ok(value.to_owned())
+}
+
 #[cfg(test)]
 mod locator_tests {
     use super::*;

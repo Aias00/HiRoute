@@ -59,6 +59,34 @@ def native(cli, arguments, payload=None, secret=None):
     return envelope["data"]
 
 
+def internal(cli, verb, request, schema, operation):
+    """Internal fixed native entry; owner credentials exist only in stdin."""
+    body = json.dumps(request, separators=(",", ":")).encode("utf-8")
+    if len(body) > 16 * 1024:
+        raise ValueError("internal maintenance request is oversized")
+    result = subprocess.run([str(cli), verb, "--request-stdin"], input=body,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=65, check=False)
+    if result.returncode or len(result.stdout) > 16 * 1024:
+        raise ValueError("native administrator or owner maintenance failed")
+    response = package.load_json_bytes(result.stdout)
+    if not isinstance(response, dict) or set(response) != {"schema", "operation", "definition", "completed"} or response["schema"] != schema or response["operation"] != operation or response["completed"] is not True or not isinstance(response["definition"], dict):
+        raise ValueError("internal maintenance response is invalid")
+    return response
+
+
+def owner_finalize(cli, operation):
+    return internal(cli, "__windows-background-finalize",
+                    {"schema": "hiroute.windows-owner-finalize-request/v1", "operation": operation},
+                    "hiroute.windows-owner-finalize-result/v1", operation)
+
+
+def pending_admin(layout, journal):
+    print(json.dumps({"completed": False, "pending_admin": True, "operation": journal["operation"],
+                      "owner_sid": journal["new_definition"]["owner_sid"],
+                      "marker": layout["marker_path"], "journal": str(Path(layout["data_root"]) / "service/install-journal.json"),
+                      "next": "administrator runs admin-scm with their verified CLI, then the owner runs finalize"}, sort_keys=True))
+
+
 def read_json(path):
     regular(path)
     if not Path(path).exists():
@@ -183,7 +211,7 @@ def finish_uninstall_metadata(layout, journal):
         manifest_path.unlink()
 
 
-def recover(cli, layout, password):
+def recover(cli, layout, password, external_manager=False):
     path = Path(layout["data_root"]) / "service/install-journal.json"
     journal = read_json(path)
     if journal is None:
@@ -194,6 +222,21 @@ def recover(cli, layout, password):
             finish_uninstall_metadata(layout, journal)
         finish_journal(path, journal)
         return
+    if external_manager and journal["new_definition"].get("manager") == "scm":
+        current = read_json(layout["marker_path"])
+        if current not in (journal["old_marker"], journal["new_marker"]):
+            raise ValueError("prepared SCM installation marker changed; preserve it for repair")
+        # Before first publication the old marker still identifies its actual
+        # daemon. After new publication, ordering already required that old
+        # daemon to stop; prepared admission prevents a new business startup.
+        if current is not None and current == journal["old_marker"]:
+            native(cli, ["stop"])
+        if journal["operation"] == "install":
+            for item in journal["files"]:
+                replace_owned(item)
+            publish_marker(cli, journal["new_marker"])
+        pending_admin(layout, journal)
+        return True
     if journal["operation"] == "uninstall":
         native(cli, ["uninstall"])
         for item in journal["files"]:
@@ -299,7 +342,9 @@ def install(args):
     manifest = package.verify(args.manifest, args.archive)
     if not manifest["target"].endswith("-pc-windows-msvc"):
         raise ValueError("package is not a Windows candidate")
-    password = password_input(args)
+    if args.external_manager and args.manager != "scm":
+        raise ValueError("external administrator maintenance is only available for SCM")
+    password = None if args.external_manager else password_input(args)
     with tempfile.TemporaryDirectory(prefix="hiroute-verified-") as temporary:
         staging = Path(temporary)
         stage_package(manifest, args.archive, staging)
@@ -309,10 +354,13 @@ def install(args):
             raise ValueError("package differs from native host target")
         data, home = Path(layout["data_root"]), Path(layout["home"])
         with maintenance_lock(data):
-            recover(cli, layout, password)
+            if recover(cli, layout, password, args.external_manager):
+                return
             old = read_json(layout["marker_path"])
             old_definition = read_json(layout["service_definition"])
             old_manifest = read_json(data / "package-manifest.json")
+            if (old is None) != (old_definition is None) or (old is None) != (old_manifest is None):
+                raise ValueError("installation ownership metadata is incomplete; preserve it for repair")
             if old and old_definition["manager"] != args.manager:
                 raise ValueError("uninstall the previous manager before switching modes")
             root = home / ".local/lib/hiroute" / (manifest["version"] + "-" + manifest["revision"][:12])
@@ -357,12 +405,16 @@ def install(args):
                 for item in journal["files"]:
                     replace_owned(item)
                 publish_marker(cli, new)
+                if args.external_manager:
+                    pending_admin(layout, journal)
+                    return
                 manager_install(cli, args.manager, password)
                 journal["phase"] = "committed"
                 write_record(cli, journal_path, journal)
                 finish_journal(journal_path, journal)
             except Exception:
-                recover(cli, layout, password)
+                if not args.external_manager:
+                    recover(cli, layout, password)
                 raise
             print(json.dumps({"installed": True, "version": manifest["version"], "manager": args.manager,
                               "cli": str(home / ".local/bin/hiroute.exe"), "started": False}, sort_keys=True))
@@ -373,17 +425,24 @@ def uninstall(args):
     layout = native(cli, ["layout"])
     data = Path(layout["data_root"])
     with maintenance_lock(data):
-        recover(cli, layout, password_input(args))
+        if recover(cli, layout, None if args.external_manager else password_input(args), args.external_manager):
+            return
         old = read_json(layout["marker_path"])
         definition = read_json(layout["service_definition"])
         manifest = read_json(data / "package-manifest.json")
         if old is None or definition is None or manifest is None:
             raise ValueError("installation ownership is unavailable")
+        if args.external_manager and definition["manager"] != "scm":
+            raise ValueError("external administrator maintenance is only available for SCM")
+        native(cli, ["stop"])
         journal = {"schema": JOURNAL_SCHEMA, "operation": "uninstall", "phase": "prepared", "old_marker": old, "new_marker": old,
                    "old_definition": definition, "new_definition": definition,
                    "files": plan_files(destinations(Path(old["install_root"]), layout, manifest), data, manifest, uninstall=True)}
         journal_path = data / "service/install-journal.json"
         write_record(cli, journal_path, journal)
+        if args.external_manager:
+            pending_admin(layout, journal)
+            return
         try:
             native(cli, ["uninstall"])
             for item in journal["files"]:
@@ -399,6 +458,63 @@ def uninstall(args):
         print(json.dumps({"uninstalled": True, "state_preserved": layout["state_root"]}, sort_keys=True))
 
 
+def finalize(args):
+    cli = regular(Path(args.cli).resolve(strict=True))
+    layout = native(cli, ["layout"])
+    data = Path(layout["data_root"])
+    with maintenance_lock(data):
+        path = data / "service/install-journal.json"
+        journal = read_json(path)
+        if journal is None:
+            raise ValueError("no prepared owner maintenance exists")
+        validate_journal(journal, layout)
+        if journal["new_definition"].get("manager") != "scm":
+            raise ValueError("owner finalization requires a prepared SCM operation")
+        if journal["phase"] == "prepared":
+            if journal["operation"] == "install":
+                # Reopen after a crash at any user-file boundary. Manager proof
+                # is still required before declaring the transaction committed.
+                for item in journal["files"]:
+                    replace_owned(item)
+                publish_marker(cli, journal["new_marker"])
+            response = owner_finalize(cli, journal["operation"])
+            if response["definition"] != journal["new_definition"]:
+                raise ValueError("machine registration differs from prepared owner maintenance")
+            if journal["operation"] == "uninstall":
+                for item in journal["files"]:
+                    replace_owned(item)
+            journal["phase"] = "committed"
+            write_record(cli, path, journal)
+        if journal["operation"] == "uninstall":
+            finish_uninstall_metadata(layout, journal)
+        finish_journal(path, journal)
+        print(json.dumps({"completed": True, "operation": journal["operation"], "manager": "scm", "started": False}, sort_keys=True))
+
+
+def admin_scm(args):
+    # This is a deliberate administrator-operated bootstrap. Never derive the
+    # executable from the standard owner's mutable installation marker.
+    cli = regular(Path(args.cli).resolve(strict=True))
+    if args.operation == "set_autostart":
+        if args.enabled is None:
+            raise ValueError("set_autostart requires explicit --enabled on or off")
+        enabled = args.enabled == "on"
+    else:
+        if args.enabled is not None:
+            raise ValueError("autostart choice is only allowed for set_autostart")
+        enabled = None
+    password = password_input(args)
+    if not args.account or len(args.account) > 512 or "\\" not in args.account:
+        raise ValueError("qualified Windows owner account is required")
+    secret = password.decode("utf-8").rstrip("\r\n")
+    request = {"schema": "hiroute.windows-scm-owner-request/v1", "operation": args.operation,
+               "account": args.account, "password": secret, "enabled": enabled}
+    result = internal(cli, "__windows-scm-owner-install", request, "hiroute.windows-scm-owner-result/v1", args.operation)
+    # Response contains no credentials. Native helper authenticates the account,
+    # inspects its profile while impersonating it and changes only its fixed SCM.
+    print(json.dumps(result, sort_keys=True))
+
+
 def main():
     if sys.platform != "win32":
         raise ValueError("Windows installation requires a native Windows process")
@@ -412,11 +528,25 @@ def main():
     for leaf in (create, remove):
         leaf.add_argument("--manager", choices=("task", "scm"), default="task")
         leaf.add_argument("--password-stdin", action="store_true")
+        leaf.add_argument("--external-manager", action="store_true", help="prepare SCM maintenance for a separate administrator, then run finalize as this owner")
+    finish = sub.add_parser("finalize", help="owner verifies actual SCM install/removal and commits prepared maintenance")
+    finish.add_argument("--cli", type=Path, required=True, help="prepared versioned CLI, never the stable hardlink being removed")
+    admin = sub.add_parser("admin-scm", help="run as administrator using the administrator's independently verified HiRoute CLI")
+    admin.add_argument("--cli", type=Path, required=True, help="administrator's independently verified CLI; do not use the standard owner's writable executable")
+    admin.add_argument("--account", required=True, help="qualified MACHINE\\owner or DOMAIN\\owner")
+    admin.add_argument("--operation", choices=("install", "uninstall", "set_autostart"), required=True)
+    admin.add_argument("--enabled", choices=("on", "off"))
+    admin.add_argument("--password-stdin", action="store_true")
+    admin.set_defaults(manager="scm")
     args = parser.parse_args()
     if args.command == "install":
         install(args)
-    else:
+    elif args.command == "uninstall":
         uninstall(args)
+    elif args.command == "finalize":
+        finalize(args)
+    else:
+        admin_scm(args)
 
 
 if __name__ == "__main__":

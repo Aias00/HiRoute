@@ -150,15 +150,25 @@ pub(super) fn spawn(
             }
         }
     }
-    if let Some(home) = env.get(std::ffi::OsStr::new("HOME")).cloned() {
+    let value = |name: &str, env: &std::collections::BTreeMap<OsString, OsString>| {
+        env.iter()
+            .find(|(key, _)| key.as_encoded_bytes().eq_ignore_ascii_case(name.as_bytes()))
+            .map(|(_, value)| value.clone())
+    };
+    if let Some(home) = value("HOME", &env) {
+        env.retain(|key, _| !key.as_encoded_bytes().eq_ignore_ascii_case(b"USERPROFILE"));
         env.insert("USERPROFILE".into(), home.clone());
-        env.entry("APPDATA".into()).or_insert_with(|| {
-            PathBuf::from(&home)
-                .join("AppData/Roaming")
-                .into_os_string()
-        });
-        env.entry("LOCALAPPDATA".into())
-            .or_insert_with(|| PathBuf::from(&home).join("AppData/Local").into_os_string());
+        for (key, suffix) in [
+            ("APPDATA", "AppData/Roaming"),
+            ("LOCALAPPDATA", "AppData/Local"),
+        ] {
+            if value(key, &env).is_none() {
+                env.insert(
+                    key.into(),
+                    PathBuf::from(&home).join(suffix).into_os_string(),
+                );
+            }
+        }
     }
     let program = if selected
         .extension()
@@ -174,11 +184,8 @@ pub(super) fn spawn(
         } else {
             selected.to_owned()
         };
-        let node = node_path(
-            env.get(std::ffi::OsStr::new("PATH"))
-                .map(OsString::as_os_str),
-            &entry,
-        )?;
+        let search = value("PATH", &env);
+        let node = node_path(search.as_deref(), &entry)?;
         args.insert(0, entry.into_os_string());
         node
     };
@@ -210,7 +217,8 @@ pub(super) fn bounded(
         Stream::Null,
         Stream::File(&writer),
         Stream::Null,
-    )?;
+    )
+    .map_err(|error| io::Error::other(LaunchFailure(error.raw_os_error())))?;
     let start = Instant::now();
     let result = (|| {
         loop {
@@ -252,6 +260,17 @@ pub(super) fn bounded(
         return Err(io::Error::other(CleanupUnknown));
     }
     result
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("native process did not start")]
+struct LaunchFailure(Option<i32>);
+
+pub(super) fn launch_failure_code(error: &io::Error) -> Option<Option<i32>> {
+    error
+        .get_ref()
+        .and_then(|source| source.downcast_ref::<LaunchFailure>())
+        .map(|failure| failure.0)
 }
 
 #[derive(Debug)]

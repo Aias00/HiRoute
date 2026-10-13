@@ -4,6 +4,7 @@
 //! admission protocol to the one Control/Runtime storage set, persists the bounded task body in
 //! the managed-text store, and retains the exact Plan version before runtime acceptance.
 
+#[cfg(unix)]
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;

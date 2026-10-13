@@ -161,8 +161,14 @@ impl TaskSessionRoot {
         }
         let file = open_marker(&marker_path)?;
         #[cfg(windows)]
-        hiroute_platform::windows::security::verify_owner_only_handle(&file, false)
-            .map_err(|_| DelegationErrorV1::ResumeUnavailable)?;
+        {
+            use hiroute_platform::windows::security::{file_link_count, verify_owner_only_handle};
+            verify_owner_only_handle(&file, false)
+                .map_err(|_| DelegationErrorV1::ResumeUnavailable)?;
+            if file_link_count(&file).map_err(|_| DelegationErrorV1::ResumeUnavailable)? != 1 {
+                return Err(DelegationErrorV1::ResumeUnavailable);
+            }
+        }
         let metadata = file
             .metadata()
             .map_err(|_| DelegationErrorV1::ResumeUnavailable)?;
@@ -295,8 +301,20 @@ impl TaskSessionRoot {
                     }
                 }
                 let mut actual = Vec::new();
-                open_marker(&path)?
-                    .take(1024 * 1024 + 1)
+                let file = open_marker(&path)?;
+                #[cfg(windows)]
+                {
+                    use hiroute_platform::windows::security::{
+                        file_link_count, verify_owner_only_handle,
+                    };
+                    verify_owner_only_handle(&file, false)
+                        .map_err(|_| DelegationErrorV1::PermissionDenied)?;
+                    if file_link_count(&file).map_err(|_| DelegationErrorV1::PermissionDenied)? != 1
+                    {
+                        return Err(DelegationErrorV1::PermissionDenied);
+                    }
+                }
+                file.take(1024 * 1024 + 1)
                     .read_to_end(&mut actual)
                     .map_err(|_| DelegationErrorV1::StorageUnavailable)?;
                 if actual != contents {
