@@ -44,7 +44,9 @@ release. Other website-only edits retain their dedicated workflow.
 The Windows jobs use the standard hosted `windows-2025` image. They do not require
 an organization owned Windows runner. Native inventories must contain every
 required case; zero, ignored or missing required cases fail. The shared library
-scope executes the complete native test inventory, while fixed Agent gates
+scope executes the complete ordinary native test inventory. Explicitly registered
+installation-input gates and child fixtures have their own execution entries;
+unregistered ignored cases fail the ordinary inventory. Fixed Agent gates
 explicitly select their opt-in real client tests. Their npm versions and all
 transitive package integrities come from `tools/windows-agent-fixtures/package-lock.json`.
 Qoder's fixed official archive has an independent SHA-256 check. No provider
@@ -59,9 +61,22 @@ session boundaries, stop/recovery policy and two-phase finalization. The separat
 candidate upgrade gate needs explicitly bound baseline package inputs; a new
 Windows platform has no released Windows baseline to invent.
 
+For a separately selected Windows 11 workstation run, `-CaptureArtifacts` records
+the exact Cargo `compiler-artifact` executable for every required test recipe,
+the product binaries, locked source inputs and complete package bytes. The
+`windows-native-replay.ps1` consumer rejects a partial scope, verifies every hash
+and source SHA, and runs those executables without rebuilding Rust. It restages
+the whole verified package with fresh administrator ACLs before Task/SCM tests.
+Static PE import auditing rejects Debug CRT dependencies; actual process launch
+still owns DLL resolution and runtime acceptance. The `windows-11-arm` hosted
+consumer explicitly records x64 emulation on ARM64, which does not establish
+native ARM64 product support. Consumer results retain the producer revision and
+have their own runtime scenario evidence.
+
 The toolchain comes from `rust-toolchain.toml`. Cargo sources are cached, not
-`target/`; shards do not exchange compiled binaries or claim another runner's build
-evidence. The shared Rust setup exports `CARGO_NET_GIT_FETCH_WITH_CLI=true` for
+`target/`; Linux shards do not exchange compiled binaries. Windows replay retains
+the original producer build evidence and assesses the consumer separately.
+The shared Rust setup exports `CARGO_NET_GIT_FETCH_WITH_CLI=true` for
 subsequent job steps, so pinned Git dependencies use the installed Git client
 instead of Cargo's embedded libgit2 transport. This avoids the libgit2 SSL failure
 observed when fetching Pingora on a cold hosted runner; TLS verification and locked

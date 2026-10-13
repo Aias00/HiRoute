@@ -24,9 +24,17 @@ fn config(harness: WorkerHarnessV1, variable: &str) -> WorkerInstallationConfig 
     };
     WorkerInstallationConfig {
         harness,
-        adapter: None,
+        adapter: match harness {
+            WorkerHarnessV1::CodexCli => Some(selected("HIROUTE_WORKER_CODEX_ACP_ADAPTER")),
+            WorkerHarnessV1::ClaudeCode => Some(selected("HIROUTE_WORKER_CLAUDE_ACP_ADAPTER")),
+            _ => None,
+        },
         harness_binary: binary,
-        node_binary: (harness == WorkerHarnessV1::Pi).then(|| selected("HIROUTE_WORKER_NODE")),
+        node_binary: matches!(
+            harness,
+            WorkerHarnessV1::Pi | WorkerHarnessV1::CodexCli | WorkerHarnessV1::ClaudeCode
+        )
+        .then(|| selected("HIROUTE_WORKER_NODE")),
     }
 }
 
@@ -41,6 +49,9 @@ fn profile(
     run: &str,
 ) -> Result<CandidateWorkerProfile, DelegationErrorV1> {
     let now = now_ms()?;
+    let secret = zeroize::Zeroizing::new(token.expose().to_vec());
+    let catalog =
+        (config.harness == WorkerHarnessV1::CodexCli).then(|| test_codex_catalog(PROBE_MODEL));
     let tools = vec![WorkerToolV1::Read, WorkerToolV1::Edit, WorkerToolV1::Shell];
     let execution = WorkerExecutionIntentV1 {
         root_identity: "root".into(),
@@ -67,7 +78,7 @@ fn profile(
         context_window_tokens: Some(32_768),
         max_output_tokens: Some(4_096),
         harness: config.harness,
-        adapter: None,
+        adapter: config.adapter.as_deref(),
         harness_binary: &config.harness_binary,
         node_binary: config.node_binary.as_deref(),
         private_root: &root.runs.join(run),
@@ -75,7 +86,7 @@ fn profile(
         native_context: context,
         workspace: &root.workspace,
         alias: PROBE_MODEL,
-        codex_catalog: None,
+        codex_catalog: catalog.as_deref(),
         native_effort: None,
         gateway,
         permit: &permit,
@@ -92,7 +103,10 @@ fn profile(
     );
     if matches!(
         config.harness,
-        WorkerHarnessV1::Pi | WorkerHarnessV1::DeepseekHarness
+        WorkerHarnessV1::Pi
+            | WorkerHarnessV1::DeepseekHarness
+            | WorkerHarnessV1::CodexCli
+            | WorkerHarnessV1::ClaudeCode
     ) {
         let node = selected("HIROUTE_WORKER_NODE");
         let node = hiroute_platform::windows::security::open_identity(&node, false).unwrap();
@@ -127,8 +141,8 @@ fn profile(
         assert!(
             !file
                 .contents
-                .windows(profile.env["HIROUTE_RUN_TOKEN"].len())
-                .any(|part| part == profile.env["HIROUTE_RUN_TOKEN"].as_bytes()),
+                .windows(secret.len())
+                .any(|part| part == secret.as_slice()),
             "run credential must remain outside material files"
         );
     }
@@ -320,3 +334,6 @@ fn actual_windows_qoder_new_load_and_cancel_use_the_selected_native_acp() {
     ))
     .unwrap();
 }
+
+#[path = "windows_tools.rs"]
+mod windows_tools;

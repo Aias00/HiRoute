@@ -42,7 +42,12 @@ struct ProbeEndpoint {
     stop: Arc<AtomicBool>,
     release_stall: Arc<AtomicBool>,
     stall_next: Arc<AtomicBool>,
+    response: Option<TestResponse>,
+    max_requests: usize,
 }
+
+pub(super) type TestResponse =
+    Arc<dyn Fn(&Value) -> Result<String, DelegationErrorV1> + Send + Sync>;
 
 pub(super) struct ProbeServer {
     address: std::net::SocketAddr,
@@ -59,6 +64,26 @@ impl ProbeServer {
         model: &'static str,
         harness: WorkerHarnessV1,
     ) -> Result<Self, DelegationErrorV1> {
+        Self::bind_inner(token, model, harness, None)
+    }
+
+    /// Actual-client tools acceptance keeps the authenticated native HTTP boundary and supplies
+    /// only its bounded deterministic model response, never a replacement ACP client.
+    pub(super) fn bind_with_response(
+        token: Vec<u8>,
+        model: &'static str,
+        harness: WorkerHarnessV1,
+        response: TestResponse,
+    ) -> Result<Self, DelegationErrorV1> {
+        Self::bind_inner(token, model, harness, Some(response))
+    }
+
+    fn bind_inner(
+        token: Vec<u8>,
+        model: &'static str,
+        harness: WorkerHarnessV1,
+        response: Option<TestResponse>,
+    ) -> Result<Self, DelegationErrorV1> {
         let listener = TcpListener::bind("127.0.0.1:0")
             .map_err(|_| DelegationErrorV1::CapabilityUnavailable)?;
         let address = listener
@@ -73,6 +98,12 @@ impl ProbeServer {
         let release_stall = Arc::new(AtomicBool::new(false));
         let stall_next = Arc::new(AtomicBool::new(false));
         let endpoint = ProbeEndpoint {
+            max_requests: if response.is_some() {
+                16
+            } else {
+                MAX_MODEL_REQUESTS
+            },
+            response,
             token,
             model,
             harness,
@@ -290,12 +321,9 @@ fn serve_probe_request(
         }
         request.extend_from_slice(&chunk[..read]);
     }
-    if serde_json::from_slice::<Value>(&request[header_end..header_end + length])
-        .ok()
-        .and_then(|body| body.get("model").and_then(Value::as_str).map(str::to_owned))
-        .as_deref()
-        != Some(endpoint.model)
-    {
+    let body: Value = serde_json::from_slice(&request[header_end..header_end + length])
+        .map_err(|_| DelegationErrorV1::ProtocolFailed)?;
+    if body.get("model").and_then(Value::as_str) != Some(endpoint.model) {
         return Err(DelegationErrorV1::ProtocolFailed);
     }
     if route == ProbeRoute::CountTokens {
@@ -309,7 +337,7 @@ fn serve_probe_request(
         return Ok(());
     }
     let index = endpoint.requests.fetch_add(1, Ordering::AcqRel) + 1;
-    if index > MAX_MODEL_REQUESTS {
+    if index > endpoint.max_requests {
         return Err(DelegationErrorV1::ProtocolFailed);
     }
     let stall = endpoint.stall_next.swap(false, Ordering::AcqRel);
@@ -324,12 +352,16 @@ fn serve_probe_request(
             return Err(DelegationErrorV1::DeadlineExceeded);
         }
     }
-    let response = match endpoint.harness {
-        WorkerHarnessV1::CodexCli
-        | WorkerHarnessV1::QoderCli
-        | WorkerHarnessV1::Pi
-        | WorkerHarnessV1::DeepseekHarness => responses_stream(endpoint.model),
-        WorkerHarnessV1::ClaudeCode => messages_stream(endpoint.model),
+    let response = if let Some(response) = &endpoint.response {
+        response(&body)?
+    } else {
+        match endpoint.harness {
+            WorkerHarnessV1::CodexCli
+            | WorkerHarnessV1::QoderCli
+            | WorkerHarnessV1::Pi
+            | WorkerHarnessV1::DeepseekHarness => responses_stream(endpoint.model),
+            WorkerHarnessV1::ClaudeCode => messages_stream(endpoint.model),
+        }
     };
     write!(
         stream,
@@ -427,6 +459,39 @@ fn responses_stream(model: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tool_responder_keeps_the_authenticated_native_http_boundary() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = Arc::clone(&calls);
+        let token = b"hiroute-http-boundary-only".to_vec();
+        let server = ProbeServer::bind_with_response(
+            token.clone(),
+            "boundary-model",
+            WorkerHarnessV1::Pi,
+            Arc::new(move |body| {
+                if body["input"][0]["content"][0]["text"] != "declared native input" {
+                    return Err(DelegationErrorV1::ProtocolFailed);
+                }
+                seen.fetch_add(1, Ordering::AcqRel);
+                Ok(responses_stream("boundary-model"))
+            }),
+        )
+        .unwrap();
+        let body = json!({"model":"boundary-model","input":[{"role":"user","content":[{"type":"input_text","text":"declared native input"}]}]}).to_string();
+        let mut stream = TcpStream::connect(server.address()).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        write!(stream, "POST /v1/responses HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", String::from_utf8(token).unwrap(), body.len()).unwrap();
+        let mut response = String::new();
+        stream.read_to_string(&mut response).unwrap();
+        assert!(response.starts_with("HTTP/1.1 200 OK\r\n"));
+        assert!(response.contains("response.completed"));
+        assert_eq!(server.request_count(), 1);
+        assert_eq!(calls.load(Ordering::Acquire), 1);
+        server.finish().unwrap();
+    }
 
     #[test]
     fn probe_protocols_have_distinct_bounded_native_routes_and_valid_events() {

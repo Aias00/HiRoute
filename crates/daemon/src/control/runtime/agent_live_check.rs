@@ -51,22 +51,34 @@ struct ProcessOutput {
 }
 
 /// Do not delete a native workspace until its owned process scope is confirmed stopped.
-struct LiveWorkspace(Option<tempfile::TempDir>);
+struct LiveWorkspace {
+    cleanup: Option<tempfile::TempDir>,
+    path: std::path::PathBuf,
+}
 
 impl LiveWorkspace {
     fn new() -> std::io::Result<Self> {
         let root = tempfile::tempdir()?;
         #[cfg(windows)]
-        hiroute_platform::windows::security::set_owner_only(root.path(), true)?;
-        Ok(Self(Some(root)))
+        let path = {
+            let path = root.path().join("private");
+            hiroute_platform::windows::security::create_owner_only_directory(&path)?;
+            path
+        };
+        #[cfg(not(windows))]
+        let path = root.path().to_owned();
+        Ok(Self {
+            cleanup: Some(root),
+            path,
+        })
     }
 
     fn path(&self) -> &std::path::Path {
-        self.0.as_ref().expect("live workspace is retained").path()
+        &self.path
     }
 
     fn keep(&mut self) {
-        if let Some(root) = self.0.take() {
+        if let Some(root) = self.cleanup.take() {
             let _ = root.keep();
         }
     }

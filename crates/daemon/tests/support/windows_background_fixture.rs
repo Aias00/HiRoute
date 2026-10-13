@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use super::windows_account as account;
+use super::windows_execution_host as execution_host;
 use super::windows_token_launcher as launcher;
 
 #[path = "windows_background_transactions.rs"]
@@ -112,6 +113,10 @@ pub fn process(
         .map(account::environment)
         .unwrap_or_else(|| std::env::vars_os().collect());
     environment.retain(|(key, _)| key != PROBE);
+    if execution_host::selected() {
+        environment.retain(|(key, _)| key != execution_host::VARIABLE);
+        environment.push((execution_host::VARIABLE.into(), "windows11-arm-x64".into()));
+    }
     if fixture {
         environment.push((PROBE.into(), "1".into()));
     }
@@ -337,6 +342,7 @@ pub fn entry() {
         .unwrap();
     assert!(!bytes.is_empty() && bytes.len() <= 16384);
     let request: Request = serde_json::from_slice(&bytes).unwrap();
+    execution_host::current();
     let current = account::process_token(std::process::id());
     let sid = background::current_sid_string().unwrap();
     account::assert_standard(&current, &sid);
@@ -385,6 +391,7 @@ pub fn entry() {
             .unwrap();
             let token = account::process_token(held.pid);
             let session = account::assert_standard(&token, &sid);
+            let execution = execution_host::daemon(&held);
             let program = hiroute_host_runtime::standalone_cli_binary(&record.install_root);
             let invoke = |args: &[&str]| {
                 let args = args
@@ -420,7 +427,7 @@ pub fn entry() {
                     .parse()
                     .unwrap(),
             );
-            let result = json!({"pid":held.pid,"creation_time":held.creation_time,"sid":sid,"session":session,"gateway":gateway,"control":control});
+            let result = json!({"pid":held.pid,"creation_time":held.creation_time,"sid":sid,"session":session,"gateway":gateway,"control":control,"execution_host":execution});
             if request.action == "crash" {
                 held.terminate().unwrap();
                 assert!(

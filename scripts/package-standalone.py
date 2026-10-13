@@ -138,7 +138,7 @@ def validate_notices(directory):
         or not manifest["packages"]
         or not isinstance(manifest.get("documents"), list)
         or not manifest["documents"]
-        or not (directory / "THIRD-PARTY-LICENSES.txt").read_text().strip()
+        or not (directory / "THIRD-PARTY-LICENSES.txt").read_text(encoding="utf-8").strip()
     ):
         raise ValueError("third-party notice manifest is invalid")
     return directory

@@ -293,7 +293,7 @@ fn bind_agent_grant_listener(
 ) -> Result<(LocalListener, EndpointGuard), String> {
     let path = runtime_root.join("hiroute/agent-grant-v1.sock");
     let listener = LocalListener::bind(&path).map_err(|error| error.to_string())?;
-    Ok((listener, EndpointGuard(path)))
+    Ok((listener, EndpointGuard))
 }
 
 fn serve_agent_grant_connection(
@@ -301,6 +301,7 @@ fn serve_agent_grant_connection(
     mut stream: LocalStream,
     mut admission: ControlConnectionAdmission,
 ) -> Result<(), ()> {
+    #[cfg(unix)]
     use std::io::{Read, Write};
 
     stream

@@ -13,6 +13,11 @@ checks the opened object type and rejects reparse points. Existing directory
 handles retain identity across renames; private creation and ordinary file reads
 deny deletion sharing. `open_owner_only` applies the explicitly requested private
 descriptor check; it is not a repair or blanket admission rule for native files.
+`open_read_write` opens an existing regular file without create, truncate or
+DELETE permission and denies deletion while it is held. Storage lock owners use
+it to preserve the admitted object's identity and native permissions.
+`set_owner_only` may tighten a caller-owned object's DACL; it checks the actual
+owner before mutation and never adopts an object owned by another SID.
 
 `windows::pipe` provides owner-only local byte streams. Its namespace binds the
 current account SID to the held parent file identity and endpoint leaf, so a service and a CLI in

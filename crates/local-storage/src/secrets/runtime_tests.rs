@@ -10,7 +10,7 @@ use hiroute_domain::{
 
 use super::{LocalNativeCredentialAuthority, LocalSecretStore};
 
-fn seeded_authority() -> (tempfile::TempDir, LocalNativeCredentialAuthority) {
+fn seeded_authority() -> (crate::TestTempDir, LocalNativeCredentialAuthority) {
     let directory = tempdir().unwrap();
     let root = directory.path().join("data");
     let store = LocalSecretStore::open(
@@ -82,7 +82,7 @@ fn classifier_request() -> HeaderSecretLeaseRequestV1 {
     }
 }
 
-fn seeded_classifier_authority() -> (tempfile::TempDir, LocalNativeCredentialAuthority) {
+fn seeded_classifier_authority() -> (crate::TestTempDir, LocalNativeCredentialAuthority) {
     let directory = tempdir().unwrap();
     let root = directory.path().join("data");
     let store = LocalSecretStore::open(

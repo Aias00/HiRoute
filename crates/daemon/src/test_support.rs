@@ -36,7 +36,10 @@ fn isolated_agent_home_inner(
     let directory = private_tempdir();
     let home = directory.path().canonicalize().unwrap();
     let claude_home = home.join(".claude");
+    #[cfg(not(windows))]
     std::fs::create_dir(&claude_home).unwrap();
+    #[cfg(windows)]
+    drop(hiroute_platform::windows::security::create_owner_only_directory(&claude_home).unwrap());
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -107,7 +110,23 @@ fn missing_isolated_child_cannot_report_success() {
 }
 
 /// Filesystem-observing fixtures must be private regardless of the caller's umask.
-pub(crate) fn private_tempdir() -> tempfile::TempDir {
+#[cfg(not(windows))]
+pub(crate) type PrivateTempDir = tempfile::TempDir;
+
+#[cfg(windows)]
+pub(crate) struct PrivateTempDir {
+    _cleanup: tempfile::TempDir,
+    path: std::path::PathBuf,
+}
+
+#[cfg(windows)]
+impl PrivateTempDir {
+    pub(crate) fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+}
+
+pub(crate) fn private_tempdir() -> PrivateTempDir {
     let builder = tempfile::Builder::new();
     #[cfg(unix)]
     let builder = {
@@ -117,7 +136,17 @@ pub(crate) fn private_tempdir() -> tempfile::TempDir {
         builder
     };
     let directory = builder.tempdir().unwrap();
+    #[cfg(not(windows))]
+    {
+        directory
+    }
     #[cfg(windows)]
-    hiroute_platform::windows::security::set_owner_only(directory.path(), true).unwrap();
-    directory
+    {
+        let path = directory.path().join("private");
+        drop(hiroute_platform::windows::security::create_owner_only_directory(&path).unwrap());
+        PrivateTempDir {
+            _cleanup: directory,
+            path,
+        }
+    }
 }

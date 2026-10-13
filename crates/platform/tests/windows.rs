@@ -158,4 +158,31 @@ fn native_permissions_survive_atomic_restore_and_detect_acl_changes() {
         file_security::capture(&security::open_identity(&target, false).unwrap()).unwrap(),
         original
     );
+
+    // This native component gate already runs with an administrator token.
+    // Deliberately assign BA ownership to a new, known fixture; a standard
+    // product user does not need this fixture-creation permission.
+    let foreign = fixture.path().join("administrators-owned.json");
+    let user = hiroute_platform::windows::background::current_sid_string().unwrap();
+    let permissions = file_security::WindowsPermissions {
+        descriptor: format!("O:BAD:P(A;;FA;;;{user})(A;;FR;;;WD)"),
+        read_only: false,
+    };
+    durable::write_windows_atomic(&foreign, b"foreign-owner-original", &permissions)
+        .expect("administrator native fixture must be allowed to assign BA ownership");
+    let before =
+        file_security::capture(&security::open_identity(&foreign, false).unwrap()).unwrap();
+    assert_eq!(
+        security::set_owner_only(&foreign, false)
+            .unwrap_err()
+            .kind(),
+        std::io::ErrorKind::PermissionDenied,
+        "a DACL-tightening setter cannot adopt the BA-owned fixture"
+    );
+    assert_eq!(
+        file_security::capture(&security::open_identity(&foreign, false).unwrap()).unwrap(),
+        before,
+        "refusing a foreign owner must leave its exact native descriptor unchanged"
+    );
+    assert_eq!(std::fs::read(foreign).unwrap(), b"foreign-owner-original");
 }

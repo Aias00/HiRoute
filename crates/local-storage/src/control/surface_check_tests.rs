@@ -47,7 +47,7 @@ fn activate(store: &ControlStore, workspace: &WorkspaceId, revision: u64) {
         .unwrap();
 }
 
-fn storage() -> (tempfile::TempDir, ControlStore) {
+fn storage() -> (crate::TestTempDir, ControlStore) {
     let directory = crate::test_tempdir().unwrap();
     let root = directory.path().join("data");
     let control = ControlStore::open(

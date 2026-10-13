@@ -1,6 +1,8 @@
 use std::cell::RefCell;
 use std::collections::BTreeSet;
-use std::fs::{self, File};
+use std::fs;
+#[cfg(not(windows))]
+use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 #[cfg(test)]
@@ -1938,7 +1940,7 @@ mod tests {
         .unwrap()
     }
 
-    fn store() -> (tempfile::TempDir, LocalSecretStore) {
+    fn store() -> (crate::TestTempDir, LocalSecretStore) {
         let directory = tempdir().unwrap();
         let root = directory.path().join("data");
         let store = LocalSecretStore::open(

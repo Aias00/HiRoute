@@ -198,14 +198,19 @@ mod tests {
     #[test]
     fn explicit_context_does_not_recover_another_home() {
         let context = QoderNativeContext::from_selected(
-            Path::new("/pilot/home"),
-            Some(Path::new("/pilot/qoder-context")),
+            &crate::agents::test_absolute_path("/pilot/home"),
+            Some(&crate::agents::test_absolute_path("/pilot/qoder-context")),
         )
         .unwrap();
-        assert_eq!(context.home, Path::new("/pilot/home"));
+        assert_eq!(
+            context.home,
+            crate::agents::test_absolute_path("/pilot/home")
+        );
         assert_eq!(
             context.skill_target(),
-            Path::new("/pilot/qoder-context/skills/hiroute-collaboration/SKILL.md")
+            crate::agents::test_absolute_path(
+                "/pilot/qoder-context/skills/hiroute-collaboration/SKILL.md"
+            )
         );
         assert!(QoderNativeContext::from_selected(Path::new("relative"), None).is_err());
     }

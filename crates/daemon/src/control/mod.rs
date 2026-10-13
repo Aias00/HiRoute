@@ -1,3 +1,4 @@
+#[cfg(unix)]
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -456,7 +457,7 @@ fn bind_listener(
     let _held = hiroute_platform::windows::security::ensure_private_directory(parent)
         .map_err(|error| error.to_string())?;
     let listener = LocalListener::bind(endpoint.path()).map_err(|error| error.to_string())?;
-    Ok((listener, EndpointGuard(endpoint.path().into()), endpoint))
+    Ok((listener, EndpointGuard, endpoint))
 }
 
 #[cfg(not(any(unix, windows)))]
@@ -680,13 +681,15 @@ fn write_frame(writer: &mut impl Write, value: &impl serde::Serialize) -> Result
     writer.flush().map_err(|error| error.to_string())
 }
 
-#[cfg(any(unix, windows))]
+#[cfg(unix)]
 struct EndpointGuard(PathBuf);
 
-#[cfg(any(unix, windows))]
+#[cfg(windows)]
+struct EndpointGuard;
+
+#[cfg(unix)]
 impl Drop for EndpointGuard {
     fn drop(&mut self) {
-        #[cfg(unix)]
         let _ = fs::remove_file(&self.0);
     }
 }

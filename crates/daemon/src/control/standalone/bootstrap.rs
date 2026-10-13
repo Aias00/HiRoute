@@ -261,15 +261,23 @@ mod tests {
             builder.permissions(std::fs::Permissions::from_mode(0o700));
             builder
         };
-        let root = builder.tempdir().unwrap();
+        let cleanup = builder.tempdir().unwrap();
+        #[cfg(not(windows))]
+        let root = cleanup.path().to_path_buf();
+        #[cfg(windows)]
+        let root = {
+            let root = cleanup.path().join("private");
+            drop(hiroute_platform::windows::security::create_owner_only_directory(&root).unwrap());
+            root
+        };
         let reservation = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let listen = reservation.local_addr().unwrap();
         drop(reservation);
         let mut role = start_role_all(RoleAllConfig::new(
-            root.path().join("storage"),
-            root.path().join("runtime"),
+            root.join("storage"),
+            root.join("runtime"),
             listen,
-            root.path().join("gateway-lkg.json"),
+            root.join("gateway-lkg.json"),
         ))
         .unwrap();
         assert_eq!(

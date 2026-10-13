@@ -51,17 +51,10 @@ impl NativeWorkerContext {
         harness: WorkerHarnessV1,
         lookup: impl Fn(&str) -> Option<OsString>,
     ) -> Result<Self, DelegationErrorV1> {
-        let home = lookup("HOME")
-            .or_else(|| {
-                #[cfg(windows)]
-                {
-                    lookup("USERPROFILE")
-                }
-                #[cfg(not(windows))]
-                {
-                    None
-                }
-            })
+        let home = lookup("HOME");
+        #[cfg(windows)]
+        let home = home.or_else(|| lookup("USERPROFILE"));
+        let home = home
             .map(PathBuf::from)
             .ok_or(DelegationErrorV1::CapabilityUnavailable)?;
         let (variable, default) = match harness {
@@ -126,57 +119,6 @@ impl NativeWorkerContext {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn instance_home_and_explicit_native_roots_are_respected_without_reading_other_env() {
-        #[cfg(windows)]
-        let (home, root) = ("C:\\isolated-pilot", "C:\\explicit-native-root");
-        #[cfg(not(windows))]
-        let (home, root) = ("/isolated-pilot", "/explicit-native-root");
-        for (harness, variable, default) in [
-            (WorkerHarnessV1::CodexCli, "CODEX_HOME", ".codex"),
-            (WorkerHarnessV1::ClaudeCode, "CLAUDE_CONFIG_DIR", ".claude"),
-            (WorkerHarnessV1::QoderCli, "QODER_CONFIG_DIR", ".qoder"),
-        ] {
-            let lookup = |name: &str| match name {
-                "HOME" => Some(OsString::from(home)),
-                key if key == variable => Some(OsString::from(root)),
-                unexpected => panic!("unexpected ambient environment read: {unexpected}"),
-            };
-            let explicit = NativeWorkerContext::from_lookup(harness, lookup).unwrap();
-            assert_eq!(explicit.home(), Path::new(home));
-            assert_eq!(explicit.config_root(), Path::new(root));
-            assert!(explicit.is_borrowed());
-            let fallback = NativeWorkerContext::from_lookup(harness, |name| {
-                (name == "HOME").then(|| OsString::from(home))
-            })
-            .unwrap();
-            assert_eq!(fallback.config_root(), Path::new(home).join(default));
-        }
-    }
-
-    #[test]
-    fn missing_or_invalid_context_does_not_fall_back_to_another_users_home() {
-        assert_eq!(
-            NativeWorkerContext::from_lookup(WorkerHarnessV1::CodexCli, |_| None),
-            Err(DelegationErrorV1::CapabilityUnavailable)
-        );
-        for invalid in ["", "relative", "/root/../elsewhere", "/root\nother"] {
-            assert_eq!(
-                NativeWorkerContext::borrowed(Path::new(invalid), Path::new("/native")),
-                Err(DelegationErrorV1::InvalidArguments)
-            );
-            assert_eq!(
-                NativeWorkerContext::borrowed(Path::new("/instance"), Path::new(invalid)),
-                Err(DelegationErrorV1::InvalidArguments)
-            );
-        }
-    }
-}
-
 #[cfg(windows)]
 pub(crate) fn windows_workspace(
     path: &str,
@@ -237,6 +179,67 @@ pub(crate) fn native_path(path: &Path) -> PathBuf {
         }
     }
     path.to_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn instance_home_and_explicit_native_roots_are_respected_without_reading_other_env() {
+        #[cfg(windows)]
+        let (home, root) = ("C:\\isolated-pilot", "C:\\explicit-native-root");
+        #[cfg(not(windows))]
+        let (home, root) = ("/isolated-pilot", "/explicit-native-root");
+        for (harness, variable, default) in [
+            (WorkerHarnessV1::CodexCli, "CODEX_HOME", ".codex"),
+            (WorkerHarnessV1::ClaudeCode, "CLAUDE_CONFIG_DIR", ".claude"),
+            (WorkerHarnessV1::QoderCli, "QODER_CONFIG_DIR", ".qoder"),
+        ] {
+            let lookup = |name: &str| match name {
+                "HOME" => Some(OsString::from(home)),
+                key if key == variable => Some(OsString::from(root)),
+                unexpected => panic!("unexpected ambient environment read: {unexpected}"),
+            };
+            let explicit = NativeWorkerContext::from_lookup(harness, lookup).unwrap();
+            assert_eq!(explicit.home(), Path::new(home));
+            assert_eq!(explicit.config_root(), Path::new(root));
+            assert!(explicit.is_borrowed());
+            let fallback = NativeWorkerContext::from_lookup(harness, |name| {
+                (name == "HOME").then(|| OsString::from(home))
+            })
+            .unwrap();
+            assert_eq!(fallback.config_root(), Path::new(home).join(default));
+        }
+    }
+
+    #[test]
+    fn missing_or_invalid_context_does_not_fall_back_to_another_users_home() {
+        assert_eq!(
+            NativeWorkerContext::from_lookup(WorkerHarnessV1::CodexCli, |_| None),
+            Err(DelegationErrorV1::CapabilityUnavailable)
+        );
+        #[cfg(windows)]
+        let (instance, native, parent, newline) = (
+            "C:\\instance",
+            "C:\\native",
+            "C:\\root\\..\\elsewhere",
+            "C:\\root\nother",
+        );
+        #[cfg(not(windows))]
+        let (instance, native, parent, newline) =
+            ("/instance", "/native", "/root/../elsewhere", "/root\nother");
+        for invalid in ["", "relative", parent, newline] {
+            assert_eq!(
+                NativeWorkerContext::borrowed(Path::new(invalid), Path::new(native)),
+                Err(DelegationErrorV1::InvalidArguments)
+            );
+            assert_eq!(
+                NativeWorkerContext::borrowed(Path::new(instance), Path::new(invalid)),
+                Err(DelegationErrorV1::InvalidArguments)
+            );
+        }
+    }
 }
 
 #[cfg(all(test, windows))]

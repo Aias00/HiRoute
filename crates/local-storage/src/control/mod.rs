@@ -1,8 +1,12 @@
 use hiroute_diagnostics::publication::{PublicationStage, measure};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
-use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Write};
+use std::fs;
+#[cfg(not(windows))]
+use std::fs::{File, OpenOptions};
+use std::io::Read;
+#[cfg(not(windows))]
+use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 
 use aes_gcm::aead::{Aead, Payload};

@@ -56,6 +56,15 @@ class NativeFeedback(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "another candidate"):
                 module.collect(root)
 
+    def test_failed_package_prerequisite_does_not_hide_case_reports_or_become_green(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixture(root, "red")
+            (root / "package-result.json").write_bytes(b"")
+            report = module.collect(root)
+            self.assertEqual(report["reports"][0]["scenario"], "red")
+            self.assertEqual(report["prerequisites"], [{"name": "package-result", "result_present": False}])
+
 
 if __name__ == "__main__":
     unittest.main()

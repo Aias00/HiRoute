@@ -804,7 +804,18 @@ fn explicit_native_mode_runs_without_universal_confinement_flags() {
 #[path = "materials_tests.rs"]
 mod materials_tests;
 
-fn private_fixture() -> tempfile::TempDir {
+struct PrivateFixture {
+    _cleanup: tempfile::TempDir,
+    path: PathBuf,
+}
+
+impl PrivateFixture {
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+fn private_fixture() -> PrivateFixture {
     // macOS /var is an alias of /private/var. Profiles bind canonical ancestry,
     // so create the fixture in that physical parent instead of mixing spellings.
     let parent = std::fs::canonicalize(std::env::temp_dir()).unwrap();
@@ -815,8 +826,17 @@ fn private_fixture() -> tempfile::TempDir {
         std::fs::set_permissions(fixture.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
     }
     #[cfg(windows)]
-    hiroute_platform::windows::security::set_owner_only(fixture.path(), true).unwrap();
-    fixture
+    let path = {
+        let path = fixture.path().join("private");
+        hiroute_platform::windows::security::create_owner_only_directory(&path).unwrap();
+        path
+    };
+    #[cfg(not(windows))]
+    let path = fixture.path().to_owned();
+    PrivateFixture {
+        _cleanup: fixture,
+        path,
+    }
 }
 
 #[path = "capability_tests.rs"]

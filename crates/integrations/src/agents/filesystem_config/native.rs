@@ -513,7 +513,7 @@ mod tests {
             (
                 "apiKeyHelper".to_owned(),
                 Some(json!({
-                    "executable": "/opt/hiroute/bin/hiroute",
+                    "executable": crate::agents::test_absolute_path("/opt/hiroute/bin/hiroute"),
                     "argv": [
                         hiroute_domain::HIDDEN_AGENT_GRANT_HELPER_VERB_V1,
                         "agent-connection/agent-context/claude/test"

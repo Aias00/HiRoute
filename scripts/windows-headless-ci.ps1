@@ -10,13 +10,15 @@ param(
   [string]$CpaOriginalRun,
   [string]$CpaOriginalRevision,
   [string]$BaselineManifest,
-  [string]$BaselineArchive
+  [string]$BaselineArchive,
+  [switch]$CaptureArtifacts
 )
 $ErrorActionPreference = 'Stop'
 $evidence = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Evidence)
 $failures = [System.Collections.Generic.List[string]]::new()
 $root = Split-Path $PSScriptRoot -Parent
 Set-Location $root
+. "$PSScriptRoot/windows-native-scopes.ps1"
 if (-not $IsWindows) { throw 'Native Windows required' }
 if ($ExpectedSha -notmatch '^[0-9a-f]{40}$' -or (git rev-parse HEAD) -ne $ExpectedSha) {
   throw 'Exact committed candidate required'
@@ -50,6 +52,22 @@ function Invoke-RequiredTests {
     foreach ($case in $Required) {
       $escaped = [regex]::Escape($case)
       if ($inventory -notmatch "(?m)^${escaped}: test`r?$") { throw "Required case not selected: $case" }
+    }
+    if ($CaptureArtifacts) {
+      cargo test --locked @CargoArguments --no-run --message-format=json 2>&1 | Tee-Object "$evidence/$Name-cargo-artifacts.log"
+      if ($LASTEXITCODE -ne 0) { throw "$Name executable provenance failed to build" }
+      $filter = $null
+      for ($i = 0; $i -lt $CargoArguments.Count; $i++) {
+        if ($CargoArguments[$i] -in @('-p','--package','--test','--bin','--features')) { $i++; continue }
+        if (-not $CargoArguments[$i].StartsWith('-')) {
+          if ($filter) { throw 'Multiple native test filters are not supported' }
+          $filter = $CargoArguments[$i]
+        }
+      }
+      @{ required_cases = $Required; cargo_arguments = $CargoArguments; harness_arguments = $HarnessArguments; filter = $filter } |
+        ConvertTo-Json -Depth 5 | Out-File -Encoding utf8 "$evidence/$Name-recipe.json"
+      python scripts/windows-native-artifacts.py capture --expected-sha $ExpectedSha --evidence $evidence --name $Name --cargo-json "$evidence/$Name-cargo-artifacts.log" --recipe-json "$evidence/$Name-recipe.json"
+      if ($LASTEXITCODE -ne 0) { throw "$Name executable provenance failed" }
     }
     $result.command_started_at = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() / 1000.0
     cargo test --locked @CargoArguments -- --test-threads=1 @HarnessArguments 2>&1 | Tee-Object "$evidence/$Name.log"
@@ -90,9 +108,24 @@ function Invoke-LibraryTests {
     cargo test --locked -p $Package --lib -- --list 2>&1 | Tee-Object "$evidence/$name-discovery.log"
     if ($LASTEXITCODE -ne 0) { throw "$Package native library inventory failed" }
     $inventory = Get-Content "$evidence/$name-discovery.log" -Raw
-    $required = @([regex]::Matches($inventory, '(?m)^(\S+): test\r?$') | ForEach-Object { $_.Groups[1].Value })
+    $optIn = @()
+    if ($Package -eq 'hiroute-integrations') {
+      $optIn = @(
+        'agents::ephemeral_ingress_probe::tests::real_codex_ephemeral_authentication_without_managed_configuration',
+        'agents::qoder_probe::tests::real_qoder_discovers_skill_and_runs_read_only_cli_in_selected_context',
+        'agents::windows_runtime::tests::windows_native_environment_fixture',
+        'agents::windows_runtime::tests::windows_selected_node_version_uses_the_private_capture_and_held_job',
+        'agents::windows_collaboration_tests::actual_windows_codex_native_skill_executes_the_public_cli',
+        'agents::windows_collaboration_tests::actual_windows_claude_native_skill_executes_the_public_cli',
+        'agents::windows_collaboration_tests::actual_windows_qoder_native_skill_executes_the_public_cli_without_synthesized_account')
+    }
+    $required = @([regex]::Matches($inventory, '(?m)^(\S+): test\r?$') | ForEach-Object { $_.Groups[1].Value } | Where-Object { $_ -notin $optIn })
     if ($required.Count -eq 0) { throw "$Package selected no native library tests" }
-    Invoke-RequiredTests $name @('-p',$Package,'--lib') $required
+    $harness = @($optIn | ForEach-Object { '--skip'; $_ })
+    @{ source_revision = $ExpectedSha; package = $Package; explicit_opt_in_or_child_fixtures = $optIn;
+       reason = 'Real selected installation inputs and helper children have separate explicit native gates; any unregistered ignored case still fails this inventory.'
+    } | ConvertTo-Json -Depth 5 | Out-File -Encoding utf8 "$evidence/$name-selection.json"
+    Invoke-RequiredTests $name @('-p',$Package,'--lib') $required $harness
   } catch { $failures.Add($_.Exception.Message); Write-Warning $_.Exception.Message }
 }
 
@@ -173,9 +206,7 @@ if ($Scope -eq 'components') {
 } elseif ($Scope -eq 'core') {
   # Entire native libraries, not an implementation-specific subset. Separate jobs
   # own platform primitives, CPA process fixtures and opt-in upstream clients.
-  foreach ($package in @('hiroute-domain','hiroute-application-api','hiroute-application',
-      'hiroute-client-core','hiroute-observation','hiroute-integrations','hiroute-local-storage',
-      'hiroute-gateway-core','hiroute-gateway','hiroute-host-runtime','hiroute-cli')) {
+  foreach ($package in (Get-WindowsCorePackages)) {
     Invoke-LibraryTests $package
   }
 } elseif ($Scope -in @('background','upgrade')) {
@@ -204,7 +235,9 @@ if ($Scope -eq 'components') {
       'windows_background_upgrade::task_native_candidate_upgrade_recovers_prepared_rollback_and_preserves_business_state') @('--nocapture')
   }
 } else {
-  cargo build --locked -p hiroute-daemon --bin hirouted 2>&1 | Tee-Object "$evidence/agent-daemon-link.log"
+  $privateRoot = 'delegation::installation::installation_probe::windows_probe_root_creates_strict_private_directories_before_native_launch'
+  Invoke-RequiredTests 'agent-private-root' @('-p','hiroute-daemon','--lib',$privateRoot) @($privateRoot) @('--exact','--nocapture')
+  cargo build --locked -p hiroute-daemon --bin hirouted -p hiroute-cli --bin hiroute 2>&1 | Tee-Object "$evidence/agent-daemon-link.log"
   if ($LASTEXITCODE -ne 0) { throw 'Production Worker daemon failed to build' }
   python scripts/windows-agent-fixtures.py --daemon target/debug/hirouted.exe --output "$evidence/clients" > "$evidence/clients-result.json"
   if ($LASTEXITCODE -ne 0) { throw 'Fixed upstream client prerequisites failed; Agent scenarios not executed' }
@@ -213,17 +246,32 @@ if ($Scope -eq 'components') {
     if ($property.Name -notmatch '^HIROUTE_WORKER_[A-Z_]+$') { throw 'Unknown client environment key' }
     [Environment]::SetEnvironmentVariable($property.Name, [string]$property.Value, 'Process')
   }
-  foreach ($case in @(
-    'delegation::installation::tests::actual_codex_acp_acceptance_uses_the_selected_installation',
-    'delegation::installation::tests::actual_claude_acp_acceptance_uses_the_selected_installation',
-    'delegation::installation::installation_probe::windows_acceptance::actual_windows_pi_new_load_and_cancel_use_the_selected_sdk',
-    'delegation::installation::installation_probe::windows_acceptance::actual_windows_dsh_new_load_and_cancel_use_the_selected_native_acp',
-    'delegation::installation::installation_probe::windows_acceptance::actual_windows_qoder_new_load_and_cancel_use_the_selected_native_acp')) {
+  $env:PATH = (@($clients.discovery_path) + @($env:PATH)) -join [IO.Path]::PathSeparator
+  $privateNode = 'agents::windows_runtime::tests::windows_selected_node_version_uses_the_private_capture_and_held_job'
+  Invoke-RequiredTests 'agent-private-node' @('-p','hiroute-integrations','--lib',$privateNode) @($privateNode) @('--ignored','--exact','--nocapture')
+  foreach ($case in (Get-WindowsDaemonAgentCases)) {
     $name = 'agent-' + ($case -split 'actual_')[1] -replace '_','-'
     Invoke-RequiredTests $name @('-p','hiroute-daemon','--lib',$case) @($case) @('--ignored','--exact','--nocapture')
   }
+  foreach ($case in (Get-WindowsMainAgentCases)) {
+    $name = 'main-' + ($case -split 'actual_windows_')[1] -replace '_','-'
+    Invoke-RequiredTests $name @('-p','hiroute-integrations','--lib',$case) @($case) @('--ignored','--exact','--nocapture')
+  }
 }
 } finally {
+  if ($CaptureArtifacts) {
+    $artifactArgs = @('finalize','--expected-sha',$ExpectedSha,'--evidence',$evidence)
+    if ($Scope -in @('product','background','upgrade','agents')) { $artifactArgs += '--include-product-binaries' }
+    if ($Scope -in @('background','upgrade') -and (Test-Path "$evidence/package-result.json") -and (Get-Item "$evidence/package-result.json").Length -gt 0) {
+      $artifactArgs += @('--package-result',"$evidence/package-result.json")
+    }
+    python scripts/windows-native-artifacts.py @artifactArgs
+    if ($LASTEXITCODE -ne 0) { $failures.Add('Native replay artifacts could not be finalized') }
+    else {
+      python scripts/windows-native-runtime-audit.py --expected-sha $ExpectedSha --evidence $evidence > "$evidence/runtime-audit.json"
+      if ($LASTEXITCODE -ne 0) { $failures.Add('Native imports require an unavailable Debug CRT or could not be verified') }
+    }
+  }
   python scripts/windows-ci-report.py $evidence
   if ($LASTEXITCODE -ne 0) { throw 'Native validation feedback could not be generated' }
 }

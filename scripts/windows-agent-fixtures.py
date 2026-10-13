@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
 import shutil
 import struct
@@ -24,7 +25,7 @@ def digest(path):
         return hashlib.file_digest(handle, "sha256").hexdigest()
 
 
-def native(path):
+def native(path, host_helper=False):
     path = path.resolve(strict=True)
     with path.open("rb") as handle:
         header = handle.read(64)
@@ -32,9 +33,19 @@ def native(path):
             raise ValueError("Native PE required: " + str(path))
         handle.seek(struct.unpack_from("<I", header, 60)[0])
         image = handle.read(6)
-    if image != b"PE\0\0\x64\x86":
+    allowed = [b"PE\0\0\x64\x86"]
+    if host_helper and os.environ.get("HIROUTE_WINDOWS_EXECUTION_HOST") == "windows11-arm-x64":
+        allowed.append(b"PE\0\0\x64\xaa")
+    if image not in allowed:
         raise ValueError("Pinned x64 native PE required: " + str(path))
     return path
+
+
+def machine(path):
+    with path.open("rb") as handle:
+        header = handle.read(64)
+        handle.seek(struct.unpack_from("<I", header, 60)[0] + 4)
+        return {0x8664: "x64", 0xAA64: "arm64"}[struct.unpack("<H", handle.read(2))[0]]
 
 
 def download(url, path, expected):
@@ -48,11 +59,11 @@ def prepare(output, daemon):
     if sys.platform != "win32":
         raise ValueError("Native Windows runner required")
     output.mkdir(parents=True, exist_ok=False)
-    lock = json.loads((FIXTURES / "package-lock.json").read_text())
+    lock = json.loads((FIXTURES / "package-lock.json").read_text(encoding="utf-8"))
     modules = FIXTURES / "node_modules"
-    declarations = json.loads((FIXTURES / "package.json").read_text())["dependencies"]
+    declarations = json.loads((FIXTURES / "package.json").read_text(encoding="utf-8"))["dependencies"]
     for package, version in declarations.items():
-        actual = json.loads((modules / package / "package.json").read_text())
+        actual = json.loads((modules / package / "package.json").read_text(encoding="utf-8"))
         if actual["name"] != package or actual["version"] != version:
             raise ValueError("Installed npm producer differs from committed fixture: " + package)
         record = lock["packages"]["node_modules/" + package]
@@ -81,6 +92,7 @@ def prepare(output, daemon):
     env = {
         "HIROUTE_WORKER_NODE": str(node),
         "HIROUTE_WORKER_DAEMON_BINARY": str(native(daemon)),
+        "HIROUTE_WORKER_CLI_BINARY": str(native(daemon.parent / "hiroute.exe")),
         "HIROUTE_WORKER_CODEX_BINARY": str(native(codex[0])),
         "HIROUTE_WORKER_CLAUDE_BINARY": str(native(claude[0])),
         "HIROUTE_WORKER_QODER_BINARY": str(native(qoder[0])),
@@ -93,16 +105,20 @@ def prepare(output, daemon):
         raise ValueError("Reviewed Codex adapter entry differs")
     git = Path(shutil.which("git") or "missing-git").resolve(strict=True)
     bash = git.parent.parent / "bin/bash.exe"
-    native(bash)
-    pwsh = native(Path(shutil.which("pwsh") or "missing-pwsh"))
+    native(bash, host_helper=True)
+    pwsh = native(Path(shutil.which("pwsh") or "missing-pwsh"), host_helper=True)
     record = dict(node_version=version, package_lock_sha256=digest(FIXTURES / "package-lock.json"),
                   declarations=declarations, environment=env,
-                  binaries={key: {"path": value, "sha256": digest(Path(value))} for key, value in env.items()},
-                  bash={"path": str(bash), "sha256": digest(bash)},
-                  pwsh={"path": str(pwsh), "sha256": digest(pwsh)},
+                  discovery_path=list(dict.fromkeys(str(path.parent) for path in
+                      (Path(env["HIROUTE_WORKER_CODEX_BINARY"]),
+                       Path(env["HIROUTE_WORKER_CLAUDE_BINARY"]),
+                       Path(env["HIROUTE_WORKER_QODER_BINARY"]), node, bash, pwsh))),
+                  binaries={key: {"path": value, "sha256": digest(Path(value)), "pe_machine": machine(Path(value)) if Path(value).suffix.lower() == ".exe" else None} for key, value in env.items()},
+                  bash={"path": str(bash), "sha256": digest(bash), "pe_machine": machine(bash)},
+                  pwsh={"path": str(pwsh), "sha256": digest(pwsh), "pe_machine": machine(pwsh)},
                   qoder_manifest_sha256=QODER_MANIFEST_SHA, qoder_archive_sha256=QODER_SHA,
                   runtime="not_executed", evidence_limit="Fixed artifact prerequisites; provider login is not supplied.")
-    (output / "clients.json").write_text(json.dumps(record, indent=2) + "\n")
+    (output / "clients.json").write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
     return record
 
 

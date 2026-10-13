@@ -874,6 +874,25 @@ fn absolute_path(value: &str) -> bool {
 mod tests {
     use super::*;
 
+    fn dependency_selection() -> WorkerDependenciesSelectRequestV1 {
+        let (adapter, cli, node) = if cfg!(windows) {
+            (
+                "C:/opt/acp/codex-acp.js",
+                "C:/opt/bin/codex",
+                "C:/opt/bin/node",
+            )
+        } else {
+            ("/opt/acp/codex-acp.js", "/opt/bin/codex", "/opt/bin/node")
+        };
+        WorkerDependenciesSelectRequestV1 {
+            harness: WorkerHarnessV1::CodexCli,
+            adapter_path: Some(adapter.into()),
+            cli_path: cli.into(),
+            node_path: Some(node.into()),
+            expected_selection_revision: 7,
+        }
+    }
+
     fn exec() -> WorkerExecRequestV1 {
         WorkerExecRequestV1 {
             schema: WORKER_EXEC_SCHEMA_V1.into(),
@@ -908,13 +927,7 @@ mod tests {
 
     #[test]
     fn dependency_selection_plan_binds_only_the_normalized_tuple_and_target_revision() {
-        let request = WorkerDependenciesSelectRequestV1 {
-            harness: WorkerHarnessV1::CodexCli,
-            adapter_path: Some("/opt/acp/codex-acp.js".into()),
-            cli_path: "/opt/bin/codex".into(),
-            node_path: Some("/opt/bin/node".into()),
-            expected_selection_revision: 7,
-        };
+        let request = dependency_selection();
         let first = plan_worker_dependency_selection(&request).unwrap();
         let second = plan_worker_dependency_selection(&request).unwrap();
         assert_eq!(first, second);
@@ -944,16 +957,16 @@ mod tests {
 
     #[test]
     fn dependency_selection_plan_rejects_relative_or_control_character_paths() {
+        let valid = dependency_selection();
+        assert!(plan_worker_dependency_selection(&valid).is_some());
         let request = WorkerDependenciesSelectRequestV1 {
-            harness: WorkerHarnessV1::CodexCli,
             adapter_path: Some("relative/adapter".into()),
-            cli_path: "/opt/bin/codex".into(),
-            node_path: Some("/opt/bin/node".into()),
             expected_selection_revision: 0,
+            ..valid.clone()
         };
         assert!(plan_worker_dependency_selection(&request).is_none());
         let invalid = WorkerDependenciesSelectRequestV1 {
-            adapter_path: Some("/opt/acp/codex\nacp".into()),
+            adapter_path: Some(format!("{}\nacp", valid.adapter_path.unwrap())),
             ..request
         };
         assert!(plan_worker_dependency_selection(&invalid).is_none());

@@ -87,6 +87,20 @@ pub fn open_identity(path: &Path, directory: bool) -> io::Result<File> {
     )
 }
 
+/// Open an existing regular file for reading and writing, without creating,
+/// truncating or requesting DELETE. Reparse-free traversal and deny-delete
+/// sharing retain its actual identity for a caller-owned lock or writer.
+pub fn open_read_write(path: &Path) -> io::Result<File> {
+    super::path::open(
+        path,
+        false,
+        GENERIC_READ | GENERIC_WRITE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+        false,
+        None,
+    )
+}
+
 /// Open an existing private object and check security on the held handle.
 pub fn open_owner_only(path: &Path, directory: bool) -> io::Result<File> {
     let file = open_identity(path, directory)?;
@@ -268,6 +282,10 @@ pub fn set_owner_only(path: &Path, directory: bool) -> io::Result<()> {
         None,
     )?;
     let user = CurrentUser::load()?;
+    // This is a tightening operation for a caller-owned object. Refuse a
+    // different owner before changing any DACL; a failed final verifier must
+    // never leave an external object's permissions changed.
+    verify_handle_owner(&object, user.sid())?;
     let mut acl: *mut ACL = null_mut();
     let access = EXPLICIT_ACCESS_W {
         grfAccessPermissions: FILE_ALL_ACCESS,
@@ -310,6 +328,35 @@ pub fn set_owner_only(path: &Path, directory: bool) -> io::Result<()> {
         return Err(win32_error(status));
     }
     verify_owner_only_handle(&object, directory)
+}
+
+fn verify_handle_owner(file: &File, expected_sid: PSID) -> io::Result<()> {
+    let mut owner = null_mut();
+    let mut descriptor = null_mut();
+    // SAFETY: the held file and both output pointers remain live. Windows
+    // allocates the returned descriptor, released by the guard below.
+    let status = unsafe {
+        GetSecurityInfo(
+            file.as_raw_handle().cast(),
+            SE_FILE_OBJECT,
+            OWNER_SECURITY_INFORMATION,
+            &mut owner,
+            null_mut(),
+            null_mut(),
+            null_mut(),
+            &mut descriptor,
+        )
+    };
+    if status != 0 {
+        return Err(win32_error(status));
+    }
+    let _descriptor = LocalAllocation(descriptor);
+    // SAFETY: expected_sid is retained by CurrentUser, while owner points into
+    // the still-live descriptor allocated by GetSecurityInfo.
+    if owner.is_null() || unsafe { EqualSid(owner, expected_sid) } == 0 {
+        return Err(permission_error());
+    }
+    Ok(())
 }
 
 pub(crate) struct OwnerSecurity {

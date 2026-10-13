@@ -295,13 +295,9 @@ fn bounded_version(path: &Path, timeout: Duration) -> Result<Vec<u8>, ProbeFailu
 
 #[cfg(windows)]
 fn bounded_version(path: &Path, timeout: Duration) -> Result<Vec<u8>, ProbeFailure> {
-    let home = tempfile::Builder::new()
-        .prefix("hiroute-version-")
-        .tempdir()
-        .map_err(|_| ProbeFailure::Unavailable)?;
+    let home =
+        super::probe_files::temporary("hiroute-version-").map_err(|_| ProbeFailure::Unavailable)?;
     let home_path = std::fs::canonicalize(home.path()).map_err(|_| ProbeFailure::Unavailable)?;
-    hiroute_platform::windows::security::set_owner_only(&home_path, true)
-        .map_err(|_| ProbeFailure::Unavailable)?;
     let mut command = std::process::Command::new(path);
     command
         .arg("--version")

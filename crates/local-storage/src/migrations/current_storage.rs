@@ -7,21 +7,56 @@ pub(super) const MARKER_SQL: &str = "CREATE TABLE stable_storage_format(singleto
 pub(crate) fn acquire_startup_lock(root: &Path) -> Result<std::fs::File, LocalStorageError> {
     use fs2::FileExt;
     let path = root.join("startup.lock");
-    if path.exists() {
+    #[cfg(windows)]
+    let file = {
+        use hiroute_platform::windows::security;
+        let (expected, created) = match security::open_identity(&path, false) {
+            Ok(file) => (security::file_identity(&file)?, false),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                match security::create_owner_only_file(&path) {
+                    Ok(file) => {
+                        security::verify_owner_only_handle(&file, false)?;
+                        file.sync_all()?;
+                        (security::file_identity(&file)?, true)
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => (
+                        security::file_identity(&security::open_identity(&path, false)?)?,
+                        false,
+                    ),
+                    Err(error) => return Err(error.into()),
+                }
+            }
+            Err(error) => return Err(error.into()),
+        };
+        let file = security::open_read_write(&path)?;
+        if security::file_identity(&file)? != expected {
+            return Err(LocalStorageError::Permission);
+        }
+        if created {
+            security::verify_owner_only_handle(&file, false)?;
+            hiroute_platform::durable::directory_barrier(root)?;
+        }
+        file
+    };
+    #[cfg(not(windows))]
+    let file = {
+        if path.exists() {
+            validate_owner_file(&path)?;
+        }
+        let mut options = std::fs::OpenOptions::new();
+        options.create(true).read(true).write(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+            options.custom_flags(
+                (rustix::fs::OFlags::NOFOLLOW | rustix::fs::OFlags::NONBLOCK).bits() as i32,
+            );
+        }
+        let file = options.open(&path)?;
         validate_owner_file(&path)?;
-    }
-    let mut options = std::fs::OpenOptions::new();
-    options.create(true).read(true).write(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-        options.custom_flags(
-            (rustix::fs::OFlags::NOFOLLOW | rustix::fs::OFlags::NONBLOCK).bits() as i32,
-        );
-    }
-    let file = options.open(&path)?;
-    validate_owner_file(&path)?;
+        file
+    };
     file.try_lock_exclusive()
         .map_err(|_| LocalStorageError::InvalidData)?;
     Ok(file)

@@ -33,13 +33,17 @@ fn invocation(key: &str, trigger: &str) -> Invocation {
 }
 
 fn apply(key: &str, trigger: &str, preview: &[u8]) -> AgentSettingsApplyV2 {
+    let super::Intent::Configure { trigger_mode } = invocation(key, trigger).selection.intent
+    else {
+        panic!("configure fixture")
+    };
     AgentSettingsApplyV2 {
         spec: serde_json::from_value(json!({
             "schema_version":{"major":2,"minor":0},
             "context_id":"agent-context/root",
             "model":{"intent":"keep"},
             "access_token":{"intent":"keep"},
-            "collaboration":{"intent":"configure","settings":{"trigger_mode":trigger}}
+            "collaboration":{"intent":"configure","settings":{"trigger_mode":trigger_mode}}
         }))
         .unwrap(),
         accept_digest: CanonicalDigest::of_bytes(preview),

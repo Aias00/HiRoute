@@ -151,22 +151,54 @@ mod tests {
 
     #[test]
     fn launch_command_binds_original_home_without_shell_interpolation() {
-        let home = Path::new("/tmp/a b'\"$HOME`false`\\codex");
-        let commands = codex_profile_commands(home).unwrap();
-        let script = format!(
-            "codex() {{ printf '%s\\n' \"$CODEX_HOME\" \"$@\"; }}\n{}",
-            commands["bash/zsh"]
-        );
-        let output = std::process::Command::new("bash")
-            .args(["--noprofile", "--norc", "-c", &script])
-            .output()
+        #[cfg(unix)]
+        {
+            let home = Path::new("/tmp/a b'\"$HOME`false`\\codex");
+            let commands = codex_profile_commands(home).unwrap();
+            let script = format!(
+                "codex() {{ printf '%s\\n' \"$CODEX_HOME\" \"$@\"; }}\n{}",
+                commands["bash/zsh"]
+            );
+            let output = std::process::Command::new("bash")
+                .args(["--noprofile", "--norc", "-c", &script])
+                .output()
+                .unwrap();
+            assert!(output.status.success());
+            assert_eq!(
+                String::from_utf8(output.stdout).unwrap(),
+                format!("{}\n--profile\nhiroute\n", home.display())
+            );
+            assert!(commands["PowerShell"].contains("finally"));
+        }
+        #[cfg(windows)]
+        {
+            let home = Path::new(r"C:\a b' % ! &\codex");
+            let commands = codex_profile_commands(home).unwrap();
+            let script = format!(
+                "function codex {{ [Console]::WriteLine($env:CODEX_HOME); foreach ($argument in $args) {{ [Console]::WriteLine($argument) }} }}; $env:CODEX_HOME = 'previous'; {}; if ($env:CODEX_HOME -ne 'previous') {{ throw 'context was not restored' }}",
+                commands["PowerShell"]
+            );
+            let powershell = hiroute_platform::windows::launcher::system_executable(Path::new(
+                r"WindowsPowerShell\v1.0\powershell.exe",
+            ))
             .unwrap();
-        assert!(output.status.success());
-        assert_eq!(
-            String::from_utf8(output.stdout).unwrap(),
-            format!("{}\n--profile\nhiroute\n", home.display())
-        );
-        assert!(commands["PowerShell"].contains("finally"));
+            let mut command = std::process::Command::new(powershell);
+            command.args(["-NoProfile", "-NonInteractive", "-Command", &script]);
+            let output = super::super::windows_runtime::bounded(
+                &command,
+                true,
+                std::time::Duration::from_secs(10),
+                4096,
+            )
+            .unwrap();
+            assert_eq!(
+                std::str::from_utf8(&output)
+                    .unwrap()
+                    .lines()
+                    .collect::<Vec<_>>(),
+                [home.to_str().unwrap(), "--profile", "hiroute"]
+            );
+        }
         assert!(codex_profile_commands(Path::new("/tmp/line\nbreak")).is_err());
     }
 

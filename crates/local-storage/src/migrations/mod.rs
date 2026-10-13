@@ -138,14 +138,23 @@ fn open_database_internal(
 ) -> Result<Connection, LocalStorageError> {
     let parent = path.parent().ok_or(LocalStorageError::InvalidData)?;
     prepare_owner_directory(parent)?;
-    let existed = path.exists();
-    if existed {
-        validate_owner_file(path)?;
-    }
-    let mut connection = Connection::open(path)?;
-    if !existed {
-        set_owner_file_permissions(path)?;
-    }
+    #[cfg(windows)]
+    let _database_identity = prepare_sqlite_file(path)?;
+    #[cfg(windows)]
+    let mut connection =
+        Connection::open_with_flags(path, OpenFlags::default() & !OpenFlags::SQLITE_OPEN_CREATE)?;
+    #[cfg(not(windows))]
+    let mut connection = {
+        let existed = path.exists();
+        if existed {
+            validate_owner_file(path)?;
+        }
+        let connection = Connection::open(path)?;
+        if !existed {
+            set_owner_file_permissions(path)?;
+        }
+        connection
+    };
     connection.execute_batch(
         "PRAGMA foreign_keys = ON;
          PRAGMA journal_mode = WAL;
@@ -164,6 +173,39 @@ fn open_database_internal(
         initialize_storage_meta(&connection, expected_store_uuid)?;
     }
     Ok(connection)
+}
+
+/// SQLite receives an existing empty file whose owner and DACL were assigned
+/// atomically. In particular, an elevated user's default Administrators owner
+/// must never be adopted after SQLite has already written the database.
+#[cfg(windows)]
+fn prepare_sqlite_file(path: &Path) -> Result<std::fs::File, LocalStorageError> {
+    use hiroute_platform::windows::security;
+    match security::open_identity(path, false) {
+        Ok(file) => return Ok(file), // Preserve the admitted existing object's native permissions.
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
+    match security::create_owner_only_file(path) {
+        Ok(created) => {
+            let identity = security::file_identity(&created)?;
+            created.sync_all()?;
+            drop(created); // The exclusive creation handle cannot be shared with SQLite.
+            let file = security::open_owner_only(path, false)?;
+            if security::file_identity(&file)? != identity {
+                return Err(LocalStorageError::Permission);
+            }
+            hiroute_platform::durable::directory_barrier(
+                path.parent().ok_or(LocalStorageError::InvalidData)?,
+            )?;
+            Ok(file)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            // A competing creator is an existing object. Never alter its ACL or owner.
+            Ok(security::open_identity(path, false)?)
+        }
+        Err(error) => Err(error.into()),
+    }
 }
 
 fn initialize_storage_meta(
@@ -1313,6 +1355,32 @@ mod tests {
     use crate::backup::{BackupSet, BackupSetPhase, test_writer_barrier};
     use crate::{ControlStore, LocalSecretStore, LocalStorageSet};
 
+    #[cfg(windows)]
+    #[test]
+    fn admitted_existing_sqlite_permissions_are_retained_without_owner_adoption() {
+        use hiroute_platform::{file_security, windows::security};
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("external.db");
+        // Deliberately use SQLite's default native descriptor to exercise an
+        // existing accessible file, including an elevated token's BA owner.
+        drop(Connection::open(&path).unwrap());
+        let before =
+            file_security::capture(&security::open_identity(&path, false).unwrap()).unwrap();
+        let control = ControlStore::open(
+            &crate::test_storage_authority(),
+            &path,
+            directory.path().join("migration"),
+        )
+        .unwrap();
+        let after =
+            file_security::capture(&security::open_identity(&path, false).unwrap()).unwrap();
+        assert_eq!(
+            before, after,
+            "existing accessible database permissions were adopted"
+        );
+        drop(control);
+    }
+
     fn replace_with_legacy_v1_set(storage_root: &Path) {
         drop(
             LocalStorageSet::open_migration_component_fixture(
@@ -1750,18 +1818,27 @@ mod tests {
 
             fs::remove_file(backup_root.join("backup-set.manifest.json")).unwrap();
             let stage = backup_root.join(format!(".backup-set.manifest.{case}.{suffix}"));
-            let mut options = fs::OpenOptions::new();
-            options.write(true).create_new(true);
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::OpenOptionsExt;
-                options.mode(0o600);
-            }
-            let mut file = options.open(&stage).unwrap();
+            #[cfg(not(windows))]
+            let mut file = {
+                let mut options = fs::OpenOptions::new();
+                options.write(true).create_new(true);
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::OpenOptionsExt;
+                    options.mode(0o600);
+                }
+                options.open(&stage).unwrap()
+            };
+            #[cfg(windows)]
+            let mut file =
+                hiroute_platform::windows::security::create_owner_only_file(&stage).unwrap();
             use std::io::Write as _;
             file.write_all(bytes).unwrap();
             file.sync_all().unwrap();
-            fs::File::open(&backup_root).unwrap().sync_all().unwrap();
+            hiroute_platform::durable::directory_barrier(&backup_root).unwrap();
+            // Creation denies sharing; close the completed payload before the
+            // production recovery reader reopens this stage.
+            drop(file);
 
             // The first daemon-shaped restart removes an uncommitted writing generation, reuses
             // the exact three source backups, republishes the set manifest, and finishes all

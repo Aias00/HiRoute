@@ -1,6 +1,8 @@
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
-use std::process::{Command, ExitStatus};
+use std::process::Command;
+#[cfg(not(windows))]
+use std::process::ExitStatus;
 use std::time::Duration;
 
 use hiroute_application_api::{
@@ -367,6 +369,7 @@ fn spawn_and_wait(command: &mut Command) -> Result<u8, ManagedLaunchFailure> {
         .map_err(|_| ManagedLaunchFailure::Unavailable)
 }
 
+#[cfg(not(windows))]
 fn exit_code(status: ExitStatus) -> u8 {
     if let Some(code) = status.code() {
         return u8::try_from(code).unwrap_or(1);
@@ -661,7 +664,7 @@ mod tests {
 
     #[test]
     fn configured_child_carries_routing_environment_without_empty_setting_sources() {
-        let executable = std::env::current_exe().unwrap();
+        let executable = std::env::current_exe().unwrap().canonicalize().unwrap();
         let descriptor = descriptor(executable.to_str().unwrap(), &trusted_helper());
         let invocation = ManagedLaunchInvocation {
             connection_id: descriptor.connection_id.clone(),
@@ -730,7 +733,7 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
 
         let root = tempfile::tempdir().unwrap();
-        let home = root.path().join("Users/test user");
+        let home = root.path().canonicalize().unwrap().join("Users/test user");
         let target = home.join("Applications/HiRoute.app/Contents/MacOS/hiroute");
         let bin = home.join(".local/bin");
         std::fs::create_dir_all(target.parent().unwrap()).unwrap();
@@ -762,7 +765,7 @@ mod tests {
     fn temporary_overlay_is_owner_only_secret_free_and_removed_on_drop() {
         use std::os::unix::fs::PermissionsExt;
 
-        let executable = std::env::current_exe().unwrap();
+        let executable = std::env::current_exe().unwrap().canonicalize().unwrap();
         let descriptor = descriptor(executable.to_str().unwrap(), &trusted_helper());
         let user_settings = serde_json::json!({
             "permissions": {"allow": ["Bash(ls)"]},

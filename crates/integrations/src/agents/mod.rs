@@ -86,7 +86,22 @@ pub use source_candidates::*;
 pub use subscription_sources::*;
 
 #[cfg(test)]
+pub(super) fn test_absolute_path(path: &str) -> std::path::PathBuf {
+    assert!(
+        path.starts_with('/'),
+        "fixture path must have a declared root"
+    );
+    #[cfg(windows)]
+    return std::path::PathBuf::from(format!("C:{}", path.replace('/', "\\")));
+    #[cfg(not(windows))]
+    std::path::PathBuf::from(path)
+}
+
+#[cfg(test)]
 mod tests;
+
+#[cfg(all(test, windows))]
+mod windows_collaboration_tests;
 
 mod codex_profile;
 pub use codex_profile::*;

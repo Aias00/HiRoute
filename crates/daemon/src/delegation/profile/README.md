@@ -247,6 +247,15 @@ reload its exact native history and cancel an in-flight request with complete Jo
 cleanup. The existing Codex/Claude installation gates use their selected real
 adapters and clients. CI must select each ignored case explicitly and require a
 nonzero pass count; missing artifacts or Qoder login prerequisites fail the gate.
-These checks cover the native protocol and profile tool configuration. Native Skill
-use, shell side effects, compaction and account/OAuth behavior retain their separate
-product journeys; a successful loopback reply does not prove those effects.
+These lifecycle checks cover the native protocol and profile tool configuration.
+The separate [Windows tools gates](../installation/windows_tools.rs) require actual
+user/project Skill discovery, correlated native Read/Edit/Shell results, edited file
+and shell receipt side effects, exact loaded tool history and complete Job cleanup.
+Codex reads Skills through its shell and edits through its declared patch tool when
+available, or a native shell when the current Plan catalog has no patch tool;
+Claude/Qoder invoke their native Skill tool, and Pi/DSH use their native resource
+loader and read/edit tools. CI selects all five exact ignored cases using the same
+fixed upstream clients, selected Node and real daemon launcher. These gates use a
+fresh private context and controlled model endpoint. Main-Agent collaboration via
+the installed public CLI, compaction and account/OAuth behavior retain their separate
+product journeys; successful Worker tool effects do not prove those other paths.

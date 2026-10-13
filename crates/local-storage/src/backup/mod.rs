@@ -1,7 +1,5 @@
 pub(crate) mod source_snapshot;
 use std::fs;
-#[cfg(test)]
-use std::fs::File;
 use std::path::{Path, PathBuf};
 
 use hiroute_domain::CanonicalDigest;
@@ -67,7 +65,7 @@ impl SqliteBackup {
             .file_name()
             .and_then(|name| name.to_str())
             .ok_or(LocalStorageError::InvalidData)?;
-        // `VACUUM INTO` creates the destination before this process can tighten its mode. A crash
+        // On Unix, `VACUUM INTO` creates the destination before this process can tighten its mode. A crash
         // in that small window leaves a current-uid regular file in an already owner-only
         // directory. Reconcile those exact attempt names before allocating the next attempt so a
         // restart never treats a recoverable 0644 SQLite stage as a permanent permission fault.
@@ -80,6 +78,11 @@ impl SqliteBackup {
 
         connection.execute_batch("PRAGMA wal_checkpoint(FULL)")?;
         let source_state_digest = database_state_digest(connection)?;
+        // SQLite explicitly accepts an existing empty INTO file. Allocate it
+        // privately first so an elevated default token owner never reaches the
+        // backup, including during the crash window before VACUUM completes.
+        #[cfg(windows)]
+        hiroute_platform::durable::write_private_new(&stage, b"")?;
         connection.execute(
             "VACUUM main INTO ?1",
             params![stage.to_string_lossy().as_ref()],
@@ -209,6 +212,16 @@ impl SqliteBackup {
         prepare_owner_directory(parent)?;
         let attempt = random_attempt_id()?;
         let temporary = parent.join(format!(".restore-{attempt}.stage.db"));
+        #[cfg(windows)]
+        {
+            use hiroute_platform::windows::security;
+            let mut source = security::open_owner_only(&self.path, false)?;
+            let mut target = security::create_owner_only_file(&temporary)?;
+            std::io::copy(&mut source, &mut target)?;
+            target.sync_all()?;
+            security::verify_owner_only_handle(&target, false)?;
+        }
+        #[cfg(not(windows))]
         fs::copy(&self.path, &temporary)?;
         set_owner_file_permissions(&temporary)?;
         hiroute_platform::durable::sync_file(&temporary)?;
@@ -549,8 +562,13 @@ impl BackupSet {
             .ok_or(LocalStorageError::InvalidData)?;
         let attempt = random_attempt_id()?;
         let stage = parent.join(format!(".{name}.{attempt}.restore-set"));
-        fs::create_dir(&stage)?;
-        set_owner_directory_permissions(&stage)?;
+        #[cfg(windows)]
+        drop(hiroute_platform::windows::security::create_owner_only_directory(&stage)?);
+        #[cfg(not(windows))]
+        {
+            fs::create_dir(&stage)?;
+            set_owner_directory_permissions(&stage)?;
+        }
 
         for (backup, name) in [
             (&self.control, "control.db"),
@@ -1217,9 +1235,8 @@ fn prepare_owner_directory(path: &Path) -> Result<(), LocalStorageError> {
     }
 }
 
+#[cfg(not(windows))]
 fn set_owner_directory_permissions(path: &Path) -> Result<(), LocalStorageError> {
-    #[cfg(windows)]
-    hiroute_platform::windows::security::set_owner_only(path, true)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -1234,7 +1251,7 @@ fn set_owner_directory_permissions(path: &Path) -> Result<(), LocalStorageError>
 
 fn set_owner_file_permissions(path: &Path) -> Result<(), LocalStorageError> {
     #[cfg(windows)]
-    hiroute_platform::windows::security::set_owner_only(path, false)?;
+    hiroute_platform::windows::security::verify_owner_only(path, false)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -1281,6 +1298,9 @@ mod tests {
         fs::write(manifest_path(&backup_path), b"stale-final").unwrap();
         let parent = backup_path.parent().unwrap();
         let orphan = parent.join(".control.db.deadbeef.stage.db");
+        #[cfg(windows)]
+        hiroute_platform::durable::write_private_new(&orphan, b"orphan").unwrap();
+        #[cfg(not(windows))]
         fs::write(&orphan, b"orphan").unwrap();
         set_owner_file_permissions(&orphan).unwrap();
         let second = control
@@ -1293,6 +1313,10 @@ mod tests {
         let restored = root.join("restored/control.db");
         second.restore_to(&restored).unwrap();
         validate_database(&restored).unwrap();
+        #[cfg(windows)]
+        for path in [&backup_path, &manifest_path(&backup_path), &restored] {
+            hiroute_platform::windows::security::verify_owner_only(path, false).unwrap();
+        }
     }
 
     #[test]
@@ -1482,7 +1506,7 @@ mod tests {
             set_manifest_stage_prefix()
         ));
         fs::rename(&final_manifest, &stage_manifest).unwrap();
-        File::open(&backup_root).unwrap().sync_all().unwrap();
+        hiroute_platform::durable::directory_barrier(&backup_root).unwrap();
         let reopened = BackupSet::open(&crate::test_storage_authority(), &backup_root).unwrap();
         assert_eq!(reopened.set_id(), set_id);
         assert_eq!(reopened.phase(), BackupSetPhase::SourcePublished);
@@ -1512,11 +1536,23 @@ mod tests {
         exact
             .restore_to_new_root(&test_writer_barrier(), &restored)
             .unwrap();
+        #[cfg(windows)]
+        hiroute_platform::windows::security::verify_owner_only(&restored, true).unwrap();
         for (name, backup) in [
             ("control.db", &exact.control),
             ("runtime.db", &exact.runtime),
             ("secrets.db", &exact.secrets),
         ] {
+            #[cfg(windows)]
+            {
+                hiroute_platform::windows::security::verify_owner_only(&restored.join(name), false)
+                    .unwrap();
+                hiroute_platform::windows::security::verify_owner_only(
+                    &manifest_path(&restored.join(name)),
+                    false,
+                )
+                .unwrap();
+            }
             let connection = Connection::open_with_flags(
                 restored.join(name),
                 OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
@@ -1527,6 +1563,12 @@ mod tests {
                 backup.manifest().source_state_digest
             );
         }
+        #[cfg(windows)]
+        hiroute_platform::windows::security::verify_owner_only(
+            &restored.join(BACKUP_SET_MANIFEST_NAME),
+            false,
+        )
+        .unwrap();
     }
 
     #[test]

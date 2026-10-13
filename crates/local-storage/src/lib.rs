@@ -351,6 +351,23 @@ mod startup_tests {
         assert!(storage_root.join("live/control.db").is_file());
         assert!(storage_root.join("live/runtime.db").is_file());
         assert!(storage_root.join("live/secrets.db").is_file());
+        #[cfg(windows)]
+        {
+            use hiroute_platform::windows::security;
+            for name in [
+                "startup.lock",
+                "master-key",
+                "live/control.db",
+                "live/runtime.db",
+                "live/secrets.db",
+            ] {
+                security::verify_owner_only(&storage_root.join(name), false)
+                    .unwrap_or_else(|error| panic!("new managed {name} is not private: {error:?}"));
+            }
+            for name in ["live", ""] {
+                security::verify_owner_only(&storage_root.join(name), true).unwrap();
+            }
+        }
     }
 
     #[cfg(unix)]
@@ -460,27 +477,66 @@ pub(crate) fn daemon_storage_authority() -> DaemonStorageAuthority {
 }
 
 /// Test-owned roots must satisfy the same permission contract under every caller umask.
-#[cfg(test)]
-pub(crate) fn test_tempdir() -> std::io::Result<tempfile::TempDir> {
-    let mut builder = tempfile::Builder::new();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        builder.permissions(std::fs::Permissions::from_mode(0o700));
+#[cfg(all(test, not(windows)))]
+pub(crate) type TestTempDir = tempfile::TempDir;
+
+#[cfg(all(test, windows))]
+pub(crate) struct TestTempDir {
+    _cleanup: tempfile::TempDir,
+    path: std::path::PathBuf,
+}
+
+#[cfg(all(test, windows))]
+impl TestTempDir {
+    pub(crate) fn path(&self) -> &std::path::Path {
+        &self.path
     }
-    builder.tempdir()
+}
+
+#[cfg(test)]
+pub(crate) fn test_tempdir() -> std::io::Result<TestTempDir> {
+    let builder = tempfile::Builder::new();
+    #[cfg(unix)]
+    let builder = {
+        use std::os::unix::fs::PermissionsExt;
+        let mut builder = builder;
+        builder.permissions(std::fs::Permissions::from_mode(0o700));
+        builder
+    };
+    let cleanup = builder.tempdir()?;
+    #[cfg(not(windows))]
+    {
+        Ok(cleanup)
+    }
+    #[cfg(windows)]
+    {
+        let path = cleanup.path().join("private");
+        drop(hiroute_platform::windows::security::create_owner_only_directory(&path)?);
+        Ok(TestTempDir {
+            _cleanup: cleanup,
+            path,
+        })
+    }
 }
 
 #[cfg(test)]
 pub(crate) fn test_create_dir_all(path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
-    let mut builder = std::fs::DirBuilder::new();
-    builder.recursive(true);
-    #[cfg(unix)]
+    #[cfg(windows)]
     {
-        use std::os::unix::fs::DirBuilderExt;
-        builder.mode(0o700);
+        drop(hiroute_platform::windows::security::ensure_private_directory(path.as_ref())?);
+        Ok(())
     }
-    builder.create(path)
+    #[cfg(not(windows))]
+    {
+        let mut builder = std::fs::DirBuilder::new();
+        builder.recursive(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        builder.create(path)
+    }
 }
 
 #[cfg(test)]

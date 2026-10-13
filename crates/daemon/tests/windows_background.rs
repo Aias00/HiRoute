@@ -10,6 +10,10 @@ mod windows_account;
 mod windows_background_fixture;
 #[path = "support/windows_background_upgrade.rs"]
 mod windows_background_upgrade;
+#[path = "support/windows_candidate_source.rs"]
+mod windows_candidate_source;
+#[path = "support/windows_execution_host.rs"]
+mod windows_execution_host;
 #[path = "support/windows_token_launcher.rs"]
 mod windows_token_launcher;
 
@@ -30,6 +34,7 @@ struct Inputs {
     archive: PathBuf,
     admin_cli: PathBuf,
     version_directory: String,
+    _source: windows_candidate_source::Sources,
 }
 impl Inputs {
     fn load() -> Self {
@@ -53,17 +58,35 @@ impl Inputs {
         let version = document["version"].as_str().unwrap();
         let revision = document["revision"].as_str().unwrap();
         assert!(revision.len() >= 12);
-        let installer = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../scripts/install-standalone-windows.py")
-            .canonicalize()
-            .unwrap();
+        windows_execution_host::current();
+        let source = windows_candidate_source::Sources::open();
+        if manifest_name == "HIROUTE_WINDOWS_PACKAGE_MANIFEST"
+            && let Some(expected) = windows_candidate_source::Sources::revision()
+        {
+            assert_eq!(
+                revision, expected,
+                "package and compiled gate candidate SHA differ"
+            );
+        }
+        let admin_cli = fixture::prepared_cli();
+        windows_execution_host::image(&admin_cli);
+        windows_execution_host::image(&admin_cli.with_file_name("hirouted.exe"));
+        windows_execution_host::image(
+            &admin_cli
+                .parent()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .join("libexec/cliproxyapi.exe"),
+        );
         Self {
             python: fixture::required("HIROUTE_WINDOWS_PYTHON"),
-            installer,
+            installer: source.installer(),
             manifest,
             archive,
-            admin_cli: fixture::prepared_cli(),
+            admin_cli,
             version_directory: format!("{version}-{}", &revision[..12]),
+            _source: source,
         }
     }
     fn python(&self, token: &File, arguments: Vec<String>) -> Value {

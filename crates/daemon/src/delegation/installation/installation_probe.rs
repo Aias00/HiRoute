@@ -371,6 +371,27 @@ fn run_normal(
     nonce: &str,
     session_watch: Option<(&DiagnosticsPort, WorkerHarnessV1)>,
 ) -> Result<AcpRunOutcome, DelegationErrorV1> {
+    run_normal_prompt(
+        platform,
+        profile_harness,
+        profile,
+        session,
+        nonce,
+        session_watch,
+        "Reply with OK only. Do not use tools.",
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_normal_prompt(
+    platform: &LocalWorkerPlatform,
+    profile_harness: WorkerHarnessV1,
+    profile: CandidateWorkerProfile,
+    session: AcpSessionStart,
+    nonce: &str,
+    session_watch: Option<(&DiagnosticsPort, WorkerHarnessV1)>,
+    prompt: &str,
+) -> Result<AcpRunOutcome, DelegationErrorV1> {
     let journal = Arc::new(ProbeJournal {
         session_watch: session_watch.map(|(diagnostics, harness)| ProbeSessionWatch {
             diagnostics: diagnostics.clone(),
@@ -386,6 +407,7 @@ fn run_normal(
     let native_session_mode = Some(profile.native_session_mode().to_owned());
     let expected_model = Some(profile.native_selected_model_id().to_owned());
     let nonce = nonce.to_owned();
+    let prompt = prompt.to_owned();
     let outcome = block_on(async move {
         let deadline = Instant::now() + PROBE_DEADLINE;
         let result = lifecycle::execute(
@@ -397,7 +419,7 @@ fn run_normal(
             },
             AcpRunInput {
                 cwd,
-                prompt: "Reply with OK only. Do not use tools.".into(),
+                prompt,
                 session,
                 identity_contract,
                 session_meta,
@@ -569,13 +591,20 @@ impl ProbeRoot {
         }
         let root = builder
             .tempdir()
-            .map_err(|_| DelegationErrorV1::StorageUnavailable)?;
-        #[cfg(windows)]
-        hiroute_platform::windows::security::set_owner_only(root.path(), true)
-            .map_err(|_| DelegationErrorV1::StorageUnavailable)?;
-        let path =
-            fs::canonicalize(root.path()).map_err(|_| DelegationErrorV1::StorageUnavailable)?;
+            .map_err(|error| probe_storage_error("root-create", error))?;
+        let path = fs::canonicalize(root.path())
+            .map_err(|error| probe_storage_error("root-canonicalize", error))?;
         let path = crate::delegation::profile::native_context_path(&path);
+        // Default Windows TokenOwner may be Administrators. Attach this user's
+        // descriptor atomically to a fresh child instead of changing ownership
+        // of an external cleanup container. Only the private child holds data.
+        #[cfg(windows)]
+        let path = {
+            let private = path.join("private");
+            hiroute_platform::windows::security::create_owner_only_directory(&private)
+                .map_err(|error| probe_storage_error("root-private-create", error))?;
+            private
+        };
         private_directory(&path)?;
         let sessions = path.join("sessions");
         let runs = path.join("runs");
@@ -597,7 +626,7 @@ fn create_private(path: &Path) -> Result<(), DelegationErrorV1> {
     {
         return hiroute_platform::windows::security::create_owner_only_directory(path)
             .map(drop)
-            .map_err(|_| DelegationErrorV1::StorageUnavailable);
+            .map_err(|error| probe_storage_error("child-private-create", error));
     }
     #[cfg(not(windows))]
     {
@@ -609,20 +638,50 @@ fn create_private(path: &Path) -> Result<(), DelegationErrorV1> {
         }
         builder
             .create(path)
-            .map_err(|_| DelegationErrorV1::StorageUnavailable)?;
+            .map_err(|error| probe_storage_error("child-private-create", error))?;
         private_directory(path)
     }
 }
 
 fn private_directory(path: &Path) -> Result<(), DelegationErrorV1> {
-    let metadata = fs::symlink_metadata(path).map_err(|_| DelegationErrorV1::StorageUnavailable)?;
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|error| probe_storage_error("private-directory-metadata", error))?;
     if !path.is_absolute() || !metadata.is_dir() || metadata.file_type().is_symlink() {
         return Err(DelegationErrorV1::PermissionDenied);
     }
     #[cfg(windows)]
-    hiroute_platform::windows::security::verify_owner_only(path, true)
-        .map_err(|_| DelegationErrorV1::PermissionDenied)?;
+    hiroute_platform::windows::security::verify_owner_only(path, true).map_err(|error| {
+        probe_storage_error("private-directory-verify", error);
+        DelegationErrorV1::PermissionDenied
+    })?;
     Ok(())
+}
+
+// This module is test-only. Keep operation and numeric OS status, never paths,
+// credential contents, command arguments, stdout or a potentially unsafe Display.
+fn probe_storage_error(stage: &'static str, error: std::io::Error) -> DelegationErrorV1 {
+    eprintln!(
+        "native acceptance storage stage={stage} kind={:?} os={:?}",
+        error.kind(),
+        error.raw_os_error()
+    );
+    DelegationErrorV1::StorageUnavailable
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_probe_root_creates_strict_private_directories_before_native_launch() {
+    let root = ProbeRoot::new().unwrap();
+    for path in [
+        root.sessions.parent().unwrap(),
+        &root.sessions,
+        &root.runs,
+        &root.workspace,
+    ] {
+        let held = hiroute_platform::windows::security::open_owner_only(path, true).unwrap();
+        hiroute_platform::windows::security::verify_owner_only_handle(&held, true).unwrap();
+    }
+    assert_ne!(root.sessions.parent().unwrap(), root._root.path());
 }
 
 #[derive(Default)]
@@ -728,3 +787,6 @@ mod tests {
 #[cfg(all(test, windows))]
 #[path = "windows_acceptance.rs"]
 mod windows_acceptance;
+
+#[path = "native_tools_probe.rs"]
+mod native_tools_probe;

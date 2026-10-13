@@ -692,6 +692,11 @@ fn explicit_environment_name(value: &str) -> Option<&str> {
 }
 
 fn source_ref(path: &Path, layer: ConfigLayerV1) -> String {
+    // Windows accepts both separators. Joining a sibling normalizes its final
+    // separator, so hashing the raw spelling would lose project/local precedence.
+    // Normalize components without opening/following the selected object.
+    #[cfg(windows)]
+    let path = path.components().collect::<std::path::PathBuf>();
     let digest = CanonicalDigest::of_bytes(
         format!("claude-settings\0{layer:?}\0{}", path.to_string_lossy()).as_bytes(),
     );

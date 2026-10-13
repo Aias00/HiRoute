@@ -8,9 +8,13 @@ fn fixture_launch(root: &std::path::Path, mode: &[u8]) -> CpaLaunch {
         .map(PathBuf::from)
         .expect("Windows native CPA fixture must be prepared; this gate cannot skip");
     assert!(binary.is_absolute() && binary.is_file());
-    hiroute_platform::windows::security::set_owner_only(root, true).unwrap();
-    let config_path = root.join("config.yaml");
-    std::fs::write(&config_path, mode).unwrap();
+    // The outer TempDir only owns cleanup. An elevated Windows token can give
+    // a std-created directory Administrators ownership; never adopt that object
+    // by changing its ACL after creation.
+    let work_dir = root.join("private");
+    drop(hiroute_platform::windows::security::create_owner_only_directory(&work_dir).unwrap());
+    let config_path = work_dir.join("config.yaml");
+    hiroute_platform::durable::write_private_new(&config_path, mode).unwrap();
     CpaLaunch {
         binary: VerifiedCpaBinary::fixture(
             binary,
@@ -18,7 +22,7 @@ fn fixture_launch(root: &std::path::Path, mode: &[u8]) -> CpaLaunch {
             "fixture".into(),
         ),
         config_path,
-        work_dir: root.to_owned(),
+        work_dir,
         management_password: Arc::new(
             crate::config::SecretText::from_owned(SECRET.into()).unwrap(),
         ),
@@ -55,7 +59,7 @@ fn native_bootstrap_delivers_stdin_eof_and_minimal_windows_environment() {
         thread::sleep(Duration::from_millis(10));
     }
     assert_eq!(
-        std::fs::read(root.path().join("bootstrap.ok")).unwrap(),
+        std::fs::read(launch.work_dir.join("bootstrap.ok")).unwrap(),
         b"stdin-eof-and-explicit-environment"
     );
 }
@@ -78,7 +82,7 @@ fn native_root_exit_cannot_report_stopped_until_descendant_job_is_empty() {
         thread::sleep(Duration::from_millis(10));
     }
     for name in ["descendant.pid", "grandchild.pid"] {
-        let pid: u32 = std::fs::read_to_string(root.path().join(name))
+        let pid: u32 = std::fs::read_to_string(launch.work_dir.join(name))
             .unwrap()
             .parse()
             .unwrap();

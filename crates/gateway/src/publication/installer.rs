@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
-use std::fs::{File, OpenOptions};
+#[cfg(not(windows))]
+use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -408,6 +409,7 @@ impl GatewayPublicationInstaller {
             .file_name()
             .and_then(|name| name.to_str())
             .ok_or(PublicationInstallError::InvalidLkgPath)?;
+        #[cfg(not(windows))]
         let temporary = parent.join(format!(".{file_name}.prepare"));
         // Price identities are reconstructed from the verified Product record
         // after restart; the Gateway LKG stores only execution semantics.
@@ -416,25 +418,56 @@ impl GatewayPublicationInstaller {
         let durable = encode_durable_state(&durable_snapshot)?;
         let mut bytes = serde_json::to_vec(&durable).map_err(PublicationInstallError::Json)?;
         bytes.push(b'\n');
-        let mut options = OpenOptions::new();
-        options.create(true).truncate(true).write(true);
-        #[cfg(unix)]
+        #[cfg(windows)]
+        let windows_file = (|| -> std::io::Result<std::fs::File> {
+            use hiroute_platform::windows::{durable, security};
+            let parent_handle = security::ensure_private_directory(parent)?;
+            let mut nonce = [0_u8; 16];
+            getrandom::fill(&mut nonce)
+                .map_err(|error| std::io::Error::other(error.to_string()))?;
+            let nonce = nonce
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>();
+            let mut file = security::create_owner_only_file_at(
+                &parent_handle,
+                format!(".{file_name}.{nonce}.prepare").as_ref(),
+            )?;
+            file.write_all(&bytes)?;
+            file.sync_all()?;
+            durable::rename_file_at(&file, &parent_handle, file_name.as_ref(), true)?;
+            Ok(file)
+        })()
+        .map_err(PublicationInstallError::Io)?;
+        #[cfg(not(windows))]
         {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
+            let mut options = OpenOptions::new();
+            options.create(true).truncate(true).write(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600);
+            }
+            let mut file = options
+                .open(&temporary)
+                .map_err(PublicationInstallError::Io)?;
+            file.write_all(&bytes)
+                .map_err(PublicationInstallError::Io)?;
+            file.sync_all().map_err(PublicationInstallError::Io)?;
+            std::fs::rename(&temporary, &self.lkg_path).map_err(PublicationInstallError::Io)?;
         }
-        let mut file = options
-            .open(&temporary)
-            .map_err(PublicationInstallError::Io)?;
-        file.write_all(&bytes)
-            .map_err(PublicationInstallError::Io)?;
-        file.sync_all().map_err(PublicationInstallError::Io)?;
-        std::fs::rename(&temporary, &self.lkg_path).map_err(PublicationInstallError::Io)?;
         if failpoint == PublicationFailpoint::AfterRenameBeforeDirectoryDurability {
             self.enter_durability_uncertain();
             return Err(PublicationInstallError::InjectedAfterRenameBeforeDirectoryDurability);
         }
-        if let Err(source) = File::open(parent).and_then(|directory| directory.sync_all()) {
+        #[cfg(windows)]
+        let directory_barrier = windows_file
+            .sync_all()
+            .and_then(|()| hiroute_platform::durable::directory_barrier(parent));
+        #[cfg(not(windows))]
+        let directory_barrier =
+            std::fs::File::open(parent).and_then(|directory| directory.sync_all());
+        if let Err(source) = directory_barrier {
             self.enter_durability_uncertain();
             return Err(PublicationInstallError::DirectoryDurabilityUncertain(
                 source,

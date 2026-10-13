@@ -458,30 +458,46 @@ mod locator_tests {
 
     #[test]
     fn desktop_default_and_explicit_isolation() {
+        let absolute = |value| match (cfg!(windows), value) {
+            (true, "/isolated") => "C:/isolated",
+            (true, "/xdg") => "C:/xdg",
+            (_, value) => value,
+        };
         let resolve = |explicit: Option<&str>, xdg: Option<&str>, macos| {
             resolve_runtime_root(
                 explicit.map(Into::into),
                 xdg.map(Into::into),
-                Some("/Users/test".into()),
+                Some(
+                    if cfg!(windows) {
+                        "C:/Users/test"
+                    } else {
+                        "/Users/test"
+                    }
+                    .into(),
+                ),
                 macos,
                 None,
             )
         };
         assert_eq!(
             resolve(None, None, true).unwrap(),
-            PathBuf::from("/Users/test/Library/Application Support/ai.hiroute.desktop/run")
+            PathBuf::from(if cfg!(windows) {
+                "C:/Users/test/Library/Application Support/ai.hiroute.desktop/run"
+            } else {
+                "/Users/test/Library/Application Support/ai.hiroute.desktop/run"
+            })
         );
         assert_eq!(
-            resolve(Some("/isolated"), Some("/xdg"), true).unwrap(),
-            PathBuf::from("/isolated")
+            resolve(Some(absolute("/isolated")), Some(absolute("/xdg")), true).unwrap(),
+            PathBuf::from(absolute("/isolated"))
         );
         assert_eq!(
-            resolve(None, Some("/xdg"), true).unwrap(),
-            PathBuf::from("/xdg")
+            resolve(None, Some(absolute("/xdg")), true).unwrap(),
+            PathBuf::from(absolute("/xdg"))
         );
         for invalid in ["", "relative"] {
             assert_eq!(
-                resolve(Some(invalid), Some("/xdg"), true),
+                resolve(Some(invalid), Some(absolute("/xdg")), true),
                 Err(LocalControlClientError::LocatorUnavailable)
             );
             assert_eq!(
@@ -501,7 +517,14 @@ mod locator_tests {
             resolve_runtime_root(
                 None,
                 Some("/xdg".into()),
-                Some("/Users/test".into()),
+                Some(
+                    if cfg!(windows) {
+                        "C:/Users/test"
+                    } else {
+                        "/Users/test"
+                    }
+                    .into()
+                ),
                 true,
                 Some(PathBuf::from(
                     "/Users/test/Library/Application Support/ai.hiroute.cli/run"

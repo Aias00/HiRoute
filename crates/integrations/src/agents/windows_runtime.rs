@@ -54,10 +54,7 @@ pub fn windows_claude_version(
     search_path: &str,
     timeout: Duration,
 ) -> io::Result<Vec<u8>> {
-    let home = tempfile::Builder::new()
-        .prefix("hiroute-claude-version-")
-        .tempdir()?;
-    hiroute_platform::windows::security::set_owner_only(home.path(), true)?;
+    let home = super::probe_files::temporary("hiroute-claude-version-")?;
     let mut command = Command::new(binary);
     command
         .arg("--version")
@@ -257,9 +254,14 @@ pub(super) fn bounded(
     timeout: Duration,
     limit: usize,
 ) -> io::Result<zeroize::Zeroizing<Vec<u8>>> {
-    let capture = tempfile::NamedTempFile::new()?;
-    hiroute_platform::windows::security::set_owner_only(capture.path(), false)?;
-    let writer = capture.reopen()?;
+    let capture =
+        tempfile::tempdir().map_err(|error| native_probe_stage("capture-create", error))?;
+    // The tempfile container may inherit an administrator TokenOwner. The file
+    // carrying native output is created atomically with the current user's
+    // descriptor and retains its exact handle through capture and final read.
+    let writer =
+        hiroute_platform::windows::security::create_owner_only_file(&capture.path().join("output"))
+            .map_err(|error| native_probe_stage("capture-private-create", error))?;
     let child = spawn(
         command,
         inherit,
@@ -267,20 +269,33 @@ pub(super) fn bounded(
         Stream::File(&writer),
         Stream::Null,
     )
-    .map_err(|error| io::Error::other(LaunchFailure(error.raw_os_error())))?;
+    .map_err(|error| {
+        let error = native_probe_stage("job-spawn", error);
+        io::Error::other(LaunchFailure(error.raw_os_error()))
+    })?;
     let start = Instant::now();
     let result = (|| {
         loop {
-            if writer.metadata()?.len() > limit as u64 {
+            if writer
+                .metadata()
+                .map_err(|error| native_probe_stage("capture-metadata", error))?
+                .len()
+                > limit as u64
+            {
                 break Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "native output bound",
                 ));
             }
-            if let Some(code) = child.exit_code()? {
+            if let Some(code) = child
+                .exit_code()
+                .map_err(|error| native_probe_stage("job-exit-query", error))?
+            {
                 break if code == 0 {
-                    super::native_probe_process::read_bounded(capture.path(), limit)
+                    Ok(())
                 } else {
+                    #[cfg(test)]
+                    eprintln!("native acceptance process stage=job-exit status={code}");
                     Err(io::Error::other("native check failed"))
                 };
             }
@@ -294,9 +309,14 @@ pub(super) fn bounded(
         }
     })();
     let cleanup = (|| {
-        child.terminate()?;
+        child
+            .terminate()
+            .map_err(|error| native_probe_stage("job-terminate", error))?;
         let stop = Instant::now();
-        while !child.empty()? {
+        while !child
+            .empty()
+            .map_err(|error| native_probe_stage("job-empty-query", error))?
+        {
             if stop.elapsed() >= Duration::from_secs(1) {
                 return Err(io::Error::other("native cleanup failed"));
             }
@@ -308,7 +328,43 @@ pub(super) fn bounded(
         let _ = capture.keep();
         return Err(io::Error::other(CleanupUnknown));
     }
-    result
+    // Even after the root exits, a descendant can still write stdout. Stop and
+    // observe the whole held Job before reading the final bounded capture.
+    result?;
+    read_held_capture(&writer, limit)
+        .map_err(|error| native_probe_stage("capture-final-read", error))
+}
+
+fn read_held_capture(
+    file: &std::fs::File,
+    limit: usize,
+) -> io::Result<zeroize::Zeroizing<Vec<u8>>> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut file = file.try_clone()?;
+    file.seek(SeekFrom::Start(0))?;
+    let mut bytes = zeroize::Zeroizing::new(Vec::new());
+    file.take(limit as u64 + 1).read_to_end(&mut bytes)?;
+    if bytes.len() > limit {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "native output bound",
+        ));
+    }
+    Ok(bytes)
+}
+
+fn native_probe_stage(stage: &'static str, error: io::Error) -> io::Error {
+    // Preserve classification and launch_failure_code. Test diagnostics contain
+    // only a fixed stage, kind and OS status; native output may contain secrets.
+    #[cfg(test)]
+    eprintln!(
+        "native acceptance process stage={stage} kind={:?} os={:?}",
+        error.kind(),
+        error.raw_os_error()
+    );
+    #[cfg(not(test))]
+    let _ = stage;
+    error
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -357,8 +413,7 @@ mod tests {
 
     #[test]
     fn windows_native_system_selectors_override_ambient_shell_paths() {
-        let home = tempfile::tempdir().unwrap();
-        hiroute_platform::windows::security::set_owner_only(home.path(), true).unwrap();
+        let home = super::super::probe_files::temporary("hiroute-system-environment-").unwrap();
         let mut command = Command::new(std::env::current_exe().unwrap());
         command
             .args(["--ignored", "--exact", ENV_FIXTURE, "--nocapture"])
@@ -387,9 +442,19 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "required pinned Node native acceptance gate"]
+    fn windows_selected_node_version_uses_the_private_capture_and_held_job() {
+        let node = std::env::var_os("HIROUTE_WORKER_NODE")
+            .map(PathBuf::from)
+            .filter(|path| path.is_absolute() && path.is_file())
+            .expect("HIROUTE_WORKER_NODE must select the pinned native Node executable");
+        super::super::pi_runtime::validate_pi_node(&node)
+            .expect("the real selected Node version must pass the production private Job probe");
+    }
+
+    #[test]
     fn windows_npm_shims_bind_global_and_local_declared_bins_without_evaluation() {
-        let root = tempfile::tempdir().unwrap();
-        hiroute_platform::windows::security::set_owner_only(root.path(), true).unwrap();
+        let root = super::super::probe_files::temporary("hiroute-npm-entry-").unwrap();
         for local in [false, true] {
             let prefix = root.path().join(if local { "local" } else { "global" });
             let modules = prefix.join("node_modules");

@@ -1,13 +1,29 @@
 //! Windows Live checks retain an atomic Job and capture bounded private files.
 use super::*;
 
-fn private_capture() -> std::io::Result<tempfile::NamedTempFile> {
-    let capture = tempfile::NamedTempFile::new()?;
-    hiroute_platform::windows::security::set_owner_only(capture.path(), false)?;
-    Ok(capture)
+struct PrivateCapture {
+    file: std::fs::File,
+    cleanup: tempfile::TempDir,
 }
 
-fn read_capture(capture: &tempfile::NamedTempFile) -> std::io::Result<Vec<u8>> {
+impl PrivateCapture {
+    fn as_file(&self) -> &std::fs::File {
+        &self.file
+    }
+    fn keep(self) {
+        let _ = self.cleanup.keep();
+    }
+}
+
+fn private_capture() -> std::io::Result<PrivateCapture> {
+    let cleanup = tempfile::tempdir()?;
+    let file = hiroute_platform::windows::security::create_owner_only_file(
+        &cleanup.path().join("capture"),
+    )?;
+    Ok(PrivateCapture { file, cleanup })
+}
+
+fn read_capture(capture: &PrivateCapture) -> std::io::Result<Vec<u8>> {
     use std::io::{Seek, SeekFrom};
     let mut file = capture.as_file().try_clone()?;
     file.seek(SeekFrom::Start(0))?;
@@ -37,8 +53,8 @@ pub(super) fn run_captured(
     }
     let stdout = private_capture().map_err(|_| unavailable())?;
     let stderr = private_capture().map_err(|_| unavailable())?;
-    let writer = stdout.reopen().map_err(|_| unavailable())?;
-    let errors = stderr.reopen().map_err(|_| unavailable())?;
+    let writer = stdout.as_file().try_clone().map_err(|_| unavailable())?;
+    let errors = stderr.as_file().try_clone().map_err(|_| unavailable())?;
     let mut child = hiroute_integrations::agents::spawn_windows_native_probe(
         command,
         inherit,
@@ -75,8 +91,8 @@ pub(super) fn run_captured(
     // and destruction of all captured files and the native working directory.
     if child.stop().is_err() {
         working.keep();
-        let _ = stdout.keep();
-        let _ = stderr.keep();
+        stdout.keep();
+        stderr.keep();
         return Err(failure(CLIENT_FAILED));
     }
     let success = result?;

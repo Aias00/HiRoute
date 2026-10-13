@@ -290,6 +290,8 @@ fn verify_claude_executable(
 struct TemporaryLaunchOverlay {
     directory: PathBuf,
     path: PathBuf,
+    #[cfg(windows)]
+    _root: super::probe_files::PrivateProbeRoot,
 }
 
 impl TemporaryLaunchOverlay {
@@ -309,8 +311,11 @@ impl TemporaryLaunchOverlay {
             file.sync_all()
                 .map_err(|_| ManagedClaudeProcessError::Unavailable)?;
             drop(file);
-            let directory = root.keep();
-            Ok(Self { directory, path })
+            Ok(Self {
+                directory,
+                path,
+                _root: root,
+            })
         }
         #[cfg(not(any(unix, windows)))]
         {
@@ -474,7 +479,9 @@ mod context_window_tests {
         let mut descriptor = ManagedClaudeLaunchDescriptorV2::trusted(
             "agent-connection/context-test",
             "claude-messages-v1",
-            "/trusted/claude",
+            crate::agents::test_absolute_path("/trusted/claude")
+                .to_str()
+                .unwrap(),
             hiroute_domain::CanonicalDigest::of_bytes(b"snapshot"),
             1,
             hiroute_domain::CanonicalDigest::of_bytes(b"publication"),
@@ -484,7 +491,9 @@ mod context_window_tests {
                 sonnet: None,
                 haiku: None,
             },
-            "/trusted/hiroute",
+            crate::agents::test_absolute_path("/trusted/hiroute")
+                .to_str()
+                .unwrap(),
         )
         .unwrap();
         descriptor.context_window_tokens = Some(272_000);
@@ -497,7 +506,7 @@ mod context_window_tests {
         assert_eq!(overlay["env"]["CLAUDE_CODE_AUTO_COMPACT_WINDOW"], "272000");
         assert_eq!(overlay["env"]["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "272000");
         assert!(overlay["env"].get("DISABLE_COMPACT").is_none());
-        let mut command = Command::new("/trusted/claude");
+        let mut command = Command::new(crate::agents::test_absolute_path("/trusted/claude"));
         configure_command(&mut command, &descriptor, file.path(), &[]);
         let environment: std::collections::BTreeMap<_, _> = command.get_envs().collect();
         assert_eq!(

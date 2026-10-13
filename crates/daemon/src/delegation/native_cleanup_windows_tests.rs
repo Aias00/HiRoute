@@ -8,7 +8,7 @@ use hiroute_domain::{
     },
 };
 use hiroute_platform::windows::security::{
-    create_owner_only_directory, file_identity, open_identity, set_owner_only,
+    create_owner_only_directory, file_identity, open_identity,
 };
 use std::path::Path;
 
@@ -55,10 +55,11 @@ fn record(base: &Path, root: &Path) -> DelegationNativeRootV1 {
 #[test]
 fn windows_native_cleanup_progress_preserves_marker_until_final_budget() {
     let fixture = tempfile::tempdir().unwrap();
-    set_owner_only(fixture.path(), true).unwrap();
-    let path = fixture.path().join("owned-root");
+    let base = fixture.path().join("private");
+    drop(create_owner_only_directory(&base).unwrap());
+    let path = base.join("owned-root");
     drop(create_owner_only_directory(&path).unwrap());
-    let root = record(fixture.path(), &path);
+    let root = record(&base, &path);
     for index in 0..70 {
         hiroute_platform::durable::write_private_new(&path.join(format!("entry-{index}")), b"x")
             .unwrap();
@@ -95,10 +96,11 @@ fn windows_native_cleanup_progress_preserves_marker_until_final_budget() {
 #[test]
 fn windows_native_cleanup_refuses_replaced_marker_without_deleting_payload() {
     let fixture = tempfile::tempdir().unwrap();
-    set_owner_only(fixture.path(), true).unwrap();
-    let path = fixture.path().join("owned-root");
+    let base = fixture.path().join("private");
+    drop(create_owner_only_directory(&base).unwrap());
+    let path = base.join("owned-root");
     drop(create_owner_only_directory(&path).unwrap());
-    let root = record(fixture.path(), &path);
+    let root = record(&base, &path);
     hiroute_platform::durable::write_private_new(&path.join("payload"), b"keep").unwrap();
     let marker = path.join(MARKER);
     std::fs::rename(&marker, path.join("old-marker")).unwrap();

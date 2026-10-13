@@ -22,7 +22,40 @@ def module(name):
 
 
 def command(*args):
-    return subprocess.check_output(list(map(str, args)), cwd=ROOT, text=True).strip()
+    return subprocess.check_output(list(map(str, args)), cwd=ROOT, text=True, encoding="utf-8").strip()
+
+
+def trusted_extraction(packager, manifest, archive, trusted):
+    verified = packager.verify(manifest, archive)
+    trusted.mkdir(parents=True, exist_ok=False)
+    for name, (payload, _) in packager.safe_members(archive, verified["files"]).items():
+        path = trusted / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+    command("icacls", trusted, "/inheritance:r", "/grant:r",
+            "*S-1-5-32-544:(OI)(CI)F", "*S-1-5-18:(OI)(CI)F", "*S-1-5-11:(OI)(CI)RX", "/T")
+    command("icacls", trusted, "/setowner", "*S-1-5-32-544", "/T")
+    return verified
+
+
+def restage(args):
+    if platform.system() != "Windows":
+        raise ValueError("Native Windows required")
+    if command("git", "rev-parse", "HEAD") != args.expected_sha:
+        raise ValueError("Restaged package does not belong to the candidate checkout")
+    command("git", "diff", "--exit-code", "HEAD", "--")
+    packager = module("package-standalone")
+    manifest, archive = args.manifest.resolve(strict=True), args.archive.resolve(strict=True)
+    verified = packager.verify(manifest, archive)
+    if verified["revision"] != args.expected_sha or verified["target"] != "x86_64-pc-windows-msvc":
+        raise ValueError("Replay requires the exact candidate's verified x64 package")
+    trusted = args.output.resolve() / "administrator-package"
+    trusted_extraction(packager, manifest, archive, trusted)
+    return dict(source_revision=args.expected_sha, target=verified["target"], manifest=str(manifest),
+                archive=str(archive), administrator_cli=str(trusted / "bin/hiroute.exe"),
+                worker_daemon=str(trusted / "bin/hirouted.exe"), python=sys.executable,
+                archive_sha256=packager.digest(archive), manifest_sha256=packager.digest(manifest),
+                production_runtime="not_executed", permission_source="fresh_verified_complete_extraction")
 
 
 def prepare(args):
@@ -81,18 +114,10 @@ def prepare(args):
     if (packager.digest(archive) != packager.digest(Path(second["archive"]))
             or manifest.read_bytes() != Path(second["manifest"]).read_bytes()):
         raise ValueError("Production package generation is not deterministic")
-    verified = packager.verify(manifest, archive)
     # The administrator receives a separate complete verified extraction. Its source
     # does not come from an owner-writable prepared installation or request parameter.
     trusted = output / "administrator-package"
-    trusted.mkdir()
-    for name, (payload, _) in packager.safe_members(archive, verified["files"]).items():
-        path = trusted / name
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(payload)
-    command("icacls", trusted, "/inheritance:r", "/grant:r",
-            "*S-1-5-32-544:(OI)(CI)F", "*S-1-5-18:(OI)(CI)F", "*S-1-5-11:(OI)(CI)RX", "/T")
-    command("icacls", trusted, "/setowner", "*S-1-5-32-544", "/T")
+    trusted_extraction(packager, manifest, archive, trusted)
     result = dict(version=1, source_revision=revision, target=target,
                   manifest=str(manifest), archive=str(archive),
                   administrator_cli=str(trusted / "bin/hiroute.exe"),
@@ -109,15 +134,22 @@ def prepare(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--expected-sha", required=True)
-    parser.add_argument("--source-repo", required=True, type=Path)
+    parser.add_argument("--source-repo", type=Path)
+    parser.add_argument("--restage-only", action="store_true")
+    parser.add_argument("--manifest", type=Path)
+    parser.add_argument("--archive", type=Path)
     parser.add_argument("--cpa-evidence", type=Path)
     parser.add_argument("--build-run-id")
     parser.add_argument("--cpa-original-run")
     parser.add_argument("--cpa-original-revision")
     parser.add_argument("--output", required=True, type=Path)
     arguments = parser.parse_args()
+    if arguments.restage_only and (arguments.manifest is None or arguments.archive is None):
+        parser.error("Restaging requires both manifest and archive")
+    if not arguments.restage_only and arguments.source_repo is None:
+        parser.error("Building requires the exact CPA source repository")
     try:
-        print(json.dumps(prepare(arguments)))
+        print(json.dumps(restage(arguments) if arguments.restage_only else prepare(arguments)))
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         print(str(error), file=sys.stderr)
         raise SystemExit(1)

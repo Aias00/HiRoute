@@ -179,6 +179,7 @@ class CandidateTests(unittest.TestCase):
                 self.assertEqual(output.name, "cliproxyapi.exe")
                 pe(output, 0x8664)
                 output.with_suffix(".LICENSE").write_text("fixture CPA license")
+                output.with_suffix(".LICENSE").chmod(0o644)
                 return json.dumps({"target": self.target})
             return self.script(name, *args)
 

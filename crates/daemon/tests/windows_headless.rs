@@ -1,11 +1,16 @@
 #![cfg(windows)]
 //! Real installed binaries on a disposable Windows user profile. No mocked HiRoute runtime.
 
+#[path = "support/windows_execution_host.rs"]
+mod windows_execution_host;
+#[path = "support/windows_headless_business.rs"]
+mod windows_headless_business;
+
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::mpsc;
+use std::sync::{Mutex, OnceLock, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -22,7 +27,7 @@ const SECRET: &str = "windows_headless_stdin_only_secret_0123456789";
 const CANDIDATE: &str = "candidate/native/agent-token-windows-headless";
 const IO_BOUND: Duration = Duration::from_secs(5);
 
-struct InstalledProduct {
+pub(crate) struct InstalledProduct {
     layout: StandaloneLayout,
     root: PathBuf,
     cli: PathBuf,
@@ -33,6 +38,7 @@ struct InstalledProduct {
 
 impl InstalledProduct {
     fn create() -> Self {
+        windows_execution_host::current();
         let layout = StandaloneLayout::from_environment().unwrap();
         // Native KnownFolders cannot be redirected by HOME. Require a disposable CI
         // profile and refuse to overwrite or remove an existing user's installation.
@@ -52,6 +58,12 @@ impl InstalledProduct {
             .data_root
             .join(format!("Windows headless 测试 {}", std::process::id()));
         security::create_owner_only_directory(&root).unwrap();
+        if windows_execution_host::selected() {
+            assert!(
+                std::env::var_os("HIROUTE_VALIDATION_PRODUCT_BIN_DIR").is_some(),
+                "artifact replay requires an explicit verified product binary directory"
+            );
+        }
         let prepared = std::env::var_os("HIROUTE_VALIDATION_PRODUCT_BIN_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|| {
@@ -62,16 +74,21 @@ impl InstalledProduct {
             });
         let source_cli = hiroute_host_runtime::standalone_cli_binary(&prepared);
         let source_daemon = hiroute_host_runtime::standalone_daemon_binary(&prepared);
+        windows_execution_host::image(&source_cli);
+        windows_execution_host::image(&source_daemon);
         assert!(
             source_cli.is_file() && source_daemon.is_file(),
             "both real CLI and daemon binaries must be built before this product gate"
         );
         let cli = hiroute_host_runtime::standalone_cli_binary(&root);
         let daemon = hiroute_host_runtime::standalone_daemon_binary(&root);
-        std::fs::copy(source_cli, &cli).unwrap();
-        std::fs::copy(source_daemon, &daemon).unwrap();
-        security::set_owner_only(&cli, false).unwrap();
-        security::set_owner_only(&daemon, false).unwrap();
+        for (source, target) in [(&source_cli, &cli), (&source_daemon, &daemon)] {
+            let mut input = security::open_identity(source, false).unwrap();
+            let mut output = security::create_owner_only_file(target).unwrap();
+            std::io::copy(&mut input, &mut output).unwrap();
+            output.sync_all().unwrap();
+            security::verify_owner_only_handle(&output, false).unwrap();
+        }
         security::ensure_private_directory(stable.parent().unwrap()).unwrap();
         std::fs::hard_link(&cli, &stable).unwrap();
         std::fs::hard_link(&daemon, &stable_daemon).unwrap();
@@ -266,6 +283,11 @@ impl InstalledProduct {
     }
 
     fn register_inherited_secret(&self) -> Value {
+        self.register_inherited_secret_for(CANDIDATE, SECRET)
+    }
+
+    fn register_inherited_secret_for(&self, candidate: &str, secret: &str) -> Value {
+        track_secret(secret.as_bytes());
         use hiroute_platform::windows::job::{self, Launch, Stream};
         use std::ffi::OsString;
         use std::os::windows::io::AsRawHandle;
@@ -275,7 +297,7 @@ impl InstalledProduct {
             OsString::from("protected-input"),
             "register".into(),
             "--candidate".into(),
-            CANDIDATE.into(),
+            candidate.into(),
             "--secret-handle".into(),
             (carrier.as_raw_handle() as usize as u64).to_string().into(),
             "--output".into(),
@@ -286,12 +308,12 @@ impl InstalledProduct {
         let environment: Vec<_> = std::env::vars_os().collect();
         assert!(
             args.iter()
-                .all(|value| !value.to_string_lossy().contains(SECRET))
+                .all(|value| !value.to_string_lossy().contains(secret))
         );
         assert!(
             environment
                 .iter()
-                .all(|(_, value)| !value.to_string_lossy().contains(SECRET))
+                .all(|(_, value)| !value.to_string_lossy().contains(secret))
         );
         let mut child = job::Child::spawn_with_inherited_pipes(
             Launch {
@@ -306,7 +328,7 @@ impl InstalledProduct {
             &[&carrier],
         )
         .unwrap();
-        write.write_all(SECRET.as_bytes()).unwrap();
+        write.write_all(secret.as_bytes()).unwrap();
         drop(write);
         drop(carrier);
         drop(read);
@@ -438,6 +460,33 @@ fn assert_no_secret(bytes: &[u8]) {
             .any(|window| window == SECRET.as_bytes()),
         "protected input leaked into process output"
     );
+    if let Some(secrets) = PRIVATE_OUTPUT_SECRETS.get() {
+        for secret in secrets.lock().unwrap().iter() {
+            assert!(
+                !bytes
+                    .windows(secret.len())
+                    .any(|window| window == secret.as_slice()),
+                "protected runtime material leaked into process output"
+            );
+        }
+    }
+}
+
+static PRIVATE_OUTPUT_SECRETS: OnceLock<Mutex<Vec<zeroize::Zeroizing<Vec<u8>>>>> = OnceLock::new();
+
+fn track_secret(secret: &[u8]) {
+    assert!((16..=4096).contains(&secret.len()));
+    let mut tracked = PRIVATE_OUTPUT_SECRETS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap();
+    if !tracked.iter().any(|existing| existing.as_slice() == secret) {
+        assert!(
+            tracked.len() < 32,
+            "secret fixture tracking exceeded its bound"
+        );
+        tracked.push(zeroize::Zeroizing::new(secret.to_vec()));
+    }
 }
 
 fn gateway_ready(listen: SocketAddr) {
@@ -473,6 +522,7 @@ fn installed_native_headless_roundtrip_and_graceful_then_forced_restart() {
     .unwrap();
     assert_eq!(owner.pid, first.child.id());
     assert!(!owner.exited().unwrap());
+    windows_execution_host::daemon(&owner);
 
     let response = product
         .input(
@@ -546,6 +596,7 @@ fn installed_native_headless_roundtrip_and_graceful_then_forced_restart() {
     );
     assert_eq!(product.cli(&["system", "status"])["status"], "succeeded");
 
+    let business = windows_headless_business::Business::save(&product);
     let port = first.listen;
     lifecycle::stop(
         &product.layout.lifecycle_endpoint(),
@@ -560,11 +611,14 @@ fn installed_native_headless_roundtrip_and_graceful_then_forced_restart() {
     let mut second = product.start();
     gateway_ready(second.listen);
     assert_eq!(product.cli(&["system", "status"])["status"], "succeeded");
+    business.recovered(&product, 1);
     second.child.kill().unwrap();
     second.wait(false);
     let mut recovered = product.start();
     gateway_ready(recovered.listen);
     assert_eq!(product.cli(&["system", "status"])["status"], "succeeded");
+    business.recovered(&product, 2);
+    business.delete(&product);
     lifecycle::stop(
         &product.layout.lifecycle_endpoint(),
         &product.daemon,

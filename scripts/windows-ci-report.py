@@ -15,7 +15,11 @@ spec.loader.exec_module(reporting)
 def collect(evidence):
     provenance = json.loads((evidence / "provenance.json").read_text(encoding="utf-8-sig"))
     reports = []
+    prerequisites = []
     for source in sorted(evidence.glob("*-result.json")):
+        if source.name in {"package-result.json", "clients-result.json"}:
+            prerequisites.append(dict(name=source.stem, result_present=bool(source.stat().st_size)))
+            continue  # Failed prerequisite commands may leave empty redirected output.
         native = json.loads(source.read_text(encoding="utf-8-sig"))
         if "cases" not in native:
             continue  # Package provenance is separate from Rust scenario execution.
@@ -38,7 +42,8 @@ def collect(evidence):
         reports.append(dict(name=native["name"], scenario=native["scenario"], **feedback))
     aggregate = dict(source_revision=provenance["source_revision"], plan=provenance["plan"],
                      phase=provenance["phase"], related_ci_runs=provenance["related_runs"],
-                     reports=reports, evidence_limit="Selected native cases only; missing reports are not passing cases.")
+                     reports=reports, prerequisites=prerequisites,
+                     evidence_limit="Selected native cases only; missing reports are not passing cases.")
     (evidence / "validation-feedback.json").write_text(json.dumps(aggregate, indent=2) + "\n")
     return aggregate
 

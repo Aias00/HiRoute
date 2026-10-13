@@ -74,7 +74,10 @@ VALIDATION_TOOLING = {"scripts/validation.py", "scripts/validation-host.py", "sc
                       "scripts/validation-schedule.py", "scripts/test-validation-schedule.py"}
 WINDOWS_VALIDATION_TOOLING = {"scripts/windows-headless-ci.ps1", "scripts/windows-ci-report.py",
                               "scripts/test-windows-ci-report.py", "scripts/windows-agent-fixtures.py",
-                              ".github/workflows/windows-headless.yml"}
+                              ".github/workflows/windows-headless.yml",
+                              "scripts/windows-native-replay.ps1", "scripts/windows-native-scopes.ps1",
+                              "scripts/windows-native-artifacts.py", "scripts/test-windows-native-artifacts.py",
+                              "scripts/windows-native-runtime-audit.py", "scripts/test-windows-native-runtime-audit.py"}
 PRODUCT_GROUPS = set(GROUPS) - {"diagnostics"}
 
 # Known shared Worker contracts consumed by the feature-gated Tauri bridge and
@@ -457,6 +460,8 @@ def select(paths, full=False):
         commands.append(["python3", "scripts/test-test-plan.py"])
     if full or windows_validation_tooling:
         commands.append(["python3", "scripts/test-windows-ci-report.py"])
+        commands.append(["python3", "scripts/test-windows-native-artifacts.py"])
+        commands.append(["python3", "scripts/test-windows-native-runtime-audit.py"])
     if full or release_build_tooling:
         commands.extend([["python3", "scripts/" + name] for name in RELEASE_BUILD_TESTS])
     product_checks = worker_product_checks(paths)
