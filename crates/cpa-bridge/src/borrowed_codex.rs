@@ -1,4 +1,5 @@
 #[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 use std::fs::OpenOptions;
 use std::fs::{self, File};
 use std::io::Read;
@@ -235,7 +236,12 @@ impl BorrowedCodexLease {
         if expected.is_some_and(|value| value.source_path_digest() != source_path_digest) {
             return Err(CpaLifecycleError::BorrowedCodexAuthSourceChanged);
         }
-        let lease_root = ensure_private_dir(&source_lease_root())
+        #[cfg(windows)]
+        let source_lease_root = crate::windows_private::lease_root("codex")
+            .map_err(|_| CpaLifecycleError::BorrowedCodexAuthIo)?;
+        #[cfg(not(windows))]
+        let source_lease_root = source_lease_root();
+        let lease_root = ensure_private_dir(&source_lease_root)
             .map_err(|_| CpaLifecycleError::BorrowedCodexAuthIo)?;
         let source_lock = acquire_lock(&lease_root.join(format!("{source_path_digest}.lock")))?;
         let mut lease = Self {
@@ -759,6 +765,7 @@ fn map_source_io(error: std::io::Error) -> CpaLifecycleError {
     }
 }
 
+#[cfg(not(windows))]
 fn source_lease_root() -> PathBuf {
     std::env::temp_dir().join(source_lease_root_name())
 }
@@ -771,7 +778,7 @@ fn source_lease_root_name() -> String {
     )
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 fn source_lease_root_name() -> String {
     "hiroute-cpa-borrowed-leases-v1".to_owned()
 }
@@ -804,7 +811,12 @@ fn open_lock_nofollow(path: &Path) -> Result<File, CpaLifecycleError> {
     .map_err(|_| CpaLifecycleError::BorrowedCodexAuthIo)
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn open_lock_nofollow(path: &Path) -> Result<File, CpaLifecycleError> {
+    crate::windows_private::lock(path).map_err(|_| CpaLifecycleError::BorrowedCodexAuthIo)
+}
+
+#[cfg(not(any(unix, windows)))]
 fn open_lock_nofollow(path: &Path) -> Result<File, CpaLifecycleError> {
     if path
         .symlink_metadata()
@@ -826,6 +838,10 @@ fn private_file_matches(
     prefix: &str,
     client_version: Option<&str>,
 ) -> Result<bool, CpaLifecycleError> {
+    #[cfg(windows)]
+    let file =
+        crate::windows_private::file(path).map_err(|_| CpaLifecycleError::BorrowedCodexAuthIo)?;
+    #[cfg(not(windows))]
     let file = File::open(path).map_err(|_| CpaLifecycleError::BorrowedCodexAuthIo)?;
     let mut bytes = Zeroizing::new(Vec::new());
     file.take(MAX_AUTH_BYTES + 1)
@@ -858,6 +874,10 @@ fn load_state(path: &Path) -> Result<Option<BorrowedState>, CpaLifecycleError> {
         return Ok(None);
     }
     validate_private_file(path).map_err(|_| CpaLifecycleError::InvalidBorrowedCodexAuth)?;
+    #[cfg(windows)]
+    let bytes = crate::windows_private::read(path, MAX_AUTH_BYTES)
+        .map_err(|_| CpaLifecycleError::BorrowedCodexAuthIo)?;
+    #[cfg(not(windows))]
     let bytes = fs::read(path).map_err(|_| CpaLifecycleError::BorrowedCodexAuthIo)?;
     if bytes.len() as u64 > MAX_AUTH_BYTES {
         return Err(CpaLifecycleError::InvalidBorrowedCodexAuth);

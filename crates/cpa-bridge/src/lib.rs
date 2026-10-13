@@ -29,6 +29,8 @@ mod runtime;
 mod runtime_set;
 pub use runtime_set::{CpaLoginSession, CpaLoginState, ManagedCpaRuntimeSet};
 mod state;
+#[cfg(windows)]
+mod windows_private;
 mod subscription;
 
 pub use accounts::{CpaAccountKind, CpaProfileBinding};

@@ -160,18 +160,23 @@ fn native_permissions_survive_atomic_restore_and_detect_acl_changes() {
     );
 
     // This native component gate already runs with an administrator token.
-    // Deliberately assign BA ownership to a new, known fixture; a standard
+    // Observe default BA ownership of a new, known fixture; a standard
     // product user does not need this fixture-creation permission.
     let foreign = fixture.path().join("administrators-owned.json");
-    let user = hiroute_platform::windows::background::current_sid_string().unwrap();
-    let permissions = file_security::WindowsPermissions {
-        descriptor: format!("O:BAD:P(A;;FA;;;{user})(A;;FR;;;WD)"),
-        read_only: false,
-    };
-    durable::write_windows_atomic(&foreign, b"foreign-owner-original", &permissions)
-        .expect("administrator native fixture must be allowed to assign BA ownership");
+    std::fs::write(&foreign, b"foreign-owner-original").unwrap();
     let before =
         file_security::capture(&security::open_identity(&foreign, false).unwrap()).unwrap();
+    assert!(
+        before
+            .descriptor
+            .strip_prefix("O:BA")
+            .is_some_and(|rest| rest.is_empty()
+                || rest.starts_with("G:")
+                || rest.starts_with("D:")
+                || rest.starts_with("S:")),
+        "administrator native fixture requires actual BA owner: {}",
+        before.descriptor
+    );
     assert_eq!(
         security::set_owner_only(&foreign, false)
             .unwrap_err()

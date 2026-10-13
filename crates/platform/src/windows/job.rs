@@ -11,7 +11,10 @@ use std::ptr::{null, null_mut};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use windows_sys::Win32::Foundation::*;
-use windows_sys::Win32::Security::SECURITY_ATTRIBUTES;
+use windows_sys::Win32::Security::{
+    DuplicateTokenEx, SECURITY_ATTRIBUTES, SecurityImpersonation, TOKEN_ADJUST_DEFAULT,
+    TOKEN_ASSIGN_PRIMARY, TOKEN_DUPLICATE, TOKEN_QUERY, TokenPrimary,
+};
 use windows_sys::Win32::Storage::FileSystem::*;
 use windows_sys::Win32::System::Console::{
     GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
@@ -586,13 +589,38 @@ impl Child {
         }
         startup.lpAttributeList = attributes.pointer();
         let mut information: PROCESS_INFORMATION = unsafe { zeroed() };
+        // A caller-owned primary token may otherwise become the child's actual
+        // token object. Duplicate it before assignment so changing child defaults
+        // cannot change the service owner's retained authentication token.
+        let launch_token = token
+            .map(|token| {
+                let mut copy = null_mut();
+                if unsafe {
+                    DuplicateTokenEx(
+                        token,
+                        TOKEN_QUERY | TOKEN_ADJUST_DEFAULT | TOKEN_ASSIGN_PRIMARY | TOKEN_DUPLICATE,
+                        null(),
+                        SecurityImpersonation,
+                        TokenPrimary,
+                        &mut copy,
+                    )
+                } == 0
+                {
+                    return Err(io::Error::last_os_error());
+                }
+                owned(copy)
+            })
+            .transpose()?;
         // The kernel assigns the job before allowing the initial thread to execute.
         // HANDLE_LIST prevents unrelated concurrent launches inheriting credentials/stdio.
-        let flags = EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW;
+        let flags = EXTENDED_STARTUPINFO_PRESENT
+            | CREATE_UNICODE_ENVIRONMENT
+            | CREATE_NO_WINDOW
+            | CREATE_SUSPENDED;
         let created = unsafe {
-            if let Some(token) = token {
+            if let Some(token) = &launch_token {
                 CreateProcessAsUserW(
-                    token,
+                    token.as_raw_handle(),
                     program.as_ptr(),
                     command.as_mut_ptr(),
                     null(),
@@ -623,15 +651,44 @@ impl Child {
             return Err(io::Error::last_os_error());
         }
         let process = owned(information.hProcess)?;
-        let _thread = owned(information.hThread)?;
-        Ok(Self {
+        let thread = owned(information.hThread)?;
+        let child = Self {
             pid: information.dwProcessId,
             process,
             job,
             stdin,
             stdout,
             stderr,
-        })
+        };
+        let initialized = (|| {
+            // Normalize only the new child's token, not the borrowed SCM token
+            // or the parent's identity. No user-mode loader/Go/C code has run.
+            super::security::initialize_child_process_private_defaults(&child.process, token)?;
+            let suspended = unsafe { ResumeThread(thread.as_raw_handle()) };
+            if suspended != 1 {
+                return Err(if suspended == u32::MAX {
+                    io::Error::last_os_error()
+                } else {
+                    io::Error::other("initial thread suspension changed")
+                });
+            }
+            Ok(())
+        })();
+        if let Err(error) = initialized {
+            child.terminate()?;
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while !child.empty()? {
+                if Instant::now() >= deadline {
+                    return Err(io::Error::new(
+                        io::ErrorKind::TimedOut,
+                        "failed child cleanup deadline",
+                    ));
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            return Err(error);
+        }
+        Ok(child)
     }
 
     /// The held process object remains authoritative even after its numeric PID is reused.

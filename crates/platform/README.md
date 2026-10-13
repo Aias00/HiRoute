@@ -18,6 +18,17 @@ DELETE permission and denies deletion while it is held. Storage lock owners use
 it to preserve the admitted object's identity and native permissions.
 `set_owner_only` may tighten a caller-owned object's DACL; it checks the actual
 owner before mutation and never adopts an object owned by another SID.
+`initialize_current_process_private_defaults` sets only the current primary
+token's default Owner to its actual TokenUser and its default DACL to that SID's
+generic full access. Daemon hosts call it before C/Go storage creation; it does
+not change groups, privileges, integrity, session or existing objects. The Job
+launcher initializes the independently identified child token before resuming
+its initial thread, and duplicates a borrowed primary token before assignment.
+`open_inherited_private_file_at` is limited to controlled CPA-generated files
+under a held strictly private directory: actual user Owner, one user full-access
+ACE, no reparse and one link. It accepts the inherited ACE flag, while ordinary
+private verification continues to require the protected descriptor. Borrowed
+native-client credentials retain their separate accessible-file contract.
 
 `windows::pipe` provides owner-only local byte streams. Its namespace binds the
 current account SID to the held parent file identity and endpoint leaf, so a service and a CLI in

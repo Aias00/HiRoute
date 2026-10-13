@@ -34,3 +34,6 @@ security-framework = "=3.6.0"
 hiroute-platform = { path = "../platform" }
 
 [dev-dependencies]
+
+[target.'cfg(windows)'.dev-dependencies]
+hiroute-platform-test-support = { path = "../platform/test-support" }

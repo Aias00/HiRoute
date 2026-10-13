@@ -110,6 +110,10 @@ adapters supply the OS mechanisms those owners require:
 - Job Objects contain daemon, CPA, native Agent and tool process trees. Membership and
   explicit inherited handles are assigned during creation. A leader exit does not mean
   surviving descendants are stopped; cancellation waits for the Job to become empty.
+- Business processes set new-object owner/default ACL to their actual user SID before
+  third-party code runs. This covers Go auth files and SQLite sidecars without changing
+  the parent shell token. CPA-generated inherited private files have a narrow reader;
+  protected HiRoute files and borrowed native-client credentials keep separate rules.
 - Reparse-free, handle-relative file operations bind reads, creation, rename, diagnostics
   and cleanup to held objects. Private new objects receive their ACL at creation.
   Existing accessible native configurations retain their ACLs during discovery.

@@ -58,6 +58,12 @@ fn main() {
     if std::env::args_os().nth(1).as_deref() == Some(std::ffi::OsStr::new("app-server"))
         && std::env::var_os("HIROUTE_NATIVE_LAUNCH_DESCRIPTOR").is_some()
     {
+        if hiroute_platform::windows::security::initialize_current_process_private_defaults()
+            .is_err()
+        {
+            eprintln!("hirouted private process defaults unavailable");
+            std::process::exit(6);
+        }
         match hiroute_platform::windows::launcher::run_from_environment() {
             Ok(code) => std::process::exit(code),
             Err(_) => {
@@ -96,6 +102,11 @@ fn main() {
             std::process::exit(6);
         }
         return;
+    }
+    #[cfg(windows)]
+    if hiroute_platform::windows::security::initialize_current_process_private_defaults().is_err() {
+        eprintln!("hirouted private process defaults unavailable");
+        std::process::exit(6);
     }
     if arguments.standalone
         && let Err(error) = apply_standalone_defaults(&mut arguments)

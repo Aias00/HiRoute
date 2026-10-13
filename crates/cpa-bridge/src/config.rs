@@ -1,6 +1,11 @@
 use std::collections::BTreeSet;
-use std::fs::{self, OpenOptions};
-use std::io::{Read, Write};
+#[cfg(any(not(windows), test))]
+use std::fs;
+#[cfg(not(windows))]
+use std::fs::OpenOptions;
+use std::io::Read;
+#[cfg(not(windows))]
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -76,6 +81,9 @@ impl InstanceSecrets {
 
     pub(crate) fn read(path: &Path) -> Result<Self, CpaConfigError> {
         validate_private_file(path)?;
+        #[cfg(windows)]
+        let file = crate::windows_private::file(path).map_err(CpaConfigError::Io)?;
+        #[cfg(not(windows))]
         let file = fs::File::open(path).map_err(CpaConfigError::Io)?;
         let mut bytes = Zeroizing::new(Vec::new());
         file.take(MAX_CAPABILITY_FILE_BYTES + 1)
@@ -455,40 +463,55 @@ pub(crate) fn ensure_private_dir(path: &Path) -> Result<PathBuf, CpaConfigError>
     if !path.is_absolute() {
         return Err(CpaConfigError::InvalidPrivatePath);
     }
-    let mut builder = fs::DirBuilder::new();
-    builder.recursive(true);
-    #[cfg(unix)]
+    #[cfg(windows)]
     {
-        use std::os::unix::fs::DirBuilderExt;
-        builder.mode(0o700);
+        drop(crate::windows_private::directory(path).map_err(CpaConfigError::Io)?);
+        return Ok(path.to_owned());
     }
-    builder.create(path).map_err(CpaConfigError::Io)?;
-    validate_private_dir(path)?;
-    path.canonicalize().map_err(CpaConfigError::Io)
+    #[cfg(not(windows))]
+    {
+        let mut builder = fs::DirBuilder::new();
+        builder.recursive(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        builder.create(path).map_err(CpaConfigError::Io)?;
+        validate_private_dir(path)?;
+        path.canonicalize().map_err(CpaConfigError::Io)
+    }
 }
 
 pub(crate) fn private_atomic_write(path: &Path, bytes: &[u8]) -> Result<(), CpaConfigError> {
     crate::request_context::io_check().map_err(CpaConfigError::Io)?;
-    let parent = path.parent().ok_or(CpaConfigError::InvalidPrivatePath)?;
-    validate_private_dir(parent)?;
-    let suffix = SecretText::generate()?;
-    let temp_path = parent.join(format!(".write-{}.tmp", suffix.expose()));
-    let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
-    set_private_file_create_mode(&mut options);
-    let result = (|| {
-        let mut file = options.open(&temp_path).map_err(CpaConfigError::Io)?;
-        file.write_all(bytes).map_err(CpaConfigError::Io)?;
-        file.sync_all().map_err(CpaConfigError::Io)?;
-        validate_private_file(&temp_path)?;
-        crate::request_context::io_check().map_err(CpaConfigError::Io)?;
-        fs::rename(&temp_path, path).map_err(CpaConfigError::Io)?;
-        validate_private_file(path)
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(&temp_path);
+    #[cfg(windows)]
+    {
+        return crate::windows_private::write(path, bytes).map_err(CpaConfigError::Io);
     }
-    result
+    #[cfg(not(windows))]
+    {
+        let parent = path.parent().ok_or(CpaConfigError::InvalidPrivatePath)?;
+        validate_private_dir(parent)?;
+        let suffix = SecretText::generate()?;
+        let temp_path = parent.join(format!(".write-{}.tmp", suffix.expose()));
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        set_private_file_create_mode(&mut options);
+        let result = (|| {
+            let mut file = options.open(&temp_path).map_err(CpaConfigError::Io)?;
+            file.write_all(bytes).map_err(CpaConfigError::Io)?;
+            file.sync_all().map_err(CpaConfigError::Io)?;
+            validate_private_file(&temp_path)?;
+            crate::request_context::io_check().map_err(CpaConfigError::Io)?;
+            fs::rename(&temp_path, path).map_err(CpaConfigError::Io)?;
+            validate_private_file(path)
+        })();
+        if result.is_err() {
+            let _ = fs::remove_file(&temp_path);
+        }
+        result
+    }
 }
 
 #[cfg(unix)]
@@ -500,7 +523,7 @@ fn validate_private_dir(path: &Path) -> Result<(), CpaConfigError> {
     Ok(())
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 fn validate_private_dir(path: &Path) -> Result<(), CpaConfigError> {
     let metadata = fs::symlink_metadata(path).map_err(CpaConfigError::Io)?;
     if !metadata.is_dir() || metadata.file_type().is_symlink() {
@@ -515,7 +538,7 @@ fn set_private_file_create_mode(options: &mut OpenOptions) {
     options.mode(0o600);
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 fn set_private_file_create_mode(_options: &mut OpenOptions) {}
 
 #[cfg(unix)]
@@ -528,7 +551,13 @@ pub(crate) fn validate_private_file(path: &Path) -> Result<(), CpaConfigError> {
     Ok(())
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+pub(crate) fn validate_private_file(path: &Path) -> Result<(), CpaConfigError> {
+    drop(crate::windows_private::file(path).map_err(CpaConfigError::Io)?);
+    Ok(())
+}
+
+#[cfg(not(any(unix, windows)))]
 pub(crate) fn validate_private_file(path: &Path) -> Result<(), CpaConfigError> {
     let metadata = fs::symlink_metadata(path).map_err(CpaConfigError::Io)?;
     if !metadata.is_file() || metadata.file_type().is_symlink() {
@@ -610,7 +639,10 @@ mod tests {
     #[test]
     fn capability_file_is_bounded_and_round_trips_without_debug_exposure() {
         let temp = tempfile::tempdir().unwrap();
+        #[cfg(not(windows))]
         let root = ensure_private_dir(temp.path()).unwrap();
+        #[cfg(windows)]
+        let root = ensure_private_dir(&temp.path().join("private")).unwrap();
         let path = root.join("capability");
         let secrets = InstanceSecrets::generate().unwrap();
         secrets.write(&path).unwrap();

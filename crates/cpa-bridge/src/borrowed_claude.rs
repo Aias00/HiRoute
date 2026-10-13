@@ -15,7 +15,9 @@ use zeroize::Zeroizing;
 
 use crate::CpaLifecycleError;
 use crate::accounts::{CpaAccountKind, ManagedAccountIdentity};
-use crate::config::{ensure_private_dir, private_atomic_write};
+#[cfg(not(windows))]
+use crate::config::ensure_private_dir;
+use crate::config::private_atomic_write;
 
 const LIMIT: u64 = 128 * 1024;
 const FILE_NAME: &str = "hiroute-managed-claude.json";
@@ -255,6 +257,10 @@ impl BorrowedClaudeLease {
         spec: &BorrowedClaudeAuthSpec,
         expected: Option<&BorrowedClaudeEvidence>,
     ) -> Result<Self, CpaLifecycleError> {
+        #[cfg(windows)]
+        let root = crate::windows_private::lease_root("claude")
+            .map_err(|_| CpaLifecycleError::BorrowedCodexAuthIo)?;
+        #[cfg(not(windows))]
         let root = ensure_private_dir(
             &std::env::temp_dir().join(format!("hiroute-claude-leases-{}", user_id())),
         )?;
@@ -363,7 +369,7 @@ fn invalid() -> CpaLifecycleError {
 fn user_id() -> u32 {
     rustix::process::geteuid().as_raw()
 }
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 fn user_id() -> u32 {
     0
 }

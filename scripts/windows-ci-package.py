@@ -32,8 +32,12 @@ def trusted_extraction(packager, manifest, archive, trusted):
         path = trusted / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(payload)
-    command("icacls", trusted, "/inheritance:r", "/grant:r",
-            "*S-1-5-32-544:(OI)(CI)F", "*S-1-5-18:(OI)(CI)F", "*S-1-5-11:(OI)(CI)RX", "/T")
+    # Inheritance flags apply to directories. Applying (OI)(CI) recursively to
+    # regular files can leave an empty DACL while icacls reports success.
+    for entry in [trusted] + sorted(trusted.rglob("*")):
+        flags = "(OI)(CI)" if entry.is_dir() else ""
+        command("icacls", entry, "/inheritance:r", "/grant:r",
+                f"*S-1-5-32-544:{flags}F", f"*S-1-5-18:{flags}F", f"*S-1-5-11:{flags}RX")
     command("icacls", trusted, "/setowner", "*S-1-5-32-544", "/T")
     return verified
 

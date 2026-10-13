@@ -1,5 +1,6 @@
 //! Read-only projections of credentials owned and refreshed exclusively by CPA.
 //! No token is returned to the daemon, and no token file is rewritten by this adapter.
+#[cfg(any(not(windows), test))]
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -102,26 +103,103 @@ impl ManagedOAuthCredentialSource {
     }
 
     pub(crate) fn list(&self) -> Result<Vec<CpaManagedEvidence>, CpaLifecycleError> {
-        // Inspection must not create a missing store or follow a replacement symlink.
-        validate_auth_directory(&self.auth_dir)?;
-        let canonical = self.auth_dir.canonicalize().map_err(|_| invalid())?;
+        #[cfg(windows)]
+        {
+            return self.list_windows();
+        }
+        #[cfg(not(windows))]
+        {
+            // Inspection must not create a missing store or follow a replacement symlink.
+            validate_auth_directory(&self.auth_dir)?;
+            let canonical = self.auth_dir.canonicalize().map_err(|_| invalid())?;
+            let mut credentials = Vec::new();
+            for entry in fs::read_dir(&canonical).map_err(|_| invalid())? {
+                let entry = entry.map_err(|_| invalid())?;
+                let name = entry.file_name().into_string().map_err(|_| invalid())?;
+                if !name.ends_with(".json") {
+                    continue;
+                }
+                if !credentials.is_empty() {
+                    // An instance is dedicated to one login, never an implicit account pool.
+                    return Err(invalid());
+                }
+                credentials.push(read_credential(&canonical, &name, self.kind)?);
+            }
+            Ok(credentials)
+        }
+    }
+
+    #[cfg(windows)]
+    fn list_windows(&self) -> Result<Vec<CpaManagedEvidence>, CpaLifecycleError> {
+        use hiroute_platform::windows::{diagnostic_files as native, security};
+        let parent =
+            crate::windows_private::existing_directory(&self.auth_dir).map_err(|error| {
+                if error.kind() == std::io::ErrorKind::NotFound {
+                    CpaLifecycleError::ManagedOAuthCredentialsMissing
+                } else {
+                    invalid()
+                }
+            })?;
         let mut credentials = Vec::new();
-        for entry in fs::read_dir(&canonical).map_err(|_| invalid())? {
-            let entry = entry.map_err(|_| invalid())?;
-            let name = entry.file_name().into_string().map_err(|_| invalid())?;
+        for name in native::list_names(&parent).map_err(|_| invalid())? {
             if !name.ends_with(".json") {
                 continue;
             }
             if !credentials.is_empty() {
-                // An instance is dedicated to one login, never an implicit account pool.
                 return Err(invalid());
             }
-            credentials.push(read_credential(&canonical, &name, self.kind)?);
+            let mut result = None;
+            for _ in 0..3 {
+                // Parent and child are held; native traversal, owner-only actual
+                // inherited DACL, reparse and single-link checks precede reading.
+                let file = security::open_inherited_private_file_at(&parent, name.as_ref())
+                    .map_err(|_| invalid())?;
+                let before = native::stat(&file, false).map_err(|_| invalid())?;
+                let modified = file
+                    .metadata()
+                    .map_err(|_| invalid())?
+                    .modified()
+                    .map_err(|_| invalid())?;
+                if before.length > MAX_CREDENTIAL_BYTES {
+                    return Err(invalid());
+                }
+                let mut bytes = Zeroizing::new(Vec::new());
+                (&file)
+                    .take(MAX_CREDENTIAL_BYTES + 1)
+                    .read_to_end(&mut bytes)
+                    .map_err(|_| invalid())?;
+                let after = native::stat(&file, false).map_err(|_| invalid())?;
+                let current = security::open_inherited_private_file_at(&parent, name.as_ref())
+                    .map_err(|_| invalid())?;
+                if before.identity != after.identity
+                    || before.length != after.length
+                    || after.identity
+                        != native::stat(&current, false)
+                            .map_err(|_| invalid())?
+                            .identity
+                    || modified
+                        != file
+                            .metadata()
+                            .map_err(|_| invalid())?
+                            .modified()
+                            .map_err(|_| invalid())?
+                    || bytes.len() as u64 > MAX_CREDENTIAL_BYTES
+                {
+                    continue;
+                }
+                if let Ok(evidence) = parse_credential(&self.auth_dir, &name, self.kind, &bytes) {
+                    result = Some(evidence);
+                    break;
+                }
+                std::thread::yield_now();
+            }
+            credentials.push(result.ok_or_else(invalid)?);
         }
         Ok(credentials)
     }
 }
 
+#[cfg(not(windows))]
 fn validate_auth_directory(path: &Path) -> Result<(), CpaLifecycleError> {
     let metadata = fs::symlink_metadata(path)
         .map_err(|_| CpaLifecycleError::ManagedOAuthCredentialsMissing)?;
@@ -131,6 +209,7 @@ fn validate_auth_directory(path: &Path) -> Result<(), CpaLifecycleError> {
     Ok(())
 }
 
+#[cfg(not(windows))]
 fn read_credential(
     directory: &Path,
     name: &str,
@@ -167,6 +246,7 @@ fn read_credential(
     Err(invalid())
 }
 
+#[cfg(not(windows))]
 fn secure_credential_file(metadata: &fs::Metadata) -> Result<(), CpaLifecycleError> {
     if !metadata.is_file() || metadata.file_type().is_symlink() {
         return Err(invalid());

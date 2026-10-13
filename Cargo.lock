@@ -2271,6 +2271,7 @@ dependencies = [
  "hiroute-domain",
  "hiroute-integrations",
  "hiroute-platform",
+ "hiroute-platform-test-support",
  "http",
  "parking_lot",
  "reqwest",

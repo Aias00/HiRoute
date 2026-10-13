@@ -111,6 +111,13 @@ Scan → Prepare → Save → restart → native use, including stale-source rej
 
 ## Changing boundaries
 
+Windows process defaults and private handle validation belong to
+[native security](../../crates/platform/src/windows/security.rs), with suspended-child
+initialization in the [Job launcher](../../crates/platform/src/windows/job.rs).
+The [CPA private-object leaf](../../crates/cpa-bridge/src/windows_private.rs) uses those
+primitives for managed files; borrowed native credentials retain their own admission
+boundary. Follow these owners for elevated-account defaults or third-party file creation.
+
 Keep a change with the owner that can enforce it. Extend a native leaf for a real
 ecosystem difference; reuse settings, admission, lifecycle and observation owners.
 Built-in decision models and custom branches are implemented in the

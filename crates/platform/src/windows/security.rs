@@ -13,12 +13,15 @@ use windows_sys::Win32::Security::Authorization::{
     SetEntriesInAclW, SetSecurityInfo, TRUSTEE_IS_SID, TRUSTEE_IS_USER, TRUSTEE_W,
 };
 use windows_sys::Win32::Security::{
-    ACCESS_ALLOWED_ACE, ACL, ACL_SIZE_INFORMATION, AclSizeInformation, DACL_SECURITY_INFORMATION,
-    EqualSid, GetAce, GetAclInformation, GetLengthSid, GetSecurityDescriptorControl,
-    GetTokenInformation, InitializeSecurityDescriptor, NO_INHERITANCE, OWNER_SECURITY_INFORMATION,
-    PROTECTED_DACL_SECURITY_INFORMATION, PSID, SE_DACL_PROTECTED, SECURITY_ATTRIBUTES,
-    SECURITY_DESCRIPTOR, SUB_CONTAINERS_AND_OBJECTS_INHERIT, SetSecurityDescriptorControl,
-    SetSecurityDescriptorDacl, SetSecurityDescriptorOwner, TOKEN_QUERY, TOKEN_USER, TokenUser,
+    ACCESS_ALLOWED_ACE, ACE_HEADER, ACL, ACL_SIZE_INFORMATION, AclSizeInformation,
+    DACL_SECURITY_INFORMATION, EqualSid, GetAce, GetAclInformation, GetLengthSid,
+    GetSecurityDescriptorControl, GetTokenInformation, InitializeSecurityDescriptor,
+    NO_INHERITANCE, OWNER_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION, PSID,
+    SE_DACL_PROTECTED, SECURITY_ATTRIBUTES, SECURITY_DESCRIPTOR,
+    SUB_CONTAINERS_AND_OBJECTS_INHERIT, SetSecurityDescriptorControl, SetSecurityDescriptorDacl,
+    SetSecurityDescriptorOwner, SetTokenInformation, TOKEN_ADJUST_DEFAULT, TOKEN_DEFAULT_DACL,
+    TOKEN_OWNER, TOKEN_QUERY, TOKEN_STATISTICS, TOKEN_USER, TokenDefaultDacl, TokenOwner,
+    TokenStatistics, TokenUser,
 };
 use windows_sys::Win32::Storage::FileSystem::{
     BY_HANDLE_FILE_INFORMATION, DELETE, FILE_ALL_ACCESS, FILE_DISPOSITION_INFO, FILE_SHARE_NONE,
@@ -45,6 +48,137 @@ pub fn current_user_sid() -> io::Result<Vec<u8>> {
     }
     // SAFETY: the validated Windows SID contains exactly `length` readable bytes.
     Ok(unsafe { std::slice::from_raw_parts(user.sid().cast::<u8>(), length) }.to_vec())
+}
+
+/// Attach defaults for subsequently created private objects to this process's
+/// actual user SID. This does not change identity, privileges, integrity level,
+/// session, or the permissions/owner of any existing object.
+pub fn initialize_current_process_private_defaults() -> io::Result<()> {
+    initialize_process_private_defaults(unsafe { GetCurrentProcess() })
+}
+
+/// Called only while the launcher's held initial thread is suspended. Read the
+/// child's token, including for a SYSTEM parent launching a different owner.
+pub(crate) fn initialize_child_process_private_defaults(
+    process: &impl AsRawHandle,
+    borrowed_token: Option<HANDLE>,
+) -> io::Result<()> {
+    let token = open_defaults_token(process.as_raw_handle())?;
+    let mut parent_token = null_mut();
+    if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut parent_token) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let parent = OwnedHandle(parent_token);
+    let child_id = token_id(token.0)?;
+    if child_id == token_id(parent.0)?
+        || borrowed_token
+            .map(token_id)
+            .transpose()?
+            .is_some_and(|id| id == child_id)
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "child token is not independent",
+        ));
+    }
+    initialize_token_private_defaults(token.0)
+}
+
+fn initialize_process_private_defaults(process: HANDLE) -> io::Result<()> {
+    let token = open_defaults_token(process)?;
+    initialize_token_private_defaults(token.0)
+}
+
+fn open_defaults_token(process: HANDLE) -> io::Result<OwnedHandle> {
+    let mut token = null_mut();
+    // QUERY reads the child's identity; ADJUST_DEFAULT changes only owner/DACL.
+    if unsafe { OpenProcessToken(process, TOKEN_QUERY | TOKEN_ADJUST_DEFAULT, &mut token) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(OwnedHandle(token))
+}
+
+fn token_id(token: HANDLE) -> io::Result<(u32, i32)> {
+    let bytes = token_information(token, TokenStatistics)?;
+    let stats = unsafe { &*bytes.as_ptr().cast::<TOKEN_STATISTICS>() };
+    Ok((stats.TokenId.LowPart, stats.TokenId.HighPart))
+}
+
+fn initialize_token_private_defaults(token: HANDLE) -> io::Result<()> {
+    let user = CurrentUser::from_token(token)?;
+    let access = EXPLICIT_ACCESS_W {
+        // Generic rights are mapped for each new object type; file-specific
+        // FILE_ALL_ACCESS is invalid for process/thread/token defaults.
+        grfAccessPermissions: GENERIC_ALL,
+        grfAccessMode: SET_ACCESS,
+        grfInheritance: NO_INHERITANCE,
+        Trustee: TRUSTEE_W {
+            pMultipleTrustee: null_mut(),
+            MultipleTrusteeOperation: NO_MULTIPLE_TRUSTEE,
+            TrusteeForm: TRUSTEE_IS_SID,
+            TrusteeType: TRUSTEE_IS_USER,
+            ptstrName: user.sid().cast(),
+        },
+    };
+    let mut acl = null_mut();
+    let status = unsafe { SetEntriesInAclW(1, &access, null(), &mut acl) };
+    if status != 0 {
+        return Err(win32_error(status));
+    }
+    let _acl = LocalAllocation(acl.cast());
+    let owner = TOKEN_OWNER { Owner: user.sid() };
+    let defaults = TOKEN_DEFAULT_DACL { DefaultDacl: acl };
+    for (class, value, size) in [
+        (
+            TokenOwner,
+            (&owner as *const TOKEN_OWNER).cast(),
+            size_of_u32::<TOKEN_OWNER>()?,
+        ),
+        (
+            TokenDefaultDacl,
+            (&defaults as *const TOKEN_DEFAULT_DACL).cast(),
+            size_of_u32::<TOKEN_DEFAULT_DACL>()?,
+        ),
+    ] {
+        // Both buffers remain live; SetTokenInformation copies their contents.
+        if unsafe { SetTokenInformation(token, class, value, size) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+    }
+    // Fail closed before execution if Windows did not retain the exact default.
+    let owner_bytes = token_information(token, TokenOwner)?;
+    let owner = unsafe { &*owner_bytes.as_ptr().cast::<TOKEN_OWNER>() };
+    if owner.Owner.is_null() || unsafe { EqualSid(owner.Owner, user.sid()) } == 0 {
+        return Err(permission_error());
+    }
+    let defaults_bytes = token_information(token, TokenDefaultDacl)?;
+    let defaults = unsafe { &*defaults_bytes.as_ptr().cast::<TOKEN_DEFAULT_DACL>() };
+    verify_single_user_ace(
+        defaults.DefaultDacl,
+        user.sid(),
+        NO_INHERITANCE as u8,
+        GENERIC_ALL,
+    )
+}
+
+fn token_information(
+    token: HANDLE,
+    class: windows_sys::Win32::Security::TOKEN_INFORMATION_CLASS,
+) -> io::Result<Vec<usize>> {
+    let mut bytes = 0;
+    unsafe {
+        GetTokenInformation(token, class, null_mut(), 0, &mut bytes);
+    }
+    if bytes == 0 || bytes > 65536 {
+        return Err(permission_error());
+    }
+    let mut buffer = vec![0_usize; (bytes as usize).div_ceil(std::mem::size_of::<usize>())];
+    if unsafe { GetTokenInformation(token, class, buffer.as_mut_ptr().cast(), bytes, &mut bytes) }
+        == 0
+    {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(buffer)
 }
 
 pub(crate) fn verify_process_user(pid: u32) -> io::Result<()> {
@@ -106,6 +240,66 @@ pub fn open_owner_only(path: &Path, directory: bool) -> io::Result<File> {
     let file = open_identity(path, directory)?;
     verify_owner_only_handle(&file, directory)?;
     Ok(file)
+}
+
+/// Open a file generated by CPA/another controlled child in a held, strictly
+/// private directory. Windows C/Go creation inherits an unprotected file DACL;
+/// only that inherited flag differs from HiRoute's atomic file descriptor.
+/// This is not an admission rule for borrowed native-client credentials.
+pub fn open_inherited_private_file_at(parent: &File, name: &std::ffi::OsStr) -> io::Result<File> {
+    verify_owner_only_handle(parent, true)?;
+    let file = super::path::relative(
+        parent,
+        name,
+        false,
+        GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+        false,
+        None,
+    )?;
+    verify_inherited_private_file_handle(parent, &file)?;
+    Ok(file)
+}
+
+/// Validate a held child after opening it relative to `parent`. Callers must
+/// retain that relation; this accepts no path, SID, or ACL supplied by a client.
+pub fn verify_inherited_private_file_handle(parent: &File, file: &File) -> io::Result<()> {
+    verify_owner_only_handle(parent, true)?;
+    super::diagnostic_files::stat(file, false)?;
+    let user = CurrentUser::load()?;
+    let mut owner = null_mut();
+    let mut dacl = null_mut();
+    let mut descriptor = null_mut();
+    let status = unsafe {
+        GetSecurityInfo(
+            file.as_raw_handle(),
+            SE_FILE_OBJECT,
+            OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+            &mut owner,
+            null_mut(),
+            &mut dacl,
+            null_mut(),
+            &mut descriptor,
+        )
+    };
+    if status != 0 {
+        return Err(win32_error(status));
+    }
+    let _descriptor = LocalAllocation(descriptor);
+    if owner.is_null() || unsafe { EqualSid(owner, user.sid()) } == 0 {
+        return Err(permission_error());
+    }
+    // INHERITED_ACE (WinNT.h): no object/container/inherit-only flags are valid
+    // on this regular file. Protected HiRoute files remain admissible as well.
+    let mut ace = null_mut();
+    if dacl.is_null() || unsafe { GetAce(dacl, 0, &mut ace) } == 0 || ace.is_null() {
+        return Err(permission_error());
+    }
+    let flags = unsafe { (*(ace.cast::<ACE_HEADER>())).AceFlags };
+    if flags != 0 && flags != 0x10 {
+        return Err(permission_error());
+    }
+    verify_single_user_ace(dacl, user.sid(), flags, FILE_ALL_ACCESS)
 }
 
 /// Create missing directories with private defaults; retain the native ACL of
@@ -526,6 +720,29 @@ fn validate_security_descriptor(
     if unsafe { EqualSid(owner, expected_sid) } == 0 {
         return Err(permission_error());
     }
+    verify_single_user_ace(
+        dacl,
+        expected_sid,
+        if directory {
+            SUB_CONTAINERS_AND_OBJECTS_INHERIT as u8
+        } else {
+            NO_INHERITANCE as u8
+        },
+        FILE_ALL_ACCESS,
+    )?;
+    drop(descriptor);
+    Ok(())
+}
+
+fn verify_single_user_ace(
+    dacl: *mut ACL,
+    expected_sid: PSID,
+    expected_flags: u8,
+    full_access: u32,
+) -> io::Result<()> {
+    if dacl.is_null() {
+        return Err(permission_error());
+    }
     let mut information = ACL_SIZE_INFORMATION::default();
     // SAFETY: `dacl` points into the live security descriptor and the output
     // buffer has exactly the declared ACL_SIZE_INFORMATION size.
@@ -548,16 +765,12 @@ fn validate_security_descriptor(
     }
     // SAFETY: the ACE type is checked before fields specific to an
     // ACCESS_ALLOWED_ACE are interpreted.
-    let ace = unsafe { &*(ace.cast::<ACCESS_ALLOWED_ACE>()) };
-    let expected_flags = if directory {
-        SUB_CONTAINERS_AND_OBJECTS_INHERIT as u8
-    } else {
-        NO_INHERITANCE as u8
-    };
-    if ace.Header.AceType != ACCESS_ALLOWED_ACE_KIND
-        || ace.Header.AceFlags != expected_flags
-        || (ace.Mask != GENERIC_ALL && ace.Mask != FILE_ALL_ACCESS)
-    {
+    let header = unsafe { &*ace.cast::<ACE_HEADER>() };
+    if header.AceType != ACCESS_ALLOWED_ACE_KIND || header.AceFlags != expected_flags {
+        return Err(permission_error());
+    }
+    let ace = unsafe { &*ace.cast::<ACCESS_ALLOWED_ACE>() };
+    if ace.Mask != GENERIC_ALL && ace.Mask != full_access {
         return Err(permission_error());
     }
     let ace_sid = addr_of!(ace.SidStart).cast_mut().cast::<c_void>();
@@ -565,7 +778,6 @@ fn validate_security_descriptor(
     if unsafe { EqualSid(ace_sid, expected_sid) } == 0 {
         return Err(permission_error());
     }
-    drop(descriptor);
     Ok(())
 }
 
