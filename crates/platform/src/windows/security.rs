@@ -29,7 +29,9 @@ use windows_sys::Win32::Storage::FileSystem::{
     FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_NONE, FILE_SHARE_READ,
     FILE_SHARE_WRITE, FileDispositionInfo, GetFileInformationByHandle, SetFileInformationByHandle,
 };
-use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+use windows_sys::Win32::System::Threading::{
+    GetCurrentProcess, OpenProcess, OpenProcessToken, PROCESS_QUERY_LIMITED_INFORMATION,
+};
 
 // WinNT.h defines ACCESS_ALLOWED_ACE_TYPE as zero. windows-sys exposes the
 // constant behind an unrelated SystemServices feature, while the ACE itself
@@ -47,6 +49,29 @@ pub fn current_user_sid() -> io::Result<Vec<u8>> {
     }
     // SAFETY: the validated Windows SID contains exactly `length` readable bytes.
     Ok(unsafe { std::slice::from_raw_parts(user.sid().cast::<u8>(), length) }.to_vec())
+}
+
+pub(crate) fn verify_process_user(pid: u32) -> io::Result<()> {
+    // SAFETY: pid comes from a kernel pipe-peer query. The returned process
+    // handle is owned and requires only identity-query permission.
+    let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+    if process.is_null() {
+        return Err(io::Error::last_os_error());
+    }
+    let process = OwnedHandle(process);
+    let mut token = null_mut();
+    // SAFETY: this process handle and output pointer are live through the call.
+    if unsafe { OpenProcessToken(process.0, TOKEN_QUERY, &mut token) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let token = OwnedHandle(token);
+    let peer = CurrentUser::from_token(token.0)?;
+    let current = CurrentUser::load()?;
+    // SAFETY: both buffers own valid TOKEN_USER SID views for this comparison.
+    if unsafe { EqualSid(peer.sid(), current.sid()) } == 0 {
+        return Err(permission_error());
+    }
+    Ok(())
 }
 
 /// Open the actual object without following a junction or sharing deletion.
@@ -427,11 +452,15 @@ impl CurrentUser {
             return Err(io::Error::last_os_error());
         }
         let token = OwnedHandle(token);
+        Self::from_token(token.0)
+    }
+
+    fn from_token(token: HANDLE) -> io::Result<Self> {
         let mut bytes = 0_u32;
         // SAFETY: the documented sizing call accepts a null buffer and writes
         // the required byte count.
         unsafe {
-            GetTokenInformation(token.0, TokenUser, null_mut(), 0, &mut bytes);
+            GetTokenInformation(token, TokenUser, null_mut(), 0, &mut bytes);
         }
         if bytes == 0 {
             return Err(io::Error::last_os_error());
@@ -446,7 +475,7 @@ impl CurrentUser {
         // by the sizing call.
         if unsafe {
             GetTokenInformation(
-                token.0,
+                token,
                 TokenUser,
                 buffer.as_mut_ptr().cast(),
                 bytes,

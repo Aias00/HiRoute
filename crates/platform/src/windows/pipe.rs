@@ -16,8 +16,9 @@ use std::time::Duration;
 
 use sha2::{Digest, Sha256};
 use windows_sys::Win32::Foundation::{
-    ERROR_BROKEN_PIPE, ERROR_IO_INCOMPLETE, ERROR_IO_PENDING, ERROR_PIPE_CONNECTED, GENERIC_READ,
-    GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0, WAIT_TIMEOUT,
+    ERROR_BROKEN_PIPE, ERROR_IO_INCOMPLETE, ERROR_IO_PENDING, ERROR_OPERATION_ABORTED,
+    ERROR_PIPE_CONNECTED, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0,
+    WAIT_TIMEOUT,
 };
 use windows_sys::Win32::Storage::FileSystem::{
     CreateFileW, FILE_FLAG_FIRST_PIPE_INSTANCE, FILE_FLAG_OVERLAPPED, OPEN_EXISTING,
@@ -30,7 +31,7 @@ use windows_sys::Win32::System::Pipes::{
 };
 use windows_sys::Win32::System::Threading::{CreateEventW, INFINITE, WaitForSingleObject};
 
-use super::security::{OwnerSecurity, current_user_sid, open_identity};
+use super::security::{OwnerSecurity, current_user_sid, open_identity, verify_process_user};
 
 /// The same logical locator is retained by CLI and daemon on every platform.
 /// Canonicalizing only after checking the held parent prevents endpoint aliases
@@ -81,6 +82,10 @@ pub fn peer_pid(pipe: &impl AsRawHandle, server_end: bool) -> io::Result<u32> {
     if result == 0 || pid == 0 {
         return Err(io::Error::last_os_error());
     }
+    // A name containing a SID is not authentication: a different account can
+    // pre-create it with a permissive DACL. Check the actual peer token before
+    // sending protected material or dispatching a request.
+    verify_process_user(pid)?;
     Ok(pid)
 }
 
@@ -135,11 +140,11 @@ impl Operation {
         Ok(bytes)
     }
 
-    fn cancel(&mut self, handle: HANDLE) {
+    fn cancel(&mut self, handle: HANDLE) -> io::Result<u32> {
         // SAFETY: this cancels only our still-owned operation, never another
         // reader/writer. Completion is observed before OVERLAPPED/buffer drop.
         unsafe { CancelIoEx(handle, &*self.overlapped) };
-        let _ = self.result(handle, true);
+        self.result(handle, true)
     }
 
     fn finish(&mut self, handle: HANDLE, timeout: Option<Duration>) -> io::Result<u32> {
@@ -151,16 +156,18 @@ impl Operation {
         // SAFETY: our live event belongs to this single outstanding operation.
         match unsafe { WaitForSingleObject(self.overlapped.hEvent, milliseconds) } {
             WAIT_OBJECT_0 => self.result(handle, false),
-            WAIT_TIMEOUT => {
-                self.cancel(handle);
-                Err(io::Error::new(
-                    io::ErrorKind::TimedOut,
-                    "pipe deadline exceeded",
-                ))
-            }
+            WAIT_TIMEOUT => match self.cancel(handle) {
+                // CancelIoEx races completion. Preserve successfully consumed
+                // or written bytes rather than dropping or duplicating a frame.
+                Ok(bytes) => Ok(bytes),
+                Err(error) if error.raw_os_error() == Some(ERROR_OPERATION_ABORTED as i32) => Err(
+                    io::Error::new(io::ErrorKind::TimedOut, "pipe deadline exceeded"),
+                ),
+                Err(error) => Err(error),
+            },
             _ => {
                 let error = io::Error::last_os_error();
-                self.cancel(handle);
+                let _ = self.cancel(handle);
                 Err(error)
             }
         }
@@ -226,7 +233,7 @@ impl Pending {
 impl Drop for Pending {
     fn drop(&mut self) {
         if !self.connected {
-            self.operation.cancel(self.handle.as_raw_handle().cast());
+            let _ = self.operation.cancel(self.handle.as_raw_handle().cast());
         }
     }
 }
