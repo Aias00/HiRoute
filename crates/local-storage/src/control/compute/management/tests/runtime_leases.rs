@@ -368,11 +368,12 @@ fn current_pool_uses_saved_order_without_changing_frozen_request_or_lease_identi
             .unwrap(),
         std::slice::from_ref(&first)
     );
-    assert!(
+    assert_eq!(
         stores
             .lease_native_credential_exact(&bound_second)
-            .unwrap()
-            .is_none()
+            .err()
+            .expect("a disabled key denies an exact lease"),
+        NativeCredentialLeaseErrorV1::Denied(NativeCredentialAccessDeniedV1::CredentialDisabled)
     );
     save(
         &stores,
