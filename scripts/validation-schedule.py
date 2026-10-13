@@ -265,7 +265,7 @@ PRODUCT_TARGETS = frozenset({
     "publication_process", "control_shell", "pre_gateway_compute_routing",
     "p0_gateway_protocol", "p0_gateway_request_authority", "p0_gateway_runtime",
     "p0_gateway_privacy", "p0_gateway_context_hold", "p0_gateway_commit_boundary",
-    "p0_gateway_replay", "p0_gateway_observation",
+    "p0_gateway_replay", "p0_gateway_observation", "p0_gateway_native_sessions",
     "smoke_cli",
 })
 

@@ -1366,6 +1366,18 @@
       "removal_condition": "Remove only after the supported released public request shape is explicitly retired with a caller migration path under the release support policy. Do not regenerate the frozen released request with the current producer."
     },
     {
+      "contract": "hiroute.observation.query/v2",
+      "field": "released V0.3.1 text block cache schema and lowercase offsets",
+      "mode": "frozen_fixture",
+      "owner": "observation-text-index",
+      "reason": "The released 13856abd873da5b4373d39322493b4cc105c4867 SQL and fixed block bytes verify startup keyword-lookup backfill without rewriting retained bodies, offsets, request identities or occurrence-query semantics. These inputs never grant reader authority.",
+      "removal_condition": "Retire only when supported stores and backups can no longer contain the V0.3.1 block cache, preserving an equivalent released-input regression if the cache reader remains.",
+      "allowed_paths": [
+        "crates/observation/tests/fixtures/released-v0.3.1-text-index.sql",
+        "crates/observation/src/query_v2/session_search_tests.rs"
+      ]
+    },
+    {
       "contract": "hiroute.observation.product-execution-envelope/v2",
       "field": "function-only execution digest sha256:80b4ff13af8abc79d7721fea42141300beade2acf1d2659983ceaafcdc6e4799 and omitted required_named.tool_kind",
       "mode": "recovery_read_only",

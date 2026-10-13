@@ -164,6 +164,54 @@ fn production_writer_store_drives_application_owned_defaults_and_all_plan_scope(
         hiroute_application_api::ErrorCode::CapabilityDenied
     );
 
+    let search = hiroute_application_api::ObservationReadRequestV2::new(
+        hiroute_application_api::ObservationReadIntentV2::SessionSearch(
+            hiroute_application_api::ObservationSearchQueryV2 {
+                from_ms: now_ms - 7 * 86_400_000,
+                to_ms: now_ms + 1000,
+                session_id: None,
+                keyword: "exact-search-test".into(),
+                limit: 50,
+                cursor: None,
+                agent_id: None,
+                plan_id: None,
+                native_model: None,
+                outcome: None,
+                only_model_switch: false,
+            },
+        ),
+    );
+    let mut search_wire = LocalControlRequestV2 {
+        schema_version: LOCAL_CONTROL_SCHEMA_V2,
+        request_id: "production-session-search".into(),
+        principal: PrincipalV1::ambient_local_peer(),
+        operation_id: search.operation().into(),
+        payload: serde_json::to_value(&search).unwrap(),
+        protected_grant: None,
+    };
+    assert_eq!(
+        application
+            .dispatch(search_wire.clone())
+            .error
+            .unwrap()
+            .code,
+        hiroute_application_api::ErrorCode::CapabilityDenied
+    );
+    search_wire.protected_grant = Some(grant(
+        search.protected_operation(),
+        CanonicalDigest::of(&search).unwrap(),
+    ));
+    let searched = application.dispatch(search_wire.clone());
+    assert!(searched.error.is_none(), "{searched:?}");
+    let page = searched.data.unwrap();
+    assert!(page["hits"].is_array() && page["index_partial"].is_boolean());
+    assert!(page.get("budget_exhausted").is_none());
+    search_wire.payload["intent"]["query"]["keyword"] = json!("different");
+    assert_eq!(
+        application.dispatch(search_wire).error.unwrap().code,
+        hiroute_application_api::ErrorCode::CapabilityDenied
+    );
+
     let home = hiroute_application_api::ObservationReadRequestV2::new(
         hiroute_application_api::ObservationReadIntentV2::HomeValue(
             hiroute_application_api::ObservationHomeValueQueryV2 {

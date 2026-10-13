@@ -32,6 +32,7 @@ pub struct TextIndexBuilder {
     _owner: crate::maintenance::LocalWorkerGuard,
     building: Option<Building>,
     scan_after: i64,
+    lookup_backfill: super::lookup::Backfill,
 }
 impl TextIndexBuilder {
     pub fn new(store: &LocalObservationStore) -> Result<Self, Error> {
@@ -51,6 +52,7 @@ impl TextIndexBuilder {
         Ok(Self {
             building: None,
             scan_after: 0,
+            lookup_backfill: Default::default(),
             _owner: owner,
         })
     }
@@ -59,7 +61,7 @@ impl TextIndexBuilder {
     /// block operations per cycle. Ordinary filesystem IO is not hard realtime.
     pub fn cycle(&mut self, store: &LocalObservationStore) -> Result<usize, Error> {
         let started = Instant::now();
-        let mut bytes = 0;
+        let mut bytes = self.lookup_backfill.cycle(store, started)?;
         let mut completed = 0;
         while bytes < 8 * 1024 * 1024 && started.elapsed() < Duration::from_millis(500) {
             if self.building.is_none() {
@@ -103,12 +105,18 @@ impl TextIndexBuilder {
                 let original_start = job.consumed.saturating_sub(job.overlap.len() as u64);
                 let text = format!("{}{new_text}", job.overlap);
                 let (folded, offsets) = super::fold(&text);
-                let connection = store.connection.lock();
-                connection.execute(
+                let mut connection = store.connection.lock();
+                let transaction = connection.transaction().map_err(|_| Error::Unavailable)?;
+                let inserted = transaction.execute(
                     "INSERT INTO observation_text_blocks_v2(workspace,digest,ordinal,original_start,primary_start,folded,offsets,original)
                      SELECT ?1,?2,?3,?4,?5,?6,?7,?8 WHERE EXISTS(SELECT 1 FROM observation_text_index_v2 WHERE workspace=?1 AND digest=?2 AND state='building')",
                     params![job.workspace,job.digest,job.ordinal,original_start,job.consumed,folded,offsets,text],
                 ).map_err(|_| Error::Unavailable)?;
+                if inserted != 0 {
+                    super::lookup::insert(&transaction, transaction.last_insert_rowid(), &folded)
+                        .map_err(|_| Error::Unavailable)?;
+                }
+                transaction.commit().map_err(|_| Error::Unavailable)?;
                 job.consumed += valid as u64;
                 job.ordinal += 1;
                 let mut overlap_start = text.len().saturating_sub(OVERLAP);
@@ -214,6 +222,12 @@ fn finish(store: &LocalObservationStore, job: Building, readable: bool) -> Resul
             ],
         )
         .map_err(|_| Error::Unavailable)?;
+    if valid && live {
+        transaction.execute(
+            "INSERT OR IGNORE INTO observation_text_lookup_sources_v1(workspace,digest) VALUES(?1,?2)",
+            params![job.workspace, job.digest],
+        ).map_err(|_| Error::Unavailable)?;
+    }
     transaction.commit().map_err(|_| Error::Unavailable)
 }
 

@@ -658,7 +658,7 @@ export function mockProductInvoke(command: string, payload: Record<string, any> 
         : sessionRows;
       return { sessions: fresh || scenario === 'configured_no_sessions' ? [] : rows.map(row => ({ ...row, content_completeness: row.session_id === 'session/stream-gap' ? 'partial' : 'complete' })), next_cursor: null };
     }
-    if (view === 'search') {
+    if (view === 'search' || view === 'session_search') {
       const needle = String(query.keyword ?? '').trim().toLocaleLowerCase();
       const allowedSessions = new Set((query.only_model_switch
         ? sessionRows.filter(row => row.fallback_request_count > 0)
@@ -679,7 +679,9 @@ export function mockProductInvoke(command: string, payload: Record<string, any> 
           }];
         });
       });
-      return { hits, next_cursor: null, index_partial: false, budget_exhausted: false };
+      return view === 'session_search'
+        ? { hits: [...new Map(hits.map(hit => [hit.session_id, hit])).values()], next_cursor: null, index_partial: false }
+        : { hits, next_cursor: null, index_partial: false, budget_exhausted: false };
     }
     if (view === 'timeline') {
       const requestId = requestBySession[query.session_id];
