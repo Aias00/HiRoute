@@ -5,6 +5,31 @@ use crate::{AgentPlanId, CanonicalDigest, WorkspaceId};
 use super::*;
 
 #[test]
+fn credential_denial_extension_keeps_released_outcomes_and_rejects_unknown_values() {
+    // The three original outcomes were verified at supported v0.2.0/v0.3.0/v0.3.1 sources.
+    for (wire, value) in [
+        ("leased", CredentialLeaseOutcomeV1::Leased),
+        ("exhausted", CredentialLeaseOutcomeV1::Exhausted),
+        ("authority_error", CredentialLeaseOutcomeV1::AuthorityError),
+        ("source_disabled", CredentialLeaseOutcomeV1::SourceDisabled),
+        (
+            "credential_disabled",
+            CredentialLeaseOutcomeV1::CredentialDisabled,
+        ),
+    ] {
+        let bytes = format!("\"{wire}\"");
+        assert_eq!(
+            serde_json::from_str::<CredentialLeaseOutcomeV1>(&bytes).unwrap(),
+            value
+        );
+        assert_eq!(serde_json::to_string(&value).unwrap(), bytes);
+    }
+    assert!(
+        serde_json::from_str::<CredentialLeaseOutcomeV1>("\"provider_private_detail\"").is_err()
+    );
+}
+
+#[test]
 fn adapter_fact_contract_roundtrips_every_gateway_variant_and_identity_field() {
     let envelopes = gateway_fact_envelopes();
     assert_eq!(envelopes.len(), 9);

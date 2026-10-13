@@ -19,6 +19,8 @@ pub(crate) struct SelectionState {
     pub(crate) fail_observation_sink: bool,
     pub(crate) routing_snapshots: VecDeque<RealtimeRoutingFacts>,
     pub(crate) preexchange_completion_trace: Option<Arc<Mutex<Vec<PreexchangeCompletionStep>>>>,
+    pub(crate) provisional_candidates: bool,
+    pub(crate) exhaustion_reply: Option<LocalReply>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -61,12 +63,22 @@ impl TestSelection {
                 fail_observation_sink: false,
                 routing_snapshots: VecDeque::new(),
                 preexchange_completion_trace: None,
+                provisional_candidates: false,
+                exhaustion_reply: None,
             })),
         }
     }
 
     pub(crate) fn with_attempt_budget(self, attempt_budget: Duration) -> Self {
         self.state.lock().expect("selection state").attempt_budget = Some(attempt_budget);
+        self
+    }
+
+    pub(crate) fn with_provisional_reply(self, reply: Option<LocalReply>) -> Self {
+        let mut state = self.state.lock().expect("selection state");
+        state.provisional_candidates = true;
+        state.exhaustion_reply = reply;
+        drop(state);
         self
     }
 
@@ -268,7 +280,18 @@ impl DecisionSessionPort for TestDecisionSession {
             .unwrap_or(request.generation);
         let selected = SelectedGatewayAttempt {
             request_id: request.request_id,
-            attempt_id: hiroute_gateway_core::runtime::attempt::AttemptId(self.next_attempt_id),
+            attempt_id: hiroute_gateway_core::runtime::attempt::AttemptId(
+                if self
+                    .state
+                    .lock()
+                    .map_err(|_| Arc::from("poisoned selector"))?
+                    .provisional_candidates
+                {
+                    0
+                } else {
+                    self.next_attempt_id
+                },
+            ),
             generation,
             binding,
             credential_ref: CredentialRef::new(format!(
@@ -300,6 +323,15 @@ impl DecisionSessionPort for TestDecisionSession {
                 .push(PreexchangeCompletionStep::Select);
         }
         Ok(Some(selected))
+    }
+
+    fn exhaustion_local_reply(&mut self, _now: Instant) -> Result<Option<LocalReply>, Arc<str>> {
+        Ok(self
+            .state
+            .lock()
+            .map_err(|_| Arc::from("poisoned selector"))?
+            .exhaustion_reply
+            .clone())
     }
 
     fn decide(
