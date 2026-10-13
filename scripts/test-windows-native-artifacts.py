@@ -303,9 +303,13 @@ class NativeArtifactReceipts(unittest.TestCase):
                 self.verify(value)
 
     def test_product_and_full_verified_package_bytes_use_portable_captured_paths(self):
+        previous_umask = os.umask(0o002)
+        self.addCleanup(os.umask, previous_umask)
         _, _, args = self.finalized()
         for filename in ("hiroute.exe", "hirouted.exe", "hiroute-cpa-process-fixture.exe"):
-            (self.root / "target/debug" / filename).write_bytes(small_pe())
+            binary = self.root / "target/debug" / filename
+            binary.write_bytes(small_pe())
+            binary.chmod(0o644)
         for name in ("LICENSE", "CPA-LICENSE", "assets/skills/hiroute-management/SKILL.md",
                      "docs/standalone-windows.md"):
             path = self.root / name
@@ -319,6 +323,8 @@ class NativeArtifactReceipts(unittest.TestCase):
             "schema": "hiroute.third-party-licenses/v1", "inputs": {},
             "packages": [{"name": "fixture", "license": "MIT"}],
             "documents": [{"name": "fixture", "text": "legal license fixture"}]}))
+        for path in notices.iterdir():
+            path.chmod(0o644)
         package = module.packager()
         package_args = SimpleNamespace(target=module.TARGET, version="0.1.0", revision=EXPECTED,
                                        cpa_version="fixture", cpa_license=self.root / "CPA-LICENSE",

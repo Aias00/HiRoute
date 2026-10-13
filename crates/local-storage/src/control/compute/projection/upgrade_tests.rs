@@ -7,11 +7,10 @@ use hiroute_domain::{
 };
 use rusqlite::{Connection, params};
 
-use super::tests::{
-    prepared, private_fixture_permissions, projection_mutation, registry, v7_operation_json,
-};
+use super::tests::{prepared, projection_mutation, registry, v7_operation_json};
 use super::*;
 use crate::control::ControlStore;
+use crate::control::test_native_permissions::private_fixture_permissions;
 
 #[test]
 fn migrated_projection_matches_exact_v7_source_and_binding_cas_digests() {

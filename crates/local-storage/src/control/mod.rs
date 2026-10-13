@@ -33,6 +33,8 @@ mod agent_transaction_tests;
 #[cfg(test)]
 mod surface_check_tests;
 #[cfg(test)]
+mod test_native_permissions;
+#[cfg(test)]
 mod transaction_v2_tests;
 #[cfg(all(test, windows))]
 mod windows_artifacts_tests;

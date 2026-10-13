@@ -11,11 +11,8 @@ use hiroute_domain::{
 use serde_json::json;
 
 use super::{ControlStore, ManagedArtifactStore};
+use crate::control::test_native_permissions::private_fixture_permissions;
 use crate::{LocalSecretStore, LocalStorageError, SqliteBackup};
-
-#[path = "test_native_permissions.rs"]
-mod test_native_permissions;
-use test_native_permissions::private_fixture_permissions;
 
 #[cfg(windows)]
 fn windows_permissions(

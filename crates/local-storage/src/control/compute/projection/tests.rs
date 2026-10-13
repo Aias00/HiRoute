@@ -16,10 +16,7 @@ use rusqlite::params;
 
 use super::*;
 use crate::control::ControlStore;
-
-#[path = "../../test_native_permissions.rs"]
-mod test_native_permissions;
-pub(super) use test_native_permissions::private_fixture_permissions;
+use crate::control::test_native_permissions::private_fixture_permissions;
 
 pub(super) fn registry() -> ConnectorRegistryBundleV1 {
     ConnectorRegistryBundleV1 {

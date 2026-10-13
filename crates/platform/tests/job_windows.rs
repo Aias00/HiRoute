@@ -1,5 +1,8 @@
 #![cfg(windows)]
 
+#[path = "support/windows_helper_diagnostics.rs"]
+mod windows_helper_diagnostics;
+
 use hiroute_platform::windows::{
     job::{
         Child, Launch, Stream, credential_pipe_pair, duplicate_inheritable_pipe,
@@ -63,6 +66,11 @@ fn stop(child: &Child) {
 fn job_probe() {
     let mode = std::env::var("HIROUTE_JOB_MODE").unwrap();
     let root = PathBuf::from(std::env::var_os("HIROUTE_JOB_ROOT").unwrap());
+    if mode == "defaults" {
+        hiroute_platform::windows::security::initialize_current_process_private_defaults().unwrap();
+        std::fs::write(root.join("defaults.receipt"), "user-owned").unwrap();
+        return;
+    }
     if mode == "credential" {
         let handle: u64 = std::env::args().last().unwrap().parse().unwrap();
         let credential = read_inherited_credential(handle, 256, Duration::from_secs(2)).unwrap();
@@ -154,7 +162,7 @@ fn job_stops_surviving_tool_after_leader_exit_and_preserves_neighbor() {
 fn native_job_argv_preserves_spaces_quotes_unicode_and_shell_characters() {
     let root = tempfile::tempdir().unwrap();
     let directory = root.path().join("路径 空格 % ! & ' (literal)");
-    std::fs::create_dir(&directory).unwrap();
+    hiroute_platform::windows::security::create_owner_only_directory(&directory).unwrap();
     let binary = directory.join("fixture % ! & '.exe");
     std::fs::copy(std::env::current_exe().unwrap(), &binary).unwrap();
     let literal = "空 格 %PATH% !bang! & | ; ' \"quote\" tail\\";
@@ -168,6 +176,7 @@ fn native_job_argv_preserves_spaces_quotes_unicode_and_shell_characters() {
     ]
     .map(OsString::from);
     let env = environment("argv", &directory);
+    let parent_defaults = token_defaults();
     let child = Child::spawn(Launch {
         program: &binary,
         args: &args,
@@ -178,12 +187,111 @@ fn native_job_argv_preserves_spaces_quotes_unicode_and_shell_characters() {
         stderr: Stream::Null,
     })
     .unwrap();
+    assert_eq!(
+        token_defaults(),
+        parent_defaults,
+        "child defaults must not mutate parent token"
+    );
     await_condition(|| child.exit_code().unwrap().is_some());
     assert_eq!(child.exit_code().unwrap(), Some(0));
     stop(&child);
+    let parent = hiroute_platform::windows::security::open_owner_only(&directory, true).unwrap();
+    for name in ["child.started", "argv.json"] {
+        let file = hiroute_platform::windows::security::open_inherited_private_file_at(
+            &parent,
+            name.as_ref(),
+        )
+        .unwrap();
+        assert!(
+            hiroute_platform::windows::security::verify_owner_only_handle(&file, false).is_err(),
+            "std-created file retains inherited DACL; the strict contract must remain distinct"
+        );
+    }
     let record: serde_json::Value =
         serde_json::from_slice(&std::fs::read(directory.join("argv.json")).unwrap()).unwrap();
     assert_eq!(record["args"].as_array().unwrap().last().unwrap(), literal);
+    // Exercise the daemon's initialization API from an ordinary CreateProcessW
+    // child, independently of the Job launcher's token-default initialization.
+    let mut ordinary = std::process::Command::new(&binary)
+        .args(["--exact", "job_probe", "--ignored", "--nocapture"])
+        .env_clear()
+        .envs(environment("defaults", &directory))
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let status = loop {
+        if let Some(status) = ordinary.try_wait().unwrap() {
+            break status;
+        }
+        if Instant::now() >= deadline {
+            ordinary.kill().unwrap();
+            ordinary.wait().unwrap();
+            panic!("private defaults initialization deadline");
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    };
+    assert!(status.success());
+    assert_eq!(
+        token_defaults(),
+        parent_defaults,
+        "self initialization must not mutate parent shell token"
+    );
+    hiroute_platform::windows::security::open_inherited_private_file_at(
+        &parent,
+        "defaults.receipt".as_ref(),
+    )
+    .unwrap();
+}
+
+fn token_defaults() -> (Vec<u8>, Vec<u8>) {
+    use windows_sys::Win32::Security::{
+        GetLengthSid, GetTokenInformation, TOKEN_DEFAULT_DACL, TOKEN_OWNER, TOKEN_QUERY,
+        TokenDefaultDacl, TokenOwner,
+    };
+    let mut token = std::ptr::null_mut();
+    assert_ne!(
+        unsafe {
+            windows_sys::Win32::System::Threading::OpenProcessToken(
+                windows_sys::Win32::System::Threading::GetCurrentProcess(),
+                TOKEN_QUERY,
+                &mut token,
+            )
+        },
+        0
+    );
+    let read = |class| {
+        let mut size = 0;
+        unsafe {
+            GetTokenInformation(token, class, std::ptr::null_mut(), 0, &mut size);
+        }
+        assert!((1..65536).contains(&size));
+        let mut words = vec![0_usize; (size as usize).div_ceil(std::mem::size_of::<usize>())];
+        assert_ne!(
+            unsafe {
+                GetTokenInformation(token, class, words.as_mut_ptr().cast(), size, &mut size)
+            },
+            0
+        );
+        words
+    };
+    let owner = read(TokenOwner);
+    let dacl = read(TokenDefaultDacl);
+    let result = unsafe {
+        let owner = (*owner.as_ptr().cast::<TOKEN_OWNER>()).Owner;
+        let acl = (*dacl.as_ptr().cast::<TOKEN_DEFAULT_DACL>()).DefaultDacl;
+        assert!(!owner.is_null() && !acl.is_null());
+        (
+            std::slice::from_raw_parts(owner.cast::<u8>(), GetLengthSid(owner) as usize).to_vec(),
+            std::slice::from_raw_parts(acl.cast::<u8>(), (*acl).AclSize as usize).to_vec(),
+        )
+    };
+    unsafe {
+        windows_sys::Win32::Foundation::CloseHandle(token);
+    }
+    result
 }
 
 #[test]
@@ -244,11 +352,14 @@ fn managed_helper_executes_from_cmd_with_literal_special_character_path_and_argv
     if status.is_none_or(|status| !status.success()) {
         let native_entered = directory.join("child.started").exists();
         let receipt_written = directory.join("argv.json").exists();
+        let elapsed_ms = started.elapsed().as_millis();
+        let descendants = windows_helper_diagnostics::descendants(child.id());
         let _ = child.kill();
         let _ = child.wait();
+        let powershell =
+            windows_helper_diagnostics::post_failure_powershell(&environment("argv", &directory));
         panic!(
-            "managed helper phase: cmd_status={status:?}; elapsed_ms={}; native_fixture_entered={native_entered}; receipt_written={receipt_written}; stdout={:?}; stderr={:?}",
-            started.elapsed().as_millis(),
+            "managed helper phase: cmd_status={status:?}; elapsed_ms={elapsed_ms}; native_fixture_entered={native_entered}; receipt_written={receipt_written}; descendants={descendants}; post_failure_system_powershell={powershell}; stdout={:?}; stderr={:?}",
             read_log(&stdout_path),
             read_log(&stderr_path)
         );
