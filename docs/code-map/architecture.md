@@ -16,6 +16,11 @@
 | Business evidence | [Observation](../../crates/observation/src), [authorized queries](../../crates/application/src/observation_query) | Execution facts, managed content, session queries and valuation; [diagnostics](../../crates/diagnostics/src) remain separate |
 | Product presentation | [Desktop product shell](../../apps/desktop/src/product), [native host](../../apps/desktop/src-tauri/src), [CLI](../../crates/cli/src) | The native host projects safe DTOs; frontend state does not grant authority or establish durable success |
 
+CLI JSON request sources (`--request-file` / `--request-stdin`) share the bounded
+[strict input reader](../../crates/cli/src/request_input.rs). Command codecs retain
+typed intent, selector and byte-limit ownership; see the [CLI input guide](../../crates/cli/INPUT.md)
+and [production argv regressions](../../crates/cli/tests/request_input.rs).
+
 CLI/Desktop → client-core → daemon control → Application → storage/native adapters
 is the control path. Published plans and grants feed Gateway execution. Worker
 admission freezes a plan and run authority before the native client calls Gateway.

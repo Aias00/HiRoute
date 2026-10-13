@@ -12,11 +12,12 @@ mod control_plane;
 mod host_commands;
 mod managed_launch;
 mod observation;
+mod request_input;
 mod service;
 mod worker;
 
 use std::ffi::OsString;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use args::{Globals, split_globals};
@@ -306,7 +307,7 @@ fn command_payload(command_id: &str, options: &[String]) -> Result<Value, ErrorC
         | "sessions.status" => empty(options),
         "routing.list" if options.is_empty() => empty(options),
         "routing.show" => match options {
-            [id] => Ok(json!({"agent_plan_id": id})),
+            [id] if request_input::valid_positional(id) => Ok(json!({"agent_plan_id": id})),
             _ => Err(ErrorCode::InvalidArguments),
         },
         "work-plans.list" => work_plans::payload(options),
@@ -329,20 +330,7 @@ fn command_payload(command_id: &str, options: &[String]) -> Result<Value, ErrorC
 }
 
 fn client_lookup(options: &[String]) -> Result<Value, ErrorCode> {
-    if options != ["--request-stdin"] {
-        return Err(ErrorCode::InvalidArguments);
-    }
-    let mut input = String::new();
-    std::io::stdin()
-        .take(65_537)
-        .read_to_string(&mut input)
-        .map_err(|_| ErrorCode::InvalidArguments)?;
-    if input.len() > 65_536 {
-        return Err(ErrorCode::InvalidArguments);
-    }
-    let value: hiroute_application_api::OperationIdempotencyLookupV1 =
-        serde_json::from_str(&input).map_err(|_| ErrorCode::InvalidArguments)?;
-    serde_json::to_value(value).map_err(|_| ErrorCode::InvalidArguments)
+    request_input::typed::<hiroute_application_api::OperationIdempotencyLookupV1>(options, 65_536)
 }
 
 fn empty(options: &[String]) -> Result<Value, ErrorCode> {
@@ -431,8 +419,7 @@ fn setup_apply(options: &[String]) -> Result<Value, ErrorCode> {
         index += 1;
     }
     serde_json::to_value(SetupApplyRequestV1 {
-        spec: serde_json::from_value(spec.ok_or(ErrorCode::InvalidArguments)?)
-            .map_err(|_| ErrorCode::InvalidArguments)?,
+        spec: crate::request_input::deserialize(spec.ok_or(ErrorCode::InvalidArguments)?)?,
         accept_digest: digest.ok_or(ErrorCode::InvalidArguments)?,
         expected_revision: revision.ok_or(ErrorCode::InvalidArguments)?,
         idempotency_key: idempotency_key
@@ -443,7 +430,10 @@ fn setup_apply(options: &[String]) -> Result<Value, ErrorCode> {
 }
 
 fn operation(options: &[String], watch: bool) -> Result<Value, ErrorCode> {
-    let Some(operation_id) = options.first().filter(|value| !value.is_empty()) else {
+    let Some(operation_id) = options
+        .first()
+        .filter(|value| request_input::valid_positional(value))
+    else {
         return Err(ErrorCode::InvalidArguments);
     };
     let mut after_sequence = 0;
@@ -463,7 +453,10 @@ fn operation(options: &[String], watch: bool) -> Result<Value, ErrorCode> {
 }
 
 fn operation_cancel(options: &[String]) -> Result<Value, ErrorCode> {
-    let Some(operation_id) = options.first().filter(|value| !value.is_empty()) else {
+    let Some(operation_id) = options
+        .first()
+        .filter(|value| request_input::valid_positional(value))
+    else {
         return Err(ErrorCode::InvalidArguments);
     };
     if options.len() != 3 || options[1] != "--idempotency-key" || options[2].is_empty() {
@@ -477,7 +470,10 @@ fn operation_cancel(options: &[String]) -> Result<Value, ErrorCode> {
 }
 
 fn agent_check(options: &[String]) -> Result<Value, ErrorCode> {
-    let Some(agent_id) = options.first().filter(|value| !value.is_empty()) else {
+    let Some(agent_id) = options
+        .first()
+        .filter(|value| request_input::valid_positional(value))
+    else {
         return Err(ErrorCode::InvalidArguments);
     };
     let mut request = AgentCheckRequestV1 {
@@ -545,16 +541,8 @@ fn next(options: &[String], index: &mut usize) -> Result<String, ErrorCode> {
         .ok_or(ErrorCode::InvalidArguments)
 }
 
-fn read_json(reader: impl Read) -> Result<Value, ErrorCode> {
-    let mut bytes = Vec::new();
-    reader
-        .take(1024 * 1024 + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|_| ErrorCode::InvalidArguments)?;
-    if bytes.len() > 1024 * 1024 {
-        return Err(ErrorCode::InvalidArguments);
-    }
-    serde_json::from_slice(&bytes).map_err(|_| ErrorCode::InvalidArguments)
+fn read_json(reader: impl std::io::Read) -> Result<Value, ErrorCode> {
+    request_input::read_json(reader, request_input::MAX_REQUEST_BYTES)
 }
 
 fn resolve_callable(arguments: &[String]) -> Option<(CommandDescriptorV1, usize)> {
