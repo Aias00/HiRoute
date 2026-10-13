@@ -27,3 +27,13 @@ Windows native tests exercise held identity, bidirectional frames, endpoint
 exclusivity/rebinding, peer queries, and deadline cancellation followed by another
 frame. Windows CI must verify that these cases are actually selected; an empty
 test inventory on another platform is not their acceptance evidence.
+
+Filesystem traversal uses synchronous `NtCreateFile` with an inspected
+`RootDirectory`, one component, `OBJ_DONT_REPARSE` and a handle type check.
+Traversal handles share deletion to coexist with DELETE-capable private parent
+handles; the relative operation remains bound to the inspected object across
+ancestor renames. Private creation attaches the DACL before publication. Files
+and created directories deny delete sharing; existing directory identity handles
+retain identity but do not promise to prevent a rename. Replay child creation
+uses the caller-owned parent directly. Pipe names hash the held parent volume /
+file identity and endpoint leaf instead of reopening its pathname.

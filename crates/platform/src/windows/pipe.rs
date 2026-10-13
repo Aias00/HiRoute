@@ -32,12 +32,13 @@ use windows_sys::Win32::System::Pipes::{
 use windows_sys::Win32::System::Threading::{CreateEventW, INFINITE, WaitForSingleObject};
 
 use super::security::{
-    OwnerSecurity, current_user_sid, open_identity, verify_owner_only_handle, verify_process_user,
+    OwnerSecurity, current_user_sid, file_identity, open_identity, verify_owner_only_handle,
+    verify_process_user,
 };
 
 /// The same logical locator is retained by CLI and daemon on every platform.
-/// Canonicalizing only after checking the held parent prevents endpoint aliases
-/// from silently following a junction in the private endpoint directory.
+/// The parent's held filesystem identity supplies a stable locator without
+/// reopening a path that an ancestor rename could redirect.
 pub fn name(endpoint: &Path) -> io::Result<PathBuf> {
     if !endpoint.is_absolute() {
         return Err(io::Error::new(
@@ -48,18 +49,17 @@ pub fn name(endpoint: &Path) -> io::Result<PathBuf> {
     let parent = endpoint
         .parent()
         .ok_or_else(|| io::Error::other("endpoint has no parent"))?;
-    let _held_parents = parent
-        .ancestors()
-        .map(|path| open_identity(path, true))
-        .collect::<io::Result<Vec<_>>>()?;
-    let parent = parent.canonicalize()?;
+    let held = open_identity(parent, true)?;
+    let (volume, index) = file_identity(&held)?;
     let leaf = endpoint
         .file_name()
         .ok_or_else(|| io::Error::other("endpoint has no name"))?;
     let mut hash = Sha256::new();
     hash.update(b"hiroute.local-pipe/v1\0");
     hash.update(current_user_sid()?);
-    for word in parent.join(leaf).as_os_str().encode_wide() {
+    hash.update(volume.to_le_bytes());
+    hash.update(index.to_le_bytes());
+    for word in leaf.encode_wide() {
         hash.update(word.to_le_bytes());
     }
     Ok(PathBuf::from(format!(

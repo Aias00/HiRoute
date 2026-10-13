@@ -24,20 +24,19 @@ pub(super) fn open_directory(path: &Path) -> Result<File, ReplayError> {
 }
 
 pub(super) fn create_directory(
-    _parent: &File,
-    path: &Path,
-    _name: &str,
+    parent: &File,
+    _path: &Path,
+    name: &str,
 ) -> Result<File, ReplayError> {
-    // The root handle is held with delete/write sharing denied for its whole
-    // lifetime, so this child pathname cannot be redirected through a root
-    // rename. The security descriptor is attached by the creation helper.
-    let file = super::super::windows_acl::create_owner_only_directory(path)?;
+    let file =
+        hiroute_platform::windows::security::create_owner_only_directory_at(parent, name.as_ref())?;
     validate_directory(&file)?;
     Ok(file)
 }
 
-pub(super) fn create_file(_parent: &File, path: &Path, _name: &str) -> Result<File, ReplayError> {
-    let file = super::super::windows_acl::create_owner_only_file(path)?;
+pub(super) fn create_file(parent: &File, _path: &Path, name: &str) -> Result<File, ReplayError> {
+    let file =
+        hiroute_platform::windows::security::create_owner_only_file_at(parent, name.as_ref())?;
     validate_file(&file)?;
     Ok(file)
 }

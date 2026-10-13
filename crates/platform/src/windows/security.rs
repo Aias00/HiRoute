@@ -1,18 +1,16 @@
 use std::ffi::c_void;
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::io;
-use std::os::windows::ffi::OsStrExt;
-use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
-use std::os::windows::io::{AsRawHandle, FromRawHandle};
+use std::os::windows::io::AsRawHandle;
 use std::path::Path;
 use std::ptr::{addr_of, null, null_mut};
 
 use windows_sys::Win32::Foundation::{
-    CloseHandle, GENERIC_ALL, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE, LocalFree,
+    CloseHandle, GENERIC_ALL, GENERIC_READ, GENERIC_WRITE, HANDLE, LocalFree,
 };
 use windows_sys::Win32::Security::Authorization::{
     EXPLICIT_ACCESS_W, GetSecurityInfo, NO_MULTIPLE_TRUSTEE, SE_FILE_OBJECT, SET_ACCESS,
-    SetEntriesInAclW, SetNamedSecurityInfoW, TRUSTEE_IS_SID, TRUSTEE_IS_USER, TRUSTEE_W,
+    SetEntriesInAclW, SetSecurityInfo, TRUSTEE_IS_SID, TRUSTEE_IS_USER, TRUSTEE_W,
 };
 use windows_sys::Win32::Security::{
     ACCESS_ALLOWED_ACE, ACL, ACL_SIZE_INFORMATION, AclSizeInformation, DACL_SECURITY_INFORMATION,
@@ -23,10 +21,9 @@ use windows_sys::Win32::Security::{
     SetSecurityDescriptorDacl, SetSecurityDescriptorOwner, TOKEN_QUERY, TOKEN_USER, TokenUser,
 };
 use windows_sys::Win32::Storage::FileSystem::{
-    BY_HANDLE_FILE_INFORMATION, CREATE_NEW, CreateDirectoryW, CreateFileW, DELETE, FILE_ALL_ACCESS,
-    FILE_ATTRIBUTE_NORMAL, FILE_ATTRIBUTE_REPARSE_POINT, FILE_DISPOSITION_INFO,
-    FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_NONE, FILE_SHARE_READ,
-    FILE_SHARE_WRITE, FileDispositionInfo, GetFileInformationByHandle, SetFileInformationByHandle,
+    BY_HANDLE_FILE_INFORMATION, DELETE, FILE_ALL_ACCESS, FILE_DISPOSITION_INFO, FILE_SHARE_NONE,
+    FILE_SHARE_READ, FILE_SHARE_WRITE, FileDispositionInfo, GetFileInformationByHandle,
+    SetFileInformationByHandle, WRITE_DAC,
 };
 use windows_sys::Win32::System::Threading::{
     GetCurrentProcess, OpenProcess, OpenProcessToken, PROCESS_QUERY_LIMITED_INFORMATION,
@@ -73,66 +70,21 @@ pub(crate) fn verify_process_user(pid: u32) -> io::Result<()> {
     Ok(())
 }
 
-/// Open the actual object without following a junction or sharing deletion.
-/// The returned handle pins its identity until the caller drops it.
+/// Open the actual object by handle-relative, reparse-free traversal.
+/// Files deny deletion; directories retain object identity across renames.
 pub fn open_identity(path: &Path, directory: bool) -> io::Result<File> {
-    let _parents = hold_parents(path)?;
-    open_leaf(path, directory)
-}
-
-fn open_leaf(path: &Path, directory: bool) -> io::Result<File> {
-    let mut options = OpenOptions::new();
-    options
-        .read(true)
-        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE);
-    options.custom_flags(
-        FILE_FLAG_OPEN_REPARSE_POINT
-            | if directory {
-                FILE_FLAG_BACKUP_SEMANTICS
-            } else {
-                0
-            },
-    );
-    let file = options.open(path)?;
-    let metadata = file.metadata()?;
-    if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
-        || metadata.is_dir() != directory
-        || metadata.is_file() == directory
-    {
-        return Err(io::Error::new(
-            io::ErrorKind::PermissionDenied,
-            "unsafe object type",
-        ));
-    }
-    Ok(file)
-}
-
-fn hold_parents(path: &Path) -> io::Result<Vec<File>> {
-    if !path.is_absolute()
-        || path.components().any(|part| {
-            matches!(
-                part,
-                std::path::Component::ParentDir | std::path::Component::CurDir
-            )
-        })
-    {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "absolute normalized path required",
-        ));
-    }
-    // Acquire from the volume root downwards. Each parent is already pinned
-    // against deletion/rename before opening the next path component; checking
-    // only the leaf would permit traversal through an ancestor junction.
-    let mut paths = path
-        .parent()
-        .map(|parent| parent.ancestors().collect::<Vec<_>>())
-        .unwrap_or_default();
-    paths.reverse();
-    paths
-        .into_iter()
-        .map(|parent| open_leaf(parent, true))
-        .collect()
+    super::path::open(
+        path,
+        directory,
+        GENERIC_READ,
+        if directory {
+            super::path::SHARE_ALL
+        } else {
+            FILE_SHARE_READ | FILE_SHARE_WRITE
+        },
+        false,
+        None,
+    )
 }
 
 /// Open an existing private object and check security on the held handle.
@@ -143,52 +95,64 @@ pub fn open_owner_only(path: &Path, directory: bool) -> io::Result<File> {
 }
 
 pub fn create_owner_only_directory(path: &Path) -> io::Result<File> {
-    let _parents = hold_parents(path)?;
-    let mut security = OwnerSecurity::new(true)?;
-    let attributes = security.attributes()?;
-    let wide = wide_path(path)?;
-    // SAFETY: the path and owner-only security descriptor remain live for the
-    // complete creation call. The DACL is present before the directory can be
-    // observed by another process.
-    if unsafe { CreateDirectoryW(wide.as_ptr(), &attributes) } == 0 {
-        return Err(io::Error::last_os_error());
-    }
-    let mut options = OpenOptions::new();
-    options
-        .access_mode(GENERIC_READ | GENERIC_WRITE | DELETE)
-        // A second read handle is required for child enumeration, but delete
-        // sharing remains denied so the directory identity stays pinned.
-        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
-        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT);
-    let file = options.open(path)?;
-    verify_owner_only_handle(&file, true)?;
-    Ok(file)
+    create_owner_only(path, true)
 }
 
 pub fn create_owner_only_file(path: &Path) -> io::Result<File> {
-    let _parents = hold_parents(path)?;
-    let mut security = OwnerSecurity::new(false)?;
-    let attributes = security.attributes()?;
-    let wide = wide_path(path)?;
-    // SAFETY: every pointer is live, the descriptor is attached atomically,
-    // and CREATE_NEW prevents replacement of an existing reparse point.
-    let handle = unsafe {
-        CreateFileW(
-            wide.as_ptr(),
-            GENERIC_READ | GENERIC_WRITE | DELETE,
-            FILE_SHARE_NONE,
-            &attributes,
-            CREATE_NEW,
-            FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT,
-            null_mut(),
-        )
-    };
-    if handle == INVALID_HANDLE_VALUE {
-        return Err(io::Error::last_os_error());
-    }
-    // SAFETY: CreateFileW returned a unique owned handle.
-    let file = unsafe { File::from_raw_handle(handle.cast()) };
-    verify_owner_only_handle(&file, false)?;
+    create_owner_only(path, false)
+}
+
+fn create_owner_only(path: &Path, directory: bool) -> io::Result<File> {
+    let security = OwnerSecurity::new(directory)?;
+    // The descriptor is attached atomically to creation. Traversal handles
+    // share deletion so an already held DELETE-capable parent remains usable;
+    // resolving children by RootDirectory prevents path retargeting.
+    let file = super::path::open(
+        path,
+        directory,
+        GENERIC_READ | GENERIC_WRITE | DELETE,
+        if directory {
+            FILE_SHARE_READ | FILE_SHARE_WRITE
+        } else {
+            FILE_SHARE_NONE
+        },
+        true,
+        Some(&security.descriptor),
+    )?;
+    verify_owner_only_handle(&file, directory)?;
+    Ok(file)
+}
+
+/// Create one private child relative to a caller-owned directory identity.
+/// No parent pathname is reopened, including when the parent is renamed.
+pub fn create_owner_only_directory_at(parent: &File, name: &std::ffi::OsStr) -> io::Result<File> {
+    create_owner_only_at(parent, name, true)
+}
+
+pub fn create_owner_only_file_at(parent: &File, name: &std::ffi::OsStr) -> io::Result<File> {
+    create_owner_only_at(parent, name, false)
+}
+
+fn create_owner_only_at(
+    parent: &File,
+    name: &std::ffi::OsStr,
+    directory: bool,
+) -> io::Result<File> {
+    let security = OwnerSecurity::new(directory)?;
+    let file = super::path::relative(
+        parent,
+        name,
+        directory,
+        GENERIC_READ | GENERIC_WRITE | DELETE,
+        if directory {
+            FILE_SHARE_READ | FILE_SHARE_WRITE
+        } else {
+            FILE_SHARE_NONE
+        },
+        true,
+        Some(&security.descriptor),
+    )?;
+    verify_owner_only_handle(&file, directory)?;
     Ok(file)
 }
 
@@ -224,10 +188,19 @@ pub fn file_identity(file: &File) -> io::Result<(u32, u64)> {
 }
 
 pub fn set_owner_only(path: &Path, directory: bool) -> io::Result<()> {
-    let _parents = hold_parents(path)?;
-    let _object = open_leaf(path, directory)?;
+    let object = super::path::open(
+        path,
+        directory,
+        GENERIC_READ | WRITE_DAC,
+        if directory {
+            super::path::SHARE_ALL
+        } else {
+            FILE_SHARE_READ | FILE_SHARE_WRITE
+        },
+        false,
+        None,
+    )?;
     let user = CurrentUser::load()?;
-    let wide = wide_path(path)?;
     let mut acl: *mut ACL = null_mut();
     let access = EXPLICIT_ACCESS_W {
         grfAccessPermissions: GENERIC_ALL,
@@ -246,16 +219,16 @@ pub fn set_owner_only(path: &Path, directory: bool) -> io::Result<()> {
         },
     };
     // SAFETY: `access` and `acl` are valid for this call; the returned ACL is
-    // released with LocalFree after SetNamedSecurityInfoW consumes it.
+    // released with LocalFree after SetSecurityInfo consumes it.
     let status = unsafe { SetEntriesInAclW(1, &access, null(), &mut acl) };
     if status != 0 {
         return Err(win32_error(status));
     }
-    // SAFETY: `wide` is NUL terminated, `user` and `acl` remain live, and all
+    // SAFETY: the held object, `user` and `acl` remain live, and all
     // other optional security components are intentionally null.
     let status = unsafe {
-        SetNamedSecurityInfoW(
-            wide.as_ptr(),
+        SetSecurityInfo(
+            object.as_raw_handle().cast(),
             SE_FILE_OBJECT,
             DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
             null_mut(),
@@ -269,7 +242,7 @@ pub fn set_owner_only(path: &Path, directory: bool) -> io::Result<()> {
     if status != 0 {
         return Err(win32_error(status));
     }
-    verify_owner_only(path, directory)
+    verify_owner_only_handle(&object, directory)
 }
 
 pub(crate) struct OwnerSecurity {
@@ -528,18 +501,6 @@ impl Drop for LocalAllocation {
             unsafe { LocalFree(self.0) };
         }
     }
-}
-
-fn wide_path(path: &Path) -> io::Result<Vec<u16>> {
-    let mut wide = path.as_os_str().encode_wide().collect::<Vec<_>>();
-    if wide.contains(&0) {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "private path contains an embedded NUL",
-        ));
-    }
-    wide.push(0);
-    Ok(wide)
 }
 
 fn size_of_u32<T>() -> io::Result<u32> {
