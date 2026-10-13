@@ -9,6 +9,7 @@ rust-version.workspace = true
 integration-test-hooks = []
 
 [dependencies]
+hiroute-platform = { path = "../platform" }
 agent-client-protocol = "=2.1.0"
 arc-swap.workspace = true
 async-trait.workspace = true

@@ -2303,6 +2303,7 @@ dependencies = [
  "hiroute-integrations",
  "hiroute-local-storage",
  "hiroute-observation",
+ "hiroute-platform",
  "http",
  "nix",
  "rusqlite",
@@ -2419,6 +2420,7 @@ dependencies = [
  "hiroute-domain",
  "hiroute-gateway-core",
  "hiroute-host-runtime",
+ "hiroute-platform",
  "hmac",
  "http",
  "libc",
@@ -2543,6 +2545,15 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.20",
  "zeroize",
+]
+
+[[package]]
+name = "hiroute-platform"
+version = "0.1.0"
+dependencies = [
+ "sha2",
+ "tempfile",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

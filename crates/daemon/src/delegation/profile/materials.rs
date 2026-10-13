@@ -150,13 +150,10 @@ impl TaskSessionRoot {
         file.write_all(&marker)
             .and_then(|()| file.sync_all())
             .map_err(|_| DelegationErrorV1::StorageUnavailable)?;
-        let marker_metadata = file
-            .metadata()
-            .map_err(|_| DelegationErrorV1::StorageUnavailable)?;
         fs::File::open(&self.path)
             .and_then(|directory| directory.sync_all())
             .map_err(|_| DelegationErrorV1::StorageUnavailable)?;
-        filesystem_identity(session_base, &self.path, &marker_metadata)
+        filesystem_identity(session_base, &self.path, &file)
     }
 
     pub(crate) fn verify_ownership(
@@ -180,7 +177,8 @@ impl TaskSessionRoot {
         }
         use std::io::Read;
         let mut bytes = Vec::with_capacity(metadata.len() as usize);
-        file.take(4097)
+        (&file)
+            .take(4097)
             .read_to_end(&mut bytes)
             .map_err(|_| DelegationErrorV1::ResumeUnavailable)?;
         if bytes.len() > 4096 {
@@ -191,7 +189,7 @@ impl TaskSessionRoot {
         if actual != root.ownership_marker() {
             return Err(DelegationErrorV1::ResumeUnavailable);
         }
-        filesystem_identity(session_base, &self.path, &metadata)
+        filesystem_identity(session_base, &self.path, &file)
             .map_err(|_| DelegationErrorV1::ResumeUnavailable)
     }
 
@@ -545,6 +543,13 @@ fn open_marker(path: &Path) -> Result<fs::File, DelegationErrorV1> {
         use std::os::unix::fs::OpenOptionsExt;
         options.custom_flags(nix::libc::O_NOFOLLOW | nix::libc::O_NONBLOCK);
     }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        // No reparse traversal and no delete sharing while marker bytes and
+        // file identity are verified through this same handle.
+        options.custom_flags(0x00200000).share_mode(1);
+    }
     options
         .open(path)
         .map_err(|_| DelegationErrorV1::ResumeUnavailable)
@@ -553,13 +558,16 @@ fn open_marker(path: &Path) -> Result<fs::File, DelegationErrorV1> {
 fn filesystem_identity(
     base: &Path,
     root: &Path,
-    marker: &fs::Metadata,
+    marker: &fs::File,
 ) -> Result<DelegationNativeFilesystemIdentityV1, DelegationErrorV1> {
-    let base = fs::metadata(base).map_err(|_| DelegationErrorV1::StorageUnavailable)?;
-    let root = fs::metadata(root).map_err(|_| DelegationErrorV1::StorageUnavailable)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
+        let base = fs::metadata(base).map_err(|_| DelegationErrorV1::StorageUnavailable)?;
+        let root = fs::metadata(root).map_err(|_| DelegationErrorV1::StorageUnavailable)?;
+        let marker = marker
+            .metadata()
+            .map_err(|_| DelegationErrorV1::StorageUnavailable)?;
         return Ok(DelegationNativeFilesystemIdentityV1 {
             scheme: "unix-dev-inode-v1".into(),
             base_device: base.dev(),
@@ -572,15 +580,24 @@ fn filesystem_identity(
     }
     #[cfg(windows)]
     {
-        use std::os::windows::fs::MetadataExt;
+        use hiroute_platform::windows::security::{file_identity, open_identity};
+        let identity = |path| {
+            open_identity(path, true)
+                .and_then(|file| file_identity(&file))
+                .map_err(|_| DelegationErrorV1::StorageUnavailable)
+        };
+        let (base_device, base_inode) = identity(base)?;
+        let (root_device, root_inode) = identity(root)?;
+        let (marker_device, marker_inode) =
+            file_identity(marker).map_err(|_| DelegationErrorV1::StorageUnavailable)?;
         return Ok(DelegationNativeFilesystemIdentityV1 {
             scheme: "windows-volume-file-index-v1".into(),
-            base_device: u64::from(base.volume_serial_number().unwrap_or(0)),
-            base_inode: base.file_index().unwrap_or(0),
-            root_device: u64::from(root.volume_serial_number().unwrap_or(0)),
-            root_inode: root.file_index().unwrap_or(0),
-            marker_device: u64::from(marker.volume_serial_number().unwrap_or(0)),
-            marker_inode: marker.file_index().unwrap_or(0),
+            base_device: u64::from(base_device),
+            base_inode,
+            root_device: u64::from(root_device),
+            root_inode,
+            marker_device: u64::from(marker_device),
+            marker_inode,
         });
     }
     #[allow(unreachable_code)]
