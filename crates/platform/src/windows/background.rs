@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use windows::Win32::System::Com::CoTaskMemFree;
 use windows::Win32::UI::Shell::{
-    FOLDERID_LocalAppData, FOLDERID_Profile, FOLDERID_ProgramFiles, SHGetKnownFolderPath,
+    FOLDERID_LocalAppData, FOLDERID_Profile, FOLDERID_ProgramData, FOLDERID_ProgramFiles,
+    SHGetKnownFolderPath,
 };
 use windows_sys::Win32::Foundation::LocalFree;
 use windows_sys::Win32::Security::Authorization::ConvertSidToStringSidW;
@@ -175,6 +176,10 @@ pub fn local_app_data() -> io::Result<PathBuf> {
 }
 pub fn program_files() -> io::Result<PathBuf> {
     known_folder(&FOLDERID_ProgramFiles)
+}
+
+pub fn program_data() -> io::Result<PathBuf> {
+    known_folder(&FOLDERID_ProgramData)
 }
 
 fn known_folder(id: &windows::core::GUID) -> io::Result<PathBuf> {

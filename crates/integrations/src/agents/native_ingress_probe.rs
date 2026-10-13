@@ -121,8 +121,8 @@ impl CodexNativeIngressProbe {
             || entries(&config_root)? != ["config.toml"]
             || !entries(workspace)?.is_empty()
             || home == workspace
-            || Path::new("/etc/codex/config.toml").exists()
-            || Path::new("/etc/codex/managed_config.toml").exists()
+            || super::codex_profile::codex_has_system_configuration()
+                .map_err(|_| fail("organization configuration isolation"))?
         {
             return Err(fail("isolated native configuration"));
         }

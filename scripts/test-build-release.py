@@ -31,6 +31,17 @@ def elf(path, machine):
     path.chmod(0o755)
 
 
+def pe(path, machine):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    header = bytearray(256)
+    header[:2] = b"MZ"
+    struct.pack_into("<I", header, 0x3C, 0x80)
+    header[0x80:0x84] = b"PE\0\0"
+    struct.pack_into("<H", header, 0x84, machine)
+    path.write_bytes(header)
+    path.chmod(0o755)
+
+
 class CandidateTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
@@ -49,7 +60,7 @@ class CandidateTests(unittest.TestCase):
         config = self.root / "apps/desktop/src-tauri/tauri.conf.json"
         config.parent.mkdir(parents=True)
         config.write_text(json.dumps({"version": self.version}))
-        for relative in ("LICENSE", "docs/standalone-cli.md", "assets/skills/hiroute-management/SKILL.md"):
+        for relative in ("LICENSE", "docs/standalone-cli.md", "docs/standalone-windows.md", "assets/skills/hiroute-management/SKILL.md"):
             path = self.root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes((REPO / relative).read_bytes())
@@ -148,6 +159,49 @@ class CandidateTests(unittest.TestCase):
         self.assertEqual(result["status"], "failed")
         self.assertNotIn("website_artifact", result)
         self.assertFalse((self.candidate.output / "assets").exists())
+
+    def test_windows_candidate_is_verified_as_native_pe_and_consumed_by_release_verifier(self):
+        self.target = self.candidate.target = "x86_64-pc-windows-msvc"
+
+        def command(*args, **kwargs):
+            if args[:2] == ("cargo", "build"):
+                self.assertIn("--locked", args)
+                for name in ("hiroute.exe", "hirouted.exe"):
+                    pe(self.root / "target" / self.target / "release" / name, 0x8664)
+                return ""
+            if args[-1] == "--help":
+                self.assertEqual(kwargs["env"], {"SYSTEMROOT": "fixture-native-root"})
+            return self.command(*args, **kwargs)
+
+        def script(name, *args):
+            if name == "build-cpa":
+                output = Path(args[args.index("--output") + 1])
+                self.assertEqual(output.name, "cliproxyapi.exe")
+                pe(output, 0x8664)
+                output.with_suffix(".LICENSE").write_text("fixture CPA license")
+                return json.dumps({"target": self.target})
+            return self.script(name, *args)
+
+        with patch.object(self.candidate, "run", side_effect=command), \
+                patch.object(self.candidate, "script", side_effect=script), \
+                patch.object(builder, "windows_probe_environment", return_value={"SYSTEMROOT": "fixture-native-root"}), \
+                patch.object(builder, "windows_build_lock", return_value=nullcontext()), \
+                patch.object(MODULES["package-desktop"], "ensure_sccache_server"):
+            result = self.candidate.build()
+        self.assertEqual(result["status"], "awaiting_runtime")
+        self.assertEqual(result["website_artifact"]["platform"], "Windows")
+        self.assertEqual(result["website_artifact"]["target"], self.target)
+        self.assertNotIn("linux_abi", result)
+        catalog = self.root / "releases.json"
+        catalog.write_text(json.dumps({"schema": "hiroute.website.releases/v2", "releases": [{
+            "version": self.version, "channel": "stable", "published_at": "2026-10-08T00:00:00Z",
+            "notes": {"zh": "测试", "en": "Fixture"}, "artifacts": [result["website_artifact"]],
+        }]}))
+        verified = subprocess.run(["node", str(REPO / "apps/website/scripts/release-manifest.mjs"),
+            "verify-assets", str(catalog), "--tag", f"v{self.version}", "--revision", "a" * 40,
+            "--asset-dir", result["assets"]], text=True, capture_output=True)
+        self.assertEqual(verified.returncode, 0, verified.stderr)
+        self.assertIn("2 release asset(s) verified", verified.stdout)
 
     def test_elf_architecture_rejects_mislabelled_and_non_elf_binaries(self):
         binary = self.root / "binary"

@@ -443,6 +443,16 @@ fn run_cancel(
     nonce: &str,
     server: &ProbeServer,
 ) -> Result<(), DelegationErrorV1> {
+    run_cancel_session(platform, profile, nonce, server, AcpSessionStart::New)
+}
+
+fn run_cancel_session(
+    platform: &LocalWorkerPlatform,
+    profile: CandidateWorkerProfile,
+    nonce: &str,
+    server: &ProbeServer,
+    session: AcpSessionStart,
+) -> Result<(), DelegationErrorV1> {
     let journal = Arc::new(ProbeJournal::default());
     let cwd = profile.cwd.clone();
     let identity_contract = profile.identity_contract.clone();
@@ -464,7 +474,7 @@ fn run_cancel(
             AcpRunInput {
                 cwd,
                 prompt: "Wait for the local response. Do not use tools.".into(),
-                session: AcpSessionStart::New,
+                session,
                 identity_contract,
                 session_meta,
                 native_session_mode,
@@ -560,8 +570,12 @@ impl ProbeRoot {
         let root = builder
             .tempdir()
             .map_err(|_| DelegationErrorV1::StorageUnavailable)?;
+        #[cfg(windows)]
+        hiroute_platform::windows::security::set_owner_only(root.path(), true)
+            .map_err(|_| DelegationErrorV1::StorageUnavailable)?;
         let path =
             fs::canonicalize(root.path()).map_err(|_| DelegationErrorV1::StorageUnavailable)?;
+        let path = crate::delegation::profile::native_context_path(&path);
         private_directory(&path)?;
         let sessions = path.join("sessions");
         let runs = path.join("runs");
@@ -579,16 +593,25 @@ impl ProbeRoot {
 }
 
 fn create_private(path: &Path) -> Result<(), DelegationErrorV1> {
-    let mut builder = fs::DirBuilder::new();
-    #[cfg(unix)]
+    #[cfg(windows)]
     {
-        use std::os::unix::fs::DirBuilderExt;
-        builder.mode(0o700);
+        return hiroute_platform::windows::security::create_owner_only_directory(path)
+            .map(drop)
+            .map_err(|_| DelegationErrorV1::StorageUnavailable);
     }
-    builder
-        .create(path)
-        .map_err(|_| DelegationErrorV1::StorageUnavailable)?;
-    private_directory(path)
+    #[cfg(not(windows))]
+    {
+        let mut builder = fs::DirBuilder::new();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        builder
+            .create(path)
+            .map_err(|_| DelegationErrorV1::StorageUnavailable)?;
+        private_directory(path)
+    }
 }
 
 fn private_directory(path: &Path) -> Result<(), DelegationErrorV1> {
@@ -596,6 +619,9 @@ fn private_directory(path: &Path) -> Result<(), DelegationErrorV1> {
     if !path.is_absolute() || !metadata.is_dir() || metadata.file_type().is_symlink() {
         return Err(DelegationErrorV1::PermissionDenied);
     }
+    #[cfg(windows)]
+    hiroute_platform::windows::security::verify_owner_only(path, true)
+        .map_err(|_| DelegationErrorV1::PermissionDenied)?;
     Ok(())
 }
 
@@ -698,3 +724,7 @@ mod tests {
         private_directory(&root.workspace).expect("workspace root must be private");
     }
 }
+
+#[cfg(all(test, windows))]
+#[path = "windows_acceptance.rs"]
+mod windows_acceptance;

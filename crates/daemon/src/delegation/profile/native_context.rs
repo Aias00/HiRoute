@@ -195,7 +195,7 @@ pub(crate) fn windows_workspace(
 
 /// Native Node/CLI cwd and history encoders use ordinary Win32 path spelling.
 /// Rust canonicalize's verbatim prefix is an I/O detail, not native history identity.
-pub(super) fn native_path(path: &Path) -> PathBuf {
+pub(crate) fn native_path(path: &Path) -> PathBuf {
     #[cfg(windows)]
     if let Some(text) = path.to_str() {
         if let Some(path) = text.strip_prefix(r"\\?\UNC\") {

@@ -104,7 +104,7 @@ impl Inputs {
         }
         fixture::accepted(&self.python(token, args)).clone()
     }
-    fn admin(
+    fn admin_attempt(
         &self,
         account: &windows_account::Account,
         operation: &str,
@@ -138,7 +138,15 @@ impl Inputs {
             Duration::from_secs(75),
             false,
         );
-        fixture::accepted(&result).clone()
+        result
+    }
+    fn admin(
+        &self,
+        account: &windows_account::Account,
+        operation: &str,
+        enabled: Option<bool>,
+    ) -> Value {
+        fixture::accepted(&self.admin_attempt(account, operation, enabled)).clone()
     }
     fn owner_layout(&self, token: &File) -> Value {
         fixture::owner(
@@ -202,6 +210,36 @@ fn assert_status(token: &File, cli: &std::path::Path, manager: &str, active: boo
     status
 }
 
+fn assert_native_service_absent(name: &str) {
+    use std::ptr::null;
+    use windows_sys::Win32::Foundation::{ERROR_SERVICE_DOES_NOT_EXIST, GetLastError};
+    use windows_sys::Win32::System::Services::{
+        CloseServiceHandle, OpenSCManagerW, OpenServiceW, SC_MANAGER_CONNECT, SERVICE_QUERY_STATUS,
+    };
+    let manager = unsafe { OpenSCManagerW(null(), null(), SC_MANAGER_CONNECT) };
+    assert!(!manager.is_null(), "native SCM observation failed");
+    let service = unsafe {
+        OpenServiceW(
+            manager,
+            windows_account::wide(name).as_ptr(),
+            SERVICE_QUERY_STATUS,
+        )
+    };
+    let error = unsafe { GetLastError() };
+    if !service.is_null() {
+        unsafe {
+            CloseServiceHandle(service);
+        }
+    }
+    unsafe {
+        CloseServiceHandle(manager);
+    }
+    assert!(
+        service.is_null() && error == ERROR_SERVICE_DOES_NOT_EXIST,
+        "candidate must have no native SCM registration before successful authenticated install"
+    );
+}
+
 fn await_actual_restart(
     token: &File,
     cli: &std::path::Path,
@@ -255,6 +293,7 @@ fn task_native_background_lua_gateway_control_stop_crash_recovery_and_autostart(
     let _privileges = windows_account::Privileges::enable();
     let input = Inputs::load();
     let token = windows_account::current_restricted();
+    let staged = windows_token_launcher::StagedFixture::create(&token);
     let sid = background::current_sid_string().unwrap();
     let account = service::account_name_for_sid(&windows_account::token_sid(&token)).unwrap();
     let expected_session = windows_account::interactive_session(&account);
@@ -303,7 +342,12 @@ fn task_native_background_lua_gateway_control_stop_crash_recovery_and_autostart(
     let crashed = fixture::inspect(&token, true);
     let recovered = await_actual_restart(&token, &cli, "windows-task-user", &crashed);
     assert_eq!(recovered["session"], expected_session);
-    fixture::cli(&token, &cli, &["service", "stop"]);
+    fixture::forced_stop(&token);
+    assert_status(&token, &cli, "windows-task-user", false);
+    // This crosses the real PT1M failure recovery interval. Merely observing an
+    // immediate exit cannot prove Scheduler interpreted this as a user stop.
+    thread::sleep(Duration::from_secs(65));
+    assert_status(&token, &cli, "windows-task-user", false);
     assert_eq!(input.uninstall(&token, &cli, false)["uninstalled"], true);
     cleanup.armed = false;
     assert!(!PathBuf::from(layout["marker"].as_str().unwrap()).exists());
@@ -321,6 +365,7 @@ fn task_native_background_lua_gateway_control_stop_crash_recovery_and_autostart(
         },
         Duration::from_secs(20),
     );
+    drop(staged);
     println!(
         "actual Task product gate: LUA, WTS session, Gateway v2, Local Control, graceful stop, forced recovery, autostart, deletion verified"
     );
@@ -334,6 +379,7 @@ fn scm_standard_owner_pending_admin_finalize_session_zero_gateway_control_and_de
     let input = Inputs::load();
     let account = windows_account::Account::create();
     let token = account.token.as_ref().unwrap();
+    let staged = windows_token_launcher::StagedFixture::create(token);
     let layout = input.owner_layout(token);
     assert_eq!(layout["sid"], account.sid);
     assert_eq!(
@@ -365,6 +411,44 @@ fn scm_standard_owner_pending_admin_finalize_session_zero_gateway_control_and_de
     assert_ne!(
         denied["code"], 0,
         "prepared maintenance must refuse business startup"
+    );
+    // The standard owner can alter their own binaries but cannot turn these
+    // mutable bytes into an SCM host. The independently verified admin package
+    // supplies the privileged source, and mismatch must have no machine writes.
+    let altered = fixture::owner(
+        token,
+        fixture::Request {
+            action: "tamper-daemon".into(),
+            program: None,
+            arguments: vec![],
+        },
+        Duration::from_secs(60),
+    );
+    let bad_host = PathBuf::from(altered["definition"]["service_host"].as_str().unwrap());
+    assert!(
+        !bad_host.parent().unwrap().exists(),
+        "tampered host cache must begin absent"
+    );
+    assert_native_service_absent(altered["definition"]["name"].as_str().unwrap());
+    let rejected = input.admin_attempt(&account, "install", None);
+    let restored = fixture::owner(
+        token,
+        fixture::Request {
+            action: "restore-daemon".into(),
+            program: None,
+            arguments: vec![],
+        },
+        Duration::from_secs(60),
+    );
+    assert_eq!(restored["modified"], true);
+    assert_ne!(
+        rejected["code"], 0,
+        "tampered owner image cannot publish a privileged host"
+    );
+    assert_native_service_absent(altered["definition"]["name"].as_str().unwrap());
+    assert!(
+        !bad_host.parent().unwrap().exists(),
+        "tampered_owner_image_cannot_publish_privileged_host: rejection must precede every machine host/cache write"
     );
     input.admin(&account, "install", None);
     // Registration alone is insufficient: owner admission stays closed until
@@ -449,6 +533,7 @@ fn scm_standard_owner_pending_admin_finalize_session_zero_gateway_control_and_de
     drop(cleanup);
     assert!(!PathBuf::from(layout["marker"].as_str().unwrap()).exists());
     assert!(!account.profile.join(".local/bin/hiroute.exe").exists());
+    drop(staged);
     account.finish();
     println!(
         "actual SCM product gate: authenticated standard owner, pending admission, finalize, session 0 medium daemon, Gateway v2, Local Control, graceful stop, forced recovery, machine autostart, confirmed deletion verified"

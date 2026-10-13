@@ -19,10 +19,10 @@ pub(in super::super) fn open_endpoint_test_artifacts(
     scanner: &hiroute_integrations::FilesystemAgentScannerV1,
     storage: &std::path::Path,
 ) -> ManagedArtifactStore {
-    use std::os::unix::fs::PermissionsExt;
     let native = scanner.claude_user_settings_target();
-    std::fs::write(&native, b"{}\n").unwrap();
-    std::fs::set_permissions(&native, std::fs::Permissions::from_mode(0o600)).unwrap();
+    hiroute_platform::durable::write_private_atomic(&native, b"{}\n").unwrap();
+    #[cfg(windows)]
+    hiroute_platform::windows::security::verify_owner_only(&native, false).unwrap();
     let subject = AgentConnectionTransactionSubjectV1::from_registered_profile(
         "agent_claude_default",
         "claude-messages-v1",

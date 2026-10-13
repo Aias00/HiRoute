@@ -589,13 +589,14 @@ mod tests {
     #[test]
     fn first_concurrent_root_preparation_revalidates_existing_directories() {
         let root = tempfile::tempdir().unwrap();
+        let root_path = fs::canonicalize(root.path()).unwrap();
         let barrier = std::sync::Barrier::new(2);
         let prepared = std::thread::scope(|scope| {
             let jobs = (0..2)
                 .map(|_| {
                     scope.spawn(|| {
                         barrier.wait();
-                        WorkerProfileRoots::prepare(root.path()).unwrap()
+                        WorkerProfileRoots::prepare(&root_path).unwrap()
                     })
                 })
                 .collect::<Vec<_>>();
@@ -611,31 +612,28 @@ mod tests {
             assert!(private(&metadata));
             assert_eq!(fs::canonicalize(path).unwrap(), *path);
         }
-        fs::write(root.path().join("file"), b"not a directory").unwrap();
+        fs::write(root_path.join("file"), b"not a directory").unwrap();
         assert_eq!(
-            create_private_child(root.path(), "file"),
+            create_private_child(&root_path, "file"),
             Err(DelegationErrorV1::PermissionDenied)
         );
         #[cfg(unix)]
         {
             use std::os::unix::fs::{PermissionsExt, symlink};
-            symlink(&prepared[0].sessions, root.path().join("link")).unwrap();
+            symlink(&prepared[0].sessions, root_path.join("link")).unwrap();
             assert_eq!(
-                create_private_child(root.path(), "link"),
+                create_private_child(&root_path, "link"),
                 Err(DelegationErrorV1::PermissionDenied)
             );
-            fs::create_dir(root.path().join("public")).unwrap();
-            fs::set_permissions(
-                root.path().join("public"),
-                fs::Permissions::from_mode(0o755),
-            )
-            .unwrap();
+            fs::create_dir(root_path.join("public")).unwrap();
+            fs::set_permissions(root_path.join("public"), fs::Permissions::from_mode(0o755))
+                .unwrap();
             assert_eq!(
-                create_private_child(root.path(), "public").unwrap(),
-                root.path().join("public")
+                create_private_child(&root_path, "public").unwrap(),
+                root_path.join("public")
             );
             assert_eq!(
-                fs::metadata(root.path().join("public"))
+                fs::metadata(root_path.join("public"))
                     .unwrap()
                     .permissions()
                     .mode()

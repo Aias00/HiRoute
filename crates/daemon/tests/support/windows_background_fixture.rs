@@ -101,7 +101,10 @@ pub fn process(
     timeout: Duration,
     fixture: bool,
 ) -> Value {
-    assert!(program.is_absolute() && program.is_file());
+    assert!(program.is_absolute());
+    if token.is_none() {
+        assert!(program.is_file());
+    }
     let mut environment = token
         .map(account::environment)
         .unwrap_or_else(|| std::env::vars_os().collect());
@@ -177,7 +180,12 @@ pub fn process(
         );
         thread::sleep(Duration::from_millis(20));
     };
-    if !child.empty().unwrap() {
+    let empty_deadline = Instant::now() + Duration::from_secs(2);
+    while !child.empty().unwrap() && Instant::now() < empty_deadline {
+        thread::sleep(Duration::from_millis(10));
+    }
+    let leaked = !child.empty().unwrap();
+    if leaked {
         child.terminate().unwrap();
     }
     let output = stdout.join().unwrap();
@@ -186,11 +194,14 @@ pub fn process(
         child.empty().unwrap(),
         "transient native command leaked descendants"
     );
+    assert!(
+        !leaked,
+        "native command exit left a live descendant beyond its cleanup bound"
+    );
+    if secret && code != 0 {
+        return json!({"code":code,"result":null});
+    }
     if secret {
-        assert_eq!(
-            code, 0,
-            "administrator credential operation failed; arbitrary output intentionally suppressed"
-        );
         // The credential operation returns a closed no-secret response. Never
         // reflect unknown stdout/stderr when decoding fails.
         assert!(
@@ -218,7 +229,13 @@ pub fn process(
 }
 
 pub fn owner(token: &File, request: Request, timeout: Duration) -> Value {
-    let binary = std::env::current_exe().unwrap();
+    let binary = account::profile_for_token(token)
+        .join(format!(
+            ".hiroute-native-background-test-{}",
+            std::process::id()
+        ))
+        .join("windows-background-fixture.exe");
+    assert!(binary.is_absolute());
     let arguments = [
         OsString::from("--exact"),
         ENTRY.into(),
@@ -347,7 +364,7 @@ pub fn entry() {
             );
             json!({"home":layout.home,"state":layout.state_root,"marker":layout.marker_path,"sid":sid})
         }
-        "inspect" | "crash" => {
+        "inspect" | "crash" | "forced-stop" => {
             assert!(request.program.is_none() && request.arguments.is_empty());
             let layout = StandaloneLayout::from_environment().unwrap();
             let record =
@@ -403,6 +420,91 @@ pub fn entry() {
                     held.wait(Duration::from_secs(10)).unwrap(),
                     "actual daemon held handle did not exit after forced crash"
                 );
+            } else if request.action == "forced-stop" {
+                use std::os::windows::io::{AsRawHandle, FromRawHandle};
+                use windows_sys::Win32::Foundation::FILETIME;
+                use windows_sys::Win32::System::Threading::{
+                    GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+                };
+                // Retain a read-only witness while the lifecycle-authenticated
+                // daemon is alive; PID reuse cannot replace this native object.
+                let raw = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, held.pid) };
+                assert!(!raw.is_null());
+                let witness = unsafe { File::from_raw_handle(raw.cast()) };
+                let times = || {
+                    let (mut creation, mut exit, mut kernel, mut user) = (
+                        FILETIME::default(),
+                        FILETIME::default(),
+                        FILETIME::default(),
+                        FILETIME::default(),
+                    );
+                    assert_ne!(
+                        unsafe {
+                            GetProcessTimes(
+                                witness.as_raw_handle().cast(),
+                                &mut creation,
+                                &mut exit,
+                                &mut kernel,
+                                &mut user,
+                            )
+                        },
+                        0
+                    );
+                    let ticks = |value: FILETIME| {
+                        (u64::from(value.dwHighDateTime) << 32) | u64::from(value.dwLowDateTime)
+                    };
+                    (ticks(creation), ticks(exit))
+                };
+                assert_eq!(times().0, held.creation_time);
+                // Stall the production protected-input reader, which shares the
+                // lifecycle poll loop and has a real 2 second I/O deadline.
+                // The public 1 second stop must take its actual Task fallback.
+                let mut stalled = hiroute_platform::windows::pipe::Stream::connect_timeout(
+                    &layout.protected_input_socket(),
+                    Duration::from_secs(5),
+                )
+                .unwrap();
+                stalled
+                    .set_deadline(Some(Instant::now() + Duration::from_secs(5)))
+                    .unwrap();
+                let start = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap();
+                let latest_forced_exit =
+                    (start.as_nanos() / 100) as u64 + 116_444_736_000_000_000 + 20_000_000;
+                stalled.write_all(b"HRO").unwrap();
+                thread::sleep(Duration::from_millis(150));
+                let response = process(
+                    None,
+                    &program,
+                    &[
+                        "service".into(),
+                        "stop".into(),
+                        "--output".into(),
+                        "json".into(),
+                        "--timeout".into(),
+                        "1s".into(),
+                    ],
+                    None,
+                    false,
+                    Duration::from_secs(10),
+                    false,
+                );
+                assert!(
+                    response["code"] == 0 || response["code"] == 6,
+                    "forced stop returned an unexpected public exit: {response}"
+                );
+                if response["code"] == 0 {
+                    assert_eq!(accepted(&response)["status"], "succeeded");
+                }
+                assert!(
+                    held.wait(Duration::from_secs(5)).unwrap(),
+                    "forced user stop must terminate the retained actual daemon"
+                );
+                assert!(
+                    times().1 > 0 && times().1 < latest_forced_exit,
+                    "native exit timestamp must precede the 2s server stall deadline, proving forced rather than delayed graceful shutdown"
+                );
             }
             result
         }
@@ -418,6 +520,52 @@ pub fn entry() {
             }
             json!({"removed":true})
         }
+        "tamper-daemon" | "restore-daemon" => {
+            assert!(request.program.is_none() && request.arguments.is_empty());
+            use std::io::{Seek, SeekFrom};
+            let layout = StandaloneLayout::from_environment().unwrap();
+            assert!(
+                hiroute_host_runtime::standalone_maintenance_pending(&layout).unwrap(),
+                "tamper fixture requires refused business admission"
+            );
+            let record =
+                hiroute_host_runtime::read_standalone_install_record(&layout.marker_path).unwrap();
+            let daemon = hiroute_host_runtime::standalone_daemon_binary(&record.install_root);
+            let backup = record.install_root.join("native-test-daemon-first-byte");
+            let mut image = std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&daemon)
+                .unwrap();
+            let byte = if request.action == "tamper-daemon" {
+                assert!(!backup.exists());
+                let mut old = [0];
+                image.read_exact(&mut old).unwrap();
+                assert_eq!(
+                    old[0], b'M',
+                    "actual package daemon must be a native PE image"
+                );
+                let mut saved =
+                    hiroute_platform::windows::security::create_owner_only_file(&backup).unwrap();
+                saved.write_all(&old).unwrap();
+                saved.sync_all().unwrap();
+                old[0] ^ 0x20
+            } else {
+                let mut saved =
+                    hiroute_platform::windows::security::open_owner_only(&backup, false).unwrap();
+                let mut old = [0];
+                saved.read_exact(&mut old).unwrap();
+                drop(saved);
+                std::fs::remove_file(&backup).unwrap();
+                old[0]
+            };
+            image.seek(SeekFrom::Start(0)).unwrap();
+            image.write_all(&[byte]).unwrap();
+            image.sync_all().unwrap();
+            drop(image);
+            let definition = background::Definition::new(background::Manager::Scm, daemon).unwrap();
+            json!({"modified":true,"definition":definition})
+        }
         _ => panic!("unknown owner fixture action"),
     };
     println!("{OUTPUT}{}", serde_json::to_string(&result).unwrap());
@@ -428,6 +576,18 @@ pub fn inspect(token: &File, crash: bool) -> Value {
         token,
         Request {
             action: if crash { "crash" } else { "inspect" }.into(),
+            program: None,
+            arguments: vec![],
+        },
+        Duration::from_secs(60),
+    )
+}
+
+pub fn forced_stop(token: &File) -> Value {
+    owner(
+        token,
+        Request {
+            action: "forced-stop".into(),
             program: None,
             arguments: vec![],
         },

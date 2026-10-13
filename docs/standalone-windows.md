@@ -68,8 +68,12 @@ python scripts/install-standalone-windows.py admin-scm `
 ```
 
 The installer prompts for that owner's password; automation may use `--password-stdin`.
+Use the qualified local or domain account and its Windows password. A Windows Hello
+PIN is not a LogonUser password. The default Task mode needs no account password.
 Passwords do not belong in command arguments, environment variables, task XML or files.
-Never elevate the CLI from a standard user's writable installation directory.
+Never elevate the CLI from a standard user's writable installation directory. Keep the
+administrator's verified `hirouted.exe` beside that CLI: the sealed host must come from
+that trusted package and match the candidate installed by the owner.
 The helper authenticates through LogonUser, derives the SID from the returned token,
 loads the profile, reads the owner's private marker and held image while impersonating
 the owner, and leaves impersonation before changing machine service state.
@@ -78,7 +82,7 @@ Return to the ordinary owner's session to finalize, using the prepared versioned
 
 ```powershell
 python scripts/install-standalone-windows.py finalize `
-  --cli C:\Users\owner\.local\lib\hiroute\VERSION\bin\hiroute.exe
+  --cli C:\Users\owner\.local\lib\hiroute\VERSION\hiroute.exe
 ```
 
 Finalization verifies the actual SCM account, binary path, sealed host and descriptor

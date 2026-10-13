@@ -265,6 +265,92 @@ impl InstalledProduct {
         serde_json::from_slice(&output.stdout).expect("public CLI must return JSON")
     }
 
+    fn register_inherited_secret(&self) -> Value {
+        use hiroute_platform::windows::job::{self, Launch, Stream};
+        use std::ffi::OsString;
+        use std::os::windows::io::AsRawHandle;
+        let (read, mut write) = job::credential_pipe_pair().unwrap();
+        let carrier = job::duplicate_inheritable_pipe(&read).unwrap();
+        let args = [
+            OsString::from("protected-input"),
+            "register".into(),
+            "--candidate".into(),
+            CANDIDATE.into(),
+            "--secret-handle".into(),
+            (carrier.as_raw_handle() as usize as u64).to_string().into(),
+            "--output".into(),
+            "json".into(),
+            "--timeout".into(),
+            "10s".into(),
+        ];
+        let environment: Vec<_> = std::env::vars_os().collect();
+        assert!(
+            args.iter()
+                .all(|value| !value.to_string_lossy().contains(SECRET))
+        );
+        assert!(
+            environment
+                .iter()
+                .all(|(_, value)| !value.to_string_lossy().contains(SECRET))
+        );
+        let mut child = job::Child::spawn_with_inherited_pipes(
+            Launch {
+                program: &self.stable,
+                args: &args,
+                env: &environment,
+                cwd: self.stable.parent(),
+                stdin: Stream::Null,
+                stdout: Stream::Piped,
+                stderr: Stream::Piped,
+            },
+            &[&carrier],
+        )
+        .unwrap();
+        write.write_all(SECRET.as_bytes()).unwrap();
+        drop(write);
+        drop(carrier);
+        drop(read);
+        let deadline = Instant::now() + Duration::from_secs(15);
+        let exit = loop {
+            if let Some(exit) = child.exit_code().unwrap() {
+                break exit;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "actual protected-input CLI did not consume inherited EOF"
+            );
+            thread::sleep(Duration::from_millis(20));
+        };
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        child
+            .stdout
+            .take()
+            .unwrap()
+            .take(65537)
+            .read_to_end(&mut stdout)
+            .unwrap();
+        child
+            .stderr
+            .take()
+            .unwrap()
+            .take(65537)
+            .read_to_end(&mut stderr)
+            .unwrap();
+        assert!(stdout.len() <= 65536 && stderr.len() <= 65536);
+        assert_no_secret(&stdout);
+        assert_no_secret(&stderr);
+        assert_eq!(
+            exit, 0,
+            "actual protected-input CLI inherited handle failed"
+        );
+        assert!(
+            child.empty().unwrap(),
+            "actual protected-input CLI leaked descendants"
+        );
+        serde_json::from_slice(&stdout).unwrap()
+    }
+
     fn input(
         &self,
         request: StandaloneProtectedInputRequestV1,
@@ -424,6 +510,13 @@ fn installed_native_headless_roundtrip_and_graceful_then_forced_restart() {
             .input(StandaloneProtectedInputRequestV1::release(CANDIDATE), true)
             .unwrap()
             .registered
+    );
+    let inherited = product.register_inherited_secret();
+    assert_eq!(inherited["status"], "succeeded");
+    assert_eq!(inherited["data"]["registered"], true);
+    assert_eq!(
+        product.cli(&["protected-input", "release", "--candidate", CANDIDATE])["data"]["registered"],
+        true
     );
 
     let grant_endpoint = product

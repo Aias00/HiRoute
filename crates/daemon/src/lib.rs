@@ -14,5 +14,5 @@ pub use control::{ControlEndpoint, LocalControlDaemon, serve_production_control}
 pub use role_all::{RoleAllConfig, RoleAllCpaConfig, RoleAllError, RoleAllHandle, start_role_all};
 mod publication_failpoint;
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 mod test_support;

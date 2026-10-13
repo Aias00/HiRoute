@@ -118,6 +118,49 @@ struct RuntimeOpenOverrides {
     storage_startup: hiroute_local_storage::StorageStartupOptions,
 }
 
+fn native_agent_home() -> Result<PathBuf, String> {
+    #[cfg(windows)]
+    {
+        // This selector exists only in the libtest child launched by test_support.
+        // Production always discovers the actual account profile through Windows.
+        #[cfg(test)]
+        if std::env::var_os("HIROUTE_ISOLATED_DAEMON_TEST")
+            .is_some_and(|selector| !selector.is_empty())
+        {
+            let home = std::env::var_os("HOME")
+                .map(PathBuf::from)
+                .filter(|path| path.is_absolute())
+                .ok_or_else(|| "isolated Agent discovery requires an absolute test HOME".to_owned())?;
+            hiroute_platform::windows::security::verify_owner_only(&home, true)
+                .map_err(|error| format!("isolated Agent discovery HOME is not private: {error}"))?;
+            return Ok(home);
+        }
+        hiroute_platform::windows::background::profile().map_err(|error| {
+            format!("Windows account profile is unavailable for Agent discovery: {error}")
+        })
+    }
+    #[cfg(not(windows))]
+    {
+        std::env::var_os("HOME")
+            .map(PathBuf::from)
+            .ok_or_else(|| "HOME is unavailable for Agent discovery".to_owned())
+    }
+}
+
+#[cfg(all(test, windows))]
+#[test]
+fn windows_agent_discovery_uses_the_private_isolated_test_home() {
+    if crate::test_support::isolated_agent_home(
+        "control::runtime::windows_agent_discovery_uses_the_private_isolated_test_home",
+    ) {
+        return;
+    }
+    let home = native_agent_home().unwrap();
+    assert_eq!(home, PathBuf::from(std::env::var_os("HOME").unwrap()));
+    assert_ne!(home, hiroute_platform::windows::background::profile().unwrap());
+    hiroute_platform::windows::security::verify_owner_only(&home, true).unwrap();
+}
+
 impl ProductionControlRuntime {
     pub(crate) fn upgrade_active_tasks(&self) -> Result<u64, String> {
         let occupied = self
@@ -293,9 +336,7 @@ impl ProductionControlRuntime {
             .begin_plan_version_recovery()
             .map_err(|error| error.to_string())?;
         release_install::activate_release_catalog_revisions(&stores, &release_catalog)?;
-        let home = std::env::var_os("HOME")
-            .map(PathBuf::from)
-            .ok_or_else(|| "HOME is unavailable for Agent discovery".to_owned())?;
+        let home = native_agent_home()?;
         let project = std::env::current_dir().map_err(|error| error.to_string())?;
         let scanner = match overrides.scanner {
             Some(scanner) => scanner,

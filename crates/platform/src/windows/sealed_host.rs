@@ -20,9 +20,8 @@ use windows_sys::Win32::Security::{
     WinBuiltinAdministratorsSid, WinLocalSystemSid,
 };
 use windows_sys::Win32::Storage::FileSystem::{
-    CREATE_NEW, CreateDirectoryW, CreateFileW, FILE_ALL_ACCESS, FILE_GENERIC_EXECUTE,
-    FILE_GENERIC_READ, FILE_SHARE_READ, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH,
-    MoveFileExW,
+    CREATE_NEW, CreateDirectoryW, CreateFileW, DELETE, FILE_ALL_ACCESS, FILE_FLAG_WRITE_THROUGH,
+    FILE_GENERIC_EXECUTE, FILE_GENERIC_READ, FILE_SHARE_DELETE, FILE_SHARE_READ,
 };
 
 use super::background::{Definition, Manager, digest};
@@ -188,11 +187,11 @@ fn create_file(path: &Path) -> io::Result<File> {
     let handle = unsafe {
         CreateFileW(
             name.as_ptr(),
-            GENERIC_WRITE | windows_sys::Win32::Foundation::GENERIC_READ,
-            FILE_SHARE_READ,
+            GENERIC_WRITE | windows_sys::Win32::Foundation::GENERIC_READ | DELETE,
+            FILE_SHARE_READ | FILE_SHARE_DELETE,
             &attributes,
             CREATE_NEW,
-            0,
+            FILE_FLAG_WRITE_THROUGH,
             null_mut(),
         )
     };
@@ -202,6 +201,47 @@ fn create_file(path: &Path) -> io::Result<File> {
     let file = unsafe { File::from_raw_handle(handle.cast()) };
     verify_protected(&file)?;
     Ok(file)
+}
+
+fn publish_file(
+    parent: &File,
+    parent_path: &Path,
+    leaf: &std::ffi::OsStr,
+    replace: bool,
+    write: impl FnOnce(&mut File) -> io::Result<()>,
+) -> io::Result<()> {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let epoch = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(io::Error::other)?
+        .as_nanos();
+    let mut file = loop {
+        let path = parent_path.join(format!(
+            ".hiroute-host-{}-{epoch}-{}.stage",
+            std::process::id(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        match create_file(&path) {
+            Ok(file) => break file,
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error),
+        }
+    };
+    let mut published = false;
+    let result = (|| {
+        write(&mut file)?;
+        file.sync_all()?;
+        verify_protected(&file)?;
+        super::durable::rename_file_at(&file, parent, leaf, replace)?;
+        published = true;
+        file.sync_all()
+    })();
+    if result.is_err() && !published {
+        // Only this retained, unpublished stage can be removed. A competing
+        // pathname or a previous committed descriptor never authorizes cleanup.
+        let _ = super::security::delete_by_handle(&file);
+    }
+    result
 }
 
 fn descriptor_path(definition: &Definition) -> io::Result<PathBuf> {
@@ -216,19 +256,48 @@ fn descriptor_path(definition: &Definition) -> io::Result<PathBuf> {
 pub fn install(definition: &Definition) -> io::Result<()> {
     definition.verify_image()?;
     let mut image = super::security::open_identity(&definition.daemon, false)?;
-    install_for_owner(definition, &definition.owner_sid, &mut image)
+    let executable = std::env::current_exe()?;
+    let trusted_path = executable
+        .parent()
+        .ok_or_else(unsafe_host)?
+        .join("hirouted.exe");
+    let mut trusted_host = super::security::open_identity(&trusted_path, false)?;
+    install_for_owner(
+        definition,
+        &definition.owner_sid,
+        &mut image,
+        &mut trusted_host,
+    )
 }
 
 /// `owner_sid` comes from a freshly authenticated credential token. The caller
 /// opened `image` while impersonating that owner and retains the object across
-/// RevertToSelf; privileged publication never reopens a mutable user pathname.
+/// RevertToSelf. `trusted_host` comes from the fixed hirouted.exe beside the
+/// administrator's independently verified, executing CLI. Only the trusted
+/// source supplies privileged executable bytes; the owner stream checks that
+/// the business candidate matches that package. Neither path is reopened here.
 pub fn install_for_owner(
     definition: &Definition,
     owner_sid: &str,
     image: &mut File,
+    trusted_host: &mut File,
 ) -> io::Result<()> {
     definition.validate_for_owner_sid(owner_sid)?;
     if definition.manager != Manager::Scm {
+        return Err(unsafe_host());
+    }
+    // Complete both held-source checks before any machine directory, descriptor,
+    // shared logon right or service registration is changed. A modified owner
+    // image never gets promoted into privileged code by hashing itself.
+    image.seek(SeekFrom::Start(0))?;
+    trusted_host.seek(SeekFrom::Start(0))?;
+    if digest(&mut *image)? != definition.daemon_sha256
+        || digest(&mut *trusted_host)?
+            != definition
+                .service_host_sha256
+                .as_deref()
+                .ok_or_else(unsafe_host)?
+    {
         return Err(unsafe_host());
     }
     let base = super::background::program_files()?;
@@ -237,11 +306,10 @@ pub fn install_for_owner(
     let _base = super::security::open_identity(&base, true)?;
     let _app = directory(&base.join("HiRoute"))?;
     let _hosts = directory(&base.join("HiRoute/service-host"))?;
-    let _version = directory(
-        &base
-            .join("HiRoute/service-host")
-            .join(&definition.daemon_sha256),
-    )?;
+    let version_path = base
+        .join("HiRoute/service-host")
+        .join(&definition.daemon_sha256);
+    let version = directory(&version_path)?;
     let host = definition.service_host.as_ref().ok_or_else(unsafe_host)?;
     match super::security::open_identity(host, false) {
         Ok(file) => {
@@ -251,21 +319,21 @@ pub fn install_for_owner(
             }
         }
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
-            let temp = host.with_extension(format!("{}.stage", std::process::id()));
-            let mut destination = create_file(&temp)?;
-            image.seek(SeekFrom::Start(0))?;
-            io::copy(image, &mut destination)?;
-            destination.sync_all()?;
-            drop(destination);
-            let check = super::security::open_identity(&temp, false)?;
-            if digest(check)? != definition.daemon_sha256 {
-                return Err(unsafe_host());
-            }
-            let from = wide(&temp);
-            let to = wide(host);
-            if unsafe { MoveFileExW(from.as_ptr(), to.as_ptr(), MOVEFILE_WRITE_THROUGH) } == 0 {
-                return Err(io::Error::last_os_error());
-            }
+            publish_file(
+                &version,
+                &version_path,
+                host.file_name().ok_or_else(unsafe_host)?,
+                false,
+                |destination| {
+                    trusted_host.seek(SeekFrom::Start(0))?;
+                    io::copy(trusted_host, destination)?;
+                    destination.seek(SeekFrom::Start(0))?;
+                    if digest(destination)? != definition.daemon_sha256 {
+                        return Err(unsafe_host());
+                    }
+                    Ok(())
+                },
+            )?;
         }
         Err(error) => return Err(error),
     }
@@ -274,23 +342,14 @@ pub fn install_for_owner(
         let existing = super::security::open_identity(&path, false)?;
         verify_protected(&existing)?;
     }
-    let temp = path.with_extension(format!("{}.stage", std::process::id()));
-    let mut file = create_file(&temp)?;
-    file.write_all(&serde_json::to_vec(definition).map_err(io::Error::other)?)?;
-    file.sync_all()?;
-    drop(file);
-    let from = wide(&temp);
-    let to = wide(&path);
-    if unsafe {
-        MoveFileExW(
-            from.as_ptr(),
-            to.as_ptr(),
-            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
-        )
-    } == 0
-    {
-        return Err(io::Error::last_os_error());
-    }
+    let bytes = serde_json::to_vec(definition).map_err(io::Error::other)?;
+    publish_file(
+        &version,
+        &version_path,
+        path.file_name().ok_or_else(unsafe_host)?,
+        true,
+        |file| file.write_all(&bytes),
+    )?;
     verify_definition_for_owner(definition, owner_sid)
 }
 

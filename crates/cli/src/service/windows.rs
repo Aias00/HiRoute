@@ -205,12 +205,17 @@ pub(super) fn stop(layout: &StandaloneLayout, timeout: Duration) -> Result<(), S
         task::force_stop(&value)
     }) {
         Ok(()) => {}
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+        Err(error)
+            if matches!(
+                error.kind(),
+                std::io::ErrorKind::NotFound | std::io::ErrorKind::TimedOut
+            ) =>
+        {
             if !active(layout)? {
                 return Ok(());
             }
-            // SCM may be starting before lifecycle admission. Request its owned
-            // handler; Task stop is limited to this verified registration.
+            // The task may still be starting, or may fail to acknowledge stop.
+            // Only its exact verified registration authorizes this fallback.
             match value.manager {
                 Manager::Task => task::force_stop(&value),
                 Manager::Scm => service::request_stop(&value),

@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::Command;
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
+use std::process::Output;
 use std::time::{Duration, Instant};
 
 use hiroute_application_api::{LOCAL_CONTROL_SCHEMA_V2, LocalControlWireRequestV2, MachineStatus};
@@ -9,6 +11,7 @@ use serde_json::json;
 
 use crate::LocalControlClient;
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 const SERVICE_LABEL: &str = "ai.hiroute.cli";
 const MAX_LOG_BYTES: usize = 256 * 1024;
 
@@ -161,7 +164,7 @@ pub(crate) fn logs() -> Result<serde_json::Value, ServiceFailure> {
         "short-iso",
     ]))?;
     #[cfg(target_os = "macos")]
-    let output = {
+    {
         let stdout = bounded_file(&layout.state_root.join("logs/hirouted.log"));
         let stderr = bounded_file(&layout.state_root.join("logs/hirouted-error.log"));
         return Ok(json!({
@@ -548,6 +551,7 @@ fn service_definition(_layout: &StandaloneLayout) -> PathBuf {
     PathBuf::new()
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn run_checked(command: &mut Command) -> Result<(), ServiceFailure> {
     command
         .status()
@@ -557,10 +561,12 @@ fn run_checked(command: &mut Command) -> Result<(), ServiceFailure> {
         .ok_or(ServiceFailure::Unavailable)
 }
 
+#[cfg(target_os = "linux")]
 fn run_capture(command: &mut Command) -> Result<Output, ServiceFailure> {
     command.output().map_err(|_| ServiceFailure::Unavailable)
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn bounded_output(output: &Output) -> String {
     let bytes = if output.stdout.is_empty() {
         &output.stderr

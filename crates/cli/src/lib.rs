@@ -68,7 +68,7 @@ where
                 .expect("released managed-launch descriptor is registered");
             return CliExecution {
                 exit_code: 0,
-                stdout: descriptor.help_document(),
+                stdout: native_help_document(&descriptor),
                 stderr: String::new(),
             };
         }
@@ -115,7 +115,7 @@ where
     if globals.help {
         return CliExecution {
             exit_code: 0,
-            stdout: descriptor.help_document(),
+            stdout: native_help_document(&descriptor),
             stderr: String::new(),
         };
     }
@@ -414,7 +414,11 @@ fn setup_apply(options: &[String]) -> Result<Value, ErrorCode> {
     let mut index = 0;
     while index < options.len() {
         match options[index].as_str() {
+            #[cfg(unix)]
             "--spec-fd" => {
+                if spec.is_some() {
+                    return Err(ErrorCode::InvalidArguments);
+                }
                 let fd = next(options, &mut index)?
                     .parse::<u32>()
                     .map_err(|_| ErrorCode::InvalidArguments)?;
@@ -425,6 +429,9 @@ fn setup_apply(options: &[String]) -> Result<Value, ErrorCode> {
             }
             #[cfg(windows)]
             "--spec-handle" => {
+                if spec.is_some() {
+                    return Err(ErrorCode::InvalidArguments);
+                }
                 let handle = next(options, &mut index)?
                     .parse::<u64>()
                     .map_err(|_| ErrorCode::InvalidArguments)?;
@@ -434,9 +441,6 @@ fn setup_apply(options: &[String]) -> Result<Value, ErrorCode> {
                     std::time::Duration::from_secs(2),
                 )
                 .map_err(|_| ErrorCode::InvalidArguments)?;
-                if spec.is_some() {
-                    return Err(ErrorCode::InvalidArguments);
-                }
                 spec = Some(read_json(bytes.as_slice())?);
             }
             "--accept-digest" => {
@@ -697,6 +701,23 @@ pub fn root_help() -> String {
     format!(
         "HiRoute headless product CLI\n\nUsage\n  hiroute <command> [options]\n\nPublic command families\n{commands}\n\nHost management: run 'hiroute service --help', 'hiroute gateway --help', 'hiroute protected-input --help', or 'hiroute subscription-proxy --help'.\nAgent collaboration workflow: run 'hiroute agents collaboration --help' to enable, edit, disable or inspect collaboration independently of model settings.\nApplication/Local Control: run 'hiroute schema list --output json' and 'hiroute schema show --command-id <ID> --output json', then append '--help' to a complete command path, for example 'hiroute worker dependencies discover --help'.\n"
     )
+}
+
+fn native_help_document(descriptor: &CommandDescriptorV1) -> String {
+    let document = descriptor.help_document();
+    #[cfg(windows)]
+    {
+        // Presentation adapts carriers; the shared registry and its digest retain their bytes.
+        document
+            .replace("--capability-fd", "--capability-handle")
+            .replace("--spec-fd", "--spec-handle")
+            .replace("--secret-fd", "--secret-handle")
+            .replace("<FD>", "<HANDLE>")
+            .replace("capability FD", "capability handle")
+            .replace("same-UID", "same-account")
+    }
+    #[cfg(not(windows))]
+    document
 }
 
 pub fn main_entry() -> u8 {

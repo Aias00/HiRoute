@@ -15,12 +15,12 @@ pub fn codex_profile_dependency_digest(
 ) -> Result<CanonicalDigest, AgentFilesystemScanError> {
     let profile = root.with_file_name("hiroute.config.toml");
     let mut sampled = Vec::new();
-    for (path, system) in [
-        (PathBuf::from("/etc/codex/config.toml"), true),
-        (PathBuf::from("/etc/codex/managed_config.toml"), true),
-        (root.to_owned(), false),
-        (profile.clone(), false),
-    ] {
+    let mut paths = codex_system_paths()?
+        .into_iter()
+        .map(|path| (path, true))
+        .collect::<Vec<_>>();
+    paths.extend([(root.to_owned(), false), (profile.clone(), false)]);
+    for (path, system) in paths {
         let content = if system {
             read_system_config_bytes(&path)?
         } else {
@@ -55,6 +55,40 @@ pub fn codex_profile_dependency_digest(
         }
     }
     CanonicalDigest::of(&sampled).map_err(|_| AgentFilesystemScanError::InvalidConfig)
+}
+
+/// Native loader namespace for the frozen Codex 0.158.0/0.160.1 contracts.
+/// Windows resolves ProgramData from the OS rather than a process-controlled variable.
+pub(super) fn codex_system_paths() -> Result<Vec<PathBuf>, AgentFilesystemScanError> {
+    #[cfg(windows)]
+    {
+        let base = hiroute_platform::windows::background::program_data()
+            .map_err(|_| AgentFilesystemScanError::SourceUnavailable)?
+            .join("OpenAI/Codex");
+        Ok(vec![
+            base.join("config.toml"),
+            base.join("requirements.toml"),
+        ])
+    }
+    #[cfg(not(windows))]
+    {
+        Ok(vec![
+            "/etc/codex/config.toml".into(),
+            "/etc/codex/managed_config.toml".into(),
+        ])
+    }
+}
+
+#[cfg(any(unix, windows))]
+pub(super) fn codex_has_system_configuration() -> Result<bool, AgentFilesystemScanError> {
+    for path in codex_system_paths()? {
+        match std::fs::symlink_metadata(path) {
+            Ok(_) => return Ok(true),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(false)
 }
 
 /// Explicit HOME binding is intentional: the terminal environment is not known to the UI.

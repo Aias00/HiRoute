@@ -415,9 +415,12 @@ fn same_owner(actual: &str, expected: &str) -> io::Result<bool> {
     if actual.is_empty() || actual.len() > 512 || actual.contains('\0') {
         return Ok(false);
     }
-    use windows_sys::Win32::Security::{LookupAccountNameW, SID_NAME_USE};
+    use windows_sys::Win32::Security::{GetLengthSid, LookupAccountNameW, SID_NAME_USE};
     let name: Vec<u16> = actual.encode_utf16().chain(Some(0)).collect();
-    let mut sid = [0_u8; 68];
+    // A SID contains native DWORD fields; retain an aligned allocation even on
+    // targets that do not permit the unaligned integer reads tolerated by x64.
+    let mut sid_words = [0_usize; 68_usize.div_ceil(std::mem::size_of::<usize>())];
+    let sid = unsafe { std::slice::from_raw_parts_mut(sid_words.as_mut_ptr().cast::<u8>(), 68) };
     let mut sid_length = sid.len() as u32;
     let mut domain = [0_u16; 1024];
     let mut domain_length = domain.len() as u32;
@@ -436,10 +439,16 @@ fn same_owner(actual: &str, expected: &str) -> io::Result<bool> {
     {
         return Ok(false);
     }
-    if sid_length > sid.len() as u32 {
+    // cbSid is an input capacity; success does not promise to replace it with
+    // the actual SID length. The returned native SID header determines that.
+    if sid_length > sid.len() as u32 || sid[0] != 1 || sid[1] > 15 {
         return Ok(false);
     }
-    Ok(super::background::sid_string(&sid[..sid_length as usize])? == expected)
+    let length = unsafe { GetLengthSid(sid.as_ptr().cast_mut().cast()) } as usize;
+    if !(8..=sid.len()).contains(&length) {
+        return Ok(false);
+    }
+    Ok(super::background::sid_string(&sid[..length])? == expected)
 }
 
 // Exact persisted spelling remains usable for uninstalling a damaged bundle.
@@ -481,6 +490,13 @@ mod tests {
         let image = temporary.path().join("hirouted.exe");
         std::fs::copy(std::env::current_exe().unwrap(), &image).unwrap();
         let definition = Definition::new(Manager::Task, image).unwrap();
+        assert!(
+            same_owner(
+                &super::super::service::account_name().unwrap(),
+                &definition.owner_sid
+            )
+            .unwrap()
+        );
         struct Remove(Definition);
         impl Drop for Remove {
             fn drop(&mut self) {

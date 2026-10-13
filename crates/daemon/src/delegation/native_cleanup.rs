@@ -636,3 +636,7 @@ mod unix {
 #[cfg(all(test, unix))]
 #[path = "native_cleanup_tests.rs"]
 mod tests;
+
+#[cfg(all(test, windows))]
+#[path = "native_cleanup_windows_tests.rs"]
+mod windows_tests;

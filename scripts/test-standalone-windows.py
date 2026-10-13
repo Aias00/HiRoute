@@ -23,6 +23,30 @@ installer = load("windows_install", "install-standalone-windows.py")
 
 
 class WindowsPackage(unittest.TestCase):
+    def test_windows_package_publishes_its_platform_guide_under_the_existing_logical_name(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            inputs = ["LICENSE", "CPA-LICENSE", "assets/skills/hiroute-management/SKILL.md",
+                      "docs/standalone-cli.md", "docs/standalone-windows.md"]
+            for name in inputs:
+                path = root / name; path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(name); path.chmod(0o644)
+            for name in package.NOTICE_FILES:
+                path = root / "notices" / name; path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(name); path.chmod(0o644)
+            image = root / "image.exe"
+            body = bytearray(70); body[:2] = b"MZ"; struct.pack_into("<I", body, 0x3C, 64)
+            body[64:68] = b"PE\0\0"; struct.pack_into("<H", body, 68, 0x8664)
+            image.write_bytes(body); image.chmod(0o755)
+            arguments = SimpleNamespace(target="x86_64-pc-windows-msvc", hiroute=image,
+                                        hirouted=image, cpa_binary=image, cpa_license=root / "CPA-LICENSE")
+            with patch.object(package, "REPO", root):
+                windows = package.payload(arguments, root / "notices")
+                self.assertEqual(windows["docs/standalone-cli.md"].read_text(), "docs/standalone-windows.md")
+                arguments.target = "x86_64-unknown-linux-gnu"
+                linux = package.payload(arguments, root / "notices")
+                self.assertEqual(linux["docs/standalone-cli.md"].read_text(), "docs/standalone-cli.md")
+
     def test_inventory_is_closed_and_keeps_one_package_schema(self):
         self.assertEqual(package.SCHEMA, "hiroute.standalone-package/v1")
         files = package.expected_files("x86_64-pc-windows-msvc")

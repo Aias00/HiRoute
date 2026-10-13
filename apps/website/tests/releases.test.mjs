@@ -105,6 +105,25 @@ test('standalone artifacts reject target, filename, and companion-manifest drift
   }
 });
 
+test('Windows standalone targets retain architecture and immutable companion identity', () => {
+  for (const architecture of ['x86_64', 'aarch64']) {
+    const target = `${architecture}-pc-windows-msvc`;
+    const candidate = { ...standalone, platform: 'Windows', architecture, target,
+      filename: `hiroute-1.2.3-aaaaaaaaaaaa-${target}.tar.gz`,
+      manifest_filename: `hiroute-1.2.3-aaaaaaaaaaaa-${target}.tar.gz.json` };
+    const value = { ...structuredClone(manifest), releases: [{ ...structuredClone(release), artifacts: [candidate] }] };
+    assert.equal(validateReleaseManifest(value), value);
+    for (const drift of [
+      { platform: 'Linux' }, { architecture: architecture === 'aarch64' ? 'x86_64' : 'aarch64' },
+      { target: `${architecture}-unknown-linux-gnu` }, { target: `${architecture}-pc-windows-gnu` },
+    ]) {
+      const invalid = structuredClone(value);
+      Object.assign(invalid.releases[0].artifacts[0], drift);
+      assert.throws(() => validateReleaseManifest(invalid));
+    }
+  }
+});
+
 test('desktop verification binds public metadata to package and tag identities', () => {
   const identity = {
     version: release.version, revision, architecture: artifact.architecture,

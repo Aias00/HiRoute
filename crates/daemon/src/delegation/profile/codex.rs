@@ -119,7 +119,7 @@ pub(super) fn render(
                 executable: false,
             });
             rendered.adapter_bootstrap = Some(bootstrap);
-            std::env::current_exe().map_err(|_| DelegationErrorV1::CapabilityUnavailable)?
+            windows_launcher_executable()?
         }
         #[cfg(not(any(unix, windows)))]
         {
@@ -153,6 +153,23 @@ pub(super) fn render_launcher(binary: &Path, config: &Value) -> Result<String, D
     }
     script.push_str(" \\\n  \"$@\"\n");
     Ok(script)
+}
+
+#[cfg(windows)]
+fn windows_launcher_executable() -> Result<PathBuf, DelegationErrorV1> {
+    #[cfg(test)]
+    {
+        // libtest has no daemon app-server entry. The opt-in native acceptance
+        // must name the real built product and must not substitute a fixture.
+        std::env::var_os("HIROUTE_WORKER_DAEMON_BINARY")
+            .map(PathBuf::from)
+            .filter(|path| path.is_absolute() && path.is_file())
+            .ok_or(DelegationErrorV1::CapabilityUnavailable)
+    }
+    #[cfg(not(test))]
+    {
+        std::env::current_exe().map_err(|_| DelegationErrorV1::CapabilityUnavailable)
+    }
 }
 
 /// The managed object contains only nested tables and scalar strings/bools/numbers.

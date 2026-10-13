@@ -831,11 +831,11 @@ pub(super) fn managed_settings_paths() -> Vec<PathBuf> {
         "/Library/Application Support/ClaudeCode/managed-settings.json",
     )];
     #[cfg(windows)]
-    return std::env::var_os("ProgramFiles")
-        .map(PathBuf::from)
-        .filter(|path| path.is_absolute())
-        .map(|root| vec![root.join("ClaudeCode/managed-settings.json")])
-        .unwrap_or_default();
+    // The frozen Claude ACP settings producer selects this exact native path;
+    // an ambient ProgramFiles value must not hide enterprise-managed policy.
+    return vec![PathBuf::from(
+        r"C:\Program Files\ClaudeCode\managed-settings.json",
+    )];
     #[cfg(not(any(target_os = "macos", windows)))]
     return vec![PathBuf::from("/etc/claude-code/managed-settings.json")];
 }

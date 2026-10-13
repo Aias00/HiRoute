@@ -88,6 +88,7 @@ pub fn execute(
     account: &str,
     password: &str,
     operation: Operation,
+    mut trusted_host: Option<File>,
     inspect: impl FnOnce(&Owner) -> io::Result<Installation>,
 ) -> io::Result<Definition> {
     let privileges = Privileges::enable_profile_access()?;
@@ -134,6 +135,9 @@ pub fn execute(
                 .image
                 .as_mut()
                 .ok_or(io::ErrorKind::InvalidInput)?,
+            trusted_host
+                .as_mut()
+                .ok_or(io::ErrorKind::PermissionDenied)?,
         )?,
         Operation::Uninstall => service::unregister_for_owner(
             &installation.definition,

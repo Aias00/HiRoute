@@ -325,11 +325,11 @@ fn serve_probe_request(
         }
     }
     let response = match endpoint.harness {
-        WorkerHarnessV1::CodexCli => responses_stream(endpoint.model),
+        WorkerHarnessV1::CodexCli
+        | WorkerHarnessV1::QoderCli
+        | WorkerHarnessV1::Pi
+        | WorkerHarnessV1::DeepseekHarness => responses_stream(endpoint.model),
         WorkerHarnessV1::ClaudeCode => messages_stream(endpoint.model),
-        WorkerHarnessV1::QoderCli | WorkerHarnessV1::Pi | WorkerHarnessV1::DeepseekHarness => {
-            return Err(DelegationErrorV1::CapabilityUnavailable);
-        }
     };
     write!(
         stream,
@@ -346,6 +346,9 @@ fn probe_route(harness: WorkerHarnessV1, method: &str, target: &str) -> Option<P
     let target = target.split('?').next()?;
     match (harness, method, target) {
         (WorkerHarnessV1::CodexCli, "POST", "/v1/responses")
+        | (WorkerHarnessV1::QoderCli, "POST", "/v1/responses")
+        | (WorkerHarnessV1::Pi, "POST", "/v1/responses")
+        | (WorkerHarnessV1::DeepseekHarness, "POST", "/v1/responses")
         | (WorkerHarnessV1::ClaudeCode, "POST", "/v1/messages") => Some(ProbeRoute::Model),
         (WorkerHarnessV1::ClaudeCode, "POST", "/v1/messages/count_tokens") => {
             Some(ProbeRoute::CountTokens)
@@ -427,6 +430,18 @@ mod tests {
 
     #[test]
     fn probe_protocols_have_distinct_bounded_native_routes_and_valid_events() {
+        for harness in [
+            WorkerHarnessV1::Pi,
+            WorkerHarnessV1::DeepseekHarness,
+            WorkerHarnessV1::QoderCli,
+        ] {
+            assert_eq!(
+                probe_route(harness, "POST", "/v1/responses"),
+                Some(ProbeRoute::Model)
+            );
+            assert_eq!(probe_route(harness, "POST", "/v1/messages"), None);
+            assert_eq!(probe_route(harness, "GET", "/v1/responses"), None);
+        }
         assert_eq!(
             probe_route(WorkerHarnessV1::CodexCli, "POST", "/v1/responses"),
             Some(ProbeRoute::Model)

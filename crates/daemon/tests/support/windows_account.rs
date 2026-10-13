@@ -40,6 +40,23 @@ pub fn wide(value: &str) -> Vec<u16> {
     value.encode_utf16().chain([0]).collect()
 }
 
+pub fn profile_for_token(token: &File) -> PathBuf {
+    let value = unsafe {
+        SHGetKnownFolderPath(
+            &FOLDERID_Profile,
+            Default::default(),
+            Some(ShellHandle(token.as_raw_handle())),
+        )
+    }
+    .unwrap();
+    let result = PathBuf::from(unsafe { value.to_string() }.unwrap());
+    unsafe {
+        CoTaskMemFree(value.0.cast());
+    }
+    assert!(result.is_absolute());
+    result
+}
+
 pub fn information(token: &File, class: TOKEN_INFORMATION_CLASS) -> Vec<usize> {
     let mut length = 0;
     unsafe {

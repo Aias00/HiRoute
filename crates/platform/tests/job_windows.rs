@@ -72,6 +72,7 @@ fn job_probe() {
         return;
     }
     if mode == "argv" {
+        std::fs::write(root.join("child.started"), "native-fixture-entered").unwrap();
         let record = serde_json::json!({"binary": std::env::current_exe().unwrap(), "args": std::env::args_os().skip(1).map(|arg| arg.into_string().unwrap()).collect::<Vec<_>>()});
         std::fs::write(root.join("argv.json"), serde_json::to_vec(&record).unwrap()).unwrap();
         return;
@@ -188,6 +189,7 @@ fn native_job_argv_preserves_spaces_quotes_unicode_and_shell_characters() {
 #[test]
 fn managed_helper_executes_from_cmd_with_literal_special_character_path_and_argv() {
     use std::os::windows::process::CommandExt;
+    hiroute_platform::windows::job::initialize_resident().unwrap();
     let root = tempfile::tempdir().unwrap();
     let directory = root.path().join("helper 路径 % ! & ' 空格");
     std::fs::create_dir(&directory).unwrap();
@@ -206,17 +208,51 @@ fn managed_helper_executes_from_cmd_with_literal_special_character_path_and_argv
     let command = launcher::managed_helper_command(&binary, &args).unwrap();
     assert!(!command.contains(literal));
     let cmd = launcher::system_executable(Path::new("cmd.exe")).unwrap();
+    let stdout_path = directory.join("helper.stdout");
+    let stderr_path = directory.join("helper.stderr");
+    let stdout = std::fs::File::create(&stdout_path).unwrap();
+    let stderr = std::fs::File::create(&stderr_path).unwrap();
     // Match node:child_process.exec's Windows /d /s /c wrapping and verbatim command.
     let mut child = std::process::Command::new(cmd)
         .raw_arg(format!("/d /s /c \"{command}\""))
         .env_clear()
         .envs(environment("argv", &directory))
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
+        .stdout(stdout)
+        .stderr(stderr)
         .spawn()
         .unwrap();
-    await_condition(|| child.try_wait().unwrap().is_some());
-    assert!(child.wait().unwrap().success());
+    let started = Instant::now();
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break Some(status);
+        }
+        if started.elapsed() >= Duration::from_secs(5) {
+            break None;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    };
+    let read_log = |path: &Path| {
+        use std::io::Read;
+        let mut bytes = Vec::new();
+        std::fs::File::open(path)
+            .unwrap()
+            .take(8192)
+            .read_to_end(&mut bytes)
+            .unwrap();
+        String::from_utf8_lossy(&bytes).into_owned()
+    };
+    if status.is_none_or(|status| !status.success()) {
+        let native_entered = directory.join("child.started").exists();
+        let receipt_written = directory.join("argv.json").exists();
+        let _ = child.kill();
+        let _ = child.wait();
+        panic!(
+            "managed helper phase: cmd_status={status:?}; elapsed_ms={}; native_fixture_entered={native_entered}; receipt_written={receipt_written}; stdout={:?}; stderr={:?}",
+            started.elapsed().as_millis(),
+            read_log(&stdout_path),
+            read_log(&stderr_path)
+        );
+    }
     let record: serde_json::Value =
         serde_json::from_slice(&std::fs::read(directory.join("argv.json")).unwrap()).unwrap();
     assert_eq!(record["args"].as_array().unwrap().last().unwrap(), literal);

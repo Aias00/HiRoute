@@ -90,9 +90,26 @@ pub(super) fn run_hidden(arguments: &[OsString]) -> u8 {
 fn run(input: impl Read, mut output: impl Write) -> io::Result<()> {
     let request = read_request(input)?;
     let operation = request.operation()?;
-    let definition = scm_owner::execute(&request.account, &request.password, operation, |owner| {
-        inspect_installation(owner, operation)
-    })?;
+    // Administrator independently verifies this package. Its fixed sibling host
+    // supplies trusted bytes, while the owner image supplies only the business
+    // location. No request/owner marker can select privileged executable input.
+    let trusted_host = if operation == Operation::Install {
+        let executable = std::env::current_exe()?;
+        let parent = executable.parent().ok_or(io::ErrorKind::InvalidInput)?;
+        Some(hiroute_platform::windows::security::open_identity(
+            &parent.join("hirouted.exe"),
+            false,
+        )?)
+    } else {
+        None
+    };
+    let definition = scm_owner::execute(
+        &request.account,
+        &request.password,
+        operation,
+        trusted_host,
+        |owner| inspect_installation(owner, operation),
+    )?;
     let result = json!({
         "schema": "hiroute.windows-scm-owner-result/v1",
         "operation": request.operation_name(),

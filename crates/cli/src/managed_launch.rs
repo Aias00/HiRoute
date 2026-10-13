@@ -289,7 +289,77 @@ fn spawn_and_wait(command: &mut Command) -> Result<u8, ManagedLaunchFailure> {
     })
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn spawn_and_wait(command: &mut Command) -> Result<u8, ManagedLaunchFailure> {
+    use hiroute_platform::windows::job::{Child, Launch, Stream};
+    use std::time::Instant;
+
+    // Apply Command's explicit removals with Windows' case-insensitive environment names.
+    let mut environment: Vec<_> = std::env::vars_os().collect();
+    for (key, value) in command.get_envs() {
+        environment.retain(|(existing, _)| {
+            !existing
+                .as_encoded_bytes()
+                .eq_ignore_ascii_case(key.as_encoded_bytes())
+        });
+        if let Some(value) = value {
+            environment.push((key.to_owned(), value.to_owned()));
+        }
+    }
+    let arguments: Vec<_> = command.get_args().map(OsStr::to_owned).collect();
+    let child = Child::spawn(Launch {
+        program: Path::new(command.get_program()),
+        args: &arguments,
+        env: &environment,
+        cwd: command.get_current_dir(),
+        stdin: Stream::Inherit,
+        stdout: Stream::Inherit,
+        stderr: Stream::Inherit,
+    })
+    .map_err(|_| ManagedLaunchFailure::Unavailable)?;
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_io()
+        .enable_time()
+        .build()
+        .map_err(|_| ManagedLaunchFailure::Unavailable)?;
+    let result = runtime.block_on(async {
+        let interrupt = tokio::signal::ctrl_c();
+        tokio::pin!(interrupt);
+        let mut signal_observed = false;
+        loop {
+            if let Some(code) = child
+                .exit_code()
+                .map_err(|_| ManagedLaunchFailure::Unavailable)?
+            {
+                break Ok(u8::try_from(code).unwrap_or(1));
+            }
+            tokio::select! {
+                _ = tokio::time::sleep(Duration::from_millis(25)) => {}
+                result = &mut interrupt, if !signal_observed => {
+                    result.map_err(|_| ManagedLaunchFailure::Unavailable)?;
+                    // The console broadcasts Ctrl-C to this foreground child's shared group.
+                    signal_observed = true;
+                }
+            }
+        }
+    });
+    child
+        .terminate()
+        .map_err(|_| ManagedLaunchFailure::Unavailable)?;
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while !child
+        .empty()
+        .map_err(|_| ManagedLaunchFailure::Unavailable)?
+    {
+        if Instant::now() >= deadline {
+            return Err(ManagedLaunchFailure::Unavailable);
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    result
+}
+
+#[cfg(not(any(unix, windows)))]
 fn spawn_and_wait(command: &mut Command) -> Result<u8, ManagedLaunchFailure> {
     command
         .status()

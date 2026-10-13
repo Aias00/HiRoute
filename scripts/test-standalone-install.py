@@ -58,8 +58,11 @@ class StandaloneFixture(unittest.TestCase):
         project_license.chmod(0o644)
         skill.write_text("---\nname: hiroute-management\ndescription: test\n---\n<!-- Managed by HiRoute standalone installer -->\n")
         docs.write_text("test documentation\n")
+        windows_docs = docs.with_name("standalone-windows.md")
+        windows_docs.write_text("test Windows documentation\n")
         skill.chmod(0o644)
         docs.chmod(0o644)
+        windows_docs.chmod(0o644)
         self.skill = skill
         self.sources = {}
         for name in ("hiroute", "hirouted", "cliproxyapi"):

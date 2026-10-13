@@ -22,6 +22,8 @@ mod native_context;
 mod pi;
 mod qoder;
 pub use native_context::NativeWorkerContext;
+#[cfg(test)]
+pub(crate) use native_context::native_path as native_context_path;
 #[cfg(windows)]
 pub(crate) use native_context::windows_workspace;
 
@@ -203,6 +205,22 @@ impl CandidateWorkerProfile {
             env.insert(
                 "USERPROFILE".into(),
                 Zeroizing::new(path_string(input.native_context.home())?),
+            );
+            for (name, relative) in [
+                ("APPDATA", "AppData/Roaming"),
+                ("LOCALAPPDATA", "AppData/Local"),
+            ] {
+                env.insert(
+                    name.into(),
+                    Zeroizing::new(path_string(&input.native_context.home().join(relative))?),
+                );
+            }
+            env.insert(
+                "ProgramFiles".into(),
+                Zeroizing::new(path_string(
+                    &hiroute_platform::windows::background::program_files()
+                        .map_err(|_| DelegationErrorV1::CapabilityUnavailable)?,
+                )?),
             );
             for name in ["TEMP", "TMP"] {
                 env.insert(

@@ -27,8 +27,8 @@ impl CodexNativeIngressProbe {
             .map_err(|_| fail("trusted executable"))?
             .ok_or_else(|| fail("executable"))?;
         let collaboration = cli.is_some();
-        if Path::new("/etc/codex/config.toml").exists()
-            || Path::new("/etc/codex/managed_config.toml").exists()
+        if super::super::codex_profile::codex_has_system_configuration()
+            .map_err(|_| fail("organization configuration isolation"))?
         {
             return Err(fail("organization configuration isolation"));
         }

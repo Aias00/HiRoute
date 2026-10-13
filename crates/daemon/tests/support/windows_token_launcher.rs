@@ -97,6 +97,13 @@ impl Child {
     ) -> io::Result<Self> {
         assert!(program.is_absolute());
         let application: Vec<_> = program.as_os_str().encode_wide().chain([0]).collect();
+        let cwd: Vec<_> = program
+            .parent()
+            .unwrap()
+            .as_os_str()
+            .encode_wide()
+            .chain([0])
+            .collect();
         let mut command = quote(program.as_os_str());
         for arg in args {
             command.push(b' ' as u16);
@@ -190,7 +197,7 @@ impl Child {
                 command.as_mut_ptr(),
                 EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW,
                 environment.as_ptr().cast(),
-                null(),
+                cwd.as_ptr(),
                 &startup.StartupInfo,
                 &mut information,
             )
@@ -245,6 +252,167 @@ impl Child {
             Err(io::Error::last_os_error())
         } else {
             Ok(())
+        }
+    }
+}
+
+/// Stage the verified currently running fixture under its real owner. Retained
+/// native image access denies replacement until all owner subprocesses finish.
+pub struct StagedFixture {
+    pub path: std::path::PathBuf,
+    token: File,
+    image: Option<File>,
+}
+impl StagedFixture {
+    pub fn create(token: &File) -> Self {
+        use hiroute_platform::windows::{background, security};
+        use sha2::{Digest, Sha256};
+        use std::io::{Read, Seek, SeekFrom, Write};
+        use std::os::windows::fs::OpenOptionsExt;
+        use windows_sys::Win32::Security::Authorization::ConvertStringSecurityDescriptorToSecurityDescriptorW;
+        use windows_sys::Win32::Security::{ImpersonateLoggedOnUser, RevertToSelf};
+        use windows_sys::Win32::Storage::FileSystem::{CreateDirectoryW, FILE_SHARE_READ};
+        let sid_bytes = super::windows_account::token_sid(token);
+        let sid = background::sid_string(&sid_bytes).unwrap();
+        let directory = super::windows_account::profile_for_token(token).join(format!(
+            ".hiroute-native-background-test-{}",
+            std::process::id()
+        ));
+        let path = directory.join("windows-background-fixture.exe");
+        let mut source = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(FILE_SHARE_READ)
+            .open(std::env::current_exe().unwrap())
+            .unwrap();
+        let expected_len = source.metadata().unwrap().len();
+        let source_hash = {
+            let mut hash = Sha256::new();
+            let mut buffer = [0; 65536];
+            loop {
+                let n = source.read(&mut buffer).unwrap();
+                if n == 0 {
+                    break;
+                }
+                hash.update(&buffer[..n]);
+            }
+            source.seek(SeekFrom::Start(0)).unwrap();
+            hash.finalize()
+        };
+        let sddl = super::windows_account::wide(&format!("O:{sid}G:{sid}D:P(A;OICI;FA;;;{sid})"));
+        let mut descriptor = null_mut();
+        assert_ne!(
+            unsafe {
+                ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                    sddl.as_ptr(),
+                    1,
+                    &mut descriptor,
+                    null_mut(),
+                )
+            },
+            0
+        );
+        let attributes = SECURITY_ATTRIBUTES {
+            nLength: size_of::<SECURITY_ATTRIBUTES>() as u32,
+            lpSecurityDescriptor: descriptor,
+            bInheritHandle: 0,
+        };
+        assert_ne!(
+            unsafe { ImpersonateLoggedOnUser(token.as_raw_handle().cast()) },
+            0
+        );
+        struct Revert;
+        impl Drop for Revert {
+            fn drop(&mut self) {
+                if unsafe { RevertToSelf() } == 0 {
+                    std::process::abort();
+                }
+            }
+        }
+        let _revert = Revert;
+        let created = unsafe {
+            CreateDirectoryW(
+                super::windows_account::wide(directory.to_str().unwrap()).as_ptr(),
+                &attributes,
+            )
+        };
+        unsafe {
+            LocalFree(descriptor);
+        }
+        assert_ne!(created, 0, "owned fixture staging directory must be fresh");
+        let mut staged = Self {
+            path: path.clone(),
+            token: token.try_clone().unwrap(),
+            image: None,
+        };
+        let mut target = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .share_mode(FILE_SHARE_READ)
+            .open(&path)
+            .unwrap();
+        assert_eq!(
+            std::io::copy(&mut source, &mut target).unwrap(),
+            expected_len
+        );
+        target.flush().unwrap();
+        target.sync_all().unwrap();
+        target.seek(SeekFrom::Start(0)).unwrap();
+        let mut hash = Sha256::new();
+        let mut buffer = [0; 65536];
+        loop {
+            let n = target.read(&mut buffer).unwrap();
+            if n == 0 {
+                break;
+            }
+            hash.update(&buffer[..n]);
+        }
+        assert_eq!(
+            source_hash,
+            hash.finalize(),
+            "owner fixture must preserve verified executable bytes"
+        );
+        security::verify_owner_only_handle_for_sid(&target, false, &sid_bytes).unwrap();
+        let identity = security::file_identity(&target).unwrap();
+        drop(target);
+        let mut held = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(FILE_SHARE_READ)
+            .open(&path)
+            .unwrap();
+        assert_eq!(security::file_identity(&held).unwrap(), identity);
+        let mut hash = Sha256::new();
+        loop {
+            let n = held.read(&mut buffer).unwrap();
+            if n == 0 {
+                break;
+            }
+            hash.update(&buffer[..n]);
+        }
+        assert_eq!(
+            source_hash,
+            hash.finalize(),
+            "held fixture executable bytes must remain the verified source"
+        );
+        staged.image = Some(held);
+        staged
+    }
+}
+impl Drop for StagedFixture {
+    fn drop(&mut self) {
+        use windows_sys::Win32::Security::{ImpersonateLoggedOnUser, RevertToSelf};
+        if unsafe { ImpersonateLoggedOnUser(self.token.as_raw_handle().cast()) } == 0 {
+            eprintln!("owned native fixture cleanup cannot impersonate");
+            return;
+        }
+        self.image.take();
+        let result = std::fs::remove_file(&self.path)
+            .and_then(|_| std::fs::remove_dir(self.path.parent().unwrap()));
+        if unsafe { RevertToSelf() } == 0 {
+            std::process::abort();
+        }
+        if result.is_err() {
+            eprintln!("owned native fixture cleanup failed");
         }
     }
 }

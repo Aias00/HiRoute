@@ -2,7 +2,7 @@
 //! No PID, job name, or caller-supplied locator is a destructive capability.
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{self, Read};
+use std::io;
 use std::mem::{size_of, zeroed};
 use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
@@ -209,7 +209,7 @@ pub fn read_inherited_credential(
     if flags & HANDLE_FLAG_INHERIT == 0 {
         return Err(invalid());
     }
-    let mut file = File::from(duplicate_with_inheritance(handle, false)?);
+    let file = File::from(duplicate_with_inheritance(handle, false)?);
     // Validate the duplicated object, not a locator that another thread might close.
     if unsafe { GetFileType(file.as_raw_handle()) } != FILE_TYPE_PIPE {
         return Err(invalid());
@@ -227,8 +227,28 @@ pub fn read_inherited_credential(
             ));
         }
         let remaining = (limit + 1 - bytes.len()).min(block.len());
-        match file.read(&mut block[..remaining]) {
-            Ok(0) => return Ok(bytes),
+        // std::fs::File::read folds ERROR_NO_DATA into Ok(0) on Windows, which
+        // loses the distinction between an empty connected NOWAIT pipe and EOF.
+        // Preserve the native error and finish only after the writer disconnects.
+        let mut count = 0;
+        // SAFETY: the held pipe is in NOWAIT mode; the live zeroizing allocation
+        // has `remaining` writable bytes and the byte-count out pointer is valid.
+        let read = unsafe {
+            ReadFile(
+                file.as_raw_handle(),
+                block.as_mut_ptr(),
+                remaining as u32,
+                &mut count,
+                null_mut(),
+            )
+        };
+        let result = if read == 0 {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(count as usize)
+        };
+        match result {
+            Ok(0) => std::thread::sleep(Duration::from_millis(2)),
             Ok(count) => {
                 bytes.extend_from_slice(&block[..count]);
                 if bytes.len() > limit {

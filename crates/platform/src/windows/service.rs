@@ -105,8 +105,18 @@ pub fn account_name_for_sid(sid: &[u8]) -> io::Result<String> {
     {
         return Err(io::Error::last_os_error());
     }
-    let name = String::from_utf16(&name[..names as usize]).map_err(io::Error::other)?;
-    let domain = String::from_utf16(&domain[..domains as usize]).map_err(io::Error::other)?;
+    // The length parameters are capacities on input and sizing outputs only on
+    // an insufficient-buffer failure. Success returns NUL-terminated strings.
+    let name_length = name
+        .iter()
+        .position(|value| *value == 0)
+        .ok_or(io::ErrorKind::InvalidData)?;
+    let domain_length = domain
+        .iter()
+        .position(|value| *value == 0)
+        .ok_or(io::ErrorKind::InvalidData)?;
+    let name = String::from_utf16(&name[..name_length]).map_err(io::Error::other)?;
+    let domain = String::from_utf16(&domain[..domain_length]).map_err(io::Error::other)?;
     if name.is_empty() || domain.is_empty() {
         return Err(io::Error::from(io::ErrorKind::InvalidData));
     }
@@ -137,6 +147,12 @@ pub fn register(
 ) -> io::Result<()> {
     definition.verify_image()?;
     let mut image = super::security::open_identity(&definition.daemon, false)?;
+    let executable = std::env::current_exe()?;
+    let trusted_host_path = executable
+        .parent()
+        .ok_or(io::ErrorKind::InvalidData)?
+        .join("hirouted.exe");
+    let mut trusted_host = super::security::open_identity(&trusted_host_path, false)?;
     register_for_owner(
         definition,
         previous,
@@ -144,12 +160,15 @@ pub fn register(
         &account_name()?,
         password,
         &mut image,
+        &mut trusted_host,
     )
 }
 
 /// The privileged helper authenticates owner credentials and holds the actual
 /// owner image across impersonation/reversion. This entry verifies those same
-/// credentials/SID again, seals the held bytes and registers the fixed account.
+/// credentials/SID again. The trusted host must be retained from the fixed daemon
+/// beside the administrator's independently verified, executing CLI package. A
+/// credential SID or a digest of owner-controlled bytes cannot establish code trust.
 pub fn register_for_owner(
     definition: &Definition,
     previous: Option<&Definition>,
@@ -157,6 +176,7 @@ pub fn register_for_owner(
     account_name: &str,
     password: &str,
     image: &mut File,
+    trusted_host: &mut File,
 ) -> io::Result<()> {
     let sid = super::background::sid_string(owner_sid)?;
     definition.validate_for_owner_sid(&sid)?;
@@ -173,7 +193,7 @@ pub fn register_for_owner(
     let command = wide(&command_line(definition)?)?;
     let password = Zeroizing::new(wide(password)?);
     token::verify_credentials(&account, &password, owner_sid)?;
-    super::sealed_host::install_for_owner(definition, &sid, image)?;
+    super::sealed_host::install_for_owner(definition, &sid, image, trusted_host)?;
     grant_service_logon(owner_sid)?;
     let access = SERVICE_QUERY_CONFIG | SERVICE_QUERY_STATUS | SERVICE_CHANGE_CONFIG | 0x40000; // WRITE_DAC
     // SAFETY: no credentials are formatted into this process command line.

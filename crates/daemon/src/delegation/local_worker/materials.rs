@@ -286,6 +286,68 @@ impl Drop for OwnedRoot {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_materials_pin_root_and_cleanup_only_owned_children() {
+        use crate::delegation::profile::RunMaterialFile;
+        let fixture = tempfile::tempdir().unwrap();
+        let session = fixture.path().join("session");
+        fs::create_dir(&session).unwrap();
+        fs::write(session.join("history"), b"keep native history").unwrap();
+        let path = fixture.path().join("run % ! & ' 空格");
+        let mut owned = prepare(
+            RunMaterials {
+                directories: vec!["nested".into()],
+                files: vec![RunMaterialFile {
+                    relative_path: "nested/route.json".into(),
+                    contents: zeroize::Zeroizing::new(b"public route fixture".to_vec()),
+                    executable: false,
+                }],
+            },
+            path.clone(),
+            session.clone(),
+        )
+        .unwrap();
+        hiroute_platform::windows::security::verify_owner_only(&path, true).unwrap();
+        hiroute_platform::windows::security::verify_owner_only(
+            &path.join("nested/route.json"),
+            false,
+        )
+        .unwrap();
+        assert!(fs::rename(&path, fixture.path().join("redirected")).is_err());
+        owned.cleanup().unwrap();
+        assert!(!path.exists());
+        assert_eq!(
+            fs::read(session.join("history")).unwrap(),
+            b"keep native history"
+        );
+        owned.cleanup().unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_materials_refuse_an_existing_unowned_root() {
+        let fixture = tempfile::tempdir().unwrap();
+        let session = fixture.path().join("session");
+        fs::create_dir(&session).unwrap();
+        let path = fixture.path().join("existing");
+        fs::create_dir(&path).unwrap();
+        fs::write(path.join("foreign"), b"keep").unwrap();
+        assert!(
+            prepare(
+                RunMaterials {
+                    directories: vec![],
+                    files: vec![]
+                },
+                path.clone(),
+                session,
+            )
+            .is_err()
+        );
+        assert_eq!(fs::read(path.join("foreign")).unwrap(), b"keep");
+    }
+
     #[tokio::test]
     async fn local_worker_cancelled_preparation_keeps_cleanup_owner() {
         let temp = tempfile::tempdir().unwrap();
