@@ -365,6 +365,15 @@ class SelectionTests(unittest.TestCase):
         for test in plan.RELEASE_BUILD_TESTS:
             self.assertIn(["python3", "scripts/" + test], plan.select([], full=True)["commands"])
 
+    def test_windows_validation_tooling_preserves_feedback_without_unix_product_builds(self):
+        for path in plan.WINDOWS_VALIDATION_TOOLING | {"tools/windows-agent-fixtures/package-lock.json"}:
+            with self.subTest(path=path):
+                result = plan.select([path])
+                self.assertFalse(result["rust"])
+                self.assertFalse(result["frontend"])
+                self.assertIn(["python3", "scripts/test-windows-ci-report.py"], result["commands"])
+        self.assertIn(["python3", "scripts/test-windows-ci-report.py"], plan.select([], full=True)["commands"])
+
     def test_release_contract_updates_select_their_checks_without_product_builds(self):
         for path in sorted(plan.RELEASE_CONTRACT_TOOLING | {"contracts/releases/v9.0.0.json"}):
             with self.subTest(path=path):

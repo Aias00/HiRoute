@@ -145,12 +145,17 @@ fn native_permissions_survive_atomic_restore_and_detect_acl_changes() {
     let fixture = tempfile::tempdir().unwrap();
     let target = fixture.path().join("native.json");
     std::fs::write(&target, b"original").unwrap();
-    let original = file_security::capture(&security::open_identity(&target, false).unwrap()).unwrap();
+    let original =
+        file_security::capture(&security::open_identity(&target, false).unwrap()).unwrap();
     durable::write_private_atomic(&target, b"managed").unwrap();
-    let managed = file_security::capture(&security::open_owner_only(&target, false).unwrap()).unwrap();
+    let managed =
+        file_security::capture(&security::open_owner_only(&target, false).unwrap()).unwrap();
     assert_eq!(managed, file_security::private_defaults(false).unwrap());
     assert_ne!(managed.descriptor, original.descriptor);
     durable::write_windows_atomic(&target, b"original", &original).unwrap();
     assert_eq!(std::fs::read(&target).unwrap(), b"original");
-    assert_eq!(file_security::capture(&security::open_identity(&target, false).unwrap()).unwrap(), original);
+    assert_eq!(
+        file_security::capture(&security::open_identity(&target, false).unwrap()).unwrap(),
+        original
+    );
 }

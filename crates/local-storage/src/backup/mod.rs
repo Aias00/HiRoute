@@ -1204,16 +1204,16 @@ fn prepare_owner_directory(path: &Path) -> Result<(), LocalStorageError> {
     }
     #[cfg(not(windows))]
     {
-    if path.exists() {
-        let metadata = fs::symlink_metadata(path)?;
-        if metadata.file_type().is_symlink() || !metadata.file_type().is_dir() {
-            return Err(LocalStorageError::Permission);
+        if path.exists() {
+            let metadata = fs::symlink_metadata(path)?;
+            if metadata.file_type().is_symlink() || !metadata.file_type().is_dir() {
+                return Err(LocalStorageError::Permission);
+            }
+        } else {
+            fs::create_dir_all(path)?;
+            set_owner_directory_permissions(path)?;
         }
-    } else {
-        fs::create_dir_all(path)?;
-        set_owner_directory_permissions(path)?;
-    }
-    Ok(())
+        Ok(())
     }
 }
 

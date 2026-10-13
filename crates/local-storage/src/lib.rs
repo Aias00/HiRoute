@@ -109,7 +109,9 @@ impl LocalStorageSet {
             }
             hiroute_platform::durable::rename(previous, &backup_root)?;
             hiroute_platform::durable::directory_barrier(storage_root)?;
-            hiroute_platform::durable::directory_barrier(backup_root.parent().ok_or(LocalStorageError::InvalidData)?)?;
+            hiroute_platform::durable::directory_barrier(
+                backup_root.parent().ok_or(LocalStorageError::InvalidData)?,
+            )?;
         }
         let master_key_path = storage_root.join("master-key");
         let control_path = live_root.join("control.db");

@@ -130,9 +130,12 @@ fn native_agent_home() -> Result<PathBuf, String> {
             let home = std::env::var_os("HOME")
                 .map(PathBuf::from)
                 .filter(|path| path.is_absolute())
-                .ok_or_else(|| "isolated Agent discovery requires an absolute test HOME".to_owned())?;
-            hiroute_platform::windows::security::verify_owner_only(&home, true)
-                .map_err(|error| format!("isolated Agent discovery HOME is not private: {error}"))?;
+                .ok_or_else(|| {
+                    "isolated Agent discovery requires an absolute test HOME".to_owned()
+                })?;
+            hiroute_platform::windows::security::verify_owner_only(&home, true).map_err(
+                |error| format!("isolated Agent discovery HOME is not private: {error}"),
+            )?;
             return Ok(home);
         }
         hiroute_platform::windows::background::profile().map_err(|error| {
@@ -157,7 +160,10 @@ fn windows_agent_discovery_uses_the_private_isolated_test_home() {
     }
     let home = native_agent_home().unwrap();
     assert_eq!(home, PathBuf::from(std::env::var_os("HOME").unwrap()));
-    assert_ne!(home, hiroute_platform::windows::background::profile().unwrap());
+    assert_ne!(
+        home,
+        hiroute_platform::windows::background::profile().unwrap()
+    );
     hiroute_platform::windows::security::verify_owner_only(&home, true).unwrap();
 }
 

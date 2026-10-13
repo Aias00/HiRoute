@@ -45,12 +45,13 @@ PI_SDK_CONTRACT_TEST = "crates/integrations/src/agents/pi_sdk_contract.test.mjs"
 INTEGRATION_SKILL = ".agents/skills/hiroute-integrate/SKILL.md"
 WEBSITE_TOOLING = {".github/workflows/website.yml", ".github/workflows/release.yml"}
 RELEASE_BUILD_TESTS = ("test-build-cpa.py", "test-build-release.py", "test-linux-release.py", "test-package-desktop.py",
-                       "test-standalone-install.py", "test-third-party-licenses.py")
+                       "test-standalone-install.py", "test-standalone-windows.py", "test-third-party-licenses.py")
 RELEASE_BUILD_TOOLING = {"scripts/linux-release-abi.py", "scripts/linux-release-runtime.py",
                          "scripts/linux-release-container.py", "scripts/linux-release-baseline.json",
                          "scripts/linux-release.Dockerfile", ".github/workflows/build-release.yml", "scripts/build-release.py",
                          "scripts/build-cpa.py", "scripts/package-desktop.py",
                          "scripts/package-standalone.py", "scripts/install-standalone.py",
+                         "scripts/install-standalone-windows.py", "scripts/windows-ci-package.py",
                          "scripts/collect-third-party-licenses.py",
                          *("scripts/" + name for name in RELEASE_BUILD_TESTS)}
 WEBSITE_PREFIXES = ("apps/website/", ".github/scripts/", "news/", "experiments/")
@@ -71,6 +72,9 @@ VALIDATION_TOOLING = {"scripts/validation.py", "scripts/validation-host.py", "sc
                       "scripts/local-rust.py", "scripts/test-local-rust.py",
                       "scripts/remote-rust.py", "scripts/test-remote-rust.py",
                       "scripts/validation-schedule.py", "scripts/test-validation-schedule.py"}
+WINDOWS_VALIDATION_TOOLING = {"scripts/windows-headless-ci.ps1", "scripts/windows-ci-report.py",
+                              "scripts/test-windows-ci-report.py", "scripts/windows-agent-fixtures.py",
+                              ".github/workflows/windows-headless.yml"}
 PRODUCT_GROUPS = set(GROUPS) - {"diagnostics"}
 
 # Known shared Worker contracts consumed by the feature-gated Tauri bridge and
@@ -317,8 +321,12 @@ def select(paths, full=False):
     validation_tooling = False
     release_contract_tooling = False
     release_build_tooling = False
+    windows_validation_tooling = False
     targets = set()
     for path in sorted(set(paths)):
+        if path in WINDOWS_VALIDATION_TOOLING or path.startswith("tools/windows-agent-fixtures/"):
+            windows_validation_tooling = True
+            continue
         if path in RELEASE_BUILD_TOOLING:
             release_build_tooling = True
             continue
@@ -447,6 +455,8 @@ def select(paths, full=False):
                              "--", "--exact"])
     if selection_tooling:
         commands.append(["python3", "scripts/test-test-plan.py"])
+    if full or windows_validation_tooling:
+        commands.append(["python3", "scripts/test-windows-ci-report.py"])
     if full or release_build_tooling:
         commands.extend([["python3", "scripts/" + name] for name in RELEASE_BUILD_TESTS])
     product_checks = worker_product_checks(paths)

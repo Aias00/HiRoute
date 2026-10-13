@@ -48,8 +48,13 @@ mutations. Main-Agent delegation must separately invoke the actual public CLI.
 
 Keep borrowed user resources, writable native acceptance configuration, fresh
 product storage and per-run materials separate. Each product instance needs a
-private runtime/storage namespace. CLI submissions have no local receipt directory;
-recovery uses the original key and request, with title/detail lookup only as an aid.
+private runtime/storage namespace. Worker task submissions recover with the original
+key and request, with title/detail lookup only as an aid. Agent collaboration
+configuration separately freezes credential-free Preview/Apply bytes in the
+[CLI receipt owner](../../crates/cli/src/collaboration/receipt.rs); Windows publishes
+them without replacement and checks native ownership, link count and ancestors
+before replay. Its [native regressions](../../crates/cli/src/collaboration/windows_receipt_tests.rs)
+do not substitute for an installed Agent invoking the public CLI.
 [CLI submission regressions](../../crates/cli/tests/worker_submission.rs) cover denied local
 writes and uncertain responses; durable admission and native Main journeys remain separate.
 Expose the selected CLI and Pi's selected Node consistently
@@ -114,6 +119,15 @@ Final backend DAG admission and preparation are owned by
 [regressions](../../scripts/test-validation-schedule.py). CPA bridge process fixtures
 run in an isolated lane before other listeners; Gateway runtime consumers wait for
 prepared product roles.
+
+The [Windows CI entry](../../scripts/windows-headless-ci.ps1) requires nonempty
+native inventories for primitives, shared libraries, installed foreground and
+Task/SCM business paths, and fixed upstream clients. The
+[fixture producer](../../scripts/windows-agent-fixtures.py) binds exact npm
+integrities and official Qoder archive hashes; the
+[feedback adapter](../../scripts/windows-ci-report.py) retains the original SHA
+and native verdict. A build or client initialize is not evidence of tool execution,
+provider login, Windows 11, or another processor architecture.
 
 Code-map and local ownership-guide edits require link/owner review and the selected
 contract checks, not new model calls. Runtime-embedded Markdown and shipped Skills

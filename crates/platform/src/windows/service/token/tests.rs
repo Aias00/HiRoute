@@ -9,13 +9,14 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 use windows_sys::Win32::Security::Authorization::{GetSecurityInfo, SE_FILE_OBJECT};
 use windows_sys::Win32::Security::{
-    AccessCheck, DACL_SECURITY_INFORMATION, DuplicateTokenEx, GENERIC_MAPPING,
-    GROUP_SECURITY_INFORMATION, GetAce, GetSecurityDescriptorSacl, GetUserObjectSecurity,
-    InitializeSecurityDescriptor, LABEL_SECURITY_INFORMATION, LookupPrivilegeNameW,
-    OWNER_SECURITY_INFORMATION, PRIVILEGE_SET, SECURITY_DESCRIPTOR, SYSTEM_MANDATORY_LABEL_ACE,
-    SecurityImpersonation, SetSecurityDescriptorDacl, SetSecurityDescriptorGroup,
-    SetSecurityDescriptorOwner, TOKEN_GROUPS, TOKEN_PRIVILEGES, TOKEN_STATISTICS, TokenGroups,
-    TokenImpersonation, TokenPrivileges, TokenSessionId, TokenStatistics,
+    ACCESS_ALLOWED_ACE, ACE_HEADER, AccessCheck, DACL_SECURITY_INFORMATION, DuplicateTokenEx,
+    GENERIC_MAPPING, GROUP_SECURITY_INFORMATION, GetAce, GetSecurityDescriptorSacl,
+    GetUserObjectSecurity, InitializeSecurityDescriptor, LABEL_SECURITY_INFORMATION,
+    LookupPrivilegeNameW, MapGenericMask, OWNER_SECURITY_INFORMATION, PRIVILEGE_SET,
+    SECURITY_DESCRIPTOR, SYSTEM_MANDATORY_LABEL_ACE, SecurityImpersonation,
+    SetSecurityDescriptorDacl, SetSecurityDescriptorGroup, SetSecurityDescriptorOwner,
+    TOKEN_GROUPS, TOKEN_PRIVILEGES, TOKEN_STATISTICS, TokenGroups, TokenImpersonation,
+    TokenPrivileges, TokenSessionId, TokenStatistics,
 };
 use windows_sys::Win32::Storage::FileSystem::{
     FILE_ALL_ACCESS, FILE_GENERIC_EXECUTE, FILE_GENERIC_READ, FILE_GENERIC_WRITE,
@@ -29,7 +30,9 @@ use windows_sys::Win32::System::StationsAndDesktops::{
     DESKTOP_JOURNALPLAYBACK, DESKTOP_JOURNALRECORD, DESKTOP_READOBJECTS, DESKTOP_SWITCHDESKTOP,
     DESKTOP_WRITEOBJECTS, GetProcessWindowStation, GetThreadDesktop,
 };
-use windows_sys::Win32::System::Threading::{GetCurrentProcessId, GetCurrentThreadId};
+use windows_sys::Win32::System::Threading::{
+    GetCurrentProcessId, GetCurrentThreadId, PROCESS_ALL_ACCESS,
+};
 
 const PROBE: &str = "HIROUTE_TEST_RESTRICTED_OWNER";
 const TEST: &str =
@@ -216,12 +219,66 @@ fn user_object_label(
 }
 
 fn default_object_access(token: &File) -> io::Result<bool> {
+    default_object_access_with_mapping(token, true, false)
+}
+
+fn default_object_access_with_mapping(
+    token: &File,
+    map_aces: bool,
+    deny_owner: bool,
+) -> io::Result<bool> {
     let user = information(token, TokenUser);
     let owner = information(token, TokenOwner);
-    let dacl = information(token, TokenDefaultDacl);
+    // GetTokenInformation gives us an independent ACL copy. It has not yet
+    // been attached to an object, so its GENERIC_ALL ACEs are still generic.
+    // MS-DTYP 2.4.3: AccessCheck does not map generic rights within ACEs.
+    // Normalize only this diagnostic copy, never the production token's ACL.
+    let mut dacl = information(token, TokenDefaultDacl);
     let user_sid = unsafe { (*user.as_ptr().cast::<TOKEN_USER>()).User.Sid };
     let owner_sid = unsafe { (*owner.as_ptr().cast::<TOKEN_OWNER>()).Owner };
-    let acl = unsafe { (*dacl.as_ptr().cast::<TOKEN_DEFAULT_DACL>()).DefaultDacl };
+    let acl = unsafe { (*dacl.as_mut_ptr().cast::<TOKEN_DEFAULT_DACL>()).DefaultDacl };
+    // This probe supports GENERIC_ALL and already-specific masks. It does not
+    // invent the kernel's GenericRead/Write/Execute process mapping.
+    let mapping = GENERIC_MAPPING {
+        GenericRead: 0,
+        GenericWrite: 0,
+        GenericExecute: 0,
+        GenericAll: PROCESS_ALL_ACCESS,
+    };
+    if acl.is_null() {
+        return Err(io::Error::from(io::ErrorKind::InvalidData));
+    }
+    let mut owner_denied = false;
+    for index in 0..unsafe { (*acl).AceCount } {
+        let mut ace = null_mut();
+        if unsafe { GetAce(acl, index.into(), &mut ace) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        // WinNT.h ACCESS_ALLOWED_ACE_TYPE=0, ACCESS_DENIED_ACE_TYPE=1;
+        // these share the Header/Mask/SidStart layout. Reject other encodings.
+        let header = unsafe { &*ace.cast::<ACE_HEADER>() };
+        if !matches!(header.AceType, 0 | 1)
+            || usize::from(header.AceSize) < std::mem::size_of::<ACCESS_ALLOWED_ACE>()
+        {
+            return Err(io::Error::from(io::ErrorKind::InvalidData));
+        }
+        let ace = unsafe { &mut *ace.cast::<ACCESS_ALLOWED_ACE>() };
+        if ace.Mask & 0xe000_0000 != 0 {
+            return Err(io::Error::from(io::ErrorKind::InvalidData));
+        }
+        if map_aces {
+            unsafe { MapGenericMask(&mut ace.Mask, &mapping) };
+        }
+        if deny_owner
+            && unsafe { EqualSid(std::ptr::addr_of_mut!(ace.SidStart).cast(), user_sid) } != 0
+        {
+            ace.Header.AceType = 1;
+            owner_denied = true;
+        }
+    }
+    if deny_owner && !owner_denied {
+        return Err(io::Error::from(io::ErrorKind::InvalidData));
+    }
     let mut descriptor = SECURITY_DESCRIPTOR::default();
     let descriptor = (&mut descriptor as *mut SECURITY_DESCRIPTOR).cast();
     // WinNT.h SECURITY_DESCRIPTOR_REVISION; absolute descriptor for AccessCheck.
@@ -232,17 +289,11 @@ fn default_object_access(token: &File) -> io::Result<bool> {
     {
         return Err(io::Error::last_os_error());
     }
-    let mapping = GENERIC_MAPPING {
-        GenericRead: 0x001f_ffff,
-        GenericWrite: 0x001f_ffff,
-        GenericExecute: 0x001f_ffff,
-        GenericAll: 0x001f_ffff,
-    };
     check_descriptor(
         descriptor,
         &impersonation_token(token)?,
         &mapping,
-        mapping.GenericAll,
+        PROCESS_ALL_ACCESS,
     )
 }
 
@@ -537,6 +588,11 @@ fn restricted_business_child_runs_with_owner_medium_token() {
         return;
     }
     let token = restricted_token().unwrap();
+    // Reproduce the former probe's false denial, then prove both positive and
+    // negative checks on the mapped copy. Keep the real restricted child gate
+    // below; synthetic descriptor access alone cannot prove DLL initialization.
+    assert!(!default_object_access_with_mapping(&token, false, false).unwrap());
+    assert!(!default_object_access_with_mapping(&token, true, true).unwrap());
     assert!(
         default_object_access(&token).unwrap(),
         "restricted child cannot access its default kernel objects"

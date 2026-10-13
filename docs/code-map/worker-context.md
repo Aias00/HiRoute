@@ -54,6 +54,16 @@ The [profile guide](../../crates/daemon/src/delegation/profile/README.md) owns s
 flags, credential delivery, native tool permissions and resource restrictions.
 Do not duplicate the shared admission, process or retention lifecycle for an ecosystem.
 
+On Windows, [native launch admission](../../crates/integrations/src/agents/windows_runtime.rs)
+resolves known npm producers to their declared JavaScript entry and selected Node;
+it never evaluates a `.cmd` shim. System shell selectors come from the actual
+Windows system directory. Worker HOME discovery uses the account's native profile,
+while explicit ecosystem configuration roots retain their existing meaning.
+[Live checks](../../crates/daemon/src/control/runtime/agent_live_check_windows.rs)
+capture output in private files and retain the process Job until all owned tools
+stop. Follow those owners for shell, environment, timeout or background-session
+differences rather than duplicating ecosystem lifecycle code.
+
 ### Pi compatibility is a capability contract
 
 Selected dependency checks allow bounded cold startup: native version reads have

@@ -209,20 +209,20 @@ fn prepare_owner_directory(path: &Path) -> Result<(), LocalStorageError> {
     }
     #[cfg(not(windows))]
     {
-    if path.exists() {
-        let metadata = fs::symlink_metadata(path)?;
-        if metadata.file_type().is_symlink() || !metadata.file_type().is_dir() {
-            return Err(LocalStorageError::Permission);
+        if path.exists() {
+            let metadata = fs::symlink_metadata(path)?;
+            if metadata.file_type().is_symlink() || !metadata.file_type().is_dir() {
+                return Err(LocalStorageError::Permission);
+            }
+        } else {
+            fs::create_dir_all(path)?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
+            }
         }
-    } else {
-        fs::create_dir_all(path)?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
-        }
-    }
-    Ok(())
+        Ok(())
     }
 }
 
