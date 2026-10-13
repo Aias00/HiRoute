@@ -32,6 +32,9 @@ use serde_json::json;
 
 use super::*;
 
+#[path = "runtime_worker_read_empty_tests.rs"]
+mod worker_read_empty_tests;
+
 #[test]
 fn production_writer_store_drives_application_owned_defaults_and_all_plan_scope() {
     #[cfg(unix)]
@@ -519,6 +522,16 @@ fn worker_read_uses_signed_run_cursors_reports_gap_and_preserves_b6_privacy() {
         wrong_purpose.error.unwrap().code,
         hiroute_application_api::ErrorCode::InvalidArguments
     );
+
+    let running = worker_read_empty_tests::start_prompt(&runtime, &accepted);
+    let empty = worker_read(&service, run_id, Some(&pending_cursor), Some(32));
+    assert!(empty.error.is_none(), "{empty:?}");
+    let empty: WorkerReadDataV1 = serde_json::from_value(empty.data.unwrap()).unwrap();
+    assert!(empty.valid());
+    assert_eq!(empty.content_state, WorkerReadContentStateV1::Pending);
+    assert_eq!(empty.run_state, running.progress.state);
+    assert_eq!(empty.state_revision, running.progress.revision);
+    assert_eq!(empty.next_cursor.as_deref(), Some(pending_cursor.as_str()));
 
     let target = ManagedTextProgressTarget {
         scope: ManagedTextScope {
