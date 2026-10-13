@@ -130,6 +130,30 @@ fn settings_status_joins_surface_checks_with_the_active_publication_revision() {
     );
     assert!(!first.model_verified);
 
+    // An untouched native file is historical evidence, not proof that its endpoint
+    // still reaches the current Gateway after a listener change.
+    adapter
+        .managed_agent_runtime
+        .lock()
+        .unwrap()
+        .as_mut()
+        .unwrap()
+        .gateway_base_url = "http://127.0.0.1:5838/v1".into();
+    let moved = status();
+    assert_eq!(moved.state, AgentModelSettingsStateV2::Drift);
+    assert!(moved.current_selection.is_none());
+    assert!(moved.live_check_targets.is_empty());
+    assert!(!moved.model_verified);
+    assert_eq!(fs::read_to_string(&path).unwrap(), configured);
+    adapter
+        .managed_agent_runtime
+        .lock()
+        .unwrap()
+        .as_mut()
+        .unwrap()
+        .gateway_base_url = "http://127.0.0.1:5837/v1".into();
+    assert_eq!(status().state, AgentModelSettingsStateV2::Configured);
+
     // Native clients may update unrelated settings after HiRoute configures the route.
     // A collaboration skill restore likewise must not turn this model selection off.
     let unrelated = configured.replace("user_setting = true", "user_setting = false");

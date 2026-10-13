@@ -572,7 +572,21 @@ hiroute gateway set --address 192.0.2.10 --port 8317 \
 hiroute gateway recover --output json
 ```
 
-`set` 保存 desired 后重启，并只在真实 ready 后推进 applied。自动端口首次选定后持久化；
+`set` 保存 desired 后重启，并只在真实 ready 后推进 applied。自动端口首次选定后持久化。
+重复 `--port auto`、固定转自动或只修改地址时，优先保留已保存的 desired 端口；
+desired 尚未选定端口时复用最近 applied 的端口，两者都没有才首次选择。
+端口冲突会明确失败，不另选端口。服务管理器重启失败后 desired 仍保留，操作仍为 failed；
+随后通过 `hiroute service run` 启动时，真实 ready 后记录该 desired 为 applied。
+`recover` 使用当前 applied 地址，不会恢复任意历史端口。
+
+`gateway show` 通过公开 Agent settings status 核对配置与当前运行地址。
+`agent_update.required` 在配置偏移、变更待完成或无法完成检查时提示核查/重新配置，
+不依赖最近监听器操作是否成功；`existing_agent_count` 为 null 表示发现不可用。
+配置已一致和仅启用协作的目标无需更新模型。未配置/已恢复模型还会检查已保存的 V1 接入：
+没有旧记录时无需更新；旧配置已断开时提示核查。当前已配置状态优先于已被取代的历史接入。
+地址实际变化后，保留所需模型选择，重新执行 `agents connect preview` / `agents connect apply`；
+监听器重启不会自动改写原生 Agent 配置。
+
 `0.0.0.0` 对本机管理客户端显示为 `127.0.0.1:<port>`。非 loopback 配置要求显式风险确认。
 HiRoute 不自动修改防火墙、TLS 或远端 Agent。暂不支持 IPv6、多监听器和防火墙管理。
 

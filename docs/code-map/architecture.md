@@ -55,6 +55,15 @@ cover that distinction. DSH module replacement and credential-store precedence
 are located in the [native composition guide](../../crates/integrations/src/agents/additional_native/README.md#dsh-static-composition).
 Do not move either rule into a generic provider merge.
 
+[Model settings status](../../crates/daemon/src/control/runtime/settings_status.rs)
+joins owned native configuration with the current Gateway endpoint as well as
+grant/publication evidence. [CLI listener status](../../crates/cli/src/host_commands.rs)
+uses that read and, for unconfigured/restored targets, the
+[released V1 connection join](../../crates/daemon/src/control/runtime/agent_connection_discovery.rs)
+to request explicit reconfiguration; listener operation history alone
+does not establish Agent convergence. Port selection belongs to the shared
+[listener store](../../crates/host-runtime/src/gateway_listener.rs), including Desktop.
+
 Follow discovery through an ordinary request using the saved source. The
 [Pi](../../tools/product-e2e/tests/PI_INTEGRATION.md) and
 [DSH](../../tools/product-e2e/tests/DSH_INTEGRATION.md) acceptance entries cover

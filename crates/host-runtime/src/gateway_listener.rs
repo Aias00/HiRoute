@@ -298,10 +298,18 @@ impl GatewayListenerStore {
 
     pub fn configure(
         &self,
-        desired: GatewayListenerDesiredV1,
+        mut desired: GatewayListenerDesiredV1,
     ) -> Result<GatewayListenerConfigV1, GatewayListenerError> {
         desired.validate()?;
         let mut config = self.load_or_default()?;
+        // Automatic selects only when no durable choice exists. Changing the mode or
+        // address must not invalidate endpoints already installed in native clients.
+        if desired.port_mode == GatewayPortModeV1::Automatic && desired.port.is_none() {
+            desired.port = config
+                .desired
+                .port
+                .or_else(|| config.applied.as_ref().map(|applied| applied.port));
+        }
         config.desired = desired.clone();
         config.operation = Some(GatewayListenerOperationV1 {
             operation_id: random_hex().map_err(|_| GatewayListenerError::Unavailable)?,
@@ -548,6 +556,92 @@ mod tests {
             connect_address(wildcard).unwrap(),
             SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 5837))
         );
+    }
+
+    #[test]
+    fn repeated_auto_and_scope_changes_preserve_the_durable_port() {
+        let root = tempfile::tempdir().unwrap();
+        let store = GatewayListenerStore::new(root.path());
+        let listen = store.reserve().unwrap().release();
+        store.mark_applied(listen).unwrap();
+        for address in ["127.0.0.1", "0.0.0.0"] {
+            let configured = store
+                .configure(GatewayListenerDesiredV1::automatic(address))
+                .unwrap();
+            assert_eq!(configured.desired.port, Some(listen.port()));
+            assert_eq!(configured.operation.unwrap().desired, configured.desired);
+            let selected = store.reserve().unwrap().release();
+            assert_eq!(selected.port(), listen.port());
+            store.mark_applied(selected).unwrap();
+        }
+        let reopened = GatewayListenerStore::new(root.path());
+        assert_eq!(reopened.reserve().unwrap().listen.port(), listen.port());
+    }
+
+    #[test]
+    fn auto_prefers_desired_then_applied_and_respects_explicit_fixed_ports() {
+        let root = tempfile::tempdir().unwrap();
+        let store = GatewayListenerStore::new(root.path());
+        let first = store.reserve().unwrap().release();
+        store.mark_applied(first).unwrap();
+        let requested = if first.port() == 45837 { 45838 } else { 45837 };
+        store
+            .configure(GatewayListenerDesiredV1::fixed("127.0.0.1", requested))
+            .unwrap();
+        store.mark_failed("SERVICE_RESTART_FAILED").unwrap();
+        assert_eq!(
+            store
+                .configure(GatewayListenerDesiredV1::automatic("127.0.0.1"))
+                .unwrap()
+                .desired
+                .port,
+            Some(requested)
+        );
+        // An old persisted request may have cleared desired while retaining applied.
+        let mut old = store.load().unwrap().unwrap();
+        old.desired.port = None;
+        old.operation.as_mut().unwrap().desired.port = None;
+        store.save(&old).unwrap();
+        assert_eq!(
+            store
+                .configure(GatewayListenerDesiredV1::automatic("127.0.0.1"))
+                .unwrap()
+                .desired
+                .port,
+            Some(first.port())
+        );
+        let mut explicit = GatewayListenerDesiredV1::automatic("127.0.0.1");
+        explicit.port = Some(requested);
+        assert_eq!(
+            store.configure(explicit).unwrap().desired.port,
+            Some(requested)
+        );
+    }
+
+    #[test]
+    fn failed_restart_then_foreground_activation_preserves_operation_history() {
+        let root = tempfile::tempdir().unwrap();
+        let store = GatewayListenerStore::new(root.path());
+        let listen = store.reserve().unwrap().release();
+        store.mark_applied(listen).unwrap();
+        store
+            .configure(GatewayListenerDesiredV1::automatic("127.0.0.1"))
+            .unwrap();
+        let failed = store
+            .mark_failed("SERVICE_RESTART_FAILED")
+            .unwrap()
+            .operation;
+        let selected = store.reserve().unwrap().release();
+        assert_eq!(selected, listen);
+        let activated = store.mark_applied(selected).unwrap();
+        assert_eq!(activated.applied_address().unwrap(), Some(listen));
+        assert_eq!(activated.operation, failed);
+        let occupied = store.reserve().unwrap();
+        assert!(matches!(
+            store.reserve(),
+            Err(GatewayListenerError::AddressUnavailable)
+        ));
+        assert_eq!(store.load().unwrap().unwrap(), occupied.config);
     }
 
     #[test]
