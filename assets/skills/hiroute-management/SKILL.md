@@ -25,6 +25,16 @@ reports `daemon=role_all` and `gateway=ready`. If not, diagnose with `service do
 `service logs`; do not substitute an App-bundle path, repository binary, remote Gateway, direct
 database access, or a second daemon.
 
+
+For JSON business requests, every `--request-stdin` command also supports
+`--request-file PATH`. Prefer a regular request file for replayable Agent submissions;
+choose exactly one source and retain the exact Preview/Apply payload and idempotency key.
+Both sources use the same strict parser and existing byte limits. Unknown fields,
+duplicate JSON members, trailing JSON and mixed sources fail before submission.
+Protected input and capability material still use their separate channels.
+`sessions receipt ID` retains the v1 receipt lookup; a v2 `facts` request through either
+JSON source uses the logical request ID returned by the v2 session timeline.
+
 ## Contract and authority
 
 - Host management commands are published by `hiroute --help` and their family help: use

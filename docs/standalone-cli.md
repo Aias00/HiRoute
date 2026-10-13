@@ -567,6 +567,26 @@ still owned by HiRoute; concurrent user changes conflict instead of being overwr
 Code uses its public profile/launcher contract. Do not configure a Responses-only Codex plan
 for a surface that supports only Messages.
 
+## JSON request input
+
+Every command that accepts `--request-stdin` also accepts `--request-file PATH`:
+
+```sh
+hiroute routing preview --request-file route-preview.json --output json
+# Existing pipelines and shell redirection remain supported:
+hiroute routing preview --request-stdin --output json < route-preview.json
+```
+
+Choose exactly one source. Both use the same bounded UTF-8 JSON parser and typed
+command schema; unknown fields, duplicate object members, trailing JSON, repeated
+sources and mixtures with human options return `INVALID_ARGUMENTS` before contacting
+Local Control. A file must be regular. Relative paths resolve from the calling
+working directory; prefix a filename beginning with `-` with `./`. Quote paths
+containing spaces. Existing byte limits remain in force (normally 1 MiB; operation
+lookup and Worker dependency selection use 64 KiB). A request file never replaces
+the separate protected-input or inherited capability channel. `worker --file`
+continues to carry prompt text under its existing contract.
+
 ## Sessions, actual selection, and usage facts
 
 After an Agent or Worker request completes:
@@ -580,6 +600,25 @@ hiroute value show --routing PLAN_ID --session SESSION_ID --output json
 hiroute observation plan-quality samples --plan-id PLAN_ID --output json
 hiroute observation plan-quality samples --session-id SESSION_ID --limit 50 --output json
 ```
+
+A positional `sessions receipt RECEIPT_ID` retains the v1 RoutingReceipt query.
+To read a v2 Facts page, use the exact logical `request_id` returned by the v2
+session timeline (a session ID or v1 receipt ID is a different locator):
+
+```json
+{
+  "schema": "hiroute.observation.query/v2",
+  "intent": {
+    "view": "facts",
+    "query": {"request_id": "REQUEST_ID_FROM_TIMELINE", "limit": 100, "cursor": null}
+  }
+}
+```
+
+Save this as `facts-request.json`, then run
+`hiroute sessions receipt --request-file facts-request.json --output json`.
+`--request-stdin` accepts the identical request. The response is a v2 Facts page;
+use its returned cursor with the same request ID to read further pages.
 
 `sessions show` returns facts and timeline by default, not conversation bodies. Ordered
 RoutingReceipt facts such as `route_decision`, `attempt_started`, and `usage_and_cache` record
@@ -669,7 +708,27 @@ hiroute gateway recover --output json
 ```
 
 `set` saves desired state, restarts, and advances applied state only after real readiness.
-The first automatically chosen port is persisted. Local management clients see a
+The first automatically chosen port is persisted. Repeating `--port auto`, switching
+from fixed to automatic, or changing the address retains the saved desired port
+(or the last applied port if no desired port has been selected). A port is selected
+only when neither exists; a binding collision fails without choosing a replacement.
+If the service-manager restart fails, desired state remains saved and the operation
+remains failed. A later `hiroute service run` applies that desired state after readiness.
+`recover` selects the current applied listener, not an earlier historical address.
+
+`gateway show` checks public Agent settings status against the current runtime endpoint.
+Its `agent_update.required` hint requests a check/reconfiguration for drift, pending
+changes or unavailable inspection; it does not depend on the last listener operation's
+success. A null `existing_agent_count` means discovery was unavailable. Configured
+targets that agree and collaboration-only targets do not require model updates.
+Unconfigured/restored model targets also check any saved V1 connection; a missing
+old record needs no update, while a disconnected configuration requires a check.
+Current configured settings take precedence over superseded connection history.
+After a real endpoint change, use fresh
+`agents connect preview` / `agents connect apply` with the intended model selection;
+HiRoute does not rewrite native Agent configuration during a listener restart.
+
+Local management clients see a
 `0.0.0.0` listener as `127.0.0.1:<port>`. A non-loopback address requires explicit risk
 acceptance. HiRoute never changes a firewall, configures TLS, or manages a remote Agent.
 IPv6, multiple listeners, and firewall management are not supported.

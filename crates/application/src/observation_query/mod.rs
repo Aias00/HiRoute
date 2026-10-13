@@ -149,6 +149,16 @@ impl ObservationQueryService {
         self.port.observed_valuation(reader, request, now_ms)
     }
 
+    pub fn search_observed_sessions(
+        &self,
+        reader: &hiroute_domain::ObservationReaderContext,
+        query: &hiroute_domain::ObservationSearchQueryV2,
+        now_ms: i64,
+    ) -> Result<hiroute_domain::ObservationSessionSearchPageV1, ObservationQueryError> {
+        reader.check(now_ms, true, true)?;
+        self.port.search_observed_sessions(reader, query, now_ms)
+    }
+
     pub fn search_observed_text(
         &self,
         reader: &hiroute_domain::ObservationReaderContext,

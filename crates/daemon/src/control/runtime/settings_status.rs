@@ -286,7 +286,24 @@ impl LocalControlAdapter {
                     }
                     None => false,
                 };
-                let configured = file_applied && current.as_ref() == Some(&expected) && published;
+                let endpoint_current = {
+                    let runtime = self
+                        .managed_agent_runtime
+                        .lock()
+                        .map_err(|_| ControlReadError::Unavailable)?;
+                    let runtime = runtime.as_ref().ok_or(ControlReadError::Unavailable)?;
+                    model_endpoint_matches_runtime(
+                        class,
+                        &operation,
+                        intent,
+                        &runtime.gateway_base_url,
+                    )
+                    .map_err(super::map_port)?
+                };
+                let configured = file_applied
+                    && endpoint_current
+                    && current.as_ref() == Some(&expected)
+                    && published;
                 status.state = if configured {
                     State::Configured
                 } else {
@@ -503,6 +520,42 @@ fn model_action(
                 ClaudeModelFileAction::Configure { .. } => Ok(ModelAction::Configure),
                 ClaudeModelFileAction::Restore { .. } => Ok(ModelAction::Restore),
             }
+        }
+    }
+}
+
+// The native adapter proves the owned file still matches the sealed configuration.
+// That historical endpoint must also match today's running Gateway.
+fn model_endpoint_matches_runtime(
+    class: SettingsAgentClass,
+    operation: &(impl hiroute_domain::AgentOperationRead + ?Sized),
+    intent: &hiroute_domain::ExternalEffectIntentV1,
+    gateway_base_url: &str,
+) -> hiroute_domain::PortResult<bool> {
+    use hiroute_application::agent_connection::{
+        AdditionalModelFileAction, additional_model_kind,
+        settings_additional_model_file_for_operation,
+    };
+    match class {
+        SettingsAgentClass::Codex | SettingsAgentClass::CodexProfile => Ok(matches!(
+            settings_codex_model_file_for_operation(operation, intent)?.change,
+            CodexModelFileAction::Configure { endpoint, .. } if endpoint == gateway_base_url
+        )),
+        SettingsAgentClass::Claude => Ok(matches!(
+            settings_claude_model_file_for_operation(operation, intent)?.change,
+            ClaudeModelFileAction::Configure { gateway_base_url: endpoint, .. }
+                if endpoint == gateway_base_url
+        )),
+        SettingsAgentClass::Qoder | SettingsAgentClass::Pi | SettingsAgentClass::Dsh => {
+            let endpoint = super::native_additional_model::additional_model_endpoint(
+                additional_model_kind(intent)?,
+                gateway_base_url,
+            )?;
+            Ok(matches!(
+                settings_additional_model_file_for_operation(operation, intent)?.change,
+                AdditionalModelFileAction::Configure { endpoint: configured, .. }
+                    if configured == endpoint
+            ))
         }
     }
 }

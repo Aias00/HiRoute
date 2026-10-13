@@ -4,6 +4,52 @@ use super::*;
 
 #[cfg(unix)]
 #[test]
+fn shutdown_preserves_owner_until_the_final_reclaim_descriptor_closes() {
+    use fs2::FileExt as _;
+    if isolated_owner_recovery_case(
+        "runtime::tests::fixture_isolation::shutdown_preserves_owner_until_the_final_reclaim_descriptor_closes",
+    ) {
+        return;
+    }
+    let root = tempfile::tempdir().unwrap();
+    let backend = Arc::new(FakeBackend::default());
+    let runtime = fixture_runtime(
+        &root,
+        Arc::clone(&backend),
+        Arc::new(FakeControl::default()),
+        2,
+    );
+    runtime.start().unwrap();
+    let instance = root.path().join("state/fixture-cpa");
+    let owner = instance.join("owner.lock/owner.json");
+    let before = std::fs::read(&owner).unwrap();
+    let held = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(instance.join(".owner-reclaim.lock"))
+        .unwrap();
+    held.try_lock_exclusive().unwrap();
+    // A fork before exec retains the same open-file description even when
+    // the originating thread closes it. Reproduce that lifetime explicitly.
+    let inherited = held.try_clone().unwrap();
+    drop(held);
+    assert!(matches!(
+        runtime.shutdown(),
+        Err(CpaLifecycleError::OwnerState)
+    ));
+    assert_eq!(std::fs::read(&owner).unwrap(), before);
+    assert!(runtime.inner.lock().live.is_some());
+    assert_eq!(backend.spawn_count(), 1);
+    assert_eq!(backend.attach_count(), 0);
+    drop(inherited);
+    assert_eq!(runtime.shutdown().unwrap().code, Some(0));
+    assert!(!instance.join("owner.lock").exists());
+    assert!(runtime.inner.lock().live.is_none());
+    assert_eq!(backend.spawn_count(), 1);
+}
+
+#[cfg(unix)]
+#[test]
 fn runtime_fixture_does_not_execute_ambient_codex() {
     use std::os::unix::fs::PermissionsExt;
     const CHILD: &str = "HIROUTE_RUNTIME_FIXTURE_CODEX";

@@ -4,7 +4,7 @@ use hiroute_domain::{
     GatewayOperationalTargetV1, HEADER_SECRET_LEASE_REQUEST_SCHEMA_V1, HeaderSecretLeaseRequestV1,
     NATIVE_CREDENTIAL_LEASE_REQUEST_SCHEMA_V1, NativeCredentialAuthorityV1,
     NativeCredentialCapabilityErrorV1, NativeCredentialLeaseRequestV1, NativeCredentialLeaseV1,
-    OperationId, PortErrorCode, PortResult, ProtectedSecret, SecretMutationV1, SecretStorePort,
+    OperationId, PortErrorCode, ProtectedSecret, SecretMutationV1, SecretStorePort,
     SensitiveAuthorizationTargetV1, UpstreamProtocol,
 };
 
@@ -267,9 +267,16 @@ fn frozen_native_request_rejects_duplicate_exclusions_and_non_bearer_auth() {
     assert!(auth.validate().is_err());
 }
 
-fn lease_error_code(result: PortResult<Option<NativeCredentialLeaseV1>>) -> PortErrorCode {
+fn lease_error_code<E: Into<hiroute_domain::NativeCredentialLeaseErrorV1>>(
+    result: Result<Option<NativeCredentialLeaseV1>, E>,
+) -> PortErrorCode {
     match result {
-        Err(error) => error.code,
+        Err(error) => match error.into() {
+            hiroute_domain::NativeCredentialLeaseErrorV1::Authority(error) => error.code,
+            hiroute_domain::NativeCredentialLeaseErrorV1::Denied(_) => {
+                PortErrorCode::PermissionDenied
+            }
+        },
         Ok(_) => panic!("expected credential authority rejection"),
     }
 }

@@ -43,11 +43,11 @@ use super::{
     MATERIALIZATION_BINDING_UNAVAILABLE, MATERIALIZATION_CREDENTIAL_COOLING_PREFIX,
     MATERIALIZATION_CREDENTIAL_DISABLED, MATERIALIZATION_CREDENTIAL_EXHAUSTED,
     MATERIALIZATION_CREDENTIAL_PROBE_BUSY, MATERIALIZATION_DNS_FAILED,
-    MATERIALIZATION_PROTOCOL_FAILED, MechanicalFailureSignal, PermitAvailability,
-    ProductionAttemptState, ProductionLogicalRequest, ProductionProvider,
-    ProductionReplaySeedEnvelope, RUNTIME_STATE_AUTHORITY_FAILED, RuntimeCooldownPolicy,
-    StatePermit, acquire_target_permit_status, confirm_success, label, record_failure, safe_error,
-    validate_attempt_permits,
+    MATERIALIZATION_KEY_DISABLED, MATERIALIZATION_PROTOCOL_FAILED, MATERIALIZATION_SOURCE_DISABLED,
+    MechanicalFailureSignal, PermitAvailability, ProductionAttemptState, ProductionLogicalRequest,
+    ProductionProvider, ProductionReplaySeedEnvelope, RUNTIME_STATE_AUTHORITY_FAILED,
+    RuntimeCooldownPolicy, StatePermit, acquire_target_permit_status, confirm_success, label,
+    record_failure, safe_error, validate_attempt_permits,
 };
 
 pub(super) struct ProductionStateAdapter {
@@ -368,7 +368,13 @@ pub(super) async fn materialize_attempt(
                 ))
                 .await
                 .map_err(|_| Arc::from(MATERIALIZATION_AUTHORITY_FAILED))?
-                .map_err(|_| Arc::from(MATERIALIZATION_AUTHORITY_FAILED))?
+                .map_err(|error| Arc::from(match error {
+                    crate::server::composition::PortError::CredentialDenied(reason) => match reason {
+                        hiroute_domain::NativeCredentialAccessDeniedV1::SourceDisabled => MATERIALIZATION_SOURCE_DISABLED,
+                        hiroute_domain::NativeCredentialAccessDeniedV1::CredentialDisabled => MATERIALIZATION_KEY_DISABLED,
+                    },
+                    _ => MATERIALIZATION_AUTHORITY_FAILED,
+                }))?
                 .ok_or_else(|| Arc::from(MATERIALIZATION_CREDENTIAL_EXHAUSTED))?,
         )
     };
@@ -628,11 +634,15 @@ pub(super) fn classify_materialization_failure(error: &Arc<str>) -> AttemptMater
             error.as_ref(),
             MATERIALIZATION_BINDING_UNAVAILABLE
                 | MATERIALIZATION_CREDENTIAL_EXHAUSTED
+                | MATERIALIZATION_SOURCE_DISABLED
+                | MATERIALIZATION_KEY_DISABLED
                 | MATERIALIZATION_DNS_FAILED
         );
     let class = match error.as_ref() {
         MATERIALIZATION_DNS_FAILED => AttemptMaterializationFailureClass::Dns,
         MATERIALIZATION_CREDENTIAL_EXHAUSTED
+        | MATERIALIZATION_SOURCE_DISABLED
+        | MATERIALIZATION_KEY_DISABLED
         | MATERIALIZATION_CREDENTIAL_PROBE_BUSY
         | MATERIALIZATION_CREDENTIAL_DISABLED => AttemptMaterializationFailureClass::Credential,
         _ if credential_cooldown.is_some() => AttemptMaterializationFailureClass::Credential,
@@ -647,6 +657,12 @@ pub(super) fn classify_materialization_failure(error: &Arc<str>) -> AttemptMater
                 "runtime_state_probe_busy"
             } else if disabled {
                 "runtime_state_disabled"
+            } else if error.as_ref() == MATERIALIZATION_SOURCE_DISABLED {
+                "source_disabled"
+            } else if error.as_ref() == MATERIALIZATION_KEY_DISABLED {
+                "credential_disabled"
+            } else if error.as_ref() == MATERIALIZATION_CREDENTIAL_EXHAUSTED {
+                "credential_exhausted"
             } else if retryable {
                 "materialization_retryable"
             } else {

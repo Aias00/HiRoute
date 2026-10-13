@@ -232,10 +232,12 @@ mod protocol_tests {
         assert!(discover.help.output.contains("omits the CAS revisions"));
 
         let select = command_by_id("worker.dependencies.select").unwrap();
-        assert_eq!(select.stdin_channels, ["request_stdin"]);
+        assert_eq!(select.stdin_channels, ["request_stdin", "request_file"]);
         assert_eq!(select.idempotency, "deterministic_request_replay");
         let help = select.help_document();
         for required in [
+            "--request-stdin",
+            "--request-file <PATH>",
             "harness",
             "adapter_path",
             "cli_path",

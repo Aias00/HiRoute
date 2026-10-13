@@ -26,14 +26,70 @@ try {
         process.stdout.write(`${item.state === 'green' ? 'green' : 'red'}: ${item.name}${item.error ? ` · ${item.error}` : ''}\n`);
       }
     }
+    const layout = [];
+    for (const [width, height] of [[1200, 813], [755, 600]]) {
+      for (const language of ['zh', 'en']) {
+        for (const state of ['searching', 'results', 'empty', 'pending', 'error']) {
+          await navigate(client, new URL('session-window.html', baseUrl).href, { width, height });
+          await waitFor(client, 'Boolean(window.sessionWindow)');
+          await evaluate(client, `(() => {
+            const control = window.sessionWindow;
+            control.reset(); control.language = ${JSON.stringify(language)};
+            const session = 'observation-session/layout';
+            const request = control.makeRequest(session, 0, Date.now() - 1000);
+            control.requests[session] = [request];
+            control.texts['layout-content'] = '中文 literal checksum matching content';
+            const state = ${JSON.stringify(state)};
+            control.views.session_search = () => {
+              if (state === 'searching') return new Promise(() => {});
+              if (state === 'error') throw { code: 'DAEMON_UNAVAILABLE' };
+              return { hits: state === 'results' ? [{ session_id: session, request_id: request.request_id, content_id: 'layout-content', original_text_offset: 15 }] : [], next_cursor: state === 'results' ? 'next' : null, index_partial: state === 'pending' };
+            };
+          })()`);
+          await evaluate(client, 'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+          await waitFor(client, 'Boolean(document.querySelector(".session-filters input"))');
+          await evaluate(client, `(() => {
+            const input = document.querySelector('.session-filters input');
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'checksum');
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+          })()`);
+          const condition = state === 'searching' ? 'Boolean(document.querySelector(".session-list [role=status]"))'
+            : state === 'error' ? 'Boolean(document.querySelector(".session-master [role=alert]"))'
+              : state === 'results' ? 'Boolean(document.querySelector(".session-more"))'
+                : 'Boolean(document.querySelector(".session-list-empty"))';
+          await waitFor(client, condition);
+          const geometry = await evaluate(client, `(() => {
+            const elements = [...document.querySelectorAll('.session-filters input,.session-master button,.session-list-empty h3,.session-list-empty p,.session-master [role=alert],.session-list [role=status]')].filter(el => el.getClientRects().length);
+            const outside = elements.filter(el => { const b=el.getBoundingClientRect(); return b.left < -1 || b.right > innerWidth+1 || b.top < -1 || b.bottom > innerHeight+1; }).map(el => el.className);
+            const clipped = elements.filter(el => {
+              const b=el.getBoundingClientRect(); let left=b.left,right=b.right,top=b.top,bottom=b.bottom;
+              for (let parent=el.parentElement;parent;parent=parent.parentElement) {
+                const style=getComputedStyle(parent),p=parent.getBoundingClientRect();
+                if (['hidden','clip','auto','scroll'].includes(style.overflowX)) { left=Math.max(left,p.left);right=Math.min(right,p.right); }
+                if (['hidden','clip','auto','scroll'].includes(style.overflowY)) { top=Math.max(top,p.top);bottom=Math.min(bottom,p.bottom); }
+              }
+              return right-left < b.width-2 || bottom-top < b.height-2;
+            }).map(el => el.className);
+            return { width: innerWidth, height: innerHeight, outside, clipped, inspected: elements.length, documentOverflow: document.documentElement.scrollWidth > innerWidth+1 };
+          })()`);
+          const image = await client.send('Page.captureScreenshot', { format: 'png' });
+          const file = `session-search-${language}-${width}x${height}-${state}.png`;
+          await writeFile(path.join(outputRoot, file), Buffer.from(image.data, 'base64'));
+          const result = { name: `session search layout ${language} ${width}x${height} ${state}`, state: !geometry.inspected || geometry.outside.length || geometry.clipped.length || geometry.documentOverflow ? 'red' : 'green', geometry, screenshot: file };
+          layout.push(result);
+          process.stdout.write(`${result.state}: ${result.name}\n`);
+        }
+      }
+    }
     const report = {
       generatedAt: new Date().toISOString(),
       evidence: 'React components + mock IPC (window and cursor binding mirrored) only; not native/Tauri and not the real daemon',
       checks,
+      layout,
       summary: { total: checks.length, green: checks.filter(check => check.state === 'green').length, red: checks.filter(check => check.state === 'red').length },
     };
     await writeFile(path.join(outputRoot, 'session-window-report.json'), `${JSON.stringify(report, null, 2)}\n`);
-    if (report.summary.total !== count || report.summary.red > 0) process.exitCode = 1;
+    if (report.summary.total !== count || report.summary.red > 0 || layout.some(item => item.state !== 'green')) process.exitCode = 1;
   } finally {
     client.close();
   }

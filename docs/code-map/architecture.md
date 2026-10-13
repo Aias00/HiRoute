@@ -16,6 +16,11 @@
 | Business evidence | [Observation](../../crates/observation/src), [authorized queries](../../crates/application/src/observation_query) | Execution facts, managed content, session queries and valuation; [diagnostics](../../crates/diagnostics/src) remain separate |
 | Product presentation | [Desktop product shell](../../apps/desktop/src/product), [native host](../../apps/desktop/src-tauri/src), [CLI](../../crates/cli/src) | The native host projects safe DTOs; frontend state does not grant authority or establish durable success |
 
+CLI JSON request sources (`--request-file` / `--request-stdin`) share the bounded
+[strict input reader](../../crates/cli/src/request_input.rs). Command codecs retain
+typed intent, selector and byte-limit ownership; see the [CLI input guide](../../crates/cli/INPUT.md)
+and [production argv regressions](../../crates/cli/tests/request_input.rs).
+
 CLI/Desktop → client-core → daemon control → Application → storage/native adapters
 is the control path. Published plans and grants feed Gateway execution. Worker
 admission freezes a plan and run authority before the native client calls Gateway.
@@ -56,6 +61,15 @@ cover that distinction. DSH module replacement and credential-store precedence
 are located in the [native composition guide](../../crates/integrations/src/agents/additional_native/README.md#dsh-static-composition).
 Do not move either rule into a generic provider merge.
 
+[Model settings status](../../crates/daemon/src/control/runtime/settings_status.rs)
+joins owned native configuration with the current Gateway endpoint as well as
+grant/publication evidence. [CLI listener status](../../crates/cli/src/host_commands.rs)
+uses that read and, for unconfigured/restored targets, the
+[released V1 connection join](../../crates/daemon/src/control/runtime/agent_connection_discovery.rs)
+to request explicit reconfiguration; listener operation history alone
+does not establish Agent convergence. Port selection belongs to the shared
+[listener store](../../crates/host-runtime/src/gateway_listener.rs), including Desktop.
+
 Follow discovery through an ordinary request using the saved source. The
 [Pi](../../tools/product-e2e/tests/PI_INTEGRATION.md) and
 [DSH](../../tools/product-e2e/tests/DSH_INTEGRATION.md) acceptance entries cover
@@ -79,11 +93,15 @@ Scan → Prepare → Save → restart → native use, including stale-source rej
 | Concern | Owner | What callers must preserve |
 | --- | --- | --- |
 | Native Agent session correlation | [Gateway identity resolver](../../crates/gateway/src/context_hold/identity.rs), [native input guide](../../crates/gateway/README.md#native-session-correlation) | One identity feeds ContextHold, decision history and observation; native IDs precede content inference, malformed or conflicting claims remain request-scoped |
+| Named tool decision facts and request receipts | [Strict Gateway adapter](../../crates/integrations/src/gateway/mod.rs), [Product tool choice](../../crates/domain/src/observation/execution.rs), [receipt writer](../../crates/observation/src/receipt/mod.rs) | Preserve callable kind and name; Product's implicit Function encoding preserves historical digests. Each completed HTTP request closes independently of an unfinished Agent turn; [boundary regressions](../../crates/integrations/src/gateway/tests.rs) cover all tool choices |
+| Lifecycle acceptance of empty response end-stream frames | [Transport acceptance capture](../../crates/gateway/src/observation/content.rs), [Product lifecycle validation](../../crates/domain/src/observation/lifecycle.rs), [bounded receiver](../../crates/observation/src/writer/lifecycle.rs) | Successful zero-byte end-stream writes are real operational events with a zero byte count; identity remains strict. [Receiver regressions](../../crates/observation/src/writer/lifecycle_tests.rs) preserve continuous ACK through RequestFinished |
 | Capture completeness | [Content completeness](../../crates/observation/src/content/completeness.rs), [session query](../../crates/observation/src/query_v2/sessions.rs) | Aggregate every required request/direction; a finished stream or readable preview does not prove the session is complete |
 | Streaming memory | [Capture](../../crates/gateway/src/observation/provider/capture.rs), [pending delivery](../../crates/gateway/src/observation/provider/capture/tracker.rs) | Decoder, projector and delivery tracker share the stream budget; queue capacity is not capture evidence |
+| Reported token usage | [Response driver](../../crates/gateway/src/runtime/driver/response.rs), [completion facts](../../crates/gateway/src/observation/request/completion.rs), [capture tracker](../../crates/gateway/src/observation/provider/capture/tracker.rs) | Nonstream completion retains known usage before request termination; capture records content without duplicating it. Follow the [Gateway guide](../../crates/gateway/README.md#response-failure-evidence) for streaming ownership. |
 | Upstream fault attribution | [Wire projection](../../crates/gateway/src/observation/provider/wire_diagnostic.rs), [attempt association](../../crates/gateway/src/observation/request/diagnostic.rs), [decision calls](../../crates/gateway/src/core_runtime/classification/diagnostic.rs) | Actual bounded model/control fields, negotiated HTTP protocol, closed error codes, hashed request IDs and separate client headers/body commit facts must preserve the real outcome without prompts or provider error text |
+| Source disabled before an upstream attempt | [Exact permission gate](../../crates/local-storage/src/secrets/runtime.rs), [product preparation reply](../../crates/gateway/src/runtime/driver/selection/preparation.rs), [Gateway error guide](../../crates/gateway/README.md#candidate-preparation-errors) | Preserve the closed lease denial in the request fact and local JSON response; a frozen route does not grant current source/Key permission, and rejected preparation remains zero attempts |
 | Inspect CPA authentication recovery | [Private response metadata](../../crates/gateway/src/observation/provider/cpa_execution.rs), [pinned CPA adapter](../../vendor/cpa/README.md) | Logical attempts and actual HTTP sends differ; only verified CPA targets can supply recovery counters. Missing evidence remains unknown and does not create token usage. |
-| Search and gaps | [Query](../../crates/observation/src/query_v2/search.rs), [index worker](../../crates/observation/src/text_index/worker.rs), [status](../../crates/observation/src/query/status.rs) | Bounded scan windows, wraparound and explicit gaps distinguish incomplete search from an empty result |
+| Search and gaps | [Live session search](../../crates/observation/src/query_v2/session_search.rs), [query contract](../../crates/observation/src/query_v2/README.md), [keyword lookup](../../crates/observation/src/text_index/lookup.rs) | Fresh authorized pages count matching sessions; bounded background backfill and explicit gaps distinguish pending indexes from complete empty results. The released occurrence-search interface remains separate. |
 | Business relations and visibility | [Relation owner](../../crates/observation/src/query_v2/relation.rs), [managed content](../../crates/observation/src/managed_text/README.md) | `query_v2` also writes relations; every content read checks current authorization and visibility |
 | Native tool-history continuation | [Responses ingress](../../crates/gateway/src/adapters/responses_ingress.rs), [real continuation journey](../../tools/e2e-harness/tests/p0_gateway_protocol/continuation.rs) | Preserve model-generated empty tool names in native history without relaxing declarations/call IDs; unsafe conversion, ContextHold and reasoning cleanup stay disabled for that history |
 | Decision and competence attribution | [Decision observation map](decision-foundation.md#observation-and-public-consumers) | Attribute scores to the stage that actually ran, with its frozen category/group/candidate and rubric |

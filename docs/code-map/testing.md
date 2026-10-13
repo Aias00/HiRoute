@@ -38,6 +38,7 @@ validate the oracle. The real installed management loop is in
 | Observe native routing and rejected attempts | [NativeContextUpstream](../../crates/daemon/tests/support/native_context_fixture.py): count every model POST, including rejected endpoints/models/credentials; keep the ledger for positive route/history assertions |
 | Prove exact Continue, concurrent routes and cancellation | [Native context](../../crates/daemon/tests/support/native_context_product.py), [boundary journey](../../crates/daemon/tests/support/native_context_boundaries.py), [boundary oracle guide](../../crates/daemon/tests/support/NATIVE_CONTEXT_BOUNDARIES.md) |
 | Prove restoration of old durable state | [Frozen producer fixtures](../../crates/local-storage/src/migrations/fixtures/README.md), [crash-boundary tests](../../crates/local-storage/src/migrations/upgrade_batch_recovery_tests.rs): old bytes through the current consumer, not a new serializer pretending to be history |
+| Preserve native probe failure classification | [Pi probe tests](../../crates/integrations/src/agents/pi_runtime_tests.rs), [immutable launcher](../../crates/integrations/tests/fixtures/pi-node-launcher.sh): mutable test bodies are interpreter inputs; executable availability and version/output failures have separate assertions |
 | Exercise actual Desktop controls | [Browser scenario map](../../apps/desktop/tests/README.md) and native acceptance: select stable scenario IDs and require every declared outcome |
 
 The publication fixture leases its listener address across daemon restarts; do
@@ -104,6 +105,11 @@ HTTP path or old restore fixture does not prove route revocation or native execu
 4. Record revision, command, platform, cases, result and evidence location. Preserve
    reused evidence at its original SHA; assess the three slowest measured modules
    once without automatically refactoring the frozen candidate.
+
+The managed backend DAG's preparation boundary lives in
+[`validation-schedule.py`](../../scripts/validation-schedule.py).
+Its [regressions](../../scripts/test-validation-schedule.py) check current Gateway
+runtime fixture consumers before an expensive workspace run.
 
 Code-map and local ownership-guide edits require link/owner review and the selected
 contract checks, not new model calls. Runtime-embedded Markdown and shipped Skills

@@ -3,6 +3,7 @@
 //! This module owns no discovery, persistence, or routing behavior. It accepts only the exact
 //! typed Local Control request DTOs and leaves the public generated command manifest unchanged.
 
+#[cfg(test)]
 use std::io::Read;
 
 use hiroute_application_api::{
@@ -38,7 +39,7 @@ const TYPED_CONTROL_IDS: [&str; 16] = [
     "agents.restore.preview",
     "agents.restore.apply",
 ];
-const MAX_REQUEST_BYTES: u64 = 1024 * 1024;
+use crate::request_input::{self, MAX_REQUEST_BYTES};
 
 #[cfg(test)]
 pub(crate) fn typed_control_commands() -> impl Iterator<Item = CommandDescriptorV1> {
@@ -68,15 +69,15 @@ pub(crate) fn command_payload(
             options,
         )),
         "decision.services.apply" => Some(preview_or_apply(options)),
-        "decision.services.test" => Some(stdin::<
+        "decision.services.test" => Some(request::<
             hiroute_application_api::ClassifierDecisionTestRequestV1,
         >(options)),
-        "models.show" => Some(stdin::<hiroute_application_api::ModelCatalogQueryV1>(
+        "models.show" => Some(request::<hiroute_application_api::ModelCatalogQueryV1>(
             options,
         )),
-        "prices.effective" => Some(stdin::<GetEffectivePricesV2>(options)),
-        "prices.override.preview" => Some(stdin::<PreviewPriceOverrideChangeV2>(options)),
-        "prices.override.apply" => Some(stdin::<ApplyPriceOverrideChangeV2>(options)),
+        "prices.effective" => Some(request::<GetEffectivePricesV2>(options)),
+        "prices.override.preview" => Some(request::<PreviewPriceOverrideChangeV2>(options)),
+        "prices.override.apply" => Some(request::<ApplyPriceOverrideChangeV2>(options)),
         "compute.scan" => Some(empty::<ComputeScanRequestV1>(options)),
         "compute.list" => Some(empty::<ComputeManagementQueryV2>(options)),
         "compute.show" => Some(positional(options, |source_id| ComputeManagementQueryV2 {
@@ -84,23 +85,23 @@ pub(crate) fn command_payload(
         })),
         "compute.connection.options" => Some(empty::<ComputeConnectionOptionsRequestV1>(options)),
         "compute.connection.preview" => Some(compute_preview(options)),
-        "compute.connection.apply" => Some(stdin::<ComputeConnectionApplyRequestV1>(options)),
+        "compute.connection.apply" => Some(request::<ComputeConnectionApplyRequestV1>(options)),
         "compute.connection.authorize" => {
-            Some(stdin::<ComputeConnectionAuthorizationRequestV1>(options))
+            Some(request::<ComputeConnectionAuthorizationRequestV1>(options))
         }
-        "compute.connection.login" => Some(stdin::<
+        "compute.connection.login" => Some(request::<
             hiroute_application_api::ComputeSubscriptionLoginRequestV1,
         >(options)),
-        "compute.connection.test" => Some(stdin::<ComputeConnectionTestRequestV1>(options)),
+        "compute.connection.test" => Some(request::<ComputeConnectionTestRequestV1>(options)),
         "compute.credential.add" => Some(preview_or_apply(options)),
-        "routing.list" if !options.is_empty() => Some(stdin::<
+        "routing.list" if !options.is_empty() => Some(request::<
             hiroute_application_api::AgentPlanCatalogQueryV2,
         >(options)),
         "routing.preview" => Some(routing_request(options, false)),
         "routing.apply" => Some(routing_request(options, true)),
         "agents.connect.preview" => Some(agent_request(options, false)),
         "routing.options" => {
-            Some(stdin::<hiroute_application_api::PlanEditorOptionsRequestV1>(options))
+            Some(request::<hiroute_application_api::PlanEditorOptionsRequestV1>(options))
         }
         "agents.connect.apply" => Some(agent_request(options, true)),
         "agents.restore.preview" => Some(agent_restore_request(options, false)),
@@ -122,10 +123,7 @@ pub(crate) fn command_payload(
 }
 
 fn compute_preview(options: &[String]) -> Result<Value, ErrorCode> {
-    if options != ["--request-stdin"] {
-        return Err(ErrorCode::InvalidArguments);
-    }
-    let value = read_value(std::io::stdin())?;
+    let value = request_input::read(options, MAX_REQUEST_BYTES)?;
     if value
         .get("change")
         .and_then(|change| change.get("schema"))
@@ -141,19 +139,12 @@ fn compute_preview(options: &[String]) -> Result<Value, ErrorCode> {
 }
 
 fn typed_value<T: DeserializeOwned + Serialize>(value: Value) -> Result<Value, ErrorCode> {
-    let request: T = serde_json::from_value(value).map_err(|_| ErrorCode::InvalidArguments)?;
+    let request: T = request_input::deserialize(value)?;
     serde_json::to_value(request).map_err(|_| ErrorCode::Internal)
 }
 
 fn routing_request(options: &[String], apply: bool) -> Result<Value, ErrorCode> {
-    if options != ["--request-stdin"] {
-        return Err(ErrorCode::InvalidArguments);
-    }
-    let value = read_value(std::io::stdin())?;
-    fn typed<T: DeserializeOwned + Serialize>(value: Value) -> Result<Value, ErrorCode> {
-        let request: T = serde_json::from_value(value).map_err(|_| ErrorCode::InvalidArguments)?;
-        serde_json::to_value(request).map_err(|_| ErrorCode::Internal)
-    }
+    let value = request_input::read(options, MAX_REQUEST_BYTES)?;
     if value
         .get("change")
         .and_then(|c| c.get("schema"))
@@ -161,9 +152,9 @@ fn routing_request(options: &[String], apply: bool) -> Result<Value, ErrorCode> 
         == Some(hiroute_application_api::PUBLICATION_CHECKPOINT_CHANGE_SCHEMA_V1)
     {
         return if apply {
-            typed::<hiroute_application_api::PublicationCheckpointApplyRequestV1>(value)
+            typed_value::<hiroute_application_api::PublicationCheckpointApplyRequestV1>(value)
         } else {
-            typed::<hiroute_application_api::PublicationCheckpointPreviewRequestV1>(value)
+            typed_value::<hiroute_application_api::PublicationCheckpointPreviewRequestV1>(value)
         };
     }
     if value
@@ -173,9 +164,9 @@ fn routing_request(options: &[String], apply: bool) -> Result<Value, ErrorCode> 
         == Some(hiroute_application_api::PLAN_LIFECYCLE_CHANGE_SCHEMA_V1)
     {
         return if apply {
-            typed::<hiroute_application_api::PlanLifecycleApplyRequestV1>(value)
+            typed_value::<hiroute_application_api::PlanLifecycleApplyRequestV1>(value)
         } else {
-            typed::<hiroute_application_api::PlanLifecyclePreviewRequestV1>(value)
+            typed_value::<hiroute_application_api::PlanLifecyclePreviewRequestV1>(value)
         };
     }
     if value
@@ -185,9 +176,9 @@ fn routing_request(options: &[String], apply: bool) -> Result<Value, ErrorCode> 
         == Some(hiroute_application_api::PLAN_DRAFT_CHANGE_SCHEMA_V1)
     {
         return if apply {
-            typed::<hiroute_application_api::PlanDraftApplyRequestV1>(value)
+            typed_value::<hiroute_application_api::PlanDraftApplyRequestV1>(value)
         } else {
-            typed::<hiroute_application_api::PlanDraftPreviewRequestV1>(value)
+            typed_value::<hiroute_application_api::PlanDraftPreviewRequestV1>(value)
         };
     }
     if value
@@ -199,30 +190,24 @@ fn routing_request(options: &[String], apply: bool) -> Result<Value, ErrorCode> 
         return Err(ErrorCode::InvalidArguments);
     }
     if apply {
-        typed::<hiroute_application_api::PlanContentApplyRequestV2>(value)
+        typed_value::<hiroute_application_api::PlanContentApplyRequestV2>(value)
     } else {
-        typed::<hiroute_application_api::PlanContentPreviewRequestV2>(value)
+        typed_value::<hiroute_application_api::PlanContentPreviewRequestV2>(value)
     }
 }
 
 fn agent_request(options: &[String], apply: bool) -> Result<Value, ErrorCode> {
-    if options != ["--request-stdin"] {
-        return Err(ErrorCode::InvalidArguments);
-    }
-    validate_agent_request(read_value(std::io::stdin())?, apply)
+    validate_agent_request(request_input::read(options, MAX_REQUEST_BYTES)?, apply)
 }
 
 fn agent_restore_request(options: &[String], apply: bool) -> Result<Value, ErrorCode> {
-    if options != ["--request-stdin"] {
-        return Err(ErrorCode::InvalidArguments);
-    }
-    validate_restore_request(read_value(std::io::stdin())?, apply)
+    validate_restore_request(request_input::read(options, MAX_REQUEST_BYTES)?, apply)
 }
 
 fn validate_restore_request(value: Value, apply: bool) -> Result<Value, ErrorCode> {
     let value = validate_agent_request(value, apply)?;
     let spec: hiroute_application_api::AgentSettingsSpecV2 =
-        serde_json::from_value(value["spec"].clone()).map_err(|_| ErrorCode::InvalidArguments)?;
+        request_input::deserialize(value["spec"].clone())?;
     if spec.schema_version != hiroute_application_api::AGENT_SETTINGS_SCHEMA_V2
         || !spec.is_restore_only()
     {
@@ -233,22 +218,23 @@ fn validate_restore_request(value: Value, apply: bool) -> Result<Value, ErrorCod
 
 fn validate_agent_request(value: Value, apply: bool) -> Result<Value, ErrorCode> {
     let v2 = value["spec"]["schema_version"]["major"] == 2;
-    let valid = match (v2, apply) {
-        (true, true) => {
-            serde_json::from_value::<hiroute_application_api::AgentSettingsApplyV2>(value.clone())
-                .is_ok()
-        }
-        (true, false) => serde_json::from_value::<
-            hiroute_application_api::AgentSettingsPreviewRequestV2,
-        >(value.clone())
-        .is_ok(),
-        (false, true) => {
-            serde_json::from_value::<AgentConnectionApplyRequestV1>(value.clone()).is_ok()
-        }
-        (false, false) => {
-            serde_json::from_value::<AgentConnectionPreviewRequestV1>(value.clone()).is_ok()
-        }
-    };
+    let valid =
+        match (v2, apply) {
+            (true, true) => request_input::deserialize::<
+                hiroute_application_api::AgentSettingsApplyV2,
+            >(value.clone())
+            .is_ok(),
+            (true, false) => request_input::deserialize::<
+                hiroute_application_api::AgentSettingsPreviewRequestV2,
+            >(value.clone())
+            .is_ok(),
+            (false, true) => {
+                request_input::deserialize::<AgentConnectionApplyRequestV1>(value.clone()).is_ok()
+            }
+            (false, false) => {
+                request_input::deserialize::<AgentConnectionPreviewRequestV1>(value.clone()).is_ok()
+            }
+        };
     if valid {
         Ok(value)
     } else {
@@ -257,10 +243,7 @@ fn validate_agent_request(value: Value, apply: bool) -> Result<Value, ErrorCode>
 }
 
 fn preview_or_apply(options: &[String]) -> Result<Value, ErrorCode> {
-    if options != ["--request-stdin"] {
-        return Err(ErrorCode::InvalidArguments);
-    }
-    let value = read_value(std::io::stdin())?;
+    let value = request_input::read(options, MAX_REQUEST_BYTES)?;
     let keys = value
         .as_object()
         .ok_or(ErrorCode::InvalidArguments)?
@@ -278,11 +261,9 @@ fn preview_or_apply(options: &[String]) -> Result<Value, ErrorCode> {
     .into_iter()
     .collect();
     if keys == preview_keys {
-        serde_json::from_value::<PreviewRequestV1>(value.clone())
-            .map_err(|_| ErrorCode::InvalidArguments)?;
+        request_input::deserialize::<PreviewRequestV1>(value.clone())?;
     } else if keys == apply_keys {
-        let apply = serde_json::from_value::<ApplyRequestV1>(value.clone())
-            .map_err(|_| ErrorCode::InvalidArguments)?;
+        let apply = request_input::deserialize::<ApplyRequestV1>(value.clone())?;
         if apply.apply_capability.is_some() || apply.idempotency_key.is_empty() {
             return Err(ErrorCode::InvalidArguments);
         }
@@ -299,7 +280,7 @@ where
     let [value] = options else {
         return Err(ErrorCode::InvalidArguments);
     };
-    if value.is_empty() {
+    if !request_input::valid_positional(value) {
         return Err(ErrorCode::InvalidArguments);
     }
     serde_json::to_value(build(value.clone())).map_err(|_| ErrorCode::Internal)
@@ -315,42 +296,19 @@ where
     serde_json::to_value(T::default()).map_err(|_| ErrorCode::Internal)
 }
 
-fn stdin<T>(options: &[String]) -> Result<Value, ErrorCode>
+fn request<T>(options: &[String]) -> Result<Value, ErrorCode>
 where
     T: DeserializeOwned + Serialize,
 {
-    if options != ["--request-stdin"] {
-        return Err(ErrorCode::InvalidArguments);
-    }
-    typed_request::<T>(std::io::stdin())
+    request_input::typed::<T>(options, MAX_REQUEST_BYTES)
 }
 
+#[cfg(test)]
 fn typed_request<T>(reader: impl Read) -> Result<Value, ErrorCode>
 where
     T: DeserializeOwned + Serialize,
 {
-    let mut bytes = Vec::new();
-    reader
-        .take(MAX_REQUEST_BYTES + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|_| ErrorCode::InvalidArguments)?;
-    if bytes.len() as u64 > MAX_REQUEST_BYTES {
-        return Err(ErrorCode::InvalidArguments);
-    }
-    let request: T = serde_json::from_slice(&bytes).map_err(|_| ErrorCode::InvalidArguments)?;
-    serde_json::to_value(request).map_err(|_| ErrorCode::Internal)
-}
-
-fn read_value(reader: impl Read) -> Result<Value, ErrorCode> {
-    let mut bytes = Vec::new();
-    reader
-        .take(MAX_REQUEST_BYTES + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|_| ErrorCode::InvalidArguments)?;
-    if bytes.len() as u64 > MAX_REQUEST_BYTES {
-        return Err(ErrorCode::InvalidArguments);
-    }
-    serde_json::from_slice(&bytes).map_err(|_| ErrorCode::InvalidArguments)
+    typed_value::<T>(request_input::read_json(reader, MAX_REQUEST_BYTES)?)
 }
 
 #[cfg(test)]

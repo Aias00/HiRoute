@@ -255,10 +255,12 @@ pub trait NativeCredentialAuthorityV1: Send + Sync {
         Ok(None)
     }
 
+    /// An empty lease means exact exhaustion. Current managed source/Key permission
+    /// denials retain their closed reason before any secret is decrypted.
     fn lease_native_credential(
         &self,
         request: &NativeCredentialLeaseRequestV1,
-    ) -> PortResult<Option<NativeCredentialLeaseV1>>;
+    ) -> Result<Option<NativeCredentialLeaseV1>, NativeCredentialLeaseErrorV1>;
 
     fn lease_header_secret(
         &self,

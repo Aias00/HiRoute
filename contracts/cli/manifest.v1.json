@@ -5,7 +5,7 @@
   },
   "product_contract_revision": "487a807c8dc25cfb24e8b097882cd3bb9716a009",
   "proposal_map_revision": "ab4da93cc49c6ec56a01e046230411ff1ca82300",
-  "descriptor_digest": "sha256:a435bc5901bbcaeaf2f41c8c4db15b0a7f967d988aeb544e8f5d2890abc64639",
+  "descriptor_digest": "sha256:1bdd37be3354af88208d5c9f91945f23b392c2bce3eb8ceb5677fa945126d4c5",
   "visibility": "release",
   "commands": [
     {
@@ -114,12 +114,15 @@
       "effect": "none",
       "network": "local_control_only",
       "model_call": "never",
-      "stdin_channels": [],
+      "stdin_channels": [
+        "request_stdin",
+        "request_file"
+      ],
       "idempotency": "not_applicable",
       "help": {
         "purpose": "Find the original Operation in one exact idempotency scope without submitting a write.",
-        "usage": "hiroute operations find --request-stdin --output json",
-        "arguments_and_options": "Only the typed options declared by the generated request schema are accepted; arbitrary patches, URLs, shell, or plaintext Secret argv are forbidden.",
+        "usage": "hiroute operations find (--request-stdin | --request-file <PATH>) --output json",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. Only the typed options declared by the generated request schema are accepted; arbitrary patches, URLs, shell, or plaintext Secret argv are forbidden.",
         "effects": "Read-only; no product side effect.",
         "network_and_model_use": "No model use; any external dependency is declared by the typed Application operation.",
         "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
@@ -302,14 +305,15 @@
       "network": "local_control_only",
       "model_call": "never",
       "stdin_channels": [
-        "request_stdin"
+        "request_stdin",
+        "request_file"
       ],
       "preview_apply_pair": "agents.connect.apply",
       "idempotency": "not_applicable",
       "help": {
         "purpose": "Preview Agent grant, catalog, Skill, overlay, and owned configuration changes.",
-        "usage": "hiroute agents connect preview --request-stdin --output json",
-        "arguments_and_options": "--request-stdin accepts only the strict v1 connection or v2 managed-settings request. Apply is same-UID, revision-checked, idempotent, and writes only owned Agent fields; restore refuses concurrent ownership drift.",
+        "usage": "hiroute agents connect preview (--request-stdin | --request-file <PATH>) --output json",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. --request-stdin accepts only the strict v1 connection or v2 managed-settings request. Apply is same-UID, revision-checked, idempotent, and writes only owned Agent fields; restore refuses concurrent ownership drift.",
         "effects": "Stateless Preview: no ID, TTL, Operation, Secret, file, database, publication, or network write.",
         "network_and_model_use": "No model use and no non-fixture network access.",
         "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
@@ -354,14 +358,15 @@
       "network": "local_control_only",
       "model_call": "never",
       "stdin_channels": [
-        "request_stdin"
+        "request_stdin",
+        "request_file"
       ],
       "preview_apply_pair": "agents.connect.preview",
       "idempotency": "required",
       "help": {
         "purpose": "Apply an exact AgentConnection change through the recoverable Application saga.",
-        "usage": "hiroute agents connect apply --request-stdin --output json",
-        "arguments_and_options": "--request-stdin accepts only the strict v1 connection or v2 managed-settings request. Apply is same-UID, revision-checked, idempotent, and writes only owned Agent fields; restore refuses concurrent ownership drift.",
+        "usage": "hiroute agents connect apply (--request-stdin | --request-file <PATH>) --output json",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. --request-stdin accepts only the strict v1 connection or v2 managed-settings request. Apply is same-UID, revision-checked, idempotent, and writes only owned Agent fields; restore refuses concurrent ownership drift.",
         "effects": "Same-UID Application-owned journaled operation after exact spec, digest, revision, and idempotency checks.",
         "network_and_model_use": "No model inference; external access, when required, is limited to registered typed ports.",
         "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
@@ -455,14 +460,15 @@
       "network": "local_control_only",
       "model_call": "never",
       "stdin_channels": [
-        "request_stdin"
+        "request_stdin",
+        "request_file"
       ],
       "preview_apply_pair": "agents.restore.apply",
       "idempotency": "not_applicable",
       "help": {
         "purpose": "Preview field-owned Agent configuration restoration without overwriting concurrent edits.",
-        "usage": "hiroute agents restore preview --request-stdin --output json",
-        "arguments_and_options": "--request-stdin accepts only the strict v1 connection or v2 managed-settings request. Apply is same-UID, revision-checked, idempotent, and writes only owned Agent fields; restore refuses concurrent ownership drift.",
+        "usage": "hiroute agents restore preview (--request-stdin | --request-file <PATH>) --output json",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. --request-stdin accepts only the strict v1 connection or v2 managed-settings request. Apply is same-UID, revision-checked, idempotent, and writes only owned Agent fields; restore refuses concurrent ownership drift.",
         "effects": "Stateless Preview: no ID, TTL, Operation, Secret, file, database, publication, or network write.",
         "network_and_model_use": "No model use and no non-fixture network access.",
         "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
@@ -507,14 +513,15 @@
       "network": "local_control_only",
       "model_call": "never",
       "stdin_channels": [
-        "request_stdin"
+        "request_stdin",
+        "request_file"
       ],
       "preview_apply_pair": "agents.restore.preview",
       "idempotency": "required",
       "help": {
         "purpose": "Restore only still-owned Agent fields from an exact restore point.",
-        "usage": "hiroute agents restore apply --request-stdin --output json",
-        "arguments_and_options": "--request-stdin accepts only the strict v1 connection or v2 managed-settings request. Apply is same-UID, revision-checked, idempotent, and writes only owned Agent fields; restore refuses concurrent ownership drift.",
+        "usage": "hiroute agents restore apply (--request-stdin | --request-file <PATH>) --output json",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. --request-stdin accepts only the strict v1 connection or v2 managed-settings request. Apply is same-UID, revision-checked, idempotent, and writes only owned Agent fields; restore refuses concurrent ownership drift.",
         "effects": "Same-UID Application-owned journaled operation after exact spec, digest, revision, and idempotency checks.",
         "network_and_model_use": "No model inference; external access, when required, is limited to registered typed ports.",
         "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
@@ -838,14 +845,15 @@
       "network": "local_control_only",
       "model_call": "never",
       "stdin_channels": [
-        "request_stdin"
+        "request_stdin",
+        "request_file"
       ],
       "preview_apply_pair": "compute.connection.apply",
       "idempotency": "not_applicable",
       "help": {
         "purpose": "Preview a connection identity and registered endpoint change without accepting a Secret.",
-        "usage": "hiroute compute connection preview --request-stdin --output json",
-        "arguments_and_options": "--request-stdin accepts exactly one registered v1 projection, compute-management v2 save/edit, or subscription-check v2 preview request. The optional edit action is rename (display_name), append_models (checked candidate; preserves existing models), remove_models (saved source; selected refs are removals), or delete (saved source; no selected refs). Omitting edit retains released save semantics. Referenced models, including disabled routes and retained versions, cannot be deleted. Preview has no durable side effect and returns the exact digest and revisions required by Apply.",
+        "usage": "hiroute compute connection preview (--request-stdin | --request-file <PATH>) --output json",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. --request-stdin accepts exactly one registered v1 projection, compute-management v2 save/edit, or subscription-check v2 preview request. The optional edit action is rename (display_name), append_models (checked candidate; preserves existing models), remove_models (saved source; selected refs are removals), or delete (saved source; no selected refs). Omitting edit retains released save semantics. Referenced models, including disabled routes and retained versions, cannot be deleted. Preview has no durable side effect and returns the exact digest and revisions required by Apply.",
         "effects": "Stateless Preview: no ID, TTL, Operation, Secret, file, database, publication, or network write.",
         "network_and_model_use": "No model use and no non-fixture network access.",
         "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
@@ -887,14 +895,15 @@
       "network": "local_control_only",
       "model_call": "never",
       "stdin_channels": [
-        "request_stdin"
+        "request_stdin",
+        "request_file"
       ],
       "preview_apply_pair": "compute.connection.preview",
       "idempotency": "required",
       "help": {
         "purpose": "Apply an exact registered compute connection change.",
-        "usage": "hiroute compute connection apply --request-stdin --output json",
-        "arguments_and_options": "--request-stdin accepts only the exact preview spec, digest, revisions, and a non-empty idempotency key. Same-UID Local Control reproduces the plan; replay uses the original key and changed payloads are rejected.",
+        "usage": "hiroute compute connection apply (--request-stdin | --request-file <PATH>) --output json",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. --request-stdin accepts only the exact preview spec, digest, revisions, and a non-empty idempotency key. Same-UID Local Control reproduces the plan; replay uses the original key and changed payloads are rejected.",
         "effects": "Same-UID Application-owned journaled operation after exact spec, digest, revision, and idempotency checks.",
         "network_and_model_use": "No model inference; external access, when required, is limited to registered typed ports.",
         "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
@@ -939,13 +948,14 @@
       "network": "local_control_only",
       "model_call": "never",
       "stdin_channels": [
-        "request_stdin"
+        "request_stdin",
+        "request_file"
       ],
       "idempotency": "not_applicable",
       "help": {
         "purpose": "Start or resume typed authorization for a registered connection option.",
-        "usage": "hiroute compute connection authorize --request-stdin --output json",
-        "arguments_and_options": "--request-stdin reads one exact subscription result operation or releases one exact validation. Starting authorization still uses connection Preview/Apply, including revision, digest, and idempotency checks.",
+        "usage": "hiroute compute connection authorize (--request-stdin | --request-file <PATH>) --output json",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. --request-stdin reads one exact subscription result operation or releases one exact validation. Starting authorization still uses connection Preview/Apply, including revision, digest, and idempotency checks.",
         "effects": "Application-owned typed operation; side effects are recorded by the Operation and external ledgers.",
         "network_and_model_use": "No model inference; external access, when required, is limited to registered typed ports.",
         "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
@@ -987,13 +997,14 @@
       "network": "local_control_then_provider_oauth",
       "model_call": "never",
       "stdin_channels": [
-        "request_stdin"
+        "request_stdin",
+        "request_file"
       ],
       "idempotency": "not_applicable",
       "help": {
         "purpose": "Manage an independent Codex or Claude subscription sign-in without enabling routing.",
-        "usage": "hiroute compute connection login --request-stdin --output json",
-        "arguments_and_options": "--request-stdin accepts list/start with provider codex or claude; status/cancel/forget with an exact login_ref; callback with login_ref and input_candidate. Register callback text first with protected-input register --candidate <callback_input_candidate.candidate_ref> --secret-fd <FD>. OAuth codes, tokens, callback URLs and credential paths are rejected in ordinary request JSON. Start returns a browser URL; successful login still requires subscription check, model selection and save.",
+        "usage": "hiroute compute connection login (--request-stdin | --request-file <PATH>) --output json",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. --request-stdin accepts list/start with provider codex or claude; status/cancel/forget with an exact login_ref; callback with login_ref and input_candidate. Register callback text first with protected-input register --candidate <callback_input_candidate.candidate_ref> --secret-fd <FD>. OAuth codes, tokens, callback URLs and credential paths are rejected in ordinary request JSON. Start returns a browser URL; successful login still requires subscription check, model selection and save.",
         "effects": "Manages one independent provider login session and CPA-owned credentials. Login does not enable routing; use the existing subscription check and Preview/Apply save flow after choosing models. Forget targets exactly one local login.",
         "network_and_model_use": "May open the provider authorization flow and exchange or refresh independent OAuth credentials through CPA. No model inference is performed and native-client refresh tokens are never imported.",
         "automation": "Keep the returned login_ref for status, cancel and forget. After uncertain delivery, list/status the existing session before starting again or resubmitting a one-use callback. Never persist the authorization URL or put callback material in argv, environment, logs or ordinary request JSON.",
@@ -1035,13 +1046,14 @@
       "network": "local_control_then_registered_gateway",
       "model_call": "explicit_probe_may_call_model",
       "stdin_channels": [
-        "request_stdin"
+        "request_stdin",
+        "request_file"
       ],
       "idempotency": "not_applicable",
       "help": {
         "purpose": "Run one explicit bounded connection probe, with inference only when requested.",
-        "usage": "hiroute compute connection test --request-stdin --output json",
-        "arguments_and_options": "--request-stdin selects native, registered, discovered, or saved with its strict nested request. Credentials are referenced only through a protected-input candidate; plaintext credential fields are rejected. The explicit probe may contact the configured provider and may consume quota when an inference model is selected.",
+        "usage": "hiroute compute connection test (--request-stdin | --request-file <PATH>) --output json",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. --request-stdin selects native, registered, discovered, or saved with its strict nested request. Credentials are referenced only through a protected-input candidate; plaintext credential fields are rejected. The explicit probe may contact the configured provider and may consume quota when an inference model is selected.",
         "effects": "Runs one explicit bounded source check. It keeps protected input in daemon memory and does not persist source state until the separate Preview/Apply flow.",
         "network_and_model_use": "Contacts only the explicitly selected, typed endpoint. Inventory checks make no inference call; selecting an inference model may send one bounded model request and consume provider quota.",
         "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
@@ -1082,13 +1094,14 @@
       "network": "local_control_only",
       "model_call": "never",
       "stdin_channels": [
-        "request_stdin"
+        "request_stdin",
+        "request_file"
       ],
       "idempotency": "not_applicable",
       "help": {
         "purpose": "Read connected candidates and exact-native plan rating suggestions.",
-        "usage": "hiroute routing options --request-stdin --output json",
-        "arguments_and_options": "Only the typed options declared by the generated request schema are accepted; arbitrary patches, URLs, shell, or plaintext Secret argv are forbidden.",
+        "usage": "hiroute routing options (--request-stdin | --request-file <PATH>) --output json",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. Only the typed options declared by the generated request schema are accepted; arbitrary patches, URLs, shell, or plaintext Secret argv are forbidden.",
         "effects": "Read-only; no product side effect.",
         "network_and_model_use": "No model use; any external dependency is declared by the typed Application operation.",
         "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
@@ -1221,13 +1234,14 @@
       "network": "local_control_only",
       "model_call": "never",
       "stdin_channels": [
-        "request_stdin"
+        "request_stdin",
+        "request_file"
       ],
       "idempotency": "deterministic_request_replay",
       "help": {
         "purpose": "Select one validated Worker dependency tuple through same-UID local management.",
-        "usage": "hiroute worker dependencies select --request-stdin [--output <json|text|quiet>]",
-        "arguments_and_options": "Same-UID local management only. --request-stdin reads one strict JSON object with harness (codex_cli, claude_code, qoder_cli, pi, or deepseek_harness), absolute cli_path, and expected_selection_revision copied from the matching selection_revisions entry returned by worker dependencies discover --output json. codex_cli and claude_code require absolute adapter_path and accept optional absolute node_path. pi requires absolute node_path and forbids adapter_path. qoder_cli and deepseek_harness accept only cli_path and forbid adapter_path and node_path. All paths and the revision are validated again before an atomic selection update; the command never installs software or accepts an Apply capability.",
+        "usage": "hiroute worker dependencies select (--request-stdin | --request-file <PATH>) [--output <json|text|quiet>]",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. Same-UID local management only. --request-stdin reads one strict JSON object with harness (codex_cli, claude_code, qoder_cli, pi, or deepseek_harness), absolute cli_path, and expected_selection_revision copied from the matching selection_revisions entry returned by worker dependencies discover --output json. codex_cli and claude_code require absolute adapter_path and accept optional absolute node_path. pi requires absolute node_path and forbids adapter_path. qoder_cli and deepseek_harness accept only cli_path and forbid adapter_path and node_path. All paths and the revision are validated again before an atomic selection update; the command never installs software or accepts an Apply capability.",
         "effects": "Application-owned journaled operation after exact spec, digest, selection-revision CAS, and idempotency checks on owner-only Local Control.",
         "network_and_model_use": "No model inference; external access, when required, is limited to registered typed ports.",
         "automation": "Preserve the submitted JSON document. If delivery may have succeeded but no response was received, replay that same document unchanged; its deterministic request identity returns the existing Operation instead of applying twice. Do not substitute paths or a newer revision until the server reports a conflict and discovery is run again.",
@@ -1727,12 +1741,15 @@
       "effect": "none",
       "network": "local_control_only",
       "model_call": "never",
-      "stdin_channels": [],
+      "stdin_channels": [
+        "request_stdin",
+        "request_file"
+      ],
       "idempotency": "not_applicable",
       "help": {
         "purpose": "List AgentPlans, optionally filtered by an AgentConnection grant.",
-        "usage": "hiroute routing list [--request-stdin] --output json",
-        "arguments_and_options": "Only the typed options declared by the generated request schema are accepted; arbitrary patches, URLs, shell, or plaintext Secret argv are forbidden.",
+        "usage": "hiroute routing list [(--request-stdin | --request-file <PATH>)] --output json",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. Only the typed options declared by the generated request schema are accepted; arbitrary patches, URLs, shell, or plaintext Secret argv are forbidden.",
         "effects": "Read-only; no product side effect.",
         "network_and_model_use": "No model use; any external dependency is declared by the typed Application operation.",
         "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
@@ -1824,14 +1841,15 @@
       "network": "local_control_only",
       "model_call": "never",
       "stdin_channels": [
-        "request_stdin"
+        "request_stdin",
+        "request_file"
       ],
       "preview_apply_pair": "routing.apply",
       "idempotency": "not_applicable",
       "help": {
         "purpose": "Preview a complete materialized AgentPlan change.",
-        "usage": "hiroute routing preview --request-stdin --output json",
-        "arguments_and_options": "--request-stdin accepts only the existing strict draft, content, or lifecycle schema. Apply must reproduce Preview and carry its exact revisions, digest, and idempotency key; publication remains one recoverable Operation.",
+        "usage": "hiroute routing preview (--request-stdin | --request-file <PATH>) --output json",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. --request-stdin accepts only the existing strict draft, content, or lifecycle schema. Apply must reproduce Preview and carry its exact revisions, digest, and idempotency key; publication remains one recoverable Operation.",
         "effects": "Stateless Preview: no ID, TTL, Operation, Secret, file, database, publication, or network write.",
         "network_and_model_use": "No model use and no non-fixture network access.",
         "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
@@ -1875,14 +1893,15 @@
       "network": "local_control_only",
       "model_call": "never",
       "stdin_channels": [
-        "request_stdin"
+        "request_stdin",
+        "request_file"
       ],
       "preview_apply_pair": "routing.preview",
       "idempotency": "required",
       "help": {
         "purpose": "Apply an exact AgentPlan change and closed publication revision.",
-        "usage": "hiroute routing apply --request-stdin --output json",
-        "arguments_and_options": "--request-stdin accepts only the existing strict draft, content, or lifecycle schema. Apply must reproduce Preview and carry its exact revisions, digest, and idempotency key; publication remains one recoverable Operation.",
+        "usage": "hiroute routing apply (--request-stdin | --request-file <PATH>) --output json",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. --request-stdin accepts only the existing strict draft, content, or lifecycle schema. Apply must reproduce Preview and carry its exact revisions, digest, and idempotency key; publication remains one recoverable Operation.",
         "effects": "Same-UID Application-owned journaled operation after exact spec, digest, revision, and idempotency checks.",
         "network_and_model_use": "No model inference; external access, when required, is limited to registered typed ports.",
         "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
@@ -1970,13 +1989,14 @@
       "network": "local_control_only",
       "model_call": "never",
       "stdin_channels": [
-        "request_stdin"
+        "request_stdin",
+        "request_file"
       ],
       "idempotency": "required",
       "help": {
         "purpose": "Save a decision service version or delete an unreferenced service with revision checking.",
-        "usage": "hiroute decision services apply --request-stdin --output json",
-        "arguments_and_options": "--request-stdin accepts a ChangeSpec preview request first, then the exact ApplyRequest with accept_digest, expected_revisions and idempotency_key. spec.desired_state contains id, expected_revision, service (null to delete), and optional protected input_slot. Replacing a credential requires a new reference. A referenced service cannot be deleted.",
+        "usage": "hiroute decision services apply (--request-stdin | --request-file <PATH>) --output json",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. --request-stdin accepts a ChangeSpec preview request first, then the exact ApplyRequest with accept_digest, expected_revisions and idempotency_key. spec.desired_state contains id, expected_revision, service (null to delete), and optional protected input_slot. Replacing a credential requires a new reference. A referenced service cannot be deleted.",
         "effects": "Same-UID Application-owned journaled operation after exact spec, digest, revision, and idempotency checks.",
         "network_and_model_use": "No model inference; external access, when required, is limited to registered typed ports.",
         "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
@@ -2018,13 +2038,14 @@
       "network": "local_control_then_registered_gateway",
       "model_call": "explicit_probe_may_call_model",
       "stdin_channels": [
-        "request_stdin"
+        "request_stdin",
+        "request_file"
       ],
       "idempotency": "not_applicable",
       "help": {
         "purpose": "Run one explicit synthetic decision through a configured decision service.",
-        "usage": "hiroute decision services test --request-stdin --output json",
-        "arguments_and_options": "--request-stdin accepts schema hiroute.classifier-decision-test/v1 and classifier {kind: decision_service, service: <saved version>}. Sends one fixed synthetic decision; no session history is read. Failure is reported in data.outcome and failure_code, even when the command query succeeds.",
+        "usage": "hiroute decision services test (--request-stdin | --request-file <PATH>) --output json",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. --request-stdin accepts schema hiroute.classifier-decision-test/v1 and classifier {kind: decision_service, service: <saved version>}. Sends one fixed synthetic decision; no session history is read. Failure is reported in data.outcome and failure_code, even when the command query succeeds.",
         "effects": "Sends one fixed synthetic routing decision to the explicitly configured service; may consume provider quota. It reads no real session history and does not publish or edit a route.",
         "network_and_model_use": "Sends one fixed synthetic routing decision to the explicitly configured service; may consume provider quota. It reads no real session history and does not publish or edit a route.",
         "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
@@ -2068,13 +2089,14 @@
       "network": "local_control_only",
       "model_call": "never",
       "stdin_channels": [
-        "request_stdin"
+        "request_stdin",
+        "request_file"
       ],
       "idempotency": "not_applicable",
       "help": {
         "purpose": "Show exact model, capability, reasoning, rating, and source facts.",
-        "usage": "hiroute models show --request-stdin --output json",
-        "arguments_and_options": "Only the typed options declared by the generated request schema are accepted; arbitrary patches, URLs, shell, or plaintext Secret argv are forbidden.",
+        "usage": "hiroute models show (--request-stdin | --request-file <PATH>) --output json",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. Only the typed options declared by the generated request schema are accepted; arbitrary patches, URLs, shell, or plaintext Secret argv are forbidden.",
         "effects": "Read-only; no product side effect.",
         "network_and_model_use": "No model use; any external dependency is declared by the typed Application operation.",
         "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
@@ -2167,13 +2189,14 @@
       "model_call": "never",
       "stdin_channels": [
         "request_stdin",
+        "request_file",
         "capability_fd"
       ],
       "idempotency": "not_applicable",
       "help": {
         "purpose": "Search Session and Turn facts without returning content by default.",
-        "usage": "hiroute sessions list ([OPTIONS] | --request-stdin) [--capability-fd <FD>] --non-interactive --output json",
-        "arguments_and_options": "Human options retain the v1 query. Fact-only listing is available to the same-UID Local Control peer; --query searches retained text and therefore still requires a separately delivered protected capability. --request-stdin accepts only a strict v2 sessions intent.",
+        "usage": "hiroute sessions list ([OPTIONS] | (--request-stdin | --request-file <PATH>)) [--capability-fd <FD>] --non-interactive --output json",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. Human options retain the v1 query. Fact-only listing is available to the same-UID Local Control peer; --query searches retained text and therefore still requires a separately delivered protected capability. --request-stdin accepts only a strict v2 sessions intent.",
         "effects": "Read-only; no product side effect.",
         "network_and_model_use": "No model use; any external dependency is declared by the typed Application operation.",
         "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
@@ -2218,13 +2241,14 @@
       "model_call": "never",
       "stdin_channels": [
         "request_stdin",
+        "request_file",
         "capability_fd"
       ],
       "idempotency": "not_applicable",
       "help": {
         "purpose": "Show one Session timeline with content only under an explicit authorized mode.",
-        "usage": "hiroute sessions show (<SESSION_ID> [--content <none|messages|messages-and-tools>] | --request-stdin) [--capability-fd <FD>] --non-interactive --output json",
-        "arguments_and_options": "Human options retain the v1 lookup and content defaults to none. Same-UID facts/timeline reads need no extra token; messages, tool content, catalog, ancestry, content pages, and search still require an exact protected capability.",
+        "usage": "hiroute sessions show (<SESSION_ID> [--content <none|messages|messages-and-tools>] | (--request-stdin | --request-file <PATH>)) [--capability-fd <FD>] --non-interactive --output json",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. Human options retain the v1 lookup and content defaults to none. Same-UID facts/timeline reads need no extra token; messages, tool content, catalog, ancestry, content pages, and search still require an exact protected capability.",
         "effects": "Read-only; no product side effect.",
         "network_and_model_use": "No model use; any external dependency is declared by the typed Application operation.",
         "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
@@ -2262,17 +2286,21 @@
       "scope": "p0",
       "lifecycle": "released",
       "kind": "query",
-      "request_schema": "hiroute.session-lookup/v1",
-      "response_schema": "hiroute.routing-receipt/v1",
+      "request_schema": "hiroute.session-receipt-request/union",
+      "response_schema": "hiroute.session-receipt/union",
       "effect": "none",
       "network": "local_control_only",
       "model_call": "never",
-      "stdin_channels": [],
+      "stdin_channels": [
+        "request_stdin",
+        "request_file",
+        "capability_fd"
+      ],
       "idempotency": "not_applicable",
       "help": {
         "purpose": "Read an immutable structured RoutingReceipt without content or recomputation.",
-        "usage": "hiroute sessions receipt <RECEIPT_ID>",
-        "arguments_and_options": "An exact typed resource ID is required; arbitrary storage keys and SQL are forbidden.",
+        "usage": "hiroute sessions receipt (<RECEIPT_ID> | (--request-stdin | --request-file <PATH>)) [--capability-fd <FD>] --output json",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. A positional RECEIPT_ID retains the released v1 RoutingReceipt lookup. JSON input accepts only hiroute.observation.query/v2 with view facts and the exact logical request_id returned by the session timeline, limit and optional cursor; returns the v2 facts page. Facts use same-UID Local Control; an explicitly supplied protected grant is still validated.",
         "effects": "Read-only; no product side effect.",
         "network_and_model_use": "No model use; any external dependency is declared by the typed Application operation.",
         "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
@@ -2365,13 +2393,14 @@
       "model_call": "never",
       "stdin_channels": [
         "request_stdin",
+        "request_file",
         "capability_fd"
       ],
       "idempotency": "not_applicable",
       "help": {
         "purpose": "Read recorded token, cache and valuation totals with coverage.",
-        "usage": "hiroute value show ([OPTIONS] | --request-stdin) [--capability-fd <FD>] --non-interactive --output json",
-        "arguments_and_options": "Human options use the current v2 value_report intent; defaults are the last seven days and separate totals for every currency. --group-by day returns UTC day buckets from the same snapshot. --request-stdin accepts strict v2 value, home_value or value_report intents. Same-UID reads retain known/unknown usage, amounts and coverage; missing values are never filled with zero.",
+        "usage": "hiroute value show ([OPTIONS] | (--request-stdin | --request-file <PATH>)) [--capability-fd <FD>] --non-interactive --output json",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. Human options use the current v2 value_report intent; defaults are the last seven days and separate totals for every currency. --group-by day returns UTC day buckets from the same snapshot. --request-stdin accepts strict v2 value, home_value or value_report intents. Same-UID reads retain known/unknown usage, amounts and coverage; missing values are never filled with zero.",
         "effects": "Read-only; no product side effect.",
         "network_and_model_use": "No model use; any external dependency is declared by the typed Application operation.",
         "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
@@ -2417,13 +2446,14 @@
       "model_call": "never",
       "stdin_channels": [
         "request_stdin",
+        "request_file",
         "capability_fd"
       ],
       "idempotency": "not_applicable",
       "help": {
         "purpose": "List the latest competence assessment for each persisted execution segment.",
-        "usage": "hiroute observation plan-quality samples ([OPTIONS] | --request-stdin) [--capability-fd <FD>] --non-interactive --output json",
-        "arguments_and_options": "Provide at least --plan-id or --session-id. Use --competence below-floor|meets-floor to compare the latest reliable score with the floor saved for that stage, or --unrated for missing/partial scores. Score bounds remain strict open bounds. Detail filters do not alter full-scope summaries. Facts are same-UID reads; protected evidence content is never returned.",
+        "usage": "hiroute observation plan-quality samples ([OPTIONS] | (--request-stdin | --request-file <PATH>)) [--capability-fd <FD>] --non-interactive --output json",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. Provide at least --plan-id or --session-id. Use --competence below-floor|meets-floor to compare the latest reliable score with the floor saved for that stage, or --unrated for missing/partial scores. Score bounds remain strict open bounds. Detail filters do not alter full-scope summaries. Facts are same-UID reads; protected evidence content is never returned.",
         "effects": "Read-only; no product side effect.",
         "network_and_model_use": "No model use; any external dependency is declared by the typed Application operation.",
         "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",

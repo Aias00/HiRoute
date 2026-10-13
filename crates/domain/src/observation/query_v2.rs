@@ -120,6 +120,20 @@ impl ObservationReaderContext {
         .map(|digest| digest.to_string())
         .map_err(|_| ObservationQueryError::InvalidQuery)
     }
+
+    /// Live pagination binds identity and admitted scope, while each page must
+    /// validate a fresh grant. An authorization revision alone is not a snapshot.
+    pub fn live_scope_binding(&self) -> Result<String, ObservationQueryError> {
+        crate::CanonicalDigest::of(&(
+            &self.workspace,
+            &self.subject,
+            &self.allowed_runs,
+            self.read_content,
+            self.search_content,
+        ))
+        .map(|digest| digest.to_string())
+        .map_err(|_| ObservationQueryError::InvalidQuery)
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -476,6 +490,15 @@ pub struct ObservationSearchPageV2 {
     pub next_cursor: Option<String>,
     pub index_partial: bool,
     pub budget_exhausted: bool,
+}
+
+/// Live conversation results, distinct from released occurrence pagination.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ObservationSessionSearchPageV1 {
+    pub hits: Vec<ObservationTextAnchorV2>,
+    pub next_cursor: Option<String>,
+    pub index_partial: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

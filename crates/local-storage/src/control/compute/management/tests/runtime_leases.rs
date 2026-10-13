@@ -147,10 +147,10 @@ fn frozen_native_requests_obey_current_source_and_key_switches_after_restart() {
     );
     for request in &requests[..2] {
         assert!(
-            stores
-                .lease_native_credential_exact(request)
-                .unwrap()
-                .is_none(),
+            stores.lease_native_credential_exact(request).err()
+                == Some(NativeCredentialLeaseErrorV1::Denied(
+                    NativeCredentialAccessDeniedV1::CredentialDisabled
+                )),
             "the same disabled key must be unavailable to both frozen model bindings"
         );
         assert!(
@@ -178,20 +178,20 @@ fn frozen_native_requests_obey_current_source_and_key_switches_after_restart() {
     );
     for request in &requests {
         assert!(
-            stores
-                .lease_native_credential_exact(request)
-                .unwrap()
-                .is_none()
+            stores.lease_native_credential_exact(request).err()
+                == Some(NativeCredentialLeaseErrorV1::Denied(
+                    NativeCredentialAccessDeniedV1::SourceDisabled
+                ))
         );
     }
     drop(stores);
     let stores = LocalStorageSet::open_for_daemon_startup(root.path()).unwrap();
     for request in &requests {
         assert!(
-            stores
-                .lease_native_credential_exact(request)
-                .unwrap()
-                .is_none()
+            stores.lease_native_credential_exact(request).err()
+                == Some(NativeCredentialLeaseErrorV1::Denied(
+                    NativeCredentialAccessDeniedV1::SourceDisabled
+                ))
         );
     }
     save(
@@ -203,10 +203,10 @@ fn frozen_native_requests_obey_current_source_and_key_switches_after_restart() {
         "lease-reenable-source",
     );
     assert!(
-        stores
-            .lease_native_credential_exact(&requests[0])
-            .unwrap()
-            .is_none()
+        stores.lease_native_credential_exact(&requests[0]).err()
+            == Some(NativeCredentialLeaseErrorV1::Denied(
+                NativeCredentialAccessDeniedV1::CredentialDisabled
+            ))
     );
     assert!(
         stores
@@ -224,10 +224,10 @@ fn frozen_native_requests_obey_current_source_and_key_switches_after_restart() {
     );
     for request in &requests {
         assert!(
-            stores
-                .lease_native_credential_exact(request)
-                .unwrap()
-                .is_none()
+            stores.lease_native_credential_exact(request).err()
+                == Some(NativeCredentialLeaseErrorV1::Denied(
+                    NativeCredentialAccessDeniedV1::SourceDisabled
+                ))
         );
     }
     save(

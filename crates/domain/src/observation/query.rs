@@ -313,6 +313,15 @@ pub trait ObservationQueryPort: Send + Sync {
         Err(ObservationQueryError::Unavailable)
     }
 
+    fn search_observed_sessions(
+        &self,
+        _reader: &super::ObservationReaderContext,
+        _query: &super::ObservationSearchQueryV2,
+        _now_ms: i64,
+    ) -> Result<super::ObservationSessionSearchPageV1, ObservationQueryError> {
+        Err(ObservationQueryError::Unavailable)
+    }
+
     fn search_observed_text(
         &self,
         _reader: &super::ObservationReaderContext,

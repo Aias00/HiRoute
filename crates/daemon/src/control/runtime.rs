@@ -840,7 +840,7 @@ impl NativeCredentialAuthorityV1 for ControlNativeCredentialAuthority {
     fn lease_native_credential(
         &self,
         request: &NativeCredentialLeaseRequestV1,
-    ) -> PortResult<Option<NativeCredentialLeaseV1>> {
+    ) -> Result<Option<NativeCredentialLeaseV1>, hiroute_domain::NativeCredentialLeaseErrorV1> {
         self.adapter
             .stores
             .lock()
