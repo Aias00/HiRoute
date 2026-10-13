@@ -31,7 +31,9 @@ use windows_sys::Win32::System::Pipes::{
 };
 use windows_sys::Win32::System::Threading::{CreateEventW, INFINITE, WaitForSingleObject};
 
-use super::security::{OwnerSecurity, current_user_sid, open_identity, verify_process_user};
+use super::security::{
+    OwnerSecurity, current_user_sid, open_identity, verify_owner_only_handle, verify_process_user,
+};
 
 /// The same logical locator is retained by CLI and daemon on every platform.
 /// Canonicalizing only after checking the held parent prevents endpoint aliases
@@ -317,6 +319,7 @@ impl Stream {
                 null_mut(),
             )
         })?;
+        verify_owner_only_handle(&handle, false)?;
         let stream = Self::new(Arc::new(handle));
         peer_pid(&stream, false)?;
         Ok(stream)

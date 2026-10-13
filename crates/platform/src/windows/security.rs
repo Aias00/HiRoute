@@ -348,7 +348,7 @@ pub fn verify_owner_only(path: &Path, directory: bool) -> io::Result<()> {
     validate_security_descriptor(&user, owner, dacl, descriptor, directory)
 }
 
-pub fn verify_owner_only_handle(file: &File, directory: bool) -> io::Result<()> {
+pub fn verify_owner_only_handle(file: &impl AsRawHandle, directory: bool) -> io::Result<()> {
     let user = CurrentUser::load()?;
     let mut owner: PSID = null_mut();
     let mut dacl: *mut ACL = null_mut();
