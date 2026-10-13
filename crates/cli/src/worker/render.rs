@@ -744,7 +744,6 @@ mod tests {
         WorkerDependencySelectionRevisionV1, WorkerDependencySelectionV1,
     };
     use serde_json::json;
-    use serde_json::json;
 
     #[test]
     fn action_rendering_posix_quotes_values_and_never_hides_controls() {
