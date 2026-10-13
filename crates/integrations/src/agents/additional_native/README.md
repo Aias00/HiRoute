@@ -41,7 +41,26 @@ A native provider name alone never grants ownership of an existing user entry.
   are native project configuration, outside the global default ownership contract.
 - [Budget admission](../../../../daemon/src/control/runtime/additional_model_budget.rs)
   keeps installed declarations compatible with publication changes and blocks a
-  second mutation while the original operation has a pending tail.
+  second mutation while the original operation has a pending tail. Only the exact active
+  grant generation retained in the next publication owns a declaration. All affected
+  Qoder/Pi/DSH contexts are reported with their Plan ID/alias, declared/proposed context
+  and output, or a distinct missing/uncomputable reason. Sharing an upstream binding
+  does not establish a Plan dependency.
+
+Budget rejections use `hiroute.agent-model-budget-conflict/v1` safe facts. Admission
+returns them as optional `error.model_budget_conflict`, leaving success `data`
+absent so released typed envelope readers still work; an Install rejection freezes the same facts in
+that step's existing terminal result and retains them through rollback/restart.
+This diagnostic has no effect ownership or recovery authority. Qoder-only conflicts
+keep the released Qoder code; other consumers use the released general conflict
+category and `AGENT_MODEL_BUDGET_CONFLICT` terminal code. Error facts require
+`PlanContentApplyRequestV2.include_model_budget_conflict=true`, which the Desktop
+sets only for content publication. Omitted/false and generic preview/apply calls
+retain the released closed error shape. This presentation flag is outside the
+change spec and confirmation digest and never grants write authority. `operations.find` emits
+these facts only when `include_model_budget_conflict=true`; omitted/false requests
+retain the old strict response shape. Existing operation inputs, grant formats,
+SQL schema and native settings formats are unchanged.
 
 The prepared local grant is written only to the private native provider, mode
 0600. Public journals contain no bearer or original native settings. Status reads

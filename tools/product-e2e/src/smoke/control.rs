@@ -311,6 +311,7 @@ pub(super) fn discover(ctx: &mut Context<'_>) -> Result<()> {
             accepted_digest: CanonicalDigest::of_bytes(
                 format!("mvp17-lookup-{}", ctx.run_id).as_bytes(),
             ),
+            include_model_budget_conflict: false,
         };
         let lookup_payload = serde_json::to_value(&lookup)?;
         let lookup_input = serde_json::to_vec(&lookup)?;

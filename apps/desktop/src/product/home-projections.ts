@@ -36,6 +36,7 @@ export type DesktopSnapshot = {
 };
 
 export type DesktopOperation = {
+  model_budget_conflict?: import('../plan-editor-errors').ModelBudgetConflict | null;
   operation_id: string;
   state: string;
   sequence: number;

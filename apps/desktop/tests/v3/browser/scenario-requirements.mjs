@@ -50,6 +50,7 @@ export const focusedRequirements = {
 };
 
 export const productShellRequired = [
+  'desktop.routing.additional-budget-consumers',
   'desktop.models.subscription-scan.recommended-login',
   'desktop.models.subscription-scan.append-to-login',
   'desktop.models.subscription-proxy.inline-cancel',

@@ -19,7 +19,10 @@ Qoder/Pi/DSH saved models use one owned provider per Plan with an explicit
 Responses/Messages choice. [Route grants](../../crates/domain/src/agents/model_grant.rs)
 and [Gateway trust](../../crates/gateway/src/publication/trust.rs) preserve alias,
 protocol and receipt authority across publication/restart. `work.protocol` is the
-independent frozen Worker choice. Native defaults and collaboration stay independent;
+independent frozen Worker choice. [Publication budget guards](../../crates/daemon/src/control/runtime/additional_model_budget.rs)
+report the actual installed consumers; [safe conflict facts](../../crates/domain/src/agents/model_budget_conflict.rs)
+retain rejection identity through compensation and client observation.
+Native defaults and collaboration stay independent;
 restoration must verify ownership rather than infer it from a provider name.
 
 ## Follow a task through its owners

@@ -348,6 +348,7 @@ button.list-row { width: 100%; border-top: 0; border-right: 0; border-left: 0; c
 
 .plan-editor { width: 100%; max-width: 1000px; margin: 0 auto; padding: 28px 30px 70px; }
 .editor-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--divider); }
+.editor-title { flex: 1; min-width: 0; max-width: 100%; }
 .editor-title h2 { margin: 0; font-size:calc(24px * var(--hr-text-scale)); }
 .editor-title p { margin: 6px 0 0; color: var(--text-muted); font-size:calc(13px * var(--hr-text-scale)); }
 .editor-actions { display: flex; gap: 8px; flex-shrink: 0; }

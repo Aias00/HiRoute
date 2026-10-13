@@ -1358,6 +1358,7 @@ pub struct OperationV1 {
 /// Read-only status, deliberately insufficient to execute or authorize an Operation.
 #[derive(Clone, Debug, PartialEq)]
 pub struct OperationStatus {
+    pub model_budget_conflict: Option<crate::AgentModelBudgetConflictV1>,
     pub operation_id: OperationId,
     pub state: OperationState,
     pub generation: u64,
@@ -1366,6 +1367,19 @@ pub struct OperationStatus {
 }
 
 impl OperationV1 {
+    pub fn model_budget_conflict(&self) -> Option<crate::AgentModelBudgetConflictV1> {
+        if !matches!(
+            self.safe_error_code.as_deref(),
+            Some("QODER_MODEL_BUDGET_CONFLICT" | "AGENT_MODEL_BUDGET_CONFLICT")
+        ) {
+            return None;
+        }
+        self.steps
+            .iter()
+            .filter_map(|step| step.terminal_result.as_deref())
+            .find_map(crate::AgentModelBudgetConflictV1::parse)
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         operation_id: OperationId,

@@ -75,6 +75,7 @@ pub(crate) async fn lookup(
         client,
         "FindOperationByIdempotency",
         &OperationIdempotencyLookupV1 {
+            include_model_budget_conflict: true,
             principal_kind: hint.principal_kind,
             operation_kind: hint.operation_kind.clone(),
             idempotency_key: hint.idempotency_key.clone(),

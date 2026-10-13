@@ -84,8 +84,8 @@ function failureCode(error: unknown): string {
   return safeDiagnosticCode(error, 'CLIENT_ERROR');
 }
 
-function failureHelp(code: string, language: 'zh' | 'en'): string {
-  if (code === 'QODER_MODEL_BUDGET_CONFLICT') return planErrorMessage(code, language);
+function failureHelp(code: string, language: 'zh' | 'en', operation?: DesktopOperation | null): string {
+  if (code === 'QODER_MODEL_BUDGET_CONFLICT' || code === 'AGENT_MODEL_BUDGET_CONFLICT') return planErrorMessage(operation ?? code, language);
   const messages: Record<string, [string, string]> = {
     CONFIRMATION_EXPIRED: ['确认已过期，请重新预览。输入已保留。', 'Confirmation expired. Preview again; your input is retained.'],
     CONFIRMATION_STALE: ['确认已失效，请重新预览。', 'This confirmation is no longer valid. Preview again.'],
@@ -775,7 +775,7 @@ export function DesktopApp() {
             </div>
           </div>
           <p>{operationView.detail}</p>
-          {operation?.safe_error_code && <div className="callout bad" role="alert" data-error-code={operation.safe_error_code}><UiIcon name="warning" /><span>{failureHelp(operation.safe_error_code, language)}</span></div>}
+          {operation?.safe_error_code && <div className="callout bad" role="alert" data-error-code={operation.safe_error_code}><UiIcon name="warning" /><span>{failureHelp(operation.safe_error_code, language, operation)}</span></div>}
         </article>}
       </main>
     </div>
