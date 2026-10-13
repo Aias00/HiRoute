@@ -54,8 +54,13 @@ function Invoke-RequiredTests {
       if ($inventory -notmatch "(?m)^${escaped}: test`r?$") { throw "Required case not selected: $case" }
     }
     if ($CaptureArtifacts) {
-      cargo test --locked @CargoArguments --no-run --message-format=json 2>&1 | Tee-Object "$evidence/$Name-cargo-artifacts.log"
-      if ($LASTEXITCODE -ne 0) { throw "$Name executable provenance failed to build" }
+      # Cargo's progress belongs to stderr even with --message-format=json.
+      # Keep the compiler-artifact stream parseable and retain diagnostics separately.
+      cargo test --locked @CargoArguments --no-run --message-format=json > "$evidence/$Name-cargo-artifacts.log" 2> "$evidence/$Name-cargo-artifacts-stderr.log"
+      if ($LASTEXITCODE -ne 0) {
+        Get-Content "$evidence/$Name-cargo-artifacts-stderr.log" | Write-Host
+        throw "$Name executable provenance failed to build"
+      }
       $filter = $null
       for ($i = 0; $i -lt $CargoArguments.Count; $i++) {
         if ($CargoArguments[$i] -in @('-p','--package','--test','--bin','--features')) { $i++; continue }
