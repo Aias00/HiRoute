@@ -1,0 +1,4 @@
+# Pinned patches, frozen fixtures and embedded source digests require identical
+# checkout bytes on Windows and Unix. Binary detection remains automatic.
+* text=auto eol=lf
+*.patch -text

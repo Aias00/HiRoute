@@ -11,8 +11,39 @@ pub struct NativeWorkerContext {
 
 impl NativeWorkerContext {
     /// Resolve only context selectors, never credentials or the entire service environment.
-    /// An explicit Pilot/test HOME is the effective user context, not a hint to search elsewhere.
+    /// Unix retains the instance HOME; Windows uses the native account profile.
     pub fn from_environment(harness: WorkerHarnessV1) -> Result<Self, DelegationErrorV1> {
+        #[cfg(windows)]
+        {
+            let home = {
+                #[cfg(test)]
+                if std::env::var_os("HIROUTE_ISOLATED_DAEMON_TEST")
+                    .is_some_and(|selector| !selector.is_empty())
+                {
+                    let home = std::env::var_os("HOME")
+                        .map(PathBuf::from)
+                        .filter(|path| path.is_absolute())
+                        .ok_or(DelegationErrorV1::CapabilityUnavailable)?;
+                    hiroute_platform::windows::security::verify_owner_only(&home, true)
+                        .map_err(|_| DelegationErrorV1::PermissionDenied)?;
+                    home
+                } else {
+                    hiroute_platform::windows::background::profile()
+                        .map_err(|_| DelegationErrorV1::CapabilityUnavailable)?
+                }
+                #[cfg(not(test))]
+                hiroute_platform::windows::background::profile()
+                    .map_err(|_| DelegationErrorV1::CapabilityUnavailable)?
+            };
+            return Self::from_lookup(harness, |name| {
+                if name == "HOME" {
+                    Some(home.clone().into_os_string())
+                } else {
+                    std::env::var_os(name)
+                }
+            });
+        }
+        #[cfg(not(windows))]
         Self::from_lookup(harness, |name| std::env::var_os(name))
     }
 

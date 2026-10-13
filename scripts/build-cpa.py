@@ -29,7 +29,7 @@ def pinned_source():
     return pin, patch
 
 
-def build(source_repo, target, output):
+def build(source_repo, target, output, bootstrap_test_evidence=None):
     pin, patch = pinned_source()
     system, arch = TARGETS[target]
     output = Path(output).resolve()
@@ -44,6 +44,23 @@ def build(source_repo, target, output):
         subprocess.run(["git", "apply", str(patch)], cwd=source, check=True)
         env = os.environ.copy()
         env.update(GOOS=system, GOARCH=arch, CGO_ENABLED="0")
+        if bootstrap_test_evidence is not None:
+            test = subprocess.run([
+                "go", "test", "-json", "./cmd/server", "./internal/api/handlers/management",
+                "-run", "^(TestLocalManagementPasswordPipeBounds|TestLocalMachinePasswordPreservesRemotePolicy)$",
+            ], cwd=source, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            Path(bootstrap_test_evidence).write_text(test.stdout, encoding="utf-8")
+            test.check_returncode()
+            passed = []
+            for line in test.stdout.splitlines():
+                try:
+                    event = json.loads(line)
+                except ValueError:
+                    continue  # Go download diagnostics remain in the retained raw log.
+                if event.get("Action") == "pass" and event.get("Test"):
+                    passed.append(event["Test"])
+            if sorted(passed) != ["TestLocalMachinePasswordPreservesRemotePolicy", "TestLocalManagementPasswordPipeBounds"]:
+                raise ValueError("Native CPA bootstrap cases missing or not passing")
         flags = " ".join(f"-X main.{name}={pin[key]}" for name, key in
                          (("Version", "version"), ("Commit", "commit"), ("BuildDate", "built_at")))
         subprocess.run(["go", "build", "-trimpath", "-buildvcs=false", "-ldflags", flags,
@@ -66,5 +83,6 @@ if __name__ == "__main__":
     parser.add_argument("--source-repo", type=Path, required=True)
     parser.add_argument("--target", choices=TARGETS, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--bootstrap-test-evidence", type=Path)
     args = parser.parse_args()
-    print(json.dumps(build(args.source_repo, args.target, args.output), indent=2))
+    print(json.dumps(build(args.source_repo, args.target, args.output, args.bootstrap_test_evidence), indent=2))

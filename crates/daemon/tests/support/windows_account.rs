@@ -506,11 +506,11 @@ impl Account {
         value.sid = background::sid_string(&token_sid(value.token.as_ref().unwrap())).unwrap();
         value.account =
             service::account_name_for_sid(&token_sid(value.token.as_ref().unwrap())).unwrap();
-        assert_eq!(
-            assert_standard(value.token.as_ref().unwrap(), &value.sid),
-            0,
-            "new standard owner must be session 0"
-        );
+        // LogonUser authenticates an account; it does not create an SCM host or
+        // move that token to session 0. Native CI's caller can be session 2. The
+        // owner fixture executes with this real token, while the product SCM
+        // gate separately requires its actual daemon to be session 0.
+        assert_standard(value.token.as_ref().unwrap(), &value.sid);
         let mut info = PROFILEINFOW {
             dwSize: std::mem::size_of::<PROFILEINFOW>() as u32,
             dwFlags: 1,

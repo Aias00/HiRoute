@@ -8,6 +8,8 @@
 mod windows_account;
 #[path = "support/windows_background_fixture.rs"]
 mod windows_background_fixture;
+#[path = "support/windows_background_upgrade.rs"]
+mod windows_background_upgrade;
 #[path = "support/windows_token_launcher.rs"]
 mod windows_token_launcher;
 
@@ -31,8 +33,20 @@ struct Inputs {
 }
 impl Inputs {
     fn load() -> Self {
-        let manifest = fixture::required("HIROUTE_WINDOWS_PACKAGE_MANIFEST");
-        let archive = fixture::required("HIROUTE_WINDOWS_PACKAGE_ARCHIVE");
+        Self::from_package(
+            "HIROUTE_WINDOWS_PACKAGE_MANIFEST",
+            "HIROUTE_WINDOWS_PACKAGE_ARCHIVE",
+        )
+    }
+    fn baseline() -> Self {
+        Self::from_package(
+            "HIROUTE_WINDOWS_BASELINE_PACKAGE_MANIFEST",
+            "HIROUTE_WINDOWS_BASELINE_PACKAGE_ARCHIVE",
+        )
+    }
+    fn from_package(manifest_name: &str, archive_name: &str) -> Self {
+        let manifest = fixture::required(manifest_name);
+        let archive = fixture::required(archive_name);
         let document: Value = serde_json::from_slice(&std::fs::read(&manifest).unwrap()).unwrap();
         assert_eq!(document["distribution"], "integration-candidate");
         assert_eq!(document["target"], "x86_64-pc-windows-msvc");
@@ -61,7 +75,7 @@ impl Inputs {
                 .collect(),
         )
     }
-    fn install(&self, token: &File, scm: bool) -> Value {
+    fn install_arguments(&self, scm: bool) -> Vec<String> {
         let mut args = vec![
             "install".into(),
             "--manifest".into(),
@@ -76,7 +90,23 @@ impl Inputs {
                 "--external-manager".into(),
             ]);
         }
-        fixture::accepted(&self.python(token, args)).clone()
+        args
+    }
+    fn install(&self, token: &File, scm: bool) -> Value {
+        fixture::accepted(&self.python(token, self.install_arguments(scm))).clone()
+    }
+    fn transaction_install(&self, token: &File, action: &str) -> Value {
+        fixture::owner(
+            token,
+            fixture::Request {
+                action: action.into(),
+                program: Some(self.python.clone()),
+                arguments: std::iter::once(self.installer.to_string_lossy().into_owned())
+                    .chain(self.install_arguments(false))
+                    .collect(),
+            },
+            Duration::from_secs(90),
+        )
     }
     fn finalize(&self, token: &File, cli: &std::path::Path) -> Value {
         fixture::accepted(&self.python(
@@ -335,6 +365,18 @@ fn task_native_background_lua_gateway_control_stop_crash_recovery_and_autostart(
         false
     );
     assert_status(&token, &cli, "windows-task-user", false);
+    // Fail after real file publication using a native deny-delete handle on the
+    // last destination. Re-entering the shipped install command runs rollback
+    // from its prepared journal before completing repair of this same package.
+    let failure = input.transaction_install(&token, "transaction-fail-install");
+    assert_ne!(failure["command"]["code"], 0);
+    assert_eq!(failure["after"]["journal"]["phase"], "prepared");
+    assert_eq!(input.install(&token, false)["installed"], true);
+    let repaired = fixture::transaction_snapshot(&token, true);
+    assert_eq!(repaired["marker"], failure["before"]["marker"]);
+    assert_eq!(repaired["definition"], failure["before"]["definition"]);
+    assert_eq!(repaired["manifest"], failure["before"]["manifest"]);
+    assert_status(&token, &cli, "windows-task-user", false);
     // A deliberate stop must stay stopped rather than invoke failure recovery.
     thread::sleep(Duration::from_secs(2));
     assert_status(&token, &cli, "windows-task-user", false);
@@ -398,6 +440,16 @@ fn scm_standard_owner_pending_admin_finalize_session_zero_gateway_control_and_de
     assert_eq!(pending["pending_admin"], true);
     assert_eq!(pending["completed"], false);
     assert_eq!(pending["owner_sid"], account.sid);
+    let journal = fixture::transaction_snapshot(token, false)["journal"].clone();
+    let reopened = input.install(token, true);
+    assert_eq!(
+        reopened, pending,
+        "prepared SCM installation must reopen without manufacturing completion"
+    );
+    assert_eq!(
+        fixture::transaction_snapshot(token, false)["journal"],
+        journal
+    );
     let denied = fixture::command(
         token,
         &cli,
@@ -451,6 +503,15 @@ fn scm_standard_owner_pending_admin_finalize_session_zero_gateway_control_and_de
         "tampered_owner_image_cannot_publish_privileged_host: rejection must precede every machine host/cache write"
     );
     input.admin(&account, "install", None);
+    let reopened = input.install(token, true);
+    assert_eq!(
+        reopened, pending,
+        "actual SCM registration still requires owner finalization on reentry"
+    );
+    assert_eq!(
+        fixture::transaction_snapshot(token, false)["journal"],
+        journal
+    );
     // Registration alone is insufficient: owner admission stays closed until
     // its real machine-definition/hash verification commits the prepared journal.
     let denied = fixture::command(
@@ -468,6 +529,7 @@ fn scm_standard_owner_pending_admin_finalize_session_zero_gateway_control_and_de
     assert_eq!(finished["completed"], true);
     assert_eq!(finished["operation"], "install");
     assert_eq!(finished["started"], false);
+    fixture::transaction_snapshot(token, true);
     assert_eq!(
         assert_status(token, &cli, "windows-scm-user", false)["autostart_enabled"],
         false
@@ -513,6 +575,11 @@ fn scm_standard_owner_pending_admin_finalize_session_zero_gateway_control_and_de
     let removal = input.uninstall(token, &cli, true);
     assert_eq!(removal["pending_admin"], true);
     assert_eq!(removal["operation"], "uninstall");
+    assert_eq!(
+        input.uninstall(token, &cli, true),
+        removal,
+        "prepared removal reentry must preserve the exact pending administrator operation"
+    );
     let too_early = input.python(
         token,
         vec![

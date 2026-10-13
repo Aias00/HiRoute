@@ -1,0 +1,74 @@
+name: windows-headless
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        scope: [components, core, product, background, agents]
+    runs-on: windows-2025
+    timeout-minutes: 75
+    env:
+      CARGO_NET_GIT_FETCH_WITH_CLI: 'true'
+      CARGO_INCREMENTAL: '0'
+      RUSTC_WRAPPER: sccache
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Repository Rust toolchain
+        shell: pwsh
+        run: rustup show active-toolchain
+      - uses: mozilla-actions/sccache-action@v0.0.11
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        if: matrix.scope == 'agents'
+        with:
+          node-version: '22.19.0'
+      - name: Locked upstream client fixtures
+        if: matrix.scope == 'agents'
+        shell: pwsh
+        working-directory: tools/windows-agent-fixtures
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'Locked client fixtures failed to install' }
+      - name: Exact CPA source for native package acceptance
+        if: matrix.scope == 'background'
+        shell: pwsh
+        run: |
+          $pin = Get-Content vendor/cpa/source.json -Raw | ConvertFrom-Json
+          git init "$env:RUNNER_TEMP/cpa"
+          git -C "$env:RUNNER_TEMP/cpa" fetch --depth=1 $pin.repository $pin.commit
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned CPA fetch failed' }
+          git -C "$env:RUNNER_TEMP/cpa" checkout --detach FETCH_HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned CPA checkout failed' }
+      - uses: actions/setup-go@v5
+        if: matrix.scope == 'background'
+        with:
+          go-version-file: ${{ runner.temp }}/cpa/go.mod
+          cache: false
+      - name: Required native cases on the exact checked out revision
+        shell: pwsh
+        run: |
+          & scripts/windows-headless-ci.ps1 -Scope '${{ matrix.scope }}' -ExpectedSha $env:GITHUB_SHA -Evidence artifacts/windows -CpaSource "$env:RUNNER_TEMP/cpa" -Plan windows-headless -Phase focused
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-${{ matrix.scope }}-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            artifacts/windows/*.log
+            artifacts/windows/*.json
+            artifacts/windows/feedback
+            artifacts/windows/clients/clients.json
+            artifacts/windows/package/package-evidence.json
+          if-no-files-found: error
+          retention-days: 14

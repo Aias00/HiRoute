@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import platform
 import re
+import shutil
 import subprocess
 import sys
 
@@ -36,7 +37,18 @@ def prepare(args):
     if target != "x86_64-pc-windows-msvc":
         raise ValueError("This package acceptance fixture requires native Windows x64")
     pin, _ = module("build-cpa").pinned_source()
-    previous = args.cpa_evidence.resolve(strict=True)
+    output = args.output.resolve()
+    output.mkdir(parents=True, exist_ok=False)
+    if args.cpa_evidence is None:
+        previous = output / "cpa"
+        previous.mkdir()
+        provenance = module("build-cpa").build(args.source_repo, target, previous / "cliproxyapi.exe",
+                                             previous / "go-bootstrap-tests.log")
+        provenance.update(build_run_id=args.build_run_id, validation_revision=revision)
+        (previous / "provenance.json").write_text(json.dumps(provenance, indent=2) + "\n")
+        shutil.copyfile(previous / "cliproxyapi.LICENSE", previous / "CPA.LICENSE")
+    else:
+        previous = args.cpa_evidence.resolve(strict=True)
     provenance = json.loads((previous / "provenance.json").read_text(encoding="utf-8-sig"))
     if any(provenance.get(key) != value for key, value in pin.items()):
         raise ValueError("Reused CPA evidence does not match the unchanged source and patch")
@@ -53,8 +65,6 @@ def prepare(args):
             passed.append(event["Test"])
     if sorted(passed) != ["TestLocalMachinePasswordPreservesRemotePolicy", "TestLocalManagementPasswordPipeBounds"]:
         raise ValueError("Original CPA native build lacks the required bootstrap security cases")
-    output = args.output.resolve()
-    output.mkdir(parents=True, exist_ok=False)
     notices = output / "notices"
     command(sys.executable, ROOT / "scripts/collect-third-party-licenses.py", "--cargo-target", target,
             "--cpa-source-repo", args.source_repo.resolve(strict=True), "--output", notices)
@@ -89,8 +99,8 @@ def prepare(args):
                   worker_daemon=str(trusted / "bin/hirouted.exe"), python=sys.executable,
                   archive_sha256=packager.digest(archive), manifest_sha256=packager.digest(manifest),
                   deterministic_publication="green", production_runtime="not_executed",
-                  cpa_original_run=38428729573,
-                  cpa_original_validation_revision="4d7da3069402df9547b25f2f52caf04d8c1cf321",
+                  cpa_original_run=provenance.get("build_run_id", args.cpa_original_run),
+                  cpa_original_validation_revision=provenance.get("validation_revision", args.cpa_original_revision),
                   cpa_original_provenance=provenance)
     (output / "package-evidence.json").write_text(json.dumps(result, indent=2) + "\n")
     return result
@@ -100,7 +110,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--expected-sha", required=True)
     parser.add_argument("--source-repo", required=True, type=Path)
-    parser.add_argument("--cpa-evidence", required=True, type=Path)
+    parser.add_argument("--cpa-evidence", type=Path)
+    parser.add_argument("--build-run-id")
+    parser.add_argument("--cpa-original-run")
+    parser.add_argument("--cpa-original-revision")
     parser.add_argument("--output", required=True, type=Path)
     arguments = parser.parse_args()
     try:

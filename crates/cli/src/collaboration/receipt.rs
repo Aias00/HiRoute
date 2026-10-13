@@ -1,6 +1,8 @@
 //! Immutable, credential-free submission binding. User retries reuse the exact Preview/Apply
 //! bytes; a crash or corrupt record never authorizes reconstructing a different request.
-use std::io::{Read, Write};
+use std::io::Read;
+#[cfg(not(windows))]
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use hiroute_application_api::{
@@ -55,8 +57,11 @@ pub(super) fn load(
     private(root, true)?;
     private(&path, false)?;
     let mut bytes = Vec::new();
-    std::fs::File::open(&path)
-        .and_then(|file| file.take(65_537).read_to_end(&mut bytes))
+    #[cfg(windows)]
+    let file = hiroute_platform::windows::security::open_owner_only(&path, false);
+    #[cfg(not(windows))]
+    let file = std::fs::File::open(&path);
+    file.and_then(|file| file.take(65_537).read_to_end(&mut bytes))
         .map_err(|_| ErrorCode::DaemonUnavailable)?;
     if bytes.len() > 65_536 {
         return Err(ErrorCode::DaemonUnavailable);
@@ -104,31 +109,17 @@ pub(super) fn freeze(
     create_private_directory(namespace)?;
     create_private_directory(root)?;
     let destination = path(root, &apply.idempotency_key)?;
-    let temporary = root.join(format!(".{}", super::random_key()?));
     let record = Record {
         schema: SCHEMA.into(),
         instance: instance(root)?,
         selection: selection.clone(),
         apply,
     };
-    let result = (|| {
-        let mut options = std::fs::OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        let mut file = options
-            .open(&temporary)
-            .map_err(|_| ErrorCode::DaemonUnavailable)?;
-        serde_json::to_writer(&mut file, &record).map_err(|_| ErrorCode::DaemonUnavailable)?;
-        file.write_all(b"\n")
-            .and_then(|_| file.sync_all())
-            .map_err(|_| ErrorCode::DaemonUnavailable)?;
-        // The first writer wins. A simultaneous same-intent retry must load that writer's
-        // frozen request instead of submitting its own newer Preview digest.
-        std::fs::hard_link(&temporary, &destination)
+    #[cfg(windows)]
+    {
+        let mut bytes = serde_json::to_vec(&record).map_err(|_| ErrorCode::DaemonUnavailable)?;
+        bytes.push(b'\n');
+        hiroute_platform::durable::write_private_new(&destination, &bytes)
             .or_else(|error| {
                 if error.kind() == std::io::ErrorKind::AlreadyExists {
                     Ok(())
@@ -137,14 +128,47 @@ pub(super) fn freeze(
                 }
             })
             .map_err(|_| ErrorCode::DaemonUnavailable)?;
-        #[cfg(unix)]
-        std::fs::File::open(root)
-            .and_then(|directory| directory.sync_all())
-            .map_err(|_| ErrorCode::DaemonUnavailable)?;
         load(root, &record.apply.idempotency_key, selection)?.ok_or(ErrorCode::DaemonUnavailable)
-    })();
-    let _ = std::fs::remove_file(temporary);
-    result
+    }
+    #[cfg(not(windows))]
+    {
+        let temporary = root.join(format!(".{}", super::random_key()?));
+        let result = (|| {
+            let mut options = std::fs::OpenOptions::new();
+            options.write(true).create_new(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600);
+            }
+            let mut file = options
+                .open(&temporary)
+                .map_err(|_| ErrorCode::DaemonUnavailable)?;
+            serde_json::to_writer(&mut file, &record).map_err(|_| ErrorCode::DaemonUnavailable)?;
+            file.write_all(b"\n")
+                .and_then(|_| file.sync_all())
+                .map_err(|_| ErrorCode::DaemonUnavailable)?;
+            // The first writer wins. A simultaneous same-intent retry must load that writer's
+            // frozen request instead of submitting its own newer Preview digest.
+            std::fs::hard_link(&temporary, &destination)
+                .or_else(|error| {
+                    if error.kind() == std::io::ErrorKind::AlreadyExists {
+                        Ok(())
+                    } else {
+                        Err(error)
+                    }
+                })
+                .map_err(|_| ErrorCode::DaemonUnavailable)?;
+            #[cfg(unix)]
+            std::fs::File::open(root)
+                .and_then(|directory| directory.sync_all())
+                .map_err(|_| ErrorCode::DaemonUnavailable)?;
+            load(root, &record.apply.idempotency_key, selection)?
+                .ok_or(ErrorCode::DaemonUnavailable)
+        })();
+        let _ = std::fs::remove_file(temporary);
+        result
+    }
 }
 
 fn create_private_directory(path: &Path) -> Result<(), ErrorCode> {
@@ -153,37 +177,48 @@ fn create_private_directory(path: &Path) -> Result<(), ErrorCode> {
 }
 
 fn create_directory_tree(path: &Path) -> Result<(), ErrorCode> {
-    match std::fs::symlink_metadata(path) {
-        Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {
-            // Another first writer may have just created it but not synced its parent yet.
-            return sync_directory_entry(path);
-        }
-        Ok(_) => return Err(ErrorCode::DaemonUnavailable),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(_) => return Err(ErrorCode::DaemonUnavailable),
-    }
-    let parent = path.parent().ok_or(ErrorCode::DaemonUnavailable)?;
-    create_directory_tree(parent)?;
-    let mut builder = std::fs::DirBuilder::new();
-    #[cfg(unix)]
+    #[cfg(windows)]
     {
-        use std::os::unix::fs::DirBuilderExt;
-        builder.mode(0o700);
+        let directory = hiroute_platform::windows::security::ensure_private_directory(path)
+            .map_err(|_| ErrorCode::DaemonUnavailable)?;
+        hiroute_platform::windows::security::verify_owner_only_handle(&directory, true)
+            .map_err(|_| ErrorCode::DaemonUnavailable)?;
+        sync_directory_entry(path)
     }
-    builder
-        .create(path)
-        .or_else(|error| {
-            if error.kind() == std::io::ErrorKind::AlreadyExists {
-                Ok(())
-            } else {
-                Err(error)
+    #[cfg(not(windows))]
+    {
+        match std::fs::symlink_metadata(path) {
+            Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {
+                // Another first writer may have just created it but not synced its parent yet.
+                return sync_directory_entry(path);
             }
-        })
-        .map_err(|_| ErrorCode::DaemonUnavailable)?;
-    private(path, true)?;
-    // A new namespace must itself survive interruption, not only its eventual receipt file.
-    // Persist every newly created directory entry before allowing a network submission.
-    sync_directory_entry(path)
+            Ok(_) => return Err(ErrorCode::DaemonUnavailable),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => return Err(ErrorCode::DaemonUnavailable),
+        }
+        let parent = path.parent().ok_or(ErrorCode::DaemonUnavailable)?;
+        create_directory_tree(parent)?;
+        let mut builder = std::fs::DirBuilder::new();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        builder
+            .create(path)
+            .or_else(|error| {
+                if error.kind() == std::io::ErrorKind::AlreadyExists {
+                    Ok(())
+                } else {
+                    Err(error)
+                }
+            })
+            .map_err(|_| ErrorCode::DaemonUnavailable)?;
+        private(path, true)?;
+        // A new namespace must itself survive interruption, not only its eventual receipt file.
+        // Persist every newly created directory entry before allowing a network submission.
+        sync_directory_entry(path)
+    }
 }
 
 fn sync_directory_entry(path: &Path) -> Result<(), ErrorCode> {
@@ -198,12 +233,33 @@ fn sync_directory_entry(path: &Path) -> Result<(), ErrorCode> {
                 .map_err(|_| ErrorCode::DaemonUnavailable)?;
         }
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        hiroute_platform::durable::directory_barrier(path)
+            .map_err(|_| ErrorCode::DaemonUnavailable)?;
+        if let Some(parent) = path.parent() {
+            hiroute_platform::durable::directory_barrier(parent)
+                .map_err(|_| ErrorCode::DaemonUnavailable)?;
+        }
+    }
+    #[cfg(not(any(unix, windows)))]
     let _ = path;
     Ok(())
 }
 
 fn private(path: &Path, directory: bool) -> Result<(), ErrorCode> {
+    #[cfg(windows)]
+    {
+        let file = hiroute_platform::windows::security::open_owner_only(path, directory)
+            .map_err(|_| ErrorCode::DaemonUnavailable)?;
+        if !directory
+            && hiroute_platform::windows::security::file_link_count(&file)
+                .map_err(|_| ErrorCode::DaemonUnavailable)?
+                != 1
+        {
+            return Err(ErrorCode::DaemonUnavailable);
+        }
+    }
     let metadata = std::fs::symlink_metadata(path).map_err(|_| ErrorCode::DaemonUnavailable)?;
     if metadata.file_type().is_symlink()
         || (directory && !metadata.is_dir())

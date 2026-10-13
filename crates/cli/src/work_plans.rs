@@ -1,5 +1,6 @@
 use crate::client::LocalControlClientError;
 use hiroute_application_api::{ErrorCode, WorkPlanListRequestV1};
+#[cfg(unix)]
 use std::io::Read;
 
 pub(crate) fn payload(options: &[String]) -> Result<serde_json::Value, ErrorCode> {

@@ -4,6 +4,8 @@ mod flow;
 mod receipt;
 #[cfg(test)]
 mod tests;
+#[cfg(all(test, windows))]
+mod windows_receipt_tests;
 
 use hiroute_application_api::{AgentCollaborationTriggerModeV2, ErrorCode};
 use serde::{Deserialize, Serialize};

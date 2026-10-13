@@ -28,6 +28,8 @@ class BuildOutputTests(unittest.TestCase):
             "x86_64-unknown-linux-gnu": ("linux", "amd64"),
             "aarch64-apple-darwin": ("darwin", "arm64"),
             "x86_64-apple-darwin": ("darwin", "amd64"),
+            "x86_64-pc-windows-msvc": ("windows", "amd64"),
+            "aarch64-pc-windows-msvc": ("windows", "arm64"),
         }
         pin, _ = builder.pinned_source()
         for target, expected in targets.items():

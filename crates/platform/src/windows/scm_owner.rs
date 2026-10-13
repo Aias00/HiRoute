@@ -166,18 +166,28 @@ fn wide(value: &str) -> io::Result<Vec<u16>> {
 }
 
 fn logon(account: &str, password: &str) -> io::Result<OwnedHandle> {
-    if account.len() > 512 || password.len() > 4096 || !account.contains('\\') {
+    if account.len() > 512 || password.len() > 4096 {
         return Err(io::ErrorKind::InvalidInput.into());
     }
-    let account = wide(account)?;
+    let (domain, username) = account
+        .split_once('\\')
+        .filter(|(domain, username)| {
+            !domain.is_empty() && !username.is_empty() && !username.contains('\\')
+        })
+        .ok_or(io::ErrorKind::InvalidInput)?;
+    // LogonUserW requires a UPN when its domain argument is NULL. This helper's
+    // canonical DOMAIN\\user contract supplies both buffers explicitly instead
+    // of depending on provider-specific parsing of a qualified username.
+    let domain = wide(domain)?;
+    let username = wide(username)?;
     let password = Zeroizing::new(wide(password)?);
     let mut token = null_mut();
-    // SAFETY: qualified account and bounded zeroizing password buffers are live;
+    // SAFETY: domain, username and bounded zeroizing password buffers are live;
     // the returned primary token is newly owned and never supplied by the request.
     if unsafe {
         LogonUserW(
-            account.as_ptr(),
-            null(),
+            username.as_ptr(),
+            domain.as_ptr(),
             password.as_ptr(),
             LOGON32_LOGON_INTERACTIVE,
             LOGON32_PROVIDER_DEFAULT,

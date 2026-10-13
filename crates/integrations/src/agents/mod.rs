@@ -33,7 +33,10 @@ pub use native_probe_process::NativeProbeProcess;
 #[cfg(windows)]
 pub(crate) mod windows_runtime;
 #[cfg(windows)]
-pub use windows_runtime::{windows_agent_command, windows_claude_version, windows_npm_entry};
+pub use windows_runtime::{
+    spawn_windows_native_probe, windows_agent_command, windows_claude_version,
+    windows_native_system_environment, windows_npm_entry,
+};
 mod dsh_config;
 mod dsh_sources;
 #[cfg(test)]

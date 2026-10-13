@@ -4,9 +4,12 @@
 
 The [installation source](../installation.rs) resolves the selected executable and
 builds a profile for an admitted run. [NativeWorkerContext](native_context.rs)
-reads only the effective instance `HOME` (or `USERPROFILE` when HOME is absent on Windows) and the selected Harness's config-root
-variable. It respects isolated Pilot/test instances and never searches for another
-user's home from an executable path. The child receives a fresh explicit
+reads only the effective Unix instance `HOME`, or the native Windows Known Folder
+Profile, and the selected Harness's config-root variable. Windows ignores ambient
+HOME/USERPROFILE for account discovery; explicit native config-root selectors still
+apply. Libtest's identified isolated child and explicit probe contexts use their
+private test-owned homes. It never searches for another user's home from an executable
+path. The child receives a fresh explicit
 environment; preserving command search paths does not import upstream credentials.
 
 ## State and ownership
@@ -236,3 +239,14 @@ and history retain accessible ACLs; only HiRoute-owned metadata and private prof
 require the owner-only descriptor. Windows native runtime and real ACP/model journeys
 need their own CI evidence; metadata checks and Job fixture tests do not establish
 Agent feature parity.
+
+The opt-in Windows [native-client gates](../installation/windows_acceptance.rs)
+execute selected Pi, DSH and Qoder artifacts through these production profiles with a
+fresh authenticated loopback endpoint. Each must initialize, create a session,
+reload its exact native history and cancel an in-flight request with complete Job
+cleanup. The existing Codex/Claude installation gates use their selected real
+adapters and clients. CI must select each ignored case explicitly and require a
+nonzero pass count; missing artifacts or Qoder login prerequisites fail the gate.
+These checks cover the native protocol and profile tool configuration. Native Skill
+use, shell side effects, compaction and account/OAuth behavior retain their separate
+product journeys; a successful loopback reply does not prove those effects.

@@ -20,6 +20,9 @@ use serde_json::{Value, json};
 use super::windows_account as account;
 use super::windows_token_launcher as launcher;
 
+#[path = "windows_background_transactions.rs"]
+mod transactions;
+
 pub const PROBE: &str = "HIROUTE_WINDOWS_BACKGROUND_FIXTURE";
 pub const ENTRY: &str = "windows_background_owner_fixture";
 const OUTPUT: &str = "HIROUTE_NATIVE_BACKGROUND_RESULT=";
@@ -338,6 +341,10 @@ pub fn entry() {
     let sid = background::current_sid_string().unwrap();
     account::assert_standard(&current, &sid);
     let result = match request.action.as_str() {
+        "transaction-snapshot"
+        | "transaction-verify"
+        | "transaction-fail-install"
+        | "transaction-upgrade-install" => transactions::run(&request),
         "command" => {
             let program = request.program.unwrap();
             let args = request
@@ -592,5 +599,22 @@ pub fn forced_stop(token: &File) -> Value {
             arguments: vec![],
         },
         Duration::from_secs(60),
+    )
+}
+
+pub fn transaction_snapshot(token: &File, verify: bool) -> Value {
+    owner(
+        token,
+        Request {
+            action: if verify {
+                "transaction-verify"
+            } else {
+                "transaction-snapshot"
+            }
+            .into(),
+            program: None,
+            arguments: vec![],
+        },
+        Duration::from_secs(45),
     )
 }

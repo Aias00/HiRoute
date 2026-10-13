@@ -1,12 +1,16 @@
 param(
-  [ValidateSet('components','product','background')][string]$Scope,
+  [ValidateSet('components','product','background','core','agents','upgrade')][string]$Scope,
   [Parameter(Mandatory)][string]$ExpectedSha,
   [Parameter(Mandatory)][string]$Evidence,
   [string]$Plan = 'windows-headless',
   [ValidateSet('focused','final')][string]$Phase = 'focused',
   [string[]]$RelatedRun = @(),
   [string]$CpaEvidence,
-  [string]$CpaSource
+  [string]$CpaSource,
+  [string]$CpaOriginalRun,
+  [string]$CpaOriginalRevision,
+  [string]$BaselineManifest,
+  [string]$BaselineArchive
 )
 $ErrorActionPreference = 'Stop'
 $evidence = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Evidence)
@@ -36,7 +40,8 @@ function Invoke-RequiredTests {
   param([string]$Name, [string[]]$CargoArguments, [string[]]$Required, [string[]]$HarnessArguments = @())
   $result = @{ scenario = 'red'; name = $Name; cases = $Required; executed = 0;
                source_revision = $ExpectedSha; ignored = 0; process_exit = $null;
-               plan = $Plan; phase = $Phase; related_runs = $RelatedRun }
+               plan = $Plan; phase = $Phase; related_runs = $RelatedRun;
+               command = @('cargo','test','--locked') + $CargoArguments + @('--','--test-threads=1') + $HarnessArguments }
   $started = Get-Date
   try {
     cargo test --locked @CargoArguments -- --list 2>&1 | Tee-Object "$evidence/$Name-inventory.log"
@@ -46,14 +51,24 @@ function Invoke-RequiredTests {
       $escaped = [regex]::Escape($case)
       if ($inventory -notmatch "(?m)^${escaped}: test`r?$") { throw "Required case not selected: $case" }
     }
+    $result.command_started_at = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() / 1000.0
     cargo test --locked @CargoArguments -- --test-threads=1 @HarnessArguments 2>&1 | Tee-Object "$evidence/$Name.log"
     $result.process_exit = $LASTEXITCODE
+    $result.command_finished_at = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() / 1000.0
     $log = Get-Content "$evidence/$Name.log" -Raw
     foreach ($case in $Required) {
       $escaped = [regex]::Escape($case)
       if ($log -match "(?m)^test ${escaped} \.\.\. (ok|FAILED)`r?$") { $result.executed++ }
     }
-    if ($LASTEXITCODE -ne 0) { throw "$Name native acceptance failed" }
+    $summaries = [regex]::Matches($log, '(?m)^test result: \w+\. (\d+) passed; (\d+) failed; (\d+) ignored.*$')
+    if ($summaries.Count -gt 0) {
+      # --nocapture can interleave per-case output; use the terminal parent summary.
+      $summary = $summaries[$summaries.Count - 1]
+      $result.tests = @{ passed = [int]$summary.Groups[1].Value; failed = [int]$summary.Groups[2].Value; ignored = [int]$summary.Groups[3].Value }
+      $result.executed = $result.tests.passed + $result.tests.failed
+      $result.ignored = $result.tests.ignored
+    }
+    if ($result.process_exit -ne 0) { throw "$Name native acceptance failed" }
     if ($log -notmatch "test result: ok\. $($Required.Count) passed; 0 failed; 0 ignored") {
       throw "$Name required runtime count differs"
     }
@@ -68,6 +83,20 @@ function Invoke-RequiredTests {
   }
 }
 
+function Invoke-LibraryTests {
+  param([string]$Package)
+  $name = $Package -replace '^hiroute-','core-'
+  try {
+    cargo test --locked -p $Package --lib -- --list 2>&1 | Tee-Object "$evidence/$name-discovery.log"
+    if ($LASTEXITCODE -ne 0) { throw "$Package native library inventory failed" }
+    $inventory = Get-Content "$evidence/$name-discovery.log" -Raw
+    $required = @([regex]::Matches($inventory, '(?m)^(\S+): test\r?$') | ForEach-Object { $_.Groups[1].Value })
+    if ($required.Count -eq 0) { throw "$Package selected no native library tests" }
+    Invoke-RequiredTests $name @('-p',$Package,'--lib') $required
+  } catch { $failures.Add($_.Exception.Message); Write-Warning $_.Exception.Message }
+}
+
+try {
 if ($Scope -eq 'components') {
   Invoke-RequiredTests 'platform' @('-p','hiroute-platform','--test','windows') @(
     'private_file_identity_is_held_and_reparse_free',
@@ -132,10 +161,31 @@ if ($Scope -eq 'components') {
     'delegation::native_cleanup::windows_tests::windows_native_cleanup_refuses_replaced_marker_without_deleting_payload')
   Invoke-RequiredTests 'authority-key' @('-p','hiroute-daemon','--lib','authority_key_is_complete_stable') @(
     'control::runtime::observation_key::tests::authority_key_is_complete_stable_and_never_replaced_by_bad_lengths')
-} else {
+  Invoke-RequiredTests 'native-endpoint' @('-p','hiroute-daemon','--lib','windows_endpoint_fixture_') @(
+    'control::runtime::agent_connection::discovery::endpoint_tests::windows_endpoint_fixture_registers_a_private_native_configuration')
+  Invoke-RequiredTests 'native-home' @('-p','hiroute-daemon','--lib','windows_agent_discovery_uses_') @(
+    'control::runtime::windows_agent_discovery_uses_the_private_isolated_test_home')
+  Invoke-RequiredTests 'startup-admission' @('-p','hiroute-daemon','--bin','hirouted','standalone::bootstrap::tests::startup_reporting_failure_drains_actual_role_and_preserves_the_primary_error') @(
+    'standalone::bootstrap::tests::startup_reporting_failure_drains_actual_role_and_preserves_the_primary_error') @('--exact')
+  Invoke-RequiredTests 'live-capture' @('-p','hiroute-daemon','--lib','windows_live_capture_') @(
+    'control::runtime::agent_live_check::windows::tests::windows_live_capture_observes_exit_and_bounds_final_stderr',
+    'control::runtime::agent_live_check::windows::tests::windows_live_capture_timeout_stops_the_owned_tool_tree') @('--skip','windows_live_capture_fixture')
+} elseif ($Scope -eq 'core') {
+  # Entire native libraries, not an implementation-specific subset. Separate jobs
+  # own platform primitives, CPA process fixtures and opt-in upstream clients.
+  foreach ($package in @('hiroute-domain','hiroute-application-api','hiroute-application',
+      'hiroute-client-core','hiroute-observation','hiroute-integrations','hiroute-local-storage',
+      'hiroute-gateway-core','hiroute-gateway','hiroute-host-runtime','hiroute-cli')) {
+    Invoke-LibraryTests $package
+  }
+} elseif ($Scope -in @('background','upgrade')) {
   cargo build --locked -p hiroute-cli --bin hiroute -p hiroute-daemon --bin hirouted 2>&1 | Tee-Object "$evidence/headless-link.log"
   if ($LASTEXITCODE -ne 0) { throw 'Production background binaries failed to build' }
-  python scripts/windows-ci-package.py --expected-sha $ExpectedSha --source-repo $CpaSource --cpa-evidence $CpaEvidence --output "$evidence/package" > "$evidence/package-result.json"
+  $packageArgs = @('--expected-sha',$ExpectedSha,'--source-repo',$CpaSource,'--output',"$evidence/package",'--build-run-id',$env:GITHUB_RUN_ID)
+  if ($CpaEvidence) {
+    $packageArgs += @('--cpa-evidence',$CpaEvidence,'--cpa-original-run',$CpaOriginalRun,'--cpa-original-revision',$CpaOriginalRevision)
+  }
+  python scripts/windows-ci-package.py @packageArgs > "$evidence/package-result.json"
   if ($LASTEXITCODE -ne 0) { throw 'Production package prerequisites failed; background scenarios not executed' }
   $package = Get-Content "$evidence/package-result.json" -Raw | ConvertFrom-Json
   $env:HIROUTE_WINDOWS_PACKAGE_MANIFEST = $package.manifest
@@ -143,8 +193,38 @@ if ($Scope -eq 'components') {
   $env:HIROUTE_WINDOWS_PYTHON = $package.python
   $env:HIROUTE_WINDOWS_ADMIN_CLI = $package.administrator_cli
   $env:HIROUTE_WORKER_DAEMON_BINARY = $package.worker_daemon
-  Invoke-RequiredTests 'background' @('-p','hiroute-daemon','--test','windows_background') @(
-    'task_native_background_lua_gateway_control_stop_crash_recovery_and_autostart',
-    'scm_standard_owner_pending_admin_finalize_session_zero_gateway_control_and_delete') @('--skip','windows_background_owner_fixture','--nocapture')
+  if ($Scope -eq 'background') {
+    Invoke-RequiredTests 'background' @('-p','hiroute-daemon','--test','windows_background') @(
+      'task_native_background_lua_gateway_control_stop_crash_recovery_and_autostart',
+      'scm_standard_owner_pending_admin_finalize_session_zero_gateway_control_and_delete') @('--skip','windows_background_owner_fixture','--skip','windows_background_upgrade::','--nocapture')
+  } else {
+    $env:HIROUTE_WINDOWS_BASELINE_PACKAGE_MANIFEST = (Resolve-Path $BaselineManifest).Path
+    $env:HIROUTE_WINDOWS_BASELINE_PACKAGE_ARCHIVE = (Resolve-Path $BaselineArchive).Path
+    Invoke-RequiredTests 'upgrade' @('-p','hiroute-daemon','--test','windows_background','windows_background_upgrade::') @(
+      'windows_background_upgrade::task_native_candidate_upgrade_recovers_prepared_rollback_and_preserves_business_state') @('--nocapture')
+  }
+} else {
+  cargo build --locked -p hiroute-daemon --bin hirouted 2>&1 | Tee-Object "$evidence/agent-daemon-link.log"
+  if ($LASTEXITCODE -ne 0) { throw 'Production Worker daemon failed to build' }
+  python scripts/windows-agent-fixtures.py --daemon target/debug/hirouted.exe --output "$evidence/clients" > "$evidence/clients-result.json"
+  if ($LASTEXITCODE -ne 0) { throw 'Fixed upstream client prerequisites failed; Agent scenarios not executed' }
+  $clients = Get-Content "$evidence/clients-result.json" -Raw | ConvertFrom-Json
+  foreach ($property in $clients.environment.PSObject.Properties) {
+    if ($property.Name -notmatch '^HIROUTE_WORKER_[A-Z_]+$') { throw 'Unknown client environment key' }
+    [Environment]::SetEnvironmentVariable($property.Name, [string]$property.Value, 'Process')
+  }
+  foreach ($case in @(
+    'delegation::installation::tests::actual_codex_acp_acceptance_uses_the_selected_installation',
+    'delegation::installation::tests::actual_claude_acp_acceptance_uses_the_selected_installation',
+    'delegation::installation::installation_probe::windows_acceptance::actual_windows_pi_new_load_and_cancel_use_the_selected_sdk',
+    'delegation::installation::installation_probe::windows_acceptance::actual_windows_dsh_new_load_and_cancel_use_the_selected_native_acp',
+    'delegation::installation::installation_probe::windows_acceptance::actual_windows_qoder_new_load_and_cancel_use_the_selected_native_acp')) {
+    $name = 'agent-' + ($case -split 'actual_')[1] -replace '_','-'
+    Invoke-RequiredTests $name @('-p','hiroute-daemon','--lib',$case) @($case) @('--ignored','--exact','--nocapture')
+  }
+}
+} finally {
+  python scripts/windows-ci-report.py $evidence
+  if ($LASTEXITCODE -ne 0) { throw 'Native validation feedback could not be generated' }
 }
 if ($failures.Count -gt 0) { throw ($failures -join '; ') }

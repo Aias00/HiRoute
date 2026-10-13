@@ -108,12 +108,14 @@ fn missing_isolated_child_cannot_report_success() {
 
 /// Filesystem-observing fixtures must be private regardless of the caller's umask.
 pub(crate) fn private_tempdir() -> tempfile::TempDir {
-    let mut builder = tempfile::Builder::new();
+    let builder = tempfile::Builder::new();
     #[cfg(unix)]
-    {
+    let builder = {
         use std::os::unix::fs::PermissionsExt;
+        let mut builder = builder;
         builder.permissions(std::fs::Permissions::from_mode(0o700));
-    }
+        builder
+    };
     let directory = builder.tempdir().unwrap();
     #[cfg(windows)]
     hiroute_platform::windows::security::set_owner_only(directory.path(), true).unwrap();

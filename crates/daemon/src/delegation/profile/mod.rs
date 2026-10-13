@@ -195,12 +195,13 @@ impl CandidateWorkerProfile {
         #[cfg(windows)]
         {
             // Windows tools require these OS selectors, without borrowing model credentials.
-            for name in ["SystemRoot", "WINDIR", "COMSPEC", "PATHEXT"] {
-                if let Some(value) =
-                    std::env::var_os(name).and_then(|value| value.into_string().ok())
-                {
-                    env.insert(name.into(), Zeroizing::new(value));
-                }
+            for (name, value) in hiroute_integrations::agents::windows_native_system_environment()
+                .map_err(|_| DelegationErrorV1::CapabilityUnavailable)?
+            {
+                let value = value
+                    .into_string()
+                    .map_err(|_| DelegationErrorV1::CapabilityUnavailable)?;
+                env.insert(name.into(), Zeroizing::new(value));
             }
             env.insert(
                 "USERPROFILE".into(),

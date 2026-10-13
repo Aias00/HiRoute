@@ -391,6 +391,7 @@ pub(crate) enum ManagedLaunchFailure {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
+    #[cfg(unix)]
     use std::path::PathBuf;
 
     use hiroute_application_api::{
@@ -409,6 +410,7 @@ mod tests {
         parse_invocation(&arguments)
     }
 
+    #[cfg(unix)]
     fn shell_quote(value: &str) -> String {
         format!("'{}'", value.replace('\'', "'\\''"))
     }
@@ -891,6 +893,7 @@ mod tests {
 
     /// Signal handling is process-global, so the tests that install forwarding handlers or
     /// raise process-level signals must never run concurrently with each other.
+    #[cfg(unix)]
     static SIGNAL_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[cfg(unix)]

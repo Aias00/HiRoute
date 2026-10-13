@@ -144,6 +144,7 @@ pub(super) fn render(
     Ok(rendered)
 }
 
+#[cfg(unix)]
 pub(super) fn render_launcher(binary: &Path, config: &Value) -> Result<String, DelegationErrorV1> {
     let mut overrides = Vec::new();
     collect_overrides("", config, &mut overrides)?;
@@ -207,6 +208,7 @@ fn collect_overrides(
     Ok(())
 }
 
+#[cfg(unix)]
 fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\"'\"'"))
 }

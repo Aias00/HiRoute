@@ -20,6 +20,10 @@ jobs:
             runner: ubuntu-22.04
           - target: aarch64-unknown-linux-gnu
             runner: ubuntu-22.04-arm
+          - target: x86_64-pc-windows-msvc
+            runner: windows-2025
+          - target: aarch64-pc-windows-msvc
+            runner: windows-11-arm
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
     env:
@@ -45,17 +49,29 @@ jobs:
           node-version: '22'
       - uses: mozilla-actions/sccache-action@v0.0.11
       - name: Prepare pinned CPA source
+        if: runner.os != 'Windows'
         run: |
           repository=$(python3 -c 'import json; print(json.load(open("vendor/cpa/source.json"))["repository"])')
           revision=$(python3 -c 'import json; print(json.load(open("vendor/cpa/source.json"))["commit"])')
           git init "$RUNNER_TEMP/cpa"
           git -C "$RUNNER_TEMP/cpa" fetch --depth=1 "$repository" "$revision"
           git -C "$RUNNER_TEMP/cpa" checkout --detach FETCH_HEAD
+      - name: Prepare pinned CPA source on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $pin = Get-Content vendor/cpa/source.json -Raw | ConvertFrom-Json
+          git init "$env:RUNNER_TEMP/cpa"
+          git -C "$env:RUNNER_TEMP/cpa" fetch --depth=1 $pin.repository $pin.commit
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned CPA fetch failed' }
+          git -C "$env:RUNNER_TEMP/cpa" checkout --detach FETCH_HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned CPA checkout failed' }
       - uses: actions/setup-go@v5
         with:
           go-version-file: ${{ runner.temp }}/cpa/go.mod
           cache: false
       - name: Repository Rust toolchain
+        shell: bash
         env:
           RELEASE_TARGET: ${{ matrix.target }}
         run: rustup show active-toolchain && rustup target add "$RELEASE_TARGET"
@@ -66,6 +82,7 @@ jobs:
             ~/.cargo/git
           key: release-sources-${{ matrix.target }}-${{ hashFiles('Cargo.lock') }}
       - name: Build and verify the exact candidate
+        if: runner.os != 'Windows'
         env:
           RELEASE_TARGET: ${{ matrix.target }}
         run: |
@@ -73,6 +90,15 @@ jobs:
             --timeout 6600 --plan release-platforms --phase final -- \
             python3 scripts/build-release.py --target "$RELEASE_TARGET" \
             --cpa-source-repo "$RUNNER_TEMP/cpa"
+      - name: Build and verify the exact Windows candidate
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          RELEASE_TARGET: ${{ matrix.target }}
+        run: |
+          if ((git rev-parse HEAD) -ne $env:GITHUB_SHA) { throw 'Exact dispatch SHA required' }
+          python scripts/build-release.py --target $env:RELEASE_TARGET --cpa-source-repo "$env:RUNNER_TEMP/cpa"
+          if ($LASTEXITCODE -ne 0) { throw 'Native Windows candidate build failed' }
       - uses: actions/upload-artifact@v4
         if: always()
         with:

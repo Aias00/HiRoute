@@ -201,19 +201,28 @@ pub(crate) fn run_all_standalone(
             ));
         }
     };
-    store.mark_applied(listen).map_err(|error| {
-        StartupError::new(StartupFailureCode::StorageUnavailable, error.to_string())
-    })?;
-    write_ready(&role, diagnostics)
-        .map_err(|error| StartupError::new(StartupFailureCode::ReadyChannelFailed, error))?;
+    let admission = (|| {
+        store.mark_applied(listen).map_err(|error| {
+            StartupError::new(StartupFailureCode::StorageUnavailable, error.to_string())
+        })?;
+        write_ready(&role, diagnostics)
+            .map_err(|error| StartupError::new(StartupFailureCode::ReadyChannelFailed, error))?;
+        #[cfg(windows)]
+        if let Some(service) = service.as_ref() {
+            service.mark_running().map_err(|error| {
+                StartupError::new(StartupFailureCode::Internal, error.to_string())
+            })?;
+        }
+        Ok(())
+    })();
+    if let Err(error) = finish_running_admission(&mut role, admission) {
+        let _ = store.mark_failed("STARTUP_ADMISSION_FAILED");
+        return Err(error);
+    }
     diagnostics.emit(DiagnosticEvent::StartupEnd(StartupEnd {
         outcome: StartupOutcome::Success,
         elapsed_ms: diagnostics_elapsed_ms(diagnostics),
     }));
-    #[cfg(windows)]
-    if let Some(service) = service.as_ref() {
-        service.mark_running();
-    }
     server
         .run(
             role,
@@ -221,4 +230,77 @@ pub(crate) fn run_all_standalone(
             service,
         )
         .map_err(|error| StartupError::new(StartupFailureCode::Internal, error))
+}
+
+/// Keep the primary admission error while draining the started production role.
+/// A cleanup failure cannot turn a failed SCM status report into success or
+/// obscure its original diagnosis. Resident/child Jobs remain held until their
+/// owners finish cleanup or the failing daemon exits.
+fn finish_running_admission(
+    role: &mut hiroute_daemon::RoleAllHandle,
+    admission: Result<(), StartupError>,
+) -> Result<(), StartupError> {
+    if admission.is_err() {
+        role.shutdown();
+        let _ = role.join(Duration::from_secs(30));
+    }
+    admission
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn startup_reporting_failure_drains_actual_role_and_preserves_the_primary_error() {
+        let builder = tempfile::Builder::new();
+        #[cfg(unix)]
+        let builder = {
+            use std::os::unix::fs::PermissionsExt;
+            let mut builder = builder;
+            builder.permissions(std::fs::Permissions::from_mode(0o700));
+            builder
+        };
+        let root = builder.tempdir().unwrap();
+        let reservation = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let listen = reservation.local_addr().unwrap();
+        drop(reservation);
+        let mut role = start_role_all(RoleAllConfig::new(
+            root.path().join("storage"),
+            root.path().join("runtime"),
+            listen,
+            root.path().join("gateway-lkg.json"),
+        ))
+        .unwrap();
+        assert_eq!(
+            role.phases(),
+            (
+                hiroute_daemon::control::ManagedControlPhase::Ready,
+                hiroute_gateway::server::ManagedGatewayPhase::Ready
+            )
+        );
+        let native = std::io::Error::from_raw_os_error(6);
+        let message = native.to_string();
+        let primary = StartupError::new(StartupFailureCode::Internal, &message);
+        let error = finish_running_admission(&mut role, Err(primary))
+            .err()
+            .unwrap();
+        assert_eq!(error.code, StartupFailureCode::Internal);
+        assert_eq!(error.message, message);
+        assert_eq!(
+            role.phases(),
+            (
+                hiroute_daemon::control::ManagedControlPhase::Terminated,
+                hiroute_gateway::server::ManagedGatewayPhase::Terminated
+            )
+        );
+        assert!(
+            std::net::TcpStream::connect_timeout(&listen, Duration::from_millis(100)).is_err(),
+            "failed startup report left the real Gateway listener serving"
+        );
+        assert!(
+            std::net::TcpListener::bind(listen).is_ok(),
+            "failed startup report retained the Gateway port"
+        );
+    }
 }

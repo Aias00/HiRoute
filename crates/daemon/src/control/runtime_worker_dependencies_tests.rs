@@ -17,6 +17,8 @@ fn executable(path: &std::path::Path) {
 }
 
 fn private_root(path: &std::path::Path) {
+    #[cfg(windows)]
+    hiroute_platform::windows::security::set_owner_only(path, true).unwrap();
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;

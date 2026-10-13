@@ -21,7 +21,7 @@ pub struct NativeProbeProcess {
 }
 
 impl NativeProbeProcess {
-    /// The caller must spawn this child with process_group(0).
+    /// Unix callers spawn with process_group(0); Windows callers retain an atomic Job child.
     pub fn new(child: Child) -> Self {
         Self {
             #[cfg(unix)]

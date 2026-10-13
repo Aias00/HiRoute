@@ -2234,6 +2234,7 @@ dependencies = [
  "hiroute-integrations",
  "hiroute-local-storage",
  "hiroute-platform",
+ "hiroute-platform-test-support",
  "nix",
  "serde",
  "serde_json",
@@ -2570,6 +2571,14 @@ dependencies = [
  "windows 0.62.2",
  "windows-sys 0.61.2",
  "zeroize",
+]
+
+[[package]]
+name = "hiroute-platform-test-support"
+version = "0.1.0"
+dependencies = [
+ "hiroute-platform",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

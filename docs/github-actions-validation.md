@@ -1,6 +1,7 @@
 # GitHub Actions validation
 
-GitHub Actions runs on the checked-out commit through `scripts/ci-run.py`.
+GitHub Actions runs on the checked-out commit. Linux checks use `scripts/ci-run.py`;
+native Windows acceptance uses `scripts/windows-headless-ci.ps1`.
 
 ## Workflows
 
@@ -10,7 +11,8 @@ GitHub Actions runs on the checked-out commit through `scripts/ci-run.py`.
 | `p0-gateway-gates.yml` | Manual, reusable | Linux listener build, neutral loopback, H1/H2 lifecycle, replay/privacy tests, contract checks, benchmark harness smoke |
 | `gateway-core-dedicated.yml` | Manual or reusable | Hosted Linux production stability and socket churn |
 | `p0-gateway-final-gates.yml` | Manual | Aggregate the three current hosted workflows |
-| `build-release.yml` | Manual, exact dispatch SHA | Native macOS ARM64/Intel DMGs and Linux x86_64/ARM64 archives; uploads candidate assets and integrity evidence for the existing release publisher |
+| `build-release.yml` | Manual, exact dispatch SHA | Native macOS ARM64/Intel DMGs and Linux/Windows x86_64/ARM64 archives; uploads candidate assets and integrity evidence for the existing release publisher |
+| `windows-headless.yml` | PR, main push, manual, reusable | Native MSVC primitives, full shared business libraries, foreground control/Gateway, real Task/SCM installation and fixed upstream Agent clients |
 
 Normal Rust checks select the organization `Default` runner group with the
 `cncf-ubuntu-16-64-x86` label. The organization must permit this public repository
@@ -38,6 +40,24 @@ The website release catalog (`apps/website/data/releases.json`) also selects the
 `hiroute-host-runtime` library tests and package Clippy in backend CI. The native
 upgrade reader consumes this data, so website validation alone cannot cover a new
 release. Other website-only edits retain their dedicated workflow.
+
+The Windows jobs use the standard hosted `windows-2025` image. They do not require
+an organization owned Windows runner. Native inventories must contain every
+required case; zero, ignored or missing required cases fail. The shared library
+scope executes the complete native test inventory, while fixed Agent gates
+explicitly select their opt-in real client tests. Their npm versions and all
+transitive package integrities come from `tools/windows-agent-fixtures/package-lock.json`.
+Qoder's fixed official archive has an independent SHA-256 check. No provider
+credentials are supplied by pull request jobs; a login prerequisite remains a
+failed gate until authorized account validation exists.
+
+Background jobs build the unchanged pinned CPA with its two native bootstrap
+security cases and use the production package generator twice. The administrator
+receives a separate verified complete package. Actual ordinary-account Task and
+SCM cases exercise authenticated account selection, protected host publication,
+session boundaries, stop/recovery policy and two-phase finalization. The separate
+candidate upgrade gate needs explicitly bound baseline package inputs; a new
+Windows platform has no released Windows baseline to invent.
 
 The toolchain comes from `rust-toolchain.toml`. Cargo sources are cached, not
 `target/`; shards do not exchange compiled binaries or claim another runner's build
@@ -85,8 +105,9 @@ maintainer validation; hosted benchmark smoke is not fixed-machine performance e
 The hosted Rust checks exclude `hiroute-desktop`. Frontend build/tests do not
 prove native Tauri interaction. macOS Desktop remains on the existing local
 validation path. The separate [release candidate workflow](release-builds.md)
-builds native macOS and Linux packages on both architectures; it does not change
-the backend test matrix. Windows is outside that release matrix.
+builds native macOS, Linux and Windows packages on both architectures. Building
+an archive records package integrity and an awaiting-runtime state; it does not
+replace that architecture's native business acceptance or Desktop validation.
 Real-provider credentials and separately provisioned production E2E fixtures are
 not supplied by this CI setup. Existing failing checks remain failures, not
 expected-red success or waived gates.

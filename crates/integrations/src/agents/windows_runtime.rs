@@ -33,6 +33,22 @@ pub fn windows_agent_command(
     Ok((node, args))
 }
 
+/// OS selectors come from the kernel's system directory, never a caller shell override.
+pub fn windows_native_system_environment() -> io::Result<[(&'static str, OsString); 4]> {
+    let cmd = hiroute_platform::windows::launcher::system_executable(Path::new("cmd.exe"))?;
+    let root = cmd
+        .parent()
+        .and_then(Path::parent)
+        .filter(|root| root.is_absolute())
+        .ok_or_else(|| io::Error::other("native system root"))?;
+    Ok([
+        ("SystemRoot", root.as_os_str().to_owned()),
+        ("WINDIR", root.as_os_str().to_owned()),
+        ("COMSPEC", cmd.into_os_string()),
+        ("PATHEXT", ".COM;.EXE;.BAT;.CMD".into()),
+    ])
+}
+
 pub fn windows_claude_version(
     binary: &Path,
     search_path: &str,
@@ -75,11 +91,26 @@ pub fn windows_npm_entry(shim: &Path) -> io::Result<PathBuf> {
         "qoder" | "qodercli" => "@qoder-ai/qodercli",
         _ => return Err(io::Error::other("unknown npm producer")),
     };
-    let root = shim
-        .parent()
-        .ok_or_else(|| io::Error::other("npm root"))?
-        .join("node_modules")
-        .join(package);
+    let bin_directory = shim.parent().ok_or_else(|| io::Error::other("npm root"))?;
+    // npm's two declared Windows layouts: a global prefix, or a local
+    // node_modules/.bin. Never interpret the generated command script.
+    let modules = if bin_directory
+        .file_name()
+        .is_some_and(|name| name.as_encoded_bytes().eq_ignore_ascii_case(b".bin"))
+        && bin_directory.parent().is_some_and(|parent| {
+            parent.file_name().is_some_and(|name| {
+                name.as_encoded_bytes()
+                    .eq_ignore_ascii_case(b"node_modules")
+            })
+        }) {
+        bin_directory
+            .parent()
+            .expect("verified npm local parent")
+            .to_owned()
+    } else {
+        bin_directory.join("node_modules")
+    };
+    let root = modules.join(package);
     let manifest = root.join("package.json");
     if std::fs::metadata(&manifest)?.len() > 64 * 1024 {
         return Err(io::Error::other("npm manifest bound"));
@@ -91,7 +122,13 @@ pub fn windows_npm_entry(shim: &Path) -> io::Result<PathBuf> {
     }
     let bin = value["bin"]
         .as_str()
-        .or_else(|| value["bin"].get(name).and_then(serde_json::Value::as_str))
+        .or_else(|| {
+            value["bin"].as_object()?.iter().find_map(|(key, value)| {
+                key.eq_ignore_ascii_case(name)
+                    .then(|| value.as_str())
+                    .flatten()
+            })
+        })
         .ok_or_else(|| io::Error::other("npm bin"))?;
     let root = std::fs::canonicalize(root)?;
     let entry = std::fs::canonicalize(root.join(bin))?;
@@ -140,15 +177,9 @@ pub(super) fn spawn(
             env.insert(key.to_owned(), value.to_owned());
         }
     }
-    for key in ["SystemRoot", "WINDIR", "COMSPEC", "PATHEXT"] {
-        if !env
-            .keys()
-            .any(|name| name.as_encoded_bytes().eq_ignore_ascii_case(key.as_bytes()))
-        {
-            if let Some(value) = std::env::var_os(key) {
-                env.insert(key.into(), value);
-            }
-        }
+    for (key, value) in windows_native_system_environment()? {
+        env.retain(|name, _| !name.as_encoded_bytes().eq_ignore_ascii_case(key.as_bytes()));
+        env.insert(key.into(), value);
     }
     let value = |name: &str, env: &std::collections::BTreeMap<OsString, OsString>| {
         env.iter()
@@ -199,6 +230,24 @@ pub(super) fn spawn(
         stdout: output,
         stderr: error,
     })
+}
+
+/// Native one-shot probes have no stdin and retain their exact Job through stop.
+/// File capture keeps synchronous output reads outside the execution deadline.
+pub fn spawn_windows_native_probe(
+    command: &Command,
+    inherit: bool,
+    output: &std::fs::File,
+    error: Option<&std::fs::File>,
+) -> io::Result<super::NativeProbeProcess> {
+    spawn(
+        command,
+        inherit,
+        Stream::Null,
+        Stream::File(output),
+        error.map_or(Stream::Null, Stream::File),
+    )
+    .map(super::NativeProbeProcess::new)
 }
 
 /// Capture to a private regular file so no synchronous pipe read can defeat the deadline.
@@ -285,4 +334,104 @@ pub(super) fn cleanup_unknown(error: &io::Error) -> bool {
     error
         .get_ref()
         .is_some_and(|error| error.is::<CleanupUnknown>())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const ENV_FIXTURE: &str = "agents::windows_runtime::tests::windows_native_environment_fixture";
+
+    #[test]
+    #[ignore = "selected only as the actual native environment child"]
+    fn windows_native_environment_fixture() {
+        let values = ["SystemRoot", "WINDIR", "COMSPEC", "PATHEXT"]
+            .into_iter()
+            .map(|key| (key, std::env::var(key).unwrap()))
+            .collect::<std::collections::BTreeMap<_, _>>();
+        println!(
+            "WINDOW_NATIVE_SYSTEM_ENV={}",
+            serde_json::to_string(&values).unwrap()
+        );
+    }
+
+    #[test]
+    fn windows_native_system_selectors_override_ambient_shell_paths() {
+        let home = tempfile::tempdir().unwrap();
+        hiroute_platform::windows::security::set_owner_only(home.path(), true).unwrap();
+        let mut command = Command::new(std::env::current_exe().unwrap());
+        command
+            .args(["--ignored", "--exact", ENV_FIXTURE, "--nocapture"])
+            .env_clear()
+            .env("HOME", home.path())
+            .env("PATH", "")
+            .env("systemroot", r"C:\untrusted-root")
+            .env("windir", r"C:\untrusted-windows")
+            .env("comspec", r"C:\untrusted-shell.cmd")
+            .env("pathext", ".UNTRUSTED")
+            .current_dir(home.path());
+        let output = bounded(&command, false, Duration::from_secs(10), 4096).unwrap();
+        let text = std::str::from_utf8(&output).unwrap();
+        let values: std::collections::BTreeMap<String, String> = serde_json::from_str(
+            text.lines()
+                .find_map(|line| {
+                    line.split_once("WINDOW_NATIVE_SYSTEM_ENV=")
+                        .map(|(_, value)| value)
+                })
+                .expect("actual child must report the selectors"),
+        )
+        .unwrap();
+        for (key, value) in windows_native_system_environment().unwrap() {
+            assert_eq!(values[key], value.to_str().unwrap());
+        }
+    }
+
+    #[test]
+    fn windows_npm_shims_bind_global_and_local_declared_bins_without_evaluation() {
+        let root = tempfile::tempdir().unwrap();
+        hiroute_platform::windows::security::set_owner_only(root.path(), true).unwrap();
+        for local in [false, true] {
+            let prefix = root.path().join(if local { "local" } else { "global" });
+            let modules = prefix.join("node_modules");
+            let package = modules.join("@deepseek-ai/dsh");
+            let bin_dir = if local {
+                modules.join(".bin")
+            } else {
+                prefix.clone()
+            };
+            std::fs::create_dir_all(package.join("lib")).unwrap();
+            std::fs::create_dir_all(&bin_dir).unwrap();
+            let shim = bin_dir.join("DSH.cmd");
+            // If any shim text is evaluated the test changes an unrelated file.
+            let marker = root.path().join("shim-was-evaluated");
+            std::fs::write(&shim, format!("@echo dangerous > \"{}\"", marker.display())).unwrap();
+            let entry = package.join("lib/bin.js");
+            std::fs::write(&entry, "throw new Error('must not execute discovery');").unwrap();
+            let manifest = package.join("package.json");
+            std::fs::write(
+                &manifest,
+                br#"{"name":"@deepseek-ai/dsh","bin":{"dsh":"lib/bin.js"}}"#,
+            )
+            .unwrap();
+            assert_eq!(
+                windows_npm_entry(&shim).unwrap(),
+                std::fs::canonicalize(&entry).unwrap()
+            );
+            assert!(!marker.exists());
+            std::fs::write(
+                &manifest,
+                br#"{"name":"@deepseek-ai/dsh","bin":{"dsh":"../../../../shim-was-evaluated"}}"#,
+            )
+            .unwrap();
+            std::fs::write(&marker, "outside the selected package").unwrap();
+            assert!(windows_npm_entry(&shim).is_err());
+            std::fs::remove_file(marker).unwrap();
+            std::fs::write(
+                &manifest,
+                br#"{"name":"another-producer","bin":"lib/bin.js"}"#,
+            )
+            .unwrap();
+            assert!(windows_npm_entry(&shim).is_err());
+        }
+    }
 }

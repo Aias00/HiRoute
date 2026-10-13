@@ -1,18 +1,69 @@
+#[cfg(unix)]
 use hiroute_application::TransactionCoordinator;
+#[cfg(unix)]
 use hiroute_application::agent_connection::AgentConnectionPlanner;
+#[cfg(unix)]
 use hiroute_application::control::{AgentConnectionControlPort, ControlReadError};
+#[cfg(unix)]
 use hiroute_application_api::{
     AgentConnectSpecV1, AgentConnectionStateV1, AgentConnectionStatusRequestV1,
 };
+#[cfg(unix)]
 use hiroute_domain::{
-    AgentActivationModeV1, AgentConnectionEffectRoleV1, AgentConnectionTransactionSubjectV1,
-    BeginOperationOutcome, CanonicalDigest, ControlRepositoryPort, IdempotencyScopeV1, OperationId,
-    OperationState, OperationV1, ProtectedApplyCapability, PublicationRepositoryPort,
-    SecretStorePort, WorkspaceId,
+    AgentActivationModeV1, BeginOperationOutcome, CanonicalDigest, ControlRepositoryPort,
+    IdempotencyScopeV1, OperationId, OperationState, OperationV1, ProtectedApplyCapability,
+    PublicationRepositoryPort, SecretStorePort, WorkspaceId,
 };
-use hiroute_local_storage::{ApplyCapabilityRegistrationV1, LocalStorageSet, ManagedArtifactStore};
+use hiroute_domain::{AgentConnectionEffectRoleV1, AgentConnectionTransactionSubjectV1};
+#[cfg(unix)]
+use hiroute_local_storage::ApplyCapabilityRegistrationV1;
+use hiroute_local_storage::{LocalStorageSet, ManagedArtifactStore};
 
+#[cfg(unix)]
 use super::LocalControlAdapter;
+
+#[cfg(windows)]
+#[test]
+fn windows_endpoint_fixture_registers_a_private_native_configuration() {
+    use hiroute_domain::{ConnectorRegistryBundleV1, ReleaseModelDataBundleV2};
+    use hiroute_integrations::{
+        AgentFilesystemLayoutV1, ClaudeRegistrationIndexV1, FilesystemAgentScannerV1,
+    };
+
+    let root = crate::test_support::private_tempdir();
+    let home = root.path().join("home");
+    let project = root.path().join("project");
+    for directory in [&home, &project, &home.join(".claude")] {
+        hiroute_platform::windows::security::create_owner_only_directory(directory).unwrap();
+    }
+    let registry: ConnectorRegistryBundleV1 = serde_json::from_slice(include_bytes!(
+        "../../../../../assets/connector-registry/current/registry-seed.json"
+    ))
+    .unwrap();
+    let model_data: ReleaseModelDataBundleV2 = serde_json::from_slice(include_bytes!(
+        "../../../../../assets/release-facts/current/bundle/model-data.json"
+    ))
+    .unwrap();
+    let mut layout = AgentFilesystemLayoutV1::from_process(&home, &project);
+    // This fixture exercises the managed artifact boundary, never ambient login
+    // or an executable/version probe. All native paths belong to this test root.
+    layout.codex_executable = root.path().join("missing-codex.exe");
+    layout.claude_executable = root.path().join("missing-claude.exe");
+    layout.claude_user_settings = home.join(".claude/settings.json");
+    layout.claude_launch_settings = None;
+    layout.claude_project_settings.clear();
+    layout.claude_managed_settings.clear();
+    let scanner = FilesystemAgentScannerV1::new(
+        layout,
+        ClaudeRegistrationIndexV1::from_verified_model_data(&registry, &model_data.data).unwrap(),
+    );
+    let storage = root.path().join("storage");
+    let stores = LocalStorageSet::open_for_daemon_startup(&storage).unwrap();
+    let _artifacts = open_endpoint_test_artifacts(&stores, &scanner, &storage);
+    let native = scanner.claude_user_settings_target();
+    assert_eq!(std::fs::read(&native).unwrap(), b"{}\n");
+    hiroute_platform::windows::security::verify_owner_only(&native, false).unwrap();
+}
 
 pub(in super::super) fn open_endpoint_test_artifacts(
     stores: &LocalStorageSet,
@@ -46,6 +97,7 @@ pub(in super::super) fn open_endpoint_test_artifacts(
 // Reuse the isolated durable-store fixture and the current V1 planner. This proves the legacy
 // endpoint boundary, not native authentication or end-to-end readiness. Ordinary V1 discovery
 // still treats the local Gateway as an unregistered upstream; do not broaden raw-grant admission.
+#[cfg(unix)]
 pub(in super::super) fn assert_persisted_endpoint_convergence(
     adapter: &LocalControlAdapter,
     spec: &AgentConnectSpecV1,

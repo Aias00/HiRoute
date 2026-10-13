@@ -192,7 +192,7 @@ pub fn register_for_owner(
     let account = wide(&expected_account)?;
     let command = wide(&command_line(definition)?)?;
     let password = Zeroizing::new(wide(password)?);
-    token::verify_credentials(&account, &password, owner_sid)?;
+    token::verify_credentials(&expected_account, &password, owner_sid)?;
     super::sealed_host::install_for_owner(definition, &sid, image, trusted_host)?;
     grant_service_logon(owner_sid)?;
     let access = SERVICE_QUERY_CONFIG | SERVICE_QUERY_STATUS | SERVICE_CHANGE_CONFIG | 0x40000; // WRITE_DAC

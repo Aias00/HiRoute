@@ -16,7 +16,7 @@ impl WorkerInstallationSelectionSource for StaticSelection {
     }
 }
 
-fn make_file(path: &Path, mode: u32) {
+fn make_file(path: &Path, #[cfg_attr(not(unix), allow(unused_variables))] mode: u32) {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).unwrap();
     }

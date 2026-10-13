@@ -1,8 +1,10 @@
 # Operating-system primitives
 
 This crate owns Windows kernel handles and FFI used by headless hosts. It does
-not select an Agent, authorize a command, own business state, or implement a
-service lifecycle. Those policies remain with the daemon and their current ports.
+not select an Agent, authorize a business command, or own business state.
+`windows::background` owns the native Task Scheduler and Service Control Manager
+adapters, fixed Known Folder resolution, and their closed installation definitions.
+The CLI and host runtime select lifecycle policy and maintain installation journals.
 
 `windows::security` is the shared implementation of the Gateway's existing
 owner-only ACL creation, verification, and held volume/file-index identity.
@@ -28,6 +30,23 @@ Windows native tests exercise held identity, bidirectional frames, endpoint
 exclusivity/rebinding, peer queries, and deadline cancellation followed by another
 frame. Windows CI must verify that these cases are actually selected; an empty
 test inventory on another platform is not their acceptance evidence.
+
+`windows::job` launches inspected native executables suspended, assigns the
+kernel Job and explicit inherited handle list before execution, and stops the
+whole Job when the leader exits. Numeric PIDs do not grant termination authority.
+`windows::launcher` supplies a fixed system PowerShell helper for managed commands
+whose argv must cross a caller's cmd invocation. Credential pipes are exclusive,
+private, bounded and explicitly inherited; their raw handle values are locators.
+
+Background lifecycle messages authenticate a held process image, creation time,
+and pipe peer identity. Task mode uses the same interactive account at LUA level;
+SCM mode authenticates a qualified owner account and uses a restricted business
+token beneath an administrator protected service host. `scm_owner` reads the
+owner's private prepared journal only while impersonating that authenticated
+account, then reverts before machine registration. Sealed publication copies a
+held daemon from the administrator's trusted package and requires its digest to
+match the owner's prepared image. A user supplied path or self reported digest
+cannot select the administrator's executable.
 
 Filesystem traversal uses synchronous `NtCreateFile` with an inspected
 `RootDirectory`, one component, `OBJ_DONT_REPARSE` and a handle type check.

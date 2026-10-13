@@ -1,7 +1,8 @@
 //! Opt-in real native Windows clients. Missing installed artifacts fail the selected gate.
 //! This endpoint issues no provider request and receives only a fresh local challenge.
 use super::*;
-use hiroute_domain::delegation::{WorkerDependencySelectionRecordV1, WorkerToolV1};
+use hiroute_domain::WorkerDependencySelectionRecordV1;
+use hiroute_domain::delegation::WorkerToolV1;
 
 fn selected(name: &str) -> std::path::PathBuf {
     std::env::var_os(name)
@@ -89,6 +90,27 @@ fn profile(
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("exe"))
     );
+    if matches!(
+        config.harness,
+        WorkerHarnessV1::Pi | WorkerHarnessV1::DeepseekHarness
+    ) {
+        let node = selected("HIROUTE_WORKER_NODE");
+        let node = hiroute_platform::windows::security::open_identity(&node, false).unwrap();
+        let actual =
+            hiroute_platform::windows::security::open_identity(&profile.executable, false).unwrap();
+        assert_eq!(
+            hiroute_platform::windows::security::file_identity(&actual).unwrap(),
+            hiroute_platform::windows::security::file_identity(&node).unwrap(),
+            "the real selected Node executable must run the SDK/ACP entry"
+        );
+        if config.harness == WorkerHarnessV1::DeepseekHarness {
+            assert_eq!(
+                std::fs::canonicalize(&profile.args[0]).unwrap(),
+                std::fs::canonicalize(&config.harness_binary).unwrap(),
+                "the actual DSH JS entry must be the first native Node argument"
+            );
+        }
+    }
     assert_eq!(
         profile.env["HOME"].as_str(),
         context.home().to_str().unwrap()
