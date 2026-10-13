@@ -26,6 +26,7 @@
     "hiroute.agent-launch-descriptor-request/v1",
     "hiroute.agent-live-check-evidence/v1",
     "hiroute.agent-live-check-receipt/v1",
+    "hiroute.agent-model-budget-conflict/v1",
     "hiroute.agent-model-grant/v3",
     "hiroute.agent-model-settings-status/v2",
     "hiroute.agent-plan-alias-registry/v1",

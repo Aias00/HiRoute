@@ -66,6 +66,7 @@ pub(super) fn dispatch_apply(
     if payload.idempotency_key.is_empty() {
         return failed(ErrorCode::InvalidArguments, request.request_id);
     }
+    let include_model_budget_conflict = payload.include_model_budget_conflict;
     if let Some(replay) = replay_apply(
         ports.control.as_ref(),
         PrincipalKind::InteractiveUser,
@@ -120,7 +121,7 @@ pub(super) fn dispatch_apply(
     };
     match mutation.apply_local_prepared_change(prepared) {
         Ok(operation) => super::accepted_apply(operation, request.request_id),
-        Err(error) => failed(error.error_code(), request.request_id),
+        Err(error) => error.envelope(request.request_id, include_model_budget_conflict),
     }
 }
 

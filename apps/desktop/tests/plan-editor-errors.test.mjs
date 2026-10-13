@@ -7,6 +7,30 @@ test('backend envelope is decoded without exposing payloads or stack traces', ()
  assert.match(planErrorMessage(failure,'zh'),/校验/);
  assert.ok(!planErrorMessage(failure,'zh').includes('private-debug-content'));
 });
+test('all live consumers and both capacity dimensions are shown without native payloads', () => {
+ const blocker = (kind, context) => ({ agent_kind: kind, context_id: `agent-context/${context}/sha256:abc`, plan_id: 'plan/free', model_alias: 'free.plan', reason: 'capacity_reduced', declared: { context_window_tokens: 262144, max_output_tokens: 235929 }, proposed: { context_window_tokens: 262144, max_output_tokens: 131072 } });
+ const conflict = { schema: 'hiroute.agent-model-budget-conflict/v1', blockers: [blocker('pi', 'pi'), blocker('deepseek_harness', 'dsh')] };
+ const error = { envelope: { error: { code: 'REVISION_CONFLICT', details: 'private-native-config', model_budget_conflict: conflict } } };
+ assert.equal(planErrorCode(error), 'AGENT_MODEL_BUDGET_CONFLICT');
+ const message = planErrorMessage(error, 'zh');
+ assert.match(message, /Pi「free.plan」.*最大输出 235,929 → 131,072.*DeepSeek Harness「free.plan」/);
+ assert.doesNotMatch(message, /Qoder|private-native-config|上下文 262/);
+ assert.match(message, /取消接入受影响计划.*任务协作无需停用.*输入已保留/);
+ assert.match(planErrorMessage({ safe_error_code: 'AGENT_MODEL_BUDGET_CONFLICT', model_budget_conflict: conflict }, 'en'), /Pi.*max output.*DeepSeek Harness/);
+ const contextOnly = { ...conflict, blockers: [{ ...blocker('qoder', 'qoder'), proposed: { context_window_tokens: 32000, max_output_tokens: 235929 } }] };
+ assert.match(planErrorMessage({ code: 'QODER_MODEL_BUDGET_CONFLICT', model_budget_conflict: contextOnly }, 'zh'), /Qoder.*上下文 262,144 → 32,000/);
+ for (const reason of ['plan_missing', 'budget_unavailable']) {
+  const value = { ...conflict, blockers: [{ ...blocker('pi', 'pi'), reason, proposed: null }] };
+  assert.match(planErrorMessage({ code: 'AGENT_MODEL_BUDGET_CONFLICT', model_budget_conflict: value }, 'zh'), reason === 'plan_missing' ? /计划不可用/ : /预算不可计算/);
+ }
+});
+test('malformed capacity projections fall back safely', () => {
+ for (const blockers of [[], [null], [{ agent_kind: 'qoder', context_id: '/private/settings.json' }]]) {
+  const error = { envelope: { error: { code: 'REVISION_CONFLICT', model_budget_conflict: { schema: 'hiroute.agent-model-budget-conflict/v1', blockers } } } };
+  assert.equal(planErrorCode(error), 'REVISION_CONFLICT');
+  assert.doesNotMatch(planErrorMessage(error, 'zh'), /settings.json|停用 Qoder/);
+ }
+});
 test('unchanged publication is distinguishable from malformed failures', () => {
  assert.equal(planErrorCode({envelope:{error:{code:'PLAN_UNCHANGED'}}}),'PLAN_UNCHANGED');
  for(const value of [null, {}, new Error('private stack'), '{"code":"PLAN_UNCHANGED"}']) assert.equal(planErrorCode(value),'REQUEST_FAILED');

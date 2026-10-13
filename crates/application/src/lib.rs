@@ -268,7 +268,7 @@ impl ApplicationService {
         }
         match mutation.preview_change(preview) {
             Ok(result) => succeeded(result, request.request_id),
-            Err(error) => failed(error.error_code(), request.request_id),
+            Err(error) => error.envelope(request.request_id, false),
         }
     }
 
@@ -295,7 +295,7 @@ impl ApplicationService {
         }
         match mutation.apply_local_change(apply) {
             Ok(operation) => accepted_apply(operation, request.request_id),
-            Err(error) => failed(error.error_code(), request.request_id),
+            Err(error) => error.envelope(request.request_id, false),
         }
     }
 

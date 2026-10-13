@@ -1038,3 +1038,100 @@ fn qoder_budget_conflict_has_the_same_public_and_terminal_error_code() {
         assert_eq!(error.safe_code(), "ADAPTER_FAILURE");
     }
 }
+
+#[test]
+fn model_budget_error_keeps_success_data_absent_for_typed_callers() {
+    use hiroute_domain::{
+        AgentKindV1, AgentModelBudgetBlockerV1, AgentModelBudgetConflictV1,
+        AgentModelBudgetReasonV1, AgentModelTokenBudgetV1,
+    };
+    let conflict = AgentModelBudgetConflictV1::new(vec![AgentModelBudgetBlockerV1 {
+        agent_kind: AgentKindV1::Pi,
+        context_id: "agent-context/pi/sha256:abc".into(),
+        plan_id: hiroute_domain::AgentPlanId::parse("plan/free").unwrap(),
+        model_alias: hiroute_domain::ModelAlias::parse("free.plan").unwrap(),
+        reason: AgentModelBudgetReasonV1::CapacityReduced,
+        declared: AgentModelTokenBudgetV1 {
+            context_window_tokens: 262_144,
+            max_output_tokens: 235_929,
+        },
+        proposed: Some(AgentModelTokenBudgetV1 {
+            context_window_tokens: 262_144,
+            max_output_tokens: 131_072,
+        }),
+    }]);
+    assert!(conflict.is_valid());
+    let error = TransactionError::Port(
+        PortError::new(PortErrorCode::Conflict, "agent.model.budget.conflict")
+            .with_model_budget_conflict(conflict.clone()),
+    );
+    let legacy = serde_json::to_value(error.envelope("legacy-budget-error".into(), false)).unwrap();
+    assert!(legacy["error"].get("model_budget_conflict").is_none());
+    assert_eq!(
+        legacy["error"]["details_schema"],
+        "hiroute.error-details/none-v1"
+    );
+    let wire = serde_json::to_value(error.envelope("budget-error".into(), true)).unwrap();
+    assert!(wire.get("data").is_none());
+    assert_eq!(wire["error"]["code"], "REVISION_CONFLICT");
+    let schema: Value = serde_json::from_str(
+        &hiroute_application_api::generated_contract_files()
+            .into_iter()
+            .find(|file| file.relative_path == "machine-envelope.v2.schema.json")
+            .unwrap()
+            .contents,
+    )
+    .unwrap();
+    // Actual serialized errors must fit every closed object in the published schema.
+    // This catches adding a Rust field while forgetting the unique schema producer.
+    for (object, definition) in [
+        (&wire["error"], "error"),
+        (
+            &wire["error"]["model_budget_conflict"],
+            "model_budget_conflict",
+        ),
+        (
+            &wire["error"]["model_budget_conflict"]["blockers"][0],
+            "model_budget_blocker",
+        ),
+        (
+            &wire["error"]["model_budget_conflict"]["blockers"][0]["declared"],
+            "model_token_budget",
+        ),
+        (
+            &wire["error"]["model_budget_conflict"]["blockers"][0]["proposed"],
+            "model_token_budget",
+        ),
+    ] {
+        let definition = &schema["$defs"][definition];
+        assert_eq!(definition["additionalProperties"], false);
+        for key in object.as_object().unwrap().keys() {
+            assert!(
+                definition["properties"].get(key).is_some(),
+                "undeclared wire field {key}"
+            );
+        }
+        for key in definition["required"].as_array().unwrap() {
+            assert!(object.get(key.as_str().unwrap()).is_some());
+        }
+    }
+    // Released 0.3.1 ErrorV1 accepts additive fields; a command's strict success DTO
+    // must never deserialize error details. This fails if budget facts move into data.
+    let typed: hiroute_application_api::MachineEnvelopeV2<
+        hiroute_application_api::AgentPlanStatusV2,
+    > = serde_json::from_value(wire.clone()).unwrap();
+    assert!(typed.data.is_none());
+    assert_eq!(
+        typed.error.unwrap().model_budget_conflict,
+        Some(Box::new(conflict))
+    );
+    let mut old = wire;
+    old["error"]
+        .as_object_mut()
+        .unwrap()
+        .remove("model_budget_conflict");
+    let typed: hiroute_application_api::MachineEnvelopeV2<
+        hiroute_application_api::AgentPlanStatusV2,
+    > = serde_json::from_value(old).unwrap();
+    assert!(typed.error.unwrap().model_budget_conflict.is_none());
+}

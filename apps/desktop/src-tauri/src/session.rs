@@ -32,6 +32,8 @@ struct NativePlanApply {
     accept_digest: CanonicalDigest,
     expected_revisions: RevisionSetV1,
     idempotency_key: String,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    include_model_budget_conflict: bool,
 }
 impl From<PlanContentApplyRequestV2> for NativePlanApply {
     fn from(request: PlanContentApplyRequestV2) -> Self {
@@ -40,6 +42,7 @@ impl From<PlanContentApplyRequestV2> for NativePlanApply {
             accept_digest: request.accept_digest,
             expected_revisions: request.expected_revisions,
             idempotency_key: request.idempotency_key,
+            include_model_budget_conflict: request.include_model_budget_conflict,
         }
     }
 }
@@ -553,6 +556,7 @@ impl Session {
                 accept_digest: preview.change_digest,
                 expected_revisions: preview.expected_revisions,
                 idempotency_key,
+                include_model_budget_conflict: true,
             }
             .into(),
         })
@@ -810,6 +814,7 @@ fn accepted_operation_view(
     hint.operation_id = Some(reference.operation_id.clone());
     hint.after_sequence = reference.sequence;
     Ok(ClientOperationViewV1 {
+        model_budget_conflict: None,
         operation_id: reference.operation_id,
         state: reference.state,
         sequence: reference.sequence,

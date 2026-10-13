@@ -247,6 +247,72 @@ fn conflicting_missing_and_nonregular_request_files_are_usage_errors() {
 }
 
 #[test]
+fn budget_detail_opt_in_preserves_legacy_inputs_across_both_sources() {
+    let root = tempfile::tempdir().unwrap();
+    let file = root.path().join("budget-projection.json");
+    let digest = format!("sha256:{}", "0".repeat(64));
+    let lookup = json!({
+        "principal_kind":"interactive_user", "operation_kind":"change",
+        "idempotency_key":"test", "accepted_digest":digest
+    });
+    let publication = json!({
+        "change":{
+            "schema":"hiroute.plan-content-change/v2",
+            "target":{"intent":"create","creation_key":"budget-compatibility"},
+            "editor":{
+                "schema":"hiroute.plan-editor/v2", "display_name":"Budget compatibility",
+                "purpose":"Check request projection", "mode":"fixed_model", "candidates":[],
+                "smart":{
+                    "economy":[], "primary":[],
+                    "judgment":hiroute_domain::JudgmentSettingsV1::default(),
+                    "reselect_on_user_message":false, "classifier":{"kind":"local_rules"},
+                    "complex_keywords":[]
+                },
+                "free":{"candidates":[],"primary":[],"primary_fallback":false},
+                "delegation_enabled":false,
+                "requirements":hiroute_domain::CapabilityRequirementsV1::default(),
+                "limits":{"maximum_attempts":1,"request_timeout_ms":1000,"attempt_timeout_ms":1000}
+            },
+            "consumed_draft":null
+        },
+        "accept_digest":digest, "expected_revisions":{"target":0},
+        "idempotency_key":"budget-compatibility"
+    });
+    for (path, original) in [
+        (vec!["operations", "find"], lookup),
+        (
+            vec!["operations", "find"],
+            json!(["interactive_user", "change", "test", digest]),
+        ),
+        (vec!["routing", "apply"], publication),
+    ] {
+        for projection in [None, Some(false), Some(true)] {
+            let mut request = original.clone();
+            if let Some(projection) = projection {
+                if let Some(fields) = request.as_array_mut() {
+                    fields.push(json!(projection));
+                } else {
+                    request["include_model_budget_conflict"] = json!(projection);
+                }
+            }
+            let bytes = serde_json::to_vec(&request).unwrap();
+            std::fs::write(&file, &bytes).unwrap();
+            for source in [
+                vec!["--request-file", file.to_str().unwrap()],
+                vec!["--request-stdin"],
+            ] {
+                let mut args = path.clone();
+                args.extend(source);
+                let (exit, envelope) = invoke(root.path(), &args, &bytes);
+                // A syntactically valid request reaches transport; no daemon or grant is created.
+                assert_eq!(exit, 6, "{args:?} {request}: {envelope}");
+                assert_eq!(envelope["error"]["code"], "DAEMON_UNAVAILABLE");
+            }
+        }
+    }
+}
+
+#[test]
 fn existing_per_command_byte_limits_apply_to_files_and_stdin() {
     let root = tempfile::tempdir().unwrap();
     for (path, limit, request) in [

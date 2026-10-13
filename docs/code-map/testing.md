@@ -106,10 +106,11 @@ HTTP path or old restore fixture does not prove route revocation or native execu
    reused evidence at its original SHA; assess the three slowest measured modules
    once without automatically refactoring the frozen candidate.
 
-The managed backend DAG's preparation boundary lives in
-[`validation-schedule.py`](../../scripts/validation-schedule.py).
-Its [regressions](../../scripts/test-validation-schedule.py) check current Gateway
-runtime fixture consumers before an expensive workspace run.
+Final backend DAG admission and preparation are owned by
+[validation-schedule.py](../../scripts/validation-schedule.py), with
+[regressions](../../scripts/test-validation-schedule.py). CPA bridge process fixtures
+run in an isolated lane before other listeners; Gateway runtime consumers wait for
+prepared product roles.
 
 Code-map and local ownership-guide edits require link/owner review and the selected
 contract checks, not new model calls. Runtime-embedded Markdown and shipped Skills

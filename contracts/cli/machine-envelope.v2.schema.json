@@ -27,6 +27,9 @@
           "minLength": 1,
           "type": "string"
         },
+        "model_budget_conflict": {
+          "$ref": "#/$defs/model_budget_conflict"
+        },
         "operation_id": {
           "minLength": 1,
           "type": "string"
@@ -41,6 +44,124 @@
         "message_key",
         "retryable",
         "details_schema"
+      ],
+      "type": "object"
+    },
+    "model_budget_blocker": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "proposed": {
+                "type": "null"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "reason": {
+                "const": "capacity_reduced"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "proposed": {
+                "$ref": "#/$defs/model_token_budget"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "agent_kind": {
+          "enum": [
+            "qoder",
+            "pi",
+            "deepseek_harness"
+          ]
+        },
+        "context_id": {
+          "pattern": "^agent-context/[A-Za-z0-9/_:-]{1,242}$",
+          "type": "string"
+        },
+        "declared": {
+          "$ref": "#/$defs/model_token_budget"
+        },
+        "model_alias": {
+          "pattern": "^(hiroute/[0-9a-f]{16}|[a-z0-9][a-z0-9._-]{0,63})$",
+          "type": "string"
+        },
+        "plan_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        },
+        "proposed": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/model_token_budget"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reason": {
+          "enum": [
+            "capacity_reduced",
+            "plan_missing",
+            "budget_unavailable"
+          ]
+        }
+      },
+      "required": [
+        "agent_kind",
+        "context_id",
+        "plan_id",
+        "model_alias",
+        "reason",
+        "declared",
+        "proposed"
+      ],
+      "type": "object"
+    },
+    "model_budget_conflict": {
+      "additionalProperties": false,
+      "properties": {
+        "blockers": {
+          "items": {
+            "$ref": "#/$defs/model_budget_blocker"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "schema": {
+          "const": "hiroute.agent-model-budget-conflict/v1"
+        }
+      },
+      "required": [
+        "schema",
+        "blockers"
+      ],
+      "type": "object"
+    },
+    "model_token_budget": {
+      "additionalProperties": false,
+      "properties": {
+        "context_window_tokens": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_output_tokens": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "context_window_tokens",
+        "max_output_tokens"
       ],
       "type": "object"
     },

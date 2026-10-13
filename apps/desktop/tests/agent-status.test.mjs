@@ -45,3 +45,15 @@ test('Agent presentation follows configuration and recovery rather than model ve
   agent.settings.state = 'pending';
   assert.equal(project().model, 'pending');
 });
+
+
+import { agentModelPlanIds } from '../src/features/agents/status.ts';
+test('plan usage covers every typed model selection and excludes restored connections', () => {
+ for (const mode of ['qoder_additional', 'pi_additional', 'dsh_additional']) {
+  assert.deepEqual(agentModelPlanIds({ mode, allowed_plan_ids: ['plan/free', 'plan/free'] }), ['plan/free']);
+ }
+ assert.deepEqual(agentModelPlanIds({ mode: 'codex_default', allowed_plan_ids: ['plan/free'], default_selection: { kind: 'plan', plan_id: 'plan/default' } }), ['plan/free', 'plan/default']);
+ assert.deepEqual(agentModelPlanIds({ mode: 'claude_launcher', preset_mappings: { opus: { kind: 'plan', plan_id: 'plan/free' }, sonnet: { kind: 'plan', plan_id: 'plan/free' }, haiku: { kind: 'preserve_native' } } }), ['plan/free']);
+ assert.deepEqual(agentModelPlanIds(null), []);
+ assert.deepEqual(agentModelPlanIds(undefined), []);
+});

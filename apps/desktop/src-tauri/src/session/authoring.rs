@@ -85,6 +85,7 @@ impl Session {
             },
             message_override: Some(label),
             request: NativePlanApply {
+                include_model_budget_conflict: change["schema"] == PLAN_CONTENT_CHANGE_SCHEMA_V2,
                 change,
                 accept_digest: preview.change_digest,
                 expected_revisions: preview.expected_revisions,
@@ -330,6 +331,7 @@ impl Session {
             },
             message_override: Some(message),
             request: NativePlanApply {
+                include_model_budget_conflict: change["schema"] == PLAN_CONTENT_CHANGE_SCHEMA_V2,
                 change,
                 accept_digest: digest,
                 expected_revisions: revisions,

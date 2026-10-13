@@ -615,7 +615,8 @@ def dag_run_targets(runner, root, run, targets, checkout, lease, environment, de
             if name == "smoke_cli":
                 env.update(item.get("smoke_environment", {}))
                 env.update(environment)
-            args = [selected, "--test-threads=" + str(1 if name == "smoke_cli" else 8)]
+            args = [selected, "--test-threads=" + str(item.get(
+                "test_threads", 1 if name == "smoke_cli" else 8))]
             trace = run / ("dag-exec-" + str(item["index"]) + ".log")
             traced = [tracer, "-f", "-e", "trace=execve,execveat", "-s", "0",
                       "-o", str(trace), *args]
@@ -742,11 +743,21 @@ def execute_dag(runner, root, run, checkout, request, lease, output, reserved_ha
         dag_bind_metadata(targets, metadata_artifact)
         for item in targets:
             item.setdefault("external_artifacts", []).append(toolchain_artifact)
+        # CPA's external-process fixture releases its selected port before the
+        # child binds it. Keep this whole library, including its internal cases,
+        # separate from other listeners until the child lifecycle is complete.
+        isolated = [item for item in targets
+                    if item["package_name"] == "hiroute-cpa-bridge"
+                    and item["test_source"] == "src/lib.rs"]
+        if len(isolated) != 1:
+            raise ValueError("CPA library target missing or duplicated in isolation lane")
+        isolated[0]["test_threads"] = 1
         runner.save(run / "dag-validation-plan.json", dict(
             schema="hiroute.validation-plan/v1", sha=request["sha"],
             command=request["command"], targets=targets, expected_tests=expected))
 
-        independent = sorted((item for item in targets if item["name"] not in PRODUCT_TARGETS),
+        independent = sorted((item for item in targets
+                              if item not in isolated and item["name"] not in PRODUCT_TARGETS),
                              key=lambda item: (item["name"] != "hiroute_daemon", item["name"]))
         dependent = [item for item in targets if item["name"] in PRODUCT_TARGETS]
         stop_event = threading.Event() if fail_fast else None
@@ -754,11 +765,24 @@ def execute_dag(runner, root, run, checkout, request, lease, output, reserved_ha
             if (item["test_source"].startswith("tests/")
                     and "mod runtime_support;" in (Path(item["cwd"]) / item["test_source"]).read_text(errors="replace")):
                 raise ValueError("Gateway runtime consumer lacks product preparation: " + item["name"])
+        execution_env = dict(os.environ, HIROUTE_VALIDATION_EXECUTION="1",
+                             HIROUTE_VALIDATION_TOOLCHAIN_JSON=toolchain_artifact["path"])
+        results = dag_run_targets(runner, root, run, isolated, checkout, lease,
+                                  execution_env, deadline, slots=4, workers=1,
+                                  fail_fast=fail_fast, reserved_handles=reserved_handles,
+                                  stop_event=stop_event)
+        if stop_event is not None and stop_event.is_set():
+            for result in results:
+                if result.get("log"):
+                    output.write(Path(result["log"]).read_text(errors="replace") + "\n")
+            outcome.update(expected_tests=expected, targets=len(targets),
+                           executed_targets=len(results), target_results=results,
+                           error="Isolated test target failed; remaining targets and doctests were not admitted")
+            return outcome
         with ThreadPoolExecutor(max_workers=2) as pool:
             prepared = pool.submit(cargo_phase, "prepare", commands(base)["prepare"], 4)
             ordinary = pool.submit(dag_run_targets, runner, root, run, independent, checkout,
-                                   lease, dict(os.environ, HIROUTE_VALIDATION_EXECUTION="1",
-                                               HIROUTE_VALIDATION_TOOLCHAIN_JSON=toolchain_artifact["path"]),
+                                   lease, execution_env,
                                    deadline, 4, 4, fail_fast, reserved_handles, stop_event)
             preparation_log = prepared.result()
             summary = runner.test_summary(preparation_log, commands(base)["prepare"])
@@ -782,7 +806,7 @@ def execute_dag(runner, root, run, checkout, request, lease, output, reserved_ha
                                         reserved_handles=reserved_handles,
                                         stop_event=stop_event)
             first = ordinary.result()
-        results = first + remaining
+        results += first + remaining
         for result in sorted(results, key=lambda item: item.get("log", "")):
             if result.get("log"):
                 output.write(Path(result["log"]).read_text(errors="replace") + "\n")

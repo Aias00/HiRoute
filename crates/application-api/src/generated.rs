@@ -123,7 +123,42 @@ fn machine_envelope_v2_schema() -> Value {
                     "message_key": { "type": "string", "minLength": 1 },
                     "retryable": { "type": "boolean" },
                     "operation_id": { "type": "string", "minLength": 1 },
-                    "details_schema": { "type": "string", "minLength": 1 }
+                    "details_schema": { "type": "string", "minLength": 1 },
+                    "model_budget_conflict": { "$ref": "#/$defs/model_budget_conflict" }
+                }
+            },
+            "model_token_budget": {
+                "type": "object", "additionalProperties": false,
+                "required": ["context_window_tokens", "max_output_tokens"],
+                "properties": {
+                    "context_window_tokens": { "type": "integer", "minimum": 1 },
+                    "max_output_tokens": { "type": "integer", "minimum": 1 }
+                }
+            },
+            "model_budget_blocker": {
+                "type": "object", "additionalProperties": false,
+                "required": ["agent_kind", "context_id", "plan_id", "model_alias", "reason", "declared", "proposed"],
+                "properties": {
+                    "agent_kind": { "enum": ["qoder", "pi", "deepseek_harness"] },
+                    "context_id": { "type": "string", "pattern": "^agent-context/[A-Za-z0-9/_:-]{1,242}$" },
+                    "plan_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+                    "model_alias": { "type": "string", "pattern": "^(hiroute/[0-9a-f]{16}|[a-z0-9][a-z0-9._-]{0,63})$" },
+                    "reason": { "enum": ["capacity_reduced", "plan_missing", "budget_unavailable"] },
+                    "declared": { "$ref": "#/$defs/model_token_budget" },
+                    "proposed": { "oneOf": [{ "$ref": "#/$defs/model_token_budget" }, { "type": "null" }] }
+                },
+                "allOf": [{
+                    "if": { "properties": { "reason": { "const": "capacity_reduced" } } },
+                    "then": { "properties": { "proposed": { "$ref": "#/$defs/model_token_budget" } } },
+                    "else": { "properties": { "proposed": { "type": "null" } } }
+                }]
+            },
+            "model_budget_conflict": {
+                "type": "object", "additionalProperties": false,
+                "required": ["schema", "blockers"],
+                "properties": {
+                    "schema": { "const": "hiroute.agent-model-budget-conflict/v1" },
+                    "blockers": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/model_budget_blocker" } }
                 }
             }
         }
