@@ -184,6 +184,20 @@ fn real_hiroute_help_exposes_both_public_contract_layers_without_a_daemon() {
 }
 
 #[test]
+fn real_worker_help_requires_the_original_key_and_request_after_uncertain_delivery() {
+    let output = Command::new(env!("CARGO_BIN_EXE_hiroute"))
+        .args(["worker", "exec", "--help"])
+        .output()
+        .expect("launch real Worker help without a daemon");
+    assert_eq!(output.status.code(), Some(0));
+    assert!(output.stderr.is_empty());
+    let help = String::from_utf8(output.stdout).unwrap();
+    assert!(help.contains("without a local receipt"));
+    assert!(help.contains("original key and the identical request"));
+    assert!(!help.contains("A private receipt is saved before transmission"));
+}
+
+#[test]
 fn real_hiroute_launcher_emits_the_same_typed_manifest() {
     let cases: &[(&[&str], i32, &str)] = &[
         (
