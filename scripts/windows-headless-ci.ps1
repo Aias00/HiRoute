@@ -134,7 +134,12 @@ function Invoke-LibraryTests {
         'windows_private::tests::private_publication_and_owner_claim_use_actual_native_owner_and_acl',
         'windows_private::tests::private_io_rejects_foreign_acl_hardlink_and_junction_without_adoption',
         'windows_private::tests::generated_auth_files_keep_user_owner_and_inherited_private_acl',
-        'windows_private::tests::damaged_private_record_is_preserved_and_never_rebuilt')) {
+        'windows_private::tests::damaged_private_record_is_preserved_and_never_rebuilt',
+        'borrowed_codex::windows_tests::windows_borrowed_native_rejects_same_size_time_parent_replacement_before_read',
+        'borrowed_codex::windows_tests::windows_borrowed_native_rejects_ancestor_junction_and_hardlinks',
+        'borrowed_codex::windows_tests::windows_borrowed_native_preserves_readable_acl_readonly_and_access_only_lease',
+        'borrowed_codex::windows_tests::windows_borrowed_native_permission_change_rejects_before_lease_publication',
+        'borrowed_codex::windows_tests::windows_borrowed_native_rejects_post_write_change_before_identity_admission')) {
         if ($inventory -notmatch "(?m)^$([regex]::Escape($case)): test`r?$") { throw "Required CPA private case missing: $case" }
       }
     }

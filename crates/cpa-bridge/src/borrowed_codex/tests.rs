@@ -179,6 +179,7 @@ fn bounded_reader_rejects_a_source_that_changes_during_every_attempt() {
     let mut revision = 0_u64;
     let result = read_nested_source_after_read(&source, || {
         revision += 1;
+        #[cfg(not(windows))]
         write_source(
             &source,
             &format!("account-changing-{revision}"),
@@ -186,6 +187,22 @@ fn bounded_reader_rejects_a_source_that_changes_during_every_attempt() {
             ID_TWO,
             &format!("refresh-{revision}"),
         );
+        #[cfg(windows)]
+        {
+            use std::io::Write as _;
+            // The active reader denies deleting/replacing its held native file.
+            // A real in-place native writer still invalidates the read stamp.
+            let bytes = serde_json::to_vec(&json!({
+                "auth_mode":"chatgpt", "last_refresh":format!("refresh-{revision}"),
+                "tokens":{"access_token":ACCESS_TWO, "id_token":ID_TWO,
+                          "account_id":format!("account-changing-{revision}")}
+            }))
+            .unwrap();
+            let mut writer = hiroute_platform::windows::security::open_read_write(&source).unwrap();
+            writer.set_len(0).unwrap();
+            writer.write_all(&bytes).unwrap();
+            writer.sync_all().unwrap();
+        }
     });
 
     assert!(matches!(

@@ -38,6 +38,16 @@ alongside its controls. CPA persists and synchronously discovers that version
 even when its watcher still holds the preceding metadata. No access or refresh
 token is included in this control request.
 
+On Windows, native Codex and Claude file borrowing uses
+[`borrowed_native_windows.rs`](../../crates/cpa-bridge/src/borrowed_native_windows.rs).
+The reader holds the inspected parent and regular file, rejects reparses and
+hardlinks, and checks native identity, timestamps and permission facts before
+publishing an access lease. Readable external ACLs and read-only attributes stay
+unchanged; only the managed access-only copy receives HiRoute's private ACL.
+These local admission checks do not establish official account authorization,
+model discovery or inference. Native adversarial cases live in
+[`borrowed_native_windows_tests.rs`](../../crates/cpa-bridge/src/borrowed_native_windows_tests.rs).
+
 Focused upstream tests are shipped in the patch:
 
 For the stale-manager/current-file regression, copy

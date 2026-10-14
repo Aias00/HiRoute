@@ -1,5 +1,7 @@
 //! Read-only native Claude credential adapter. Refresh authority never leaves Claude Code.
-use std::fs::{self, File};
+#[cfg(any(not(windows), test))]
+use std::fs;
+use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -50,17 +52,25 @@ impl BorrowedClaudeAuthSpec {
         self.proxy = proxy;
     }
     fn source_identity(&self) -> Result<String, CpaLifecycleError> {
+        #[cfg(windows)]
+        let canonical = crate::borrowed_codex::native_windows::ReadGuard::open(self.source_path())
+            .and_then(|guard| guard.canonical_path())
+            .map_err(|_| CpaLifecycleError::BorrowedClaudeAuthUnavailable)?;
+        #[cfg(not(windows))]
         let canonical = self
             .source_path()
             .canonicalize()
             .map_err(|_| CpaLifecycleError::BorrowedClaudeAuthUnavailable)?;
+        Ok(self.identity_from_canonical(&canonical))
+    }
+    fn identity_from_canonical(&self, canonical: &Path) -> String {
         let mut hash = Sha256::new();
         hash.update(canonical.as_os_str().as_encoded_bytes());
         hash.update([0]);
         if let ClaudeSubscriptionLocation::Keychain { service, .. } = &self.location {
             hash.update(service.as_bytes());
         }
-        Ok(format!("{:x}", hash.finalize()))
+        format!("{:x}", hash.finalize())
     }
     pub fn source_path(&self) -> &Path {
         self.location.anchor()
@@ -88,8 +98,21 @@ impl BorrowedClaudeAuthSpec {
     }
     fn read_input(&self, allow_interaction: bool) -> Result<AccessInput, CpaLifecycleError> {
         crate::request_context::check()?;
+        #[cfg(windows)]
+        let mut native = None;
         let bytes = match &self.location {
-            ClaudeSubscriptionLocation::File(path) => read_private(path)?,
+            ClaudeSubscriptionLocation::File(path) => {
+                #[cfg(windows)]
+                {
+                    let mut guard = crate::borrowed_codex::native_windows::ReadGuard::open(path)
+                        .map_err(native_read_error)?;
+                    let bytes = guard.read(LIMIT).map_err(native_read_error)?;
+                    native = Some(guard);
+                    bytes
+                }
+                #[cfg(not(windows))]
+                read_private(path)?
+            }
             ClaudeSubscriptionLocation::Keychain {
                 service,
                 config_dir,
@@ -111,12 +134,23 @@ impl BorrowedClaudeAuthSpec {
             return Err(invalid());
         }
         let revision = digest(token.as_bytes());
+        #[cfg(windows)]
+        let source = self.identity_from_canonical(
+            &native
+                .as_ref()
+                .ok_or_else(invalid)?
+                .canonical_path()
+                .map_err(native_read_error)?,
+        );
+        #[cfg(not(windows))]
         let source = self.source_identity()?;
         Ok(AccessInput {
             token,
             revision,
             source,
             expires_at: oauth.expires_at,
+            #[cfg(windows)]
+            native,
         })
     }
 
@@ -132,6 +166,8 @@ impl BorrowedClaudeAuthSpec {
             revision,
             source,
             expires_at,
+            #[cfg(windows)]
+            native,
         } = input;
         // Account UUID is proved with this access token, never inferred from an unrelated
         // cached CLI profile or from token bytes. Rotation revalidates the account.
@@ -151,6 +187,8 @@ impl BorrowedClaudeAuthSpec {
             })
         })?;
         crate::request_context::check()?;
+        #[cfg(windows)]
+        verify_native(&native)?;
         if self.read_input(allow_interaction)?.stamp()? != stamp {
             return Err(CpaLifecycleError::BorrowedClaudeAuthSourceChanged);
         }
@@ -179,6 +217,8 @@ impl BorrowedClaudeAuthSpec {
                 binding,
                 evidence_digest,
             },
+            #[cfg(windows)]
+            native,
         })
     }
 }
@@ -213,9 +253,13 @@ struct AccessInput {
     source: String,
     revision: String,
     expires_at: u64,
+    #[cfg(windows)]
+    native: Option<crate::borrowed_codex::native_windows::ReadGuard>,
 }
 impl AccessInput {
     fn stamp(&self) -> Result<CanonicalDigest, CpaLifecycleError> {
+        #[cfg(windows)]
+        verify_native(&self.native)?;
         CanonicalDigest::of(&(
             "hiroute.native-claude-read/v1",
             &self.source,
@@ -230,6 +274,8 @@ struct AccessLease {
     token: Zeroizing<String>,
     account: String,
     evidence: BorrowedClaudeEvidence,
+    #[cfg(windows)]
+    native: Option<crate::borrowed_codex::native_windows::ReadGuard>,
 }
 #[derive(Deserialize)]
 struct NativeDocument {
@@ -285,6 +331,15 @@ impl BorrowedClaudeLease {
         expected: Option<&BorrowedClaudeEvidence>,
         account: Option<&str>,
     ) -> Result<ManagedAccountIdentity, CpaLifecycleError> {
+        self.refresh_after_writes(expected, account, || {})
+    }
+
+    pub(super) fn refresh_after_writes(
+        &mut self,
+        expected: Option<&BorrowedClaudeEvidence>,
+        account: Option<&str>,
+        after_writes: impl FnOnce(),
+    ) -> Result<ManagedAccountIdentity, CpaLifecycleError> {
         let lease = self.spec.read(false)?;
         if expected.is_some_and(|expected| expected != &lease.evidence)
             || account.is_some_and(|account| account != lease.evidence.account_digest)
@@ -295,14 +350,22 @@ impl BorrowedClaudeLease {
         {
             return Err(CpaLifecycleError::BorrowedClaudeAuthSourceChanged);
         }
-        if self.observed.as_ref() != Some(&lease.evidence) {
-            self.generation = self.generation.checked_add(1).ok_or_else(invalid)?;
+        let generation = if self.observed.as_ref() != Some(&lease.evidence) {
+            self.generation.checked_add(1).ok_or_else(invalid)?
+        } else {
+            self.generation
+        };
+        // Keep the released Unix update order. Windows publishes its transient
+        // generation only after the retained native admission verifies below.
+        #[cfg(not(windows))]
+        {
+            self.generation = generation;
         }
         let identity = ManagedAccountIdentity {
             account_kind: CpaAccountKind::Claude,
             stock_file_name: FILE_NAME.into(),
             account_digest: lease.evidence.account_digest.clone(),
-            generation: self.generation,
+            generation,
             client_version: None,
         };
         let prefix = identity.prefix().map_err(|_| invalid())?;
@@ -352,8 +415,16 @@ impl BorrowedClaudeLease {
             Err(CpaLifecycleError::BorrowedClaudeAuthMissing) => false,
             Err(error) => return Err(error),
         };
+        #[cfg(windows)]
+        verify_native(&lease.native)?;
         if !same {
             private_atomic_write(&self.path, &rendered)?;
+        }
+        after_writes();
+        #[cfg(windows)]
+        {
+            verify_native(&lease.native)?;
+            self.generation = generation;
         }
         self.observed = Some(lease.evidence);
         Ok(identity)
@@ -374,6 +445,36 @@ fn user_id() -> u32 {
     0
 }
 
+#[cfg(windows)]
+fn native_read_error(error: std::io::Error) -> CpaLifecycleError {
+    if error.kind() == std::io::ErrorKind::NotFound {
+        CpaLifecycleError::BorrowedClaudeAuthMissing
+    } else {
+        invalid()
+    }
+}
+
+#[cfg(windows)]
+fn verify_native(
+    native: &Option<crate::borrowed_codex::native_windows::ReadGuard>,
+) -> Result<(), CpaLifecycleError> {
+    native
+        .as_ref()
+        .ok_or_else(invalid)?
+        .verify()
+        .map_err(|_| CpaLifecycleError::BorrowedClaudeAuthSourceChanged)
+}
+
+#[cfg(windows)]
+fn read_private(path: &Path) -> Result<Zeroizing<Vec<u8>>, CpaLifecycleError> {
+    // On Windows this helper reads only our managed access-only copy. External
+    // native credentials use ReadGuard above and retain their readable ACLs.
+    crate::windows_private::read(path, LIMIT)
+        .map(Zeroizing::new)
+        .map_err(native_read_error)
+}
+
+#[cfg(not(windows))]
 fn read_private(path: &Path) -> Result<Zeroizing<Vec<u8>>, CpaLifecycleError> {
     let metadata = fs::symlink_metadata(path).map_err(|error| {
         if error.kind() == std::io::ErrorKind::NotFound {
