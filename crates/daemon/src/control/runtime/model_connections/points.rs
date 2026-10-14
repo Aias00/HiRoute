@@ -95,6 +95,10 @@ impl LocalControlAdapter {
             .map_err(|_| ControlReadError::Corrupt)?;
         let mut connections = Vec::new();
         let mut diagnostics = Vec::new();
+        let selected_target = request
+            .native_target
+            .as_ref()
+            .map(hiroute_integrations::canonical_hermes_target);
         if let Some(target) = &request.native_target {
             if self.remember_hermes_scan_target(target).is_err() {
                 diagnostics.push(ComputeScanDiagnosticV2 {
@@ -105,7 +109,14 @@ impl LocalControlAdapter {
                 });
             }
         }
-        let hermes = self.hermes_source_facts().map_err(|_| ());
+        let hermes = match selected_target {
+            Some(Ok(target)) => hiroute_integrations::hermes_api_sources(&target).map_err(|_| ()),
+            Some(Err(_)) => Ok(hiroute_integrations::HermesApiDiscoveryV1 {
+                sources: Vec::new(),
+                diagnostics: Vec::new(),
+            }),
+            None => self.hermes_source_facts().map_err(|_| ()),
+        };
         let hermes_sources =
             hermes.map(|facts| {
                 diagnostics.extend(facts.diagnostics.into_iter().map(|d| {

@@ -7,6 +7,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { agentEditorSeed, agentModelFormInvalid, editorFingerprint, EMPTY_EDITOR_VALUES, type AgentEditorValues } from './features/agents/editor-state';
 import { AgentSettingsFeedback } from './features/agents/AgentSettingsFeedback';
 import { AgentModelEditor, modelSelectionSummary } from './features/agents/AgentModelEditor';
+import { HermesRootFields } from './features/agents/HermesRootFields';
 import { agentBrand, agentDisplayName, agentEcosystem, agentSupportsCollaboration, agentSupportsModelRouting } from './features/agents/ecosystems';
 import { agentHasNoModelConnection, agentModelStatus } from './features/agents/status';
 import { collaborationCheckFailureMessage } from './features/agents/collaboration-check-feedback';
@@ -481,7 +482,7 @@ export function Agents({
   return <ProductPage title="Agent" subtitle={text('在你常用的 Agent 中使用智能路由', 'Use smart routing in your usual Agent')} flush className="agents-page">
     <button type="button" className="btn" disabled={busy} onClick={() => { setActionError(''); setHermesRootOpen(true); }}>{text('选择 Hermes 配置目录', 'Select Hermes configuration directory')}</button>
     {hermesRootOpen && <Dialog open title={text('选择 Hermes 配置目录', 'Select Hermes configuration directory')} closeLabel={text('取消', 'Cancel')} closeDisabled={busy} onClose={() => setHermesRootOpen(false)} footer={<><button className="btn" type="button" disabled={busy} onClick={() => setHermesRootOpen(false)}>{text('取消', 'Cancel')}</button><button className="btn btn-primary" type="submit" form="hermes-root-selection" disabled={busy || !hermesRoot.trim().startsWith('/')}>{busy ? text('读取中…', 'Reading…') : text('读取配置', 'Read configuration')}</button></>}>
-      <form id="hermes-root-selection" className="agent-form" onSubmit={event => { event.preventDefault(); void discoverHermes(); }}><label className="field-label">{text('本机有效配置目录的绝对路径', 'Absolute path to the effective local configuration directory')}<input className="input" autoFocus disabled={busy} value={hermesRoot} onChange={event => setHermesRoot(event.target.value)} /></label><p className="field-help">{text('选择当前 Hermes 实际使用的目录，包括独立 profile。HiRoute 不会根据服务进程的环境猜测目录。', 'Select the directory Hermes actually uses, including a separate profile. HiRoute does not infer it from the service process environment.')}</p>{actionError && <p className="oc-inline-error" role="alert">{agentActionErrorMessage(actionError, language)}</p>}</form>
+      <form id="hermes-root-selection" className="agent-form" onSubmit={event => { event.preventDefault(); void discoverHermes(); }}><HermesRootFields value={hermesRoot} onChange={setHermesRoot} disabled={busy} language={language} />{actionError && <p className="oc-inline-error" role="alert">{agentActionErrorMessage(actionError, language)}</p>}</form>
     </Dialog>}
     <div className="agents-workspace">
       <div className="agent-tabs segmented" role="tablist">

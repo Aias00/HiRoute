@@ -228,6 +228,7 @@ pub async fn compute_management_snapshot(
 pub async fn compute_scan(
     window: WebviewWindow,
     state: State<'_, DesktopState>,
+    native_target: Option<hiroute_domain::AgentNativeTargetV1>,
 ) -> Result<WebComputeScanResultV2, DesktopFailure> {
     main_window(&window)?;
     let client = state
@@ -244,7 +245,7 @@ pub async fn compute_scan(
                 &crate::random_id()?,
                 ComputeScanRequestV2 {
                     schema: COMPUTE_SCAN_REQUEST_SCHEMA_V2.into(),
-                    native_target: None,
+                    native_target,
                 },
             )
             .await?,

@@ -25,6 +25,8 @@ import {
   type ComputeScanResult,
 } from '../features/device-scan/DeviceScanList';
 import { PriceEditor } from '../features/model-reference/PriceEditor';
+import { HermesRootFields } from '../features/agents/HermesRootFields';
+import type { AgentNativeTarget } from '../features/agents/types';
 import type { PriceContext, PriceOutcome } from '../features/model-reference/types';
 import { agentBrandFromId, BrandIcon, Dialog, Disclosure, ProductPage, UiIcon } from '../ui';
 import type { Agent } from '../agents';
@@ -200,6 +202,9 @@ export function ModelManagementPage({
   const [editingSubscriptionProxy, setEditingSubscriptionProxy] = useState(false);
   const proxyButton = useRef<HTMLButtonElement>(null);
   const scanResumed = useRef(false);
+  const [hermesScanRoot, setHermesScanRoot] = useState('');
+  const hermesScanTarget = useRef<AgentNativeTarget | null>(null);
+  const [hermesScanDiagnostic, setHermesScanDiagnostic] = useState(false);
   const [reconnectingFrom, setReconnectingFrom] = useState<string | null>(null);
   const [addStage, setAddStage] = useState<'choose' | 'api' | 'scan' | 'subscription-login' | 'existing'>('choose');
   const [appendingSource, setAppendingSource] = useState<ManagedSource | null>(null);
@@ -262,7 +267,7 @@ export function ModelManagementPage({
     setComputeScanError('');
     const [subscriptionResult, computeResult] = await Promise.allSettled([
       invoke<SubscriptionScanResult>('compute_subscriptions'),
-      invoke<ComputeScanResult>('compute_scan'),
+      invoke<ComputeScanResult>('compute_scan', { nativeTarget: hermesScanTarget.current }),
     ]);
     if (!alive.current || subscriptionScan.current !== scan) return;
     if (subscriptionResult.status === 'fulfilled') {
@@ -272,7 +277,10 @@ export function ModelManagementPage({
       setSubscriptionDiscoveryState('complete');
       setSubscriptionError({ code: failureCode(subscriptionResult.reason), phase: 'scan' });
     }
-    if (computeResult.status === 'fulfilled') setComputeScanItems(computeResult.value.connections);
+    if (computeResult.status === 'fulfilled') {
+      setComputeScanItems(computeResult.value.connections);
+      setHermesScanDiagnostic((computeResult.value.diagnostics ?? []).some(item => item.agent_id === 'agent_hermes_default'));
+    }
     else setComputeScanError(failureCode(computeResult.reason));
     setSubscriptionLoading(false);
   }
@@ -1142,6 +1150,18 @@ export function ModelManagementPage({
       <p className="oc-meta">{language === 'zh' ? '订阅连接需要代理？' : 'Need a proxy for subscriptions?'} <button ref={proxyButton} className="btn" type="button" aria-expanded={editingSubscriptionProxy} disabled={!trustedAuthority || scanWorking || editingSubscriptionProxy} onClick={() => setEditingSubscriptionProxy(true)}>{language === 'zh' ? '设置订阅连接代理' : 'Configure subscription proxy'}</button></p>
       {panel}
       <fieldset className="subscription-proxy-scan-content" disabled={editingSubscriptionProxy}>
+      {!selectedDiscovery && <Disclosure label={language === 'zh' ? '扫描 Hermes 配置' : 'Scan a Hermes profile'} language={language}>
+        <form className="agent-form" data-hermes-source-scope onSubmit={event => {
+          event.preventDefault();
+          if (!hermesScanRoot.trim().startsWith('/') || scanWorking) return;
+          hermesScanTarget.current = { kind: 'hermes', config_root: hermesScanRoot.trim() };
+          rescanDevice();
+        }}>
+          <HermesRootFields value={hermesScanRoot} onChange={setHermesScanRoot} language={language} disabled={scanWorking} />
+          <button className="btn" type="submit" disabled={!trustedAuthority || scanWorking || !hermesScanRoot.trim().startsWith('/')}>{language === 'zh' ? '扫描此配置目录' : 'Scan this configuration directory'}</button>
+          {hermesScanDiagnostic && <p className="field-help" role="status">{language === 'zh' ? '部分 Hermes 配置无法读取或导入；可用接入点仍会显示。请检查所选目录和原生凭据配置。' : 'Some Hermes configuration could not be read or imported. Available connection points remain visible; check the selected directory and native credential configuration.'}</p>}
+        </form>
+      </Disclosure>}
       {scanWorking ? <div className="oc-status-row" role="status"><span className="oc-spinner" /><div className="row-main"><strong>{discoveryAction === 'preparing'
         ? (language === 'zh' ? '正在读取配置' : 'Reading configuration')
         : discoveryAction === 'saving' || subscriptionAction === 'saving'
