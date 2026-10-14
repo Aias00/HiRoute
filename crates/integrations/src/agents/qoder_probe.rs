@@ -24,7 +24,7 @@ use serde_json::Value;
 
 #[path = "qoder_probe_http.rs"]
 mod http;
-#[cfg(test)]
+#[cfg(any(test, windows))]
 #[path = "qoder_probe_skill_diagnostic.rs"]
 mod skill_diagnostic;
 
@@ -207,7 +207,7 @@ impl QoderCollaborationProbe {
                 .ok_or_else(|| qoder_error("Skill target"))?,
         )
         .map_err(|_| qoder_error("Skill target"))?;
-        #[cfg(all(test, windows))]
+        #[cfg(windows)]
         let expected_skill = skill_diagnostic::NativeSkill::retain(
             skill_path
                 .parent()
@@ -230,6 +230,7 @@ impl QoderCollaborationProbe {
         );
         let mut challenge = http::Challenge {
             skill_name,
+            #[cfg(any(test, not(windows)))]
             skill_directory: skill_directory
                 .to_str()
                 .ok_or_else(|| qoder_error("Skill target encoding"))?
@@ -238,7 +239,7 @@ impl QoderCollaborationProbe {
             command,
             expected_cli,
             step: 0,
-            #[cfg(all(test, windows))]
+            #[cfg(windows)]
             expected_skill: Some(expected_skill),
         };
         let listener =

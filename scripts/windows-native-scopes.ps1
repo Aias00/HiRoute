@@ -54,7 +54,7 @@ function Get-WindowsNativeReaderCases {
 function Get-WindowsRequiredRecipes {
   param([Parameter(Mandatory)][string]$Scope)
   switch ($Scope) {
-    'components' { return @('platform','read-leases','platform-unit','jobs','console','diagnostics','scm-owner') }
+    'components' { return @('platform','read-leases','platform-unit','jobs','console','diagnostics','scm-owner','background-state') }
     'product' { return @('artifacts','cpa','core-cpa-bridge','replay-fragmentation','headless','foreground-ctrl-c','foreground-ctrl-break','credential-options','worker-materials',
       'worker-cleanup','authority-key','native-endpoint','native-home','startup-admission','live-capture') }
     'core' { return @(Get-WindowsCorePackages | ForEach-Object { $_ -replace '^hiroute-','core-' }) }

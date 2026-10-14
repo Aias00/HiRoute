@@ -1,10 +1,12 @@
-//! Test-only closed facts for the failed Skill receipt. No matching decision is
-//! changed; native paths, message bodies and permission descriptors stay in RAM.
+//! Retained Windows Skill authority and test-only closed receipt diagnostics.
+//! Native paths, message bodies and permission descriptors stay in RAM.
+#[cfg(test)]
 use serde::Serialize;
 use serde_json::Value;
 
 const HEADER: &str = "Base directory for this skill: ";
 
+#[cfg(test)]
 #[derive(Debug, Serialize)]
 pub(super) struct Facts {
     shape: &'static str,
@@ -21,6 +23,7 @@ pub(super) struct Facts {
     candidate_relation: &'static str,
 }
 
+#[cfg(test)]
 impl Default for Facts {
     fn default() -> Self {
         Self {
@@ -40,6 +43,7 @@ impl Default for Facts {
     }
 }
 
+#[cfg(test)]
 impl Facts {
     pub(super) fn emit(self) {
         eprintln!(
@@ -49,6 +53,7 @@ impl Facts {
     }
 }
 
+#[cfg(test)]
 fn merge(current: &mut &'static str, value: &'static str, empty: &str) {
     if *current == empty {
         *current = value;
@@ -57,6 +62,7 @@ fn merge(current: &mut &'static str, value: &'static str, empty: &str) {
     }
 }
 
+#[cfg(test)]
 pub(super) fn observe(
     input: &[Value],
     expected_directory: &str,
@@ -114,6 +120,7 @@ pub(super) fn observe(
     facts
 }
 
+#[cfg(test)]
 fn inspect_text(
     facts: &mut Facts,
     text: &str,
@@ -268,6 +275,8 @@ pub(super) struct NativeSkill {
     directory_permissions: file_security::WindowsPermissions,
     file_permissions: file_security::WindowsPermissions,
     content: hiroute_domain::CanonicalDigest,
+    #[cfg(test)]
+    _fixture_root: Option<tempfile::TempDir>,
 }
 
 #[cfg(windows)]
@@ -310,7 +319,40 @@ impl NativeSkill {
             directory: directory_file,
             file,
             content: expected,
+            #[cfg(test)]
+            _fixture_root: None,
         })
+    }
+
+    /// Only one actual user-array text may supply both the directory and body.
+    /// Recheck the held file and full descriptors on both sides of the query.
+    pub(super) fn matches_loaded_user(&mut self, input: &[Value], expected_body: &str) -> bool {
+        if self.binding() != "unchanged" {
+            return false;
+        }
+        let matched = input
+            .iter()
+            .filter(|item| item["type"] == "message" && item["role"] == "user")
+            .filter_map(|item| item["content"].as_array())
+            .flatten()
+            .filter_map(|part| part["text"].as_str())
+            .any(|text| {
+                let Some(text) = text.strip_prefix(HEADER) else {
+                    return false;
+                };
+                let Some((directory, body)) = text.split_once("\n\n") else {
+                    return false;
+                };
+                !directory.contains(['\r', '\n'])
+                    && body.trim() == expected_body.trim()
+                    && self.directory_identity(directory) == "same"
+            });
+        self.binding() == "unchanged" && matched
+    }
+
+    #[cfg(test)]
+    pub(super) fn keep_fixture_root(&mut self, root: tempfile::TempDir) {
+        self._fixture_root = Some(root);
     }
 
     fn binding(&mut self) -> &'static str {
@@ -500,6 +542,10 @@ mod tests {
         assert_eq!(observed.path_identity, "same");
         assert_eq!(observed.expected_binding, "unchanged");
         assert_eq!(observed.candidate_relation, "same_native_directory");
+        assert!(held.matches_loaded_user(
+            &input(json!([{ "text":format!("{HEADER}{ordinary}\n\nsame Skill bytes") }])),
+            "same Skill bytes"
+        ));
     }
 
     #[cfg(windows)]
@@ -539,7 +585,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn windows_skill_diagnostic_rejects_foreign_reparse_device_and_ads_paths() {
-        let (root, held) = native();
+        let (root, mut held) = native();
         let other = super::super::super::probe_files::temporary("hiroute-other-skill-").unwrap();
         let alias = other.path().join("alias");
         hiroute_platform_test_support::junction::create(&alias, root.path()).unwrap();
@@ -554,6 +600,10 @@ mod tests {
             format!("{}\\..\\skill", root.path().display()),
         ] {
             assert_eq!(held.directory_identity(&path), "rejected");
+            assert!(!held.matches_loaded_user(
+                &input(json!([{ "text":format!("{HEADER}{path}\n\nsame Skill bytes") }])),
+                "same Skill bytes"
+            ));
         }
         std::fs::remove_dir(&alias).unwrap();
         assert!(root.path().join("SKILL.md").is_file());
@@ -576,6 +626,12 @@ mod tests {
         writer.flush().unwrap();
         assert_eq!(security::file_identity(&writer).unwrap(), identity);
         assert_eq!(held.binding(), "changed");
+        assert!(!held.matches_loaded_user(
+            &input(
+                json!([{ "text":format!("{HEADER}{}\n\nsame Skill bytes", root.path().display()) }])
+            ),
+            "same Skill bytes"
+        ));
         // This controlled fixture is not a provider/account file. Restore only
         // its own still-held object, so cleanup retains the original authority.
         writer.seek(SeekFrom::Start(0)).unwrap();
@@ -586,8 +642,36 @@ mod tests {
             .unwrap();
         assert_eq!(security::file_identity(&writer).unwrap(), identity);
         assert_eq!(held.binding(), "changed");
+        assert!(!held.matches_loaded_user(
+            &input(
+                json!([{ "text":format!("{HEADER}{}\n\nsame Skill bytes", root.path().display()) }])
+            ),
+            "same Skill bytes"
+        ));
         let mut borrowed = NativeSkill::retain(root.path(), b"same Skill bytes\n", false).unwrap();
         assert_eq!(borrowed.binding(), "unchanged");
         assert!(NativeSkill::retain(root.path(), b"same Skill bytes\n", true).is_err());
+    }
+    #[cfg(windows)]
+    #[test]
+    fn windows_loaded_skill_never_combines_foreign_body_shape_or_policy_facts() {
+        let (root, mut held) = native();
+        let valid = format!("{HEADER}{}\n\nsame Skill bytes", root.path().display());
+        let wrong_body = format!("{HEADER}{}\n\nwrong body", root.path().display());
+        let foreign = format!("{HEADER}C:\\foreign\n\nsame Skill bytes");
+        assert!(!held.matches_loaded_user(
+            &input(json!([{ "text":wrong_body }, { "text":foreign }])),
+            "same Skill bytes"
+        ));
+        assert!(!held.matches_loaded_user(&input(json!(valid.clone())), "same Skill bytes"));
+        assert!(!held.matches_loaded_user(
+            &[json!({"type":"message","role":"assistant","content":[{"text":valid}]})],
+            "same Skill bytes"
+        ));
+        assert!(!held.matches_loaded_user(
+            &input(json!([{ "text":valid.replace('\n', "\r\n") }])),
+            "same Skill bytes"
+        ));
+        assert!(held.matches_loaded_user(&input(json!([{ "text":valid }])), "same Skill bytes"));
     }
 }

@@ -69,6 +69,14 @@ capture output in private files and retain the process Job until all owned tools
 stop. Follow those owners for shell, environment, timeout or background-session
 differences rather than duplicating ecosystem lifecycle code.
 
+The Windows [Qoder collaboration probe](../../crates/integrations/src/agents/qoder_probe.rs)
+retains the actual Skill directory and file before launching the client. Its
+[receipt binding](../../crates/integrations/src/agents/qoder_probe_skill_diagnostic.rs)
+accepts equivalent disk spellings only after native identity, captured permissions and
+content checks; it rejects foreign/reparse paths, changed files and split messages.
+The [HTTP peer](../../crates/integrations/src/agents/qoder_probe_http.rs) still requires
+correlated native Skill and CLI results. No credential contents enter these checks.
+
 The [Codex collaboration check](../../crates/integrations/src/agents/collaboration_probe.rs)
 selects the native restricted-token sandbox for its Windows read-only process.
 Its independent [write rejection control](../../crates/integrations/src/agents/collaboration_probe/readonly_control.rs)

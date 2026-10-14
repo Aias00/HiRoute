@@ -292,6 +292,12 @@ if ($Scope -eq 'components') {
     'lock_contention_settings_commit_and_real_runtime_writer_are_supported')
   Invoke-RequiredTests 'scm-owner' @('-p','hiroute-platform','--test','windows_scm_owner') @(
     'native_standard_owner_credentials_select_profile_and_reader_failure_reverts_identity')
+  $state = 'windows_background_fixture::state::tests::'
+  Invoke-RequiredTests 'background-state' @('-p','hiroute-daemon','--test','windows_background',$state) @(
+    ($state + 'post_uninstall_disposition_preserves_existing_state_and_unknown_additions'),
+    ($state + 'post_uninstall_disposition_refuses_present_marker_without_touching_state'),
+    ($state + 'former_recursive_state_cleanup_fails_the_preservation_oracle'),
+    ($state + 'native_post_uninstall_preserves_file_ids_permissions_links_and_reparse_state'))
 } elseif ($Scope -eq 'product') {
   cargo check --locked -p hiroute-daemon -p hiroute-cli --all-targets --keep-going 2>&1 | Tee-Object "$evidence/headless-build.log"
   if ($LASTEXITCODE -ne 0) { throw 'Full headless compilation failed; business scenarios are not executed' }
@@ -301,7 +307,7 @@ if ($Scope -eq 'components') {
     'control::windows_artifacts_tests::windows_backup_authentication_binds_native_permission_facts',
     'control::windows_artifacts_tests::windows_owned_directory_cleanup_preserves_user_additions_and_replacements')
   New-Item -ItemType Directory -Force target/debug | Out-Null
-  rustc --edition 2024 crates/cpa-bridge/tests/support/windows_cpa_fixture.rs -o target/debug/hiroute-cpa-process-fixture.exe
+  rustc --edition 2024 -C target-feature=+crt-static crates/cpa-bridge/tests/support/windows_cpa_fixture.rs -o target/debug/hiroute-cpa-process-fixture.exe
   if ($LASTEXITCODE -ne 0) { throw 'CPA fixture failed to build' }
   $env:HIROUTE_WINDOWS_CPA_FIXTURE = (Resolve-Path target/debug/hiroute-cpa-process-fixture.exe).Path
   Invoke-RequiredTests 'cpa' @('-p','hiroute-cpa-bridge','--lib','process::windows_tests') @(
@@ -460,7 +466,16 @@ if ($Scope -eq 'components') {
     'agents::collaboration_probe::readonly_control::parser_probe::readonly_parser_console_frames_preserve_parse_input_and_reject_echo_as_completion',
     'agents::collaboration_probe::tests::codex_readonly_control_precedes_the_skill_and_cli_and_requires_a_correlated_denial',
     'agents::collaboration_probe::tests::readonly_rejection_observes_closed_tool_facts_before_early_return',
-    'agents::collaboration_probe::tests::readonly_facts_preserve_missing_correlation_and_echo_duplicate_gates')
+    'agents::collaboration_probe::tests::readonly_facts_preserve_missing_correlation_and_echo_duplicate_gates',
+    'agents::collaboration_probe::readonly_control::clm_tests::readonly_clm_requires_typed_filesystem_denial_and_known_matching_modes',
+    'agents::collaboration_probe::readonly_control::clm_tests::readonly_clm_rejects_language_failure_duplicate_unknown_and_success_rows',
+    'agents::collaboration_probe::readonly_control::clm_tests::readonly_script_preserves_full_language_and_uses_cmdlet_only_for_clm',
+    'agents::collaboration_probe::readonly_control::windows_tests::readonly_windows_powershell_clm_writable_actual_write_is_rejected',
+    'agents::collaboration_probe::readonly_control::windows_tests::readonly_windows_powershell_clm_acl_denial_is_accepted',
+    'agents::collaboration_probe::readonly_control::windows_tests::readonly_windows_powershell_clm_method_error_cannot_authorize_denial',
+    'agents::collaboration_probe::readonly_control::windows_tests::readonly_windows_pwsh_clm_writable_actual_write_is_rejected',
+    'agents::collaboration_probe::readonly_control::windows_tests::readonly_windows_pwsh_clm_acl_denial_is_accepted',
+    'agents::collaboration_probe::readonly_control::windows_tests::readonly_windows_pwsh_clm_method_error_cannot_authorize_denial')
   $toolDiagnostic = 'agents::collaboration_probe::tool_diagnostic::tests::'
   Invoke-RequiredTests 'agent-codex-tool-diagnostic' @('-p','hiroute-integrations','--lib',$toolDiagnostic) @(
     ($toolDiagnostic + 'official_terminal_and_live_headers_keep_numbers_but_discard_session_and_native_text'),
@@ -476,12 +491,14 @@ if ($Scope -eq 'components') {
     ($qoderSkill + 'windows_skill_diagnostic_binds_drive_spellings_to_one_actual_directory_and_content'),
     ($qoderSkill + 'windows_skill_diagnostic_rejects_foreign_reparse_device_and_ads_paths'),
     ($qoderSkill + 'windows_skill_diagnostic_detects_changed_content_on_the_same_retained_file'),
-    ($qoderSkill + 'windows_skill_diagnostic_admits_only_original_or_proven_canonical_components'))
+    ($qoderSkill + 'windows_skill_diagnostic_admits_only_original_or_proven_canonical_components'),
+    ($qoderSkill + 'windows_loaded_skill_never_combines_foreign_body_shape_or_policy_facts'))
   $qoderHttp = 'agents::qoder_probe::http::tests::'
   Invoke-RequiredTests 'agent-qoder-skill-http-diagnostic' @('-p','hiroute-integrations','--lib',$qoderHttp) @(
     ($qoderHttp + 'installed_skill_requires_correlated_call_and_actual_user_source'),
     ($qoderHttp + 'model_claim_cannot_replace_cli_tool_evidence'),
-    ($qoderHttp + 'skill_receipt_diagnostics_do_not_admit_alternate_path_shape_or_newlines'))
+    ($qoderHttp + 'skill_receipt_diagnostics_do_not_admit_alternate_path_shape_or_newlines'),
+    ($qoderHttp + 'windows_skill_receipt_requires_held_binding_and_same_candidate_exact_body'))
   Invoke-RequiredTests 'agent-native-reader' @('-p','hiroute-local-storage','--lib','control::windows_native_reader_tests::') @(Get-WindowsNativeReaderCases)
   $profileIdentity = 'delegation::installation::windows_tests::'
   Invoke-RequiredTests 'agent-worker-profile-identity' @('-p','hiroute-daemon','--lib',$profileIdentity) @(

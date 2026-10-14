@@ -216,12 +216,20 @@ entry, parse and completion stages through bounded private captures; a forced Jo
 cleanup never turns that timeout into successful parsing.
 The [readonly control](../../crates/integrations/src/agents/collaboration_probe/readonly_control.rs)
 keeps pipeline entry and language-mode observations separate from actual write
-attempt and access-denial receipts; diagnostic output cannot satisfy the permission gate.
-For Qoder Skill receipt mismatches, follow the test-only
-[native directory and content observer](../../crates/integrations/src/agents/qoder_probe_skill_diagnostic.rs)
-and its HTTP challenge owner. They distinguish receipt shape, exact spelling,
-held native identity and content without publishing paths or bodies; their observations
-do not change the challenge's acceptance rule.
+attempt and access-denial receipts; diagnostic output cannot satisfy the permission gate. Its Windows controls prove
+actual writable and ACL-denied behavior in both system PowerShell and pwsh;
+FullLanguage retains File.WriteAllText, while ConstrainedLanguage uses the native
+filesystem cmdlet and an independently nonce-bound typed denial.
+The [background state fixture](../../crates/daemon/tests/support/windows_background_state.rs)
+preserves persistent state after uninstall; the Lua journey requires an absent state
+at its start, while the upgrade journey retains its existing-state recovery contract.
+For Qoder Skill receipt mismatches, follow the
+[retained Windows Skill binding](../../crates/integrations/src/agents/qoder_probe_skill_diagnostic.rs)
+and its HTTP challenge owner. Windows admits a directory spelling only through its
+held native directory/file identity, captured permissions and content checks before and
+after a same-candidate user-array receipt with exact body. Linux retains the literal
+path rule. Test-only closed observations distinguish these dimensions without
+publishing paths or bodies; diagnostic facts alone cannot authorize a match.
 
 The same native entry's `-InventoryOnly` exports static scope recipes through its
 actual required-test producer without Cargo, package preparation or client launch.
