@@ -263,7 +263,9 @@ fn snapshot(
             .any(|field| declaration.get(*field).is_some());
             let main_override = configured_main
                 && main_model == Some(model_id.as_str())
-                && ["base_url", "api_key", "api_mode"]
+                // Named providers resolve their transport from the provider definition.
+                // A stale model.api_mode does not override that native path.
+                && ["base_url", "api_key"]
                     .iter()
                     .any(|field| main.get(*field).is_some_and(|v| text(v).is_some()));
             let unsupported = pool_present

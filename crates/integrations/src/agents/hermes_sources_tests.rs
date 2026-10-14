@@ -129,6 +129,25 @@ fn roots_and_equal_material_from_different_native_selectors_do_not_share_authori
 }
 
 #[test]
+fn named_provider_transport_takes_precedence_over_stale_main_api_mode() {
+    let root = tempfile::tempdir().unwrap();
+    write(
+        root.path(),
+        "config.yaml",
+        &CONFIG.replace(
+            "  provider: coding-plan",
+            "  provider: coding-plan\n  api_mode: codex_responses",
+        ),
+    );
+    write(root.path(), ".env", "HERMES_SOURCE_TEST_KEY=fixture\n");
+    let facts = hermes_api_sources(&target(root.path())).unwrap();
+    assert!(facts.diagnostics.is_empty());
+    assert!(facts.sources.iter().all(|source| source.supported_auth
+        && source.protocol == Some(UpstreamProtocol::ChatCompletions)));
+    assert_eq!(crate::native_api_connection_points(facts.sources).len(), 1);
+}
+
+#[test]
 fn unsupported_members_are_local_and_managed_or_disabled_routes_are_excluded() {
     let root = tempfile::tempdir().unwrap();
     let config = format!(
