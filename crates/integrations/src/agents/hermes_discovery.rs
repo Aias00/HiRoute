@@ -3,6 +3,60 @@ use super::*;
 use hiroute_domain::{AgentCapability, CanonicalDigest, CapabilityReason, CapabilityState};
 use std::collections::BTreeMap;
 
+/// Current static channel models only; native session selection/loading stays unobserved.
+pub fn hermes_known_channel_models(
+    target: &hiroute_domain::AgentNativeTargetV1,
+) -> Result<Vec<String>, HermesNativeError> {
+    use super::hermes_yaml::{HermesDocument, hermes_error};
+    let target = canonical_hermes_target(target)?;
+    let root = std::path::Path::new(target.config_root());
+    let read = |name| {
+        let observed = super::filesystem_config::read_validated_config_bytes(&root.join(name))
+            .map_err(|_| hermes_error("channel configuration access"))?;
+        HermesDocument::parse(observed.as_ref().map_or(&[], |(bytes, _)| bytes.as_slice()))
+    };
+    let config = read("config.yaml")?;
+    let legacy = read("gateway.json")?;
+    let mut platforms = std::collections::BTreeSet::new();
+    for doc in [&config, &legacy] {
+        if let Some(values) = doc.value["platforms"].as_object() {
+            platforms.extend(values.keys());
+        }
+    }
+    let mut models = std::collections::BTreeSet::new();
+    for platform in platforms {
+        let modern = &config.value["platforms"][platform];
+        // Native config.yaml overrides a platform's legacy map only when that key is present.
+        let overrides = modern
+            .get("channel_overrides")
+            .unwrap_or(&legacy.value["platforms"][platform]["channel_overrides"]);
+        if overrides.is_null() {
+            continue;
+        }
+        let entries = overrides
+            .as_object()
+            .ok_or_else(|| hermes_error("channel overrides"))?;
+        if entries.len() > 128 {
+            return Err(hermes_error("channel bound"));
+        }
+        for entry in entries.values() {
+            let Some(value) = entry.get("model").filter(|value| !value.is_null()) else {
+                continue;
+            };
+            let id = value
+                .as_str()
+                .ok_or_else(|| hermes_error("channel model"))?;
+            if !id.is_empty() {
+                if !hiroute_domain::valid_upstream_model_id(id) {
+                    return Err(hermes_error("channel model"));
+                }
+                models.insert(id.to_owned());
+            }
+        }
+    }
+    Ok(models.into_iter().collect())
+}
+
 pub fn hermes_settings_installation(
     target: &hiroute_domain::AgentNativeTargetV1,
 ) -> Result<hiroute_domain::SupportedAgentInstallationV1, HermesNativeError> {

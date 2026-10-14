@@ -349,6 +349,11 @@ impl LocalControlAdapter {
                     status.native_adapter = Some(
                         hiroute_application_api::AgentNativeAdapterStatusV1 {
                             resources_installed,
+                            known_channel_models: status.native_target.as_ref().and_then(
+                                |target| {
+                                    hiroute_integrations::hermes_known_channel_models(target).ok()
+                                },
+                            ),
                             runtime_loading:
                                 hiroute_application_api::AgentNativeRuntimeLoadingV1::Unobserved,
                             next_action: if resources_installed {

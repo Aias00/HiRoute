@@ -216,6 +216,8 @@ pub struct AgentNativeAdapterStatusV1 {
     pub resources_installed: bool,
     pub runtime_loading: AgentNativeRuntimeLoadingV1,
     pub next_action: AgentNativeAdapterNextActionV1,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub known_channel_models: Option<Vec<String>>,
 }
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]

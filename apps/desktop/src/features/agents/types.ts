@@ -115,7 +115,7 @@ export type AgentLiveCheckCompletion = {
 export type ModelStatus = {
   native_target?: AgentNativeTarget;
   management_skill?: ManagementSkillStatus;
-  native_adapter?: { resources_installed: boolean; runtime_loading: 'unobserved'; next_action: 'reload_plugins_if_running' | 'repair_owned_resources' };
+  native_adapter?: { resources_installed: boolean; runtime_loading: 'unobserved'; next_action: 'reload_plugins_if_running' | 'repair_owned_resources'; known_channel_models?: string[] };
   state: string;
   operation_id?: string | null;
   operation_state?: string | null;

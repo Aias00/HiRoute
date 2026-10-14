@@ -35,6 +35,24 @@ providers:
 "#;
 
 #[test]
+fn known_channel_models_follow_native_yaml_precedence_without_exposing_channels_or_secrets() {
+    let root = tempfile::tempdir().unwrap();
+    let config = "model: {default: managed-alias}\nplatforms:\n  discord:\n    channel_overrides: {}\n  telegram:\n    enabled: true\n  slack:\n    channel_overrides:\n      private-channel-id: {model: native-selection, api_key: private-fixture-key}\n";
+    write(root.path(), "config.yaml", config);
+    write(
+        root.path(),
+        "gateway.json",
+        r#"{"platforms":{"discord":{"channel_overrides":{"private-id":{"model":"suppressed-legacy"}}},"telegram":{"channel_overrides":{"other-private-id":{"model":"legacy-selection"}}}}}"#,
+    );
+    let models = super::hermes_known_channel_models(&target(root.path())).unwrap();
+    assert_eq!(models, ["legacy-selection", "native-selection"]);
+    assert_eq!(
+        fs::read_to_string(root.path().join("config.yaml")).unwrap(),
+        config
+    );
+}
+
+#[test]
 fn selected_profile_retains_native_default_mapping_and_precedence_without_writing() {
     let root = tempfile::tempdir().unwrap();
     write(root.path(), "config.yaml", CONFIG);
