@@ -30,6 +30,8 @@ mod hermes_target;
 pub use hermes_target::*;
 mod hermes_support;
 pub use hermes_support::*;
+mod hermes_sources;
+pub use hermes_sources::*;
 mod hermes_discovery;
 pub use hermes_discovery::*;
 pub use hermes_yaml::HermesNativeError;

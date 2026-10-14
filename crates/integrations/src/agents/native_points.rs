@@ -13,6 +13,7 @@ pub struct NativeApiPointBindingV1 {
     pub model_override_scope: Option<String>,
     /// Selected native selector and precedence branch; contains no credential value/digest.
     pub credential_binding: String,
+    pub configured_default_model_id: Option<String>,
 }
 
 #[derive(Clone)]

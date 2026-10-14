@@ -633,6 +633,21 @@ impl ProtectedInputPort for LocalControlAdapter {
             .get(input_slot)
             .cloned()
             .ok_or_else(|| PortError::new(PortErrorCode::NotFound, "discovery.input.missing"))?;
+        if descriptor.field_selector == "hermes.api-key" {
+            let source = self
+                .hermes_source_facts()
+                .map_err(|_| PortError::new(PortErrorCode::Conflict, "discovery.input.changed"))?
+                .sources
+                .into_iter()
+                .find(|source| source.credential.as_ref() == Some(&descriptor))
+                .ok_or_else(|| {
+                    PortError::new(PortErrorCode::Conflict, "discovery.input.changed")
+                })?;
+            return self
+                .read_hermes_source(&source)
+                .map(|(_, secret)| secret)
+                .map_err(|_| PortError::new(PortErrorCode::Conflict, "discovery.input.changed"));
+        }
         self.scanner
             .read_discovered_secret(&descriptor)
             .map_err(|_| PortError::new(PortErrorCode::Conflict, "discovery.input.changed"))

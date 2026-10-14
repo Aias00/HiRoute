@@ -33,6 +33,7 @@ use hiroute_integrations::{
 use super::LocalControlAdapter;
 
 mod discovered;
+mod hermes_points;
 mod key_inputs;
 mod key_masks;
 mod pi_discovered;

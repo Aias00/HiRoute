@@ -490,6 +490,7 @@ impl ProductionControlRuntime {
             ),
             model_connection_cancellations: Mutex::new(BTreeMap::new()),
             prepared_discoveries: Mutex::new(BTreeMap::new()),
+            hermes_scan_targets: Mutex::new(BTreeMap::new()),
             permission_findings: Mutex::new(BTreeMap::new()),
             admission: hiroute_application::TransactionRuntime::default(),
             plan_admission,
@@ -798,6 +799,7 @@ struct LocalControlAdapter {
     model_connection_cancellations:
         Mutex<BTreeMap<String, hiroute_integrations::ModelConnectionProbeCancellationV1>>,
     prepared_discoveries: Mutex<BTreeMap<String, PrepareDiscoveredModelConnectionRequestV1>>,
+    hermes_scan_targets: Mutex<BTreeMap<String, hiroute_domain::AgentNativeTargetV1>>,
     permission_findings: Mutex<BTreeMap<String, PermissionHardeningRequiredV1>>,
     admission: hiroute_application::TransactionRuntime,
     plan_admission: Arc<hiroute_application::publication::admission::SharedAdmissionGate>,

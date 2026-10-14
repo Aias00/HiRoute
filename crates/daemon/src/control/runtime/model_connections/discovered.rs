@@ -139,6 +139,11 @@ impl LocalControlAdapter {
                 .collect();
             let mut sources = sources;
             sources.extend(self.claude_api_point_sources().unwrap_or_default());
+            sources.extend(
+                self.hermes_source_facts()
+                    .map(|facts| facts.sources)
+                    .unwrap_or_default(),
+            );
             let native_exists = !sources.is_empty();
             if let Some(point) = hiroute_integrations::native_api_connection_points(sources)
                 .into_iter()

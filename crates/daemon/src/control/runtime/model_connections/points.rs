@@ -50,6 +50,7 @@ impl LocalControlAdapter {
             sources.push(hiroute_integrations::NativeApiSource {
                 point_binding: Some(hiroute_integrations::NativeApiPointBindingV1 {
                     native_scope: scope,
+                    configured_default_model_id: Some(discovery.fact.observed_model_id.clone()),
                     provider_definition: discovery.fact.connection_option_id.clone(),
                     endpoint: discovery.fact.registered_base_url,
                     authentication: GatewayAuthenticationSemanticsV1::Bearer,
@@ -94,6 +95,29 @@ impl LocalControlAdapter {
             .map_err(|_| ControlReadError::Corrupt)?;
         let mut connections = Vec::new();
         let mut diagnostics = Vec::new();
+        if let Some(target) = &request.native_target {
+            if self.remember_hermes_scan_target(target).is_err() {
+                diagnostics.push(ComputeScanDiagnosticV2 {
+                    agent_id: "agent_hermes_default".into(),
+                    reason: "selected_profile_unavailable".into(),
+                    native_provider_id: None,
+                    model_id: None,
+                });
+            }
+        }
+        let hermes = self.hermes_source_facts().map_err(|_| ());
+        let hermes_sources =
+            hermes.map(|facts| {
+                diagnostics.extend(facts.diagnostics.into_iter().map(|d| {
+                    ComputeScanDiagnosticV2 {
+                        agent_id: "agent_hermes_default".into(),
+                        reason: d.reason.into(),
+                        native_provider_id: d.provider_id,
+                        model_id: d.model_id,
+                    }
+                }));
+                facts.sources
+            });
         for (agent, sources) in [
             (
                 "agent_pi_default",
@@ -107,6 +131,7 @@ impl LocalControlAdapter {
                 "agent_claude_default",
                 self.claude_api_point_sources().map_err(|_| ()),
             ),
+            ("agent_hermes_default", hermes_sources),
         ] {
             let sources = match sources {
                 Ok(sources) => sources,
@@ -158,7 +183,10 @@ impl LocalControlAdapter {
                     native_provider_id: Some(first.provider_id.clone()),
                     protocol: point.protocol(),
                     declared_model_ids: point.sources.iter().map(|s| s.model_id.clone()).collect(),
-                    default_model_id: None,
+                    default_model_id: first
+                        .point_binding
+                        .as_ref()
+                        .and_then(|b| b.configured_default_model_id.clone()),
                     configuration_state: if importable {
                         "static_api_with_protected_input"
                     } else {
@@ -173,15 +201,6 @@ impl LocalControlAdapter {
                     },
                 });
             }
-        }
-        // Hermes and recognized registered APIs enter this same projection in their leaf wiring.
-        if request.native_target.is_some() {
-            diagnostics.push(ComputeScanDiagnosticV2 {
-                agent_id: "agent_hermes_default".into(),
-                reason: "native_producer_unavailable".into(),
-                native_provider_id: None,
-                model_id: None,
-            });
         }
         connections.sort_by(|a, b| a.connection_ref.cmp(&b.connection_ref));
         Ok(ComputeScanResultV2 {

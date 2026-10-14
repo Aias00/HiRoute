@@ -62,6 +62,32 @@ impl LocalControlAdapter {
             .get(input_slot)
             .cloned()
             .ok_or(ControlReadError::NotFound)?;
+        if descriptor.field_selector == "hermes.api-key" {
+            let sources = self
+                .hermes_source_facts()
+                .map_err(|_| ControlReadError::SnapshotChanged)?
+                .sources;
+            return if hiroute_integrations::native_api_connection_points(sources)
+                .iter()
+                .any(|point| {
+                    self.release_catalog
+                        .as_ref()
+                        .and_then(|catalog| {
+                            super::model_connections::point_catalog::point_evidence(catalog, point)
+                                .ok()
+                        })
+                        .as_ref()
+                        == Some(expected_evidence)
+                        && point
+                            .sources
+                            .iter()
+                            .any(|source| source.credential.as_ref() == Some(&descriptor))
+                }) {
+                Ok(())
+            } else {
+                Err(ControlReadError::SnapshotChanged)
+            };
+        }
         if descriptor.field_selector == "env.ANTHROPIC_AUTH_TOKEN" {
             let sources = self
                 .claude_api_point_sources()

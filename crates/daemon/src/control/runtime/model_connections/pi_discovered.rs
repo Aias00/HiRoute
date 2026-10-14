@@ -145,7 +145,10 @@ impl LocalControlAdapter {
             .ok_or(ComputeManagementControlError::DiscoveryNotImportable)?;
         use hiroute_application::ProtectedInputPort;
         let dsh = source.source_ref.starts_with("dsh-source/");
-        let (base_url, secret) = (if source
+        let (base_url, secret) = (if source.source_ref.starts_with("hermes-source/") {
+            self.read_hermes_source(&source)
+                .map_err(|_| hiroute_integrations::AgentFilesystemScanError::SourceChanged)
+        } else if source
             .credential
             .as_ref()
             .is_some_and(|c| c.field_selector == "env.ANTHROPIC_AUTH_TOKEN")
@@ -190,6 +193,10 @@ impl LocalControlAdapter {
             field_selector: credential.field_selector.clone(),
             observed_revision: credential.observed_revision,
         };
+        self.protected_inputs
+            .lock()
+            .map_err(|_| ComputeManagementControlError::Unavailable)?
+            .insert(input_slot.clone(), credential.clone());
         let candidate_digest = hiroute_domain::CanonicalDigest::of(&(
             if dsh {
                 "dsh-discovered-candidate/v1"
