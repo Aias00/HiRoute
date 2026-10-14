@@ -141,6 +141,6 @@ fn console_fixture() {
     let mut input = Vec::new();
     std::io::stdin().take(65).read_to_end(&mut input).unwrap();
     assert_eq!(input, b"literal-pipe-proof");
-    println!("{FRAME}");
+    println!("\n{FRAME}");
     std::io::stdout().flush().unwrap();
 }
