@@ -11,8 +11,8 @@ The assigned Proposal thread owns its authorized planning and later implementati
 
 ## Reference policy
 
-- Use current code, related issue-spec Issues, and repository durable specs as the design inputs. Do not require a separate design repository, archive, or local symlink.
-- When those sources lack required intent, investigate available repository evidence and record the missing decision in the selected Proposal or Design. An optional personal history skill may help explain past rationale, but record required intent self-contained in the current Issue/Design. Public development must work without access to private archives.
+- Use current code, related issue-spec Issues, and repository durable specs as the design inputs.
+- When those sources lack required intent, investigate available repository evidence and record the missing decision self-contained in the selected Proposal or Design.
 - Treat historical Issues as context, not fixed execution itineraries. Choose the architecture from current requirements and code without carrying obsolete scope forward.
 - Make the issue-native Proposal/SPEC/Design/TASK chain self-contained for product behavior, shared interfaces, invariants, failure behavior, decisions, and acceptance. Private helpers and internal layouts need not be predetermined unless they protect an invariant or another package depends on them. A reader with only the repository and selected Issues must be able to review and implement the Design.
 - Resolve actual contract conflicts through typed QUESTION decisions or a Design amendment. Investigate available evidence and decide routine design details within the confirmed scope, recording non-obvious rationale. Ask for a decision when it changes product behavior, authority, shared contracts, or acceptance; do not manufacture questions or ask implementers to reconstruct intent from external files.
@@ -22,6 +22,6 @@ The assigned Proposal thread owns its authorized planning and later implementati
 
 For detailed implementation handoffs, read [Executable Design and TASKs](references/executable-design.md). Resolve shared contracts and consequential decisions before implementation; leave private helpers to the owner. Keep the Design body a complete architectural overview plus a TASK/dependency index, with independently readable implementation detail in selected TASK comments. Do not duplicate the entire design in every comment or turn temporary implementation steps into durable SPEC requirements.
 
-Finish with the requested reviewable design artifacts and explicit unresolved decisions; authoring alone does not authorize implementation. Implementation and Review consume the complete authoritative Design Issue, latest effective ANSWERs, selected repository durable specs, code, and executable tests. They do not require external archives or local design symlinks.
+Finish with the requested reviewable design artifacts and explicit unresolved decisions; authoring alone does not authorize implementation. Implementation and Review consume the complete authoritative Design Issue, latest effective ANSWERs, selected repository durable specs, code, and executable tests.
 
 At a requested Design-only or coordinated-stage checkpoint, report interface/dependency changes, acceptance coverage and remaining uncertainty and stop for the agreed handoff. An already authorized end-to-end change may continue within that scope. The same owner thread/worktree may later resume implementation with different model settings; neither Design completion nor a model switch grants phase authorization. Include affected durable SPEC paths and intended product-behavior changes in the handoff, leaving implementation-time reconciliation to the owner.

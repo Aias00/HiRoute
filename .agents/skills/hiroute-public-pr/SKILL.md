@@ -17,8 +17,8 @@ Drafts and raw evidence stay in ignored local artifacts.
 Fetch GitHub and record the exact base and candidate. Inspect the checkout and
 preserve unrelated work. Use `<type>/<concise-kebab-case-topic>` for branches
 created by this skill, such as `feat/`, `fix/`, `doc/`, `chore/`, `test/`, or `ci/`.
-The user can request another name. Never merge private archival history into a
-public branch or publish old branches/tags in bulk.
+The user can request another name. Keep task history scoped to the selected
+GitHub base and change; never merge unrelated history or publish branches/tags in bulk.
 
 Keep changes within the authorized scope. If publication preparation would
 change product behavior, a contract, default, routing, authentication or bundled

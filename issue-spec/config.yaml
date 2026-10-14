@@ -5,7 +5,7 @@ html_review:
 rules:
     language: English
     language_instructions: 'Write public Issues, designs, decisions, task records, comments, PR descriptions and current specifications in English. Keep canonical issue-spec structural tokens and typed headers unchanged. Conversation with the user may follow their preferred language.'
-    public_content: 'Before publishing Issue, Design, comment or attachment content, check that it is self-contained and contains no private infrastructure addresses, personal configuration, credentials, raw operational logs or private historical records. Use sanitized examples and concise observable results. Ask the user about a genuinely unresolved disclosure boundary; this does not add routine per-write approval or automatic scanning.'
+    public_content: 'Before publishing Issue, Design, comment or attachment content, check that it is self-contained and contains no private infrastructure addresses, personal configuration, credentials, raw operational logs or confidential records. Use sanitized examples and concise observable results. Ask the user about a genuinely unresolved disclosure boundary; this does not add routine per-write approval or automatic scanning.'
     records: 'Keep design discussions, alternatives, decisions, progress, handoff and validation summaries in the corresponding GitHub Issue or PR. Commit current durable specifications and long-lived architecture, user and developer guides. Keep drafts, raw evidence and one-off investigation notes in ignored local artifacts.'
 guidance:
     shared: [issue-spec/project/workflow.md]
