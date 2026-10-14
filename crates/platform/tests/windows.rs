@@ -215,12 +215,21 @@ fn held_bytes(file: &mut std::fs::File) -> Vec<u8> {
 // Teardown modifies attributes only through an admitted held fixture object.
 // The tested publication never clears read-only by pathname.
 fn unseal_fixture(file: &std::fs::File) {
+    set_fixture_read_only(file, false);
+}
+
+fn set_fixture_read_only(file: &std::fs::File, read_only: bool) {
     use std::os::windows::io::AsRawHandle;
     use windows_sys::Win32::Storage::FileSystem::{
-        FILE_ATTRIBUTE_NORMAL, FILE_BASIC_INFO, FileBasicInfo, SetFileInformationByHandle,
+        FILE_ATTRIBUTE_NORMAL, FILE_ATTRIBUTE_READONLY, FILE_BASIC_INFO, FileBasicInfo,
+        SetFileInformationByHandle,
     };
     let information = FILE_BASIC_INFO {
-        FileAttributes: FILE_ATTRIBUTE_NORMAL,
+        FileAttributes: if read_only {
+            FILE_ATTRIBUTE_READONLY
+        } else {
+            FILE_ATTRIBUTE_NORMAL
+        },
         ..Default::default()
     };
     assert_ne!(
@@ -233,7 +242,111 @@ fn unseal_fixture(file: &std::fs::File) {
             )
         },
         0,
-        "owned native fixture teardown"
+        "owned native fixture attribute update"
+    );
+}
+
+fn assert_readonly_user_and_system_fixture(file: &std::fs::File, user_sid: &str) {
+    use std::os::windows::fs::MetadataExt;
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Foundation::LocalFree;
+    use windows_sys::Win32::Security::Authorization::{
+        ConvertStringSidToSidW, GetSecurityInfo, SE_FILE_OBJECT,
+    };
+    use windows_sys::Win32::Security::{
+        ACCESS_ALLOWED_ACE, DACL_SECURITY_INFORMATION, EqualSid, GetAce,
+        GetSecurityDescriptorControl, OWNER_SECURITY_INFORMATION, SE_DACL_PROTECTED,
+    };
+    use windows_sys::Win32::Storage::FileSystem::{
+        FILE_ALL_ACCESS, FILE_ATTRIBUTE_READONLY, FILE_GENERIC_READ,
+    };
+    struct Allocation(*mut std::ffi::c_void);
+    impl Drop for Allocation {
+        fn drop(&mut self) {
+            // SAFETY: both SID conversion and GetSecurityInfo use LocalAlloc.
+            unsafe { LocalFree(self.0) };
+        }
+    }
+    let decode_sid = |sid: &str| {
+        let wide: Vec<u16> = sid.encode_utf16().chain([0]).collect();
+        let mut decoded = std::ptr::null_mut();
+        // SAFETY: bounded fixture SID and output remain live for conversion.
+        assert_ne!(
+            unsafe { ConvertStringSidToSidW(wide.as_ptr(), &mut decoded) },
+            0
+        );
+        Allocation(decoded)
+    };
+    let user = decode_sid(user_sid);
+    let system = decode_sid("S-1-5-18");
+    let mut owner = std::ptr::null_mut();
+    let mut dacl = std::ptr::null_mut();
+    let mut descriptor = std::ptr::null_mut();
+    // SAFETY: all returned pointers are retained by the descriptor allocation.
+    assert_eq!(
+        unsafe {
+            GetSecurityInfo(
+                file.as_raw_handle().cast(),
+                SE_FILE_OBJECT,
+                OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+                &mut owner,
+                std::ptr::null_mut(),
+                &mut dacl,
+                std::ptr::null_mut(),
+                &mut descriptor,
+            )
+        },
+        0
+    );
+    let descriptor = Allocation(descriptor);
+    assert!(!owner.is_null() && !dacl.is_null());
+    // SAFETY: both SIDs are validated Windows outputs held above.
+    assert_ne!(
+        unsafe { EqualSid(owner, user.0) },
+        0,
+        "fixture owner must remain TokenUser"
+    );
+    let mut control = 0;
+    let mut revision = 0;
+    assert_ne!(
+        unsafe { GetSecurityDescriptorControl(descriptor.0, &mut control, &mut revision) },
+        0
+    );
+    assert_ne!(control & SE_DACL_PROTECTED, 0);
+    assert_eq!(
+        unsafe { (*dacl).AceCount },
+        2,
+        "fixture must have exactly two ACEs"
+    );
+    let mut user_full = false;
+    let mut system_read = false;
+    for index in 0..2 {
+        let mut ace = std::ptr::null_mut();
+        assert_ne!(unsafe { GetAce(dacl, index, &mut ace) }, 0);
+        assert!(!ace.is_null());
+        // SAFETY: GetSecurityInfo and GetAce supplied a native, validated ACL.
+        let ace = unsafe { &*ace.cast::<ACCESS_ALLOWED_ACE>() };
+        assert_eq!(ace.Header.AceType, 0, "ACCESS_ALLOWED_ACE_TYPE required");
+        assert_eq!(
+            ace.Header.AceFlags, 0,
+            "no inherited or propagating fixture ACEs"
+        );
+        let sid = (&ace.SidStart as *const u32).cast_mut().cast();
+        if unsafe { EqualSid(sid, user.0) } != 0 {
+            assert!(!user_full, "duplicate user ACE");
+            assert_eq!(ace.Mask, FILE_ALL_ACCESS);
+            user_full = true;
+        } else {
+            assert_ne!(unsafe { EqualSid(sid, system.0) }, 0, "foreign fixture ACE");
+            assert!(!system_read, "duplicate SYSTEM ACE");
+            assert_eq!(ace.Mask, FILE_GENERIC_READ);
+            system_read = true;
+        }
+    }
+    assert!(user_full && system_read);
+    assert_ne!(
+        file.metadata().unwrap().file_attributes() & FILE_ATTRIBUTE_READONLY,
+        0
     );
 }
 
@@ -376,14 +489,35 @@ fn readonly_atomic_restore_preserves_permissions_and_requires_target_write_attri
     let directory = fixture.path().join("native readonly restoration");
     let _parent = security::create_owner_only_directory(&directory).unwrap();
     let sid = hiroute_platform::windows::background::current_sid_string().unwrap();
-    let old_permissions = file_security::WindowsPermissions {
-        descriptor: format!("O:{sid}D:P(A;;FA;;;{sid})(A;;FR;;;SY)"),
-        read_only: true,
-    };
     for read_only in [false, true] {
         let target = directory.join(format!("restore-{read_only}"));
+        // Use an actual, independently checked native descriptor as recovery
+        // input. Handwritten SDDL is not a promised encoder spelling: Windows
+        // may serialize SID aliases, rights and control bits differently.
+        let mut initial = security::create_owner_only_file(&target).unwrap();
+        initial.write_all(b"old-native-bytes").unwrap();
+        initial.sync_all().unwrap();
+        security::verify_owner_only_handle(&initial, false).unwrap();
+        let initial_identity = security::file_identity(&initial).unwrap();
+        drop(initial);
+        let fixture_control = shared_native_file(
+            &target,
+            READ_CONTROL | WRITE_DAC | FILE_READ_ATTRIBUTES | FILE_WRITE_ATTRIBUTES,
+        )
+        .unwrap();
+        assert_eq!(
+            security::file_identity(&fixture_control).unwrap(),
+            initial_identity
+        );
+        set_fixture_dacl(&fixture_control, &format!("D:P(A;;FA;;;{sid})(A;;FR;;;SY)"));
+        set_fixture_read_only(&fixture_control, true);
+        assert_readonly_user_and_system_fixture(&fixture_control, &sid);
+        let old_permissions = file_security::capture(&fixture_control).unwrap();
+        assert!(old_permissions.read_only);
+        drop(fixture_control);
         durable::write_windows_atomic(&target, b"old-native-bytes", &old_permissions).unwrap();
         let mut old_reader = shared_native_file(&target, GENERIC_READ).unwrap();
+        assert_readonly_user_and_system_fixture(&old_reader, &sid);
         let old_identity = security::file_identity(&old_reader).unwrap();
         assert_eq!(
             file_security::capture(&old_reader).unwrap(),
