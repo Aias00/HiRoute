@@ -64,6 +64,31 @@ python3 experiments/render_figures.py
 It writes the canonical SVGs in `news/assets/`. Website preparation copies these
 assets; the Markdown and news index remain the source of truth.
 
+## Recalculate cache-cost sensitivity
+
+For the cache-cost article's separate post-hoc sensitivity analysis, run:
+
+```sh
+python3 experiments/reproduce.py fetch
+python3 experiments/cache_cost_analysis.py
+```
+
+The calculator verifies the frozen evidence before using its prices, fixed FX,
+all-attempt usage and recorded delivery bounds. It preserves all three paired
+acceptance outcomes and computes an idealized all-input-cached Astra reference
+with each run's observed outputs held fixed. Prefix-loss examples are conditional
+calculations, not measured cache-hit rates. This analysis adds no model calls and
+changes neither the historical evidence nor its acceptance rules. Read the article
+in [English](../news/2026-10-14-routing-cache-cost.en.md) or
+[简体中文](../news/2026-10-14-routing-cache-cost.zh-CN.md).
+
+Observed per-turn request counts are reported separately from the conditional
+cache calculations. Writing counts use the tracked October 6 structured results
+(including interrupted turns separately); HTTPX counts use the frozen October 4
+evidence, distinguishing the whole native turn from its final stable Astra segment.
+The calculator includes the writing source hash and keeps decision reuse distinct
+from cache hits.
+
 ## Add an experiment
 
 Create `cases/<name>/` with a README, task inputs, parameter/provenance record,
