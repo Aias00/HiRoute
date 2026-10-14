@@ -34,7 +34,7 @@ validate the oracle. The real installed management loop is in
 | --- | --- |
 | Prepare a daemon's current sources, grants and plans | [Publication Product](../../crates/daemon/tests/support/publication_product.py): its `Product.cli` is internal Local Control notation, not the standalone CLI; protected input belongs to that fixture's daemon |
 | Configure a real native Agent | [Agent product support](../../crates/daemon/tests/support/agent_product_support.py): shared Preview → Apply → status and bounded process capture; native argv/ownership/result interpretation remain in the leaf |
-| Prove saved model configuration | [Additional-model journey](../../crates/daemon/tests/support/additional_model_product.py), [Windows Pi/DSH journey](../../crates/daemon/tests/support/windows_user_models.rs): ordinary native startup reads saved settings, without injected provider/endpoint/credential overrides; its required `agent-user-models` recipe is separate from Worker profiles |
+| Prove saved model configuration | [Additional-model journey](../../crates/daemon/tests/support/additional_model_product.py), [Windows Pi/DSH journey](../../crates/daemon/tests/support/windows_user_models.rs), [Windows Qoder account journey](../../crates/daemon/tests/support/windows_qoder_user_models.rs): ordinary native startup reads saved settings without provider/endpoint/credential overrides; `agent-user-models` and protected `account-qoder-user-models` remain separate from Worker profiles |
 | Observe native routing and rejected attempts | [NativeContextUpstream](../../crates/daemon/tests/support/native_context_fixture.py): count every model POST, including rejected endpoints/models/credentials; keep the ledger for positive route/history assertions |
 | Prove exact Continue, concurrent routes and cancellation | [Native context](../../crates/daemon/tests/support/native_context_product.py), [boundary journey](../../crates/daemon/tests/support/native_context_boundaries.py), [boundary oracle guide](../../crates/daemon/tests/support/NATIVE_CONTEXT_BOUNDARIES.md) |
 | Prove restoration of old durable state | [Frozen producer fixtures](../../crates/local-storage/src/migrations/fixtures/README.md), [crash-boundary tests](../../crates/local-storage/src/migrations/upgrade_batch_recovery_tests.rs): old bytes through the current consumer, not a new serializer pretending to be history |
@@ -141,6 +141,11 @@ remain separate required evidence.
 
 The same native entry's `-InventoryOnly` exports static scope recipes through its
 actual required-test producer without Cargo, package preparation or client launch.
+Protected Qoder acceptance uses that exact source inventory, including library and
+installed integration-test targets; a missing saved-model recipe cannot be accepted
+as complete account coverage. Its borrowed official profile retains native identity
+without reading authentication bytes, and controlled upstreams prove saved routing
+and tool execution separately from provider-account model inference.
 Use the exact old checkout's export to compare upgrade baseline cases, filters and
 harness arguments; the export itself records no runtime execution. Workstation
 replay provenance binds its actual OS and original manifest/package hashes to the

@@ -450,3 +450,179 @@ async fn interrupted_terminal_checkpoint_retains_lease_completion_and_false_read
     assert!(journal.finalization.try_acquire().is_some());
     assert_eq!(*journal.events.lock().unwrap(), ["completed", "revoke"]);
 }
+
+#[tokio::test]
+async fn execute_outer_cancel_and_deadline_after_completion_preserve_terminal_receipt() {
+    let mut exercised = Vec::new();
+    for interruption in ["outer-cancel", "deadline"] {
+        let (request, mut input, _directory) = claude_inputs();
+        if interruption == "deadline" {
+            // The terminal response precedes this bound; the missing native tail
+            // still keeps the two-second checkpoint active when it expires.
+            input.deadline = Instant::now() + Duration::from_secs(1);
+        }
+        let deadline = input.deadline;
+        let cancellation = input.cancellation.clone();
+        let journal = Arc::new(TerminalJournal::default());
+        let fixture = TailFixture::new(
+            journal.clone(),
+            &request.profile.session_root,
+            Terminal::NoTail,
+        );
+        let interrupt = async {
+            timeout(Duration::from_secs(1), journal.completed.notified())
+                .await
+                .unwrap();
+            assert!(
+                Instant::now() < deadline,
+                "completion must precede interruption"
+            );
+            assert_eq!(*journal.events.lock().unwrap(), ["completed", "revoke"]);
+            assert!(journal.finalization.try_acquire().is_none());
+            assert!(!fixture.task.lock().unwrap().as_ref().unwrap().is_finished());
+            assert!(!fixture.history.exists());
+            if interruption == "outer-cancel" {
+                cancellation.cancel();
+                assert!(cancellation.is_cancelled());
+            } else {
+                tokio::time::sleep_until(deadline).await;
+                assert!(Instant::now() >= deadline);
+            }
+            // Neither interruption may publish another outcome, revoke twice or
+            // release the finalization lease while the live transport is draining.
+            assert_eq!(*journal.events.lock().unwrap(), ["completed", "revoke"]);
+            assert!(journal.finalization.try_acquire().is_none());
+            assert!(!fixture.task.lock().unwrap().as_ref().unwrap().is_finished());
+        };
+        let (result, ()) = timeout(Duration::from_secs(4), async {
+            tokio::join!(biased; execute(&fixture, request, input, journal.clone()), interrupt)
+        })
+        .await
+        .unwrap();
+        let result = result.unwrap();
+        fixture.joined().await;
+        assert_eq!(result.execution.as_ref().unwrap().stop_reason, "end_turn");
+        assert!(!result.native_history_settled);
+        assert!(!fixture.history.exists());
+        assert!(result.stop.as_ref().unwrap().scope_stopped);
+        assert!(result.stop_intent_error.is_none());
+        assert_eq!(
+            *journal.events.lock().unwrap(),
+            ["completed", "revoke", "stop"]
+        );
+        assert!(result.finalization.is_some());
+        assert!(journal.finalization.try_acquire().is_none());
+        drop(result);
+        assert!(journal.finalization.try_acquire().is_some());
+        exercised.push(interruption);
+    }
+    assert_eq!(exercised, ["outer-cancel", "deadline"]);
+}
+
+/// ACP EOF belongs to the transport. This independently retained platform object
+/// remains Running when the exact terminate call fails; no stop evidence is forged.
+struct FailingTerminalStop {
+    adapter: TailFixture,
+    held: Mutex<Option<WorkerProcessIdentity>>,
+    stop_attempts: AtomicUsize,
+}
+
+#[async_trait::async_trait]
+impl WorkerPlatformPort for FailingTerminalStop {
+    fn capabilities(
+        &self,
+        profile: &CandidateWorkerProfile,
+    ) -> Result<WorkerPlatformCapabilities, DelegationErrorV1> {
+        self.adapter.capabilities(profile)
+    }
+
+    async fn launch(&self, request: WorkerLaunchRequest) -> Result<ReadyWorker, DelegationErrorV1> {
+        let worker = self.adapter.launch(request).await?;
+        assert!(
+            self.held
+                .lock()
+                .unwrap()
+                .replace(worker.identity.clone())
+                .is_none()
+        );
+        Ok(worker)
+    }
+
+    async fn observe(
+        &self,
+        identity: &WorkerProcessIdentity,
+    ) -> Result<WorkerObservation, DelegationErrorV1> {
+        assert_eq!(self.held.lock().unwrap().as_ref(), Some(identity));
+        Ok(WorkerObservation::Running)
+    }
+
+    async fn terminate(
+        &self,
+        identity: &WorkerProcessIdentity,
+        bound: u64,
+    ) -> Result<WorkerStopEvidence, DelegationErrorV1> {
+        assert_eq!(self.held.lock().unwrap().as_ref(), Some(identity));
+        assert_eq!(bound, STOP_WAIT_MS);
+        assert!(self.adapter.journal.finalization.try_acquire().is_none());
+        self.stop_attempts.fetch_add(1, Ordering::SeqCst);
+        self.adapter
+            .journal
+            .events
+            .lock()
+            .unwrap()
+            .push("stop-failed");
+        Err(DelegationErrorV1::CapabilityUnavailable)
+    }
+}
+
+#[tokio::test]
+async fn claude_completed_settled_history_does_not_replace_failed_owned_stop_evidence() {
+    let (request, input, _directory) = claude_inputs();
+    let journal = Arc::new(TerminalJournal::default());
+    let fixture = FailingTerminalStop {
+        adapter: TailFixture::new(
+            journal.clone(),
+            &request.profile.session_root,
+            Terminal::Tail {
+                check_publication: true,
+            },
+        ),
+        held: Mutex::default(),
+        stop_attempts: AtomicUsize::default(),
+    };
+    let result = timeout(
+        Duration::from_secs(3),
+        execute(&fixture, request, input, journal.clone()),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    fixture.adapter.joined().await;
+    assert_eq!(result.execution.as_ref().unwrap().stop_reason, "end_turn");
+    assert!(result.native_history_settled);
+    assert_eq!(fs::read(&fixture.adapter.history).unwrap(), b"final-tail\n");
+    assert!(
+        result.stop.is_none(),
+        "completion/history is not owned stop evidence"
+    );
+    assert_eq!(fixture.stop_attempts.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        fixture.observe(&result.identity).await.unwrap(),
+        WorkerObservation::Running
+    );
+    assert_eq!(
+        *journal.events.lock().unwrap(),
+        ["completed", "revoke", "tail", "stop-failed"]
+    );
+    assert!(result.finalization.is_some());
+    assert!(journal.finalization.try_acquire().is_none());
+    // The executor must receive this lease together with the missing stop proof;
+    // dropping its result is distinct from proving the retained object stopped.
+    let identity = result.identity.clone();
+    drop(result);
+    assert!(journal.finalization.try_acquire().is_some());
+    assert_eq!(
+        fixture.observe(&identity).await.unwrap(),
+        WorkerObservation::Running
+    );
+}

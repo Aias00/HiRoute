@@ -3,6 +3,11 @@
 use serde_json::{Value, json};
 use std::{io::Write, path::Path, process::Command};
 
+mod launch_diagnostic;
+#[cfg(test)]
+use launch_diagnostic::NativeLaunchStage;
+use launch_diagnostic::native_launch_diagnostic;
+
 pub(crate) struct CollaborationChallenge {
     discovery: String,
     contents: String,
@@ -327,79 +332,6 @@ fn responses_tool_text(output: &Value) -> Option<String> {
     (!text.is_empty()).then(|| text.join("\n"))
 }
 
-#[derive(Debug, Eq, PartialEq)]
-enum NativeLaunchStage {
-    Unknown,
-    UnifiedExecCreate,
-    CreateProcessW,
-    CreateProcessAsUserW,
-    CreateProcessWithLogonW,
-    Spawn,
-}
-
-#[derive(Debug, Eq, PartialEq)]
-struct NativeLaunchDiagnostic {
-    stage: NativeLaunchStage,
-    os_error: Option<u32>,
-    ambiguous_os_error: bool,
-}
-
-fn native_launch_diagnostic(text: &str) -> NativeLaunchDiagnostic {
-    // These are fixed upstream Rust/API error formats, not guesses from a shell's
-    // exit status or arbitrary digits in argv/paths. Codex 0.160.0 uses the same
-    // CreateProcessAsUserW marker in core/src/exec.rs for its numeric diagnostic.
-    let stage = if text.contains("CreateProcessAsUserW failed: ") {
-        NativeLaunchStage::CreateProcessAsUserW
-    } else if text.contains("CreateProcessWithLogonW failed: ") {
-        NativeLaunchStage::CreateProcessWithLogonW
-    } else if text.contains("CreateProcessW `") {
-        NativeLaunchStage::CreateProcessW
-    } else if text.contains("Failed to create unified exec process:")
-        || text.contains("CreateProcess { message:")
-    {
-        NativeLaunchStage::UnifiedExecCreate
-    } else if text.contains("Failed to spawn") {
-        NativeLaunchStage::Spawn
-    } else {
-        NativeLaunchStage::Unknown
-    };
-    let mut codes = std::collections::BTreeSet::new();
-    for (marker, suffix) in [
-        ("(os error ", ")"),
-        ("Os { code: ", ","),
-        ("CreateProcessAsUserW failed: ", " ("),
-    ] {
-        for (offset, _) in text.match_indices(marker).take(32) {
-            let tail = &text[offset + marker.len()..];
-            let end = tail.bytes().take_while(u8::is_ascii_digit).count();
-            if (1..=10).contains(&end)
-                && tail[end..].starts_with(suffix)
-                && let Ok(code) = tail[..end].parse::<u32>()
-            {
-                codes.insert(code);
-            }
-        }
-    }
-    for (offset, _) in text
-        .match_indices("CreateProcessWithLogonW failed: ")
-        .take(32)
-    {
-        let tail = &text[offset + "CreateProcessWithLogonW failed: ".len()..];
-        let end = tail.bytes().take_while(u8::is_ascii_digit).count();
-        if (1..=10).contains(&end)
-            && (tail[end..].is_empty() || tail[end..].starts_with([' ', '\n', '"', '}']))
-            && let Ok(code) = tail[..end].parse::<u32>()
-        {
-            codes.insert(code);
-        }
-    }
-    NativeLaunchDiagnostic {
-        stage,
-        os_error: (codes.len() == 1).then(|| *codes.first().expect("one numeric error")),
-        ambiguous_os_error: codes.len() > 1,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -530,14 +462,10 @@ mod tests {
                 None,
             ),
         ] {
-            assert_eq!(
-                native_launch_diagnostic(text),
-                NativeLaunchDiagnostic {
-                    stage,
-                    os_error,
-                    ambiguous_os_error: false
-                }
-            );
+            let diagnostic = native_launch_diagnostic(text);
+            assert_eq!(diagnostic.stage, stage);
+            assert_eq!(diagnostic.os_error, os_error);
+            assert!(!diagnostic.ambiguous_os_error);
         }
     }
 

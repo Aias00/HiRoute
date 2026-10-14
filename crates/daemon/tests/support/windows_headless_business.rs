@@ -13,6 +13,7 @@ use std::time::{Duration, Instant};
 use hiroute_domain::UpstreamProtocol;
 use hiroute_platform::windows::job::{Child, Launch, Stream};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 
 use super::{InstalledProduct, SECRET, assert_no_secret};
 
@@ -220,7 +221,7 @@ impl Business {
             .find(|source| !before_ids.iter().any(|id| source["source_id"] == *id))
             .unwrap()
             .clone();
-        assert_eq!(source["display_name"], NAME);
+        assert_eq!(source["display_name"], display_name(NAME, candidate_ref));
         assert_eq!(source["state"], "ready");
         assert_eq!(source["keys"].as_array().unwrap().len(), 1);
         assert_eq!(source["models"][0]["upstream_model_id"], MODEL);
@@ -244,7 +245,7 @@ impl Business {
         let preview = edit_preview(
             product,
             &source_id,
-            json!({"action":"rename","display_name":RENAMED}),
+            json!({"action":"rename","display_name":display_name(RENAMED, candidate_ref)}),
         );
         let renamed = cli(
             product,
@@ -257,7 +258,7 @@ impl Business {
         );
         let original_source = source;
         let source = saved(product, &source_id);
-        assert_eq!(source["display_name"], RENAMED);
+        assert_eq!(source["display_name"], display_name(RENAMED, candidate_ref));
         assert_eq!(source["keys"], original_source["keys"]);
         assert_eq!(
             source["models"][0]["binding_id"],
@@ -278,7 +279,7 @@ impl Business {
 
     pub fn recovered(&self, product: &InstalledProduct, sequence: usize) {
         let actual = saved(product, &self.source_id);
-        assert_eq!(actual["display_name"], RENAMED);
+        assert_eq!(actual["display_name"], self.source["display_name"]);
         assert_eq!(actual["revision"], self.source["revision"]);
         assert_eq!(actual["target"], self.source["target"]);
         assert_eq!(actual["keys"], self.source["keys"]);
@@ -416,7 +417,7 @@ fn draft(
     let profile = format!("profile/custom/{}", protocol.as_str().unwrap());
     json!({
         "inference_model_id":MODEL,"candidate_ref":candidate_ref,"lineage_ref":format!("lineage/{candidate_ref}"),
-        "display_name":NAME,"existing_source_id":null,"edit_revision":1,"check_id":"check/windows/public-native",
+        "display_name":display_name(NAME, candidate_ref),"existing_source_id":null,"edit_revision":1,"check_id":"check/windows/public-native",
         "base_url":format!("http://{address}/v1"),"base_kind":"api_root","request_path_override":null,
         "inventory_path_override":"/v1/models","protocol":protocol,"protocol_profile_id":profile,
         "protocol_profile_revision":1,"authentication":{"kind":"bearer"},"configuration_revision":1,
@@ -429,9 +430,34 @@ fn draft(
     })
 }
 
+fn display_name(prefix: &str, candidate_ref: &str) -> String {
+    // The production Rename contract rejects another saved source's name.
+    // Multiple retained Sources in one real journey need independent names,
+    // including when they share an upstream listener or model ID.
+    let digest = Sha256::digest(candidate_ref.as_bytes());
+    let suffix: String = digest[..8]
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    format!("{prefix} {suffix}")
+}
+
 pub(crate) fn cli(product: &InstalledProduct, args: &[&str], payload: Option<&Value>) -> Value {
     let (exit, value) = command(product, args, payload);
     let (command, stage) = checkpoint(args, payload);
+    if exit != 0 {
+        let status = serde_json::from_value::<hiroute_application_api::MachineStatus>(
+            value["status"].clone(),
+        )
+        .ok();
+        let code = serde_json::from_value::<hiroute_application_api::ErrorCode>(
+            value["error"]["code"].clone(),
+        )
+        .ok();
+        eprintln!(
+            "Windows public business failure: command={command}, stage={stage}, status={status:?}, code={code:?}"
+        );
+    }
     assert_eq!(
         exit, 0,
         "actual public Windows business CLI failed: command={command}, stage={stage}"

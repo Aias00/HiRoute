@@ -302,10 +302,19 @@ fn serve_probe_request(
             );
         }
         let mut chunk = [0_u8; 4096];
-        let read = stream
-            .read(&mut chunk)
-            .map_err(|_| DelegationErrorV1::ProtocolFailed)?;
+        let read = stream.read(&mut chunk).map_err(|error| {
+            eprintln!(
+                "native acceptance loopback failure: stage=head-read kind={:?} os-error={:?}",
+                error.kind(),
+                error.raw_os_error()
+            );
+            DelegationErrorV1::ProtocolFailed
+        })?;
         if read == 0 {
+            eprintln!(
+                "native acceptance loopback failure: stage=head-eof buffered-bytes={}",
+                request.len()
+            );
             return Err(DelegationErrorV1::ProtocolFailed);
         }
         request.extend_from_slice(&chunk[..read]);
@@ -315,10 +324,19 @@ fn serve_probe_request(
             return Err(DelegationErrorV1::ProtocolFailed);
         }
         let mut chunk = [0_u8; 4096];
-        let read = stream
-            .read(&mut chunk)
-            .map_err(|_| DelegationErrorV1::ProtocolFailed)?;
+        let read = stream.read(&mut chunk).map_err(|error| {
+            eprintln!(
+                "native acceptance loopback failure: stage=body-read kind={:?} os-error={:?}",
+                error.kind(),
+                error.raw_os_error()
+            );
+            DelegationErrorV1::ProtocolFailed
+        })?;
         if read == 0 {
+            eprintln!(
+                "native acceptance loopback failure: stage=body-eof buffered-bytes={}",
+                request.len()
+            );
             return Err(DelegationErrorV1::ProtocolFailed);
         }
         request.extend_from_slice(&chunk[..read]);

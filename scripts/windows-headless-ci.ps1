@@ -325,13 +325,26 @@ if ($Scope -eq 'components') {
   # Ordinary PR jobs never receive credentials or claim these cases executed.
   Initialize-WindowsAgentInputs
   foreach ($recipe in (Get-WindowsQoderAccountRecipes)) {
-    Invoke-RequiredTests $recipe.name @('-p',$recipe.package,'--lib',$recipe.case) @($recipe.case) @('--ignored','--exact','--nocapture')
+    Invoke-RequiredTests $recipe.name (@('-p',$recipe.package) + @($recipe.target) + @($recipe.case)) @($recipe.case) @('--ignored','--exact','--nocapture')
   }
 } else {
   Invoke-RequiredTests 'agent-acp-notifications' @('-p','hiroute-daemon','--lib','delegation::acp::notification_tests::') @(
     'delegation::acp::notification_tests::startup_and_loaded_history_notifications_do_not_make_current_output_incomplete',
     'delegation::acp::notification_tests::wrong_session_notification_during_prompt_still_marks_output_incomplete')
   Invoke-RequiredTests 'agent-live-history' @('-p','hiroute-daemon','--lib','delegation::lifecycle::tests::terminal::') @(Get-WindowsLiveHistoryCases)
+  $userModelOracle = 'windows_user_models::native::diagnostic_tests::'
+  Invoke-RequiredTests 'agent-user-model-oracle' @('-p','hiroute-daemon','--test','windows_headless',$userModelOracle) @(
+    ($userModelOracle + 'public_check_phase_is_distinct_from_ordinary_native_model_invocation'),
+    ($userModelOracle + 'public_failure_exposes_typed_status_and_code_without_private_native_fields'),
+    ($userModelOracle + 'vendor_caption_classification_never_exposes_native_paths_or_guesses_numbers'),
+    ($userModelOracle + 'sdk_after_failure_requires_the_exact_success_receipt_and_preserves_closed_stages'))
+  $qoderUserOracle = 'windows_qoder_user_models::'
+  Invoke-RequiredTests 'agent-qoder-user-model-oracle' @('-p','hiroute-daemon','--test','windows_headless',$qoderUserOracle) @(
+    ($qoderUserOracle + 'native::tests::account_output_classification_never_reflects_native_error_text'),
+    ($qoderUserOracle + 'native::tests::native_terminal_requires_exact_success_receipt_and_one_session'),
+    ($qoderUserOracle + 'oracle::tests::ordinary_qoder_protocol_oracle_requires_independent_request_and_exact_usage'),
+    ($qoderUserOracle + 'oracle::tests::ordinary_qoder_skill_oracle_rejects_uncorrelated_error_and_fake_cli_success'),
+    ($qoderUserOracle + 'settings::tests::ordinary_qoder_defaults_oracle_preserves_user_fields_and_jsonc_literals'))
   $cancelOracle = 'delegation::installation::probe_server::tests::only_deliberately_cancelled_peer_disconnect_is_not_a_probe_response_failure'
   Invoke-RequiredTests 'agent-cancel-oracle' @('-p','hiroute-daemon','--lib',$cancelOracle) @($cancelOracle) @('--exact')
   $mainOracle = 'agents::collaboration_probe::tests::codex_collaboration_accepts_correlated_native_text_content_items_only'
@@ -340,6 +353,14 @@ if ($Scope -eq 'components') {
   Invoke-RequiredTests 'agent-launch-oracle' @('-p','hiroute-integrations','--lib',$launchOracle) @(
     'agents::collaboration_probe::tests::native_launch_diagnostic_preserves_fixed_os_codes_and_api_stages',
     'agents::collaboration_probe::tests::native_launch_diagnostic_rejects_ambiguous_codes_and_never_emits_native_text')
+  $launchCause = 'agents::collaboration_probe::launch_diagnostic::tests::'
+  Invoke-RequiredTests 'agent-launch-cause' @('-p','hiroute-integrations','--lib',$launchCause) @(
+    ($launchCause + 'arbitrary_digits_and_unfixed_api_names_are_not_classified'),
+    ($launchCause + 'distinct_fixed_causes_and_codes_remain_ambiguous_and_private'),
+    ($launchCause + 'fixed_windows_api_captions_preserve_only_their_own_codes'),
+    ($launchCause + 'repeated_fixed_caption_keeps_one_cause_and_code'),
+    ($launchCause + 'sandbox_preparation_context_does_not_invent_a_win32_error'),
+    ($launchCause + 'wrapped_tool_error_is_not_assumed_to_be_an_os_create_failure'))
   $historyOracle = 'delegation::installation::installation_probe::native_tools_probe::history_probe::tests::'
   Invoke-RequiredTests 'agent-history-oracle' @('-p','hiroute-daemon','--lib',$historyOracle) @(
     ($historyOracle + 'closed_history_shape_distinguishes_missing_failed_and_alternate_results'),

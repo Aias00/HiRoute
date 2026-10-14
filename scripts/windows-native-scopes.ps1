@@ -23,13 +23,16 @@ function Get-WindowsLiveHistoryCases {
     ($prefix + 'claude_cancel_and_protocol_error_do_not_wait_for_history'),
     ($prefix + 'claude_disconnect_after_terminal_keeps_completion_without_history_ready'),
     ($prefix + 'interrupted_terminal_checkpoint_retains_lease_completion_and_false_readiness'),
-    ($prefix + 'terminal_publication_failure_does_not_wait_or_double_write'))
+    ($prefix + 'terminal_publication_failure_does_not_wait_or_double_write'),
+    ($prefix + 'execute_outer_cancel_and_deadline_after_completion_preserve_terminal_receipt'),
+    ($prefix + 'claude_completed_settled_history_does_not_replace_failed_owned_stop_evidence'))
 }
 function Get-WindowsQoderAccountRecipes {
   return @(
-    @{ name = 'account-qoder-lifecycle'; package = 'hiroute-daemon'; case = 'delegation::installation::installation_probe::windows_acceptance::actual_windows_qoder_new_load_and_cancel_use_the_selected_native_acp' },
-    @{ name = 'account-qoder-tools'; package = 'hiroute-daemon'; case = 'delegation::installation::installation_probe::windows_acceptance::windows_tools::actual_windows_qoder_skills_read_edit_shell_and_exact_history' },
-    @{ name = 'account-qoder-main'; package = 'hiroute-integrations'; case = 'agents::windows_collaboration_tests::actual_windows_qoder_native_skill_executes_the_public_cli_without_synthesized_account' })
+    @{ name = 'account-qoder-lifecycle'; package = 'hiroute-daemon'; target = @('--lib'); case = 'delegation::installation::installation_probe::windows_acceptance::actual_windows_qoder_new_load_and_cancel_use_the_selected_native_acp' },
+    @{ name = 'account-qoder-tools'; package = 'hiroute-daemon'; target = @('--lib'); case = 'delegation::installation::installation_probe::windows_acceptance::windows_tools::actual_windows_qoder_skills_read_edit_shell_and_exact_history' },
+    @{ name = 'account-qoder-main'; package = 'hiroute-integrations'; target = @('--lib'); case = 'agents::windows_collaboration_tests::actual_windows_qoder_native_skill_executes_the_public_cli_without_synthesized_account' },
+    @{ name = 'account-qoder-user-models'; package = 'hiroute-daemon'; target = @('--test','windows_headless'); case = 'actual_windows_qoder_persisted_user_models_with_official_account' })
 }
 function Get-WindowsCorePackages {
   return @('hiroute-domain','hiroute-application-api','hiroute-application',
@@ -48,8 +51,8 @@ function Get-WindowsRequiredRecipes {
     'accounts' { return @(Get-WindowsQoderAccountRecipes | ForEach-Object { $_.name }) }
     'agents' {
       return @('agent-private-root','agent-private-node','agent-path-identity','agent-managed-path','agent-account-fixture','agent-pi-sdk',
-        'agent-acp-notifications','agent-cancel-oracle','agent-main-oracle','agent-launch-oracle','agent-history-oracle',
-        'agent-native-codex-ingress','agent-business-oracle','agent-http','agent-public-business','agent-user-models','agent-management','agent-live-history') +
+        'agent-acp-notifications','agent-cancel-oracle','agent-main-oracle','agent-launch-oracle','agent-launch-cause','agent-history-oracle',
+        'agent-native-codex-ingress','agent-business-oracle','agent-http','agent-public-business','agent-user-models','agent-user-model-oracle','agent-qoder-user-model-oracle','agent-management','agent-live-history') +
         @(Get-WindowsDaemonAgentCases | ForEach-Object { 'agent-' + (($_ -split 'actual_')[1] -replace '_','-') }) +
         @(Get-WindowsMainAgentCases | ForEach-Object { 'main-' + (($_ -split 'actual_windows_')[1] -replace '_','-') })
     }

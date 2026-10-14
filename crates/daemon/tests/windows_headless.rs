@@ -23,6 +23,8 @@ mod windows_model_ratings;
 mod windows_native_protocols;
 #[path = "support/windows_packaged_foreground.rs"]
 mod windows_packaged_foreground;
+#[path = "support/windows_qoder_user_models.rs"]
+mod windows_qoder_user_models;
 #[path = "support/windows_routing_business.rs"]
 mod windows_routing_business;
 #[path = "support/windows_routing_modes.rs"]
@@ -811,6 +813,36 @@ fn actual_windows_pi_and_dsh_persisted_user_models() {
     recovered.wait(true);
     println!(
         "Windows ordinary Pi/DSH user models: public Preview/Apply, persisted providers, ordinary native Gateway requests, private grant rotation, installed user Skill and real public CLI invocation, actual restart, independent Restore and retained same-request receipts"
+    );
+}
+
+#[test]
+#[ignore = "requires the fixed real Qoder image and official private account login"]
+fn actual_windows_qoder_persisted_user_models_with_official_account() {
+    let product = InstalledProduct::create();
+    let contexts = windows_qoder_user_models::Contexts::borrow(&product);
+    let mut first = product.start_with_environment(false, contexts.variables());
+    gateway_ready(first.listen);
+    let mut models = windows_qoder_user_models::UserModels::run(&product, &contexts, first.listen);
+    lifecycle::stop(
+        &product.layout.lifecycle_endpoint(),
+        &product.daemon,
+        Duration::from_secs(30),
+    )
+    .unwrap();
+    first.wait(true);
+    let mut recovered = product.start_with_environment(true, contexts.variables());
+    gateway_ready(recovered.listen);
+    models.recovered(&product, &contexts, recovered.listen);
+    lifecycle::stop(
+        &product.layout.lifecycle_endpoint(),
+        &product.daemon,
+        Duration::from_secs(30),
+    )
+    .unwrap();
+    recovered.wait(true);
+    println!(
+        "Windows ordinary Qoder user models: official private account, public Source/Plan transactions, saved Responses/Messages providers, actual native requests, grant rotation, independent installed Skill and trusted CLI, durable restart and exact native settings restore"
     );
 }
 
