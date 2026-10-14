@@ -1,5 +1,5 @@
 param(
-  [ValidateSet('components','product','background','core','agents','upgrade')][string]$Scope,
+  [ValidateSet('components','product','background','core','agents','accounts','upgrade')][string]$Scope,
   [Parameter(Mandatory)][string]$ExpectedSha,
   [Parameter(Mandatory)][string]$Evidence,
   [string]$Plan = 'windows-headless',
@@ -148,6 +148,20 @@ function Invoke-LibraryTests {
   } catch { $failures.Add($_.Exception.Message); Write-Warning $_.Exception.Message }
 }
 
+function Initialize-WindowsAgentInputs {
+  cargo build --locked -p hiroute-daemon --bin hirouted -p hiroute-cli --bin hiroute 2>&1 | Tee-Object "$evidence/agent-daemon-link.log"
+  if ($LASTEXITCODE -ne 0) { throw 'Production Worker daemon failed to build' }
+  python scripts/windows-agent-fixtures.py --daemon target/debug/hirouted.exe --output "$evidence/clients" > "$evidence/clients-result.json"
+  if ($LASTEXITCODE -ne 0) { throw 'Fixed upstream client prerequisites failed; Agent scenarios not executed' }
+  $clients = Get-Content "$evidence/clients-result.json" -Raw | ConvertFrom-Json
+  foreach ($property in $clients.environment.PSObject.Properties) {
+    if ($property.Name -notmatch '^HIROUTE_WORKER_[A-Z_]+$') { throw 'Unknown client environment key' }
+    [Environment]::SetEnvironmentVariable($property.Name, [string]$property.Value, 'Process')
+  }
+  $env:PATH = (@($clients.discovery_path) + @($env:PATH)) -join [IO.Path]::PathSeparator
+  $env:HIROUTE_NATIVE_CODEX = $env:HIROUTE_WORKER_CODEX_BINARY
+}
+
 try {
 if ($Scope -eq 'components') {
   Invoke-RequiredTests 'platform' @('-p','hiroute-platform','--test','windows') @(
@@ -258,24 +272,23 @@ if ($Scope -eq 'components') {
     Invoke-RequiredTests 'upgrade' @('-p','hiroute-daemon','--test','windows_background','windows_background_upgrade::') @(
       'windows_background_upgrade::task_native_candidate_upgrade_recovers_prepared_rollback_and_preserves_business_state') @('--nocapture')
   }
+} elseif ($Scope -eq 'accounts') {
+  # Account acceptance is explicitly selected after official login preparation.
+  # Ordinary PR jobs never receive credentials or claim these cases executed.
+  Initialize-WindowsAgentInputs
+  foreach ($recipe in (Get-WindowsQoderAccountRecipes)) {
+    Invoke-RequiredTests $recipe.name @('-p',$recipe.package,'--lib',$recipe.case) @($recipe.case) @('--ignored','--exact','--nocapture')
+  }
 } else {
   $privateRoot = 'delegation::installation::installation_probe::windows_probe_root_creates_strict_private_directories_before_native_launch'
   Invoke-RequiredTests 'agent-private-root' @('-p','hiroute-daemon','--lib',$privateRoot) @($privateRoot) @('--exact','--nocapture')
-  cargo build --locked -p hiroute-daemon --bin hirouted -p hiroute-cli --bin hiroute 2>&1 | Tee-Object "$evidence/agent-daemon-link.log"
-  if ($LASTEXITCODE -ne 0) { throw 'Production Worker daemon failed to build' }
-  python scripts/windows-agent-fixtures.py --daemon target/debug/hirouted.exe --output "$evidence/clients" > "$evidence/clients-result.json"
-  if ($LASTEXITCODE -ne 0) { throw 'Fixed upstream client prerequisites failed; Agent scenarios not executed' }
-  $clients = Get-Content "$evidence/clients-result.json" -Raw | ConvertFrom-Json
-  foreach ($property in $clients.environment.PSObject.Properties) {
-    if ($property.Name -notmatch '^HIROUTE_WORKER_[A-Z_]+$') { throw 'Unknown client environment key' }
-    [Environment]::SetEnvironmentVariable($property.Name, [string]$property.Value, 'Process')
-  }
-  $env:PATH = (@($clients.discovery_path) + @($env:PATH)) -join [IO.Path]::PathSeparator
-  $env:HIROUTE_NATIVE_CODEX = $env:HIROUTE_WORKER_CODEX_BINARY
+  Initialize-WindowsAgentInputs
   $privateNode = 'agents::windows_runtime::tests::windows_selected_node_version_uses_the_private_capture_and_held_job'
   Invoke-RequiredTests 'agent-private-node' @('-p','hiroute-integrations','--lib',$privateNode) @($privateNode) @('--ignored','--exact','--nocapture')
   $pathIdentity = 'delegation::installation::installation_probe::windows_isolated_profile_uses_one_native_path_identity'
   Invoke-RequiredTests 'agent-path-identity' @('-p','hiroute-daemon','--lib',$pathIdentity) @($pathIdentity) @('--exact')
+  $accountFixture = 'delegation::installation::installation_probe::windows_acceptance::windows_qoder_account_fixture_rejects_missing_or_ambiguous_official_profile'
+  Invoke-RequiredTests 'agent-account-fixture' @('-p','hiroute-daemon','--lib',$accountFixture) @($accountFixture) @('--exact')
   $piSdk = 'agents::windows_runtime::tests::windows_selected_pi_sdk_capabilities_load_the_actual_package'
   Invoke-RequiredTests 'agent-pi-sdk' @('-p','hiroute-integrations','--lib',$piSdk) @($piSdk) @('--ignored','--exact','--nocapture')
   $codexIngress = 'agents::native_ingress_probe::ephemeral::tests::real_codex_ephemeral_authentication_without_managed_configuration'
@@ -298,7 +311,7 @@ if ($Scope -eq 'components') {
 } finally {
   if ($CaptureArtifacts) {
     $artifactArgs = @('finalize','--expected-sha',$ExpectedSha,'--evidence',$evidence)
-    if ($Scope -in @('product','background','upgrade','agents')) { $artifactArgs += '--include-product-binaries' }
+    if ($Scope -in @('product','background','upgrade','agents','accounts')) { $artifactArgs += '--include-product-binaries' }
     if ($Scope -in @('background','upgrade') -and (Test-Path "$evidence/package-result.json") -and (Get-Item "$evidence/package-result.json").Length -gt 0) {
       $artifactArgs += @('--package-result',"$evidence/package-result.json")
     }

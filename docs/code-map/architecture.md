@@ -117,6 +117,11 @@ initialization in the [Job launcher](../../crates/platform/src/windows/job.rs).
 The [CPA private-object leaf](../../crates/cpa-bridge/src/windows_private.rs) uses those
 primitives for managed files; borrowed native credentials retain their own admission
 boundary. Follow these owners for elevated-account defaults or third-party file creation.
+Native client gates select the installed, pinned producer through
+[Windows acceptance](../../scripts/windows-headless-ci.ps1). Ordinary Agent
+recipes and official Qoder account recipes have separate inventories; the latter
+borrow an explicitly prepared private profile and never obtain account authority
+from pull-request environment secrets.
 Stopped Windows source snapshots preserve native permissions through
 [streamed backup copying](../../crates/local-storage/src/backup/source_snapshot.rs)
 and the [durable stage owner](../../crates/platform/src/durable.rs). Native artifact

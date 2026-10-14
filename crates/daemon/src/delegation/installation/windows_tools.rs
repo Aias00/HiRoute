@@ -19,8 +19,19 @@ fn native_tools(config: WorkerInstallationConfig) -> Result<(), DelegationErrorV
     let native_config = home.join("native-config");
     create_private(&home)?;
     create_private(&native_config)?;
-    let context = NativeWorkerContext::borrowed(&home, &native_config)?;
-    let fixture = ToolsFixture::prepare(config.harness, &home, &native_config, &root.workspace)?;
+    let account = (config.harness == WorkerHarnessV1::QoderCli)
+        .then(QoderAccount::selected)
+        .transpose()?;
+    let context = account
+        .as_ref()
+        .map(|account| Ok(account.context.clone()))
+        .unwrap_or_else(|| NativeWorkerContext::borrowed(&home, &native_config))?;
+    let fixture = ToolsFixture::prepare(
+        config.harness,
+        context.home(),
+        context.config_root(),
+        &root.workspace,
+    )?;
     let oracle = Arc::new(Mutex::new(ToolsOracle::new(fixture)));
     let responder = Arc::clone(&oracle);
     let challenge = fresh_challenge()?;
@@ -73,6 +84,9 @@ fn native_tools(config: WorkerInstallationConfig) -> Result<(), DelegationErrorV
         .native_session_id
         .as_deref()
         .ok_or(DelegationErrorV1::ResumeUnavailable)?;
+    if let Some(account) = &account {
+        account.verify()?;
+    }
     let history = crate::delegation::profile::native_history(
         session.path(),
         config.harness,
@@ -123,6 +137,9 @@ fn native_tools(config: WorkerInstallationConfig) -> Result<(), DelegationErrorV
         config.harness,
         server.request_count()
     );
+    if let Some(account) = &account {
+        account.verify()?;
+    }
     assert!(
         server.request_count() >= 7,
         "both native Skills, Read, Edit, Shell, terminal and loaded history require nonzero actual requests"
@@ -163,7 +180,7 @@ fn actual_windows_dsh_skills_read_edit_shell_and_exact_history() {
     .unwrap();
 }
 #[test]
-#[ignore = "fixed real Qoder artifact; missing native login fails, no account credential is synthesized"]
+#[ignore = "fixed real Qoder and explicit official logged-in private profile; missing account input fails"]
 fn actual_windows_qoder_skills_read_edit_shell_and_exact_history() {
     native_tools(config(
         WorkerHarnessV1::QoderCli,

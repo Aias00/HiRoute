@@ -1,5 +1,5 @@
 param(
-  [Parameter(Mandatory)][ValidateSet('components','core','product','background','agents','upgrade')][string]$Scope,
+  [Parameter(Mandatory)][ValidateSet('components','core','product','background','agents','accounts','upgrade')][string]$Scope,
   [Parameter(Mandatory)][string]$ExpectedSha,
   [Parameter(Mandatory)][string]$Bundle,
   [Parameter(Mandatory)][string]$Evidence,
@@ -71,7 +71,7 @@ if ($Scope -in @('background','upgrade')) {
     $env:HIROUTE_WINDOWS_BASELINE_PACKAGE_ARCHIVE = (Resolve-Path $BaselineArchive).Path
   }
 }
-if ($Scope -eq 'agents') {
+if ($Scope -in @('agents','accounts')) {
   if (-not $daemon) { throw 'Actual compiled Worker daemon required' }
   python scripts/windows-agent-fixtures.py --daemon $daemon --output "$evidence/clients" > "$evidence/clients-result.json"
   if ($LASTEXITCODE -ne 0) { throw 'Locked actual client fixtures unavailable on Windows 11' }

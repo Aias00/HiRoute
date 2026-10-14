@@ -5,18 +5,21 @@ function Get-WindowsDaemonAgentCases {
     'delegation::installation::tests::actual_claude_acp_acceptance_uses_the_selected_installation',
     'delegation::installation::installation_probe::windows_acceptance::actual_windows_pi_new_load_and_cancel_use_the_selected_sdk',
     'delegation::installation::installation_probe::windows_acceptance::actual_windows_dsh_new_load_and_cancel_use_the_selected_native_acp',
-    'delegation::installation::installation_probe::windows_acceptance::actual_windows_qoder_new_load_and_cancel_use_the_selected_native_acp',
     'delegation::installation::installation_probe::windows_acceptance::windows_tools::actual_windows_codex_skills_read_edit_shell_and_exact_history',
     'delegation::installation::installation_probe::windows_acceptance::windows_tools::actual_windows_claude_skills_read_edit_shell_and_exact_history',
     'delegation::installation::installation_probe::windows_acceptance::windows_tools::actual_windows_pi_skills_read_edit_shell_and_exact_history',
-    'delegation::installation::installation_probe::windows_acceptance::windows_tools::actual_windows_dsh_skills_read_edit_shell_and_exact_history',
-    'delegation::installation::installation_probe::windows_acceptance::windows_tools::actual_windows_qoder_skills_read_edit_shell_and_exact_history')
+    'delegation::installation::installation_probe::windows_acceptance::windows_tools::actual_windows_dsh_skills_read_edit_shell_and_exact_history')
 }
 function Get-WindowsMainAgentCases {
   return @(
     'agents::windows_collaboration_tests::actual_windows_codex_native_skill_executes_the_public_cli',
-    'agents::windows_collaboration_tests::actual_windows_claude_native_skill_executes_the_public_cli',
-    'agents::windows_collaboration_tests::actual_windows_qoder_native_skill_executes_the_public_cli_without_synthesized_account')
+    'agents::windows_collaboration_tests::actual_windows_claude_native_skill_executes_the_public_cli')
+}
+function Get-WindowsQoderAccountRecipes {
+  return @(
+    @{ name = 'account-qoder-lifecycle'; package = 'hiroute-daemon'; case = 'delegation::installation::installation_probe::windows_acceptance::actual_windows_qoder_new_load_and_cancel_use_the_selected_native_acp' },
+    @{ name = 'account-qoder-tools'; package = 'hiroute-daemon'; case = 'delegation::installation::installation_probe::windows_acceptance::windows_tools::actual_windows_qoder_skills_read_edit_shell_and_exact_history' },
+    @{ name = 'account-qoder-main'; package = 'hiroute-integrations'; case = 'agents::windows_collaboration_tests::actual_windows_qoder_native_skill_executes_the_public_cli_without_synthesized_account' })
 }
 function Get-WindowsCorePackages {
   return @('hiroute-domain','hiroute-application-api','hiroute-application',
@@ -32,8 +35,9 @@ function Get-WindowsRequiredRecipes {
     'core' { return @(Get-WindowsCorePackages | ForEach-Object { $_ -replace '^hiroute-','core-' }) }
     'background' { return @('background') }
     'upgrade' { return @('upgrade') }
+    'accounts' { return @(Get-WindowsQoderAccountRecipes | ForEach-Object { $_.name }) }
     'agents' {
-      return @('agent-private-root','agent-private-node','agent-path-identity','agent-pi-sdk',
+      return @('agent-private-root','agent-private-node','agent-path-identity','agent-account-fixture','agent-pi-sdk',
         'agent-native-codex-ingress','agent-business-oracle','agent-public-business') +
         @(Get-WindowsDaemonAgentCases | ForEach-Object { 'agent-' + (($_ -split 'actual_')[1] -replace '_','-') }) +
         @(Get-WindowsMainAgentCases | ForEach-Object { 'main-' + (($_ -split 'actual_windows_')[1] -replace '_','-') })

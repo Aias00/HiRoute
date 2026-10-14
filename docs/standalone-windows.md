@@ -153,9 +153,12 @@ Background login tests use the actual packaged CPA to check official authorizati
 URLs, PKCE, cancellation and expiry after restart. Completing provider authorization,
 refresh and paid or free provider inference needs a real authorized account.
 Qoder's fixed ACP client also requires its own official login; custom model settings
-do not establish that login. A temporary PAT does not create a persistent profile
-for a separately isolated Worker. These account gates remain separate from native
-OS and account-free business acceptance.
+do not establish that login. Supplying a PAT in the child environment does not create
+the persistent profile used by a separately isolated Worker. Its lifecycle, tools
+and Main-agent account recipes form the explicitly selected `accounts` scope, bound
+to an officially prepared private profile. Missing profile prerequisites fail that
+scope. These account gates remain separate from native OS and account-free business
+acceptance and must pass before claiming full upstream-account acceptance.
 
 Future features use the shared business owner and extend the affected platform adapter
 and native gate together. CI catches deterministic OS and contract regressions without
