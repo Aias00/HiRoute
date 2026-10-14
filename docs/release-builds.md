@@ -41,6 +41,13 @@ import the Unix workbench lock implementation. The CPA probe retains the actual 
 SystemRoot and uses isolated profile/temp paths. Windows candidates remain
 `awaiting_runtime` until the installed foreground/background and feature gates pass;
 see [Windows operating and evidence boundaries](standalone-windows.md).
+The native x64 Windows Release invocation selects static CRT for Rust and its
+CMake dependencies and rejects ambient compiler overrides. The complete archive's
+three EXEs are checked for both ordinary and delay imports of Debug CRT or VC
+runtime before candidate assets are accepted. Build evidence records the toolchain
+digest, compiler context and exact image hashes. This dependency gate does not
+replace installed runtime acceptance; Debug development builds and native ARM64
+retain their separate build contexts and require their own evidence.
 macOS candidates keep the existing macOS 15 minimum and self-signed trial
 distribution. Developer ID signing and cross-building on a Mac remain available
 through [package-desktop.py](../scripts/package-desktop.py) as documented in the

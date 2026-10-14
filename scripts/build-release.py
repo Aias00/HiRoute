@@ -3,6 +3,7 @@
 import argparse
 from contextlib import contextmanager
 from datetime import datetime, timezone
+import hashlib
 import importlib.util
 import json
 import os
@@ -23,6 +24,7 @@ TARGETS = (
     "x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu",
     "x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc",
 )
+STATIC_CRT_TARGET = "x86_64-pc-windows-msvc"
 
 
 def module(name):
@@ -75,6 +77,21 @@ def windows_probe_environment(directory):
     root = Path(buffer.value).resolve(strict=True)
     return {"SYSTEMROOT": str(root), "WINDIR": str(root), "PATH": str(root / "System32"),
             "TEMP": directory, "TMP": directory, "USERPROFILE": directory}
+
+
+def windows_release_environment(target, inherited):
+    if target != STATIC_CRT_TARGET:
+        return inherited
+    conflicts = [name for name, value in inherited.items() if value and (
+        name in ("RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "HOST_CMAKE_TOOLCHAIN_FILE")
+        or "CMAKE_TOOLCHAIN_FILE" in name or name.endswith("_RUSTFLAGS")
+        or name.startswith(("CFLAGS", "CXXFLAGS", "ASMFLAGS", "HOST_CFLAGS", "HOST_CXXFLAGS",
+                            "HOST_ASMFLAGS", "TARGET_CFLAGS", "TARGET_CXXFLAGS", "TARGET_ASMFLAGS")))]
+    if conflicts:
+        raise ValueError("Windows Release compiler overrides must be absent: " + ", ".join(sorted(conflicts)))
+    toolchain = (REPO / "scripts/windows-release-toolchain.cmake").resolve(strict=True)
+    return dict(inherited, CARGO_ENCODED_RUSTFLAGS="-C\x1ftarget-feature=+crt-static",
+                CMAKE_TOOLCHAIN_FILE=toolchain.as_posix())
 
 
 class Candidate:
@@ -160,8 +177,21 @@ class Candidate:
         match = re.search(r"CLIProxyAPI Version: ([^,]+), Commit: ([0-9a-f]{7,40}), BuiltAt: ([^\r\n]+)", probe)
         if not match or match[1] != pin["version"] or not pin["commit"].startswith(match[2]) or match[3] != pin["built_at"]:
             raise ValueError("CPA release version/commit/build date mismatch")
+        build_environment = windows_release_environment(self.target, self.environment)
+        if self.target == STATIC_CRT_TARGET:
+            toolchain = Path(build_environment["CMAKE_TOOLCHAIN_FILE"])
+            self.result["windows_crt_build"] = {
+                "selection": "static", "target_scope": self.target, "profile": "release",
+                "rust_flags": ["-C", "target-feature=+crt-static"],
+                "cmake_runtime": "MultiThreaded",
+                "toolchain_sha256": hashlib.sha256(toolchain.read_bytes()).hexdigest(),
+                "cmake_version": self.run("cmake", "--version").splitlines()[0],
+                "generator": self.environment.get("CMAKE_GENERATOR", "cmake-crate-native-MSVC-default"),
+                "generator_toolset": self.environment.get("CMAKE_GENERATOR_TOOLSET"),
+                "runtime_acceptance": "not_executed"}
         self.run("cargo", "build", "--locked", "--release", "--target", self.target,
-                 "-p", "hiroute-cli", "-p", "hiroute-daemon", "--bin", "hiroute", "--bin", "hirouted")
+                 "-p", "hiroute-cli", "-p", "hiroute-daemon", "--bin", "hiroute", "--bin", "hirouted",
+                 env=build_environment)
         binaries = REPO / "target" / self.target / "release"
         suffix = ".exe" if windows else ""
         for binary in (binaries / ("hiroute" + suffix), binaries / ("hirouted" + suffix), cpa):
@@ -183,6 +213,16 @@ class Candidate:
         if any(verified[key] != expected for key, expected in (
                 ("revision", self.revision), ("version", self.version), ("target", self.target))):
             raise ValueError("standalone package differs from candidate identity")
+        if self.target == STATIC_CRT_TARGET:
+            inspector = module("windows-native-runtime-audit")
+            images = [inspector.image_record(payload, name, "verified-release-package")
+                      for name, (payload, _) in packager.safe_members(archive, verified["files"]).items()
+                      if name.lower().endswith((".exe", ".dll"))]
+            if (len(images) != 3 or any(image["imports"]["debug_crt"] or
+                                      image["imports"]["release_vc_runtime"] for image in images)):
+                raise ValueError("Complete Windows x64 Release package has an unexpected CRT dependency")
+            self.result["windows_crt_build"]["images"] = images
+            self.result["windows_crt_build"]["dependency_gate"] = "green"
         if not windows:
             abi = module("linux-release-abi").archive(manifest, archive, packager, self.run)
             (self.output / "linux-abi.json").write_text(json.dumps(abi, indent=2) + "\n")
