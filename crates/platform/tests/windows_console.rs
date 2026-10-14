@@ -4,15 +4,22 @@
 use std::ffi::OsString;
 use std::io;
 use std::io::{Read, Write};
+use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+use std::ptr::null_mut;
 use std::time::{Duration, Instant};
 
 use hiroute_platform::windows::console::{self, ParentConsoleAttachment};
 use hiroute_platform::windows::job::{Child, Launch, Stream};
 use serde::{Deserialize, Serialize};
+use windows_sys::Win32::Foundation::{
+    CompareObjectHandles, DUPLICATE_SAME_ACCESS, DuplicateHandle, HANDLE, INVALID_HANDLE_VALUE,
+};
 use windows_sys::Win32::Storage::FileSystem::{FILE_TYPE_PIPE, GetFileType};
 use windows_sys::Win32::System::Console::{
-    GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+    AllocConsole, FreeConsole, GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+    SetStdHandle,
 };
+use windows_sys::Win32::System::Threading::GetCurrentProcess;
 
 const MODE: &str = "HIROUTE_NATIVE_CONSOLE_FIXTURE";
 const FRAME: &str = "HiRouteConsoleFixture/v1";
@@ -22,6 +29,8 @@ const FACTS: &str = "HiRouteConsoleFacts/v1 ";
 #[serde(rename_all = "kebab-case")]
 enum Stage {
     HostBeforeAttached,
+    HostAfterAllocConsole,
+    HostAfterFreeConsole,
     HostAfterChild,
     WithParentBeforeAttach,
     NoParentBeforeAttach,
@@ -86,6 +95,146 @@ fn observe(stage: Stage) -> bool {
         None,
     );
     attached.expect("console attachment query must succeed")
+}
+
+/// Only this isolated GUI fixture may allocate a console. Keep the inherited
+/// pipe objects alive independently of the mutable standard-handle slots.
+struct FixtureConsole {
+    standards: Vec<(u32, HANDLE, OwnedHandle)>,
+    allocated: bool,
+}
+
+impl FixtureConsole {
+    fn prepare() -> io::Result<Self> {
+        let mut fixture = Self {
+            standards: Vec::with_capacity(3),
+            allocated: false,
+        };
+        for selector in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
+            // SAFETY: borrow this process's three explicit inherited pipes.
+            let original = unsafe { GetStdHandle(selector) };
+            if original.is_null()
+                || original == INVALID_HANDLE_VALUE
+                || unsafe { GetFileType(original) } != FILE_TYPE_PIPE
+            {
+                return Err(io::Error::other("fixture inherited pipe required"));
+            }
+            let mut duplicate = null_mut();
+            // SAFETY: duplicate within this process, with identical rights and
+            // no inheritance; only the successful new handle becomes owned.
+            if unsafe {
+                DuplicateHandle(
+                    GetCurrentProcess(),
+                    original,
+                    GetCurrentProcess(),
+                    &mut duplicate,
+                    0,
+                    0,
+                    DUPLICATE_SAME_ACCESS,
+                )
+            } == 0
+            {
+                return Err(io::Error::last_os_error());
+            }
+            fixture.standards.push((selector, original, unsafe {
+                OwnedHandle::from_raw_handle(duplicate)
+            }));
+        }
+        fixture.verify_pipes()?;
+        if !console::is_attached()? {
+            // SAFETY: allocate only for this detached test process. Never detach
+            // an existing console or allocate one for a production GUI daemon.
+            if unsafe { AllocConsole() } == 0 {
+                let error = io::Error::last_os_error();
+                emit_facts(
+                    Stage::HostAfterAllocConsole,
+                    console::is_attached().ok(),
+                    Some(&error),
+                    None,
+                    None,
+                    None,
+                );
+                return Err(error);
+            }
+            fixture.allocated = true;
+            let restored = fixture.restore_pipes();
+            emit_facts(
+                Stage::HostAfterAllocConsole,
+                console::is_attached().ok(),
+                restored.as_ref().err(),
+                None,
+                Some(restored.is_ok()),
+                None,
+            );
+            restored?;
+        }
+        if !console::is_attached()? {
+            return Err(io::Error::other("fixture real console required"));
+        }
+        fixture.verify_pipes()?;
+        Ok(fixture)
+    }
+
+    fn verify_pipes(&self) -> io::Result<()> {
+        for (selector, original, held) in &self.standards {
+            // SAFETY: compare live borrowed/current and independently held
+            // duplicates. No locator or printed handle value authorizes access.
+            let current = unsafe { GetStdHandle(*selector) };
+            if current != *original
+                || unsafe { GetFileType(current) } != FILE_TYPE_PIPE
+                || unsafe { CompareObjectHandles(current, held.as_raw_handle()) } == 0
+            {
+                return Err(io::Error::other("fixture pipe object identity changed"));
+            }
+        }
+        Ok(())
+    }
+
+    fn restore_pipes(&self) -> io::Result<()> {
+        for (selector, original, _) in &self.standards {
+            // SAFETY: restore only the same borrowed stdio values this fixture
+            // captured, as the production attachment owner does. Never close them.
+            if unsafe { SetStdHandle(*selector, *original) } == 0 {
+                return Err(io::Error::last_os_error());
+            }
+        }
+        self.verify_pipes()
+    }
+
+    fn finish(mut self) -> io::Result<()> {
+        if self.allocated {
+            // SAFETY: this guard frees only the console it successfully allocated,
+            // after its with-parent child was reaped and the exact Job was empty.
+            if unsafe { FreeConsole() } == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            self.allocated = false;
+            let restored = self.restore_pipes();
+            emit_facts(
+                Stage::HostAfterFreeConsole,
+                console::is_attached().ok(),
+                restored.as_ref().err(),
+                None,
+                Some(restored.is_ok()),
+                None,
+            );
+            restored?;
+            if console::is_attached()? {
+                return Err(io::Error::other("fixture allocated console must detach"));
+            }
+        }
+        self.verify_pipes()
+    }
+}
+
+impl Drop for FixtureConsole {
+    fn drop(&mut self) {
+        if self.allocated {
+            // Failure cleanup cannot satisfy finish(), natural exit or receipt gates.
+            let _ = unsafe { FreeConsole() };
+            let _ = self.restore_pipes();
+        }
+    }
 }
 
 fn frame_count(bytes: &[u8]) -> Option<usize> {
@@ -285,8 +434,11 @@ fn gui_attach_preserves_inherited_pipes_with_a_real_parent_console() {
 #[ignore = "child fixture selected only by the two real native console gates"]
 fn console_fixture() {
     let mode = std::env::var(MODE).expect("explicit native console fixture mode required");
+    let mut console_owner = None;
     if mode == "isolated-host" {
-        assert!(observe(Stage::HostBeforeAttached));
+        observe(Stage::HostBeforeAttached);
+        console_owner = Some(FixtureConsole::prepare().expect("isolated fixture real console"));
+        assert!(console::is_attached().unwrap());
         run("with-parent", false);
         observe(Stage::HostAfterChild);
     } else {
@@ -355,4 +507,9 @@ fn console_fixture() {
     println!("\n{FRAME}");
     std::io::stdout().flush().unwrap();
     observe(Stage::NewlineFrameWritten);
+    if let Some(console) = console_owner {
+        console
+            .finish()
+            .expect("fixture console and pipe cleanup must succeed");
+    }
 }
