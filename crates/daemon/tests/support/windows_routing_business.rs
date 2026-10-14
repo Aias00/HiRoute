@@ -394,9 +394,20 @@ pub(crate) fn grant(product: &InstalledProduct, connection: &str) -> Zeroizing<S
         thread::sleep(Duration::from_millis(10));
     }
     let bytes = output.join().unwrap();
-    track_secret(&bytes);
     let error = error.join().unwrap();
     assert_no_secret(&error);
     assert!(error.is_empty(), "native grant helper emitted diagnostics");
-    Zeroizing::new(std::str::from_utf8(&bytes).unwrap().to_owned())
+    let token = std::str::from_utf8(&bytes)
+        .unwrap()
+        .strip_suffix('\n')
+        .expect("native grant helper must emit one terminated token");
+    assert!(
+        !token.is_empty()
+            && token
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_')),
+        "native grant helper must emit exactly one base64url token"
+    );
+    track_secret(token.as_bytes());
+    Zeroizing::new(token.to_owned())
 }

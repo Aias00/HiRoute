@@ -40,7 +40,8 @@ pub(super) fn verify(
         .unwrap();
     assert_eq!(pi["start_approve_all"]["state"], "ready");
     assert_eq!(pi["cancel"]["state"], "ready");
-    assert_eq!(pi["continue_session"]["state"], "ready");
+    assert_eq!(pi["continue_session"]["state"], "unknown");
+    assert_eq!(pi["continue_session"]["reason"], "capability_unverified");
     let prompt = workspace.join("cancel-task.txt");
     write_new(
         &prompt,
