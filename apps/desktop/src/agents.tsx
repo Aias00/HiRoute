@@ -89,7 +89,8 @@ export function Agents({
   const hermesTargets = useRef<AgentNativeTarget[]>([]);
   const [hermesRootOpen, setHermesRootOpen] = useState(false);
   const [hermesRoot, setHermesRoot] = useState('');
-  const agentKey = (agent: Agent) => `${agent.agent_id}:${agent.context_id ?? ''}`;
+  const agentKey = (agent: Agent) => agent.agent_id === 'agent_hermes_default'
+    ? `${agent.agent_id}:${agent.context_id ?? ''}` : agent.agent_id;
   const [loadError, setLoadError] = useState('');
   const [actionError, setActionErrorCode] = useState('');
   const [actionErrorHint, setActionErrorHint] = useState<string | null>(null);
