@@ -206,6 +206,9 @@ fn observe(mut stream: TcpStream, phase: Phase) -> Receipt {
         extra_bytes: false,
     };
     let io_result = (|| -> io::Result<()> {
+        // Normalize the accepted Winsock stream before bounded header/EOF reads;
+        // a read timeout does not clear inherited nonblocking mode.
+        stream.set_nonblocking(false)?;
         loop {
             stream.set_read_timeout(Some(remaining(deadline)?))?;
             let mut chunk = [0u8; 1024];
@@ -500,6 +503,49 @@ mod tests {
         client.join().unwrap();
         assert!(receipt.approved());
     }
+    #[test]
+    fn accepted_nonblocking_proxy_waits_for_delayed_peer_eof_after_rejection() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let client = thread::spawn(move || {
+            let mut stream = TcpStream::connect(address).unwrap();
+            stream.set_read_timeout(Some(CONNECTION_BOUND)).unwrap();
+            stream.write_all(&request(UPDATER, "")).unwrap();
+            let mut response = Vec::new();
+            stream.read_to_end(&mut response).unwrap();
+            assert_eq!(
+                response,
+                b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            );
+            thread::sleep(Duration::from_millis(50));
+        });
+        let stream = listener.accept().unwrap().0;
+        stream.set_nonblocking(true).unwrap();
+        // Buffer the entire CONNECT before observing it. The old mode must fail
+        // specifically while awaiting the client's delayed EOF after the 502.
+        let deadline = Instant::now() + CONNECTION_BOUND;
+        let mut head = [0u8; HEADER_BOUND];
+        loop {
+            match stream.peek(&mut head) {
+                Ok(count) if count >= request(UPDATER, "").len() => break,
+                Ok(_) => {}
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => {}
+                Err(error) => panic!("proxy regression header peek failed: {error}"),
+            }
+            assert!(
+                Instant::now() < deadline,
+                "proxy regression CONNECT was not buffered"
+            );
+            thread::sleep(Duration::from_millis(1));
+        }
+        let receipt = observe(stream, Phase::LoginStart);
+        client.join().unwrap();
+        assert!(
+            receipt.approved(),
+            "bounded rejected CONNECT must observe actual peer EOF: {receipt:?}"
+        );
+    }
+
     #[test]
     fn empty_closed_socket_is_not_a_successful_proxy_observation() {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();

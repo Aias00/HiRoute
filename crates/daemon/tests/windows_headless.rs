@@ -164,6 +164,8 @@ impl InstalledProduct {
         environment: &[(std::ffi::OsString, std::ffi::OsString)],
     ) -> RunningDaemon {
         let mut command = Command::new(if cli { &self.stable } else { &self.daemon });
+        let discovery = windows_worker_business::discovery_environment();
+        command.envs(discovery.values.iter().cloned());
         command.envs(environment.iter().cloned());
         if cli {
             command.args(["service", "run"]);

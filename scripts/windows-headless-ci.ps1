@@ -316,11 +316,14 @@ if ($Scope -eq 'components') {
       ($packagedProxy + 'only_exact_pinned_updater_origin_is_an_approved_rejected_connect'),
       ($packagedProxy + 'credentials_bodies_unknown_headers_and_ambiguous_hosts_stay_red'),
       ($packagedProxy + 'actual_loopback_connect_is_rejected_without_tls_then_observes_peer_eof'),
+      ($packagedProxy + 'accepted_nonblocking_proxy_waits_for_delayed_peer_eof_after_rejection'),
       ($packagedProxy + 'empty_closed_socket_is_not_a_successful_proxy_observation'))
     $packaged = 'actual_windows_packaged_foreground_subscription_lifecycle'
     Invoke-RequiredTests 'packaged-foreground' @('-p','hiroute-daemon','--test','windows_headless',$packaged) @($packaged) @('--ignored','--exact','--nocapture')
     Invoke-RequiredTests 'background' @('-p','hiroute-daemon','--test','windows_background','task_native_background_lua_gateway_control_stop_crash_recovery_and_autostart') @(
       'task_native_background_lua_gateway_control_stop_crash_recovery_and_autostart') @('--exact','--nocapture')
+    $standardOwner = 'windows_background_standard::task_real_standard_logged_on_owner_installs_runs_recovers_and_uninstalls'
+    Invoke-RequiredTests 'background-standard-owner' @('-p','hiroute-daemon','--test','windows_background',$standardOwner) @($standardOwner) @('--exact','--nocapture')
   } else {
     Initialize-WindowsUpgradeBaseline -ExpectedSha $ExpectedSha -BaselineRevision $BaselineRevision -BaselineManifest $BaselineManifest -BaselineArchive $BaselineArchive -Evidence $evidence
     Invoke-RequiredTests 'upgrade' @('-p','hiroute-daemon','--test','windows_background','windows_background_upgrade::task_native_candidate_upgrade_recovers_prepared_rollback_and_preserves_business_state') @(
@@ -394,6 +397,12 @@ if ($Scope -eq 'components') {
     'windows_worker_business::oracle::tests::ambiguous_native_cli_stdout_is_rejected')
   $httpOracle = 'windows_business_http::tests::windows_loopback_oracle_reads_delayed_header_and_body_from_nonblocking_listener'
   Invoke-RequiredTests 'agent-http' @('-p','hiroute-daemon','--test','windows_headless',$httpOracle) @($httpOracle) @('--exact')
+  $nativeSourceOracle = 'windows_headless_business::upstream::tests::native_source_oracle_reads_delayed_header_and_body_from_nonblocking_stream'
+  Invoke-RequiredTests 'agent-native-source-oracle' @('-p','hiroute-daemon','--test','windows_headless',$nativeSourceOracle) @($nativeSourceOracle) @('--exact')
+  $dependencyOracle = 'windows_worker_business::dependency_selection::tests::'
+  Invoke-RequiredTests 'agent-worker-dependency-oracle' @('-p','hiroute-daemon','--test','windows_headless',$dependencyOracle) @(
+    ($dependencyOracle + 'closed_worker_diagnostic_never_returns_a_path_payload_or_unknown_key'),
+    ($dependencyOracle + 'discovery_selection_requires_one_exact_held_native_file_identity'))
   $publicBusiness = 'actual_windows_complete_public_headless_business'
   Invoke-RequiredTests 'agent-public-business' @('-p','hiroute-daemon','--test','windows_headless',$publicBusiness) @($publicBusiness) @('--ignored','--exact','--nocapture')
   $userModels = 'actual_windows_pi_and_dsh_persisted_user_models'

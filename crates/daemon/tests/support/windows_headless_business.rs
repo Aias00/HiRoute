@@ -2,12 +2,8 @@
 //! No direct database writes, internal operation dispatch, provider account or fake CLI.
 use std::ffi::OsString;
 use std::io::{Read, Write};
-use std::net::{SocketAddr, TcpListener, TcpStream};
-use std::sync::{
-    Arc, Mutex,
-    atomic::{AtomicBool, Ordering},
-};
-use std::thread::{self, JoinHandle};
+use std::net::SocketAddr;
+use std::thread;
 use std::time::{Duration, Instant};
 
 use hiroute_domain::UpstreamProtocol;
@@ -16,6 +12,10 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 use super::{InstalledProduct, SECRET, assert_no_secret};
+
+#[path = "windows_headless_business_upstream.rs"]
+mod upstream;
+use upstream::Upstream;
 
 const MODEL: &str = "windows-native-api-model";
 const NAME: &str = "Windows public Native API";
@@ -634,78 +634,6 @@ pub(crate) fn command(
     )
 }
 
-#[derive(Default)]
-struct Ledger {
-    posts: usize,
-    gets: usize,
-    rejected: usize,
-    malformed: usize,
-}
-struct Upstream {
-    address: SocketAddr,
-    ledger: Arc<Mutex<Ledger>>,
-    stop: Arc<AtomicBool>,
-    thread: Option<JoinHandle<()>>,
-}
-impl Upstream {
-    fn diagnostic(&self) {
-        let ledger = self.ledger.lock().unwrap();
-        eprintln!(
-            "Windows Native oracle: posts={}, gets={}, rejected={}, malformed={}",
-            ledger.posts, ledger.gets, ledger.rejected, ledger.malformed
-        );
-    }
-    fn start() -> Self {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let address = listener.local_addr().unwrap();
-        listener.set_nonblocking(true).unwrap();
-        let ledger = Arc::new(Mutex::new(Ledger::default()));
-        let stop = Arc::new(AtomicBool::new(false));
-        let worker_ledger = Arc::clone(&ledger);
-        let worker_stop = Arc::clone(&stop);
-        let thread = thread::spawn(move || {
-            while !worker_stop.load(Ordering::Acquire) {
-                match listener.accept() {
-                    Ok((mut stream, _)) => {
-                        if serve(&mut stream, &worker_ledger).is_err() {
-                            worker_ledger.lock().unwrap().malformed += 1;
-                        }
-                    }
-                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                        thread::sleep(Duration::from_millis(10))
-                    }
-                    Err(_) => {
-                        worker_ledger.lock().unwrap().malformed += 1;
-                        break;
-                    }
-                }
-            }
-        });
-        Self {
-            address,
-            ledger,
-            stop,
-            thread: Some(thread),
-        }
-    }
-    fn assert_requests(&self, posts: usize, gets: usize) {
-        let ledger = self.ledger.lock().unwrap();
-        assert_eq!(
-            ledger.rejected, 0,
-            "upstream must receive only the exact protected/committed credential"
-        );
-        assert_eq!(
-            ledger.malformed, 0,
-            "upstream must receive the exact bounded public protocol"
-        );
-        assert_eq!(ledger.posts, posts, "unexpected actual model POST count");
-        assert_eq!(
-            ledger.gets, gets,
-            "unexpected actual authenticated saved-source GET count"
-        );
-    }
-}
-
 /// Only native enums, allowlisted issue codes and numeric facts are diagnostic.
 /// Do not print the typed DTO: it also carries target and candidate selectors.
 fn check_diagnostic(value: &Value) {
@@ -751,112 +679,4 @@ fn check_diagnostic(value: &Value) {
         check.pages_read,
         check.issues.len()
     );
-}
-impl Drop for Upstream {
-    fn drop(&mut self) {
-        self.stop.store(true, Ordering::Release);
-        if let Some(thread) = self.thread.take() {
-            let _ = thread.join();
-        }
-    }
-}
-
-fn serve(stream: &mut TcpStream, ledger: &Mutex<Ledger>) -> std::io::Result<()> {
-    stream.set_read_timeout(Some(Duration::from_secs(3)))?;
-    stream.set_write_timeout(Some(Duration::from_secs(3)))?;
-    let invalid = || {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "invalid bounded fixture request",
-        )
-    };
-    let mut bytes = Vec::new();
-    let end = loop {
-        if let Some(end) = bytes.windows(4).position(|part| part == b"\r\n\r\n") {
-            break end + 4;
-        }
-        if bytes.len() > 8192 {
-            return Err(invalid());
-        }
-        let mut buffer = [0; 512];
-        let count = stream.read(&mut buffer)?;
-        if count == 0 {
-            return Err(invalid());
-        }
-        bytes.extend_from_slice(&buffer[..count]);
-    };
-    if end > 8192 {
-        return Err(invalid());
-    }
-    let header = std::str::from_utf8(&bytes[..end]).map_err(|_| invalid())?;
-    let mut lines = header.split("\r\n");
-    let line = lines.next().ok_or_else(invalid)?;
-    let method = line.split_whitespace().next().ok_or_else(invalid)?;
-    let path = line.split_whitespace().nth(1).ok_or_else(invalid)?;
-    let mut length = 0;
-    let mut authenticated = false;
-    for line in lines.filter(|line| !line.is_empty()) {
-        let (name, value) = line.split_once(':').ok_or_else(invalid)?;
-        if name.eq_ignore_ascii_case("content-length") {
-            length = value.trim().parse::<usize>().map_err(|_| invalid())?;
-        }
-        if name.eq_ignore_ascii_case("authorization") {
-            authenticated = value.trim() == format!("Bearer {SECRET}");
-        }
-    }
-    if length > 65536 {
-        return Err(invalid());
-    }
-    let method = method.to_owned();
-    let path = path.to_owned();
-    while bytes.len() - end < length {
-        let mut buffer = [0; 512];
-        let count = stream.read(&mut buffer)?;
-        if count == 0 {
-            return Err(invalid());
-        }
-        bytes.extend_from_slice(&buffer[..count]);
-    }
-    if !authenticated {
-        ledger.lock().unwrap().rejected += 1;
-        return reply(stream, 401, json!({"error":"fixture credential rejected"}));
-    }
-    match (method.as_str(), path.as_str()) {
-        ("GET", "/v1/models") => {
-            ledger.lock().unwrap().gets += 1;
-            reply(
-                stream,
-                200,
-                json!({"object":"list","data":[{"id":MODEL,"object":"model"}]}),
-            )
-        }
-        ("POST", "/v1/responses") => {
-            let request: Value =
-                serde_json::from_slice(&bytes[end..end + length]).map_err(|_| invalid())?;
-            if request["model"] != MODEL
-                || request["stream"] != false
-                || request["tools"][0]["name"] != "hiroute_probe"
-            {
-                return Err(invalid());
-            }
-            ledger.lock().unwrap().posts += 1;
-            reply(
-                stream,
-                200,
-                json!({"id":"resp_windows_probe","object":"response","status":"completed","model":MODEL,
-                "output":[{"type":"function_call","call_id":"call_windows_probe","name":"hiroute_probe","arguments":"{\"value\":\"ok\"}"}],
-                "usage":{"input_tokens":4,"output_tokens":3,"total_tokens":7}}),
-            )
-        }
-        _ => Err(invalid()),
-    }
-}
-fn reply(stream: &mut TcpStream, status: u16, value: Value) -> std::io::Result<()> {
-    let body = serde_json::to_vec(&value).unwrap();
-    write!(
-        stream,
-        "HTTP/1.1 {status} Fixture\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        body.len()
-    )?;
-    stream.write_all(&body)
 }

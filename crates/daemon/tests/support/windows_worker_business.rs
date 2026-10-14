@@ -3,8 +3,12 @@
 //! uses public management throughout. Only the independent model endpoints are controlled.
 #[path = "windows_worker_cancel.rs"]
 mod cancel;
+#[path = "windows_worker_dependency_selection.rs"]
+mod dependency_selection;
 #[path = "windows_worker_oracle.rs"]
 mod oracle;
+
+pub(crate) use dependency_selection::discovery_environment;
 
 use super::windows_headless_business::{Business, assert_operation, cli};
 use super::windows_routing_business::Plan;
@@ -453,20 +457,54 @@ fn select_pi(product: &InstalledProduct) {
         &["worker", "dependencies", "discover", "--harness", "pi"],
         None,
     );
-    let revision = discovered["data"]["selection_revisions"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|entry| entry["harness"] == "pi")
-        .unwrap()["revision"]
-        .as_u64()
-        .unwrap();
-    let request = json!({"harness":"pi","cli_path":selected("HIROUTE_WORKER_PI_BINARY"),
-        "node_path":selected("HIROUTE_WORKER_NODE"),"expected_selection_revision":revision});
+    let selection = dependency_selection::select(
+        &discovered,
+        &selected("HIROUTE_WORKER_PI_BINARY"),
+        &selected("HIROUTE_WORKER_NODE"),
+    );
+    let revision = selection.request.expected_selection_revision;
+    // The old fixture submitted valid ordinary drive paths instead of the actual
+    // discovery's canonical tuple. Exercise that real public rejection before
+    // admitting the same held objects through the current producer.
+    let (exit, rejected) = command_outcome(
+        product,
+        &["worker", "dependencies", "select"],
+        Some(&serde_json::to_value(&selection.rejected_ordinary).unwrap()),
+        Duration::from_secs(120),
+    );
+    assert_eq!(exit, 2, "ordinary dependency tuple must be rejected");
+    assert_eq!(
+        dependency_selection::error_code(&rejected),
+        "INVALID_ARGUMENTS"
+    );
+    assert_eq!(
+        dependency_selection::message_key(&rejected),
+        "cli.error.invalid_arguments"
+    );
+    assert!(
+        rejected["operation"].is_null(),
+        "rejected tuple must not start an Operation"
+    );
+    let unchanged = cli(
+        product,
+        &["worker", "dependencies", "discover", "--harness", "pi"],
+        None,
+    );
+    assert_eq!(
+        unchanged["data"]["selection_revisions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["harness"] == "pi")
+            .unwrap()["revision"]
+            .as_u64(),
+        Some(revision),
+        "ordinary tuple rejection must not consume the selection revision"
+    );
     let selected = command(
         product,
         &["worker", "dependencies", "select"],
-        Some(&request),
+        Some(&serde_json::to_value(&selection.request).unwrap()),
         Duration::from_secs(120),
     );
     assert_eq!(selected["operation"]["state"], "succeeded");
@@ -588,6 +626,30 @@ fn command(
     payload: Option<&Value>,
     deadline: Duration,
 ) -> Value {
+    let (exit, value) = command_outcome(product, args, payload, deadline);
+    assert_eq!(
+        exit,
+        0,
+        "actual public Worker business CLI failed: command={}, code={}, key={}",
+        dependency_selection::command_label(args),
+        dependency_selection::error_code(&value),
+        dependency_selection::message_key(&value)
+    );
+    assert!(matches!(
+        value["status"].as_str(),
+        Some("succeeded" | "accepted")
+    ));
+    value
+}
+
+fn command_outcome(
+    product: &InstalledProduct,
+    args: &[&str],
+    payload: Option<&Value>,
+    deadline: Duration,
+) -> (i32, Value) {
+    let label = dependency_selection::command_label(args);
+    println!("Windows public Worker checkpoint: command={label}");
     let mut args: Vec<OsString> = args.iter().map(OsString::from).collect();
     if payload.is_some() {
         args.push("--request-stdin".into());
@@ -608,16 +670,14 @@ fn command(
     );
     let value: Value = serde_json::from_slice(&output)
         .expect("actual public Worker business CLI must return its JSON envelope");
-    assert_eq!(
-        exit, 0,
-        "actual public Worker business CLI failed: {}",
-        value["error"]["code"]
-    );
-    assert!(matches!(
-        value["status"].as_str(),
-        Some("succeeded" | "accepted")
-    ));
-    value
+    if exit != 0 {
+        println!(
+            "Windows public Worker failure: command={label}, code={}, key={}",
+            dependency_selection::error_code(&value),
+            dependency_selection::message_key(&value)
+        );
+    }
+    (exit, value)
 }
 fn run(
     program: &Path,

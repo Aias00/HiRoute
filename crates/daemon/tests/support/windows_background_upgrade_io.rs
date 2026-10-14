@@ -20,7 +20,7 @@ const BOUND: u64 = 1024 * 1024;
 const CANDIDATE: &str = super::CANDIDATE;
 static PRIVATE_TOKENS: Mutex<Vec<Zeroizing<Vec<u8>>>> = Mutex::new(Vec::new());
 
-pub(super) fn assert_no_secret(bytes: &[u8]) {
+pub(in super::super) fn assert_no_secret(bytes: &[u8]) {
     oracle::assert_no_secret(bytes);
     for token in PRIVATE_TOKENS.lock().unwrap().iter() {
         assert!(

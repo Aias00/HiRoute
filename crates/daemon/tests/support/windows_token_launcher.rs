@@ -520,47 +520,6 @@ impl Drop for Child {
     }
 }
 
-#[cfg(test)]
-mod capture_tests {
-    use super::{Capture, pipe};
-    use std::io::{ErrorKind, Write};
-
-    #[test]
-    fn native_capture_requires_last_writer_close_for_eof() {
-        let (mut writer, reader) = pipe(false).unwrap();
-        let duplicate = writer.try_clone().unwrap();
-        let mut capture = Capture::new(reader);
-        capture.poll(1024).unwrap();
-        assert!(!capture.eof(), "a connected empty pipe is not EOF");
-        writer
-            .write_all(b"HIROUTE_NATIVE_BACKGROUND_STAGE=request-reading\n")
-            .unwrap();
-        capture.poll(1024).unwrap();
-        assert_eq!(capture.fixture_stage(), "request-reading");
-        drop(writer);
-        capture.poll(1024).unwrap();
-        assert!(!capture.eof(), "a duplicate writer prevents actual EOF");
-        drop(duplicate);
-        capture.poll(1024).unwrap();
-        assert!(capture.eof());
-    }
-
-    #[test]
-    fn native_capture_bounds_output_and_never_reports_unknown_stage_data() {
-        let (mut writer, reader) = pipe(false).unwrap();
-        let mut capture = Capture::new(reader);
-        writer
-            .write_all(b"HIROUTE_NATIVE_BACKGROUND_STAGE=entry\r\nHIROUTE_NATIVE_BACKGROUND_STAGE=private-fixture-value\n")
-            .unwrap();
-        capture.poll(1024).unwrap();
-        assert_eq!(capture.fixture_stage(), "entry");
-        let (mut writer, reader) = pipe(false).unwrap();
-        let mut capture = Capture::new(reader);
-        writer.write_all(&[b'x'; 32]).unwrap();
-        assert_eq!(capture.poll(16).unwrap_err().kind(), ErrorKind::InvalidData);
-    }
-}
-
 /// Stage the verified currently running fixture under its real owner. Retained
 /// native image access denies replacement until all owner subprocesses finish.
 pub struct StagedFixture {
@@ -758,5 +717,46 @@ impl Drop for StagedFixture {
         if result.is_err() {
             eprintln!("owned native fixture cleanup failed");
         }
+    }
+}
+
+#[cfg(test)]
+mod capture_tests {
+    use super::{Capture, pipe};
+    use std::io::{ErrorKind, Write};
+
+    #[test]
+    fn native_capture_requires_last_writer_close_for_eof() {
+        let (mut writer, reader) = pipe(false).unwrap();
+        let duplicate = writer.try_clone().unwrap();
+        let mut capture = Capture::new(reader);
+        capture.poll(1024).unwrap();
+        assert!(!capture.eof(), "a connected empty pipe is not EOF");
+        writer
+            .write_all(b"HIROUTE_NATIVE_BACKGROUND_STAGE=request-reading\n")
+            .unwrap();
+        capture.poll(1024).unwrap();
+        assert_eq!(capture.fixture_stage(), "request-reading");
+        drop(writer);
+        capture.poll(1024).unwrap();
+        assert!(!capture.eof(), "a duplicate writer prevents actual EOF");
+        drop(duplicate);
+        capture.poll(1024).unwrap();
+        assert!(capture.eof());
+    }
+
+    #[test]
+    fn native_capture_bounds_output_and_never_reports_unknown_stage_data() {
+        let (mut writer, reader) = pipe(false).unwrap();
+        let mut capture = Capture::new(reader);
+        writer
+            .write_all(b"HIROUTE_NATIVE_BACKGROUND_STAGE=entry\r\nHIROUTE_NATIVE_BACKGROUND_STAGE=private-fixture-value\n")
+            .unwrap();
+        capture.poll(1024).unwrap();
+        assert_eq!(capture.fixture_stage(), "entry");
+        let (mut writer, reader) = pipe(false).unwrap();
+        let mut capture = Capture::new(reader);
+        writer.write_all(&[b'x'; 32]).unwrap();
+        assert_eq!(capture.poll(16).unwrap_err().kind(), ErrorKind::InvalidData);
     }
 }

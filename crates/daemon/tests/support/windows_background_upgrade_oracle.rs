@@ -1,7 +1,5 @@
 //! Independent HTTP endpoint for the real upgrade consumer, never a HiRoute response fixture.
-#[path = "windows_business_http.rs"]
-#[allow(dead_code)] // Reuse its bounded HTTP framing; this gate has no SSE traffic.
-mod http;
+use super::super::windows_business_http as http;
 
 use serde_json::{Value, json};
 use std::net::SocketAddr;

@@ -1,13 +1,12 @@
 //! Public user-owned Source → Secret → fixed Plan → Agent grant → Gateway → receipt,
 //! retained across real package rollback/upgrade. Only the independent upstream is controlled.
-#[path = "windows_business_http.rs"]
-#[allow(dead_code)] // Bounded framing is shared; the upstream server belongs to oracle.
-mod http;
+use super::windows_business_http as http;
 #[path = "windows_background_upgrade_io.rs"]
 mod native_io;
 #[path = "windows_background_upgrade_oracle.rs"]
 mod oracle;
-use native_io::{assert_no_secret, cli, execute, grant, read, register, stage_codex};
+pub(super) use native_io::assert_no_secret;
+use native_io::{cli, execute, grant, read, register, stage_codex};
 
 use super::fixture;
 use hiroute_host_runtime::StandaloneLayout;

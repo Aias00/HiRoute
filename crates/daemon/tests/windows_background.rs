@@ -9,12 +9,17 @@
 mod windows_account;
 #[path = "support/windows_background_fixture.rs"]
 mod windows_background_fixture;
+#[path = "support/windows_background_standard.rs"]
+mod windows_background_standard;
 #[path = "support/windows_background_task.rs"]
 mod windows_background_task;
 #[path = "support/windows_background_upgrade.rs"]
 mod windows_background_upgrade;
 #[path = "support/windows_background_upgrade_business.rs"]
 mod windows_background_upgrade_business;
+#[path = "support/windows_business_http.rs"]
+#[allow(dead_code)] // Upgrade consumers share the bounded framing owner.
+mod windows_business_http;
 #[path = "support/windows_candidate_source.rs"]
 mod windows_candidate_source;
 #[path = "support/windows_execution_host.rs"]
@@ -34,9 +39,13 @@ use std::path::PathBuf;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use hiroute_platform::windows::{background, service};
+use hiroute_platform::windows::background;
 use serde_json::Value;
 use windows_background_fixture as fixture;
+
+fn assert_no_secret(bytes: &[u8]) {
+    windows_background_upgrade_business::assert_no_secret(bytes);
+}
 
 struct Inputs {
     python: PathBuf,
@@ -193,7 +202,7 @@ impl Inputs {
         }
         // Only this anonymous stdin carries synthetic credentials. Neither owner
         // subprocess environment nor argv nor package/journal contains them.
-        let result = fixture::process(
+        fixture::process(
             None,
             &self.python,
             &args,
@@ -201,8 +210,7 @@ impl Inputs {
             true,
             Duration::from_secs(75),
             false,
-        );
-        result
+        )
     }
     fn admin(
         &self,

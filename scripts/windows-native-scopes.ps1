@@ -46,13 +46,13 @@ function Get-WindowsRequiredRecipes {
     'product' { return @('artifacts','cpa','core-cpa-bridge','replay-fragmentation','headless','credential-options','worker-materials',
       'worker-cleanup','authority-key','native-endpoint','native-home','startup-admission','live-capture') }
     'core' { return @(Get-WindowsCorePackages | ForEach-Object { $_ -replace '^hiroute-','core-' }) }
-    'background' { return @('background-capture','packaged-proxy-oracle','packaged-foreground','background') }
+    'background' { return @('background-capture','packaged-proxy-oracle','packaged-foreground','background','background-standard-owner') }
     'upgrade' { return @('upgrade') }
     'accounts' { return @(Get-WindowsQoderAccountRecipes | ForEach-Object { $_.name }) }
     'agents' {
       return @('agent-private-root','agent-private-node','agent-path-identity','agent-managed-path','agent-account-fixture','agent-pi-sdk',
         'agent-acp-notifications','agent-cancel-oracle','agent-main-oracle','agent-launch-oracle','agent-launch-cause','agent-history-oracle',
-        'agent-native-codex-ingress','agent-business-oracle','agent-http','agent-public-business','agent-user-models','agent-user-model-oracle','agent-qoder-user-model-oracle','agent-management','agent-management-oracle','agent-live-history','agent-legacy-history') +
+        'agent-native-codex-ingress','agent-native-source-oracle','agent-worker-dependency-oracle','agent-business-oracle','agent-http','agent-public-business','agent-user-models','agent-user-model-oracle','agent-qoder-user-model-oracle','agent-management','agent-management-oracle','agent-live-history','agent-legacy-history') +
         @(Get-WindowsDaemonAgentCases | ForEach-Object { 'agent-' + (($_ -split 'actual_')[1] -replace '_','-') }) +
         @(Get-WindowsMainAgentCases | ForEach-Object { 'main-' + (($_ -split 'actual_windows_')[1] -replace '_','-') })
     }

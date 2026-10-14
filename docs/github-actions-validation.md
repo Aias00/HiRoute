@@ -50,7 +50,7 @@ explicitly select their opt-in real client tests. Their npm versions and all
 transitive package integrities come from `tools/windows-agent-fixtures/package-lock.json`.
 Qoder's fixed official archive has an independent SHA-256 check. The ordinary
 Agent scope uses the shared required recipe inventory without provider accounts, including
-rejection of missing or ambiguous account profiles. Qoder's three
+rejection of missing or ambiguous account profiles. Qoder's four
 official-account recipes are a separately selected `accounts` scope, requiring
 an officially prepared private profile; missing credentials fail that scope.
 Pull request jobs receive no provider credentials. Passing ordinary CI does not
@@ -58,14 +58,23 @@ establish official-account acceptance, which remains a separate release gate.
 
 Background jobs build the unchanged pinned CPA with its two native bootstrap
 security cases and use the production package generator twice. The administrator
-receives a separate verified complete package. The required Task case exercises
-the actual logged-on owner, least-privilege launch, stop/recovery and login autostart.
+receives a separate verified complete package. Task acceptance exercises the
+actual logged-on owner, least-privilege launch and stop/recovery. The
+`background-standard-owner` recipe uses the controller's own standard token and
+ordinary process creation; it rejects every Administrators group SID, including
+deny-only membership. It does not require an administrator controller, alternate
+logon, linked token or impersonation. Initial markers, stable entries, definitions
+and the SID-derived native Task must be absent before installation. Autostart
+policy changes, real login-trigger execution and externally closing a console or
+disconnecting/reconnecting RDP require distinct evidence.
 The current hosted images execute as the built-in administrator without a linked
 limited token. Native inspection found `EnableLUA=1` and administrator consent
 prompts disabled; that policy does not give this account a split token. Creating
 a standard account with `LogonUser` also does not create an existing interactive
 desktop login. These defaults cannot establish the required standard-owner Task
-result. That gate requires an actual logged-in owner with a limited token, and
+result. The standard-owner gate requires an actual logged-in standard token; the
+separate administrator-controlled Task gate also requires its linked limited token.
+Each selected gate
 remains failed when those prerequisites are absent. Read-only RDP service and
 port facts alone do not establish such a login or a passing background task.
 SCM and logout continuity are optional, outside the required background scope.

@@ -133,11 +133,31 @@ The [installed management journey](../../crates/daemon/tests/support/windows_man
 keeps Host collaboration receipts, native defaults and model authority separate.
 Its foreground doctor/logs negatives do not replace the
 [real Task doctor/logs helper](../../crates/daemon/tests/support/windows_management_service.rs).
+The [standard-owner Task journey](../../crates/daemon/tests/support/windows_background_standard.rs)
+executes as its own actual logged-on standard user, with no administrator group
+or alternate token. It requires an absent installation and SID-derived Task,
+then verifies native identity, Control/Gateway, recovery and guarded uninstall.
+Its policy toggles do not establish console closure, RDP reconnection or a login
+trigger; those need external session evidence.
 The [complete-package foreground CPA journey](../../crates/daemon/tests/support/windows_packaged_foreground.rs)
 executes before the required logged-owner Task, so missing WTS prerequisites cannot
 hide stock CPA startup, public PKCE cancellation/expiry or launch-snapshot failures.
 Its marker is test-owned; installer, Task and authorized outbound model traffic
 remain separate required evidence.
+
+The [native Source upstream](../../crates/daemon/tests/support/windows_headless_business_upstream.rs)
+owns the independent model endpoint and bounded wire receipts; public command
+and settings assertions stay in the business journey. Its accepted TCP sockets
+and the [rejected package proxy observer](../../crates/daemon/tests/support/windows_packaged_proxy_observation.rs)
+explicitly clear nonblocking mode before bounded reads. Real delayed header/body
+and post-rejection peer EOF regressions cover the inherited Winsock mode without
+extending deadlines or weakening request validation.
+
+The [Worker dependency selection fixture](../../crates/daemon/tests/support/windows_worker_dependency_selection.rs)
+binds the locked npm fixture directory before daemon startup, then submits actual
+discovery candidates only when their held FileIDs match the pinned CLI and Node.
+The transaction keeps its canonical tuple and digest contract; same-byte foreign
+files and duplicate candidates cannot replace an admitted dependency.
 
 The same native entry's `-InventoryOnly` exports static scope recipes through its
 actual required-test producer without Cargo, package preparation or client launch.
