@@ -95,12 +95,15 @@ impl LocalControlAdapter {
             .map_err(|_| ControlReadError::Corrupt)?;
         let mut connections = Vec::new();
         let mut diagnostics = Vec::new();
-        let selected_target = request
+        let mut selected_target = request
             .native_target
             .as_ref()
             .map(hiroute_integrations::canonical_hermes_target);
         if let Some(target) = &request.native_target {
             if self.remember_hermes_scan_target(target).is_err() {
+                selected_target = Some(Err(hiroute_integrations::HermesNativeError {
+                    stage: "selected profile unavailable",
+                }));
                 diagnostics.push(ComputeScanDiagnosticV2 {
                     agent_id: "agent_hermes_default".into(),
                     reason: "selected_profile_unavailable".into(),

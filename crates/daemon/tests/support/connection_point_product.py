@@ -69,6 +69,21 @@ def run(repository):
         assert hermes_point['declared_model_ids'] == ['first', 'second']
         assert hermes_point['protocol'] == 'chat_completions'
         assert hermes_point['connection_ref'] != pi_point['connection_ref']
+        other = product.root / 'second-hermes-profile'
+        other.mkdir(mode=0o700)
+        write(other / 'config.yaml', {'model': {'provider': 'team-native', 'default': 'other-profile-model'}, 'providers': {
+            'team-native': {'api': 'https://point.example.invalid/v1', 'transport': 'openai_chat',
+                            'key_env': 'POINT_PROFILE_KEY', 'default_model': 'other-profile-model'}}})
+        write(other / '.env', b'POINT_PROFILE_KEY=point-profile-fixture-secret\n')
+        other_request = {'schema': request['schema'], 'native_target': {'kind': 'hermes', 'config_root': str(other)}}
+        other_scan = data(product, 'compute scan', other_request)
+        other_points = [p for p in other_scan['connections'] if p['agent_id'] == 'agent_hermes_default']
+        assert len(other_points) == 1 and other_points[0]['declared_model_ids'] == ['other-profile-model']
+        assert other_points[0]['connection_ref'] != hermes_point['connection_ref']
+        invalid_scan = data(product, 'compute scan', {'schema': request['schema'],
+            'native_target': {'kind': 'hermes', 'config_root': str(product.root / 'missing-profile')}})
+        assert not any(p['agent_id'] == 'agent_hermes_default' for p in invalid_scan['connections'])
+        assert any(d['reason'] == 'selected_profile_unavailable' for d in invalid_scan['diagnostics'])
         assert len(pi_point['declared_model_ids']) == 3
         for point in [hermes_point, pi_point]:
             assert point['discovery'] and 'credential_binding' not in point and 'field_selector' not in point
