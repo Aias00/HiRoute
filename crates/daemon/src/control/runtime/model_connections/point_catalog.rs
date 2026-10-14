@@ -55,7 +55,7 @@ pub(super) fn adapter(protocol: UpstreamProtocol) -> &'static str {
     match protocol {
         UpstreamProtocol::Responses => "adapter.openai-responses.v1",
         UpstreamProtocol::Messages => "adapter.anthropic-messages.v1",
-        UpstreamProtocol::ChatCompletions => "adapter.openai-chat-completions.v1",
+        UpstreamProtocol::ChatCompletions => "adapter.openai-chat.v1",
     }
 }
 

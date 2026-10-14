@@ -12,7 +12,7 @@ impl LocalControlAdapter {
         let canonical = hiroute_integrations::canonical_hermes_target(target)
             .map_err(|_| ControlReadError::Denied)?;
         let id = hiroute_integrations::hermes_context_id(canonical.config_root());
-        let targets = self
+        let mut targets = self
             .hermes_scan_targets
             .lock()
             .map_err(|_| ControlReadError::Unavailable)?;
