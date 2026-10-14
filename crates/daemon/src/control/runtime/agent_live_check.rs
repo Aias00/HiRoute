@@ -101,7 +101,9 @@ impl LocalControlAdapter {
 
         for (model, trust) in target.client_model_ids.iter().zip(&expected) {
             let result = match target.surface {
-                AgentModelSurfaceV2::PiCli | AgentModelSurfaceV2::DshCli => {
+                AgentModelSurfaceV2::PiCli
+                | AgentModelSurfaceV2::DshCli
+                | AgentModelSurfaceV2::HermesCli => {
                     return Err(ControlReadError::Denied);
                 }
                 AgentModelSurfaceV2::QoderCli => {

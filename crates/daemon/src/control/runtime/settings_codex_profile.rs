@@ -199,6 +199,7 @@ impl LocalControlAdapter {
             slot_occupied: owner.is_some(),
             target_file: class
                 .native_path(&self.scanner)
+                .ok_or(ControlReadError::Corrupt)?
                 .to_string_lossy()
                 .into_owned(),
             profile_name: hiroute_integrations::CODEX_MANAGED_PROFILE_NAME.into(),

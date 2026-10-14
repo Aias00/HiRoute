@@ -5,8 +5,8 @@
 
 use hiroute_domain::{
     AgentConfigChangeV1, CanonicalDigest, CompensationOutcome, ControlRepositoryPort,
-    EffectReconciliation, ExternalEffectIntentV1, ExternalEffectPort, OperationId,
-    OperationStepKind, OperationStepStatus, OwnedEffectKind, OwnedEffectV1, PortError,
+    EffectReconciliation, ExternalEffectIntentV1, ExternalEffectPort, NativeAgentArtifactPort,
+    OperationId, OperationStepKind, OperationStepStatus, OwnedEffectKind, OwnedEffectV1, PortError,
     PortErrorCode, PortResult,
 };
 use hiroute_integrations::{PermissionHardeningOutcomeV1, PermissionHardeningRequiredV1};
@@ -316,6 +316,9 @@ impl ExternalEffectPort for LocalControlAdapter {
         operation: &hiroute_domain::OperationV1,
     ) -> PortResult<()> {
         self.finish_product_activation(operation)?;
+        if operation.state != hiroute_domain::OperationState::Succeeded {
+            return Ok(());
+        }
         for intent in operation.plan.external() {
             if hiroute_application::agent_connection::is_settings_hermes_plugin(intent)
                 && matches!(hiroute_application::agent_connection::settings_hermes_plugin_file_for_operation(operation, intent)?.change, hiroute_application::agent_connection::HermesPluginFileAction::Restore { .. })

@@ -202,19 +202,19 @@ impl LocalControlAdapter {
 
     pub(super) fn hermes_operation_files_applied(
         &self,
-        operation: &OperationV1,
+        operation: &(impl hiroute_domain::AgentOperationRead + ?Sized),
         intent: &ExternalEffectIntentV1,
     ) -> PortResult<bool> {
         if !hiroute_integrations::hermes_native_configuration_is_applied(
             &self.artifacts,
-            &operation.operation_id,
+            operation.operation_id(),
             intent,
         )? {
             return Ok(false);
         }
         let plugins: Vec<_> = operation
-            .plan
-            .external()
+            .agent_input()
+            .external
             .iter()
             .filter(|i| is_settings_hermes_plugin(i))
             .collect();
@@ -225,7 +225,7 @@ impl LocalControlAdapter {
             settings_hermes_plugin_file_for_operation(operation, plugin)?;
             if !hiroute_integrations::hermes_plugin_is_applied(
                 &self.artifacts,
-                &operation.operation_id,
+                operation.operation_id(),
                 plugin,
             )? {
                 return Ok(false);

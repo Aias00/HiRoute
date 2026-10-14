@@ -370,7 +370,10 @@ fn reconfigure_then_conditional_restore_preserves_foreign_edits_and_rejects_targ
     );
     let restored =
         String::from_utf8(fs::read(fixture.profile.join("config.yaml")).unwrap()).unwrap();
-    assert!(restored.contains("default: \"native/model\""), "{restored}");
+    assert!(
+        restored.contains("\"default\": \"native/model\""),
+        "{restored}"
+    );
     assert!(restored.contains("user_note: retained"), "{restored}");
     assert!(restored.contains("  discord: unchanged"), "{restored}");
 }

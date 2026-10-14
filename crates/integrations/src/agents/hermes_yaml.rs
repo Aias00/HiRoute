@@ -31,8 +31,20 @@ impl HermesDocument {
         let text = std::str::from_utf8(bytes).map_err(|_| hermes_error("encoding"))?;
         // Aliases can silently rewrite an unowned member when a referenced owned mapping is
         // edited. Refuse them even though a YAML decoder could resolve them successfully.
+        let mut literal_indent = None;
         for line in text.lines() {
             let trimmed = line.trim_start();
+            let indent = line.len() - trimmed.len();
+            if literal_indent.is_some_and(|level| indent > level || trimmed.is_empty()) {
+                continue;
+            }
+            literal_indent = None;
+            if mapping_colon(line)
+                .is_some_and(|colon| line[colon + 1..].trim_start().starts_with(['|', '>']))
+            {
+                literal_indent = Some(indent);
+            }
+
             if trimmed.starts_with('#') {
                 continue;
             }
@@ -209,7 +221,7 @@ fn mapping_spans(
     end: usize,
     indent: usize,
 ) -> Result<BTreeMap<String, MemberSpan>, HermesNativeError> {
-    let mut members = Vec::new();
+    let mut members: Vec<(String, usize, usize, bool, bool, usize)> = Vec::new();
     let mut offset = start;
     let mut scalar_indent = None;
     for line in text[start..end].split_inclusive('\n') {
@@ -221,14 +233,16 @@ fn mapping_spans(
             return Err(hermes_error("block indentation"));
         }
         if scalar_indent.is_some_and(|level| spaces > level || trimmed.is_empty()) {
+            if let Some(member) = members.last_mut() {
+                member.5 = offset + line.len();
+            }
             offset += line.len();
             continue;
         }
         scalar_indent = None;
         if spaces == indent && !trimmed.is_empty() && !trimmed.starts_with('#') {
-            let (raw, rest) = trimmed
-                .split_once(':')
-                .ok_or_else(|| hermes_error("mapping member"))?;
+            let colon = mapping_colon(trimmed).ok_or_else(|| hermes_error("mapping member"))?;
+            let (raw, rest) = (&trimmed[..colon], &trimmed[colon + 1..]);
             let key = if raw.starts_with('\'') || raw.starts_with('"') {
                 serde_yaml::from_str::<String>(raw).map_err(|_| hermes_error("member key"))?
             } else {
@@ -247,13 +261,18 @@ fn mapping_spans(
                 offset + line.len(),
                 rhs.is_empty() || rhs.starts_with('#'),
                 rhs.split('#').next().is_some_and(|v| v.trim() == "{}"),
+                offset + line.len(),
             ));
+        } else if !trimmed.is_empty() && !trimmed.starts_with('#') {
+            if let Some(member) = members.last_mut() {
+                member.5 = offset + line.len();
+            }
         }
         offset += line.len();
     }
     let mut result = BTreeMap::new();
-    for (i, (key, begin, body, block, empty_map)) in members.iter().enumerate() {
-        let stop = members.get(i + 1).map_or(end, |x| x.1);
+    for (i, (key, begin, body, block, empty_map, content_end)) in members.iter().enumerate() {
+        let stop = members.get(i + 1).map_or(end, |x| x.1).min(*content_end);
         if result
             .insert(
                 key.clone(),
@@ -270,6 +289,26 @@ fn mapping_spans(
         }
     }
     Ok(result)
+}
+
+fn mapping_colon(line: &str) -> Option<usize> {
+    let mut quote = None;
+    let mut escaped = false;
+    for (index, byte) in line.bytes().enumerate() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match (quote, byte) {
+            (Some(b'"'), b'\\') => escaped = true,
+            (Some(q), b) if q == b => quote = None,
+            (None, b'\'' | b'"') => quote = Some(byte),
+            (None, b':') => return Some(index),
+            (None, b'#') => return None,
+            _ => {}
+        }
+    }
+    None
 }
 
 fn render_member(key: &str, value: &Value, indent: usize) -> Result<String, HermesNativeError> {

@@ -112,7 +112,10 @@ impl LocalControlAdapter {
                 self.scanner.codex_user_config_target()
             }
             SettingsAgentClass::Claude => self.scanner.claude_user_settings_target(),
-            SettingsAgentClass::Qoder | SettingsAgentClass::Pi | SettingsAgentClass::Dsh => {
+            SettingsAgentClass::Qoder
+            | SettingsAgentClass::Pi
+            | SettingsAgentClass::Dsh
+            | SettingsAgentClass::Hermes => {
                 return Err(error());
             }
         };
@@ -126,7 +129,10 @@ impl LocalControlAdapter {
             .join(match class {
                 SettingsAgentClass::Codex | SettingsAgentClass::CodexProfile => "codex.sealed",
                 SettingsAgentClass::Claude => "claude-code.sealed",
-                SettingsAgentClass::Qoder | SettingsAgentClass::Pi | SettingsAgentClass::Dsh => {
+                SettingsAgentClass::Qoder
+                | SettingsAgentClass::Pi
+                | SettingsAgentClass::Dsh
+                | SettingsAgentClass::Hermes => {
                     return Err(error());
                 }
             }))

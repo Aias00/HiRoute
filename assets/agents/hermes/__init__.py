@@ -1,10 +1,15 @@
 """HiRoute's native Hermes request adapter. No tools or outbound clients."""
+from collections.abc import Mapping
 
 
 def _identity(value):
+    try:
+        encoded = value.encode("utf-8") if isinstance(value, str) else b""
+    except UnicodeEncodeError:
+        return False
     return (
         isinstance(value, str)
-        and 0 < len(value.encode("utf-8")) <= 128
+        and 0 < len(encoded) <= 128
         and not any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in value)
     )
 
@@ -45,12 +50,12 @@ def _adapter(config):
         if selected != route or not isinstance(request, dict):
             return None
         existing = request.get("extra_headers")
-        if existing is not None and not isinstance(existing, dict):
+        if existing is not None and not isinstance(existing, Mapping):
             return None
         # Case-insensitive replacement avoids duplicate identity or authorization headers.
         headers = {
             k: v for k, v in (existing or {}).items()
-            if isinstance(k, str) and k.lower() not in ("x-hiroute-token", "x-hermes-session-id")
+            if not isinstance(k, str) or k.lower() not in ("x-hiroute-token", "x-hermes-session-id")
         }
         headers["X-HiRoute-Token"] = bearer
         session = context.get("session_id")
