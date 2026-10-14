@@ -5,7 +5,7 @@
   },
   "product_contract_revision": "487a807c8dc25cfb24e8b097882cd3bb9716a009",
   "proposal_map_revision": "ab4da93cc49c6ec56a01e046230411ff1ca82300",
-  "descriptor_digest": "sha256:3ae32fc9b7da19b9d8b23ffefd8a25bc221dc86adc3bdbaca761f176928508b9",
+  "descriptor_digest": "sha256:85d828bd2b5ee7cb64bec70fc3f5c11e5619965c5694133019dd79283e72facd",
   "visibility": "planned",
   "commands": [
     {
@@ -581,24 +581,27 @@
       "scope": "p0",
       "lifecycle": "released",
       "kind": "query",
-      "request_schema": "hiroute.empty-request/v1",
+      "request_schema": "hiroute.agent-scan-request/v1",
       "response_schema": "hiroute.agent-discovery-list/v1",
       "effect": "none",
       "network": "local_control_only",
       "model_call": "never",
-      "stdin_channels": [],
+      "stdin_channels": [
+        "request_stdin",
+        "request_file"
+      ],
       "idempotency": "not_applicable",
       "help": {
         "purpose": "Discover exact supported Agent installations and profiles.",
-        "usage": "hiroute agents scan [OPTIONS] --non-interactive --output json",
-        "arguments_and_options": "Only the typed options declared by the generated request schema are accepted; arbitrary patches, URLs, shell, or plaintext Secret argv are forbidden.",
+        "usage": "hiroute agents scan [(--request-stdin | --request-file <PATH>) | --request-file <PATH>] --non-interactive --output json",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. Only the typed options declared by the generated request schema are accepted; arbitrary patches, URLs, shell, or plaintext Secret argv are forbidden.",
         "effects": "Read-only; no product side effect.",
         "network_and_model_use": "No model use; any external dependency is declared by the typed Application operation.",
         "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
         "output": "One hiroute.machine-envelope/v2 JSON object on stdout; diagnostics belong on stderr.",
         "exit_status": "0 success/accepted; 2 usage; 3 conflict/blocker; 4 capability denied; 5 not found; 6 unavailable; 7 action required; 8 needs attention.",
         "examples": [
-          "hiroute agents scan --non-interactive --output json"
+          "hiroute agents scan [--request-stdin | --request-file <PATH>] --non-interactive --output json"
         ],
         "see_also": [
           "hiroute schema show --command-id agents.scan"
@@ -1072,20 +1075,23 @@
       "scope": "p0",
       "lifecycle": "released",
       "kind": "query",
-      "request_schema": "hiroute.empty-request/v1",
-      "response_schema": "hiroute.compute-scan-result/v1",
+      "request_schema": "hiroute.compute-scan-request/union",
+      "response_schema": "hiroute.compute-scan-result/union",
       "effect": "none",
       "network": "local_control_only",
       "model_call": "never",
-      "stdin_channels": [],
+      "stdin_channels": [
+        "request_stdin",
+        "request_file"
+      ],
       "idempotency": "not_applicable",
       "help": {
         "purpose": "Discover registered subscription, Native API, and free compute sources.",
-        "usage": "hiroute compute scan [typed options] --non-interactive --output json",
-        "arguments_and_options": "Only the typed options declared by the generated request schema are accepted; arbitrary patches, URLs, shell, or plaintext Secret argv are forbidden.",
+        "usage": "hiroute compute scan (--request-stdin | --request-file <PATH>) --output json",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. Only the typed options declared by the generated request schema are accepted; arbitrary patches, URLs, shell, or plaintext Secret argv are forbidden.",
         "effects": "Read-only; no product side effect.",
         "network_and_model_use": "No model use; any external dependency is declared by the typed Application operation.",
-        "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
+        "automation": "No input retains released V1 rows. Request hiroute.compute-scan-request/v2 explicitly for connection points, with the selected native_target for Hermes. No scan result is a saved source or account entitlement.",
         "output": "One hiroute.machine-envelope/v2 JSON object on stdout; diagnostics belong on stderr.",
         "exit_status": "0 success/accepted; 2 usage; 3 conflict/blocker; 4 capability denied; 5 not found; 6 unavailable; 7 action required; 8 needs attention.",
         "examples": [
@@ -1245,6 +1251,55 @@
         "scenario_id": "p0.compute.refresh.negative",
         "polarity": "negative",
         "state": "planned"
+      }
+    },
+    {
+      "command_id": "compute.connection.prepare",
+      "path": [
+        "compute",
+        "connection",
+        "prepare"
+      ],
+      "operation_id": "PrepareDiscoveredModelConnection",
+      "trace_ids": [],
+      "scope": "p0",
+      "lifecycle": "released",
+      "kind": "query",
+      "request_schema": "hiroute.prepare-discovered-model-connection-request/v1",
+      "response_schema": "hiroute.compute-candidate-view/v2",
+      "effect": "local_candidate_preparation",
+      "network": "local_control_only",
+      "model_call": "never",
+      "stdin_channels": [
+        "request_stdin",
+        "request_file"
+      ],
+      "idempotency": "not_applicable",
+      "help": {
+        "purpose": "Prepare the current opaque native connection-point reference without an inference call.",
+        "usage": "hiroute compute connection prepare (--request-stdin | --request-file <PATH>) --output json",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. Only the typed options declared by the generated request schema are accepted; arbitrary patches, URLs, shell, or plaintext Secret argv are forbidden.",
+        "effects": "Registers a private ephemeral candidate and protected credential reference after exact source reread. Does not save a source, mutate native files or call a model.",
+        "network_and_model_use": "No model use; any external dependency is declared by the typed Application operation.",
+        "automation": "Reuse the opaque discovery reference and revision exactly. Prepare privately rereads native facts and returns selectable model refs. Save all currently selectable refs by default or the explicit requested subset through Preview/Apply; never omit selection or treat all as a wildcard.",
+        "output": "One hiroute.machine-envelope/v2 JSON object on stdout; diagnostics belong on stderr.",
+        "exit_status": "0 success/accepted; 2 usage; 3 conflict/blocker; 4 capability denied; 5 not found; 6 unavailable; 7 action required; 8 needs attention.",
+        "examples": [
+          "hiroute compute connection prepare --non-interactive --output json"
+        ],
+        "see_also": [
+          "hiroute schema show --command-id compute.connection.prepare"
+        ]
+      },
+      "positive": {
+        "scenario_id": "p0.compute.connection.prepare.positive",
+        "polarity": "positive",
+        "state": "executable"
+      },
+      "negative": {
+        "scenario_id": "p0.compute.connection.prepare.negative",
+        "polarity": "negative",
+        "state": "executable"
       }
     },
     {

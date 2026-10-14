@@ -365,6 +365,20 @@
       }
     },
     {
+      "command_id": "compute.connection.prepare",
+      "lifecycle": "released",
+      "negative": {
+        "polarity": "negative",
+        "scenario_id": "p0.compute.connection.prepare.negative",
+        "state": "executable"
+      },
+      "positive": {
+        "polarity": "positive",
+        "scenario_id": "p0.compute.connection.prepare.positive",
+        "state": "executable"
+      }
+    },
+    {
       "command_id": "compute.connection.options",
       "lifecycle": "released",
       "negative": {
@@ -1219,7 +1233,7 @@
       }
     }
   ],
-  "descriptor_digest": "sha256:3ae32fc9b7da19b9d8b23ffefd8a25bc221dc86adc3bdbaca761f176928508b9",
+  "descriptor_digest": "sha256:85d828bd2b5ee7cb64bec70fc3f5c11e5619965c5694133019dd79283e72facd",
   "schema_version": {
     "major": 1,
     "minor": 0
