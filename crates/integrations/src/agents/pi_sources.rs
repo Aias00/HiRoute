@@ -205,6 +205,12 @@ impl FilesystemAgentScannerV1 {
             .pi_executable_target()
             .and_then(|p| super::super::pi_cli_installation(&p).ok());
         let mut catalog_digests = BTreeMap::new();
+        let configured_providers = providers.keys().cloned().collect::<BTreeSet<_>>();
+        let configured_keys = providers
+            .iter()
+            .filter(|(_, p)| p.get("apiKey").is_some())
+            .map(|(id, _)| id.clone())
+            .collect::<BTreeSet<_>>();
         for (provider_id, variable) in [
             ("openai", "OPENAI_API_KEY"),
             ("anthropic", "ANTHROPIC_API_KEY"),
@@ -397,14 +403,23 @@ impl FilesystemAgentScannerV1 {
                     format!("models.json/providers/{provider_id}/baseUrl")
                 };
                 let protocol_selector = if model.get("api").is_some() {
-                    format!("models.json/providers/{provider_id}/models/{id}/api")
+                    format!(
+                        "{}/providers/{provider_id}/models/{id}/api",
+                        if inherited {
+                            "native-catalog"
+                        } else {
+                            "models.json"
+                        }
+                    )
                 } else {
                     format!("models.json/providers/{provider_id}/api")
                 };
                 let credential_selector = if native_auth.is_some_and(|v| v["type"] == "api_key") {
                     format!("auth.json/{provider_id}/key")
-                } else {
+                } else if configured_keys.contains(provider_id) {
                     format!("models.json/providers/{provider_id}/apiKey")
+                } else {
+                    format!("native-environment/providers/{provider_id}/apiKey")
                 };
                 items.push(PiApiSource {
                     point_binding: endpoint.map(|endpoint| super::NativeApiPointBindingV1 {
@@ -413,7 +428,14 @@ impl FilesystemAgentScannerV1 {
                             &self.layout.pi_config_root,
                         ))
                         .expect("native scope"),
-                        provider_definition: format!("models.json/providers/{provider_id}"),
+                        provider_definition: format!(
+                            "{}/providers/{provider_id}",
+                            if configured_providers.contains(provider_id) {
+                                "models.json"
+                            } else {
+                                "native-catalog"
+                            }
+                        ),
                         endpoint: endpoint.to_owned(),
                         endpoint_selector,
                         protocol_selector,

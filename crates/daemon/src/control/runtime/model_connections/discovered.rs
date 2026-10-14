@@ -140,7 +140,7 @@ impl LocalControlAdapter {
             let native_exists = !sources.is_empty();
             if let Some(point) = hiroute_integrations::native_api_connection_points(sources)
                 .into_iter()
-                .find(|point| super::points::point_discovery(point) == request.discovery)
+                .find(|point| super::points::point_discovery(point, catalog) == request.discovery)
             {
                 return self.prepare_native_point_candidate(point, &request.prepare_id);
             }

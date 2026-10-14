@@ -75,7 +75,14 @@ impl LocalControlAdapter {
             if hiroute_integrations::native_api_connection_points(sources)
                 .iter()
                 .any(|point| {
-                    &point.snapshot_digest == expected_evidence
+                    self.release_catalog
+                        .as_ref()
+                        .and_then(|catalog| {
+                            super::model_connections::point_catalog::point_evidence(catalog, point)
+                                .ok()
+                        })
+                        .as_ref()
+                        == Some(expected_evidence)
                         && point
                             .sources
                             .iter()

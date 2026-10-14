@@ -108,7 +108,7 @@ impl LocalControlAdapter {
     ) -> Result<ComputeCandidateViewV2, ComputeManagementControlError> {
         let discovery = pi_discovery(&source);
         let evidence = source.evidence_digest.clone();
-        self.prepare_native_source_candidate(vec![source], discovery, evidence, prepare_id)
+        self.prepare_native_source_candidate(vec![source], discovery, evidence, prepare_id, false)
     }
 
     pub(super) fn prepare_native_point_candidate(
@@ -116,9 +116,13 @@ impl LocalControlAdapter {
         point: hiroute_integrations::NativeApiConnectionPointV2,
         prepare_id: &str,
     ) -> Result<ComputeCandidateViewV2, ComputeManagementControlError> {
-        let discovery = super::points::point_discovery(&point);
-        let evidence = point.snapshot_digest;
-        self.prepare_native_source_candidate(point.sources, discovery, evidence, prepare_id)
+        let catalog = self
+            .release_catalog
+            .as_ref()
+            .ok_or(ComputeManagementControlError::Unavailable)?;
+        let discovery = super::points::point_discovery(&point, catalog);
+        let evidence = super::point_catalog::point_evidence(catalog, &point)?;
+        self.prepare_native_source_candidate(point.sources, discovery, evidence, prepare_id, true)
     }
 
     fn prepare_native_source_candidate(
@@ -127,6 +131,7 @@ impl LocalControlAdapter {
         discovery: ComputeDiscoveryRefV1,
         evidence: hiroute_domain::CanonicalDigest,
         prepare_id: &str,
+        grouped: bool,
     ) -> Result<ComputeCandidateViewV2, ComputeManagementControlError> {
         let source = sources
             .first()
@@ -186,6 +191,17 @@ impl LocalControlAdapter {
             .reserve_candidate_ref(&candidate)
             .map_err(|_| ComputeManagementControlError::Conflict)?;
         let models = sources.iter().map(native_source_declaration).collect();
+        let models = if grouped {
+            super::point_catalog::expand_models(
+                self.release_catalog
+                    .as_ref()
+                    .ok_or(ComputeManagementControlError::Unavailable)?,
+                &sources,
+                models,
+            )?
+        } else {
+            models
+        };
         let draft = NativeModelConnectionDraftV1 {
             display_template_id: None,
             inference_model_id: None,
@@ -237,17 +253,19 @@ impl LocalControlAdapter {
             ),
             models,
         };
-        self.model_connections
-            .prepare_observed_discovery(
-                draft,
-                NativeModelConnectionCredentialV1::Protected {
-                    descriptor,
-                    input_slot,
-                    secret: &secret,
-                },
-                evidence,
-            )
-            .map_err(|_| ComputeManagementControlError::Corrupt)
+        let credential = NativeModelConnectionCredentialV1::Protected {
+            descriptor,
+            input_slot,
+            secret: &secret,
+        };
+        let result = if grouped {
+            self.model_connections
+                .prepare_native_point_discovery(draft, credential, evidence)
+        } else {
+            self.model_connections
+                .prepare_observed_discovery(draft, credential, evidence)
+        };
+        result.map_err(|_| ComputeManagementControlError::Corrupt)
     }
 }
 

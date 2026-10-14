@@ -36,6 +36,7 @@ mod discovered;
 mod key_inputs;
 mod key_masks;
 mod pi_discovered;
+pub(in crate::control::runtime) mod point_catalog;
 mod points;
 mod presentation;
 mod registered;

@@ -151,14 +151,19 @@ impl FilesystemAgentScannerV1 {
                     && r.len() <= 256
                     && r.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
             });
-            let secret = reference
-                .and_then(|r| {
-                    std::env::var(r)
-                        .ok()
-                        .filter(|v| !v.is_empty())
-                        .or_else(|| credentials_value.0["refs"][r].as_str().map(str::to_owned))
-                })
-                .map(Zeroizing::new);
+            let (secret, credential_origin) = match reference {
+                Some(reference) => match std::env::var(reference).ok().filter(|v| !v.is_empty()) {
+                    Some(value) => (Some(Zeroizing::new(value)), "process_environment"),
+                    None => (
+                        credentials_value.0["refs"][reference]
+                            .as_str()
+                            .map(str::to_owned)
+                            .map(Zeroizing::new),
+                        "credential_reference_file",
+                    ),
+                },
+                None => (None, "missing"),
+            };
             let protocol = match provider["api"].as_str() {
                 Some("openai-responses") => Some(UpstreamProtocol::Responses),
                 Some("anthropic-messages") => Some(UpstreamProtocol::Messages),
@@ -259,14 +264,7 @@ impl FilesystemAgentScannerV1 {
                         credential_binding: format!(
                             "providers/{provider_id}/apiKeyEnv:{}:{}:{}",
                             reference.unwrap_or("missing"),
-                            if reference.is_some_and(|r| std::env::var(r)
-                                .ok()
-                                .is_some_and(|v| !v.is_empty()))
-                            {
-                                "process_environment"
-                            } else {
-                                "credential_reference_file"
-                            },
+                            credential_origin,
                             CanonicalDigest::of(&(
                                 "dsh-credential-file-location/v1",
                                 &credentials_path

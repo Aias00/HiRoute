@@ -36,7 +36,12 @@ impl ComputeScanRequestV2 {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeConnectionPointV2 {
-    pub point_id: String,
+    pub connection_ref: String,
+    /// A scope label/reference safe for public display; private filesystem selectors remain local.
+    pub context_ref: String,
+    pub connection_option_id: Option<String>,
+    pub endpoint_profile_id: Option<String>,
+    pub target: Option<crate::ComputeCandidateTargetV2>,
     pub agent_id: String,
     pub display_name: String,
     pub native_provider_id: Option<String>,

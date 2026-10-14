@@ -6,10 +6,17 @@ use hiroute_application_api::{
 };
 use hiroute_integrations::{NativeApiConnectionPointV2, native_api_connection_points};
 
-pub(super) fn point_discovery(point: &NativeApiConnectionPointV2) -> ComputeDiscoveryRefV1 {
+pub(super) fn point_discovery(
+    point: &NativeApiConnectionPointV2,
+    catalog: &TrustedReleaseCatalog,
+) -> ComputeDiscoveryRefV1 {
+    let evidence = super::point_catalog::point_evidence(catalog, point)
+        .expect("validated catalog and source facts");
     ComputeDiscoveryRefV1 {
         discovery_ref: format!("discovery/{}", &point.key_digest.as_str()[7..]),
-        discovery_revision: point.revision(),
+        discovery_revision: u64::from_str_radix(&evidence.as_str()[7..23], 16)
+            .expect("digest revision")
+            .max(1),
     }
 }
 
@@ -61,7 +68,21 @@ impl LocalControlAdapter {
                     .iter()
                     .all(|s| s.supported_auth && s.protocol.is_some() && s.credential.is_some());
                 connections.push(ComputeConnectionPointV2 {
-                    point_id: format!("connection-point/{}", &point.key_digest.as_str()[7..]),
+                    context_ref: format!(
+                        "native-scope/{}",
+                        &first
+                            .point_binding
+                            .as_ref()
+                            .ok_or(ControlReadError::Corrupt)?
+                            .native_scope
+                            .as_str()[7..]
+                    ),
+                    connection_option_id: super::point_catalog::qualified_point(catalog, first)
+                        .map(|(r, _)| r.option.connection_option_id),
+                    endpoint_profile_id: super::point_catalog::qualified_point(catalog, first)
+                        .map(|(r, _)| r.endpoint_profile.endpoint_profile_id),
+                    target: super::point_catalog::native_target(first),
+                    connection_ref: format!("connection-point/{}", &point.key_digest.as_str()[7..]),
                     agent_id: agent.into(),
                     display_name: first.provider_id.clone(),
                     native_provider_id: Some(first.provider_id.clone()),
@@ -74,7 +95,7 @@ impl LocalControlAdapter {
                         "native_configuration_not_importable"
                     }
                     .into(),
-                    discovery: importable.then(|| point_discovery(&point)),
+                    discovery: importable.then(|| point_discovery(&point, catalog)),
                     actions_required: if importable {
                         vec![]
                     } else {
@@ -92,7 +113,7 @@ impl LocalControlAdapter {
                 model_id: None,
             });
         }
-        connections.sort_by(|a, b| a.point_id.cmp(&b.point_id));
+        connections.sort_by(|a, b| a.connection_ref.cmp(&b.connection_ref));
         Ok(ComputeScanResultV2 {
             schema: COMPUTE_SCAN_RESULT_SCHEMA_V2.into(),
             catalog: super::super::compute_routing::public_provenance(&provenance),
