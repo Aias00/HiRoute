@@ -475,7 +475,8 @@ if ($Scope -eq 'components') {
     ($qoderSkill + 'skill_diagnostic_does_not_confuse_assistant_or_tool_output_with_loaded_user_text'),
     ($qoderSkill + 'windows_skill_diagnostic_binds_drive_spellings_to_one_actual_directory_and_content'),
     ($qoderSkill + 'windows_skill_diagnostic_rejects_foreign_reparse_device_and_ads_paths'),
-    ($qoderSkill + 'windows_skill_diagnostic_detects_changed_content_on_the_same_retained_file'))
+    ($qoderSkill + 'windows_skill_diagnostic_detects_changed_content_on_the_same_retained_file'),
+    ($qoderSkill + 'windows_skill_diagnostic_admits_only_original_or_proven_canonical_components'))
   $qoderHttp = 'agents::qoder_probe::http::tests::'
   Invoke-RequiredTests 'agent-qoder-skill-http-diagnostic' @('-p','hiroute-integrations','--lib',$qoderHttp) @(
     ($qoderHttp + 'installed_skill_requires_correlated_call_and_actual_user_source'),
