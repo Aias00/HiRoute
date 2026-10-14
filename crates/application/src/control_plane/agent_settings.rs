@@ -70,6 +70,18 @@ pub(crate) fn preview(
     ) {
         (
             hiroute_application_api::AgentFacetIntent::Configure { settings },
+            Some(SettingsModelTargetFacts::Hermes {
+                provider_id,
+                endpoint,
+                ..
+            }),
+        ) => json!({
+            "action":"configure", "agent_class":"hermes", "provider_id":provider_id,"endpoint":endpoint,
+            "selection":settings,"authentication":"connection_scoped_local_grant",
+            "native_adapter":{"resources":"planned","runtime_loading":"unobserved","next_action":"reload_plugins_if_running"},
+        }),
+        (
+            hiroute_application_api::AgentFacetIntent::Configure { settings },
             Some(SettingsModelTargetFacts::Codex {
                 provider_id,
                 endpoint,

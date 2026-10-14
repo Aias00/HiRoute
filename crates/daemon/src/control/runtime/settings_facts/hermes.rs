@@ -1,6 +1,6 @@
 //! Explicit Hermes scopes and independent management Skill facts.
 use super::*;
-use hiroute_domain::{AgentModelSelectionV2, AgentNativeTargetV1};
+use hiroute_domain::AgentNativeTargetV1;
 
 impl LocalControlAdapter {
     pub(in crate::control::runtime) fn hermes_target_for_spec(
