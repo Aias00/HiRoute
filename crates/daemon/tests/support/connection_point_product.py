@@ -99,7 +99,7 @@ def run(repository):
         selection = [m['model_ref'] for m in candidate['models'] if m['selectable']]
         draft = preview(product, candidate, selection)
         admitted = apply(product, draft, 'point-exact-save')[1]['data']
-        assert admitted['operation']['state'] == 'succeeded'
+        assert admitted['state'] == 'succeeded'
         snapshot = data(product, 'compute list')
         assert len(snapshot['sources']) == 1
         source = snapshot['sources'][0]
