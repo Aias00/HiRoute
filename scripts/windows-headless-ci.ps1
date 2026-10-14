@@ -294,6 +294,8 @@ if ($Scope -eq 'components') {
   Invoke-RequiredTests 'agent-private-node' @('-p','hiroute-integrations','--lib',$privateNode) @($privateNode) @('--ignored','--exact','--nocapture')
   $pathIdentity = 'delegation::installation::installation_probe::windows_isolated_profile_uses_one_native_path_identity'
   Invoke-RequiredTests 'agent-path-identity' @('-p','hiroute-daemon','--lib',$pathIdentity) @($pathIdentity) @('--exact')
+  $managedPath = 'agents::executable::windows_tests::windows_executable_observation_prepares_managed_launch_with_native_drive_identity'
+  Invoke-RequiredTests 'agent-managed-path' @('-p','hiroute-integrations','--lib',$managedPath) @($managedPath) @('--exact')
   $accountFixture = 'delegation::installation::installation_probe::windows_acceptance::windows_qoder_account_fixture_rejects_missing_or_ambiguous_official_profile'
   Invoke-RequiredTests 'agent-account-fixture' @('-p','hiroute-daemon','--lib',$accountFixture) @($accountFixture) @('--exact')
   $piSdk = 'agents::windows_runtime::tests::windows_selected_pi_sdk_capabilities_load_the_actual_package'

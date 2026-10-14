@@ -124,6 +124,17 @@ pub(super) fn resolve(path: &Path) -> Result<Option<PathBuf>, ProbeFailure> {
             .collect()
     };
     for candidate in candidates {
+        #[cfg(windows)]
+        {
+            // Open the supplied path without following reparses before any
+            // canonicalization or path-based metadata lookup can hide an alias.
+            match super::managed_launch::windows_executable_path(&candidate) {
+                Ok(canonical) => return Ok(Some(canonical)),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(_) => return Err(ProbeFailure::Unavailable),
+            }
+        }
+        #[cfg(not(windows))]
         match std::fs::symlink_metadata(&candidate) {
             Ok(_) => {
                 let canonical =
@@ -148,7 +159,7 @@ fn check_runnable(path: &Path) -> Result<(), ProbeFailure> {
     Ok(())
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 fn check_runnable(path: &Path) -> Result<(), ProbeFailure> {
     let metadata = std::fs::metadata(path).map_err(|_| ProbeFailure::Unavailable)?;
     if !metadata.is_file() {
@@ -366,3 +377,74 @@ fn parse_version(bytes: &[u8]) -> Option<String> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    use super::*;
+    use hiroute_domain::{
+        AgentClaudePresetValuesV2, CanonicalDigest, ManagedClaudeLaunchDescriptorV2,
+        ManagedLaunchProfileV1,
+    };
+
+    #[test]
+    fn windows_executable_observation_prepares_managed_launch_with_native_drive_identity() {
+        let current = std::env::current_exe().unwrap();
+        let trusted = std::fs::canonicalize(&current).unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let selected = directory.path().join("native 路径 %! '&.exe");
+        // This is a copy of the actual native test executable, not script bytes
+        // named .exe. It is borrowed executable input, not a private auth file.
+        std::fs::copy(&current, &selected).unwrap();
+        let projected = resolve(&selected).unwrap().unwrap();
+        assert!(!projected.to_str().unwrap().starts_with(r"\\?\"));
+        assert_eq!(
+            std::fs::canonicalize(&projected).unwrap(),
+            std::fs::canonicalize(&selected).unwrap()
+        );
+        let native = hiroute_platform::windows::security::open_identity(&selected, false).unwrap();
+        let projected_file =
+            hiroute_platform::windows::security::open_identity(&projected, false).unwrap();
+        assert_eq!(
+            hiroute_platform::windows::security::file_identity(&native).unwrap(),
+            hiroute_platform::windows::security::file_identity(&projected_file).unwrap()
+        );
+        let ExecutableProbe::Installed(observation) = probe(&selected, Duration::from_secs(2))
+        else {
+            panic!("actual native executable observation unavailable");
+        };
+        assert_eq!(observation.canonical_path, projected.to_str().unwrap());
+        let preflight = super::super::ManagedClaudeLaunchPreflightV1::from_observations(
+            observation.canonical_path,
+            &ManagedLaunchProfileV1::claude_code(),
+            &[],
+        );
+        let helper = super::super::managed_launch::windows_executable_path(&current).unwrap();
+        let descriptor = ManagedClaudeLaunchDescriptorV2::trusted(
+            "agent-connection/windows-native-path",
+            "claude-messages-v1",
+            &preflight.executable,
+            CanonicalDigest::of_bytes(b"native-path-snapshot"),
+            1,
+            CanonicalDigest::of_bytes(b"native-path-publication"),
+            "http://127.0.0.1:5837",
+            AgentClaudePresetValuesV2 {
+                opus: None,
+                sonnet: None,
+                haiku: None,
+            },
+            helper.to_str().unwrap(),
+        )
+        .unwrap();
+        let mut prepared = super::super::ManagedClaudeProcessV1::prepare(
+            &descriptor,
+            &serde_json::json!({"env":{"UNRELATED":"keep"}}),
+            &[],
+            trusted.to_str().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(prepared.command_mut().get_program(), projected.as_os_str());
+        drop(prepared);
+        drop(projected_file);
+        drop(native);
+    }
+}

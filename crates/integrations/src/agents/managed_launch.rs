@@ -1,5 +1,7 @@
 use std::collections::BTreeSet;
-use std::ffi::{OsStr, OsString};
+#[cfg(any(not(windows), test))]
+use std::ffi::OsStr;
+use std::ffi::OsString;
 use std::fs::File;
 #[cfg(not(windows))]
 use std::fs::OpenOptions;
@@ -12,6 +14,12 @@ use hiroute_domain::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
+
+#[cfg(windows)]
+#[path = "managed_launch/windows.rs"]
+mod windows;
+#[cfg(windows)]
+pub(super) use windows::executable_path as windows_executable_path;
 
 pub const MANAGED_LAUNCH_ENV_SANITIZED_V1: &str = "MANAGED_LAUNCH_ENV_SANITIZED";
 pub const AGENT_AUTH_PRECEDENCE_CONFLICT_V1: &str = "AGENT_AUTH_PRECEDENCE_CONFLICT";
@@ -149,6 +157,8 @@ impl ManagedClaudeLaunchPreflightV1 {
 pub struct ManagedClaudeProcessV1 {
     command: Command,
     _overlay: TemporaryLaunchOverlay,
+    #[cfg(windows)]
+    _native_files: Vec<File>,
 }
 
 impl ManagedClaudeProcessV1 {
@@ -164,28 +174,34 @@ impl ManagedClaudeProcessV1 {
         if !Path::new(trusted_hiroute_executable).is_absolute() {
             return Err(ManagedClaudeProcessError::Unavailable);
         }
-        let trusted = std::fs::canonicalize(trusted_hiroute_executable)
-            .map_err(|_| ManagedClaudeProcessError::Unavailable)?;
-        let helper = std::fs::canonicalize(&descriptor.helper_executable)
-            .map_err(|_| ManagedClaudeProcessError::Unavailable)?;
-        if !helper.is_file() {
-            return Err(ManagedClaudeProcessError::Unavailable);
-        }
-        // The persisted descriptor may name the installer-owned stable symlink.
-        // Validate its target and pin this launch's overlay to that resolved file.
-        let mut descriptor = descriptor.clone();
-        descriptor.helper_executable = helper
-            .to_str()
-            .ok_or(ManagedClaudeProcessError::Unavailable)?
-            .to_owned();
-        descriptor
-            .validate_trusted_helper(
-                trusted
-                    .to_str()
-                    .ok_or(ManagedClaudeProcessError::Unavailable)?,
-            )
-            .map_err(|_| ManagedClaudeProcessError::Unavailable)?;
-        verify_claude_executable(&descriptor)?;
+        #[cfg(not(windows))]
+        let descriptor = {
+            let trusted = std::fs::canonicalize(trusted_hiroute_executable)
+                .map_err(|_| ManagedClaudeProcessError::Unavailable)?;
+            let helper = std::fs::canonicalize(&descriptor.helper_executable)
+                .map_err(|_| ManagedClaudeProcessError::Unavailable)?;
+            if !helper.is_file() {
+                return Err(ManagedClaudeProcessError::Unavailable);
+            }
+            // Unix installer-owned stable symlinks retain their existing meaning.
+            let mut descriptor = descriptor.clone();
+            descriptor.helper_executable = helper
+                .to_str()
+                .ok_or(ManagedClaudeProcessError::Unavailable)?
+                .to_owned();
+            descriptor
+                .validate_trusted_helper(
+                    trusted
+                        .to_str()
+                        .ok_or(ManagedClaudeProcessError::Unavailable)?,
+                )
+                .map_err(|_| ManagedClaudeProcessError::Unavailable)?;
+            verify_claude_executable(&descriptor)?;
+            descriptor
+        };
+        #[cfg(windows)]
+        let (descriptor, native_files) =
+            windows::prepare_paths(descriptor, Path::new(trusted_hiroute_executable))?;
         let overlay = TemporaryLaunchOverlay::create(&descriptor, user_settings)?;
         #[cfg(not(windows))]
         let mut command = Command::new(&descriptor.executable);
@@ -209,6 +225,8 @@ impl ManagedClaudeProcessV1 {
         Ok(Self {
             command,
             _overlay: overlay,
+            #[cfg(windows)]
+            _native_files: native_files,
         })
     }
 
@@ -263,6 +281,7 @@ fn configure_command(
         .args(child_arguments);
 }
 
+#[cfg(not(windows))]
 fn verify_claude_executable(
     descriptor: &ManagedClaudeLaunchDescriptorV2,
 ) -> Result<(), ManagedClaudeProcessError> {

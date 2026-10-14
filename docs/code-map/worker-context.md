@@ -59,6 +59,10 @@ resolves known npm producers to their declared JavaScript entry and selected Nod
 it never evaluates a `.cmd` shim. System shell selectors come from the actual
 Windows system directory. Worker HOME discovery uses the account's native profile,
 while explicit ecosystem configuration roots retain their existing meaning.
+[Managed Claude drive paths](../../crates/integrations/src/agents/managed_launch/windows.rs)
+project Rust's verbatim spelling only after reparse-free native file identity
+checks. Discovery and launch share that boundary; the launch retains the selected
+image and trusted helper handles. UNC and device aliases remain outside this contract.
 [Live checks](../../crates/daemon/src/control/runtime/agent_live_check_windows.rs)
 capture output in private files and retain the process Job until all owned tools
 stop. Follow those owners for shell, environment, timeout or background-session

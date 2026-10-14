@@ -37,7 +37,7 @@ function Get-WindowsRequiredRecipes {
     'upgrade' { return @('upgrade') }
     'accounts' { return @(Get-WindowsQoderAccountRecipes | ForEach-Object { $_.name }) }
     'agents' {
-      return @('agent-private-root','agent-private-node','agent-path-identity','agent-account-fixture','agent-pi-sdk',
+      return @('agent-private-root','agent-private-node','agent-path-identity','agent-managed-path','agent-account-fixture','agent-pi-sdk',
         'agent-acp-notifications','agent-cancel-oracle','agent-main-oracle',
         'agent-native-codex-ingress','agent-business-oracle','agent-public-business') +
         @(Get-WindowsDaemonAgentCases | ForEach-Object { 'agent-' + (($_ -split 'actual_')[1] -replace '_','-') }) +

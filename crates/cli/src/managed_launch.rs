@@ -668,6 +668,7 @@ mod tests {
     #[test]
     fn configured_child_carries_routing_environment_without_empty_setting_sources() {
         let executable = std::path::PathBuf::from(trusted_helper());
+        let trusted = std::fs::canonicalize(std::env::current_exe().unwrap()).unwrap();
         let descriptor = descriptor(executable.to_str().unwrap(), &trusted_helper());
         let invocation = ManagedLaunchInvocation {
             connection_id: descriptor.connection_id.clone(),
@@ -678,7 +679,7 @@ mod tests {
             &descriptor,
             &invocation.user_settings,
             &invocation.child_arguments,
-            &trusted_helper(),
+            trusted.to_str().unwrap(),
         )
         .unwrap();
         let command = process.command_mut();
@@ -728,6 +729,73 @@ mod tests {
         assert_eq!(command.get_args().next(), Some(OsStr::new("--settings")));
         assert_eq!(command.get_args().nth(2), Some(OsStr::new("--model")));
         assert_eq!(command.get_args().nth(3), Some(OsStr::new("opus")));
+        assert_eq!(command.get_args().count(), 4);
+        assert_eq!(command.get_program(), executable.as_os_str());
+        let settings = std::path::Path::new(command.get_args().nth(1).unwrap());
+        #[cfg(windows)]
+        let file = hiroute_platform::windows::security::open_owner_only(settings, false).unwrap();
+        #[cfg(not(windows))]
+        let file = std::fs::File::open(settings).unwrap();
+        let overlay: Value = serde_json::from_reader(file).unwrap();
+        assert_eq!(overlay["env"]["UNRELATED"], "keep");
+        assert_eq!(
+            overlay["env"]["ANTHROPIC_BASE_URL"],
+            "http://127.0.0.1:5837"
+        );
+        assert!(!overlay["apiKeyHelper"].as_str().unwrap().is_empty());
+
+        #[cfg(windows)]
+        {
+            let foreign =
+                hiroute_platform::windows::launcher::system_executable(Path::new("cmd.exe"))
+                    .unwrap();
+            assert!(
+                ManagedClaudeProcessV1::prepare(
+                    &descriptor,
+                    &invocation.user_settings,
+                    &invocation.child_arguments,
+                    foreign.to_str().unwrap(),
+                )
+                .is_err()
+            );
+            for alias in [
+                r"\\server\share\hiroute.exe",
+                r"\\?\UNC\server\share\hiroute.exe",
+                r"\\.\C:\hiroute.exe",
+                r"\\?\GLOBALROOT\Device\HarddiskVolume1\hiroute.exe",
+            ] {
+                assert!(
+                    ManagedClaudeProcessV1::prepare(
+                        &descriptor,
+                        &invocation.user_settings,
+                        &invocation.child_arguments,
+                        alias,
+                    )
+                    .is_err()
+                );
+            }
+            let directory = tempfile::tempdir().unwrap();
+            let junction = directory.path().join("native-alias");
+            hiroute_platform_test_support::junction::create(
+                &junction,
+                executable.parent().unwrap(),
+            )
+            .unwrap();
+            let alias = junction.join(executable.file_name().unwrap());
+            let reparse_descriptor = self::descriptor(alias.to_str().unwrap(), &trusted_helper());
+            let rejected = ManagedClaudeProcessV1::prepare(
+                &reparse_descriptor,
+                &invocation.user_settings,
+                &invocation.child_arguments,
+                trusted.to_str().unwrap(),
+            )
+            .is_err();
+            std::fs::remove_dir(&junction).unwrap();
+            assert!(
+                rejected,
+                "managed executable must reject a junction ancestor"
+            );
+        }
     }
 
     #[cfg(unix)]

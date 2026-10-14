@@ -50,7 +50,7 @@ unregistered ignored cases fail the ordinary inventory. Fixed Agent gates
 explicitly select their opt-in real client tests. Their npm versions and all
 transitive package integrities come from `tools/windows-agent-fixtures/package-lock.json`.
 Qoder's fixed official archive has an independent SHA-256 check. The ordinary
-Agent scope contains 18 required recipes without provider accounts, including
+Agent scope uses the shared required recipe inventory without provider accounts, including
 rejection of missing or ambiguous account profiles. Qoder's three
 official-account recipes are a separately selected `accounts` scope, requiring
 an officially prepared private profile; missing credentials fail that scope.
