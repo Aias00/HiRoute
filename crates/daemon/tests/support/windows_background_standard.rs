@@ -47,6 +47,21 @@ fn current_owner(request: fixture::Request, bound: Duration) -> Value {
         bound,
         true,
     );
+    if result["code"] != 0 || !result["result"].is_object() {
+        let output = result["stdout"].as_str().unwrap_or_default();
+        let error = result["stderr"].as_str().unwrap_or_default();
+        let marker = "HIROUTE_NATIVE_BACKGROUND_RESULT=";
+        eprintln!(
+            "standard-owner frame facts: stage={stage}, stdout_bytes={}, stderr_bytes={}, marker_seen={}, exact_line_count={}",
+            output.len(),
+            error.len(),
+            output.contains(marker),
+            output
+                .lines()
+                .filter(|line| line.starts_with(marker))
+                .count(),
+        );
+    }
     assert!(
         result["code"] == 0 && result["result"].is_object(),
         "standard-owner oracle failed: stage={stage}, exit={:?}, result_present={}",

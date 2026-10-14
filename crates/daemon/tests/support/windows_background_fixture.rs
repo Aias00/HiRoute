@@ -618,7 +618,10 @@ pub fn entry() {
         _ => panic!("unknown owner fixture action"),
     };
     eprintln!("HIROUTE_NATIVE_BACKGROUND_STAGE=action-completed");
-    println!("{OUTPUT}{}", serde_json::to_string(&result).unwrap());
+    // Pretty libtest has already written `test <name> ... ` without a newline.
+    // Start the closed frame on its own line so the parent can require an exact
+    // prefix without searching arbitrary child output for an embedded marker.
+    println!("\n{OUTPUT}{}", serde_json::to_string(&result).unwrap());
 }
 
 pub fn inspect(token: &File, crash: bool) -> Value {
