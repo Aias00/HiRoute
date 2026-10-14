@@ -1,8 +1,9 @@
 //! Exact product/protocol qualification for passive native points, without account claims.
 use super::*;
+use hiroute_application_api::ComputeCandidateTargetV2;
 use hiroute_integrations::{NativeApiConnectionPointV2, NativeApiSource};
 
-pub(super) fn point_evidence(
+pub(in crate::control::runtime) fn point_evidence(
     catalog: &TrustedReleaseCatalog,
     point: &NativeApiConnectionPointV2,
 ) -> Result<hiroute_domain::CanonicalDigest, ComputeManagementControlError> {
@@ -34,7 +35,7 @@ pub(super) fn native_target(source: &NativeApiSource) -> Option<ComputeCandidate
             protocol_profile_id: adapter(protocol),
             protocol_profile_revision: 1,
             protocol_header_semantics: &super::custom_endpoint_headers(protocol),
-            authentication: &authentication(protocol),
+            authentication: &binding.authentication,
         },
     )
     .ok()
@@ -94,7 +95,7 @@ pub(super) fn qualified_point(
             if endpoint.protocol != protocol
                 || endpoint.adapter_ref != adapter(protocol)
                 || endpoint.adapter_revision != 1
-                || endpoint.authentication_semantics.as_ref() != Some(&authentication(protocol))
+                || endpoint.authentication_semantics.as_ref() != Some(&binding.authentication)
             {
                 continue;
             }

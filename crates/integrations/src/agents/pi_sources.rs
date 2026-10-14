@@ -423,6 +423,13 @@ impl FilesystemAgentScannerV1 {
                 };
                 items.push(PiApiSource {
                     point_binding: endpoint.map(|endpoint| super::NativeApiPointBindingV1 {
+                        authentication: if protocol == Some(UpstreamProtocol::Messages) {
+                            hiroute_domain::GatewayAuthenticationSemanticsV1::ApiKeyHeader {
+                                header: "x-api-key".into(),
+                            }
+                        } else {
+                            hiroute_domain::GatewayAuthenticationSemanticsV1::Bearer
+                        },
                         native_scope: CanonicalDigest::of(&(
                             "pi-native-scope/v1",
                             &self.layout.pi_config_root,

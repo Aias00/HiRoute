@@ -143,8 +143,35 @@ impl LocalControlAdapter {
         let protocol = source
             .protocol
             .ok_or(ComputeManagementControlError::DiscoveryNotImportable)?;
+        use hiroute_application::ProtectedInputPort;
         let dsh = source.source_ref.starts_with("dsh-source/");
-        let (base_url, secret) = (if dsh {
+        let (base_url, secret) = (if source
+            .credential
+            .as_ref()
+            .is_some_and(|c| c.field_selector == "env.ANTHROPIC_AUTH_TOKEN")
+        {
+            let credential = source
+                .credential
+                .as_ref()
+                .ok_or(ComputeManagementControlError::DiscoveryNotImportable)?;
+            let slot = super::super::mutation::protected_input_slot(credential)
+                .map_err(|_| ComputeManagementControlError::Corrupt)?;
+            self.read_secret(&slot)
+                .map(|secret| {
+                    (
+                        zeroize::Zeroizing::new(
+                            source
+                                .point_binding
+                                .as_ref()
+                                .expect("trusted point binding")
+                                .endpoint
+                                .clone(),
+                        ),
+                        secret,
+                    )
+                })
+                .map_err(|_| hiroute_integrations::AgentFilesystemScanError::SourceChanged)
+        } else if dsh {
             self.scanner.read_dsh_api_source(&source)
         } else {
             self.scanner.read_pi_api_source(&source)
@@ -210,7 +237,17 @@ impl LocalControlAdapter {
             trusted_lineage_digest: None,
             display_name: format!(
                 "{} · {}",
-                if dsh { "DSH" } else { "Pi" },
+                if source
+                    .credential
+                    .as_ref()
+                    .is_some_and(|c| c.field_selector == "env.ANTHROPIC_AUTH_TOKEN")
+                {
+                    "Claude Code"
+                } else if dsh {
+                    "DSH"
+                } else {
+                    "Pi"
+                },
                 source.provider_id
             ),
             existing_source_id: None,
@@ -233,13 +270,11 @@ impl LocalControlAdapter {
             .into(),
             protocol_profile_revision: 1,
             protocol_header_semantics: super::custom_endpoint_headers(protocol),
-            authentication: if protocol == UpstreamProtocol::Messages {
-                GatewayAuthenticationSemanticsV1::ApiKeyHeader {
-                    header: "x-api-key".into(),
-                }
-            } else {
-                GatewayAuthenticationSemanticsV1::Bearer
-            },
+            authentication: source
+                .point_binding
+                .as_ref()
+                .map(|b| b.authentication.clone())
+                .unwrap_or_else(|| super::point_catalog::authentication(protocol)),
             additional_native_endpoints: Vec::new(),
             provenance: NativeConnectionProvenanceInputV1::UserConfigured {
                 configuration_revision: source.revision,

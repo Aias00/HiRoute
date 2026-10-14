@@ -137,6 +137,8 @@ impl LocalControlAdapter {
                 .into_iter()
                 .chain(self.scanner.dsh_api_sources().unwrap_or_default())
                 .collect();
+            let mut sources = sources;
+            sources.extend(self.claude_api_point_sources().unwrap_or_default());
             let native_exists = !sources.is_empty();
             if let Some(point) = hiroute_integrations::native_api_connection_points(sources)
                 .into_iter()
@@ -219,7 +221,7 @@ impl LocalControlAdapter {
             .map_err(|_| ComputeManagementControlError::Corrupt)
     }
 
-    fn validate_discovered_allowlist(
+    pub(super) fn validate_discovered_allowlist(
         &self,
         discovery: &AuthorizedComputeDiscoveryV1,
     ) -> Result<(), ComputeManagementControlError> {

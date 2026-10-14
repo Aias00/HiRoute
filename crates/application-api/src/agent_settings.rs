@@ -360,6 +360,9 @@ mod tests {
     fn status() -> AgentModelSettingsStatusV2 {
         let revision = GatewayPublicationRevision::new(7).unwrap();
         AgentModelSettingsStatusV2 {
+            native_target: None,
+            management_skill: None,
+            native_adapter: None,
             schema: "hiroute.agent-model-settings-status/v2".into(),
             context_id: "agent-context/test".into(),
             state: AgentModelSettingsStateV2::Configured,

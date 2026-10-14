@@ -21,6 +21,65 @@ pub(super) fn point_discovery(
 }
 
 impl LocalControlAdapter {
+    pub(in crate::control::runtime) fn claude_api_point_sources(
+        &self,
+    ) -> Result<
+        Vec<hiroute_integrations::NativeApiSource>,
+        hiroute_application::control::ControlReadError,
+    > {
+        use super::super::compute_routing::authorized_compute_discovery;
+        use hiroute_application::control::ControlReadError;
+        let catalog = self
+            .release_catalog
+            .as_ref()
+            .ok_or(ControlReadError::Unavailable)?;
+        let mut sources = Vec::new();
+        for native in self.scanner.scan() {
+            let Some(discovery) = authorized_compute_discovery(catalog, &native)? else {
+                continue;
+            };
+            if self.validate_discovered_allowlist(&discovery).is_err() {
+                continue;
+            }
+            let credential = discovery.credential;
+            let scope = hiroute_domain::CanonicalDigest::of(&(
+                "claude-native-point-scope/v2",
+                &credential.discovered_source_ref,
+            ))
+            .map_err(|_| ControlReadError::Corrupt)?;
+            sources.push(hiroute_integrations::NativeApiSource {
+                point_binding: Some(hiroute_integrations::NativeApiPointBindingV1 {
+                    native_scope: scope,
+                    provider_definition: discovery.fact.connection_option_id.clone(),
+                    endpoint: discovery.fact.registered_base_url,
+                    authentication: GatewayAuthenticationSemanticsV1::Bearer,
+                    endpoint_selector: "env.ANTHROPIC_BASE_URL".into(),
+                    protocol_selector: "native-messages".into(),
+                    model_override_scope: None,
+                    credential_binding: format!(
+                        "{}:{}",
+                        credential.discovered_source_ref, credential.field_selector
+                    ),
+                }),
+                provider_id: discovery.fact.connection_option_id,
+                model_id: discovery.fact.observed_model_id.clone(),
+                display_name: discovery.fact.observed_model_id,
+                protocol: Some(UpstreamProtocol::Messages),
+                context_tokens: None,
+                max_output_tokens: None,
+                vision: None,
+                reasoning: None,
+                authentication: hiroute_integrations::DiscoveredAuthSource::InlineToken,
+                source_ref: credential.discovered_source_ref.clone(),
+                evidence_digest: discovery.evidence_digest,
+                revision: discovery.fact.configuration_revision,
+                credential: Some(credential),
+                supported_auth: true,
+            });
+        }
+        Ok(sources)
+    }
+
     pub(in crate::control::runtime) fn compute_point_scan(
         &self,
         request: &ComputeScanRequestV2,
@@ -36,8 +95,18 @@ impl LocalControlAdapter {
         let mut connections = Vec::new();
         let mut diagnostics = Vec::new();
         for (agent, sources) in [
-            ("agent_pi_default", self.scanner.pi_api_sources()),
-            ("agent_dsh_default", self.scanner.dsh_api_sources()),
+            (
+                "agent_pi_default",
+                self.scanner.pi_api_sources().map_err(|_| ()),
+            ),
+            (
+                "agent_dsh_default",
+                self.scanner.dsh_api_sources().map_err(|_| ()),
+            ),
+            (
+                "agent_claude_default",
+                self.claude_api_point_sources().map_err(|_| ()),
+            ),
         ] {
             let sources = match sources {
                 Ok(sources) => sources,
@@ -63,10 +132,11 @@ impl LocalControlAdapter {
             }
             for point in native_api_connection_points(sources) {
                 let first = point.sources.first().ok_or(ControlReadError::Corrupt)?;
-                let importable = point
-                    .sources
-                    .iter()
-                    .all(|s| s.supported_auth && s.protocol.is_some() && s.credential.is_some());
+                let target = super::point_catalog::native_target(first);
+                let importable = target.is_some()
+                    && point.sources.iter().all(|s| {
+                        s.supported_auth && s.protocol.is_some() && s.credential.is_some()
+                    });
                 connections.push(ComputeConnectionPointV2 {
                     context_ref: format!(
                         "native-scope/{}",
@@ -81,7 +151,7 @@ impl LocalControlAdapter {
                         .map(|(r, _)| r.option.connection_option_id),
                     endpoint_profile_id: super::point_catalog::qualified_point(catalog, first)
                         .map(|(r, _)| r.endpoint_profile.endpoint_profile_id),
-                    target: super::point_catalog::native_target(first),
+                    target,
                     connection_ref: format!("connection-point/{}", &point.key_digest.as_str()[7..]),
                     agent_id: agent.into(),
                     display_name: first.provider_id.clone(),

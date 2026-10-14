@@ -272,7 +272,7 @@ export function ModelManagementPage({
       setSubscriptionDiscoveryState('complete');
       setSubscriptionError({ code: failureCode(subscriptionResult.reason), phase: 'scan' });
     }
-    if (computeResult.status === 'fulfilled') setComputeScanItems(computeResult.value.items);
+    if (computeResult.status === 'fulfilled') setComputeScanItems(computeResult.value.connections);
     else setComputeScanError(failureCode(computeResult.reason));
     setSubscriptionLoading(false);
   }
@@ -1151,7 +1151,7 @@ export function ModelManagementPage({
             : (language === 'zh' ? '正在检查订阅' : 'Checking subscription')}</strong><p>{discoveryAction === 'preparing'
           ? (language === 'zh' ? '只读取这项本机配置，不会改动 Agent。' : 'This only reads the local configuration and does not change the agent.')
           : (language === 'zh' ? '完成后会在这里更新状态。' : 'The result will appear here.')}</p></div></div> : selectedDiscovery ? <div className="oc-scan-detail">
-        <div className="oc-status-row"><BrandIcon kind={agentBrandFromId(selectedDiscovery.agent_id)} label={discoveredAgentName(selectedDiscovery.agent_id, language)} /><div className="row-main"><strong>{preparedDiscovery?.display_name || selectedDiscovery.observed_model_id || (language === 'zh' ? '已发现的模型配置' : 'Discovered model configuration')}</strong><p>{language === 'zh' ? `已从 ${discoveredAgentName(selectedDiscovery.agent_id, language)} 读取现有配置。保存后作为独立接入，不修改 Agent 当前配置。` : `Read from ${discoveredAgentName(selectedDiscovery.agent_id, language)}. Saving creates an independent connection without changing the agent configuration.`}</p></div>{discoveryReady && !discoveryFailureNeedsRescan && <span className="badge good">{language === 'zh' ? '可保存' : 'Ready to save'}</span>}</div>
+        <div className="oc-status-row"><BrandIcon kind={agentBrandFromId(selectedDiscovery.agent_id)} label={discoveredAgentName(selectedDiscovery.agent_id, language)} /><div className="row-main"><strong>{preparedDiscovery?.display_name || selectedDiscovery.display_name || (language === 'zh' ? '已发现的模型配置' : 'Discovered model configuration')}</strong><p>{language === 'zh' ? `已从 ${discoveredAgentName(selectedDiscovery.agent_id, language)} 读取现有配置。保存后作为独立接入，不修改 Agent 当前配置。` : `Read from ${discoveredAgentName(selectedDiscovery.agent_id, language)}. Saving creates an independent connection without changing the agent configuration.`}</p></div>{discoveryReady && !discoveryFailureNeedsRescan && <span className="badge good">{language === 'zh' ? '可保存' : 'Ready to save'}</span>}</div>
         {preparedDiscovery && (selectableDiscoveryModels.length === 1
           ? <p className="oc-meta">{language === 'zh' ? '将接入模型：' : 'Model to connect: '} {selectableDiscoveryModels[0].display_name}</p>
           : selectableDiscoveryModels.length > 1
