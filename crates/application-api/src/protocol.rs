@@ -926,7 +926,7 @@ pub(crate) fn command_response_schema(command_id: &str) -> &'static str {
         "agents.connect.apply" | "agents.restore.apply" => "hiroute.operation-view/v1",
         "agents.connect.status" => "hiroute.agent-connection-status/union",
         "agents.check" => "hiroute.agent-check/v1",
-        "compute.scan" => "hiroute.compute-scan-result/v1",
+        "compute.scan" => "hiroute.compute-scan-result/union",
         "compute.list" | "compute.show" => "hiroute.compute-management-snapshot/v2",
         "compute.connection.options" => "hiroute.compute-connection-options/v1",
         "compute.connection.preview" => "hiroute.compute-connection-preview/union",
@@ -981,6 +981,9 @@ pub(crate) fn command_stdin_channels(command_id: &str) -> &'static [&'static str
         | "prices.override.apply"
         | "compute.credential.add"
         | "models.show"
+        | "compute.scan"
+        | "agents.scan"
+        | "compute.connection.prepare"
         | "compute.connection.preview"
         | "compute.connection.apply"
         | "compute.connection.authorize"

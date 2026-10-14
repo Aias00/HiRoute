@@ -112,12 +112,12 @@ impl FilesystemAgentScannerV1 {
             super::dsh_config::Patch::parse(Some(&home)).map_err(|_| Error::InvalidConfig)?;
         let profile_patch =
             super::dsh_config::Patch::parse(Some(&profile)).map_err(|_| Error::InvalidConfig)?;
+        let home_provider_definition = home_patch
+            .config("llm-pi-ai")
+            .map_err(|_| Error::InvalidConfig)?
+            .is_some();
         let providers = super::pi_sources::Document(
-            if home_patch
-                .config("llm-pi-ai")
-                .map_err(|_| Error::InvalidConfig)?
-                .is_some()
-            {
+            if home_provider_definition {
                 home_patch.providers()
             } else {
                 profile_patch.providers()
@@ -246,11 +246,7 @@ impl FilesystemAgentScannerV1 {
                         .expect("native scope"),
                         provider_definition: format!(
                             "{}/llm-pi-ai/providers/{provider_id}",
-                            if home_patch
-                                .config("llm-pi-ai")
-                                .map_err(|_| Error::InvalidConfig)?
-                                .is_some()
-                            {
+                            if home_provider_definition {
                                 "cordis.patch.yml"
                             } else {
                                 "profiles/hiroute.yml"
