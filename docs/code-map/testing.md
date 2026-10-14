@@ -214,6 +214,14 @@ body. These diagnostics preserve the original cancellation and recovery assertio
 system PowerShell parser probe retains its original timeout while recording actual
 entry, parse and completion stages through bounded private captures; a forced Job
 cleanup never turns that timeout into successful parsing.
+The [readonly control](../../crates/integrations/src/agents/collaboration_probe/readonly_control.rs)
+keeps pipeline entry and language-mode observations separate from actual write
+attempt and access-denial receipts; diagnostic output cannot satisfy the permission gate.
+For Qoder Skill receipt mismatches, follow the test-only
+[native directory and content observer](../../crates/integrations/src/agents/qoder_probe_skill_diagnostic.rs)
+and its HTTP challenge owner. They distinguish receipt shape, exact spelling,
+held native identity and content without publishing paths or bodies; their observations
+do not change the challenge's acceptance rule.
 
 The same native entry's `-InventoryOnly` exports static scope recipes through its
 actual required-test producer without Cargo, package preparation or client launch.
