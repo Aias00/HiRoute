@@ -219,3 +219,44 @@ fn inspect_sdks(paths: &[PathBuf]) -> (bool, bool, CanonicalDigest) {
             .expect("bounded sdk evidence"),
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn selected_interpreter_sdks_are_protocol_specific_and_digest_bound() {
+        let prefix = tempfile::tempdir().unwrap();
+        let site = prefix.path().join("lib/python3.11/site-packages");
+        let responses = site.join("openai/resources/responses/responses.py");
+        std::fs::create_dir_all(responses.parent().unwrap()).unwrap();
+        std::fs::write(
+            &responses,
+            "def create(self, *, extra_headers: dict):\n    pass\n",
+        )
+        .unwrap();
+        let paths = python_package_paths(&[prefix.path().join("bin/python")]);
+        assert_eq!(paths, vec![site.clone()]);
+        let first = inspect_sdks(&paths);
+        assert!(first.0);
+        assert!(!first.1);
+        let messages = site.join("anthropic/resources/messages/messages.py");
+        std::fs::create_dir_all(messages.parent().unwrap()).unwrap();
+        std::fs::write(&messages, "def create(self):\n    pass\n").unwrap();
+        let without_headers = inspect_sdks(&paths);
+        assert!(!without_headers.1);
+        assert_ne!(first.2, without_headers.2);
+        std::fs::write(
+            &messages,
+            "def create(self, *, extra_headers: dict):\n    pass\n",
+        )
+        .unwrap();
+        let both = inspect_sdks(&paths);
+        assert!(both.0 && both.1);
+        assert_ne!(both.2, without_headers.2);
+        std::fs::remove_file(responses).unwrap();
+        let messages_only = inspect_sdks(&paths);
+        assert!(!messages_only.0 && messages_only.1);
+        assert_ne!(both.2, messages_only.2);
+    }
+}

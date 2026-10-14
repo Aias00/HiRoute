@@ -161,3 +161,26 @@ fn absent_interpolated_environment_and_native_pool_remain_unavailable() {
             .all(|d| d.reason == "unsupported_native_composition")
     );
 }
+
+#[test]
+fn unrelated_builtin_pools_do_not_replace_a_selected_custom_provider_key() {
+    let root = tempfile::tempdir().unwrap();
+    write(root.path(), "config.yaml", CONFIG);
+    write(root.path(), ".env", "HERMES_SOURCE_TEST_KEY=fixture\n");
+    write(
+        root.path(),
+        "auth.json",
+        r#"{"credential_pool":{"zai":[{"source":"env:GLM_API_KEY"}],"copilot":[{"source":"gh_cli"}]}}"#,
+    );
+    let facts = hermes_api_sources(&target(root.path())).unwrap();
+    assert_eq!(facts.sources.len(), 2);
+    assert!(facts.diagnostics.is_empty());
+    assert!(
+        facts
+            .sources
+            .iter()
+            .all(|s| s.supported_auth && s.credential.is_some())
+    );
+    let (_, secret) = read_hermes_api_source(&target(root.path()), &facts.sources[0]).unwrap();
+    assert_eq!(secret.expose(), b"fixture");
+}
