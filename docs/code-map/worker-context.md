@@ -78,6 +78,9 @@ successful sandbox evidence.
 Its [closed tool-output facts](../../crates/integrations/src/agents/collaboration_probe/tool_diagnostic.rs)
 are observed before failed receipt checks return, so early rejection retains
 fixed execution-header facts without logging native output or session identifiers.
+Nonce-bound script checkpoints retain the entered phase, fixed language mode and
+numeric failures; they cannot replace the actual denied-write receipt. Follow the
+read-only control owner for the Windows parse-only gate and shell boundaries.
 
 [CLI dependency input](../../crates/cli/src/worker/selection_windows.rs) projects
 ordinary local drive paths to the existing canonical selection before transport,

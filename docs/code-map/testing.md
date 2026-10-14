@@ -176,6 +176,10 @@ they retain neither arbitrary result text nor a guessed per-run failure cause.
 The [cancel publication fixture](../../crates/daemon/tests/support/windows_worker_cancel.rs)
 waits for the complete nonce receipt within the original deadline; file existence
 alone does not prove that the native writer has published its contents.
+Its residual binding reader distinguishes incomplete publication from fatal native
+identity errors. The [residual oracle](../../crates/daemon/tests/support/windows_worker_residual_oracle.rs)
+keeps correlated tool errors observable, with fixed stage/error facts and no native
+body. These diagnostics preserve the original cancellation and recovery assertions.
 
 The same native entry's `-InventoryOnly` exports static scope recipes through its
 actual required-test producer without Cargo, package preparation or client launch.
