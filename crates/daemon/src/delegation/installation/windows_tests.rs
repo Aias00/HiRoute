@@ -273,10 +273,9 @@ impl Fixture {
 
 #[test]
 fn managed_new_profile_accepts_the_same_workspace_without_verbatim_spelling() {
-    if crate::test_support::isolated_agent_home(concat!(
-        module_path!(),
-        "::managed_new_profile_accepts_the_same_workspace_without_verbatim_spelling"
-    )) {
+    if crate::test_support::isolated_agent_home(
+        "delegation::installation::windows_tests::managed_new_profile_accepts_the_same_workspace_without_verbatim_spelling",
+    ) {
         return;
     }
     let fixture = Fixture::new();
@@ -300,10 +299,9 @@ fn managed_new_profile_accepts_the_same_workspace_without_verbatim_spelling() {
 
 #[test]
 fn native_root_new_to_continue_reopens_verbatim_base_with_exact_retained_identity() {
-    if crate::test_support::isolated_agent_home(concat!(
-        module_path!(),
-        "::native_root_new_to_continue_reopens_verbatim_base_with_exact_retained_identity"
-    )) {
+    if crate::test_support::isolated_agent_home(
+        "delegation::installation::windows_tests::native_root_new_to_continue_reopens_verbatim_base_with_exact_retained_identity",
+    ) {
         return;
     }
     let fixture = Fixture::new();
@@ -360,10 +358,9 @@ fn native_root_new_to_continue_reopens_verbatim_base_with_exact_retained_identit
 
 #[test]
 fn retained_native_root_rejects_a_junction_spelling_of_its_managed_base() {
-    if crate::test_support::isolated_agent_home(concat!(
-        module_path!(),
-        "::retained_native_root_rejects_a_junction_spelling_of_its_managed_base"
-    )) {
+    if crate::test_support::isolated_agent_home(
+        "delegation::installation::windows_tests::retained_native_root_rejects_a_junction_spelling_of_its_managed_base",
+    ) {
         return;
     }
     let fixture = Fixture::new();
