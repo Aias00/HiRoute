@@ -2,6 +2,7 @@
 //! No privilege enabling, alternate logon, linked/restricted token or impersonation
 //! belongs to this gate. Console closure, RDP reconnect and login triggers are
 //! separate externally observed phases; toggling autostart does not prove login.
+use std::ffi::OsString;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::ptr::null_mut;
@@ -20,7 +21,10 @@ use windows_sys::Win32::System::RemoteDesktop::{
     WTSDomainName, WTSFreeMemory, WTSQuerySessionInformationW, WTSUserName,
 };
 
-use super::{Inputs, fixture, windows_account as account, windows_management_service};
+use super::{
+    Inputs, fixture, windows_account as account, windows_gateway_recovery,
+    windows_management_service, windows_subscription_authorization, windows_subscription_login,
+};
 
 /// Invoke the existing owner oracle as ourselves, using normal CreateProcessW.
 /// This deliberately avoids fixture::owner and its alternate-token/staged path.
@@ -128,6 +132,49 @@ fn cli(program: &Path, arguments: &[&str], stage: &'static str) -> Value {
         "standard-owner CLI envelope failed: stage={stage}, data_present={}, error_present={}",
         envelope["data"].is_object(),
         envelope["error"].is_object()
+    );
+    envelope
+}
+
+/// Invoke the real public CLI with our unchanged standard token. Requests and
+/// authorization URLs remain bounded in memory; failure diagnostics never
+/// interpolate an envelope, URL, input, provider text or native configuration.
+fn public_call(program: &Path, arguments: &[&str], request: Option<&Value>) -> (i64, Value) {
+    let mut args: Vec<OsString> = arguments.iter().map(OsString::from).collect();
+    if request.is_some() && !arguments.contains(&"--request-stdin") {
+        args.push("--request-stdin".into());
+    }
+    if !arguments.contains(&"--output") {
+        args.extend(["--output".into(), "json".into()]);
+    }
+    if !arguments.contains(&"--timeout") {
+        args.extend(["--timeout".into(), "45s".into()]);
+    }
+    let input = request.map(|value| serde_json::to_vec(value).unwrap());
+    let result = fixture::process(
+        None,
+        program,
+        &args,
+        input.as_deref(),
+        false,
+        Duration::from_secs(60),
+        false,
+    );
+    let exit = result["code"]
+        .as_i64()
+        .expect("public CLI returned no process exit");
+    assert!(
+        result["result"].is_object(),
+        "public CLI returned no parsed envelope"
+    );
+    (exit, result["result"].clone())
+}
+
+fn public_cli(program: &Path, arguments: &[&str], request: Option<&Value>) -> Value {
+    let (exit, envelope) = public_call(program, arguments, request);
+    assert!(
+        exit == 0 && envelope["status"] == "succeeded" && envelope["data"].is_object(),
+        "standard-owner public subscription/lifecycle command failed"
     );
     envelope
 }
@@ -532,6 +579,73 @@ fn task_real_standard_logged_on_owner_installs_runs_recovers_and_uninstalls() {
         "repeated start must retain one actual daemon"
     );
     windows_management_service::run(&mut |args| cli(cli_path, args, "management"));
+
+    // The same public recovery oracle now executes through our real current
+    // token. Desired B stays occupied while the native Task recovers applied A.
+    let recovered = windows_gateway_recovery::exercise_with(
+        &mut |arguments| public_call(cli_path, arguments, None),
+        &mut || action("inspect"),
+        &first,
+        &sid,
+        session,
+    );
+    assert_identity(&recovered, &sid, session);
+    assert!(
+        held.wait(Duration::from_secs(5)).unwrap(),
+        "Gateway recovery must end the retained original daemon"
+    );
+    status(cli_path, true);
+    let restart_held = lifecycle::retain_for_stop(
+        &cleanup.layout.lifecycle_endpoint(),
+        &definition.daemon,
+        Duration::from_secs(5),
+    )
+    .unwrap();
+    assert_eq!(recovered["pid"].as_u64(), Some(u64::from(restart_held.pid)));
+    assert_eq!(
+        recovered["creation_time"].as_u64(),
+        Some(restart_held.creation_time)
+    );
+    no_administrator_group(&account::process_token(restart_held.pid));
+    assert!(!restart_held.exited().unwrap());
+    windows_subscription_authorization::exercise(&mut |arguments, request| {
+        public_call(cli_path, arguments, request)
+    });
+    let pending = windows_subscription_login::run_before_restart(&mut |arguments, request| {
+        public_cli(cli_path, arguments, request)
+    });
+    public_cli(cli_path, &["service", "restart"], None);
+    assert!(
+        restart_held.wait(Duration::from_secs(5)).unwrap(),
+        "public restart must end its held exact daemon"
+    );
+    status(cli_path, true);
+    let restarted = action("inspect");
+    assert_identity(&restarted, &sid, session);
+    assert!(
+        restarted["pid"] != recovered["pid"]
+            || restarted["creation_time"] != recovered["creation_time"],
+        "public service restart must produce a new authenticated daemon"
+    );
+    windows_subscription_login::assert_after_restart(
+        &mut |arguments, request| public_cli(cli_path, arguments, request),
+        pending,
+    );
+    // The following original graceful-stop assertion must retain the current
+    // daemon, rather than reuse a handle that recovery already made signalled.
+    let held = lifecycle::retain_for_stop(
+        &cleanup.layout.lifecycle_endpoint(),
+        &definition.daemon,
+        Duration::from_secs(5),
+    )
+    .unwrap();
+    assert_eq!(restarted["pid"].as_u64(), Some(u64::from(held.pid)));
+    assert_eq!(
+        restarted["creation_time"].as_u64(),
+        Some(held.creation_time)
+    );
+    no_administrator_group(&account::process_token(held.pid));
+    assert!(!held.exited().unwrap());
     cli(cli_path, &["service", "stop"], "graceful-stop");
     assert!(
         held.wait(Duration::from_secs(5)).unwrap(),
@@ -605,7 +719,7 @@ fn task_real_standard_logged_on_owner_installs_runs_recovers_and_uninstalls() {
     }
     task_absent(definition.name, "uninstalled-task");
     println!(
-        "actual standard Task gate: own logged-on token, no Administrators SID, demand-only install, toggle policy, Gateway/Control, doctor/logs, graceful stop, PT1M recovery, forced stop remains stopped, exact uninstall and preserved user state; external console/RDP/logon phases not executed here"
+        "actual standard Task gate: own logged-on token, no Administrators SID, demand-only install, toggle policy, Gateway/Control, doctor/logs, occupied-port recovery, public restart, real packaged CPA pending/cancel/forget/expiry and authorization rejection boundaries, graceful stop, PT1M recovery, forced stop remains stopped, exact uninstall and preserved user state; valid subscription authorization and external console/RDP/logon phases not executed here"
     );
 }
 

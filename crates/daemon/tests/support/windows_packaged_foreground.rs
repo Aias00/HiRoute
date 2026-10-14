@@ -10,7 +10,6 @@ mod proxy_observation;
 use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Read};
-use std::net::TcpListener;
 use std::os::windows::fs::OpenOptionsExt;
 use std::path::{Component, Path, PathBuf};
 use std::sync::mpsc;
@@ -23,7 +22,7 @@ use hiroute_platform::windows::{lifecycle, security};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
-use super::windows_headless_business::{cli, failure};
+use super::windows_headless_business::cli;
 use super::{IO_BOUND, InstalledProduct, windows_execution_host};
 
 const MAX_FILE: u64 = 512 * 1024 * 1024;
@@ -170,13 +169,6 @@ fn assert_snapshot(product: &InstalledProduct, expected: &Value, applied: bool) 
     );
 }
 
-fn assert_no_declared_decision_hop(listener: &TcpListener) {
-    match listener.accept() {
-        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
-        _ => panic!("declaration-only custom decision generated an unapproved endpoint hop"),
-    }
-}
-
 fn manual_policy_login(product: &InstalledProduct, proxy: &proxy_observation::Observation) {
     proxy.phase(proxy_observation::Phase::LoginStart);
     let started = cli(
@@ -206,75 +198,11 @@ fn manual_policy_login(product: &InstalledProduct, proxy: &proxy_observation::Ob
 }
 
 fn authorization_rejections(product: &InstalledProduct) {
-    let args = ["compute", "connection", "authorize"];
-    let absent = json!({"operation_id":format!("op_{}", "0".repeat(32)),
-        "state":"succeeded", "sequence":1, "cancellable":false});
-    failure(
-        product,
-        &args,
-        &json!({"action":"result", "operation":absent}),
-        "RESOURCE_NOT_FOUND",
-    );
-    failure(
-        product,
-        &args,
-        &json!({"action":"release", "validation":{
-        "approval_operation":absent,"validation_ref":"validation/foreground/missing","validation_revision":1}}),
-        "RESOURCE_NOT_FOUND",
-    );
-    // Create an actual public journaled operation, not a database/validation
-    // fixture. A Custom declaration does not test or call its endpoint.
-    let endpoint = TcpListener::bind("127.0.0.1:0").unwrap();
-    endpoint.set_nonblocking(true).unwrap();
-    let id = "windows-foreground-authorization-boundary";
-    let service = json!({"id":id,"revision":1,"name":"Foreground authorization boundary",
-        "connection":{"kind":"custom","endpoint":format!("http://{}/decision",endpoint.local_addr().unwrap()),
-            "timeout_ms":1000,"auth_header":null}});
-    let desired = json!({"id":id,"expected_revision":0,"service":service});
-    let version = json!({"major":1,"minor":0});
-    let spec = json!({"schema_version":version,"command_id":"decision.services.apply",
-        "resource_id":id,"desired_state":desired});
-    let preview = cli(
-        product,
-        &["decision", "services", "apply"],
-        Some(&json!({"schema_version":version,"spec":spec})),
-    )["data"]
-        .clone();
-    let request = json!({"schema_version":version,"spec":preview["normalized_spec"],
-        "accept_digest":preview["change_digest"],"expected_revisions":preview["expected_revisions"],
-        "idempotency_key":"windows-foreground-authorization-boundary"});
-    let applied = cli(product, &["decision", "services", "apply"], Some(&request));
-    let operation = applied["operation"].clone();
-    assert!(operation["operation_id"].is_string());
-    assert!(applied["data"]["state"] == "succeeded");
-    failure(
-        product,
-        &args,
-        &json!({"action":"result", "operation":operation}),
-        "INVALID_ARGUMENTS",
-    );
-    let mut stale = operation.clone();
-    stale["sequence"] = json!(
-        operation["sequence"]
-            .as_u64()
-            .unwrap()
-            .checked_add(1)
-            .unwrap()
-    );
-    failure(
-        product,
-        &args,
-        &json!({"action":"result", "operation":stale}),
-        "REVISION_CONFLICT",
-    );
-    failure(
-        product,
-        &args,
-        &json!({"action":"release", "validation":{
-        "approval_operation":stale,"validation_ref":"validation/foreground/stale","validation_revision":1}}),
-        "REVISION_CONFLICT",
-    );
-    assert_no_declared_decision_hop(&endpoint);
+    super::windows_subscription_authorization::exercise(&mut |arguments, request| {
+        let (exit, envelope) =
+            super::windows_headless_business::command(product, arguments, request);
+        (i64::from(exit), envelope)
+    });
     checkpoint("authorize-missing-wrong-kind-and-stale");
 }
 
