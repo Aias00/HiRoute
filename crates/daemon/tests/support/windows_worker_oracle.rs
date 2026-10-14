@@ -7,6 +7,8 @@ use serde_json::{Value, json};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+#[path = "windows_worker_residual_oracle.rs"]
+mod residual;
 
 pub const MODEL: &str = "windows-native-api-model";
 pub const DIRECT: &str = "WINDOWS-PUBLIC-WORKER-DIRECT";
@@ -65,22 +67,21 @@ impl Oracle {
             let text = native_text(body);
             if text.contains(RESIDUAL) {
                 ledger.worker_stage = Some(WorkerStage::ResidualRequest);
-                assert!(correlated(body, "worker_residual").is_none());
+                println!("Windows public residual checkpoint: stage=oracle-request-observed");
+                if let Some((output, is_error)) = residual::returned(body) {
+                    println!(
+                        "Windows public residual tool facts: {}",
+                        residual::facts(&output, is_error)
+                    );
+                    panic!(
+                        "native residual tool returned before its bounded cancellation receipt was confirmed"
+                    );
+                }
                 // The actual native tool supplies its Windows PID and this run's
                 // TEMP selector. No model-generated locator or credential is used.
-                let literal = |text: &str| format!("'{}'", text.replace('\'', "''"));
                 let binding = workspace.join("residual-started.json");
                 let late = workspace.join("residual-late.txt");
-                let script = format!(
-                    "$ErrorActionPreference='Stop'; $encoding=[Text.UTF8Encoding]::new($false); \
-                     $binding=@{{pid=$PID;temp=$env:TEMP;receipt={}}}|ConvertTo-Json -Compress; \
-                     [IO.File]::WriteAllText({},$binding,$encoding); Start-Sleep -Seconds 60; \
-                     [IO.File]::WriteAllText({},{},$encoding)",
-                    literal(&format!("started-{nonce}")),
-                    literal(binding.to_str().unwrap()),
-                    literal(late.to_str().unwrap()),
-                    literal(&format!("late-{nonce}")),
-                );
+                let script = residual::script(&binding, &late, &nonce);
                 let powershell = hiroute_platform::windows::launcher::system_executable(Path::new(
                     "WindowsPowerShell/v1.0/powershell.exe",
                 ))
