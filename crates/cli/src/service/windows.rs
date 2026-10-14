@@ -12,6 +12,7 @@ use zeroize::Zeroizing;
 
 use super::ServiceFailure;
 
+mod logs;
 mod scm_owner;
 pub(crate) fn scm_owner_helper_verb() -> &'static str {
     scm_owner::VERB
@@ -242,28 +243,7 @@ pub(super) fn restart(layout: &StandaloneLayout, timeout: Duration) -> Result<()
 }
 
 pub(super) fn logs(layout: &StandaloneLayout) -> Result<serde_json::Value, ServiceFailure> {
-    let root = layout.diagnostics_root();
-    let mut files: Vec<_> = std::fs::read_dir(&root)
-        .map_err(failure)?
-        .filter_map(Result::ok)
-        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_file()))
-        .map(|entry| entry.path())
-        .collect();
-    files.sort();
-    let output: Vec<_> = files
-        .iter()
-        .rev()
-        .take(2)
-        .map(|path| {
-            json!({
-                "file": path.file_name().and_then(|v| v.to_str()).unwrap_or("diagnostics"),
-                "output": super::bounded_file(path),
-            })
-        })
-        .collect();
-    Ok(
-        json!({"schema":"hiroute.standalone-service-logs/v1", "manager": manager_name(layout)?, "diagnostics_root":root, "files":output}),
-    )
+    logs::read(layout, manager_name(layout)?)
 }
 
 pub(super) fn install(

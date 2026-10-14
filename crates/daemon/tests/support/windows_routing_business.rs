@@ -226,11 +226,7 @@ impl Routing {
         assert_eq!(*counts.lock().unwrap(), (1, 0));
         let mut plan = Plan::create(product, source.binding_id(), "windows-public-route");
         plan.update_and_reject_stale(product);
-        let options = cli(
-            product,
-            &["compute", "connection", "options"],
-            Some(&json!({})),
-        );
+        let options = cli(product, &["compute", "connection", "options"], None);
         let model_id = options["data"]["options"]
             .as_array()
             .unwrap()

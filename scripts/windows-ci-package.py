@@ -51,11 +51,15 @@ def restage(args):
     packager = module("package-standalone")
     manifest, archive = args.manifest.resolve(strict=True), args.archive.resolve(strict=True)
     verified = packager.verify(manifest, archive)
-    if verified["revision"] != args.expected_sha or verified["target"] != "x86_64-pc-windows-msvc":
-        raise ValueError("Replay requires the exact candidate's verified x64 package")
+    package_revision = args.package_revision or args.expected_sha
+    if not re.fullmatch(r"[a-f0-9]{40}", package_revision):
+        raise ValueError("Restaging requires an exact committed package revision")
+    if verified["revision"] != package_revision or verified["target"] != "x86_64-pc-windows-msvc":
+        raise ValueError("Replay requires the explicitly bound verified x64 package")
     trusted = args.output.resolve() / "administrator-package"
     trusted_extraction(packager, manifest, archive, trusted)
-    return dict(source_revision=args.expected_sha, target=verified["target"], manifest=str(manifest),
+    return dict(source_revision=package_revision, consumer_revision=args.expected_sha,
+                target=verified["target"], manifest=str(manifest),
                 archive=str(archive), administrator_cli=str(trusted / "bin/hiroute.exe"),
                 worker_daemon=str(trusted / "bin/hirouted.exe"), python=sys.executable,
                 archive_sha256=packager.digest(archive), manifest_sha256=packager.digest(manifest),
@@ -140,6 +144,7 @@ if __name__ == "__main__":
     parser.add_argument("--expected-sha", required=True)
     parser.add_argument("--source-repo", type=Path)
     parser.add_argument("--restage-only", action="store_true")
+    parser.add_argument("--package-revision", help="Explicit baseline revision when restaging an upgrade package")
     parser.add_argument("--manifest", type=Path)
     parser.add_argument("--archive", type=Path)
     parser.add_argument("--cpa-evidence", type=Path)
@@ -152,6 +157,8 @@ if __name__ == "__main__":
         parser.error("Restaging requires both manifest and archive")
     if not arguments.restage_only and arguments.source_repo is None:
         parser.error("Building requires the exact CPA source repository")
+    if arguments.package_revision is not None and not arguments.restage_only:
+        parser.error("An explicit package revision is valid only for restaging")
     try:
         print(json.dumps(restage(arguments) if arguments.restage_only else prepare(arguments)))
     except (OSError, ValueError, subprocess.CalledProcessError) as error:

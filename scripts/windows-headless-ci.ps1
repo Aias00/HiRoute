@@ -11,6 +11,7 @@ param(
   [string]$CpaOriginalRevision,
   [string]$BaselineManifest,
   [string]$BaselineArchive,
+  [string]$BaselineRevision,
   [switch]$CaptureArtifacts
 )
 $ErrorActionPreference = 'Stop'
@@ -19,6 +20,7 @@ $failures = [System.Collections.Generic.List[string]]::new()
 $root = Split-Path $PSScriptRoot -Parent
 Set-Location $root
 . "$PSScriptRoot/windows-native-scopes.ps1"
+. "$PSScriptRoot/windows-upgrade-inputs.ps1"
 if (-not $IsWindows) { throw 'Native Windows required' }
 if ($ExpectedSha -notmatch '^[0-9a-f]{40}$' -or (git rev-parse HEAD) -ne $ExpectedSha) {
   throw 'Exact committed candidate required'
@@ -143,6 +145,14 @@ function Invoke-LibraryTests {
         if ($inventory -notmatch "(?m)^$([regex]::Escape($case)): test`r?$") { throw "Required CPA private case missing: $case" }
       }
     }
+    if ($Package -eq 'hiroute-cli') {
+      foreach ($case in @(
+        'service::windows::logs::tests::windows_service_logs_reads_actual_daemon_writer_and_bounds_rotated_tails',
+        'service::windows::logs::tests::windows_service_logs_refuses_hardlinks_and_junctions_before_reading_external_bytes',
+        'service::windows::logs::tests::windows_service_logs_keeps_held_root_identity_and_does_not_create_missing_roles')) {
+        if ($inventory -notmatch "(?m)^$([regex]::Escape($case)): test`r?$") { throw "Required Windows logs case missing: $case" }
+      }
+    }
     $required = @([regex]::Matches($inventory, '(?m)^(\S+): test\r?$') | ForEach-Object { $_.Groups[1].Value } | Where-Object { $_ -notin $optIn })
     if ($required.Count -eq 0) { throw "$Package selected no native library tests" }
     $harness = @($optIn | ForEach-Object { '--skip'; $_ })
@@ -255,6 +265,13 @@ if ($Scope -eq 'components') {
 } elseif ($Scope -in @('background','upgrade')) {
   cargo build --locked -p hiroute-cli --bin hiroute -p hiroute-daemon --bin hirouted 2>&1 | Tee-Object "$evidence/headless-link.log"
   if ($LASTEXITCODE -ne 0) { throw 'Production background binaries failed to build' }
+  if ($Scope -eq 'upgrade') {
+    Initialize-WindowsAgentInputs
+    $upgradeClients = Get-Content "$evidence/clients-result.json" -Raw | ConvertFrom-Json
+    $env:HIROUTE_WINDOWS_UPGRADE_CODEX_BINARY = $upgradeClients.environment.HIROUTE_WORKER_CODEX_BINARY
+    $env:HIROUTE_WINDOWS_UPGRADE_CODEX_SHA256 = $upgradeClients.binaries.HIROUTE_WORKER_CODEX_BINARY.sha256
+    $env:HIROUTE_WINDOWS_UPGRADE_CODEX_VERSION = $upgradeClients.declarations.'@openai/codex'
+  }
   $packageArgs = @('--expected-sha',$ExpectedSha,'--source-repo',$CpaSource,'--output',"$evidence/package",'--build-run-id',$env:GITHUB_RUN_ID)
   if ($CpaEvidence) {
     $packageArgs += @('--cpa-evidence',$CpaEvidence,'--cpa-original-run',$CpaOriginalRun,'--cpa-original-revision',$CpaOriginalRevision)
@@ -271,14 +288,12 @@ if ($Scope -eq 'components') {
     Invoke-RequiredTests 'background-capture' @('-p','hiroute-daemon','--test','windows_background','windows_token_launcher::capture_tests::') @(
       'windows_token_launcher::capture_tests::native_capture_requires_last_writer_close_for_eof',
       'windows_token_launcher::capture_tests::native_capture_bounds_output_and_never_reports_unknown_stage_data')
-    Invoke-RequiredTests 'background' @('-p','hiroute-daemon','--test','windows_background') @(
-      'task_native_background_lua_gateway_control_stop_crash_recovery_and_autostart',
-      'scm_standard_owner_pending_admin_finalize_session_zero_gateway_control_and_delete') @('--skip','windows_background_owner_fixture','--skip','windows_background_upgrade::','--skip','windows_token_launcher::capture_tests::','--nocapture')
+    Invoke-RequiredTests 'background' @('-p','hiroute-daemon','--test','windows_background','task_native_background_lua_gateway_control_stop_crash_recovery_and_autostart') @(
+      'task_native_background_lua_gateway_control_stop_crash_recovery_and_autostart') @('--exact','--nocapture')
   } else {
-    $env:HIROUTE_WINDOWS_BASELINE_PACKAGE_MANIFEST = (Resolve-Path $BaselineManifest).Path
-    $env:HIROUTE_WINDOWS_BASELINE_PACKAGE_ARCHIVE = (Resolve-Path $BaselineArchive).Path
-    Invoke-RequiredTests 'upgrade' @('-p','hiroute-daemon','--test','windows_background','windows_background_upgrade::') @(
-      'windows_background_upgrade::task_native_candidate_upgrade_recovers_prepared_rollback_and_preserves_business_state') @('--nocapture')
+    Initialize-WindowsUpgradeBaseline -ExpectedSha $ExpectedSha -BaselineRevision $BaselineRevision -BaselineManifest $BaselineManifest -BaselineArchive $BaselineArchive -Evidence $evidence
+    Invoke-RequiredTests 'upgrade' @('-p','hiroute-daemon','--test','windows_background','windows_background_upgrade::task_native_candidate_upgrade_recovers_prepared_rollback_and_preserves_business_state') @(
+      'windows_background_upgrade::task_native_candidate_upgrade_recovers_prepared_rollback_and_preserves_business_state') @('--exact','--nocapture')
   }
 } elseif ($Scope -eq 'accounts') {
   # Account acceptance is explicitly selected after official login preparation.

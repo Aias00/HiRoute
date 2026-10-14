@@ -45,7 +45,7 @@ PI_SDK_CONTRACT_TEST = "crates/integrations/src/agents/pi_sdk_contract.test.mjs"
 INTEGRATION_SKILL = ".agents/skills/hiroute-integrate/SKILL.md"
 WEBSITE_TOOLING = {".github/workflows/website.yml", ".github/workflows/release.yml"}
 RELEASE_BUILD_TESTS = ("test-build-cpa.py", "test-build-release.py", "test-linux-release.py", "test-package-desktop.py",
-                       "test-standalone-install.py", "test-standalone-windows.py", "test-third-party-licenses.py")
+                       "test-standalone-install.py", "test-standalone-windows.py", "test-windows-ci-package.py", "test-third-party-licenses.py")
 RELEASE_BUILD_TOOLING = {"scripts/linux-release-abi.py", "scripts/linux-release-runtime.py",
                          "scripts/linux-release-container.py", "scripts/linux-release-baseline.json",
                          "scripts/linux-release.Dockerfile", ".github/workflows/build-release.yml", "scripts/build-release.py",
@@ -73,6 +73,7 @@ VALIDATION_TOOLING = {"scripts/validation.py", "scripts/validation-host.py", "sc
                       "scripts/remote-rust.py", "scripts/test-remote-rust.py",
                       "scripts/validation-schedule.py", "scripts/test-validation-schedule.py"}
 WINDOWS_VALIDATION_TOOLING = {"scripts/windows-headless-ci.ps1", "scripts/windows-ci-report.py",
+                              "scripts/windows-upgrade-inputs.ps1",
                               "scripts/test-windows-ci-report.py", "scripts/windows-agent-fixtures.py",
                               ".github/workflows/windows-headless.yml",
                               "scripts/windows-native-replay.ps1", "scripts/windows-native-scopes.ps1",

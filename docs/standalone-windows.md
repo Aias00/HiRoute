@@ -42,6 +42,10 @@ Starting, stopping, restarting, logs and doctor use the same CLI family. Busines
 readiness requires Local Control to answer and the actual Gateway listener to be ready.
 Task registration or a successful process-manager call alone cannot establish readiness.
 Foreground operation remains available through `hiroute service run`.
+`service logs` returns at most the last 256 KiB of `daemon/current.jsonl` and
+`daemon/previous-1.jsonl`. It reads existing diagnostic objects through held directory
+handles and refuses reparse points and multiply linked log files; settings, correlation
+keys and unrelated files are not log content.
 
 ## Background manager policy
 
@@ -142,7 +146,7 @@ each promised executable architecture require their own recorded native runs.
 Required gates cover pipe identity/deadlines, junction and hardlink refusal, native ACL
 restore/authentication, complete file publication, process-tree cancellation, literal
 argv, diagnostics rotation, actual installed foreground Control/Gateway/input/restart,
-Task lifecycle, standard-owner SCM session-zero lifecycle, installation upgrade/recovery,
+Logged-on Task lifecycle, installation upgrade/recovery,
 and the five native Agent adapters. Subscription/provider tests use controlled endpoints;
 actual account login/refresh and upstream native clients require their own authorized
 acceptance evidence and pinned version records.

@@ -2229,6 +2229,7 @@ dependencies = [
  "hiroute-application-api",
  "hiroute-client-core",
  "hiroute-daemon",
+ "hiroute-diagnostics",
  "hiroute-domain",
  "hiroute-host-runtime",
  "hiroute-integrations",

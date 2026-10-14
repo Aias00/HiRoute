@@ -186,7 +186,7 @@ impl CollaborationChallenge {
                 })
                 .ok_or("native read-only shell tool")?;
             let args = if name == "exec_command" {
-                json!({"cmd":self.command, "max_output_tokens":2000, "yield_time_ms":1000})
+                json!({"cmd":self.command, "max_output_tokens":2000, "yield_time_ms":1000, "login":false})
             } else {
                 json!({"command":self.command, "timeout_ms":10000})
             };
@@ -223,6 +223,23 @@ impl CollaborationChallenge {
                 output
                     .as_ref()
                     .is_some_and(|text| text.contains("truncated"))
+            );
+            // Closed flags distinguish a native launch/sandbox/command failure
+            // without exposing tool output, private paths or authentication data.
+            let text = output.as_deref().unwrap_or_default();
+            eprintln!(
+                "native collaboration failure flags: process-launch={} access-denied={} sandbox={} command-not-found={} powershell-parser={} dll-init={}",
+                text.contains("CreateProcess") || text.contains("Failed to spawn"),
+                text.contains("Access is denied")
+                    || text.contains("os error 5")
+                    || text.contains("PermissionDenied"),
+                text.contains("sandbox") || text.contains("Sandbox"),
+                text.contains("not recognized") || text.contains("command not found"),
+                text.contains("ParserError") || text.contains("UnexpectedToken"),
+                text.contains("0xc0000142")
+                    || text.contains("0xC0000142")
+                    || text.contains("-1073741502")
+                    || text.contains("1114")
             );
             return Err("native Skill read and trusted CLI execution");
         }
@@ -333,6 +350,9 @@ mod tests {
             .reply(&json!({"input":"discovery-nonce", "tools":[{"name":"exec_command"}]}))
             .unwrap();
         assert_eq!(call[0]["call_id"], "call_hiroute_probe");
+        let arguments: Value =
+            serde_json::from_str(call[0]["arguments"].as_str().unwrap()).unwrap();
+        assert_eq!(arguments["login"], false);
         assert!(!check.complete());
         for (id, output) in [
             ("wrong-call", "contents-nonce CLI-contract-output"),

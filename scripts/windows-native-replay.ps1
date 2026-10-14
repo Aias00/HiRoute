@@ -7,12 +7,14 @@ param(
   [ValidateSet('focused','final')][string]$Phase = 'focused',
   [string[]]$RelatedRun = @(),
   [string]$BaselineManifest,
-  [string]$BaselineArchive
+  [string]$BaselineArchive,
+  [string]$BaselineRevision
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 Set-Location $root
 . "$PSScriptRoot/windows-native-scopes.ps1"
+. "$PSScriptRoot/windows-upgrade-inputs.ps1"
 $bundle = (Resolve-Path $Bundle).Path
 $evidence = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Evidence)
 $os = Get-CimInstance Win32_OperatingSystem
@@ -67,11 +69,10 @@ if ($Scope -in @('background','upgrade')) {
   $env:HIROUTE_WINDOWS_PYTHON = $package.python
   $env:HIROUTE_WORKER_DAEMON_BINARY = $package.worker_daemon
   if ($Scope -eq 'upgrade') {
-    $env:HIROUTE_WINDOWS_BASELINE_PACKAGE_MANIFEST = (Resolve-Path $BaselineManifest).Path
-    $env:HIROUTE_WINDOWS_BASELINE_PACKAGE_ARCHIVE = (Resolve-Path $BaselineArchive).Path
+    Initialize-WindowsUpgradeBaseline -ExpectedSha $ExpectedSha -BaselineRevision $BaselineRevision -BaselineManifest $BaselineManifest -BaselineArchive $BaselineArchive -Evidence $evidence
   }
 }
-if ($Scope -in @('agents','accounts')) {
+if ($Scope -in @('agents','accounts','upgrade')) {
   if (-not $daemon) { throw 'Actual compiled Worker daemon required' }
   python scripts/windows-agent-fixtures.py --daemon $daemon --output "$evidence/clients" > "$evidence/clients-result.json"
   if ($LASTEXITCODE -ne 0) { throw 'Locked actual client fixtures unavailable on Windows 11' }
@@ -82,6 +83,11 @@ if ($Scope -in @('agents','accounts')) {
   }
   $env:PATH = (@($clients.discovery_path) + @($env:PATH)) -join [IO.Path]::PathSeparator
   $env:HIROUTE_NATIVE_CODEX = $env:HIROUTE_WORKER_CODEX_BINARY
+  if ($Scope -eq 'upgrade') {
+    $env:HIROUTE_WINDOWS_UPGRADE_CODEX_BINARY = $clients.environment.HIROUTE_WORKER_CODEX_BINARY
+    $env:HIROUTE_WINDOWS_UPGRADE_CODEX_SHA256 = $clients.binaries.HIROUTE_WORKER_CODEX_BINARY.sha256
+    $env:HIROUTE_WINDOWS_UPGRADE_CODEX_VERSION = $clients.declarations.'@openai/codex'
+  }
 }
 
 $failures = [System.Collections.Generic.List[string]]::new()

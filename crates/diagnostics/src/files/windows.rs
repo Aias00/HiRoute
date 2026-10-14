@@ -79,6 +79,32 @@ impl PrivateDir {
         })
     }
 
+    /// Inspect an existing child relative to this held directory. Read-only callers
+    /// must not create a role directory or follow a replacement pathname.
+    pub fn open_existing_child(&self, name: &str) -> Result<Option<Self>, FileSafetyError> {
+        self.recheck_identity()?;
+        let file = match hiroute_platform::windows::security::open_identity_at(
+            &self.file,
+            std::ffi::OsStr::new(name),
+            true,
+        ) {
+            Ok(file) => file,
+            Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(map_directory_error(error)),
+        };
+        let identity = FileIdentity(
+            native::stat(&file, true)
+                .map_err(map_directory_error)?
+                .identity,
+        );
+        Ok(Some(Self {
+            path: self.path.join(name),
+            file,
+            identity,
+            scan: Mutex::new(()),
+        }))
+    }
+
     pub fn open_read(&self, name: &str) -> Result<Option<VerifiedFile>, FileSafetyError> {
         match self.open_file(name, OpenMode::Read) {
             Ok(file) => Ok(Some(file)),

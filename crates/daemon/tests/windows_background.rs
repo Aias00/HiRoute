@@ -1,5 +1,6 @@
 #![cfg(windows)]
-//! Required native product gates: actual Task Scheduler and standard-owner SCM.
+//! Required native product gate: actual Task Scheduler for the logged-in owner.
+//! SCM remains separately selectable; logout continuity is outside this scope.
 //! Run serially in a disposable CI profile with a verified candidate package.
 //! A selected gate fails when prerequisites are missing; fixtures never stand in
 //! for actual service launch, Gateway readiness, or Local Control.
@@ -12,6 +13,8 @@ mod windows_background_fixture;
 mod windows_background_task;
 #[path = "support/windows_background_upgrade.rs"]
 mod windows_background_upgrade;
+#[path = "support/windows_background_upgrade_business.rs"]
+mod windows_background_upgrade_business;
 #[path = "support/windows_candidate_source.rs"]
 mod windows_candidate_source;
 #[path = "support/windows_execution_host.rs"]

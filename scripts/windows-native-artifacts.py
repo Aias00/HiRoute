@@ -34,6 +34,7 @@ SOURCE_FILES = (
     "scripts/windows-native-artifacts.py",
     "scripts/windows-native-replay.ps1",
     "scripts/windows-native-scopes.ps1",
+    "scripts/windows-upgrade-inputs.ps1",
     "scripts/windows-native-runtime-audit.py",
     "scripts/windows-agent-fixtures.py",
 )

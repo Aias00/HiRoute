@@ -379,6 +379,9 @@ pub fn entry() {
     account::assert_standard(&current, &sid);
     eprintln!("HIROUTE_NATIVE_BACKGROUND_STAGE=owner-verified");
     let result = match request.action.as_str() {
+        "upgrade-business-save" | "upgrade-business-verify" | "upgrade-business-cleanup" => {
+            super::windows_background_upgrade_business::run_action(&request)
+        }
         "transaction-snapshot"
         | "transaction-verify"
         | "transaction-fail-install"

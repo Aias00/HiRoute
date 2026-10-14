@@ -12,7 +12,7 @@ native Windows acceptance uses `scripts/windows-headless-ci.ps1`.
 | `gateway-core-dedicated.yml` | Manual or reusable | Hosted Linux production stability and socket churn |
 | `p0-gateway-final-gates.yml` | Manual | Aggregate the three current hosted workflows |
 | `build-release.yml` | Manual, exact dispatch SHA | Native macOS ARM64/Intel DMGs and Linux/Windows x86_64/ARM64 archives; uploads candidate assets and integrity evidence for the existing release publisher |
-| `windows-headless.yml` | PR, main push, manual, reusable | Native MSVC primitives, full shared business libraries, foreground control/Gateway, real Task/SCM installation and fixed upstream Agent clients; complete x64 artifact replay on Windows 11 ARM64 |
+| `windows-headless.yml` | PR, main push, manual, reusable | Native MSVC primitives, full shared business libraries, foreground control/Gateway, logged-on Task installation and fixed upstream Agent clients; complete x64 artifact replay on Windows 11 ARM64 |
 
 Normal Rust checks select the organization `Default` runner group with the
 `cncf-ubuntu-16-64-x86` label. The organization must permit this public repository
@@ -41,8 +41,7 @@ The website release catalog (`apps/website/data/releases.json`) also selects the
 upgrade reader consumes this data, so website validation alone cannot cover a new
 release. Other website-only edits retain their dedicated workflow.
 
-The Windows jobs use the standard hosted `windows-2025` image. They do not require
-an organization owned Windows runner. Native inventories must contain every
+Most Windows jobs use the standard hosted `windows-2025` image. Native inventories must contain every
 required case; zero, ignored or missing required cases fail. The shared library
 scope executes the complete ordinary native test inventory. Explicitly registered
 installation-input gates and child fixtures have their own execution entries;
@@ -59,10 +58,18 @@ establish official-account acceptance, which remains a separate release gate.
 
 Background jobs build the unchanged pinned CPA with its two native bootstrap
 security cases and use the production package generator twice. The administrator
-receives a separate verified complete package. Actual ordinary-account Task and
-SCM cases exercise authenticated account selection, protected host publication,
-session boundaries, stop/recovery policy and two-phase finalization. The separate
-candidate upgrade gate needs explicitly bound baseline package inputs; a new
+receives a separate verified complete package. The required Task case exercises
+the actual logged-on owner, least-privilege launch, stop/recovery and login autostart.
+GitHub-hosted Windows uses an administrator with UAC disabled. This account has no
+linked limited token; creating a standard account with `LogonUser` also does not
+create an existing interactive desktop login. These defaults cannot establish the
+required standard-owner Task result. That gate needs a separately provisioned real
+login and normal UAC, and remains failed when those prerequisites are absent.
+SCM and logout continuity are optional, outside the required background scope.
+The separate candidate upgrade gate uses two distinct, fully verified source revisions
+and independently restages the original baseline with fresh administrator trust.
+It preserves actual public Source/Key/Plan, Agent restoration, Gateway traffic and
+usage receipts across prepared-fault rollback and candidate replacement. A new
 Windows platform has no released Windows baseline to invent.
 
 For a separately selected Windows 11 workstation run, `-CaptureArtifacts` records

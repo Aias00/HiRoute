@@ -576,7 +576,7 @@ fn bounded_output(output: &Output) -> String {
     String::from_utf8_lossy(&bytes[bytes.len().saturating_sub(MAX_LOG_BYTES)..]).into_owned()
 }
 
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(target_os = "macos")]
 fn bounded_file(path: &Path) -> String {
     use std::io::{Read, Seek, SeekFrom};
     let read = || -> std::io::Result<String> {
