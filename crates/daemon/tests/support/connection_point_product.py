@@ -89,7 +89,7 @@ def run(repository):
         assert all(path.read_bytes() == contents for path, contents in before.items()), 'Scan/prepare mutated a native source'
         assert not data(product, 'compute list')['sources'], 'Scan/prepare saved a source'
         coding_point = next(p for p in scan['connections'] if p.get('provider_id') == 'china-coding')
-        assert coding_point['connection_option_id'] == 'zhipu.coding-plan.cn.v1'
+        assert coding_point['connection_option_id'] == 'zhipu.coding-chat.cn.v1'
         assert coding_point['declared_model_ids'] == ['glm-5.3']
         coding = prepare(product, coding_point, 'prepare/point-product/coding')
         assert {m['upstream_model_id'] for m in coding['models']} == {'glm-5.3', 'glm-5.3-flash'}

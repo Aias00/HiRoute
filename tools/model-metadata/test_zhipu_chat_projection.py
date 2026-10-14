@@ -17,15 +17,16 @@ class ZhipuChatProjectionTests(unittest.TestCase):
         self.data = json.loads((ROOT / 'assets/model-data/current/model-data.json').read_text())['data']
 
     def project(self):
-        projection = {'models': [], 'model_endpoint_capabilities': [], 'offers': []}
+        projection = {'models': [], 'model_endpoint_capabilities': [], 'offers': [], 'registrations': [], 'attempts': []}
         GENERATOR.add_qualified_zhipu_chat_capabilities(projection, self.catalog, self.data)
         return projection
 
-    def test_both_models_reuse_the_existing_exact_chat_endpoint_and_subscription(self):
+    def test_both_models_reuse_the_connector_exact_chat_address_and_subscription(self):
         projection = self.project()
         self.assertEqual({c['upstream_model_id'] for c in projection['model_endpoint_capabilities']}, {'glm-5.3', 'glm-5.3-flash'})
         for cap in projection['model_endpoint_capabilities']:
-            self.assertEqual(cap['endpoint_profile_id'], 'endpoint.zhipu.coding-plan.cn.v1')
+            self.assertEqual(cap['endpoint_profile_id'], 'endpoint.zhipu.coding-chat.cn.v1')
+            self.assertEqual(cap['connector_id'], 'connector.zhipu.p0')
             self.assertEqual(cap['upstream_protocol'], 'chat_completions')
             self.assertEqual(cap['required_adapter_ref'], 'adapter.openai-chat.v1')
         for model in projection['models']:

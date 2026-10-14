@@ -774,7 +774,7 @@ def build_runtime_projection(catalog):
     }
 
 def add_qualified_zhipu_chat_capabilities(projection, catalog, data):
-    """Reuse the current Coding Plan endpoint; qualify only its exact Chat models."""
+    """Reuse the Coding Plan connector with its qualified Chat-native model configuration."""
     product = next(value for value in catalog["access_products"]
         if value["product_key"] == "zhipu-coding-cn")
     interface = next(value for value in product["interfaces"]
@@ -813,8 +813,8 @@ def add_qualified_zhipu_chat_capabilities(projection, catalog, data):
         projection["model_endpoint_capabilities"].append({
             "capability_id": f"cap.zhipu.{upstream}.coding-plan.chat", "revision": 1,
             "model_configuration_id": identity, "connector_id": "connector.zhipu.p0", "connector_revision": 1,
-            "endpoint_profile_id": "endpoint.zhipu.coding-plan.cn.v1", "endpoint_profile_revision": 1,
-            "protocol_endpoint_id": "endpoint.zhipu.coding-plan.cn.v1.chat", "upstream_protocol": "chat_completions",
+            "endpoint_profile_id": "endpoint.zhipu.coding-chat.cn.v1", "endpoint_profile_revision": 1,
+            "protocol_endpoint_id": "endpoint.zhipu.coding-chat.cn.v1.chat", "upstream_protocol": "chat_completions",
             "upstream_model_id": upstream, "required_adapter_ref": "adapter.openai-chat.v1", "required_adapter_revision": 1,
             "evidence_digest": digest([binding, source_model["evidence_refs"]])})
         model_ids.append(identity)
@@ -822,9 +822,36 @@ def add_qualified_zhipu_chat_capabilities(projection, catalog, data):
         existing = next(value for value in data["offers"]
             if value["endpoint_profile_id"] == "endpoint.zhipu.coding-plan.cn.v1")
         offer = copy.deepcopy(existing)
+        offer["offer_id"] = "offer.zhipu.coding-chat"
+        offer["endpoint_profile_id"] = "endpoint.zhipu.coding-chat.cn.v1"
         offer["model_configuration_ids"] = sorted(model_ids)
         offer["evidence_digest"] = digest([product["evidence_refs"], model_ids])
         projection["offers"].append(offer)
+        profile_id = offer["endpoint_profile_id"]
+        reviewed_on = max(evidence[ref]["collected_on"] for ref in product["evidence_refs"])
+        profile = {
+            "endpoint_profile_id": profile_id, "revision": 1,
+            "connector_id": "connector.zhipu.p0", "connector_revision": 1,
+            "provider_platform_id": "zhipu", "service_offering_id": offer["service_offering_id"],
+            "entitlement_id": offer["entitlement_id"], "usage_scope": offer["usage_scope"],
+            "region_id": offer["region_id"], "logical_endpoint_group": "zhipu-coding-plan",
+            "inventory_strategy": "bundled_catalog", "verification_evidence": offer["evidence_digest"],
+            "last_verified_at": int(datetime.datetime.strptime(reviewed_on, "%Y-%m-%d").replace(tzinfo=datetime.timezone.utc).timestamp()),
+            "protocol_endpoints": [{"protocol_endpoint_id": profile_id + ".chat", "protocol": "chat_completions",
+                "base_url": "https://open.bigmodel.cn", "request_path": "/api/coding/paas/v4/chat/completions",
+                "adapter_ref": "adapter.openai-chat.v1", "adapter_revision": 1, "stable_preference": 0,
+                "authentication_semantics": {"kind": "bearer"}}],
+        }
+        option = {"connection_option_id": "zhipu.coding-chat.cn.v1", "display_name": "Zhipu Coding Plan Chat (China)",
+            "origin": "native_api", "connector_id": "connector.zhipu.p0", "connector_revision": 1,
+            "endpoint_profile_id": profile_id, "endpoint_profile_revision": 1, "billing_class": "subscription"}
+        projection["registrations"].append({"connector_id": "connector.zhipu.p0", "implementation_ref": "builtin/zhipu",
+            "endpoint_profile": profile, "connection_option": option})
+        projection["attempts"].append({"connection_option_id": option["connection_option_id"], "product_key": product["product_key"],
+            "outcome": "endpoint_qualified", "models": [{"model_key": v["source_model_key"], "outcome": "qualified"}
+                for v in projection["models"] if v["model"]["model_configuration_id"] in model_ids]})
+        projection["registrations"].sort(key=lambda v: v["connection_option"]["connection_option_id"])
+        projection["attempts"].sort(key=lambda v: v["connection_option_id"])
     for field, key in [("models", lambda v: v["model"]["model_configuration_id"]),
             ("model_endpoint_capabilities", lambda v: v["capability_id"]), ("offers", lambda v: v["offer_id"])]:
         projection[field].sort(key=key)

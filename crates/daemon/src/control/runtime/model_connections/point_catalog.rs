@@ -100,7 +100,11 @@ pub(super) fn qualified_point(
                 continue;
             }
             let destination = format!("{}{}", endpoint.base_url, endpoint.request_path);
-            if destination.strip_suffix(suffix) == Some(binding.endpoint.as_str()) {
+            if destination.strip_suffix(suffix) == Some(binding.endpoint.as_str())
+                && catalog_models(catalog, &resolved, endpoint)
+                    .ok()
+                    .is_some_and(|models| !models.is_empty())
+            {
                 matches.push((resolved.clone(), endpoint.clone()));
             }
         }

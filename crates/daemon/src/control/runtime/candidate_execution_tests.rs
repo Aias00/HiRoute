@@ -332,7 +332,7 @@ fn native_companion_controls_require_exact_catalog_model_product_and_protocol() 
     let catalog = current_catalog();
     let mut fact = registered_fact(
         &catalog,
-        "zhipu.coding-plan.cn.v1",
+        "zhipu.coding-chat.cn.v1",
         "model.zhipu.glm-5.3.coding-chat",
     );
     let convention = Some(NativeReasoningRenderConventionV1::ZhipuThinkingChat);

@@ -373,6 +373,7 @@
           "provider_api_key"
         ],
         "endpoint_profile_refs": [
+          "endpoint.zhipu.coding-chat.cn.v1",
           "endpoint.zhipu.coding-plan.cn.v1",
           "endpoint.zhipu.general.cn.v1"
         ],
@@ -1097,6 +1098,35 @@
         "verification_evidence": "sha256:3b5e30780af253304d215c20ac1254a3f9ebecb898b7cc27948c25203492f302"
       },
       {
+        "connector_id": "connector.zhipu.p0",
+        "connector_revision": 1,
+        "endpoint_profile_id": "endpoint.zhipu.coding-chat.cn.v1",
+        "entitlement_id": "coding-plan-api-key",
+        "inventory_strategy": "bundled_catalog",
+        "last_verified_at": 1791936000,
+        "logical_endpoint_group": "zhipu-coding-plan",
+        "protocol_endpoints": [
+          {
+            "adapter_ref": "adapter.openai-chat.v1",
+            "adapter_revision": 1,
+            "authentication_semantics": {
+              "kind": "bearer"
+            },
+            "base_url": "https://open.bigmodel.cn",
+            "protocol": "chat_completions",
+            "protocol_endpoint_id": "endpoint.zhipu.coding-chat.cn.v1.chat",
+            "request_path": "/api/coding/paas/v4/chat/completions",
+            "stable_preference": 0
+          }
+        ],
+        "provider_platform_id": "zhipu",
+        "region_id": "cn",
+        "revision": 1,
+        "service_offering_id": "coding-plan",
+        "usage_scope": "account",
+        "verification_evidence": "sha256:b1ad8c148887a08a0371e8c39a5f7844d4ae7b35300d36a34fd0b14c6bb80cee"
+      },
+      {
         "endpoint_profile_id": "endpoint.zhipu.coding-plan.cn.v1",
         "revision": 1,
         "connector_id": "connector.zhipu.p0",
@@ -1386,6 +1416,16 @@
         "connector_revision": 1,
         "display_name": "Z.AI · General API",
         "endpoint_profile_id": "endpoint.zai.general.global.v1",
+        "endpoint_profile_revision": 1,
+        "origin": "native_api"
+      },
+      {
+        "billing_class": "subscription",
+        "connection_option_id": "zhipu.coding-chat.cn.v1",
+        "connector_id": "connector.zhipu.p0",
+        "connector_revision": 1,
+        "display_name": "Zhipu · Coding Plan Chat (China)",
+        "endpoint_profile_id": "endpoint.zhipu.coding-chat.cn.v1",
         "endpoint_profile_revision": 1,
         "origin": "native_api"
       },
@@ -1856,11 +1896,11 @@
           "capability_id": "cap.zhipu.glm-5.3-flash.coding-plan.chat",
           "connector_id": "connector.zhipu.p0",
           "connector_revision": 1,
-          "endpoint_profile_id": "endpoint.zhipu.coding-plan.cn.v1",
+          "endpoint_profile_id": "endpoint.zhipu.coding-chat.cn.v1",
           "endpoint_profile_revision": 1,
           "evidence_digest": "sha256:3661d17c3fcbbcbc1e88c3c42d7a938401a98a2f9b34a710f18bbe2591d5526d",
           "model_configuration_id": "model.zhipu.glm-5.3-flash.coding-chat",
-          "protocol_endpoint_id": "endpoint.zhipu.coding-plan.cn.v1.chat",
+          "protocol_endpoint_id": "endpoint.zhipu.coding-chat.cn.v1.chat",
           "required_adapter_ref": "adapter.openai-chat.v1",
           "required_adapter_revision": 1,
           "revision": 1,
@@ -1871,11 +1911,11 @@
           "capability_id": "cap.zhipu.glm-5.3.coding-plan.chat",
           "connector_id": "connector.zhipu.p0",
           "connector_revision": 1,
-          "endpoint_profile_id": "endpoint.zhipu.coding-plan.cn.v1",
+          "endpoint_profile_id": "endpoint.zhipu.coding-chat.cn.v1",
           "endpoint_profile_revision": 1,
           "evidence_digest": "sha256:ac244c817bb03d624467fd62599147c82d245869a5274ecd30e2d539a5d71f22",
           "model_configuration_id": "model.zhipu.glm-5.3.coding-chat",
-          "protocol_endpoint_id": "endpoint.zhipu.coding-plan.cn.v1.chat",
+          "protocol_endpoint_id": "endpoint.zhipu.coding-chat.cn.v1.chat",
           "required_adapter_ref": "adapter.openai-chat.v1",
           "required_adapter_revision": 1,
           "revision": 1,
@@ -2432,14 +2472,28 @@
         },
         {
           "billing_class": "subscription",
+          "endpoint_profile_id": "endpoint.zhipu.coding-chat.cn.v1",
+          "endpoint_profile_revision": 1,
+          "entitlement_id": "coding-plan-api-key",
+          "evidence_digest": "sha256:b1ad8c148887a08a0371e8c39a5f7844d4ae7b35300d36a34fd0b14c6bb80cee",
+          "model_configuration_ids": [
+            "model.zhipu.glm-5.3-flash.coding-chat",
+            "model.zhipu.glm-5.3.coding-chat"
+          ],
+          "offer_id": "offer.zhipu.coding-chat",
+          "region_id": "cn",
+          "revision": 1,
+          "service_offering_id": "coding-plan",
+          "usage_scope": "account"
+        },
+        {
+          "billing_class": "subscription",
           "endpoint_profile_id": "endpoint.zhipu.coding-plan.cn.v1",
           "endpoint_profile_revision": 1,
           "entitlement_id": "coding-plan-api-key",
-          "evidence_digest": "sha256:f33bd546bb24ba7ae0c48274d2d1f74e709624fe963781ab3b2510f995b8d608",
+          "evidence_digest": "sha256:dad45c2ef96c761acffc75c3a5b718c825c7aadf1498fd1a18931980e321d5e7",
           "model_configuration_ids": [
-            "model.zhipu.glm-5.3",
-            "model.zhipu.glm-5.3-flash.coding-chat",
-            "model.zhipu.glm-5.3.coding-chat"
+            "model.zhipu.glm-5.3"
           ],
           "offer_id": "offer.zhipu.coding-plan",
           "region_id": "cn",
@@ -101555,7 +101609,7 @@
         }
       ],
       "schema": "hiroute.model-metadata-catalog/v1",
-      "source_catalog_digest": "sha256:897f2e8a6caf697dad2dd20d61cc36841bb5743e061c7527844657111286338e"
+      "source_catalog_digest": "sha256:275bb1862f855a05d04888e59666a1249e2e8108b4c519bb757219caafb2b5af"
     },
     "rating_snapshot": {
       "digest": "sha256:4421ab512915f871dbbec5ec7d437302beb8e2f7bfeced07a9eecf4232c372e8",

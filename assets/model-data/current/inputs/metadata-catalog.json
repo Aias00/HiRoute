@@ -118409,6 +118409,27 @@
       ]
     },
     {
+      "connection_option_id": "zhipu.coding-chat.cn.v1",
+      "provider_id": "zhipu",
+      "name": {
+        "zh": "智谱 · Coding Plan Chat（中国）",
+        "en": "Zhipu · Coding Plan Chat (China)"
+      },
+      "description": {
+        "zh": "套餐权益与按量 API 分开计费，请使用对应套餐的凭据。",
+        "en": "Plan entitlements are separate from pay-as-you-go API billing. Use the matching plan credential."
+      },
+      "documentation_url": "https://docs.bigmodel.cn/cn/coding-plan/quick-start",
+      "endpoint_defaults": [
+        {
+          "protocol_endpoint_id": "endpoint.zhipu.coding-chat.cn.v1.chat",
+          "authentication_semantics": {
+            "kind": "bearer"
+          }
+        }
+      ]
+    },
+    {
       "connection_option_id": "zhipu.coding-plan.cn.v1",
       "provider_id": "zhipu",
       "name": {
