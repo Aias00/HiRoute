@@ -100,10 +100,6 @@ impl HermesDocument {
         })
     }
 
-    pub fn bytes(&self) -> &[u8] {
-        &self.bytes
-    }
-
     /// A single top-level mapping is the edit unit; only the specified descendant members
     /// are changed. Scalar/flow mappings are readable but cannot provide safe member spans.
     pub fn edit(
@@ -334,6 +330,23 @@ fn render_member(key: &str, value: &Value, indent: usize) -> Result<String, Herm
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn unowned_literal_markers_quoted_keys_and_following_comments_survive_member_removal() {
+        let before = b"model:\n  api_key: native-secret\n# belongs to the following member\n\"unrelated:key\": |\n  *literal !literal &literal\n  # literal content\n";
+        let doc = HermesDocument::parse(before).unwrap();
+        let after = doc
+            .edit(&BTreeMap::from([(
+                vec!["model".into(), "api_key".into()],
+                None,
+            )]))
+            .unwrap();
+        assert!(std::str::from_utf8(&after).unwrap().contains("# belongs to the following member\n\"unrelated:key\": |\n  *literal !literal &literal\n  # literal content\n"));
+        assert!(
+            HermesDocument::parse(&after).unwrap().value["model"]
+                .get("api_key")
+                .is_none()
+        );
+    }
     #[test]
     fn bounded_members_preserve_foreign_yaml_and_reject_ambiguous_composition() {
         let bytes=b"# profile\nmodel:\n  default: old\n  provider: native\n  unrelated: keep\nauxiliary:\n  title: native # keep exact bytes\n";

@@ -61,6 +61,18 @@ pub fn hermes_configure(
         return Err(hermes_error("owned provider"));
     }
     let doc = HermesDocument::parse(current)?;
+    if doc
+        .value
+        .pointer("/plugins/disabled")
+        .and_then(Value::as_array)
+        .is_some_and(|entries| {
+            entries
+                .iter()
+                .any(|v| v.as_str() == Some(HERMES_PLUGIN_NAME))
+        })
+    {
+        return Err(hermes_error("native plugin explicitly disabled"));
+    }
     let concrete_provider =
         hiroute_domain::additional_model_plan_provider_id(provider_id, &model.alias);
     if let Some(previous) = previous {
