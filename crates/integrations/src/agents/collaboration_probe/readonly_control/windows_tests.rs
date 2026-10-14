@@ -159,7 +159,21 @@ fn denied(shell: Shell) {
     let root = super::super::super::probe_files::temporary("hiroute-readonly-denied-").unwrap();
     let held = security::open_owner_only(root.path(), true).unwrap();
     let identity = security::file_identity(&held).unwrap();
+    // Atomic native creation and SetSecurityInfo do not promise the same DACL
+    // inheritance control bits. Establish the fixture's restoration baseline
+    // using its actual restore operation before adding the deny ACE. This is a
+    // fresh explicitly current-user-owned object, never an adopted directory.
+    security::set_owner_only(root.path(), true).unwrap();
+    assert_eq!(
+        security::file_identity(&security::open_owner_only(root.path(), true).unwrap()).unwrap(),
+        identity
+    );
     let before = file_security::capture(&held).unwrap();
+    security::set_owner_only(root.path(), true).unwrap();
+    assert!(
+        file_security::capture(&held).unwrap() == before,
+        "the actual fixture restoration operation must be idempotent"
+    );
     let owner = hiroute_platform::windows::background::current_sid_string().unwrap();
     let mut command = Command::new(
         hiroute_platform::windows::launcher::system_executable(Path::new("icacls.exe")).unwrap(),
