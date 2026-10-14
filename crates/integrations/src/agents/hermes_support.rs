@@ -6,6 +6,8 @@ pub struct HermesSupportFacts {
     pub version: String,
     pub middleware: bool,
     pub skills: bool,
+    pub responses_sdk: bool,
+    pub messages_sdk: bool,
     pub dependency_digest: CanonicalDigest,
 }
 
@@ -19,6 +21,7 @@ pub fn hermes_support_facts() -> HermesSupportFacts {
         })
         .unwrap_or_default();
     let mut roots = Vec::new();
+    let mut interpreters = Vec::new();
     for executable in executables.drain(..) {
         let Ok(Some(executable)) = super::executable::resolve(&executable) else {
             continue;
@@ -42,6 +45,13 @@ pub fn hermes_support_facts() -> HermesSupportFacts {
             if !path.is_absolute() || raw.contains(['$', '`', '\0']) {
                 continue;
             }
+            if path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("python"))
+            {
+                interpreters.push(path.to_path_buf());
+            }
             let mut ancestor = path.parent();
             for _ in 0..4 {
                 let Some(parent) = ancestor else {
@@ -55,6 +65,9 @@ pub fn hermes_support_facts() -> HermesSupportFacts {
         // discovered later merely because its interfaces would pass.
         break;
     }
+    let sdk_paths = python_package_paths(&interpreters);
+    roots.extend(sdk_paths.iter().cloned());
+    let sdk = inspect_sdks(&sdk_paths);
     roots.sort();
     roots.dedup();
     for root in roots.into_iter().take(256) {
@@ -104,7 +117,8 @@ pub fn hermes_support_facts() -> HermesSupportFacts {
             })
             .unwrap_or_else(|| "unknown".into());
         let dependency_digest = CanonicalDigest::of(&(
-            "hermes-native-interfaces/v1",
+            "hermes-native-interfaces/v2",
+            &sdk.2,
             CanonicalDigest::of_bytes(plugins.as_bytes()),
             CanonicalDigest::of_bytes(middleware.as_bytes()),
             calls
@@ -119,6 +133,8 @@ pub fn hermes_support_facts() -> HermesSupportFacts {
             version,
             middleware: supported,
             skills,
+            responses_sdk: sdk.0,
+            messages_sdk: sdk.1,
             dependency_digest,
         };
     }
@@ -126,6 +142,8 @@ pub fn hermes_support_facts() -> HermesSupportFacts {
         version: "unknown".into(),
         middleware: false,
         skills: false,
+        responses_sdk: false,
+        messages_sdk: false,
         dependency_digest: CanonicalDigest::of_bytes(b"hermes-native-interfaces/unavailable"),
     }
 }
@@ -136,4 +154,68 @@ fn bounded_text(path: &Path, bound: u64) -> Option<String> {
         return None;
     }
     std::fs::read_to_string(path).ok()
+}
+
+/// Follow only the literal launcher's interpreter installation. No imports or environment search.
+fn python_package_paths(interpreters: &[PathBuf]) -> Vec<PathBuf> {
+    let mut packages = Vec::new();
+    for interpreter in interpreters.iter().take(8) {
+        let Some(prefix) = interpreter.parent().and_then(Path::parent) else {
+            continue;
+        };
+        for library in ["lib", "lib64"] {
+            let Ok(versions) = std::fs::read_dir(prefix.join(library)) else {
+                continue;
+            };
+            for version in versions.take(32).flatten() {
+                let name = version.file_name();
+                if !name.to_string_lossy().starts_with("python3.") {
+                    continue;
+                }
+                for directory in ["site-packages", "dist-packages"] {
+                    let path = version.path().join(directory);
+                    if path.is_dir() {
+                        packages.push(path);
+                    }
+                }
+            }
+        }
+    }
+    packages.sort();
+    packages.dedup();
+    packages
+}
+fn inspect_sdks(paths: &[PathBuf]) -> (bool, bool, CanonicalDigest) {
+    let mut responses = false;
+    let mut messages = false;
+    let mut evidence = Vec::new();
+    for path in paths {
+        for (package, resource, protocol) in [
+            ("openai", "resources/responses/responses.py", "responses"),
+            ("anthropic", "resources/messages/messages.py", "messages"),
+        ] {
+            let module = path.join(package).join(resource);
+            let source = bounded_text(&module, 2 * 1024 * 1024);
+            let supported = source.as_ref().is_some_and(|source| {
+                source.contains("def create(") && source.contains("extra_headers:")
+            });
+            evidence.push((
+                module,
+                source
+                    .as_ref()
+                    .map(|source| CanonicalDigest::of_bytes(source.as_bytes())),
+            ));
+            if protocol == "responses" {
+                responses |= supported;
+            } else {
+                messages |= supported;
+            }
+        }
+    }
+    (
+        responses,
+        messages,
+        CanonicalDigest::of(&("hermes-selected-sdk-interfaces/v1", evidence))
+            .expect("bounded sdk evidence"),
+    )
 }

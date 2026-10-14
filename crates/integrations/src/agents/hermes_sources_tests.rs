@@ -150,7 +150,7 @@ fn absent_interpolated_environment_and_native_pool_remain_unavailable() {
     write(
         root.path(),
         "auth.json",
-        r#"{"credential_pool":{"custom:other":[{"id":"private-pool-entry"}]}}"#,
+        r#"{"credential_pool":{"custom:coding-plan":[{"id":"private-pool-entry"}]}}"#,
     );
     let facts = hermes_api_sources(&target(root.path())).unwrap();
     assert!(facts.sources.iter().all(|s| s.credential.is_none()));

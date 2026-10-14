@@ -6,18 +6,26 @@ use std::collections::BTreeMap;
 pub fn hermes_settings_installation(
     target: &hiroute_domain::AgentNativeTargetV1,
 ) -> Result<hiroute_domain::SupportedAgentInstallationV1, HermesNativeError> {
-    hermes_installation(target, true)
+    hermes_installation(target, true, None)
+}
+
+pub fn hermes_settings_installation_for_protocol(
+    target: &hiroute_domain::AgentNativeTargetV1,
+    protocol: hiroute_domain::AgentIngressProtocolV1,
+) -> Result<hiroute_domain::SupportedAgentInstallationV1, HermesNativeError> {
+    hermes_installation(target, true, Some(protocol))
 }
 
 pub fn hermes_management_installation(
     target: &hiroute_domain::AgentNativeTargetV1,
 ) -> Result<hiroute_domain::SupportedAgentInstallationV1, HermesNativeError> {
-    hermes_installation(target, false)
+    hermes_installation(target, false, None)
 }
 
 fn hermes_installation(
     target: &hiroute_domain::AgentNativeTargetV1,
     model: bool,
+    protocol: Option<hiroute_domain::AgentIngressProtocolV1>,
 ) -> Result<hiroute_domain::SupportedAgentInstallationV1, HermesNativeError> {
     let target = canonical_hermes_target(target)?;
     let root = target.config_root();
@@ -54,7 +62,18 @@ fn hermes_installation(
     );
     for proof in &mut installation.capability_evidence {
         let available = match proof.capability {
-            AgentCapability::IngressAuthentication => Some(support.middleware),
+            AgentCapability::IngressAuthentication => Some(
+                support.middleware
+                    && match protocol {
+                        Some(hiroute_domain::AgentIngressProtocolV1::Responses) => {
+                            support.responses_sdk
+                        }
+                        Some(hiroute_domain::AgentIngressProtocolV1::Messages) => {
+                            support.messages_sdk
+                        }
+                        None => true,
+                    },
+            ),
             AgentCapability::SkillLoading => Some(support.skills),
             _ => None,
         };

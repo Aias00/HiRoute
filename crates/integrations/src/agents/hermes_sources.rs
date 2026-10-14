@@ -211,7 +211,23 @@ fn snapshot(
         // need another native adapter; keep that composition visible and unavailable.
         let pool_present = auth_document.0["credential_pool"]
             .as_object()
-            .is_some_and(|p| !p.is_empty());
+            .is_some_and(|pools| {
+                pools.iter().any(|(pool, entries)| {
+                    let Some(name) = pool.strip_prefix("custom:") else {
+                        return false;
+                    };
+                    let Some(entries) = entries.as_array().filter(|entries| !entries.is_empty())
+                    else {
+                        return false;
+                    };
+                    name == normalized_name(&id)
+                        || text(&entry["name"])
+                            .is_some_and(|display| name == normalized_name(display))
+                        || entries
+                            .iter()
+                            .any(|value| text(&value["base_url"]) == Some(endpoint))
+                })
+            });
         let secret_sources = document.value["secrets"]
             .as_object()
             .is_some_and(|s| !s.is_empty());

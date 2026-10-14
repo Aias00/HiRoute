@@ -13,7 +13,27 @@ const ORIGINAL: &[u8] = b"# user config\nmodel:\n  default: native/model\n  prov
 
 fn isolate(test: &str) -> bool {
     let source = crate::test_support::private_tempdir();
-    private_file(&source.path().join("hermes"), b"#!/bin/sh\nexit 97\n");
+    let interpreter = source.path().join("venv/bin/python");
+    private_file(
+        &interpreter,
+        b"structural interpreter locator, never executed",
+    );
+    private_file(
+        &source.path().join("hermes"),
+        format!("#!/bin/sh\n# '{}'\nexit 97\n", interpreter.display()).as_bytes(),
+    );
+    for resource in [
+        "openai/resources/responses/responses.py",
+        "anthropic/resources/messages/messages.py",
+    ] {
+        private_file(
+            &source
+                .path()
+                .join("venv/lib/python3.13/site-packages")
+                .join(resource),
+            b"def create(*, extra_headers: Headers): pass\n# structural fixture, never imported\n",
+        );
+    }
     fs::set_permissions(
         source.path().join("hermes"),
         fs::Permissions::from_mode(0o700),

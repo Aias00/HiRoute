@@ -63,6 +63,14 @@ impl LocalControlAdapter {
         let root_ref = format!("skill-root/{}", spec.context_id);
         let installation = if matches!(spec.model, AgentFacetIntent::Keep) {
             hiroute_integrations::hermes_management_installation(&target_scope)
+        } else if let AgentFacetIntent::Configure {
+            settings: AgentModelSelectionV2::HermesDefault { protocol, .. },
+        } = &spec.model
+        {
+            hiroute_integrations::hermes_settings_installation_for_protocol(
+                &target_scope,
+                *protocol,
+            )
         } else {
             hiroute_integrations::hermes_settings_installation(&target_scope)
         }
