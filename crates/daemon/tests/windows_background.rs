@@ -406,6 +406,7 @@ fn task_native_background_lua_gateway_control_stop_crash_recovery_and_autostart(
     let sid = background::current_sid_string().unwrap();
     windows_account::assert_standard(&token, &sid);
     let layout = input.owner_layout(&token);
+    fixture::require_fresh_lua_state(&layout);
     let cli = input.owner_cli(&layout);
     let installed = input.install(&token, false);
     let mut cleanup = Cleanup {
@@ -487,7 +488,7 @@ fn task_native_background_lua_gateway_control_stop_crash_recovery_and_autostart(
             .join(".local/bin/hiroute.exe")
             .exists()
     );
-    fixture::owner(
+    let preserved = fixture::owner(
         &token,
         fixture::Request {
             action: "cleanup-state".into(),
@@ -496,9 +497,11 @@ fn task_native_background_lua_gateway_control_stop_crash_recovery_and_autostart(
         },
         Duration::from_secs(20),
     );
+    assert_eq!(preserved["preserved"], true);
+    assert_eq!(preserved["removed"], false);
     drop(staged);
     println!(
-        "actual Task product gate: LUA, WTS session, Gateway v2, Local Control, graceful stop, forced recovery, autostart, deletion verified"
+        "actual Task product gate: fresh Lua state, WTS session, Gateway v2, Local Control, graceful stop, forced recovery, autostart, installation deletion verified; user state preserved"
     );
 }
 

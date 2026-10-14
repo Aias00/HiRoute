@@ -21,6 +21,8 @@ use super::windows_account as account;
 use super::windows_execution_host as execution_host;
 use super::windows_token_launcher as launcher;
 
+#[path = "windows_background_state.rs"]
+mod state;
 #[path = "windows_background_transactions.rs"]
 mod transactions;
 
@@ -92,6 +94,17 @@ pub fn prepared_cli() -> PathBuf {
     let bin = required("HIROUTE_WINDOWS_ADMIN_CLI");
     assert_eq!(bin.file_name().unwrap(), "hiroute.exe");
     bin
+}
+
+/// Only the Lua fixture demands empty initial state. Upgrade and the pure
+/// standard-owner journey retain their existing user-state contracts.
+pub fn require_fresh_lua_state(layout: &Value) {
+    let path = Path::new(
+        layout["state"]
+            .as_str()
+            .expect("actual owner state path is missing"),
+    );
+    state::require_absent(path).expect("Lua product gate refuses existing owner state");
 }
 
 /// All subprocess waits and capture readers are bounded. Secret stdin callers
@@ -560,14 +573,9 @@ pub fn entry() {
         "cleanup-state" => {
             assert!(request.program.is_none() && request.arguments.is_empty());
             let layout = StandaloneLayout::from_environment().unwrap();
-            assert!(
-                !layout.marker_path.exists(),
-                "cannot remove state of an installed product"
-            );
-            if layout.state_root.exists() {
-                std::fs::remove_dir_all(&layout.state_root).unwrap();
-            }
-            json!({"removed":true})
+            let disposition = state::after_uninstall(&layout.marker_path)
+                .expect("post-uninstall fixture preservation admission failed");
+            json!({"removed":disposition.removed,"preserved":disposition.preserved})
         }
         "tamper-daemon" | "restore-daemon" => {
             assert!(request.program.is_none() && request.arguments.is_empty());
