@@ -35,6 +35,7 @@ DIAGNOSTIC_CONTRACTS = (
     "crates/diagnostics/src/identity.rs", "crates/diagnostics/src/error.rs",
 )
 SELECTION_TOOLING = {"scripts/test-plan.py", "scripts/test-test-plan.py"}
+LOCAL_GC_TOOLING = {"scripts/local-rust-gc.py", "scripts/test-local-rust-gc.py"}
 WORKER_FIXTURE_TOOLING = {"scripts/test-agent-product-support.py",
                           "scripts/test-native-context-product.py",
                           "scripts/test-native-context-boundaries.py",
@@ -43,6 +44,40 @@ WORKER_BOOTSTRAP_TEST = "crates/daemon/src/delegation/profile/claude_adapter_boo
 PI_WORKER_BRIDGE_TEST = "crates/daemon/src/delegation/profile/pi_worker_bridge.test.mjs"
 PI_SDK_CONTRACT_TEST = "crates/integrations/src/agents/pi_sdk_contract.test.mjs"
 INTEGRATION_SKILL = ".agents/skills/hiroute-integrate/SKILL.md"
+# Repository agent policy is not shipped as the product's installed collaboration Skill.
+# Keep unknown skill code conservative; the known execution tools have their own consumers.
+PROJECT_AGENT_SKILLS = {
+    "hiroute-compatibility", "hiroute-cu", "hiroute-design-author", "hiroute-implementation-writer",
+    "hiroute-integrate", "hiroute-macos-launch", "hiroute-process-coordinator",
+    "hiroute-public-pr", "hiroute-ui-quality", "hiroute-validation", "issue-spec-apply", "issue-spec-github",
+    "issue-spec-propose", "issue-spec-workflow", "model-metadata-maintainer",
+}
+AGENT_TOOL_COMMANDS = {
+    "hiroute-cu": [["node", "--test", ".agents/skills/hiroute-cu/tests/" + name]
+                   for name in ("runtime.test.mjs", "screening.test.mjs", "sky-driver.test.mjs")],
+    "hiroute-public-pr": [["python3", ".agents/skills/hiroute-public-pr/scripts/test_public_surface.py"]],
+    "model-metadata-maintainer": [["python3", ".agents/skills/model-metadata-maintainer/scripts/" + name]
+                                  for name in ("test_materialize_client_metadata.py", "test_scan_client_repo.py")],
+}
+
+
+def project_agent_tooling(path):
+    if path == ".gitignore":
+        return AGENT_TOOL_COMMANDS["hiroute-public-pr"]
+    if path in {".agents/README.md", "CLAUDE.md", ".issue-spec/config.json", "issue-spec/config.yaml"}:
+        return []
+    if path.startswith("issue-spec/project/") and path.endswith(".md"):
+        return []
+    parts = path.split("/")
+    if len(parts) == 3 and parts[:2] == [".claude", "skills"] and parts[2] in PROJECT_AGENT_SKILLS:
+        return []
+    if len(parts) > 3 and parts[:2] == [".agents", "skills"] and parts[2] in PROJECT_AGENT_SKILLS:
+        if parts[3] in ("scripts", "tests", "page"):
+            return AGENT_TOOL_COMMANDS.get(parts[2])
+        if path.endswith((".md", ".yaml", ".json", ".txt", ".flac")) or path.endswith("/.gitignore"):
+            return []
+    return None
+
 WEBSITE_TOOLING = {".github/workflows/website.yml", ".github/workflows/release.yml"}
 RELEASE_BUILD_TESTS = ("test-build-cpa.py", "test-build-release.py", "test-linux-release.py", "test-package-desktop.py",
                        "test-standalone-install.py", "test-third-party-licenses.py")
@@ -315,10 +350,18 @@ def select(paths, full=False):
     selection_tooling = False
     worker_fixture_tooling = False
     validation_tooling = False
+    local_gc_tooling = False
     release_contract_tooling = False
     release_build_tooling = False
     targets = set()
+    agent_commands = []
     for path in sorted(set(paths)):
+        selected_agent_commands = project_agent_tooling(path)
+        if selected_agent_commands is not None:
+            agent_commands.extend(c for c in selected_agent_commands if c not in agent_commands)
+            if path == INTEGRATION_SKILL:
+                selection_tooling = True
+            continue
         if path in RELEASE_BUILD_TOOLING:
             release_build_tooling = True
             continue
@@ -347,6 +390,8 @@ def select(paths, full=False):
             full = True
             validation_tooling = True
             reasons.append("hosted backend execution contract: " + path)
+        elif path in LOCAL_GC_TOOLING:
+            local_gc_tooling = True
         elif path in VALIDATION_TOOLING:
             validation_tooling = True
         elif e2e_consumers(path):
@@ -445,6 +490,7 @@ def select(paths, full=False):
             commands.append(["cargo", "test", "--locked", "-p", "hiroute-diagnostics",
                              "--release", "--lib", "runtime::tests::unconfigured_runtime_uses_build_default_without_persisting",
                              "--", "--exact"])
+    commands.extend(agent_commands)
     if selection_tooling:
         commands.append(["python3", "scripts/test-test-plan.py"])
     if full or release_build_tooling:
@@ -470,6 +516,10 @@ def select(paths, full=False):
         commands.extend([["python3", "scripts/" + name] for name in
                          ("test-validation.py", "test-validation-report.py", "test-local-rust.py", "test-remote-rust.py", "test-validation-schedule.py",
                           "test-ci-run.py", "test-ci-shards.py", "test-desktop-pilot.py", "test-pilot-builds.py")])
+    if full or validation_tooling or local_gc_tooling:
+        if ["python3", "scripts/test-local-rust.py"] not in commands:
+            commands.append(["python3", "scripts/test-local-rust.py"])
+        commands.append(["python3", "scripts/test-local-rust-gc.py"])
     if full or paths:
         commands.append(["python3", "scripts/test-contract-convergence.py"])
         commands.append(["python3", "scripts/check-contract-convergence.py"])

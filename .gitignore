@@ -1,5 +1,8 @@
 /target/
 /artifacts/
+# Optional local video tooling and its shared Claude entry stay private.
+/.agents/skills/hiroute-promo-video/
+/.claude/skills/hiroute-promo-video
 /design
 /crates/hiroute-poc
 /docs/poc

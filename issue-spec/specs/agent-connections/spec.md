@@ -1,0 +1,381 @@
+# Agent connections and reversible native configuration
+
+## Purpose
+
+HiRoute can configure model access and collaboration independently in an Agent's
+selected native context. Native files, local model grants, Skill ownership, and
+published routes converge through the common recoverable settings workflow.
+
+## Requirements
+
+### Requirement: Model and collaboration facets have independent intent
+
+Each facet MUST use keep, configure, or restore, with omission meaning keep.
+Model settings own default/Fixed/allowed Plan routes; collaboration owns the shared
+Skill and explicit (default) or delegate_by_default trigger mode, never a caller
+Worker allowlist. Keeping another facet cannot read/validate its unused native files.
+Collaboration configuration needs neither active publication nor a plan; an empty
+runtime directory is a legitimate outcome. A collaboration-only Qoder context
+cannot acquire a fake model grant/token/file effect or ingress capability merely
+because its model settings are absent/malformed.
+
+The current native model surfaces are:
+
+| Agent | Model configuration | Collaboration resource context |
+| --- | --- | --- |
+| Codex | One independent CLI profile by default, or explicit shared-root takeover | Actual native user root, independently of model profile |
+| Claude Code | Ordinary `claude` user settings and three preset mappings | User/project Skills through native configuration |
+| Qoder | Explicit supplementary Plan providers; native default remains independent | Selected normally logged-in native context |
+| Pi | Per-Plan owned members in user models.json | Selected native Skills/resources |
+| DSH | Public standard Web/home composition and per-Plan provider rows | Public native Skills/CLI capabilities |
+
+A Fixed route always retains exact source/account/physical model. Selecting a plan
+never implies a Worker process or shared main-Agent ownership of that plan.
+
+### Requirement: Settings bind current facts once through one transaction
+
+Preview/Apply MUST bind context, target file ownership, required native capability,
+selected plans/protocols, resource revisions, and dependency digest, reproducing
+facts at Application admission. One save click is explicit intent without a second
+native authorization prompt or an extra scan just to create unseen confirmation text.
+A pre-admission conflict reports not-submitted and retains edits; retry creates fresh
+Preview from current facts, not endless replay of a stale digest. Current service
+unavailability preserves input. Login-item state is not configuration permission.
+
+Configuration retains unrelated/unknown fields and protected original recovery
+material. Ordinary Configure/Edit prepares dependencies/files, activates service
+publication, then switches the native file tail; this is recoverable, not a global
+cross-store atomic pause. Ordinary Restore conditionally restores native files
+before withdrawing their grants. An already sealed service result with a pending
+owned file tail retains its same-Operation recovery guard. Registered historical
+revoke tails keep their own existing ordering and cannot regrant durably withdrawn
+authority merely because later cleanup fails. Rollback handles only owned effects.
+
+File conflict before a switch leaves the original connection effective, preserves
+user edits, and can abandon proven untouched staging to release the writer. Repair
+then uses the applicable fresh operation or exact pending-tail retry, never one to
+bypass another's ownership. Damaged recovery proofs or unverifiable shared effects
+retain the recovery gate. Unmanaged unreadable targets cannot block service startup;
+actual managed access/recovery still checks type, contents, and identity. No extra
+owner/group-read/write-bit check or chmod is introduced.
+
+### Requirement: Connection bearer is separate from provider and Worker secrets
+
+First model configuration generates a per-connection 256-bit bearer from system
+secure randomness and stores it in the existing encrypted grant store. Ordinary
+route/scope edits retain its value but publish updated authority; equivalent save
+reuses it. Claude and Codex connections are independent; identical normalized Codex
+scope/CODEX_HOME shares one connection token.
+
+Connection detail masks state and permits explicit replacement/regeneration. Custom
+values are 16–128 ASCII letters/digits or `._~-`, entering via protected local input,
+never ordinary journal, WebView, diagnostics, or provider-Key storage. Successful
+rotation makes old values invalid for new requests and updates native consumption
+in the same Operation. Failure/stale facts preserve the old connection/token.
+Codex's owned local auth/config may contain its allowed plaintext copy; Claude's
+managed helper reads the current grant instead of copying bearer into native settings.
+Provider API Keys and automatically injected run credentials remain separate.
+Released Worker CLI does not require this token.
+
+### Requirement: Capability checks are specific to the requested action
+
+Configuration depends on actual writable fields/paths, protocol expressibility,
+required catalog facts, and current authority, not a generic client version allowlist.
+Unknown/old/new labels or failed diagnostic version reads cannot alone block settings,
+preview, restore, or ordinary managed launch. Missing optional usage/refusal/reasoning
+metadata cannot be a blanket save gate; exact client window/protocol/vision declarations
+still require proof. Version labels do not enter settings business identity.
+
+Borrowed Claude Worker launch has the single narrow host-managed-provider lower-bound
+check in [Worker platform](../worker-platform/spec.md); it is not a save/discovery gate.
+Diagnostic version execution clears inherited credentials and uses explicit writable
+disposable HOME/native/cwd roots, stopping its child chain before cleanup, so native
+startup side effects cannot fall back into a daily home. Ordinary Claude settings
+Preview/Apply does not re-run `claude --version`. An unknown native provider in scan
+cannot make a valid executable/resource disappear when switching to an authorized plan.
+Only the action requiring an unproven capability is unavailable.
+
+### Requirement: Configuration UI reports applied state, not invented verification
+
+Agents share enable, adjust, disable, and blocked-action recovery. Trusted new
+Codex/Claude configuration may preselect the sole enabled route in a draft; zero
+or several require explicit choices. Existing mappings/invalid selections stay
+visible and are not auto-replaced. Cancel/draft neither writes nor grants.
+
+Primary controls are route/default choices. Advanced controls retain native-model
+retention, root/profile selection, and independent Claude presets, with no read-only
+window preview in the enable dialog. Context lives in plan editing. Disable restores
+the selected facet through its independent detail action, not another toggle in the
+edit dialog. Model validation status or client-specific paid-validation buttons
+cannot obstruct normal save or masquerade as configuration state.
+
+Codex profile first-save may enable and copy a shell-specific launch command only
+after the exact Operation succeeds and current target is reread. Pending/failed/
+cancelled is neither configured nor copied. Clipboard failure preserves completed
+configuration and offers manual copy, not replay. Claude save explains ordinary
+entry/preset use without claiming a real model call. Independent isolated/live
+checks retain their actual diagnostic result and cannot establish task completion.
+
+### Requirement: Codex has one owned model slot per CODEX_HOME
+
+Independent profile and root takeover are mutually exclusive in one normalized
+CODEX_HOME, including pending Operations; file/context-ID differences cannot create
+parallel slots. Accepted state binds selection, target, context, grant, and recovery
+ownership across restart. Mode change requires complete restore before reconfigure.
+Independent mode manages one profile, applies to CLI only, and does not alter root
+provider/default or advertise Desktop configured. Advanced root explicitly affects
+CLI/Desktop sharing that scope; discovering one surface does not require installing
+or validating another. Desktop-only discovery uses its actual embedded engine.
+
+Filename, comments, same-name empty file/provider, or an inherited HiRoute provider
+are not ownership proof. Existing unowned files remain untouched; conflicting names
+may suggest another name. Creating a profile rejects inherited same-name provider
+auth residue rather than clearing it with an empty table. Added auth/header fields
+inside an owned provider are conflicts, not silently cleaned. Root selector
+`profile="hiroute"` conflicts just like the reserved inherited profile; other selectors
+remain independent. Collaboration uses the native root, not the model profile;
+misdirected collaboration configuration fails with its explicit root-context reason.
+
+### Requirement: Codex native retention needs both metadata and account proof
+
+Users choose HiRoute-only or retain-native-models as part of the shared settings.
+HiRoute-only exposes only authorized Fixed/Plan names and requires an available
+HiRoute default. With Plan aliases alone, catalog comes directly from published
+plans without native cache/account login. Fixed native entries still need complete
+native metadata for their exact binding.
+
+Retention resolves actual account models through the approved same-account
+subscription/CPA or saved API source, proves same original name/physical model and
+compatible route, and seals connection-specific grant membership. Catalog names
+alone do not grant access; unproven entries stay metadata-only. Missing source,
+unproven default, or a proven model without an exact route blocks the switch before
+writing, with HiRoute-only as an explicit user alternative. The subscription channel
+may be access-only borrowed or independently managed; no native-auth passthrough,
+new OAuth refresh owner, account substitution, or global source membership expansion
+is introduced. A retained default still routes through HiRoute, not native direct mode.
+
+Current Fixed bindings stay visible for repair/removal; automatically retained ones
+are read-only while enabled. Restoring either mode returns the first-managed provider/
+auth/model state, not the current managed selection. If original model field was
+absent, remove the owned field without requiring native account/cache/model call.
+Restoring an explicit/substitute model retains exact required directory checks.
+An old restore point containing an invalid managed alias fails explicitly rather
+than silently selecting another source or permanent native default.
+
+### Requirement: Codex catalog resolution is target-specific and preserves bytes
+
+Only retained-native mode reads the target catalog, in strict precedence: explicit
+effective-scope `model_catalog_json`; only if absent, that CODEX_HOME's models_cache;
+only if both absent, a proven target-bundled artifact using the same consumption
+contract. An existing higher-priority unreadable/malformed/invalid source fails
+without falling back to HiRoute's bundle, ReleaseFacts, another home, or a model-list
+projection. HiRoute-only unused native cache drift cannot block save.
+
+Merged output preserves top-level unknown fields, complete retained-entry JSON and
+relative order, then appends qualified plans. It exposes only authorized retained
+names. For target-cache native entries, absent supports_parallel_tool_calls defaults
+to true; explicit booleans remain, null/wrong types fail. Explicit user catalogs get
+no such missing default. Appended plans explicitly set false for current serial
+capability. Metadata does not grant account/model rights.
+
+Preview/Apply bind producer kind, exact path, complete content/context digest.
+Drift fails context_drift before config write. Artifact is private and immutable;
+input cache/catalog cannot be modified/deleted. Reconfiguration derives from the
+original pre-managed pointer or current same-target source, never the previous
+HiRoute merge. Restore reinstates the original pointer or removes the owned one.
+CLI/Desktop share only equal normalized scope and CODEX_HOME, without a new binary
+pin/version gate or retroactive surface history merging.
+
+### Requirement: Codex launch and restore preserve the native user's control
+
+Independent access provides the actual `codex --profile` command for its profile
+and CODEX_HOME, properly quoted and labeled for the shell. A short form is allowed
+only for default context with known terminal resolution; otherwise include original
+CODEX_HOME explicitly without changing HOME/shell startup files. Safe local access
+DTO may expose only the exact codex_home/target_file/commands needed for this action;
+other paths remain masked and no credential is included. This exception does not
+apply to diagnostics or remote telemetry. Gateway validates token/model scope,
+not directory hiding or launch argument filtering. Pure HiRoute needs no Codex
+OpenAI login and promises neither Desktop profile launch nor cross-provider history
+recovery. Native history labels/databases are not rewritten.
+
+Restore preserves unrelated user fields and new content in a created profile.
+Originally missing profile fields resume inheriting current root rather than writing
+old inherited values into the profile. No online/model-auth probe is required to
+undo owned selection. Before ordinary Disable, validate target/protected restore
+record and conditional write; drift preserves file and original connection with
+not-completed feedback. Proven untouched staging may roll back; a restored-file then
+service failure uses journal/conditional compensation, releasing writer when safe.
+Unparseable UTF-8 or inaccessible target is local scan diagnostic, not total scan
+failure. Persisted service-tail recovery needs its exact recorded dependency bytes;
+user-changed safe defaults do not authorize reinterpretation of an accepted tail.
+
+Login-item creation/check is not a model-save prerequisite. Users ensure the service
+runs when needed. Existing journal-owned historical login items may be released on
+last restore; preexisting user items are preserved. Saving config does not guarantee
+future service availability or real CLI/Desktop model inference.
+
+### Requirement: Claude ordinary entry preserves its preset and auth semantics
+
+The ordinary `claude` command consumes configured user settings. Opus/Sonnet/Haiku
+presets independently keep native mapping or map an allowed Plan; mappings may repeat.
+There is no fourth slot/arbitrary plan menu or forced single default. HiRoute cannot
+write native settings.model as a convenience. It conditionally owns only confirmed
+Gateway/preset/auth/window fields, retaining other user/project permissions, MCP,
+Skills, and unknown fields. Original helper/user-file auth env is replaced by one
+managed helper while active; protected restore stores the old values, never normal
+journal/WebView/logs. Unsafe process/project/enterprise route/auth overrides block
+configuration instead of leaving a falsely connected Agent.
+
+Effective explicit current model is env.ANTHROPIC_MODEL before top-level model,
+and must be covered by this grant. With neither, account-dependent Default cannot
+be inferred from three preset mappings: mappings may save with Default unverified,
+then user explicitly selects/tests a mapped preset. Native user changes survive
+restore except conflicting owned fields, which fail closed.
+
+`hiroute agent launch` remains optional isolated diagnosis, not a configuration
+activation requirement or displayed setup command. It derives from current successful
+Operation/presets/grant/stable endpoint, retains original cwd/TTY/stdio/signals and
+private overlay, and cannot run old auth helpers, re-discover sources, version-probe,
+or independently reauthorize from current user files.
+
+### Requirement: Client windows use the selected native client's policy
+
+[Plan windows](../routing-plans/spec.md) are per plan. Codex keeps per-plan catalog
+windows. Claude's process-wide compaction window is the selected plans' minimum,
+capped at 1,000,000; below 100,000 rejects Claude configuration with actionable detail
+without changing the plan or blocking Codex. Retained native models may compact
+sooner using their recognized capacity. This is compaction policy, not a request-
+size/token-cost guarantee.
+
+Chosen Claude window feeds persistent user settings, managed launch, Workers, and
+Gateway alias capacity hints. Conflicting process/project/managed window or disabled
+compaction overrides block persistent configuration. Re-saving/restarting applies
+changed plan windows; publishing alone does not reload existing native sessions.
+Restore preserves prior user values, and supported old immutable operations without
+window fields retain recovery. Preview data identifies target Agent, per-plan and
+shared window; ordinary enable dialog need not expose a read-only capacity panel.
+Fixed native effort and plan-owned effort follow [request routing](../request-routing/spec.md);
+plan catalog cannot imply one client effort changes all candidates.
+
+### Requirement: Supplementary providers retain native defaults and exact protocols
+
+Qoder/Pi/DSH model configuration contains explicitly selected published Plan routes,
+one stable owned provider per plan and user-chosen Responses/Messages protocol.
+Recommendation considers all active/fallback candidates' native protocols and
+explains conversion, never overrides selection or starts paid calls. Protocol change
+cannot regroup unrelated plans or rewrite old operation/provider identity. Restore
+checks native default references before deleting an old selector.
+
+Qoder does not scan/import native models/API/subscriptions/login through this surface.
+Owned context provider preserves other providers/models/default/purpose/hooks/MCP/
+unknown fields/comments. Native model provider uses its dedicated local model-grant
+carrier/path rather than run credentials; ordinary saved native startup must consume
+that config without transient route/token overrides. No-model collaboration stays
+independent. Strict existing Model V2 Codex/Claude responses keep field order/shape;
+collaboration-only clients use their distinct schema/context/collaboration result,
+not fabricated Model/NotConfigured/verification fields. Installed Skill state and
+actual native validation are different facts.
+
+Pi owns only selected per-plan members of user models.json with current alias and
+exact context/output, not native auth/default/extensions/Skills. Current user
+settings.json defaultProvider/defaultModel is an independent remove dependency
+checked at Preview/staging/activation/exact retry; a late default pauses the original
+operation until changed, not another operation's bypass. Project defaults retain
+native semantics. Configure checks only the same-package interface needed for
+models or native Skill/read/bash/trusted CLI; Worker APIs are not requirements for
+collaboration alone. Restore adds no incompatible-SDK prerequisite. Checks are
+offline without native auth store/helpers/extensions/downloads/model calls. Changed
+selected CLI invalidates process-local proof, not a generic version-label whitelist.
+
+Every supplementary provider obeys [installed-budget protection](../routing-plans/spec.md)
+for surviving current grants, including Pi/DSH; completed service with pending file
+tail remains recoverable before conflicting publication. Scope/rotation/restoration
+never chooses a native default or takes over an unowned equal-name provider.
+
+### Requirement: DSH configuration uses public static composition
+
+DSH uses public CLI/ACP/config, no internal SDK/plugin/session decoder. Static scan
+accepts safe block/flow YAML or JSON, but edits require a preservable block sequence.
+Executable tags/includes/merge ambiguity/dynamic or shadowing composition are
+rejected, not evaluated. Unrelated lines/providers/defaults remain unchanged; native
+compatibility options that cannot be preserved block import. Candidates require
+explicit nonempty model IDs; missing catalog models are not placeholder Observed
+members. Only nonempty explicit input proves vision; missing/empty is unknown.
+
+Resolve effective standard credential module before import. The home patch replaces
+the Web module/config as a whole, not field-merging. Credential location follows
+static absolute config.path, config.dshHome/.credentials.yaml, then selected DSH_HOME's
+file. An explicit nonempty inherited environment Key precedes file references.
+Evidence binds effective file path/bytes and selected environment secret; unselected
+fallback file drift cannot invalidate it. Relative/tilde/HOME/cwd-dependent paths,
+disabled/removed/unknown module composition fail without guessing a default or helper.
+Passive dotenv/OAuth import is not supported. Public composition checks stay path-
+capability-based, not exact release pins; cross-version execution needs separate
+native evidence. Model and collaboration restore remain independent.
+
+### Requirement: Collaboration proofs distinguish preinstall from installed Skill
+
+Codex/Claude initial collaboration install uses user-triggered private-context proof
+of Skill loading and controlled read-only trusted HiRoute CLI, without daily config,
+upstream calls, or borrowing another client's proof. Current-client/installation/
+short-lived evidence binds Preview/Apply; missing/expired proof retains edits and
+recheck. Plain model settings do not require this collaboration challenge.
+
+Qoder proof explicitly borrows the selected normally logged-in context, isolates
+workspace/provider/tool/challenge, and never copies auth, auto-logs in, collects PAT,
+falls back to another HOME, or forwards model requests. Native client's own refresh
+does not grant HiRoute auth/config deletion rights. It preserves settings bytes/mode
+without promising all borrowed HOME is immutable.
+
+Preinstall private project/plugin Skill proof establishes a basic capability only.
+Postinstall verification must load/invoke the actual user
+skills/hiroute-collaboration/SKILL.md with user source included, correlated native tool
+call/result and trusted CLI outcome. Same-named project/plugin, prompt echo, or model
+self-report cannot replace it. Method/context/CLI/contract/target/content binds the
+consumed dependency evidence; changed/expired/shadowed/invalid resources require fresh
+proof. Unknown route/hook/MCP/tool constraints fail rather than infer isolation from
+empty settings/mode names. Installed, native-verified, and real delegated completion
+remain distinct. Closed diagnostics distinguish login missing, installed-Skill absence/
+drift/invalidity, context/dependency/check failure without raw output/paths/credentials.
+An auth challenge followed by collaboration proof cannot erase still-valid auth
+capability, nor grant unrequested Skill access to model settings.
+
+### Requirement: Skill and reference maintenance never becomes Worker authority
+
+The shared Skill queries published purposes and public task CLI, explains local trust,
+approve-all default/optional policies, preserves original submission identity, and
+hands off results. Trigger description/body update together. explicit is default;
+delegate_by_default guides execution tasks but cannot technically intercept every
+request or recursively delegate coordination/Workers. Installing model access does
+not enable default delegation. Configuration/restoration of owned Skill references
+is transactional, shared-file-reference-aware, and preserves equal-content unowned
+or user-edited files. Old sealed artifacts may be cleaned only with current-key
+proof of ownership; obsolete runtime/task records remain isolated unchanged.
+
+Released Worker calls reject protected grants/capability FDs before business work.
+Dependency selection uses local trust with exact Harness revision CAS, deterministic
+intent/digest, key, and Operation, never Apply-capability issuance. Plan reference
+queries return independent default-model/allowed-model relations with stable subject/
+revision/digest, not removed collaboration allowlists. Unfinished/corrupt records
+are not zero references. Plan admission/deletion rechecks them under its writer/gate.
+
+### Requirement: Live model checks consume one exact explicit consent
+
+Live CheckAgentConnection binds context, native surface, current tested publication,
+model names/client, call count, and possible cost. Validate target/surface/configuration/
+current grant membership before starting or consuming consent. Valid consent is
+atomically consumed before potentially paid execution; expired/replayed/cross-subject/
+cross-request use fails. Result belongs to that tested surface/revision only, not
+all configured Agents or future service state. Verification uses isolated configuration
+rather than altering a live user's environment, and cannot substitute for ordinary
+native saved-route or real main-Agent delegation acceptance.
+
+## Implementation references
+
+- [Shared settings transaction](../../../crates/application/src/agent_connection/settings/transaction.rs)
+  and [native supplemental-provider guide](../../../crates/integrations/src/agents/additional_native/README.md).
+- [Codex slot/restore scenarios](../../../crates/daemon/src/control/runtime/settings_profile_tests.rs)
+  and [legacy-tail scenarios](../../../crates/daemon/src/control/runtime/settings_profile_legacy_tests.rs).
+- [Saved native-model journey](../../../crates/daemon/tests/support/additional_model_product.py)
+  and [real collaboration journey](../../../crates/daemon/tests/support/collaboration_product.py).

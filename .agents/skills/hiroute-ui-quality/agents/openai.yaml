@@ -1,0 +1,4 @@
+interface:
+  display_name: "HiRoute UI Quality"
+  short_description: "Verify Desktop layout with production styles and screenshots"
+  default_prompt: "Use $hiroute-ui-quality to verify the changed Desktop states with production styles, geometry and screenshots."

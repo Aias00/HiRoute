@@ -621,6 +621,7 @@ def dag_run_targets(runner, root, run, targets, checkout, lease, environment, de
             traced = [tracer, "-f", "-e", "trace=execve,execveat", "-s", "0",
                       "-o", str(trace), *args]
             started = time.monotonic()
+            started_at = time.time()
             with path.open("w") as output:
                 output.write("     Running " + item["label"] + " (" + selected + ")\n")
                 output.flush()
@@ -651,6 +652,7 @@ def dag_run_targets(runner, root, run, targets, checkout, lease, environment, de
             return dict(name=name, log=str(path), process_exit=code,
                         complete=summary["complete"] and code == 0,
                         counts=summary["counts"], exec_audit=audit,
+                        started_at=started_at, finished_at=time.time(),
                         seconds=round(time.monotonic() - started, 3))
 
         pending = iter(targets)
@@ -743,15 +745,18 @@ def execute_dag(runner, root, run, checkout, request, lease, output, reserved_ha
         dag_bind_metadata(targets, metadata_artifact)
         for item in targets:
             item.setdefault("external_artifacts", []).append(toolchain_artifact)
-        # CPA's external-process fixture releases its selected port before the
-        # child binds it. Keep this whole library, including its internal cases,
-        # separate from other listeners until the child lifecycle is complete.
-        isolated = [item for item in targets
-                    if item["package_name"] == "hiroute-cpa-bridge"
-                    and item["test_source"] == "src/lib.rs"]
-        if len(isolated) != 1:
-            raise ValueError("CPA library target missing or duplicated in isolation lane")
-        isolated[0]["test_threads"] = 1
+        # CPA's child must finish its released-port handoff before other listeners.
+        # Observation keeps its real 500 ms query deadlines and library parallelism,
+        # without competing with preparation builds or other library processes.
+        isolated = []
+        for package, threads in (("hiroute-cpa-bridge", 1), ("hiroute-observation", 8)):
+            selected = [item for item in targets
+                        if item["package_name"] == package
+                        and item["test_source"] == "src/lib.rs"]
+            if len(selected) != 1:
+                raise ValueError(package + " library target missing or duplicated in isolation lane")
+            selected[0]["test_threads"] = threads
+            isolated.extend(selected)
         runner.save(run / "dag-validation-plan.json", dict(
             schema="hiroute.validation-plan/v1", sha=request["sha"],
             command=request["command"], targets=targets, expected_tests=expected))

@@ -1,0 +1,11 @@
+# HiRoute repository invariants
+
+- Use current Issue/Design decisions, repository durable specs, code and executable tests as authority. Requirements must be self-contained. Resolve consequential conflicts before affected implementation, while continuing unrelated work.
+- Start from the [code map](docs/code-map/README.md) to find the production owner and a representative scenario. Update affected map entries and local guides when responsibilities, entry points or contract boundaries change; keep detailed requirements in their owning specs.
+- Follow [agent instruction ownership](.agents/README.md) when changing instructions or skills. Claude uses repository skills exposed through `.claude/skills/` and must not load Codex-only skills through indirect references.
+- Before writing GitHub Issues, PRs or attachments, read and follow `rules` and `guidance.shared` in `issue-spec/config.yaml`. Keep process records in the corresponding Issue/PR and raw evidence in ignored artifacts.
+- Before every authorized public push, including validation pushes, use [public PR checks](.agents/skills/hiroute-public-pr/SKILL.md) on the complete outgoing history. Human review and merge remain the default.
+- For selecting, executing or diagnosing checks and preparing validation handoff, use [HiRoute validation](.agents/skills/hiroute-validation/SKILL.md). Select scope by changed behavior and affected consumers. Bind results to the actual tested revision; missing required cases or fixture-only success cannot establish product completion.
+- Keep each checkout's default `target/`; share compiler objects only through sccache. Never use external Cargo targets or `cargo clean`, and never clean active runs. Preserve source worktrees and unique evidence during owner-led cleanup.
+- For persisted data, configuration, recovery, published CLI/Gateway behavior or release handoff, use [compatibility maintenance](.agents/skills/hiroute-compatibility/SKILL.md). Keep one current contract per boundary; register intentional legacy support in [the compatibility register](contracts/compatibility-support.v1.json).
+- For Desktop layout, text wrapping, visual hierarchy or interactive form-state changes, use [Desktop UI quality](.agents/skills/hiroute-ui-quality/SKILL.md), with affected production states and actual screenshots.
