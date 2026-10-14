@@ -13,6 +13,7 @@ pub(super) struct ReceiptFacts {
     pub(super) attempt_substring: bool,
     pub(super) denial_substring: bool,
     pub(super) script: ScriptFacts,
+    pub(super) pipeline: PipelineFacts,
 }
 
 /// Observations from the nonce-bound command, never evidence of sandbox enforcement.
@@ -49,6 +50,23 @@ pub(super) struct ScriptFacts {
     pub(super) failure: Option<ScriptFailure>,
 }
 
+#[derive(Debug, Eq, PartialEq)]
+pub(super) enum ScriptErrorClass {
+    Unknown,
+    ConstrainedMethodInvocation,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub(super) struct PipelineFacts {
+    pub(super) entered_matches: usize,
+    pub(super) mode_matches: usize,
+    pub(super) mode: LanguageMode,
+    pub(super) failure_matches: usize,
+    pub(super) failure: Option<ScriptFailure>,
+    pub(super) error_matches: usize,
+    pub(super) error_class: ScriptErrorClass,
+}
+
 pub(super) struct ReadOnlyControl {
     path: PathBuf,
     command: String,
@@ -57,6 +75,10 @@ pub(super) struct ReadOnlyControl {
     entered: String,
     mode_prefix: String,
     failure_prefix: String,
+    pipeline_entered: String,
+    pipeline_mode_prefix: String,
+    pipeline_failure_prefix: String,
+    pipeline_error_prefix: String,
     verified: bool,
 }
 
@@ -74,14 +96,24 @@ impl ReadOnlyControl {
         let entered = format!("hiroute-readonly-entered-{nonce}");
         let mode_prefix = format!("hiroute-readonly-mode-{nonce}:");
         let failure_prefix = format!("hiroute-readonly-failure-{nonce}:");
+        let mut entropy = [0u8; 16];
+        getrandom::fill(&mut entropy).map_err(|_| "read-only pipeline entropy")?;
+        let pipeline_nonce: String = entropy.iter().map(|byte| format!("{byte:02x}")).collect();
+        let pipeline_entered = format!("hiroute-readonly-pipeline-entered-{pipeline_nonce}");
+        let pipeline_mode_prefix = format!("hiroute-readonly-pipeline-mode-{pipeline_nonce}:");
+        let pipeline_failure_prefix =
+            format!("hiroute-readonly-pipeline-failure-{pipeline_nonce}:");
+        let pipeline_error_prefix = format!("hiroute-readonly-pipeline-error-{pipeline_nonce}:");
         // One physical command line prevents a rejected tool's echoed command
         // from containing a receipt as a standalone output line. Policy rejection,
         // invalid syntax and unrelated I/O failures must stay red.
-        // Diagnostic frames use the same inherited Console stream as the actual
-        // attempt/denial receipts; their emission must not discover a PowerShell
-        // cmdlet before observing the native write attempt.
+        // Literal pipeline diagnostics do not call cmdlets or .NET methods. They
+        // distinguish script entry from a failure of the first Console method,
+        // including ConstrainedLanguage. Original Console and write receipts
+        // remain the independent authority; neither diagnostic proves denial.
+        // PowerShell v7.4.13 Binders.cs uses the exact constrained-method error ID.
         let command = format!(
-            "$ErrorActionPreference = 'Stop'; $hirouteProbePhase = 'entered'; try {{ [Console]::WriteLine('{entered}'); switch ($ExecutionContext.SessionState.LanguageMode) {{ 'FullLanguage' {{ [Console]::WriteLine('{mode_prefix}FullLanguage') }} 'ConstrainedLanguage' {{ [Console]::WriteLine('{mode_prefix}ConstrainedLanguage') }} 'RestrictedLanguage' {{ [Console]::WriteLine('{mode_prefix}RestrictedLanguage') }} 'NoLanguage' {{ [Console]::WriteLine('{mode_prefix}NoLanguage') }} default {{ [Console]::WriteLine('{mode_prefix}Unknown') }} }}; $hirouteProbePhase = 'console-attempt'; [Console]::WriteLine('{attempted}'); $hirouteProbePhase = 'file-write'; try {{ [System.IO.File]::WriteAllText('{literal}', 'hiroute-readonly-unexpected-write'); [Console]::WriteLine('hiroute-readonly-write-succeeded'); exit 1 }} catch [System.UnauthorizedAccessException] {{ $hirouteProbePhase = 'console-denial'; [Console]::WriteLine('{denied}') }} }} catch {{ [Console]::WriteLine('{failure_prefix}' + $hirouteProbePhase + ':' + [string][int]$_.Exception.HResult + ':' + [string][int]$_.CategoryInfo.Category); throw }}"
+            "$ErrorActionPreference = 'Stop'; $hirouteProbePhase = 'entered'; try {{ '{pipeline_entered}'; switch ($ExecutionContext.SessionState.LanguageMode) {{ 'FullLanguage' {{ '{pipeline_mode_prefix}FullLanguage' }} 'ConstrainedLanguage' {{ '{pipeline_mode_prefix}ConstrainedLanguage' }} 'RestrictedLanguage' {{ '{pipeline_mode_prefix}RestrictedLanguage' }} 'NoLanguage' {{ '{pipeline_mode_prefix}NoLanguage' }} default {{ '{pipeline_mode_prefix}Unknown' }} }}; [Console]::WriteLine('{entered}'); switch ($ExecutionContext.SessionState.LanguageMode) {{ 'FullLanguage' {{ [Console]::WriteLine('{mode_prefix}FullLanguage') }} 'ConstrainedLanguage' {{ [Console]::WriteLine('{mode_prefix}ConstrainedLanguage') }} 'RestrictedLanguage' {{ [Console]::WriteLine('{mode_prefix}RestrictedLanguage') }} 'NoLanguage' {{ [Console]::WriteLine('{mode_prefix}NoLanguage') }} default {{ [Console]::WriteLine('{mode_prefix}Unknown') }} }}; $hirouteProbePhase = 'console-attempt'; [Console]::WriteLine('{attempted}'); $hirouteProbePhase = 'file-write'; try {{ [System.IO.File]::WriteAllText('{literal}', 'hiroute-readonly-unexpected-write'); [Console]::WriteLine('hiroute-readonly-write-succeeded'); exit 1 }} catch [System.UnauthorizedAccessException] {{ $hirouteProbePhase = 'console-denial'; [Console]::WriteLine('{denied}') }} }} catch {{ '{pipeline_failure_prefix}' + $hirouteProbePhase + ':' + [string][int]$_.Exception.HResult + ':' + [string][int]$_.CategoryInfo.Category; if ($_.FullyQualifiedErrorId -ceq 'MethodInvocationNotSupportedInConstrainedLanguage') {{ '{pipeline_error_prefix}ConstrainedMethodInvocation' }} else {{ '{pipeline_error_prefix}Unknown' }}; [Console]::WriteLine('{failure_prefix}' + $hirouteProbePhase + ':' + [string][int]$_.Exception.HResult + ':' + [string][int]$_.CategoryInfo.Category); throw }}"
         );
         Ok(Self {
             path,
@@ -91,6 +123,10 @@ impl ReadOnlyControl {
             entered,
             mode_prefix,
             failure_prefix,
+            pipeline_entered,
+            pipeline_mode_prefix,
+            pipeline_failure_prefix,
+            pipeline_error_prefix,
             verified: false,
         })
     }
@@ -111,6 +147,7 @@ impl ReadOnlyControl {
             attempt_substring: output.contains(&self.attempted),
             denial_substring: output.contains(&self.denied),
             script: self.script_facts(output),
+            pipeline: self.pipeline_facts(output),
         }
     }
 
@@ -119,13 +156,7 @@ impl ReadOnlyControl {
             .lines()
             .filter_map(|line| line.trim().strip_prefix(&self.mode_prefix))
             .collect();
-        let mode = match modes.as_slice() {
-            ["FullLanguage"] => LanguageMode::FullLanguage,
-            ["ConstrainedLanguage"] => LanguageMode::ConstrainedLanguage,
-            ["RestrictedLanguage"] => LanguageMode::RestrictedLanguage,
-            ["NoLanguage"] => LanguageMode::NoLanguage,
-            _ => LanguageMode::Unknown,
-        };
+        let mode = language_mode(&modes);
         let failures: Vec<_> = output
             .lines()
             .filter_map(|line| line.trim().strip_prefix(&self.failure_prefix))
@@ -138,6 +169,36 @@ impl ReadOnlyControl {
             failure: match failures.as_slice() {
                 [failure] => script_failure(failure),
                 _ => None,
+            },
+        }
+    }
+
+    fn pipeline_facts(&self, output: &str) -> PipelineFacts {
+        let suffixes = |prefix: &str| -> Vec<String> {
+            output
+                .lines()
+                .filter_map(|line| line.trim().strip_prefix(prefix))
+                .map(ToOwned::to_owned)
+                .collect()
+        };
+        let modes = suffixes(&self.pipeline_mode_prefix);
+        let failures = suffixes(&self.pipeline_failure_prefix);
+        let errors = suffixes(&self.pipeline_error_prefix);
+        PipelineFacts {
+            entered_matches: matching_lines(output, &self.pipeline_entered).count(),
+            mode_matches: modes.len(),
+            mode: language_mode(&modes.iter().map(String::as_str).collect::<Vec<_>>()),
+            failure_matches: failures.len(),
+            failure: match failures.as_slice() {
+                [failure] => script_failure(failure),
+                _ => None,
+            },
+            error_matches: errors.len(),
+            error_class: match errors.as_slice() {
+                [error] if error == "ConstrainedMethodInvocation" => {
+                    ScriptErrorClass::ConstrainedMethodInvocation
+                }
+                _ => ScriptErrorClass::Unknown,
             },
         }
     }
@@ -166,6 +227,16 @@ impl ReadOnlyControl {
             return Err("native read-only write rejection");
         }
         require_absent(&self.path)
+    }
+}
+
+fn language_mode(modes: &[&str]) -> LanguageMode {
+    match modes {
+        ["FullLanguage"] => LanguageMode::FullLanguage,
+        ["ConstrainedLanguage"] => LanguageMode::ConstrainedLanguage,
+        ["RestrictedLanguage"] => LanguageMode::RestrictedLanguage,
+        ["NoLanguage"] => LanguageMode::NoLanguage,
+        _ => LanguageMode::Unknown,
     }
 }
 
@@ -432,6 +503,182 @@ mod tests {
             assert_eq!(facts.script.failure_matches, 0);
             assert_eq!(facts.script.mode, LanguageMode::Unknown);
         }
+    }
+
+    fn pipeline_output(control: &ReadOnlyControl) -> String {
+        format!(
+            "{}\n{}ConstrainedLanguage\n{}entered:-2146233087:7\n{}ConstrainedMethodInvocation\n",
+            control.pipeline_entered,
+            control.pipeline_mode_prefix,
+            control.pipeline_failure_prefix,
+            control.pipeline_error_prefix
+        )
+    }
+
+    #[test]
+    fn readonly_pipeline_captures_before_console_failure_without_authorizing_denial() {
+        let root = tempfile::tempdir().unwrap();
+        let mut control = ReadOnlyControl::new(root.path(), "old-console-nonce").unwrap();
+        let output = pipeline_output(&control);
+        let facts = control.receipt_facts(&output);
+        // The old Console-only observation loses every checkpoint in this failure.
+        assert_eq!(facts.script.entered_matches, 0);
+        assert_eq!(facts.script.failure_matches, 0);
+        assert_eq!(facts.pipeline.entered_matches, 1);
+        assert_eq!(facts.pipeline.mode, LanguageMode::ConstrainedLanguage);
+        assert_eq!(
+            facts.pipeline.failure,
+            Some(ScriptFailure {
+                phase: ScriptPhase::Entered,
+                hresult: -2146233087,
+                category: 7
+            })
+        );
+        assert_eq!(
+            facts.pipeline.error_class,
+            ScriptErrorClass::ConstrainedMethodInvocation
+        );
+        assert_eq!(facts.attempt_matches, 0);
+        assert_eq!(facts.denial_matches, 0);
+        assert!(control.confirm(&output).is_err());
+        assert!(!control.verified());
+        assert!(!control.pipeline_entered.ends_with("old-console-nonce"));
+        let command = control.command();
+        assert!(
+            command
+                .find(&format!("'{}';", control.pipeline_entered))
+                .unwrap()
+                < command.find("[Console]::WriteLine(").unwrap()
+        );
+        assert!(
+            command
+                .find(&format!("'{}' +", control.pipeline_failure_prefix))
+                .unwrap()
+                < command
+                    .find(&format!(
+                        "[Console]::WriteLine('{}' +",
+                        control.failure_prefix
+                    ))
+                    .unwrap()
+        );
+        assert!(command.contains("[System.IO.File]::WriteAllText("));
+        assert!(command.contains("catch [System.UnauthorizedAccessException]"));
+        assert!(command.ends_with("; throw }"));
+    }
+
+    #[test]
+    fn readonly_pipeline_rejects_echo_wrong_nonce_and_duplicate_frames() {
+        let root = tempfile::tempdir().unwrap();
+        let mut control = ReadOnlyControl::new(root.path(), "nonce").unwrap();
+        let other = ReadOnlyControl::new(root.path(), "other").unwrap();
+        for output in [control.command().to_owned(), pipeline_output(&other)] {
+            let facts = control.receipt_facts(&output);
+            assert_eq!(facts.pipeline.entered_matches, 0);
+            assert_eq!(facts.pipeline.mode_matches, 0);
+            assert_eq!(facts.pipeline.failure_matches, 0);
+            assert_eq!(facts.pipeline.error_matches, 0);
+            assert!(control.confirm(&output).is_err());
+        }
+        let output = pipeline_output(&control).repeat(2);
+        let facts = control.receipt_facts(&output);
+        assert_eq!(facts.pipeline.entered_matches, 2);
+        assert_eq!(facts.pipeline.mode_matches, 2);
+        assert_eq!(facts.pipeline.mode, LanguageMode::Unknown);
+        assert_eq!(facts.pipeline.failure_matches, 2);
+        assert_eq!(facts.pipeline.failure, None);
+        assert_eq!(facts.pipeline.error_matches, 2);
+        assert_eq!(facts.pipeline.error_class, ScriptErrorClass::Unknown);
+        assert!(control.confirm(&output).is_err());
+        assert!(!control.verified());
+    }
+
+    #[test]
+    fn readonly_pipeline_rejects_unknown_and_noncanonical_failure_facts() {
+        let root = tempfile::tempdir().unwrap();
+        let control = ReadOnlyControl::new(root.path(), "nonce").unwrap();
+        for failure in [
+            "unknown:-1:7",
+            "entered:+1:7",
+            "entered:-01:7",
+            "entered:2147483648:7",
+            "entered:-2147483649:7",
+            "entered:-1:32",
+            "entered:-1:-1",
+            "entered:-1:07",
+            "entered:-1:7:private-extra",
+        ] {
+            let output = format!(
+                "{}private-mode\n{}{failure}\n{}private-error\n",
+                control.pipeline_mode_prefix,
+                control.pipeline_failure_prefix,
+                control.pipeline_error_prefix
+            );
+            let facts = control.receipt_facts(&output);
+            assert_eq!(facts.pipeline.mode, LanguageMode::Unknown);
+            assert_eq!(facts.pipeline.failure_matches, 1);
+            assert_eq!(facts.pipeline.failure, None);
+            assert_eq!(facts.pipeline.error_class, ScriptErrorClass::Unknown);
+            assert!(!format!("{facts:?}").contains("private-"));
+        }
+        for (code, category) in [(i32::MIN, 0), (i32::MAX, 31)] {
+            let facts = control.receipt_facts(&format!(
+                "{}file-write:{code}:{category}",
+                control.pipeline_failure_prefix
+            ));
+            assert_eq!(
+                facts.pipeline.failure,
+                Some(ScriptFailure {
+                    phase: ScriptPhase::FileWrite,
+                    hresult: code,
+                    category
+                })
+            );
+        }
+        for error in [
+            "constrainedmethodinvocation",
+            "ConstrainedMethodInvocation:private-extra",
+            "MethodInvocationNotSupportedInConstrainedLanguage",
+        ] {
+            let facts = control.receipt_facts(&format!("{}{error}", control.pipeline_error_prefix));
+            assert_eq!(facts.pipeline.error_class, ScriptErrorClass::Unknown);
+        }
+    }
+
+    #[test]
+    fn readonly_pipeline_terminal_facts_survive_the_original_console_early_failure() {
+        use super::super::tool_diagnostic::{ReturnPhase, SelectedTool, ToolResultDiagnostic};
+        let root = tempfile::tempdir().unwrap();
+        let mut control = ReadOnlyControl::new(root.path(), "private-nonce").unwrap();
+        let output = format!(
+            "Wall time: 0.9514 seconds\nProcess exited with code 1\nOutput:\n{}private-native-error-path",
+            pipeline_output(&control)
+        );
+        let value = serde_json::json!({"output":output});
+        let facts = ToolResultDiagnostic::capture(
+            SelectedTool::ExecCommand,
+            Some(&value),
+            Some(&output),
+            "private-skill",
+            "private-cli",
+            Some(control.receipt_facts(&output)),
+        );
+        assert!(facts.correlated);
+        assert_eq!(facts.header.phase, ReturnPhase::TerminalReturned);
+        assert_eq!(facts.header.terminal_code, Some(1));
+        assert_eq!(facts.header.wall_time_micros, Some(951400));
+        let receipt = facts.receipts.as_ref().unwrap();
+        assert_eq!(receipt.script.entered_matches, 0);
+        assert_eq!(receipt.pipeline.entered_matches, 1);
+        assert_eq!(receipt.pipeline.mode, LanguageMode::ConstrainedLanguage);
+        assert_eq!(
+            receipt.pipeline.error_class,
+            ScriptErrorClass::ConstrainedMethodInvocation
+        );
+        assert!(!format!("{facts:?}").contains("private-"));
+        assert!(!facts.skill_content && !facts.cli_output);
+        assert!(control.confirm(&output).is_err());
+        assert!(control.verify_after_stop().is_err());
+        assert!(!control.verified());
     }
 
     #[cfg(windows)]
