@@ -1,5 +1,6 @@
 //! Windows kernel boundaries. No borrowed numeric handle escapes this module.
 pub mod background;
+pub mod console;
 pub mod diagnostic_files;
 pub mod durable;
 pub(crate) mod file_security;
