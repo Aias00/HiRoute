@@ -106,6 +106,32 @@ impl LocalControlAdapter {
         source: PiApiSource,
         prepare_id: &str,
     ) -> Result<ComputeCandidateViewV2, ComputeManagementControlError> {
+        let discovery = pi_discovery(&source);
+        let evidence = source.evidence_digest.clone();
+        self.prepare_native_source_candidate(vec![source], discovery, evidence, prepare_id)
+    }
+
+    pub(super) fn prepare_native_point_candidate(
+        &self,
+        point: hiroute_integrations::NativeApiConnectionPointV2,
+        prepare_id: &str,
+    ) -> Result<ComputeCandidateViewV2, ComputeManagementControlError> {
+        let discovery = super::points::point_discovery(&point);
+        let evidence = point.snapshot_digest;
+        self.prepare_native_source_candidate(point.sources, discovery, evidence, prepare_id)
+    }
+
+    fn prepare_native_source_candidate(
+        &self,
+        sources: Vec<PiApiSource>,
+        discovery: ComputeDiscoveryRefV1,
+        evidence: hiroute_domain::CanonicalDigest,
+        prepare_id: &str,
+    ) -> Result<ComputeCandidateViewV2, ComputeManagementControlError> {
+        let source = sources
+            .first()
+            .cloned()
+            .ok_or(ComputeManagementControlError::DiscoveryNotImportable)?;
         if !source.supported_auth || source.credential.is_none() {
             return Err(ComputeManagementControlError::DiscoveryNotImportable);
         }
@@ -138,7 +164,7 @@ impl LocalControlAdapter {
             } else {
                 "pi-discovered-candidate/v1"
             },
-            &source.evidence_digest,
+            &evidence,
             prepare_id,
         ))
         .map_err(|_| ComputeManagementControlError::Corrupt)?;
@@ -159,41 +185,12 @@ impl LocalControlAdapter {
         self.model_connections
             .reserve_candidate_ref(&candidate)
             .map_err(|_| ComputeManagementControlError::Conflict)?;
-        let observed = |v| NativeCandidateFactValueV1 {
-            value: v,
-            basis: if v.is_some() {
-                NativeCandidateFactBasisV1::Observed
-            } else {
-                NativeCandidateFactBasisV1::Unknown
-            },
-        };
-        let capability = NativeModelCapabilityDeclarationV1 {
-            tool: NativeCandidateFactValueV1::unknown(),
-            vision: observed(source.vision),
-            streaming: NativeCandidateFactValueV1::unknown(),
-            context_tokens: NativeCandidateFactValueV1 {
-                value: source.context_tokens,
-                basis: if source.context_tokens.is_some() {
-                    NativeCandidateFactBasisV1::Observed
-                } else {
-                    NativeCandidateFactBasisV1::Unknown
-                },
-            },
-            max_output_tokens: NativeCandidateFactValueV1 {
-                value: source.max_output_tokens,
-                basis: if source.max_output_tokens.is_some() {
-                    NativeCandidateFactBasisV1::Observed
-                } else {
-                    NativeCandidateFactBasisV1::Unknown
-                },
-            },
-            native_reasoning: NativeCandidateFactValueV1::unknown(),
-        };
+        let models = sources.iter().map(native_source_declaration).collect();
         let draft = NativeModelConnectionDraftV1 {
             display_template_id: None,
             inference_model_id: None,
             candidate_ref: Some(candidate.candidate_ref),
-            lineage_ref: pi_discovery(&source).discovery_ref,
+            lineage_ref: discovery.discovery_ref,
             trusted_lineage_digest: None,
             display_name: format!(
                 "{} · {}",
@@ -238,13 +235,7 @@ impl LocalControlAdapter {
             runtime_fallback_denied_model_ids: super::runtime_fallback_denied_model_ids(
                 self.release_catalog.as_ref(),
             ),
-            models: vec![NativeModelDeclarationV1 {
-                upstream_model_id: source.model_id,
-                display_name: source.display_name,
-                catalog_configuration_id: None,
-                membership: ComputeModelMembershipV2::Observed,
-                capabilities: capability,
-            }],
+            models,
         };
         self.model_connections
             .prepare_observed_discovery(
@@ -254,8 +245,48 @@ impl LocalControlAdapter {
                     input_slot,
                     secret: &secret,
                 },
-                source.evidence_digest,
+                evidence,
             )
             .map_err(|_| ComputeManagementControlError::Corrupt)
+    }
+}
+
+fn native_source_declaration(source: &PiApiSource) -> NativeModelDeclarationV1 {
+    let observed = |v| NativeCandidateFactValueV1 {
+        value: v,
+        basis: if v.is_some() {
+            NativeCandidateFactBasisV1::Observed
+        } else {
+            NativeCandidateFactBasisV1::Unknown
+        },
+    };
+    let capability = NativeModelCapabilityDeclarationV1 {
+        tool: NativeCandidateFactValueV1::unknown(),
+        vision: observed(source.vision),
+        streaming: NativeCandidateFactValueV1::unknown(),
+        context_tokens: NativeCandidateFactValueV1 {
+            value: source.context_tokens,
+            basis: if source.context_tokens.is_some() {
+                NativeCandidateFactBasisV1::Observed
+            } else {
+                NativeCandidateFactBasisV1::Unknown
+            },
+        },
+        max_output_tokens: NativeCandidateFactValueV1 {
+            value: source.max_output_tokens,
+            basis: if source.max_output_tokens.is_some() {
+                NativeCandidateFactBasisV1::Observed
+            } else {
+                NativeCandidateFactBasisV1::Unknown
+            },
+        },
+        native_reasoning: NativeCandidateFactValueV1::unknown(),
+    };
+    NativeModelDeclarationV1 {
+        upstream_model_id: source.model_id.clone(),
+        display_name: source.display_name.clone(),
+        catalog_configuration_id: None,
+        membership: ComputeModelMembershipV2::Observed,
+        capabilities: capability,
     }
 }

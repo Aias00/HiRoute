@@ -454,6 +454,15 @@ const COMMANDS: &[StaticCommandDescriptor] = &[
         "Refresh inventory only through its registered connector contract."
     ),
     command!(
+        "compute.connection.prepare",
+        ["compute", "connection", "prepare"],
+        "PrepareDiscoveredModelConnection",
+        [],
+        Released,
+        Query,
+        "Prepare the current opaque native connection-point reference without an inference call."
+    ),
+    command!(
         "compute.connection.options",
         ["compute", "connection", "options"],
         "ListConnectionOptions",

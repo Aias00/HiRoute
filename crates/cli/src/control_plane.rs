@@ -87,6 +87,9 @@ pub(crate) fn command_payload(
         "compute.show" => Some(positional(options, |source_id| ComputeManagementQueryV2 {
             source_id: Some(source_id),
         })),
+        "compute.connection.prepare" => Some(request::<
+            hiroute_application_api::PrepareDiscoveredModelConnectionRequestV1,
+        >(options)),
         "compute.connection.options" => Some(empty::<ComputeConnectionOptionsRequestV1>(options)),
         "compute.connection.preview" => Some(compute_preview(options)),
         "compute.connection.apply" => Some(request::<ComputeConnectionApplyRequestV1>(options)),

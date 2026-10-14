@@ -45,7 +45,7 @@ pub(crate) fn dispatch_scan_compute(
         };
         return match port.scan_compute_points(&parsed) {
             Ok(value) => succeeded(value, request.request_id),
-            Err(error) => failed(map_compute_error(error), request.request_id),
+            Err(error) => failed(crate::map_control_error(error), request.request_id),
         };
     }
     if request.protected_grant.is_some()

@@ -862,6 +862,8 @@ pub(crate) fn command_request_schema(command_id: &str) -> &'static str {
         "agents.scan" => "hiroute.agent-scan-request/v1",
         "compute.list" | "compute.show" => "hiroute.compute-management-query/v2",
         "compute.connection.preview" => "hiroute.compute-connection-preview-request/union",
+        "compute.connection.prepare" => "hiroute.prepare-discovered-model-connection-request/v1",
+        "compute.scan" => "hiroute.compute-scan-request/union",
         "compute.connection.apply" => "hiroute.compute-connection-apply-request/v1",
         "compute.connection.authorize" => "hiroute.compute-connection-authorization-request/v1",
         "compute.connection.login" => "hiroute.subscription-login-request/v1",
@@ -1090,7 +1092,7 @@ pub(crate) fn command_usage(command_id: &str, joined_path: &str) -> String {
         "routing.list" => "hiroute routing list [--request-stdin] --output json".to_owned(),
         "decision.services.list" => "hiroute decision services list --output json".to_owned(),
         "routing.show" => "hiroute routing show <PLAN_ID> --output json".to_owned(),
-        "agents.connect.preview" | "agents.connect.apply" | "agents.restore.preview" | "agents.restore.apply" => {
+        "compute.scan" | "compute.connection.prepare" | "agents.connect.preview" | "agents.connect.apply" | "agents.restore.preview" | "agents.restore.apply" => {
             format!("hiroute {joined_path} --request-stdin --output json")
         }
         "agents.connect.status" => "hiroute agents connect status <CONNECTION_OR_CONTEXT_ID> --output json".to_owned(),

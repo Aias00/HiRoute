@@ -66,6 +66,24 @@ impl LocalControlAdapter {
             descriptor.field_selector.as_str(),
             "pi.api-key" | "dsh.api-key"
         ) {
+            let sources = if descriptor.field_selector == "dsh.api-key" {
+                self.scanner.dsh_api_sources()
+            } else {
+                self.scanner.pi_api_sources()
+            }
+            .map_err(|_| ControlReadError::SnapshotChanged)?;
+            if hiroute_integrations::native_api_connection_points(sources)
+                .iter()
+                .any(|point| {
+                    &point.snapshot_digest == expected_evidence
+                        && point
+                            .sources
+                            .iter()
+                            .any(|source| source.credential.as_ref() == Some(&descriptor))
+                })
+            {
+                return Ok(());
+            }
             return (if descriptor.field_selector == "dsh.api-key" {
                 self.scanner.dsh_api_sources()
             } else {
