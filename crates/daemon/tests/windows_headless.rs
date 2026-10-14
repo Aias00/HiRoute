@@ -23,6 +23,8 @@ mod windows_native_protocols;
 mod windows_routing_business;
 #[path = "support/windows_routing_modes.rs"]
 mod windows_routing_modes;
+#[path = "support/windows_user_models.rs"]
+mod windows_user_models;
 #[path = "support/windows_worker_business.rs"]
 mod windows_worker_business;
 
@@ -145,7 +147,16 @@ impl InstalledProduct {
     }
 
     fn start_with_entry(&self, cli: bool) -> RunningDaemon {
+        self.start_with_environment(cli, &[])
+    }
+
+    fn start_with_environment(
+        &self,
+        cli: bool,
+        environment: &[(std::ffi::OsString, std::ffi::OsString)],
+    ) -> RunningDaemon {
         let mut command = Command::new(if cli { &self.stable } else { &self.daemon });
+        command.envs(environment.iter().cloned());
         if cli {
             command.args(["service", "run"]);
         } else {
@@ -763,5 +774,38 @@ fn actual_windows_complete_public_headless_business() {
     assert!(product.cli.is_file());
     println!(
         "Windows public headless: exact pinned native clients, Compute, Decision, plan preview/apply/list/show, independent Responses/Messages grants, streaming, safe facts/usage/value, real managed Claude launch, actual Main Skill to public Worker, durable restart and native settings restore"
+    );
+}
+
+/// Ordinary native user configuration is distinct from per-run Worker profiles.
+/// The selected client roots exist before the real daemon freezes its discovery
+/// environment; production public transactions alone write their configuration.
+#[test]
+#[ignore = "requires explicit pinned real Pi, DSH and Node artifacts"]
+fn actual_windows_pi_and_dsh_persisted_user_models() {
+    let product = InstalledProduct::create();
+    let contexts = windows_user_models::Contexts::prepare(&product);
+    let mut first = product.start_with_environment(false, contexts.variables());
+    gateway_ready(first.listen);
+    let mut models = windows_user_models::UserModels::run(&product, &contexts, first.listen);
+    lifecycle::stop(
+        &product.layout.lifecycle_endpoint(),
+        &product.daemon,
+        Duration::from_secs(30),
+    )
+    .unwrap();
+    first.wait(true);
+    let mut recovered = product.start_with_environment(true, contexts.variables());
+    gateway_ready(recovered.listen);
+    models.recovered(&product, &contexts);
+    lifecycle::stop(
+        &product.layout.lifecycle_endpoint(),
+        &product.daemon,
+        Duration::from_secs(30),
+    )
+    .unwrap();
+    recovered.wait(true);
+    println!(
+        "Windows ordinary Pi/DSH user models: public Preview/Apply, persisted providers, ordinary native Gateway requests, private grant rotation, installed user Skill and real public CLI invocation, actual restart, independent Restore and retained same-request receipts"
     );
 }

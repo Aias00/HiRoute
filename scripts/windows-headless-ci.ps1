@@ -12,7 +12,8 @@ param(
   [string]$BaselineManifest,
   [string]$BaselineArchive,
   [string]$BaselineRevision,
-  [switch]$CaptureArtifacts
+  [switch]$CaptureArtifacts,
+  [switch]$InventoryOnly
 )
 $ErrorActionPreference = 'Stop'
 $evidence = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Evidence)
@@ -21,6 +22,10 @@ $root = Split-Path $PSScriptRoot -Parent
 Set-Location $root
 . "$PSScriptRoot/windows-native-scopes.ps1"
 . "$PSScriptRoot/windows-upgrade-inputs.ps1"
+if ($InventoryOnly -and ($Scope -notin @('components','background','agents','accounts') -or $CaptureArtifacts)) {
+  throw 'Inventory export requires a static native scope and no artifact capture'
+}
+$inventoryRecipes = [System.Collections.Generic.List[object]]::new()
 if (-not $IsWindows) { throw 'Native Windows required' }
 if ($ExpectedSha -notmatch '^[0-9a-f]{40}$' -or (git rev-parse HEAD) -ne $ExpectedSha) {
   throw 'Exact committed candidate required'
@@ -29,6 +34,7 @@ git diff --exit-code HEAD --
 if ($LASTEXITCODE -ne 0) { throw 'Candidate has tracked changes' }
 if ($env:CARGO_TARGET_DIR -or $env:CARGO_BUILD_TARGET_DIR) { throw 'Checkout-local Cargo target required' }
 New-Item -ItemType Directory -Force $evidence | Out-Null
+if (-not $InventoryOnly) {
 $env:HIROUTE_BUILD_SOURCE_SHA = $ExpectedSha
 $env:CARGO_TERM_COLOR = 'never'
 $env:CARGO_INCREMENTAL = '0'
@@ -39,9 +45,30 @@ $os = Get-CimInstance Win32_OperatingSystem
    host_architecture = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString();
    image_version = $env:ImageVersion; rustc = (rustc --version); cargo = (cargo --version)
 } | ConvertTo-Json -Depth 5 | Out-File -Encoding utf8 "$evidence/provenance.json"
+}
+
+function Get-NativeTestFilter {
+  param([string[]]$CargoArguments)
+  $filter = $null
+  for ($i = 0; $i -lt $CargoArguments.Count; $i++) {
+    if ($CargoArguments[$i] -in @('-p','--package','--test','--bin','--features')) { $i++; continue }
+    if (-not $CargoArguments[$i].StartsWith('-')) {
+      if ($filter) { throw 'Multiple native test filters are not supported' }
+      $filter = $CargoArguments[$i]
+    }
+  }
+  return $filter
+}
 
 function Invoke-RequiredTests {
   param([string]$Name, [string[]]$CargoArguments, [string[]]$Required, [string[]]$HarnessArguments = @())
+  if ($InventoryOnly) {
+    if ($Required.Count -eq 0 -or @($Required | Sort-Object -Unique).Count -ne $Required.Count -or
+        @($inventoryRecipes | Where-Object { $_.name -ceq $Name }).Count -ne 0) { throw 'Native source inventory must be nonempty and unique' }
+    $inventoryRecipes.Add(@{ name=$Name; required_cases=$Required; cargo_arguments=$CargoArguments;
+      harness_arguments=$HarnessArguments; filter=(Get-NativeTestFilter $CargoArguments) })
+    return
+  }
   $result = @{ scenario = 'red'; name = $Name; cases = $Required; executed = 0;
                source_revision = $ExpectedSha; ignored = 0; process_exit = $null;
                plan = $Plan; phase = $Phase; related_runs = $RelatedRun;
@@ -63,14 +90,7 @@ function Invoke-RequiredTests {
         Get-Content "$evidence/$Name-cargo-artifacts-stderr.log" | Write-Host
         throw "$Name executable provenance failed to build"
       }
-      $filter = $null
-      for ($i = 0; $i -lt $CargoArguments.Count; $i++) {
-        if ($CargoArguments[$i] -in @('-p','--package','--test','--bin','--features')) { $i++; continue }
-        if (-not $CargoArguments[$i].StartsWith('-')) {
-          if ($filter) { throw 'Multiple native test filters are not supported' }
-          $filter = $CargoArguments[$i]
-        }
-      }
+      $filter = Get-NativeTestFilter $CargoArguments
       @{ required_cases = $Required; cargo_arguments = $CargoArguments; harness_arguments = $HarnessArguments; filter = $filter } |
         ConvertTo-Json -Depth 5 | Out-File -Encoding utf8 "$evidence/$Name-recipe.json"
       python scripts/windows-native-artifacts.py capture --expected-sha $ExpectedSha --evidence $evidence --name $Name --cargo-json "$evidence/$Name-cargo-artifacts.log" --recipe-json "$evidence/$Name-recipe.json"
@@ -164,6 +184,7 @@ function Invoke-LibraryTests {
 }
 
 function Initialize-WindowsAgentInputs {
+  if ($InventoryOnly) { return }
   cargo build --locked -p hiroute-daemon --bin hirouted -p hiroute-cli --bin hiroute 2>&1 | Tee-Object "$evidence/agent-daemon-link.log"
   if ($LASTEXITCODE -ne 0) { throw 'Production Worker daemon failed to build' }
   python scripts/windows-agent-fixtures.py --daemon target/debug/hirouted.exe --output "$evidence/clients" > "$evidence/clients-result.json"
@@ -263,6 +284,7 @@ if ($Scope -eq 'components') {
     Invoke-LibraryTests $package
   }
 } elseif ($Scope -in @('background','upgrade')) {
+  if (-not $InventoryOnly) {
   cargo build --locked -p hiroute-cli --bin hiroute -p hiroute-daemon --bin hirouted 2>&1 | Tee-Object "$evidence/headless-link.log"
   if ($LASTEXITCODE -ne 0) { throw 'Production background binaries failed to build' }
   if ($Scope -eq 'upgrade') {
@@ -284,6 +306,7 @@ if ($Scope -eq 'components') {
   $env:HIROUTE_WINDOWS_PYTHON = $package.python
   $env:HIROUTE_WINDOWS_ADMIN_CLI = $package.administrator_cli
   $env:HIROUTE_WORKER_DAEMON_BINARY = $package.worker_daemon
+  }
   if ($Scope -eq 'background') {
     Invoke-RequiredTests 'background-capture' @('-p','hiroute-daemon','--test','windows_background','windows_token_launcher::capture_tests::') @(
       'windows_token_launcher::capture_tests::native_capture_requires_last_writer_close_for_eof',
@@ -310,6 +333,10 @@ if ($Scope -eq 'components') {
   Invoke-RequiredTests 'agent-cancel-oracle' @('-p','hiroute-daemon','--lib',$cancelOracle) @($cancelOracle) @('--exact')
   $mainOracle = 'agents::collaboration_probe::tests::codex_collaboration_accepts_correlated_native_text_content_items_only'
   Invoke-RequiredTests 'agent-main-oracle' @('-p','hiroute-integrations','--lib',$mainOracle) @($mainOracle) @('--exact')
+  $launchOracle = 'agents::collaboration_probe::tests::native_launch_diagnostic_'
+  Invoke-RequiredTests 'agent-launch-oracle' @('-p','hiroute-integrations','--lib',$launchOracle) @(
+    'agents::collaboration_probe::tests::native_launch_diagnostic_preserves_fixed_os_codes_and_api_stages',
+    'agents::collaboration_probe::tests::native_launch_diagnostic_rejects_ambiguous_codes_and_never_emits_native_text')
   $historyOracle = 'delegation::installation::installation_probe::native_tools_probe::history_probe::tests::'
   Invoke-RequiredTests 'agent-history-oracle' @('-p','hiroute-daemon','--lib',$historyOracle) @(
     ($historyOracle + 'closed_history_shape_distinguishes_missing_failed_and_alternate_results'),
@@ -333,8 +360,12 @@ if ($Scope -eq 'components') {
     'windows_worker_business::oracle::tests::a_prompt_or_unrelated_or_error_tool_result_cannot_supply_a_native_receipt',
     'windows_worker_business::oracle::tests::a_running_native_shell_does_not_complete_even_after_printing_json',
     'windows_worker_business::oracle::tests::ambiguous_native_cli_stdout_is_rejected')
+  $httpOracle = 'windows_business_http::tests::windows_loopback_oracle_reads_delayed_header_and_body_from_nonblocking_listener'
+  Invoke-RequiredTests 'agent-http' @('-p','hiroute-daemon','--test','windows_headless',$httpOracle) @($httpOracle) @('--exact')
   $publicBusiness = 'actual_windows_complete_public_headless_business'
   Invoke-RequiredTests 'agent-public-business' @('-p','hiroute-daemon','--test','windows_headless',$publicBusiness) @($publicBusiness) @('--ignored','--exact','--nocapture')
+  $userModels = 'actual_windows_pi_and_dsh_persisted_user_models'
+  Invoke-RequiredTests 'agent-user-models' @('-p','hiroute-daemon','--test','windows_headless',$userModels) @($userModels) @('--ignored','--exact','--nocapture')
   foreach ($case in (Get-WindowsDaemonAgentCases)) {
     $name = 'agent-' + ($case -split 'actual_')[1] -replace '_','-'
     Invoke-RequiredTests $name @('-p','hiroute-daemon','--lib',$case) @($case) @('--ignored','--exact','--nocapture')
@@ -345,6 +376,15 @@ if ($Scope -eq 'components') {
   }
 }
 } finally {
+  if ($InventoryOnly) {
+    $requiredNames = @(Get-WindowsRequiredRecipes $Scope)
+    $actualNames = @($inventoryRecipes | ForEach-Object { $_.name })
+    if ($actualNames.Count -ne $requiredNames.Count -or
+        (Compare-Object ($actualNames | Sort-Object) ($requiredNames | Sort-Object))) { throw 'Complete source inventory required' }
+    @{ schema='hiroute.windows-native-source-inventory/v1'; source_revision=$ExpectedSha;
+       scope=$Scope; scenario='inventory_only'; runtime_executed=$false; recipes=@($inventoryRecipes.ToArray()) } |
+      ConvertTo-Json -Depth 8 | Out-File -Encoding utf8 "$evidence/source-recipe-inventory.json"
+  } else {
   if ($CaptureArtifacts) {
     $artifactArgs = @('finalize','--expected-sha',$ExpectedSha,'--evidence',$evidence)
     if ($Scope -in @('product','background','upgrade','agents','accounts')) { $artifactArgs += '--include-product-binaries' }
@@ -360,5 +400,6 @@ if ($Scope -eq 'components') {
   }
   python scripts/windows-ci-report.py $evidence
   if ($LASTEXITCODE -ne 0) { throw 'Native validation feedback could not be generated' }
+  }
 }
 if ($failures.Count -gt 0) { throw ($failures -join '; ') }

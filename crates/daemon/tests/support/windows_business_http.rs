@@ -57,7 +57,14 @@ pub struct Server {
     worker: Option<JoinHandle<()>>,
 }
 impl Server {
-    pub fn start(mut handler: impl FnMut(Request) -> Reply + Send + 'static) -> Self {
+    pub fn start(handler: impl FnMut(Request) -> Reply + Send + 'static) -> Self {
+        Self::start_observed(handler, || {})
+    }
+
+    fn start_observed(
+        mut handler: impl FnMut(Request) -> Reply + Send + 'static,
+        mut accepted: impl FnMut() + Send + 'static,
+    ) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
         listener.set_nonblocking(true).unwrap();
@@ -67,8 +74,13 @@ impl Server {
             while !stopping.load(Ordering::SeqCst) {
                 match listener.accept() {
                     Ok((mut stream, _)) => {
+                        // Winsock can inherit the listener's nonblocking mode. Read/write
+                        // timeouts do not clear it: a real delayed request otherwise fails
+                        // immediately with WSAEWOULDBLOCK instead of awaiting its bytes.
+                        stream.set_nonblocking(false).unwrap();
                         stream.set_read_timeout(Some(TIMEOUT)).unwrap();
                         stream.set_write_timeout(Some(TIMEOUT)).unwrap();
+                        accepted();
                         let request = read_request(&mut stream);
                         let reply = handler(request);
                         assert!(reply.body.len() <= BOUND);
@@ -293,5 +305,69 @@ fn dechunk(raw: &[u8]) -> Vec<u8> {
         position += length;
         assert_eq!(&raw[position..position + 2], b"\r\n");
         position += 2;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use std::sync::mpsc;
+    use std::time::Instant;
+
+    #[test]
+    fn windows_loopback_oracle_reads_delayed_header_and_body_from_nonblocking_listener() {
+        let (accepted, observed) = mpsc::channel();
+        let (handled, received) = mpsc::channel();
+        let server = Server::start_observed(
+            move |request| {
+                assert!(request.method == "POST" && request.path == "/bounded-native-oracle");
+                assert!(request.authorization.is_none());
+                assert!(request.body == json!({"receipt":"delayed-native-request"}));
+                handled.send(()).unwrap();
+                Reply::json(200, json!({"receipt":"delayed-native-response"}))
+            },
+            move || accepted.send(()).unwrap(),
+        );
+        let started = Instant::now();
+        let mut client = TcpStream::connect_timeout(&server.address, TIMEOUT).unwrap();
+        client.set_read_timeout(Some(TIMEOUT)).unwrap();
+        client.set_write_timeout(Some(TIMEOUT)).unwrap();
+        // The real server has accepted before any HTTP byte exists. A nonblocking
+        // accepted stream cannot pass this phase by consuming an already queued header.
+        observed.recv_timeout(TIMEOUT).unwrap();
+        thread::sleep(Duration::from_millis(75));
+        let body = br#"{"receipt":"delayed-native-request"}"#;
+        write!(
+            client,
+            "POST /bounded-native-oracle HTTP/1.1\r\nHost: {}\r\nContent-Length: {}\r\n",
+            server.address,
+            body.len()
+        )
+        .unwrap();
+        thread::sleep(Duration::from_millis(75));
+        client.write_all(b"Connection: close\r\n\r\n").unwrap();
+        thread::sleep(Duration::from_millis(75));
+        client.write_all(&body[..7]).unwrap();
+        thread::sleep(Duration::from_millis(75));
+        client.write_all(&body[7..]).unwrap();
+        let header = head(&mut client);
+        assert!(header.starts_with(b"HTTP/1.1 200 OK\r\n"));
+        let mut response = Vec::new();
+        client
+            .take((BOUND + 1) as u64)
+            .read_to_end(&mut response)
+            .unwrap();
+        assert!(response.len() <= BOUND);
+        assert!(
+            serde_json::from_slice::<Value>(&response).unwrap()
+                == json!({"receipt":"delayed-native-response"})
+        );
+        received.recv_timeout(TIMEOUT).unwrap();
+        assert!(
+            started.elapsed() < TIMEOUT,
+            "native HTTP fixture exceeded its bound"
+        );
+        drop(server);
     }
 }

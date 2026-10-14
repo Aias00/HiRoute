@@ -38,8 +38,8 @@ function Get-WindowsRequiredRecipes {
     'accounts' { return @(Get-WindowsQoderAccountRecipes | ForEach-Object { $_.name }) }
     'agents' {
       return @('agent-private-root','agent-private-node','agent-path-identity','agent-managed-path','agent-account-fixture','agent-pi-sdk',
-        'agent-acp-notifications','agent-cancel-oracle','agent-main-oracle','agent-history-oracle',
-        'agent-native-codex-ingress','agent-business-oracle','agent-public-business') +
+        'agent-acp-notifications','agent-cancel-oracle','agent-main-oracle','agent-launch-oracle','agent-history-oracle',
+        'agent-native-codex-ingress','agent-business-oracle','agent-http','agent-public-business','agent-user-models') +
         @(Get-WindowsDaemonAgentCases | ForEach-Object { 'agent-' + (($_ -split 'actual_')[1] -replace '_','-') }) +
         @(Get-WindowsMainAgentCases | ForEach-Object { 'main-' + (($_ -split 'actual_windows_')[1] -replace '_','-') })
     }

@@ -241,6 +241,10 @@ impl CollaborationChallenge {
                     || text.contains("-1073741502")
                     || text.contains("1114")
             );
+            eprintln!(
+                "native collaboration closed launch diagnostic: {:?}",
+                native_launch_diagnostic(text)
+            );
             return Err("native Skill read and trusted CLI execution");
         }
         self.completed = true;
@@ -321,6 +325,79 @@ fn responses_tool_text(output: &Value) -> Option<String> {
         })
         .collect::<Vec<_>>();
     (!text.is_empty()).then(|| text.join("\n"))
+}
+
+#[derive(Debug, Eq, PartialEq)]
+enum NativeLaunchStage {
+    Unknown,
+    UnifiedExecCreate,
+    CreateProcessW,
+    CreateProcessAsUserW,
+    CreateProcessWithLogonW,
+    Spawn,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct NativeLaunchDiagnostic {
+    stage: NativeLaunchStage,
+    os_error: Option<u32>,
+    ambiguous_os_error: bool,
+}
+
+fn native_launch_diagnostic(text: &str) -> NativeLaunchDiagnostic {
+    // These are fixed upstream Rust/API error formats, not guesses from a shell's
+    // exit status or arbitrary digits in argv/paths. Codex 0.160.0 uses the same
+    // CreateProcessAsUserW marker in core/src/exec.rs for its numeric diagnostic.
+    let stage = if text.contains("CreateProcessAsUserW failed: ") {
+        NativeLaunchStage::CreateProcessAsUserW
+    } else if text.contains("CreateProcessWithLogonW failed: ") {
+        NativeLaunchStage::CreateProcessWithLogonW
+    } else if text.contains("CreateProcessW `") {
+        NativeLaunchStage::CreateProcessW
+    } else if text.contains("Failed to create unified exec process:")
+        || text.contains("CreateProcess { message:")
+    {
+        NativeLaunchStage::UnifiedExecCreate
+    } else if text.contains("Failed to spawn") {
+        NativeLaunchStage::Spawn
+    } else {
+        NativeLaunchStage::Unknown
+    };
+    let mut codes = std::collections::BTreeSet::new();
+    for (marker, suffix) in [
+        ("(os error ", ")"),
+        ("Os { code: ", ","),
+        ("CreateProcessAsUserW failed: ", " ("),
+    ] {
+        for (offset, _) in text.match_indices(marker).take(32) {
+            let tail = &text[offset + marker.len()..];
+            let end = tail.bytes().take_while(u8::is_ascii_digit).count();
+            if (1..=10).contains(&end)
+                && tail[end..].starts_with(suffix)
+                && let Ok(code) = tail[..end].parse::<u32>()
+            {
+                codes.insert(code);
+            }
+        }
+    }
+    for (offset, _) in text
+        .match_indices("CreateProcessWithLogonW failed: ")
+        .take(32)
+    {
+        let tail = &text[offset + "CreateProcessWithLogonW failed: ".len()..];
+        let end = tail.bytes().take_while(u8::is_ascii_digit).count();
+        if (1..=10).contains(&end)
+            && (tail[end..].is_empty() || tail[end..].starts_with([' ', '\n', '"', '}']))
+            && let Ok(code) = tail[..end].parse::<u32>()
+        {
+            codes.insert(code);
+        }
+    }
+    NativeLaunchDiagnostic {
+        stage,
+        os_error: (codes.len() == 1).then(|| *codes.first().expect("one numeric error")),
+        ambiguous_os_error: codes.len() > 1,
+    }
 }
 
 #[cfg(test)]
@@ -417,5 +494,78 @@ mod tests {
         assert_eq!(answer["text"], "OK");
         assert_eq!(stop, "end_turn");
         assert!(check.complete());
+    }
+
+    #[test]
+    fn native_launch_diagnostic_preserves_fixed_os_codes_and_api_stages() {
+        for (text, stage, os_error) in [
+            (
+                "Failed to create unified exec process: missing executable (os error 2)",
+                NativeLaunchStage::UnifiedExecCreate,
+                Some(2),
+            ),
+            (
+                "CreateProcess { message: \"CreateProcessAsUserW failed: 1314 (fixed error) | cwd=private | cmd=private\" }",
+                NativeLaunchStage::CreateProcessAsUserW,
+                Some(1314),
+            ),
+            (
+                "CreateProcessWithLogonW failed: 1385",
+                NativeLaunchStage::CreateProcessWithLogonW,
+                Some(1385),
+            ),
+            (
+                "CreateProcessW `private` in cwd `private` failed: fixed error (os error 267)",
+                NativeLaunchStage::CreateProcessW,
+                Some(267),
+            ),
+            (
+                "Failed to spawn: Os { code: 87, kind: InvalidInput, message: private }",
+                NativeLaunchStage::Spawn,
+                Some(87),
+            ),
+            (
+                "CreateProcess { message: \"unclassified launch reason\" }",
+                NativeLaunchStage::UnifiedExecCreate,
+                None,
+            ),
+        ] {
+            assert_eq!(
+                native_launch_diagnostic(text),
+                NativeLaunchDiagnostic {
+                    stage,
+                    os_error,
+                    ambiguous_os_error: false
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn native_launch_diagnostic_rejects_ambiguous_codes_and_never_emits_native_text() {
+        const PRIVATE: &str = "private-path-command-and-credential-never-emitted";
+        for text in [
+            format!("{PRIVATE}: 552 5408 10035 CreateProcess"),
+            format!("{PRIVATE}: (os error -5) (os error 5suffix)"),
+            format!("{PRIVATE}: Os {{ code: secret, kind: Other }}"),
+            format!("{PRIVATE}: (os error 4294967296)"),
+            format!("{PRIVATE}: CreateProcessAsUserW failed: 123path"),
+        ] {
+            let diagnostic = native_launch_diagnostic(&text);
+            assert_eq!(diagnostic.os_error, None);
+            assert!(!diagnostic.ambiguous_os_error);
+            assert!(!format!("{diagnostic:?}").contains(PRIVATE));
+        }
+        let diagnostic = native_launch_diagnostic(&format!(
+            "Failed to spawn: {PRIVATE} (os error 2) Os {{ code: 5, kind: Other }}"
+        ));
+        assert_eq!(diagnostic.stage, NativeLaunchStage::Spawn);
+        assert_eq!(diagnostic.os_error, None);
+        assert!(diagnostic.ambiguous_os_error);
+        assert!(!format!("{diagnostic:?}").contains(PRIVATE));
+        assert_eq!(
+            native_launch_diagnostic("Failed to spawn: (os error 2) (os error 2)").os_error,
+            Some(2)
+        );
     }
 }

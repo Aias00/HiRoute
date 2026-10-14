@@ -21,7 +21,10 @@ const NAME: &str = "Windows public Native API";
 const RENAMED: &str = "Windows public Native API renamed";
 const KEY: &str = "windows-public-native-save";
 const NATIVE_CANDIDATE: &str = "candidate/native/windows-public-native";
-const BOUND: u64 = 1024 * 1024;
+// The CLI serializes the same compact MachineEnvelope as Local Control. Options
+// legitimately include the current model catalog; a smaller fixture-only bound
+// would reject a valid production frame before its business assertions run.
+const BOUND: u64 = hiroute_application_api::LOCAL_CONTROL_MAX_FRAME_BYTES as u64;
 
 pub struct Business {
     upstream: Option<Upstream>,

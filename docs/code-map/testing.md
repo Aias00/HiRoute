@@ -34,7 +34,7 @@ validate the oracle. The real installed management loop is in
 | --- | --- |
 | Prepare a daemon's current sources, grants and plans | [Publication Product](../../crates/daemon/tests/support/publication_product.py): its `Product.cli` is internal Local Control notation, not the standalone CLI; protected input belongs to that fixture's daemon |
 | Configure a real native Agent | [Agent product support](../../crates/daemon/tests/support/agent_product_support.py): shared Preview → Apply → status and bounded process capture; native argv/ownership/result interpretation remain in the leaf |
-| Prove saved model configuration | [Additional-model journey](../../crates/daemon/tests/support/additional_model_product.py): ordinary native startup reads saved settings, without injected provider/endpoint/credential overrides |
+| Prove saved model configuration | [Additional-model journey](../../crates/daemon/tests/support/additional_model_product.py), [Windows Pi/DSH journey](../../crates/daemon/tests/support/windows_user_models.rs): ordinary native startup reads saved settings, without injected provider/endpoint/credential overrides; its required `agent-user-models` recipe is separate from Worker profiles |
 | Observe native routing and rejected attempts | [NativeContextUpstream](../../crates/daemon/tests/support/native_context_fixture.py): count every model POST, including rejected endpoints/models/credentials; keep the ledger for positive route/history assertions |
 | Prove exact Continue, concurrent routes and cancellation | [Native context](../../crates/daemon/tests/support/native_context_product.py), [boundary journey](../../crates/daemon/tests/support/native_context_boundaries.py), [boundary oracle guide](../../crates/daemon/tests/support/NATIVE_CONTEXT_BOUNDARIES.md) |
 | Prove restoration of old durable state | [Frozen producer fixtures](../../crates/local-storage/src/migrations/fixtures/README.md), [crash-boundary tests](../../crates/local-storage/src/migrations/upgrade_batch_recovery_tests.rs): old bytes through the current consumer, not a new serializer pretending to be history |
@@ -128,6 +128,13 @@ integrities and official Qoder archive hashes; the
 [feedback adapter](../../scripts/windows-ci-report.py) retains the original SHA
 and native verdict. A build or client initialize is not evidence of tool execution,
 provider login, Windows 11, or another processor architecture.
+
+The same native entry's `-InventoryOnly` exports static scope recipes through its
+actual required-test producer without Cargo, package preparation or client launch.
+Use the exact old checkout's export to compare upgrade baseline cases, filters and
+harness arguments; the export itself records no runtime execution. Workstation
+replay provenance binds its actual OS and original manifest/package hashes to the
+producer run, so another build of the same source is not interchangeable evidence.
 
 Code-map and local ownership-guide edits require link/owner review and the selected
 contract checks, not new model calls. Runtime-embedded Markdown and shipped Skills

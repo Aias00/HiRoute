@@ -44,12 +44,16 @@ if ($actualRecipes.Count -ne $requiredRecipes.Count -or
 }
 @{ source_revision = $ExpectedSha; validation_revision = $env:GITHUB_SHA; scope = $Scope;
    plan = $Plan; phase = $Phase; related_runs = $RelatedRun; caption = $os.Caption;
-   version = $os.Version; host_architecture = $hostArchitecture; target_architecture = 'X64';
+   version = $os.Version; os_product_type = [int]$os.ProductType; os_build_number = [int]$os.BuildNumber;
+   host_architecture = $hostArchitecture; target_architecture = 'X64';
    execution = $runtimeExecution; arm64_native_evidence = $false;
    x64_native_evidence = ($ExecutionHost -eq 'windows11-x64');
    image_version = $env:ImageVersion; rustc = $manifest.build.rustc_verbose;
    cargo = 'Exact compiler-artifact replay; Cargo not run on consumer';
-   producer_revision = $manifest.build.source_sha
+   producer_revision = $manifest.build.source_sha;
+   native_manifest_sha256 = (Get-FileHash -LiteralPath "$bundle/native-artifacts.json" -Algorithm SHA256).Hash.ToLowerInvariant();
+   package_manifest_sha256 = $(if ($manifest.package) { (Get-FileHash -LiteralPath (Join-Path $bundle $manifest.package.manifest) -Algorithm SHA256).Hash.ToLowerInvariant() } else { $null });
+   package_archive_sha256 = $(if ($manifest.package) { (Get-FileHash -LiteralPath (Join-Path $bundle $manifest.package.archive) -Algorithm SHA256).Hash.ToLowerInvariant() } else { $null })
 } | ConvertTo-Json -Depth 5 | Out-File -Encoding utf8 "$evidence/provenance.json"
 
 if ($manifest.product_binaries.hiroute -and $manifest.product_binaries.hirouted) {
