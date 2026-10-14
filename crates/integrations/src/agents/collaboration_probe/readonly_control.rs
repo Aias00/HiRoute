@@ -3,6 +3,14 @@
 //! catch only UnauthorizedAccessException, and leave the initially absent file absent.
 use std::path::{Path, PathBuf};
 
+#[derive(Debug, Eq, PartialEq)]
+pub(super) struct ReceiptFacts {
+    pub(super) attempt_matches: usize,
+    pub(super) denial_matches: usize,
+    pub(super) attempt_substring: bool,
+    pub(super) denial_substring: bool,
+}
+
 pub(super) struct ReadOnlyControl {
     path: PathBuf,
     command: String,
@@ -46,6 +54,15 @@ impl ReadOnlyControl {
         self.verified
     }
 
+    pub(super) fn receipt_facts(&self, output: &str) -> ReceiptFacts {
+        ReceiptFacts {
+            attempt_matches: matching_lines(output, &self.attempted).count(),
+            denial_matches: matching_lines(output, &self.denied).count(),
+            attempt_substring: output.contains(&self.attempted),
+            denial_substring: output.contains(&self.denied),
+        }
+    }
+
     pub(super) fn confirm(&mut self, output: &str) -> Result<(), &'static str> {
         let attempted = unique_line(output, &self.attempted);
         let denied = unique_line(output, &self.denied);
@@ -81,12 +98,16 @@ fn require_absent(path: &Path) -> Result<(), &'static str> {
 }
 
 fn unique_line(output: &str, marker: &str) -> Option<usize> {
-    let mut matching = output
-        .lines()
-        .enumerate()
-        .filter_map(|(index, line)| (line.trim() == marker).then_some(index));
+    let mut matching = matching_lines(output, marker);
     let first = matching.next()?;
     matching.next().is_none().then_some(first)
+}
+
+fn matching_lines<'a>(output: &'a str, marker: &'a str) -> impl Iterator<Item = usize> + 'a {
+    output
+        .lines()
+        .enumerate()
+        .filter_map(move |(index, line)| (line.trim() == marker).then_some(index))
 }
 
 #[cfg(test)]

@@ -6,9 +6,12 @@ use std::{io::Write, path::Path, process::Command};
 
 mod launch_diagnostic;
 mod readonly_control;
+mod tool_diagnostic;
 #[cfg(test)]
 use launch_diagnostic::NativeLaunchStage;
+#[cfg(test)]
 use launch_diagnostic::native_launch_diagnostic;
+use tool_diagnostic::{SelectedTool, ToolResultDiagnostic};
 
 pub(crate) struct CollaborationChallenge {
     discovery: String,
@@ -16,6 +19,7 @@ pub(crate) struct CollaborationChallenge {
     command: String,
     expected_cli: String,
     readonly: Option<readonly_control::ReadOnlyControl>,
+    selected_tool: SelectedTool,
     issued: bool,
     completed: bool,
 }
@@ -178,6 +182,7 @@ impl CollaborationChallenge {
             command,
             expected_cli: expected_cli.trim().into(),
             readonly,
+            selected_tool: SelectedTool::Unknown,
             issued: false,
             completed: false,
         })
@@ -194,6 +199,14 @@ impl CollaborationChallenge {
     }
 
     pub(crate) fn reply(&mut self, body: &Value) -> Result<Value, &'static str> {
+        self.reply_observed(body, ToolResultDiagnostic::emit)
+    }
+
+    fn reply_observed(
+        &mut self,
+        body: &Value,
+        mut observe: impl FnMut(&ToolResultDiagnostic),
+    ) -> Result<Value, &'static str> {
         if !self.issued {
             // A nonce absent from the user prompt must have come from native Skill discovery.
             if !body.to_string().contains(&self.discovery) {
@@ -207,6 +220,7 @@ impl CollaborationChallenge {
                     matches!(name, "exec_command" | "shell_command").then_some(name)
                 })
                 .ok_or("native read-only shell tool")?;
+            self.selected_tool = SelectedTool::from_name(name);
             self.issued = true;
             let command = self.readonly.as_ref().map_or_else(
                 || self.command.clone(),
@@ -223,17 +237,24 @@ impl CollaborationChallenge {
         // content items (protocol/models.rs at a956835d). Match only that exact
         // correlated result; unrelated prompt text, images or metadata cannot prove it.
         let output = result.and_then(|item| responses_tool_text(&item["output"]));
+        let diagnostic = ToolResultDiagnostic::capture(
+            self.selected_tool,
+            result,
+            output.as_deref(),
+            &self.contents,
+            &self.expected_cli,
+            self.readonly
+                .as_ref()
+                .map(|control| control.receipt_facts(output.as_deref().unwrap_or_default())),
+        );
+        // Observe before correlation/readonly rejection: the old early return
+        // discarded the only native tool result's diagnostic facts.
+        observe(&diagnostic);
         if let Some(control) = self.readonly.as_mut() {
             let output = output
                 .as_deref()
                 .ok_or("native read-only correlated result")?;
-            if let Err(error) = control.confirm(output) {
-                eprintln!(
-                    "native collaboration closed launch diagnostic: {:?}",
-                    native_launch_diagnostic(output)
-                );
-                return Err(error);
-            }
+            control.confirm(output)?;
         }
         let content_proved = output
             .as_ref()
@@ -243,39 +264,6 @@ impl CollaborationChallenge {
             .is_some_and(|text| text.contains(&self.expected_cli));
         let proved = content_proved && cli_proved;
         if !proved {
-            eprintln!(
-                "native collaboration checkpoint: correlated={} content-items={} skill-content={} cli-output={} output-bytes={} expected-cli-bytes={} truncated={}",
-                result.is_some(),
-                result.is_some_and(|item| item["output"].is_array()),
-                content_proved,
-                cli_proved,
-                output.as_ref().map_or(0, String::len),
-                self.expected_cli.len(),
-                output
-                    .as_ref()
-                    .is_some_and(|text| text.contains("truncated"))
-            );
-            // Closed flags distinguish a native launch/sandbox/command failure
-            // without exposing tool output, private paths or authentication data.
-            let text = output.as_deref().unwrap_or_default();
-            eprintln!(
-                "native collaboration failure flags: process-launch={} access-denied={} sandbox={} command-not-found={} powershell-parser={} dll-init={}",
-                text.contains("CreateProcess") || text.contains("Failed to spawn"),
-                text.contains("Access is denied")
-                    || text.contains("os error 5")
-                    || text.contains("PermissionDenied"),
-                text.contains("sandbox") || text.contains("Sandbox"),
-                text.contains("not recognized") || text.contains("command not found"),
-                text.contains("ParserError") || text.contains("UnexpectedToken"),
-                text.contains("0xc0000142")
-                    || text.contains("0xC0000142")
-                    || text.contains("-1073741502")
-                    || text.contains("1114")
-            );
-            eprintln!(
-                "native collaboration closed launch diagnostic: {:?}",
-                native_launch_diagnostic(text)
-            );
             return Err("native Skill read and trusted CLI execution");
         }
         self.completed = true;
@@ -378,6 +366,7 @@ mod tests {
             command: "/trusted/hiroute schema list --output json".into(),
             expected_cli: "CLI-contract-output".into(),
             readonly: None,
+            selected_tool: SelectedTool::Unknown,
             issued: false,
             completed: false,
         }
@@ -418,6 +407,93 @@ mod tests {
         }
         check.reply(&json!({"tools":tools,"input":[{"type":"function_call_output", "call_id":"call_hiroute_probe","output":[{"type":"input_text","text":"hiroute-readonly-attempt-nonce\nhiroute-readonly-denied-nonce\ncontents-nonce CLI-contract-output"}]}]})).unwrap();
         assert!(check.complete());
+        check.verify_after_stop().unwrap();
+    }
+
+    #[test]
+    fn readonly_rejection_observes_closed_tool_facts_before_early_return() {
+        use tool_diagnostic::{OutputShape, ReturnPhase};
+        let root = tempfile::tempdir().unwrap();
+        let mut check = challenge();
+        check.readonly =
+            Some(readonly_control::ReadOnlyControl::new(root.path(), "nonce").unwrap());
+        check
+            .reply(&json!({"input":"discovery-nonce", "tools":[{"name":"exec_command"}]}))
+            .unwrap();
+        let text = "Wall time: 0.0142 seconds\nProcess exited with code -1073741502\nOutput:\nprivate-path-token ParserError";
+        let body = json!({"input":[{"type":"function_call_output","call_id":"call_hiroute_probe","output":[{"type":"input_text","text":text}]}]});
+        let mut observations = 0;
+        let result = check.reply_observed(&body, |facts| {
+            observations += 1;
+            assert_eq!(facts.selected_tool, SelectedTool::ExecCommand);
+            assert!(facts.correlated);
+            assert_eq!(facts.output_shape, OutputShape::ContentItems);
+            assert_eq!(facts.text_items, 1);
+            assert_eq!(facts.output_bytes, text.len());
+            assert_eq!(facts.header.phase, ReturnPhase::TerminalReturned);
+            assert_eq!(facts.header.terminal_code, Some(-1073741502));
+            assert!(facts.powershell_parser);
+            assert!(facts.dll_init);
+            assert_eq!(facts.receipts.as_ref().unwrap().attempt_matches, 0);
+            assert_eq!(facts.receipts.as_ref().unwrap().denial_matches, 0);
+            assert!(!format!("{facts:?}").contains("private-path-token"));
+        });
+        assert_eq!(result, Err("native read-only write rejection"));
+        // Moving observe after confirm (the old order) makes this regression fail.
+        assert_eq!(observations, 1);
+        assert!(!check.complete());
+        assert!(check.verify_after_stop().is_err());
+    }
+
+    #[test]
+    fn readonly_facts_preserve_missing_correlation_and_echo_duplicate_gates() {
+        use tool_diagnostic::OutputShape;
+        let root = tempfile::tempdir().unwrap();
+        let mut check = challenge();
+        check.readonly =
+            Some(readonly_control::ReadOnlyControl::new(root.path(), "nonce").unwrap());
+        check
+            .reply(&json!({"input":"discovery-nonce", "tools":[{"name":"shell_command"}]}))
+            .unwrap();
+        let mut observed = false;
+        assert_eq!(check.reply_observed(&json!({"input":[{"type":"function_call_output","call_id":"wrong-call","output":"contents-nonce CLI-contract-output"}]}), |facts| {
+            observed = true;
+            assert_eq!(facts.selected_tool, SelectedTool::ShellCommand);
+            assert!(!facts.correlated);
+            assert_eq!(facts.output_shape, OutputShape::Missing);
+            assert_eq!(facts.output_bytes, 0);
+        }), Err("native read-only correlated result"));
+        assert!(observed);
+        for (text, attempt_count, denial_count) in [
+            (
+                "echo 'hiroute-readonly-attempt-nonce'; echo 'hiroute-readonly-denied-nonce'; contents-nonce CLI-contract-output",
+                0,
+                0,
+            ),
+            (
+                "hiroute-readonly-attempt-nonce\nhiroute-readonly-attempt-nonce\nhiroute-readonly-denied-nonce\ncontents-nonce CLI-contract-output",
+                2,
+                1,
+            ),
+        ] {
+            assert_eq!(check.reply_observed(&json!({"input":[{"type":"function_call_output","call_id":"call_hiroute_probe","output":text}]}), |facts| {
+                let receipt = facts.receipts.as_ref().unwrap();
+                assert_eq!(receipt.attempt_matches, attempt_count);
+                assert_eq!(receipt.denial_matches, denial_count);
+                assert!(receipt.attempt_substring);
+                assert!(receipt.denial_substring);
+                assert!(facts.skill_content && facts.cli_output);
+            }), Err("native read-only write rejection"));
+            assert!(!check.complete());
+        }
+        let text = "hiroute-readonly-attempt-nonce\nhiroute-readonly-denied-nonce\ncontents-nonce CLI-contract-output";
+        let mut facts_seen = false;
+        check.reply_observed(&json!({"input":[{"type":"function_call_output","call_id":"call_hiroute_probe","output":text}]}), |facts| {
+            facts_seen = true;
+            assert_eq!(facts.receipts.as_ref().unwrap().attempt_matches, 1);
+            assert_eq!(facts.receipts.as_ref().unwrap().denial_matches, 1);
+        }).unwrap();
+        assert!(facts_seen && check.complete());
         check.verify_after_stop().unwrap();
     }
 
