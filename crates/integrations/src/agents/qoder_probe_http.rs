@@ -12,6 +12,8 @@ pub(super) struct Challenge {
     pub command: String,
     pub expected_cli: String,
     pub step: usize,
+    #[cfg(all(test, windows))]
+    pub expected_skill: Option<super::skill_diagnostic::NativeSkill>,
 }
 
 impl Challenge {
@@ -63,6 +65,15 @@ impl Challenge {
                             .is_some_and(|body| body.trim() == self.skill_body.trim())
                     });
                 if !loaded {
+                    #[cfg(test)]
+                    super::skill_diagnostic::observe(
+                        input,
+                        &self.skill_directory,
+                        &self.skill_body,
+                        #[cfg(windows)]
+                        self.expected_skill.as_mut(),
+                    )
+                    .emit();
                     return Err("actual native Skill path and contents");
                 }
                 function(
@@ -237,6 +248,8 @@ mod tests {
             command: "trusted cli".into(),
             expected_cli: "trusted result".into(),
             step: 1,
+            #[cfg(windows)]
+            expected_skill: None,
         }
     }
 
@@ -278,5 +291,31 @@ mod tests {
         let mut check = challenge();
         check.step = 2;
         assert!(check.reply(&json!({"input":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"trusted result"}]}]})).is_err());
+    }
+
+    #[test]
+    fn skill_receipt_diagnostics_do_not_admit_alternate_path_shape_or_newlines() {
+        let request = |content| {
+            json!({"input":[
+                {"type":"function_call_output","call_id":"call_hiroute_skill","output":"Launching skill: hiroute-collaboration"},
+                {"type":"message","role":"user","content":content}
+            ]})
+        };
+        let exact = "Base directory for this skill: /user/.qoder/skills/hiroute-collaboration\n\nconfirmed Skill body";
+        for content in [
+            json!([{"type":"input_text","text":exact.replace("/user/", "/project/")}]),
+            json!(exact),
+            json!([{"type":"input_text","text":exact.replace('\n', "\r\n")}]),
+        ] {
+            assert_eq!(
+                challenge().reply(&request(content)).unwrap_err(),
+                "actual native Skill path and contents"
+            );
+        }
+        assert!(
+            challenge()
+                .reply(&request(json!([{"type":"input_text","text":exact}])))
+                .is_ok()
+        );
     }
 }

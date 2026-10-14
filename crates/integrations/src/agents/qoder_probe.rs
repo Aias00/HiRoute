@@ -24,6 +24,9 @@ use serde_json::Value;
 
 #[path = "qoder_probe_http.rs"]
 mod http;
+#[cfg(test)]
+#[path = "qoder_probe_skill_diagnostic.rs"]
+mod skill_diagnostic;
 
 const CONTRACT: &str = "hiroute.qoder-borrowed-context-collaboration/v1";
 const MARKER: &str = "hiroute-local-challenge-no-authority";
@@ -204,6 +207,15 @@ impl QoderCollaborationProbe {
                 .ok_or_else(|| qoder_error("Skill target"))?,
         )
         .map_err(|_| qoder_error("Skill target"))?;
+        #[cfg(all(test, windows))]
+        let expected_skill = skill_diagnostic::NativeSkill::retain(
+            skill_path
+                .parent()
+                .ok_or_else(|| qoder_error("Skill target"))?,
+            content.as_bytes(),
+            matches!(target, QoderCollaborationProbeTarget::PreinstallCapability),
+        )
+        .map_err(|_| qoder_error("Skill target"))?;
         let skill_name = skill_directory
             .file_name()
             .and_then(|name| name.to_str())
@@ -226,6 +238,8 @@ impl QoderCollaborationProbe {
             command,
             expected_cli,
             step: 0,
+            #[cfg(all(test, windows))]
+            expected_skill: Some(expected_skill),
         };
         let listener =
             std::net::TcpListener::bind("127.0.0.1:0").map_err(|_| qoder_error("loopback bind"))?;
