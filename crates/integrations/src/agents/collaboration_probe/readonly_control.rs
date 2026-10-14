@@ -77,8 +77,11 @@ impl ReadOnlyControl {
         // One physical command line prevents a rejected tool's echoed command
         // from containing a receipt as a standalone output line. Policy rejection,
         // invalid syntax and unrelated I/O failures must stay red.
+        // Diagnostic frames use the same inherited Console stream as the actual
+        // attempt/denial receipts; their emission must not discover a PowerShell
+        // cmdlet before observing the native write attempt.
         let command = format!(
-            "$ErrorActionPreference = 'Stop'; $hirouteProbePhase = 'entered'; try {{ Write-Output '{entered}'; switch ($ExecutionContext.SessionState.LanguageMode) {{ 'FullLanguage' {{ Write-Output '{mode_prefix}FullLanguage' }} 'ConstrainedLanguage' {{ Write-Output '{mode_prefix}ConstrainedLanguage' }} 'RestrictedLanguage' {{ Write-Output '{mode_prefix}RestrictedLanguage' }} 'NoLanguage' {{ Write-Output '{mode_prefix}NoLanguage' }} default {{ Write-Output '{mode_prefix}Unknown' }} }}; $hirouteProbePhase = 'console-attempt'; [Console]::WriteLine('{attempted}'); $hirouteProbePhase = 'file-write'; try {{ [System.IO.File]::WriteAllText('{literal}', 'hiroute-readonly-unexpected-write'); [Console]::WriteLine('hiroute-readonly-write-succeeded'); exit 1 }} catch [System.UnauthorizedAccessException] {{ $hirouteProbePhase = 'console-denial'; [Console]::WriteLine('{denied}') }} }} catch {{ Write-Output ('{failure_prefix}' + $hirouteProbePhase + ':' + [string][int]$_.Exception.HResult + ':' + [string][int]$_.CategoryInfo.Category); throw }}"
+            "$ErrorActionPreference = 'Stop'; $hirouteProbePhase = 'entered'; try {{ [Console]::WriteLine('{entered}'); switch ($ExecutionContext.SessionState.LanguageMode) {{ 'FullLanguage' {{ [Console]::WriteLine('{mode_prefix}FullLanguage') }} 'ConstrainedLanguage' {{ [Console]::WriteLine('{mode_prefix}ConstrainedLanguage') }} 'RestrictedLanguage' {{ [Console]::WriteLine('{mode_prefix}RestrictedLanguage') }} 'NoLanguage' {{ [Console]::WriteLine('{mode_prefix}NoLanguage') }} default {{ [Console]::WriteLine('{mode_prefix}Unknown') }} }}; $hirouteProbePhase = 'console-attempt'; [Console]::WriteLine('{attempted}'); $hirouteProbePhase = 'file-write'; try {{ [System.IO.File]::WriteAllText('{literal}', 'hiroute-readonly-unexpected-write'); [Console]::WriteLine('hiroute-readonly-write-succeeded'); exit 1 }} catch [System.UnauthorizedAccessException] {{ $hirouteProbePhase = 'console-denial'; [Console]::WriteLine('{denied}') }} }} catch {{ [Console]::WriteLine('{failure_prefix}' + $hirouteProbePhase + ':' + [string][int]$_.Exception.HResult + ':' + [string][int]$_.CategoryInfo.Category); throw }}"
         );
         Ok(Self {
             path,
@@ -314,7 +317,7 @@ mod tests {
         assert!(
             control
                 .command()
-                .contains("Write-Output 'hiroute-readonly-entered-private-nonce'")
+                .contains("[Console]::WriteLine('hiroute-readonly-entered-private-nonce')")
         );
         for (caption, mode) in [
             ("FullLanguage", LanguageMode::FullLanguage),
@@ -351,6 +354,46 @@ mod tests {
                 assert!(!control.verified());
             }
         }
+    }
+
+    #[test]
+    fn readonly_control_console_diagnostics_preserve_exact_frames_and_cannot_replace_denial() {
+        let root = tempfile::tempdir().unwrap();
+        let mut control = ReadOnlyControl::new(root.path(), "console-nonce").unwrap();
+        assert!(!control.command().contains("Write-Output"));
+        assert!(!control.command().contains('\n'));
+        assert!(
+            control
+                .command()
+                .contains("[Console]::WriteLine('hiroute-readonly-entered-console-nonce')")
+        );
+        assert!(
+            control.command().contains(
+                "[Console]::WriteLine('hiroute-readonly-mode-console-nonce:FullLanguage')"
+            )
+        );
+        assert!(
+            control
+                .command()
+                .contains("[Console]::WriteLine('hiroute-readonly-failure-console-nonce:' +")
+        );
+        let echo = control.receipt_facts(control.command());
+        assert_eq!(echo.script.entered_matches, 0);
+        assert_eq!(echo.script.mode_matches, 0);
+        assert_eq!(echo.script.failure_matches, 0);
+        assert_eq!(echo.attempt_matches, 0);
+        assert_eq!(echo.denial_matches, 0);
+        let diagnostics = "hiroute-readonly-entered-console-nonce\r\nhiroute-readonly-mode-console-nonce:FullLanguage\r\n";
+        let facts = control.receipt_facts(diagnostics);
+        assert_eq!(facts.script.entered_matches, 1);
+        assert_eq!(facts.script.mode, LanguageMode::FullLanguage);
+        assert!(control.confirm(diagnostics).is_err());
+        assert!(!control.verified());
+        let receipts = format!(
+            "{diagnostics}hiroute-readonly-attempt-console-nonce\r\nhiroute-readonly-denied-console-nonce\r\n"
+        );
+        control.confirm(&receipts).unwrap();
+        control.verify_after_stop().unwrap();
     }
 
     #[test]

@@ -84,11 +84,13 @@ fn trace(bytes: &[u8], arm: &str) -> Trace {
     result
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, test))]
 pub(super) fn script(escaped: &str, arm: &str) -> String {
     let prefix = format!("HiRouteParser/v1 arm={arm} stage=");
+    // The parser observation itself needs only language expressions and .NET;
+    // emitting a checkpoint must not add an unrelated cmdlet discovery step.
     format!(
-        "$ErrorActionPreference='Stop'; try {{ Write-Output '{prefix}entered'; $tokens=$null; $errors=$null; Write-Output '{prefix}parse-started'; $null=[System.Management.Automation.Language.Parser]::ParseInput('{escaped}',[ref]$tokens,[ref]$errors); if($errors.Count -eq 0){{Write-Output '{prefix}accepted'}}else{{Write-Output '{prefix}rejected'}}; Write-Output '{prefix}complete' }} catch {{ Write-Output ('{prefix}exception hresult=' + [string][int]$_.Exception.HResult + ' category=' + [string][int]$_.CategoryInfo.Category); exit 1 }}"
+        "$ErrorActionPreference='Stop'; try {{ [Console]::WriteLine('{prefix}entered'); $tokens=$null; $errors=$null; [Console]::WriteLine('{prefix}parse-started'); $null=[System.Management.Automation.Language.Parser]::ParseInput('{escaped}',[ref]$tokens,[ref]$errors); if($errors.Count -eq 0){{[Console]::WriteLine('{prefix}accepted')}}else{{[Console]::WriteLine('{prefix}rejected')}}; [Console]::WriteLine('{prefix}complete') }} catch {{ [Console]::WriteLine('{prefix}exception hresult=' + [string][int]$_.Exception.HResult + ' category=' + [string][int]$_.CategoryInfo.Category); exit 1 }}"
     )
 }
 
@@ -255,4 +257,43 @@ fn readonly_parser_trace_limits_native_failure_facts_without_retaining_dynamic_o
         assert!(!format!("{receipt:?}").contains("private-account-path"));
     }
     assert!(trace(b"\xff", "incomplete").unknown);
+}
+
+#[test]
+fn readonly_parser_console_frames_preserve_parse_input_and_reject_echo_as_completion() {
+    let literal = "'fixture-literal'".replace('\'', "''");
+    let command = script(&literal, "complete");
+    assert!(!command.contains("Write-Output"));
+    assert!(!command.contains('\n'));
+    assert!(command.contains(&format!(
+        "::ParseInput('{literal}',[ref]$tokens,[ref]$errors)"
+    )));
+    for phase in [
+        "entered",
+        "parse-started",
+        "accepted",
+        "rejected",
+        "complete",
+    ] {
+        assert!(command.contains(&format!(
+            "[Console]::WriteLine('HiRouteParser/v1 arm=complete stage={phase}')"
+        )));
+    }
+    assert!(command.contains(
+        "[Console]::WriteLine('HiRouteParser/v1 arm=complete stage=exception hresult=' +"
+    ));
+    assert!(command.ends_with("; exit 1 }"));
+    let echoed = trace(command.as_bytes(), "complete");
+    assert!(echoed.unknown && !echoed.entered && !echoed.accepted && !echoed.complete);
+    let prefix = "HiRouteParser/v1 arm=complete stage=";
+    for result in ["accepted", "rejected"] {
+        let bytes = format!(
+            "{prefix}entered\r\n{prefix}parse-started\r\n{prefix}{result}\r\n{prefix}complete\r\n"
+        );
+        let observed = trace(bytes.as_bytes(), "complete");
+        assert!(observed.entered && observed.parse_started && observed.complete);
+        assert_eq!(observed.accepted, result == "accepted");
+        assert_eq!(observed.rejected, result == "rejected");
+        assert!(!observed.unknown && observed.failure.is_none());
+    }
 }
