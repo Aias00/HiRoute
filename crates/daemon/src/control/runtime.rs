@@ -1125,6 +1125,39 @@ impl ControlStatePort for LocalControlAdapter {
 }
 
 impl AgentDiscoveryPort for LocalControlAdapter {
+    fn discover_target(
+        &self,
+        target: &hiroute_domain::AgentNativeTargetV1,
+    ) -> Result<Vec<DiscoveredAgentV1>, ControlReadError> {
+        let target = hiroute_integrations::canonical_hermes_target(target)
+            .map_err(|_| ControlReadError::Denied)?;
+        let installation = hiroute_integrations::hermes_settings_installation(&target)
+            .map_err(|_| ControlReadError::Denied)?;
+        let supported = installation
+            .require_action(hiroute_domain::AgentAction::ConfigureModel)
+            .is_ok();
+        let context_id = hiroute_integrations::hermes_context_id(target.config_root());
+        Ok(vec![DiscoveredAgentV1 {
+            native_target: Some(target),
+            context_id: Some(context_id),
+            codex_access: None,
+            agent_id: installation.agent_id,
+            profile_id: installation.profile.profile_id,
+            version: installation.version,
+            supported,
+            configuration_state: if supported {
+                "registered"
+            } else {
+                "unsupported_native_feature"
+            }
+            .into(),
+            available_surfaces: [hiroute_domain::AgentModelSurfaceV2::HermesCli].into(),
+            native_model_catalog: None,
+            registered_configuration: None,
+            discovered_credential: None,
+            permission_hardening: None,
+        }])
+    }
     fn discover(&self) -> Result<Vec<DiscoveredAgentV1>, ControlReadError> {
         let fixed_candidates =
             hiroute_application::control::RoutingFactsPort::routing_compilation_snapshot(
@@ -1362,6 +1395,7 @@ fn release_agent_scanner(
             AgentKindV1::Qoder => &mut layout.qoder_executable,
             AgentKindV1::Pi => &mut layout.pi_executable,
             AgentKindV1::DeepseekHarness => &mut layout.dsh_executable,
+            AgentKindV1::Hermes => continue,
         };
         *target = executable.clone();
     }
@@ -1425,6 +1459,7 @@ fn discovered_agent(
         })
         .transpose()?;
     Ok(DiscoveredAgentV1 {
+        native_target: None,
         codex_access: None,
         context_id: None,
         agent_id,

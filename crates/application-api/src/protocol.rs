@@ -1097,7 +1097,8 @@ pub(crate) fn command_usage(command_id: &str, joined_path: &str) -> String {
             format!("hiroute {joined_path} ([OPTIONS] | --request-stdin) [--capability-fd <FD>] --non-interactive --output json")
         }
         "sessions.show" => "hiroute sessions show (<SESSION_ID> [--content <none|messages|messages-and-tools>] | --request-stdin) [--capability-fd <FD>] --non-interactive --output json".to_owned(),
-        "system.status" | "agents.scan" | "agents.list" | "sessions.status" => {
+        "agents.scan" => "hiroute agents scan [--request-stdin | --request-file <PATH>] --non-interactive --output json".to_owned(),
+        "system.status" | "agents.list" | "sessions.status" => {
             format!("hiroute {joined_path} [OPTIONS] --non-interactive --output json")
         }
         "setup.preview" => "hiroute setup preview [HUMAN OPTIONS] | --spec-stdin".to_owned(),

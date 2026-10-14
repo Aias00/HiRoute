@@ -67,6 +67,8 @@ pub struct ControlStateSnapshotV1 {
 #[serde(deny_unknown_fields)]
 pub struct DiscoveredAgentV1 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_target: Option<hiroute_domain::AgentNativeTargetV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub codex_access: Option<CodexAccessViewV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_id: Option<String>,

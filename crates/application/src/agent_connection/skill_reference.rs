@@ -155,7 +155,7 @@ pub fn persist_settings_skill_reference_change(
     let spec: AgentSettingsSpecV2 =
         serde_json::from_value(operation.plan.spec().desired_state.clone())
             .map_err(|_| invalid())?;
-    let expected_action = match spec.collaboration {
+    let expected_action = match spec.skill_intent() {
         AgentFacetIntent::Configure { .. } => SkillReferenceAction::Add,
         AgentFacetIntent::Restore { .. } => SkillReferenceAction::Remove,
         AgentFacetIntent::Keep => return Err(invalid()),

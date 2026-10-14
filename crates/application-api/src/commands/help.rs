@@ -211,7 +211,7 @@ pub(super) fn example(command_id: &str, joined_path: &str) -> String {
         "routing.show" => {
             "hiroute routing show plan/example --non-interactive --output json".to_owned()
         }
-        "agents.scan" => "hiroute agents scan --non-interactive --output json".to_owned(),
+        "agents.scan" => "hiroute agents scan [--request-stdin | --request-file <PATH>] --non-interactive --output json".to_owned(),
         "sessions.list" => "hiroute sessions list --non-interactive --output json".to_owned(),
         "sessions.show" => {
             "hiroute sessions show session/example --non-interactive --output json".to_owned()

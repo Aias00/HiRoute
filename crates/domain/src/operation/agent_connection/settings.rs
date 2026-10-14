@@ -16,7 +16,7 @@ impl AgentConnectionControlIntentV1 {
         payload: &T,
     ) -> Result<Self, OperationValidationError> {
         let settings = decode_spec(spec)?;
-        if skill_file_change && matches!(settings.collaboration, AgentFacetIntent::Keep) {
+        if skill_file_change && matches!(settings.skill_intent(), AgentFacetIntent::Keep) {
             return Err(OperationValidationError::UnregisteredEffectPlan);
         }
         Self::from_registered_planner(
@@ -41,7 +41,39 @@ pub(super) fn decode_spec(
         || spec.resource_id.as_deref() != Some(settings.context_id.as_str())
         || !bounded_reference(&settings.context_id)
         || (matches!(settings.model, AgentFacetIntent::Keep)
-            && matches!(settings.collaboration, AgentFacetIntent::Keep))
+            && matches!(settings.skill_intent(), AgentFacetIntent::Keep))
+    {
+        return Err(OperationValidationError::UnregisteredEffectPlan);
+    }
+    let hermes = settings
+        .context_id
+        .starts_with("agent-context/hermes/sha256:");
+    if hermes {
+        let target = settings
+            .native_target
+            .as_ref()
+            .ok_or(OperationValidationError::UnregisteredEffectPlan)?;
+        target
+            .validate()
+            .map_err(|_| OperationValidationError::UnregisteredEffectPlan)?;
+        if settings.context_id
+            != format!(
+                "agent-context/hermes/{}",
+                CanonicalDigest::of_bytes(target.config_root().as_bytes()).as_str()
+            )
+            || !matches!(settings.collaboration, AgentFacetIntent::Keep)
+            || matches!(&settings.model, AgentFacetIntent::Configure { settings } if !matches!(settings, crate::AgentModelSelectionV2::HermesDefault { .. }))
+        {
+            return Err(OperationValidationError::UnregisteredEffectPlan);
+        }
+    } else if settings.native_target.is_some()
+        || settings.management_skill.is_some()
+        || matches!(&settings.model, AgentFacetIntent::Configure { settings } if matches!(settings, crate::AgentModelSelectionV2::HermesDefault { .. }))
+    {
+        return Err(OperationValidationError::UnregisteredEffectPlan);
+    }
+    if let AgentFacetIntent::Restore { restore_point_ref } = settings.skill_intent()
+        && !bounded_reference(&restore_point_ref)
     {
         return Err(OperationValidationError::UnregisteredEffectPlan);
     }
@@ -104,7 +136,7 @@ pub(super) fn validate_effects(
         .get("skill_file_change")
         .and_then(Value::as_bool)
         .ok_or(OperationValidationError::UnregisteredEffectPlan)?;
-    if skill_file_change && matches!(settings.collaboration, AgentFacetIntent::Keep) {
+    if skill_file_change && matches!(settings.skill_intent(), AgentFacetIntent::Keep) {
         return Err(OperationValidationError::UnregisteredEffectPlan);
     }
     let mut required = BTreeSet::new();
@@ -112,6 +144,14 @@ pub(super) fn validate_effects(
         required.extend([
             AgentConnectionEffectRoleV1::GrantScopedPublication,
             AgentConnectionEffectRoleV1::ManagedConfiguration,
+        ]);
+    }
+    if !matches!(settings.model, AgentFacetIntent::Keep)
+        && settings.context_id.starts_with("agent-context/hermes/")
+    {
+        required.extend([
+            AgentConnectionEffectRoleV1::HermesPluginModule,
+            AgentConnectionEffectRoleV1::HermesPluginManifest,
         ]);
     }
     if skill_file_change {

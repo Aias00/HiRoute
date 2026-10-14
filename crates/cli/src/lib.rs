@@ -300,11 +300,19 @@ fn execute_control(
 
 fn command_payload(command_id: &str, options: &[String]) -> Result<Value, ErrorCode> {
     match command_id {
-        "system.status"
-        | "system.client-status"
-        | "agents.scan"
-        | "agents.list"
-        | "sessions.status" => empty(options),
+        "system.status" | "system.client-status" | "agents.list" | "sessions.status" => {
+            empty(options)
+        }
+        "agents.scan" => {
+            if options.is_empty() {
+                empty(options)
+            } else {
+                request_input::typed::<hiroute_application_api::AgentScanRequestV1>(
+                    options,
+                    request_input::MAX_REQUEST_BYTES,
+                )
+            }
+        }
         "routing.list" if options.is_empty() => empty(options),
         "routing.show" => match options {
             [id] if request_input::valid_positional(id) => Ok(json!({"agent_plan_id": id})),
