@@ -1,5 +1,25 @@
 [
   {
+    "slug": "routing-cache-cost",
+    "date": "2026-10-14",
+    "title": {
+      "zh": "模型切换的缓存影响与智能路由成本分析",
+      "en": "Model Switching Cache Effects and Smart Routing Costs"
+    },
+    "shortTitle": {
+      "zh": "模型切换、缓存与整单成本",
+      "en": "Model switching, caching, and task cost"
+    },
+    "description": {
+      "zh": "解释 HiRoute 如何保护连续调用的缓存复用，用 Astra 与 Qwen 3.8 Flash 的实验价格和用量计算缓存损失、摊薄条件与整单成本余量。",
+      "en": "How HiRoute protects cache reuse, with calculations of cache losses, amortization, and whole-task cost margins using the Astra and Qwen 3.8 Flash experiment."
+    },
+    "files": {
+      "zh": "2026-10-14-routing-cache-cost.zh-CN.md",
+      "en": "2026-10-14-routing-cache-cost.en.md"
+    }
+  },
+  {
     "slug": "astra-qwen-smart-routing",
     "date": "2026-10-04",
     "title": {
