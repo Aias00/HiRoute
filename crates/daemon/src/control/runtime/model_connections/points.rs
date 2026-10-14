@@ -99,18 +99,18 @@ impl LocalControlAdapter {
             .native_target
             .as_ref()
             .map(hiroute_integrations::canonical_hermes_target);
-        if let Some(target) = &request.native_target {
-            if self.remember_hermes_scan_target(target).is_err() {
-                selected_target = Some(Err(hiroute_integrations::HermesNativeError {
-                    stage: "selected profile unavailable",
-                }));
-                diagnostics.push(ComputeScanDiagnosticV2 {
-                    agent_id: "agent_hermes_default".into(),
-                    reason: "selected_profile_unavailable".into(),
-                    native_provider_id: None,
-                    model_id: None,
-                });
-            }
+        if let Some(target) = &request.native_target
+            && self.remember_hermes_scan_target(target).is_err()
+        {
+            selected_target = Some(Err(hiroute_integrations::HermesNativeError {
+                stage: "selected profile unavailable",
+            }));
+            diagnostics.push(ComputeScanDiagnosticV2 {
+                agent_id: "agent_hermes_default".into(),
+                reason: "selected_profile_unavailable".into(),
+                native_provider_id: None,
+                model_id: None,
+            });
         }
         let hermes = match selected_target {
             Some(Ok(target)) => hiroute_integrations::hermes_api_sources(&target).map_err(|_| ()),
