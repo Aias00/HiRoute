@@ -859,6 +859,7 @@ pub(crate) fn command_request_schema(command_id: &str) -> &'static str {
         }
         "agents.connect.status" => "hiroute.agent-connection-status-request/union",
         "agents.check" => "hiroute.agent-check-request/v1",
+        "agents.scan" => "hiroute.agent-scan-request/v1",
         "compute.list" | "compute.show" => "hiroute.compute-management-query/v2",
         "compute.connection.preview" => "hiroute.compute-connection-preview-request/union",
         "compute.connection.apply" => "hiroute.compute-connection-apply-request/v1",

@@ -178,6 +178,8 @@ impl AgentSettingsStatusV2 {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AgentModelSettingsStatusV2 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_target: Option<AgentNativeTargetV1>,
     pub schema: String,
     pub context_id: String,
     pub state: AgentModelSettingsStateV2,
@@ -204,6 +206,27 @@ pub struct AgentModelSettingsStatusV2 {
     pub collaboration: Option<AgentCollaborationSettingsStatusV2>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub management_skill: Option<AgentManagementSkillStatusV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_adapter: Option<AgentNativeAdapterStatusV1>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentNativeAdapterStatusV1 {
+    pub resources_installed: bool,
+    pub runtime_loading: AgentNativeRuntimeLoadingV1,
+    pub next_action: AgentNativeAdapterNextActionV1,
+}
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentNativeRuntimeLoadingV1 {
+    Unobserved,
+}
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentNativeAdapterNextActionV1 {
+    ReloadPluginsIfRunning,
+    RepairOwnedResources,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]

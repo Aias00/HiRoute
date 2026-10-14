@@ -250,6 +250,9 @@ pub trait ControlStatePort: Send + Sync {
 }
 
 pub trait AgentDiscoveryPort: Send + Sync {
+    fn list(&self) -> Result<Vec<DiscoveredAgentV1>, ControlReadError> {
+        self.discover()
+    }
     fn discover(&self) -> Result<Vec<DiscoveredAgentV1>, ControlReadError>;
     fn discover_target(
         &self,

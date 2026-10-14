@@ -320,6 +320,18 @@ fn agent_launch_descriptor_request_schema() -> Value {
     })
 }
 
+fn agent_scan_request_schema() -> Value {
+    json!({
+        "$schema":"https://json-schema.org/draft/2020-12/schema",
+        "$id":"hiroute://contracts/cli/agent-scan-request.v1.schema.json",
+        "type":"object", "additionalProperties":false,
+        "properties":{"native_target":{"type":"object","additionalProperties":false,
+            "required":["kind","config_root"],"properties":{"kind":{"const":"hermes"},
+            "config_root":{"type":"string","minLength":1,"maxLength":4096,
+                "description":"Explicit absolute effective Hermes profile directory; never inferred from the daemon environment."}}}}
+    })
+}
+
 fn empty_request_schema() -> Value {
     json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -464,6 +476,10 @@ pub fn generated_contract_files() -> Vec<GeneratedContractFile> {
         (
             "agent-launch-descriptor-request.v1.schema.json",
             pretty_json(&agent_launch_descriptor_request_schema()),
+        ),
+        (
+            "agent-scan-request.v1.schema.json",
+            pretty_json(&agent_scan_request_schema()),
         ),
         (
             "empty-request.v1.schema.json",

@@ -263,6 +263,38 @@ fn model_resources_rehydrate_after_restart_and_restore_without_touching_skill() 
     assert_eq!(fixture.status()["model_verified"], false);
     let fixture = fixture.reopen();
     assert_eq!(fixture.status()["state"], "configured");
+    assert_eq!(
+        fixture.status()["native_target"]["config_root"],
+        json!(fixture.profile)
+    );
+    assert_eq!(
+        fixture.status()["native_adapter"]["runtime_loading"],
+        "unobserved"
+    );
+    let listed = fixture
+        .service
+        .dispatch_wire(request("ListAgents", json!({}), None))
+        .data
+        .unwrap();
+    assert!(
+        listed["agents"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|a| a["context_id"] == fixture.context)
+    );
+    let scan = fixture
+        .service
+        .dispatch_wire(request("ScanAgents", json!({}), None))
+        .data
+        .unwrap();
+    assert!(
+        !scan["agents"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|a| a["agent_id"] == "agent_hermes_default")
+    );
     let spec = fixture.restore();
     apply(
         &fixture.service,

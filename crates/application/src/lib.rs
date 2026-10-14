@@ -246,6 +246,7 @@ impl ApplicationService {
         let result = match &input.native_target {
             Some(target) if target.validate().is_ok() => ports.discovery.discover_target(target),
             Some(_) => return failed(ErrorCode::InvalidArguments, request.request_id),
+            None if request.operation_id == "ListAgents" => ports.discovery.list(),
             None => ports.discovery.discover(),
         };
         match result {

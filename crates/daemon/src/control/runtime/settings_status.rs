@@ -156,7 +156,24 @@ impl LocalControlAdapter {
         } else if class != SettingsAgentClass::Hermes && request.native_target.is_some() {
             return Err(ControlReadError::Denied);
         }
+        let native_target = if class == SettingsAgentClass::Hermes {
+            self.stores_lock()
+                .map_err(super::map_port)?
+                .control()
+                .agent_settings_native_targets(&WorkspaceId::default())
+                .map_err(super::map_port)?
+                .into_iter()
+                .find(|target| {
+                    hiroute_integrations::hermes_context_id(target.config_root())
+                        == request.context_id
+                })
+                .or(request.native_target.clone())
+        } else {
+            None
+        };
         let mut status = AgentModelSettingsStatusV2 {
+            native_target,
+            native_adapter: None,
             schema: "hiroute.agent-model-settings-status/v2".into(),
             context_id: request.context_id.clone(),
             state: State::NotConfigured,
@@ -319,6 +336,20 @@ impl LocalControlAdapter {
                     )
                     .map_err(super::map_port)?
                 };
+                if class == SettingsAgentClass::Hermes {
+                    status.native_adapter = Some(
+                        hiroute_application_api::AgentNativeAdapterStatusV1 {
+                            resources_installed: file_applied,
+                            runtime_loading:
+                                hiroute_application_api::AgentNativeRuntimeLoadingV1::Unobserved,
+                            next_action: if file_applied {
+                                hiroute_application_api::AgentNativeAdapterNextActionV1::ReloadPluginsIfRunning
+                            } else {
+                                hiroute_application_api::AgentNativeAdapterNextActionV1::RepairOwnedResources
+                            },
+                        },
+                    );
+                }
                 let configured = file_applied
                     && endpoint_current
                     && current.as_ref() == Some(&expected)

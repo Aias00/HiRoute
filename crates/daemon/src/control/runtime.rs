@@ -1125,17 +1125,61 @@ impl ControlStatePort for LocalControlAdapter {
 }
 
 impl AgentDiscoveryPort for LocalControlAdapter {
+    fn list(&self) -> Result<Vec<DiscoveredAgentV1>, ControlReadError> {
+        let mut agents = self.discover()?;
+        let targets = self
+            .stores_lock()
+            .map_err(map_port)?
+            .control()
+            .agent_settings_native_targets(&WorkspaceId::default())
+            .map_err(map_port)?;
+        for target in targets {
+            match self.discover_target(&target) {
+                Ok(rows) => agents.extend(rows),
+                Err(_) => {
+                    let subject = hiroute_integrations::hermes_subject(target.config_root())
+                        .map_err(|_| ControlReadError::Corrupt)?;
+                    agents.push(DiscoveredAgentV1 {
+                        native_target: Some(target.clone()),
+                        codex_access: None,
+                        context_id: Some(hiroute_integrations::hermes_context_id(
+                            target.config_root(),
+                        )),
+                        agent_id: subject.agent_id().into(),
+                        profile_id: subject.profile_id().into(),
+                        version: "unknown".into(),
+                        supported: false,
+                        configuration_state: "selected_target_unavailable".into(),
+                        available_surfaces: Default::default(),
+                        native_model_catalog: None,
+                        registered_configuration: None,
+                        discovered_credential: None,
+                        permission_hardening: None,
+                    });
+                }
+            }
+        }
+        Ok(agents)
+    }
     fn discover_target(
         &self,
         target: &hiroute_domain::AgentNativeTargetV1,
     ) -> Result<Vec<DiscoveredAgentV1>, ControlReadError> {
         let target = hiroute_integrations::canonical_hermes_target(target)
             .map_err(|_| ControlReadError::Denied)?;
-        let installation = hiroute_integrations::hermes_settings_installation(&target)
-            .map_err(|_| ControlReadError::Denied)?;
-        let supported = installation
-            .require_action(hiroute_domain::AgentAction::ConfigureModel)
-            .is_ok();
+        let (installation, config_available) =
+            match hiroute_integrations::hermes_settings_installation(&target) {
+                Ok(installation) => (installation, true),
+                Err(_) => (
+                    hiroute_integrations::hermes_management_installation(&target)
+                        .map_err(|_| ControlReadError::Denied)?,
+                    false,
+                ),
+            };
+        let supported = config_available
+            && installation
+                .require_action(hiroute_domain::AgentAction::ConfigureModel)
+                .is_ok();
         let context_id = hiroute_integrations::hermes_context_id(target.config_root());
         Ok(vec![DiscoveredAgentV1 {
             native_target: Some(target),
