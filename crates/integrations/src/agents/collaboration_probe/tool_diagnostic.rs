@@ -420,4 +420,35 @@ mod tests {
             assert_eq!(facts.header.phase, ReturnPhase::Unknown);
         }
     }
+
+    #[test]
+    fn terminal_script_checkpoint_retains_failure_facts_without_proving_denial() {
+        use super::super::readonly_control::{LanguageMode, ReadOnlyControl, ScriptPhase};
+        let root = tempfile::tempdir().unwrap();
+        let mut control = ReadOnlyControl::new(root.path(), "private-nonce").unwrap();
+        let output = "Wall time: 3.7322 seconds\nProcess exited with code 1\nOutput:\nhiroute-readonly-entered-private-nonce\nhiroute-readonly-mode-private-nonce:ConstrainedLanguage\nhiroute-readonly-failure-private-nonce:console-attempt:-2146233087:7\nprivate-native-error-text";
+        let result = serde_json::json!({"output":output});
+        let diagnostic = ToolResultDiagnostic::capture(
+            SelectedTool::ExecCommand,
+            Some(&result),
+            Some(output),
+            "private-content-nonce",
+            "private-cli-contract",
+            Some(control.receipt_facts(output)),
+        );
+        assert_eq!(diagnostic.header.phase, ReturnPhase::TerminalReturned);
+        assert_eq!(diagnostic.header.terminal_code, Some(1));
+        let receipt = diagnostic.receipts.as_ref().unwrap();
+        assert_eq!(receipt.attempt_matches, 0);
+        assert_eq!(receipt.denial_matches, 0);
+        assert_eq!(receipt.script.entered_matches, 1);
+        assert_eq!(receipt.script.mode, LanguageMode::ConstrainedLanguage);
+        let failure = receipt.script.failure.as_ref().unwrap();
+        assert_eq!(failure.phase, ScriptPhase::ConsoleAttempt);
+        assert_eq!(failure.hresult, -2146233087);
+        assert_eq!(failure.category, 7);
+        assert!(!format!("{diagnostic:?}").contains("private-"));
+        assert!(control.confirm(output).is_err());
+        assert!(!diagnostic.skill_content && !diagnostic.cli_output);
+    }
 }
