@@ -9,6 +9,8 @@ mod windows_claude_connection;
 mod windows_decision_business;
 #[path = "support/windows_execution_host.rs"]
 mod windows_execution_host;
+#[path = "support/windows_foreground_console.rs"]
+mod windows_foreground_console;
 #[path = "support/windows_free_admission.rs"]
 mod windows_free_admission;
 #[path = "support/windows_gateway_foreground_recovery.rs"]

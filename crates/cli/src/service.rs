@@ -283,10 +283,26 @@ pub(crate) fn foreground_run() -> u8 {
             return 6;
         }
         let daemon = hiroute_host_runtime::standalone_daemon_binary(&record.install_root);
-        match Command::new(daemon)
-            .args(["--role", "all", "--standalone"])
-            .status()
-        {
+        let Ok(wait) = hiroute_platform::windows::console::ForegroundWaitGuard::install() else {
+            eprintln!("standalone foreground console wait unavailable");
+            return 6;
+        };
+        let result = Command::new(daemon)
+            .args([
+                "--role",
+                "all",
+                "--standalone",
+                "--foreground-parent-console",
+            ])
+            .stdin(std::process::Stdio::inherit())
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
+            .status();
+        if wait.finish().is_err() {
+            eprintln!("standalone foreground console wait unavailable");
+            return 6;
+        }
+        match result {
             Ok(status) => status
                 .code()
                 .and_then(|code| u8::try_from(code).ok())

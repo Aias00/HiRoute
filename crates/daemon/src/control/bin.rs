@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+#![cfg_attr(windows, windows_subsystem = "windows")]
 
 use std::io::{Read, Write};
 use std::net::SocketAddr;
@@ -38,6 +39,8 @@ struct Arguments {
     standalone: bool,
     #[cfg(windows)]
     windows_service: Option<String>,
+    #[cfg(windows)]
+    foreground_parent_console: bool,
     storage_root: Option<PathBuf>,
     runtime_root: Option<PathBuf>,
     listen: Option<SocketAddr>,
@@ -73,6 +76,14 @@ fn main() {
         }
     }
     let mut arguments = parse_arguments();
+    #[cfg(windows)]
+    if arguments.foreground_parent_console
+        && (!arguments.standalone
+            || arguments.role.as_deref() != Some("all")
+            || arguments.windows_service.is_some())
+    {
+        exit_usage();
+    }
     #[cfg(windows)]
     if let Some(name) = arguments.windows_service.take() {
         if !arguments.standalone
@@ -112,6 +123,13 @@ fn main() {
         && let Err(error) = apply_standalone_defaults(&mut arguments)
     {
         eprintln!("hirouted failed: {error}");
+        std::process::exit(6);
+    }
+    #[cfg(windows)]
+    if arguments.foreground_parent_console
+        && hiroute_platform::windows::console::attach_parent_preserving_stdio().is_err()
+    {
+        eprintln!("hirouted foreground parent console unavailable");
         std::process::exit(6);
     }
     if let Err(error) = run_daemon(
@@ -461,6 +479,8 @@ fn parse_arguments() -> Arguments {
             "--windows-service" => {
                 parsed.windows_service = Some(value(&mut arguments).unwrap_or_else(|| exit_usage()))
             }
+            #[cfg(windows)]
+            "--foreground-parent-console" => parsed.foreground_parent_console = true,
             "--storage-root" => parsed.storage_root = value(&mut arguments).map(PathBuf::from),
             "--runtime-root" => parsed.runtime_root = value(&mut arguments).map(PathBuf::from),
             "--listen" => {

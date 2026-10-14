@@ -2,6 +2,7 @@
 //! No privilege enabling, alternate logon, linked/restricted token or impersonation
 //! belongs to this gate. Console closure, RDP reconnect and login triggers are
 //! separate externally observed phases; toggling autostart does not prove login.
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::ptr::null_mut;
 use std::thread;
@@ -468,6 +469,12 @@ fn task_real_standard_logged_on_owner_installs_runs_recovers_and_uninstalls() {
             && definition.daemon == record.install_root.join("hirouted.exe"),
         "actual registered Task definition must belong to this standard owner"
     );
+    assert_eq!(
+        definition.arguments(),
+        "--role all --standalone",
+        "Task startup cannot request the foreground parent console"
+    );
+    assert_gui_daemon(&definition.daemon);
     let mut cleanup = Cleanup {
         input: &input,
         layout,
@@ -499,6 +506,10 @@ fn task_real_standard_logged_on_owner_installs_runs_recovers_and_uninstalls() {
     );
     assert!(status(cli_path, false)["autostart_enabled"] == false);
     cli(cli_path, &["service", "start"], "start");
+    assert!(
+        hiroute_platform::windows::task::active(&definition).unwrap(),
+        "the actual registered Task action retains its exact background arguments"
+    );
     status(cli_path, true);
     let first = action("inspect");
     assert_identity(&first, &sid, session);
@@ -595,5 +606,28 @@ fn task_real_standard_logged_on_owner_installs_runs_recovers_and_uninstalls() {
     task_absent(definition.name, "uninstalled-task");
     println!(
         "actual standard Task gate: own logged-on token, no Administrators SID, demand-only install, toggle policy, Gateway/Control, doctor/logs, graceful stop, PT1M recovery, forced stop remains stopped, exact uninstall and preserved user state; external console/RDP/logon phases not executed here"
+    );
+}
+
+/// The real installed image is already SHA-bound to the production package.
+/// Read its bounded held PE header rather than infer subsystem from a filename.
+fn assert_gui_daemon(path: &Path) {
+    let mut file = hiroute_platform::windows::security::open_identity(path, false).unwrap();
+    let mut dos = [0u8; 64];
+    file.read_exact(&mut dos).unwrap();
+    assert_eq!(&dos[..2], b"MZ");
+    let offset = u32::from_le_bytes(dos[60..64].try_into().unwrap()) as u64;
+    assert!(offset <= 1024 * 1024 && offset + 94 <= file.metadata().unwrap().len());
+    file.seek(SeekFrom::Start(offset)).unwrap();
+    let mut pe = [0u8; 94];
+    file.read_exact(&mut pe).unwrap();
+    assert_eq!(&pe[..4], b"PE\0\0");
+    assert!(u16::from_le_bytes(pe[20..22].try_into().unwrap()) >= 70);
+    assert_eq!(u16::from_le_bytes(pe[4..6].try_into().unwrap()), 0x8664);
+    assert_eq!(u16::from_le_bytes(pe[24..26].try_into().unwrap()), 0x20b);
+    assert_eq!(
+        u16::from_le_bytes(pe[92..94].try_into().unwrap()),
+        2,
+        "the actual Task daemon is a GUI-subsystem image"
     );
 }

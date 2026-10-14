@@ -440,25 +440,34 @@ impl Drop for Attributes {
 
 impl Child {
     pub fn spawn(launch: Launch<'_>) -> io::Result<Self> {
-        Self::spawn_with_token(launch, None, &[])
+        Self::spawn_with_token(launch, None, &[], false)
+    }
+
+    /// An isolated native-test console host. Never use this for a product daemon
+    /// or a Worker: ordinary production launches remain CREATE_NO_WINDOW.
+    /// The new console contains only this held Job's fixture, so its Ctrl-C/Break
+    /// tests cannot broadcast into Cargo, the runner, or the user's parent console.
+    pub fn spawn_console_host(launch: Launch<'_>) -> io::Result<Self> {
+        Self::spawn_with_token(launch, None, &[], true)
     }
 
     /// Include only these caller-held private pipe capabilities in the same atomic
     /// handle list as stdio and Job assignment. No ambient inheritable handle is added.
     pub fn spawn_with_inherited_pipes(launch: Launch<'_>, pipes: &[&File]) -> io::Result<Self> {
-        Self::spawn_with_token(launch, None, pipes)
+        Self::spawn_with_token(launch, None, pipes, false)
     }
 
     /// Borrow a caller-owned primary token. Job assignment and the explicit handle list
     /// use the same atomic CreateProcess contract as the ordinary current-user launch.
     pub fn spawn_as_token(launch: Launch<'_>, token: &impl AsRawHandle) -> io::Result<Self> {
-        Self::spawn_with_token(launch, Some(token.as_raw_handle()), &[])
+        Self::spawn_with_token(launch, Some(token.as_raw_handle()), &[], false)
     }
 
     fn spawn_with_token(
         launch: Launch<'_>,
         token: Option<HANDLE>,
         pipes: &[&File],
+        console_host: bool,
     ) -> io::Result<Self> {
         if pipes.len() > 8 {
             return Err(io::Error::other("inherited pipe count"));
@@ -615,7 +624,11 @@ impl Child {
         // HANDLE_LIST prevents unrelated concurrent launches inheriting credentials/stdio.
         let flags = EXTENDED_STARTUPINFO_PRESENT
             | CREATE_UNICODE_ENVIRONMENT
-            | CREATE_NO_WINDOW
+            | if console_host {
+                CREATE_NEW_CONSOLE
+            } else {
+                CREATE_NO_WINDOW
+            }
             | CREATE_SUSPENDED;
         let created = unsafe {
             if let Some(token) = &launch_token {
