@@ -391,6 +391,8 @@ if ($Scope -eq 'components') {
     ($readonlyControl + 'readonly_control_script_facts_are_closed_nonce_bound_and_never_satisfy_denial'),
     ($readonlyControl + 'readonly_control_script_facts_reject_duplicate_unknown_and_malformed_failure_rows'),
     ($readonlyControl + 'readonly_control_windows_parser_checks_actual_command_without_execution'),
+    'agents::collaboration_probe::readonly_control::parser_probe::readonly_parser_trace_requires_ordered_actual_entry_parse_and_completion',
+    'agents::collaboration_probe::readonly_control::parser_probe::readonly_parser_trace_limits_native_failure_facts_without_retaining_dynamic_output',
     'agents::collaboration_probe::tests::codex_readonly_control_precedes_the_skill_and_cli_and_requires_a_correlated_denial',
     'agents::collaboration_probe::tests::readonly_rejection_observes_closed_tool_facts_before_early_return',
     'agents::collaboration_probe::tests::readonly_facts_preserve_missing_correlation_and_echo_duplicate_gates')

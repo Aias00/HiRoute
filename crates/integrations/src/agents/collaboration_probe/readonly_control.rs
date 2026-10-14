@@ -3,6 +3,9 @@
 //! catch only UnauthorizedAccessException, and leave the initially absent file absent.
 use std::path::{Path, PathBuf};
 
+#[cfg(test)]
+mod parser_probe;
+
 #[derive(Debug, Eq, PartialEq)]
 pub(super) struct ReceiptFacts {
     pub(super) attempt_matches: usize,
@@ -399,24 +402,18 @@ mod tests {
         ))
         .unwrap();
         let broken = control.command().strip_suffix('}').unwrap();
-        for (text, expected) in [(control.command(), "accepted"), (broken, "rejected")] {
+        for (text, expected, arm) in [
+            (control.command(), "accepted", "complete"),
+            (broken, "rejected", "incomplete"),
+        ] {
             let text = text.replace('\'', "''");
-            let script = format!(
-                "$ErrorActionPreference='Stop'; $tokens=$null; $errors=$null; $null=[System.Management.Automation.Language.Parser]::ParseInput('{text}',[ref]$tokens,[ref]$errors); if($errors.Count -eq 0){{Write-Output 'accepted'}}else{{Write-Output 'rejected'}}"
-            );
+            let script = parser_probe::script(&text, arm);
             let mut command = Command::new(&program);
             command
                 .args(["-NoProfile", "-NonInteractive", "-Command", &script])
                 .env_clear()
                 .current_dir(root.path());
-            let bytes = super::super::super::windows_runtime::bounded(
-                &command,
-                false,
-                Duration::from_secs(10),
-                1024,
-            )
-            .unwrap();
-            assert_eq!(std::str::from_utf8(&bytes).unwrap().trim(), expected);
+            parser_probe::check(&command, Duration::from_secs(10), arm, expected).unwrap();
             require_absent(&control.path).unwrap();
         }
         // The actual command was only a string input to Parser.ParseInput.

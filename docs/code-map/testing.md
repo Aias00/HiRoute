@@ -182,7 +182,10 @@ alone does not prove that the native writer has published its contents.
 Its residual binding reader distinguishes incomplete publication from fatal native
 identity errors. The [residual oracle](../../crates/daemon/tests/support/windows_worker_residual_oracle.rs)
 keeps correlated tool errors observable, with fixed stage/error facts and no native
-body. These diagnostics preserve the original cancellation and recovery assertions.
+body. These diagnostics preserve the original cancellation and recovery assertions. The
+system PowerShell parser probe retains its original timeout while recording actual
+entry, parse and completion stages through bounded private captures; a forced Job
+cleanup never turns that timeout into successful parsing.
 
 The same native entry's `-InventoryOnly` exports static scope recipes through its
 actual required-test producer without Cargo, package preparation or client launch.
