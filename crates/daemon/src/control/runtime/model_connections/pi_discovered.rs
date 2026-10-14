@@ -254,6 +254,8 @@ impl LocalControlAdapter {
                     "Claude Code"
                 } else if dsh {
                     "DSH"
+                } else if source.source_ref.starts_with("hermes-source/") {
+                    "Hermes"
                 } else {
                     "Pi"
                 },
@@ -274,6 +276,7 @@ impl LocalControlAdapter {
             protocol_profile_id: match protocol {
                 UpstreamProtocol::Responses => "adapter.openai-responses.v1",
                 UpstreamProtocol::Messages => "adapter.anthropic-messages.v1",
+                UpstreamProtocol::ChatCompletions if grouped => "adapter.openai-chat.v1",
                 UpstreamProtocol::ChatCompletions => "adapter.openai-chat-completions.v1",
             }
             .into(),

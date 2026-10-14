@@ -24,9 +24,9 @@ pub(super) use registered_management::materialize_registered_management_candidat
 
 #[path = "candidate_protocol_profiles.rs"]
 mod protocol_profile;
-use protocol_profile::protocol_profiles;
 #[cfg(test)]
 use protocol_profile::{cpa_reasoning_profiles, field, parameter_path, reasoning_profiles};
+use protocol_profile::{protocol_profiles, qualified_native_render_convention};
 
 const MAX_CREDENTIAL_REFS: usize = 64;
 
@@ -456,7 +456,7 @@ pub(super) fn materialize_management_candidate(
     let reasoning = ModelNativeReasoningV1 {
         model_configuration_id: model_configuration_id.clone(),
         capability: fact.native_reasoning.clone(),
-        native_render_convention: None,
+        native_render_convention: qualified_native_render_convention(fact, catalog),
     };
     let mut protocol_faces = vec![ProtocolFace {
         protocol: protocol_endpoint.protocol,

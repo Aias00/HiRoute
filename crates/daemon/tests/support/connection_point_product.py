@@ -45,7 +45,9 @@ def run(repository):
         hermes.mkdir(mode=0o700)
         hermes_config = {'model': {'provider': 'team-native', 'default': 'first'}, 'providers': {
             'team-native': {'api': 'https://point.example.invalid/v1', 'transport': 'openai_chat',
-                            'key_env': 'POINT_PROFILE_KEY', 'models': {'first': {}, 'second': {}}}}}
+                            'key_env': 'POINT_PROFILE_KEY', 'models': {'first': {}, 'second': {}}},
+            'china-coding': {'api': 'https://open.bigmodel.cn/api/coding/paas/v4', 'transport': 'openai_chat',
+                             'key_env': 'POINT_PROFILE_KEY', 'default_model': 'glm-5.3'}}}
         write(hermes / 'config.yaml', hermes_config)
         write(hermes / '.env', b'POINT_PROFILE_KEY=point-profile-fixture-secret\nALTERNATIVE_KEY=point-profile-fixture-secret\n')
         product.secrets.add('point-profile-fixture-secret')
@@ -61,7 +63,7 @@ def run(repository):
                    'native_target': {'kind': 'hermes', 'config_root': str(hermes)}}
         scan = data(product, 'compute scan', request)
         assert scan['schema'] == 'hiroute.compute-scan-result/v2'
-        hermes_point = next(p for p in scan['connections'] if p['agent_id'] == 'agent_hermes_default')
+        hermes_point = next(p for p in scan['connections'] if p['agent_id'] == 'agent_hermes_default' and p['provider_id'] == 'team-native')
         pi_point = next(p for p in scan['connections'] if p['agent_id'] == 'agent_pi_default')
         assert hermes_point['default_model_id'] == 'first'
         assert hermes_point['declared_model_ids'] == ['first', 'second']
@@ -86,6 +88,14 @@ def run(repository):
         assert all(m['membership'] == 'observed' for m in candidate['models'])
         assert all(path.read_bytes() == contents for path, contents in before.items()), 'Scan/prepare mutated a native source'
         assert not data(product, 'compute list')['sources'], 'Scan/prepare saved a source'
+        coding_point = next(p for p in scan['connections'] if p.get('provider_id') == 'china-coding')
+        assert coding_point['connection_option_id'] == 'zhipu.coding-plan.cn.v1'
+        assert coding_point['declared_model_ids'] == ['glm-5.3']
+        coding = prepare(product, coding_point, 'prepare/point-product/coding')
+        assert {m['upstream_model_id'] for m in coding['models']} == {'glm-5.3', 'glm-5.3-flash'}
+        assert all(m['selectable'] for m in coding['models'])
+        assert next(m for m in coding['models'] if m['upstream_model_id'] == 'glm-5.3')['membership'] == 'observed'
+        assert next(m for m in coding['models'] if m['upstream_model_id'] == 'glm-5.3-flash')['membership'] == 'catalog'
         selection = [m['model_ref'] for m in candidate['models'] if m['selectable']]
         draft = preview(product, candidate, selection[:1])
         # Changing only credential selection provenance still invalidates the snapshot.
@@ -94,7 +104,7 @@ def run(repository):
         status, _ = apply(product, draft, 'point-source-stale', success=False)
         assert status != 0 and not data(product, 'compute list')['sources']
         fresh = data(product, 'compute scan', request)
-        point = next(p for p in fresh['connections'] if p['agent_id'] == 'agent_hermes_default')
+        point = next(p for p in fresh['connections'] if p['agent_id'] == 'agent_hermes_default' and p['provider_id'] == 'team-native')
         candidate = prepare(product, point, 'prepare/point-product/fresh')
         selection = [m['model_ref'] for m in candidate['models'] if m['selectable']]
         draft = preview(product, candidate, selection)
@@ -105,7 +115,8 @@ def run(repository):
         source = snapshot['sources'][0]
         assert {m['upstream_model_id'] for m in source['models']} == {'first', 'second'}
         assert source['target']['upstream_protocol'] == 'chat_completions'
-        product.restart()
+        product.stop()
+        product.start()
         snapshot = data(product, 'compute list')
         assert len(snapshot['sources']) == 1 and snapshot['sources'][0]['source_id'] == source['source_id']
         assert {m['upstream_model_id'] for m in snapshot['sources'][0]['models']} == {'first', 'second'}
