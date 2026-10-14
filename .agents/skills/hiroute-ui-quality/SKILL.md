@@ -22,8 +22,9 @@ Fix dimensions only when the product requires them; controls/columns must shrink
 
 ## Select coverage by the change
 
-Read the [Desktop test map](../../../apps/desktop/tests/README.md) and
-[test selection](../../../docs/test-selection.md). Record selected combinations:
+Read the [Desktop test map](../../../apps/desktop/tests/README.md) and use
+[HiRoute validation](../hiroute-validation/SKILL.md) to select and execute checks.
+Record selected combinations:
 
 - Layout/forms: default and smallest supported window from current `tauri.conf.json`
   (currently 1200×813 and 755×600). Distinguish content viewport from native window.

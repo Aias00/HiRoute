@@ -65,13 +65,13 @@ prewrite a future migration. Preserve unsupported/corrupt input without silently
 over it. Existing manual recovery pairs a complete old backup with its matching binary;
 upgrade support does not promise old binaries can read newly written data.
 
-Register added or changed legacy readers, adapters and frozen fixtures with owner, reason and
+Register added or changed legacy readers, adapters, frozen fixtures and catalog fallbacks with owner, reason and
 removal condition in the existing compatibility register. Follow the support policy for any
 retirement; a newer release or absence of old records on the developer's machine is insufficient.
 
 ## Validate the affected path
 
-Use `AGENTS.md` and the existing test planner/runner. Select checks by the changed boundary;
+Use [HiRoute validation](../hiroute-validation/SKILL.md) and the existing test planner/runner. Select checks by the changed boundary;
 this skill does not add a full workspace or physical-machine run to every task.
 
 - Freeze affected old bytes/calls from the exact released producer, or reuse fixtures with
@@ -82,7 +82,7 @@ this skill does not add a full workspace or physical-machine run to every task.
   the existing production startup/recovery entry. Include retained supported intermediate
   sources when their path changes; fixture-only success is not release-to-release acceptance.
 - Deliver the compatibility change and its regressions together. Run contract convergence
-  after contract changes, and affected generators twice as required by `AGENTS.md`. Bind
+  after contract changes, and use the validation workflow for affected generators. Bind
   results to the actual candidate; a descriptor/hash audit does not test semantic compatibility.
 
 At release handoff, assess the accumulated diff against supported released sources and reuse

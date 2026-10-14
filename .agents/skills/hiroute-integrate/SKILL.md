@@ -5,9 +5,9 @@ description: Integrate HiRoute task branches and converge their validation befor
 
 # HiRoute integration
 
-Use the repository's existing test planner and validation reports as the workflow state.
-Run commands from the repository root. Read [test selection](../../../docs/test-selection.md)
-and [validation routing](../../../docs/validation-routing.md) for scope and execution.
+Own the combined candidate and cross-branch convergence. Use
+[HiRoute validation](../hiroute-validation/SKILL.md) for check selection, configured
+execution, failure repair and evidence; run repository commands from its root.
 
 ## Establish the candidate
 
@@ -26,67 +26,45 @@ For an SSH backend integration with repeated checks, retain the first managed
 checkout with `--retention always` and a nonempty plan. Continue from the last
 stopped run using `--continue-checkout LAST_RUN_ID`; keep its checkout owner for
 final cleanup. This preserves Cargo artifacts across descendant candidate SHAs,
-not earlier test verdicts. See the validation-routing guide for refusal conditions.
+not earlier test verdicts. See [retained integration checkouts](../../../docs/validation-routing.md#continue-an-integration-checkout-and-schedule-the-final-workspace)
+for refusal conditions and cleanup ownership.
 
 Run `python3 scripts/test-plan.py --base BASE_SHA --integration` after combining changes.
 The top-level plan retains final obligations. `integration.commands` puts selected Python
 gates and known coverage/protocol/runtime checks first, even when a lockfile selects full.
 Inspect its paths and reasons: an empty early target list does not prove integration coverage.
 Add missing consumers based on the diff; preserve required native/product acceptance cases.
-Submit Cargo commands through `scripts/validation.py` on an exact committed candidate,
-with a distinct `--plan` and `--phase focused`; this command only prints a plan.
+The planner only prints commands. Execute preflight checks as focused runs through
+the shared validation workflow; they do not waive the final plan.
 
 Run the coverage gate before protocol/runtime checks. If generated data is stale, review
-the source change and let the convergence owner regenerate it twice (second run zero diff).
+the source change and let the convergence owner use the validation generator protocol.
 A checksum refresh is not evidence that a changed assertion still represents the contract.
-For affected Desktop journeys, check the configured Mac and required native interaction
-capability before a costly build. Reuse an eligible managed Pilot build across scenarios.
+For affected Desktop journeys, resolve the required capable environment before a costly build.
 
 ## Diagnose once within the affected boundary
 
-After failure, inspect the saved report/logs using [validation feedback](../../../docs/validation-feedback.md).
-Record observed failures and unfinished checks. When multiple related failures may remain,
-use `--integration --collect-failures` to propose bounded Cargo collection, review its scope,
-and explicitly run it. It does not continue later commands or collect every workspace failure.
+Use the validation failure-repair route for reports, original evidence and affected checks.
+When multiple related failures may remain, use `--integration --collect-failures`
+to propose bounded Cargo collection, review its scope, and explicitly run it.
+It does not continue later commands or collect every workspace failure.
 Do not add product smoke to diagnosis unless a product path or an unresolved consumer needs it.
 If early coverage fails, repair it before continuing the behavior command on the new candidate.
 
-Batch related repairs. Use `--since CHECKPOINT_SHA --integration` to obtain an iteration
-preflight while retaining the original base plan and its Cargo package context. Keep original failures and linked run IDs.
-Demonstrate the fix with the existing failing regression, or add a regression/selection mapping
-when the earlier checks missed it. Preserve the failing package/feature context when relevant.
-A same-SHA focused command may resolve different features from the full workspace command.
+Batch related integration repairs. Use `--since CHECKPOINT_SHA --integration` to obtain
+an iteration preflight while retaining the original base plan and its Cargo package context.
+Keep original failures and linked run IDs. Preserve the failing package/feature context;
+requested flags alone do not prove the focused and final commands resolve the same feature graph.
 
 ## Freeze and finish
 
-After affected checks pass, freeze the code candidate and finish the selected final checks.
-For queued SSH backend checks, use `backend wait RUN_ID --timeout 50` instead of
-frequent `status` snapshots. If the shell tool yields a live session, continue that
-same session to the bounded result within one orchestration call when available.
-On `wait_state=timeout`, give a concise progress update and wait again; on failure,
-read the report and relevant logs once. The wait summary is not a product scenario verdict.
-When the selected final command is the full locked backend all-features test,
-use `--schedule workspace-dag --exclusive` on the SSH runner. It prepares each
-binary role once, runs ordinary targets alongside product preparation, and
-checks the complete target and case-name set, doctests and three real smoke
-cases. Include checkout, preparation, execution and reporting in the measured
-time; preparation is not product success. A correctness pass over 300 seconds
-still misses the performance target. `workspace-smoke` is an explicit rollback
-entry, never an automatic retry after a DAG failure. Other commands keep their
-ordinary execution path.
+Freeze the integrated source heads and use the shared validation workflow to finish
+the selected final checks on the combined candidate. For a final full locked backend
+test, use the documented [workspace DAG schedule](../../../docs/validation-routing.md#continue-an-integration-checkout-and-schedule-the-final-workspace).
+Preserve early diagnostic evidence and final obligations; avoid running expensive
+smoke in both phases without a concrete unresolved reason.
 
-Link relevant runs with `--related-run`; do not automatically repeat the entire workspace
-following each fix. Early checks are diagnostic and do not automatically waive final checks.
-The small early boundary tests can recur in final workspace validation; expensive smoke
-should not be scheduled in both phases without a concrete unresolved reason.
-
-Keep a compact check ledger in the task's corresponding Issue or PR (raw logs stay in ignored local artifacts):
-
-| Check / exact command | Source SHA | Run ID / evidence | Package, features, platform | Outcome / remaining obligation |
-| --- | --- | --- | --- | --- |
-
-Distinguish process exit from actual scenario states and unexecuted checks. Evidence reused
-for unchanged code retains its original SHA and an explanation of the intervening diff;
-SHA equality alone is insufficient. Docs/tooling follow-ups use their own checks. Assess
-Top 3 timings once using the existing report; report unavailable timing rather than estimating.
-Merge/push only when authorized, then verify the remote target contains the intended sources.
+Record the target base, integrated source SHAs, shared-file resolution and remaining
+production-wiring gaps in the Issue/PR, alongside the validation handoff. Individual
+branch passes do not prove the combined production path. Merge/push only when
+authorized, then verify the remote target contains the intended sources.

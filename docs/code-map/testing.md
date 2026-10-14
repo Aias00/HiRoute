@@ -97,6 +97,10 @@ HTTP path or old restore fixture does not prove route revocation or native execu
 
 ## Select and report validation
 
+Use [HiRoute validation](../../.agents/skills/hiroute-validation/SKILL.md) for the
+current selection, execution, failure or handoff operation. Its routes lead to
+the owning guides; branch convergence remains a separate integration responsibility.
+
 1. Run `python3 scripts/test-plan.py --base <exact-base>`; use `--integration` for
    branch integration. Review affected consumers and explain semantic adjustments.
 2. Follow the selected commands and [CI definitions](../github-actions-validation.md).
@@ -126,4 +130,4 @@ scripts to their own tests; unknown skill code and runtime-embedded documents
 still require consumer investigation. Repository ignore rules select publication-policy
 regressions; optional ignored skills are not public-checkout test dependencies.
 See [instruction ownership](../../.agents/README.md)
-for pinned generation and actual host discovery.
+for pinned generation and actual host discovery, including the shared validation skill.

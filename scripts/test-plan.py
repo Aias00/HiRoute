@@ -49,7 +49,7 @@ INTEGRATION_SKILL = ".agents/skills/hiroute-integrate/SKILL.md"
 PROJECT_AGENT_SKILLS = {
     "hiroute-compatibility", "hiroute-cu", "hiroute-design-author", "hiroute-implementation-writer",
     "hiroute-integrate", "hiroute-macos-launch", "hiroute-process-coordinator",
-    "hiroute-public-pr", "hiroute-ui-quality", "issue-spec-apply", "issue-spec-github",
+    "hiroute-public-pr", "hiroute-ui-quality", "hiroute-validation", "issue-spec-apply", "issue-spec-github",
     "issue-spec-propose", "issue-spec-workflow", "model-metadata-maintainer",
 }
 AGENT_TOOL_COMMANDS = {

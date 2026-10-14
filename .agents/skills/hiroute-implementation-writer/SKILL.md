@@ -27,16 +27,17 @@ This skill can be selected automatically for an assigned HiRoute Proposal/change
 - Aim for an independently deliverable owned module. Use the agreed interface and contract-level test doubles for unavailable peer implementations; preserve fail-closed behavior and report the missing production wiring. Do not invent a replacement public contract, ship a test double as a real backend, or weaken acceptance to finish independently.
 - Amend an inaccurate Design within your authoring authority before implementing a changed contract. Escalate changes outside the authorized product scope, shared interfaces or acceptance to the designated coordinator or user. Do not demand another decision for a settled choice or invent issue-spec workflow gates.
 - If a supposedly mechanical step requires unresolved architectural research, report the concrete mismatch, impact and smallest proposed resolution. Continue unaffected work; do not compensate with speculative frameworks, permissive compatibility layers or weaker tests. Private helper choices remain yours.
-- Finish the behavior, fix introduced failures, and run affected checks plus explicit gates. Select non-zero intended test cases and distinguish fixture tests from the real Client Core/CLI/Daemon/Desktop entry path. Follow `AGENTS.md` for revision-bound evidence, generator stability, build output and Rust size limits.
-- On the current backend-only Linux workbench, explicitly exclude `hiroute-desktop` from workspace Cargo checks (`--workspace --exclude hiroute-desktop`) or select backend packages. Use the available macOS environment for Desktop validation; Report Windows coverage from the checks actually executed and their environment. Missing evidence is a validation limit, not a product platform exclusion. Do not install Desktop dependencies as an incidental backend-gate repair.
+- Finish the behavior and fix introduced failures. Use [HiRoute validation](../hiroute-validation/SKILL.md) for selected checks, configured execution, failure repair, generators and final evidence. Preserve explicit product/native gates and the distinction between fixtures and the real Client Core/CLI/Daemon/Desktop entry.
+- Organize Rust by responsibility. Treat 700 lines as a soft review threshold, not a hard cap; split only for a clear ownership boundary, never through low-value fragments or distorted logic. Split candidate-introduced files above 1100 lines; exact-base oversized files remain with their owning change. Preserve the [existing size gate](../../../scripts/check-rust-file-size.sh).
 - Self-inspection and tests are normal implementation work. They are not the independent stage review and cannot produce a final “approved/merged” verdict.
 
 ## Retire superseded build artifacts
 
-- Before another local Rust build in a build/fix/retest loop, inspect this task's earlier validation runs and retire debug outputs that are no longer needed. Repeat after validation and at handoff; do not leave every previous build under `--keep`. Use the existing tools in [Local validation and retention](../../../docs/local-rust-validation.md#owner-cleanup-during-buildfixretest).
-- The owner decides what remains needed for a running app, comparison or investigation. Save unique evidence first, confirm no task or launched process still uses the selected output, then use the shared-lock `retire`/`preview`/`apply` or managed-run cleanup flow. An idle compiler alone does not establish retirement. Never change a scenario verdict merely to enable deletion.
-- Record retained run IDs, their purpose and the event that ends retention in the corresponding Issue or PR; raw investigation evidence stays in ignored local artifacts. Clean only your own inactive build outputs; keep source worktrees, branches, shared sccache and evidence. Resolve uncertain ownership with the designated coordinator or user.
-- This is owner housekeeping, not a new build gate: do not introduce retention-count limits, mandatory approval round trips, background cleanup or extra serialization. If a selected output is still needed or its cleanup lock is busy, retain it, note why and continue independent work within the existing runner rules.
+Use the owner-cleanup route in [HiRoute validation](../hiroute-validation/SKILL.md)
+before another local Rust build and at handoff. Decide which owned outputs are
+still needed; record retained run IDs, purpose and end condition in the Issue/PR.
+Uncertain ownership or a busy cleanup lock leaves the output retained while
+unaffected work continues. Cleanup adds no approval round or source-worktree deletion.
 
 ## Handoff and repair
 

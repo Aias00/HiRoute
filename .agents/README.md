@@ -6,6 +6,12 @@ Codex discovers that directory directly. `.claude/skills/` is a real directory
 containing relative, per-skill symlinks to the shared subset. Read and edit the
 canonical paths, including when following sibling-skill references.
 
+`AGENTS.md` keeps global boundaries and task routing. The shared
+`hiroute-validation` skill owns check selection, execution, failure repair,
+retention and handoff guidance for ordinary changes as well as integration.
+Its linked guides retain runner commands and report details. Keep integration
+ownership in `hiroute-integrate`, rather than making it a prerequisite for testing.
+
 Optional local skills and their matching Claude links can be explicitly ignored.
 They are not part of the published skillset or prerequisites for public worktrees.
 Keep required public references within the tracked instruction set.
@@ -39,7 +45,8 @@ boundary by loading them through another skill or repository instruction. Shared
 UI quality checks can run in Claude; their Codex native-CU portion remains pending
 until performed in a capable Codex session. A browser check does not satisfy it.
 
-The Proposal-owner skill (`hiroute-implementation-writer`) and the issue-spec
+The validation and Proposal-owner skills (`hiroute-validation`,
+`hiroute-implementation-writer`) and the issue-spec
 workflow, apply, propose and design-author skills are shared. They run in the
 current Codex or Claude session without creating other sessions. Their references
 to central coordination describe an external responsibility, not a requirement

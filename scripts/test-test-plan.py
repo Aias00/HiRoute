@@ -730,6 +730,7 @@ class IntegrationPreflightTests(unittest.TestCase):
         paths = ['.gitignore', 'CLAUDE.md', '.agents/README.md', '.issue-spec/config.json', 'issue-spec/config.yaml',
                  'issue-spec/project/workflow.md', '.claude/skills/issue-spec-apply',
                  '.agents/skills/hiroute-implementation-writer/SKILL.md',
+                 '.agents/skills/hiroute-validation/SKILL.md', '.claude/skills/hiroute-validation',
                  '.agents/skills/issue-spec-workflow/release.json']
         result = plan.select(paths)
         self.assertEqual(result['mode'], 'affected')
@@ -753,7 +754,7 @@ class IntegrationPreflightTests(unittest.TestCase):
                 for command in plan.AGENT_TOOL_COMMANDS[name]:
                     self.assertIn(command, result['commands'])
         for path in ['.agents/skills/unknown/SKILL.md', '.claude/skills/unknown',
-                     'assets/skills/hiroute-cu/SKILL.md']:
+                     'assets/skills/hiroute-cu/SKILL.md', 'assets/skills/hiroute-validation/SKILL.md']:
             self.assertEqual(plan.select([path])['mode'], 'full')
 
     def test_only_the_known_operator_skill_is_tooling(self):

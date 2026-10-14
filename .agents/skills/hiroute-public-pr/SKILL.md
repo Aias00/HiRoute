@@ -67,9 +67,8 @@ owner's branch. For a sign-off-only repair, prove the tree unchanged and use
 
 ## Verify and deliver
 
-Follow `AGENTS.md`, the [code map](../../../docs/code-map/README.md),
-[test selection](../../../docs/test-selection.md) and
-[validation routing](../../../docs/validation-routing.md). Verify references
+Follow `AGENTS.md`, the [code map](../../../docs/code-map/README.md) and
+[HiRoute validation](../hiroute-validation/SKILL.md). Verify references
 against the public checkout so private files cannot satisfy missing dependencies.
 Choose checks from changed behavior, then bind results to the exact candidate.
 A source build does not prove installation or an actual user journey.

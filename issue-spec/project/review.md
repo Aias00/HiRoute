@@ -6,4 +6,4 @@ Ordinary changes proceed to human PR review. If the user explicitly selected a c
 
 Record actionable findings and handoff in the corresponding Issue/PR or the requested provider comments. Name the reviewed revision, concrete failure or violated invariant, expected correction and focused verification. Return repairs to their current owner. Do not add typed REVIEW/VERIFY, readiness receipts, rationale quotas or another tracking system.
 
-Use `hiroute-integrate` for authorized branch convergence and `hiroute-public-pr` before public pushes. Review alone grants no publication or merge authority. Follow GitHub's review/check rules; the human decides approval and merge.
+Use [HiRoute validation](../../.agents/skills/hiroute-validation/SKILL.md) to interpret evidence and select any necessary checks, `hiroute-integrate` for authorized branch convergence, and `hiroute-public-pr` before public pushes. Review alone grants no publication or merge authority. Follow GitHub's review/check rules; the human decides approval and merge.
