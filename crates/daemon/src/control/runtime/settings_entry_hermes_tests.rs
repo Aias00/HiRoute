@@ -1,5 +1,6 @@
 //! Public wire settings with real stores/files; native SDK acceptance is a separate gate.
 use super::*;
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
 fn private_file(path: &Path, bytes: &[u8]) {
@@ -310,12 +311,15 @@ fn borrowed_plugin_files_survive_restore_and_foreign_collision_blocks_before_wri
         &manifest,
         hiroute_integrations::HERMES_PLUGIN_MANIFEST.as_bytes(),
     );
+    let inode = fs::metadata(&module).unwrap().ino();
     apply(
         &fixture.service,
         &fixture.runtime,
         fixture.model_spec(0),
         "hermes-borrow",
     );
+    assert_eq!(fs::metadata(&module).unwrap().ino(), inode);
+    assert_eq!(fs::metadata(&module).unwrap().mode() & 0o777, 0o600);
     apply(
         &fixture.service,
         &fixture.runtime,

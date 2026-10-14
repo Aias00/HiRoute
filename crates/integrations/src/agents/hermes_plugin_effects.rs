@@ -27,6 +27,15 @@ fn load(
     let bytes = port
         .load_native_restore(operation, intent)?
         .ok_or_else(|| invalid("hermes.plugin.restore.missing"))?;
+    let value: serde_json::Value =
+        serde_json::from_slice(&bytes).map_err(|_| invalid("hermes.plugin.restore.record"))?;
+    let bytes = if value["schema"] == hiroute_domain::NATIVE_FILE_REFERENCE_SCHEMA_V1 {
+        let reference: hiroute_domain::NativeFileReferenceRecordV1 =
+            serde_json::from_value(value).map_err(|_| invalid("hermes.plugin.reference.record"))?;
+        Zeroizing::new(reference.metadata)
+    } else {
+        bytes
+    };
     let restore: Restore =
         serde_json::from_slice(&bytes).map_err(|_| invalid("hermes.plugin.restore.record"))?;
     if restore.schema != "hiroute.hermes-plugin-restore/v1" {
