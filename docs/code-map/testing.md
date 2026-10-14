@@ -141,6 +141,8 @@ The [standard-owner Task journey](../../crates/daemon/tests/support/windows_back
 executes as its own actual logged-on standard user, with no administrator group
 or alternate token. It requires an absent installation and SID-derived Task,
 then verifies native identity, Control/Gateway, recovery and guarded uninstall.
+WTS account lookup retains actual SID validity and equality independently of
+the API's input buffer capacity; follow this fixture for identity prerequisites.
 Its policy toggles do not establish console closure, RDP reconnection or a login
 trigger; those need external session evidence.
 The [complete-package foreground CPA journey](../../crates/daemon/tests/support/windows_packaged_foreground.rs)
@@ -171,6 +173,9 @@ cover original npm/package paths and reparse rejection before canonicalization.
 [Worker terminal facts](../../crates/daemon/tests/support/windows_worker_failure_diagnostics.rs)
 publish typed result states and bounded, independently observed oracle counters;
 they retain neither arbitrary result text nor a guessed per-run failure cause.
+The [cancel publication fixture](../../crates/daemon/tests/support/windows_worker_cancel.rs)
+waits for the complete nonce receipt within the original deadline; file existence
+alone does not prove that the native writer has published its contents.
 
 The same native entry's `-InventoryOnly` exports static scope recipes through its
 actual required-test producer without Cargo, package preparation or client launch.

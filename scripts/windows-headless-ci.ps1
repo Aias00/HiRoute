@@ -382,13 +382,21 @@ if ($Scope -eq 'components') {
     ($launchCause + 'malformed_or_truncated_rejection_wrappers_stay_unknown'))
   $selectionInput = 'worker::selection_windows::tests::'
   $readonlyControl = 'agents::collaboration_probe::readonly_control::tests::'
-  Invoke-RequiredTests 'agent-codex-readonly-control' @('-p','hiroute-integrations','--lib','readonly_control') @(
+  Invoke-RequiredTests 'agent-codex-readonly-control' @('-p','hiroute-integrations','--lib','readonly_') @(
     ($readonlyControl + 'readonly_control_requires_actual_attempt_and_access_denial_not_just_absence'),
     ($readonlyControl + 'readonly_control_rejects_echoed_policy_error_and_unrelated_receipts'),
     ($readonlyControl + 'readonly_control_rejects_reversed_or_repeated_receipt_lines'),
     ($readonlyControl + 'readonly_control_rejects_an_existing_file_and_any_write_before_or_after_receipt'),
     ($readonlyControl + 'readonly_control_preserves_a_literal_path_and_only_catches_access_denial'),
-    'agents::collaboration_probe::tests::codex_readonly_control_precedes_the_skill_and_cli_and_requires_a_correlated_denial')
+    'agents::collaboration_probe::tests::codex_readonly_control_precedes_the_skill_and_cli_and_requires_a_correlated_denial',
+    'agents::collaboration_probe::tests::readonly_rejection_observes_closed_tool_facts_before_early_return',
+    'agents::collaboration_probe::tests::readonly_facts_preserve_missing_correlation_and_echo_duplicate_gates')
+  $toolDiagnostic = 'agents::collaboration_probe::tool_diagnostic::tests::'
+  Invoke-RequiredTests 'agent-codex-tool-diagnostic' @('-p','hiroute-integrations','--lib',$toolDiagnostic) @(
+    ($toolDiagnostic + 'official_terminal_and_live_headers_keep_numbers_but_discard_session_and_native_text'),
+    ($toolDiagnostic + 'header_rejects_partial_duplicate_overflow_and_embedded_receipts'),
+    ($toolDiagnostic + 'only_pinned_prelaunch_captions_establish_handler_preflight'),
+    ($toolDiagnostic + 'facets_are_closed_and_shape_counts_do_not_invent_parsed_text'))
   Invoke-RequiredTests 'agent-native-reader' @('-p','hiroute-local-storage','--lib','control::windows_native_reader_tests::') @(Get-WindowsNativeReaderCases)
   $profileIdentity = 'delegation::installation::windows_tests::'
   Invoke-RequiredTests 'agent-worker-profile-identity' @('-p','hiroute-daemon','--lib',$profileIdentity) @(
@@ -447,6 +455,8 @@ if ($Scope -eq 'components') {
     ($workerFailureOracle + 'terminal_facts_publish_typed_states_and_correlations_without_result_or_locator_text'),
     ($workerFailureOracle + 'unknown_terminal_shapes_and_excessive_counts_remain_closed_and_unattributed'))
   $publicBusiness = 'actual_windows_complete_public_headless_business'
+  $cancelPublication = 'windows_worker_business::cancel::tests::cancellation_waits_for_the_complete_native_receipt_after_file_creation'
+  Invoke-RequiredTests 'agent-worker-cancel-publication' @('-p','hiroute-daemon','--test','windows_headless',$cancelPublication) @($cancelPublication) @('--exact')
   Invoke-RequiredTests 'agent-public-business' @('-p','hiroute-daemon','--test','windows_headless',$publicBusiness) @($publicBusiness) @('--ignored','--exact','--nocapture')
   $userModels = 'actual_windows_pi_and_dsh_persisted_user_models'
   Invoke-RequiredTests 'agent-user-models' @('-p','hiroute-daemon','--test','windows_headless',$userModels) @($userModels) @('--ignored','--exact','--nocapture')

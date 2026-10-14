@@ -75,6 +75,9 @@ Its independent [write rejection control](../../crates/integrations/src/agents/c
 must observe the actual shell's denied write before accepting Skill reads and
 execution of the public CLI; a policy rejection before shell execution is not
 successful sandbox evidence.
+Its [closed tool-output facts](../../crates/integrations/src/agents/collaboration_probe/tool_diagnostic.rs)
+are observed before failed receipt checks return, so early rejection retains
+fixed execution-header facts without logging native output or session identifiers.
 
 [CLI dependency input](../../crates/cli/src/worker/selection_windows.rs) projects
 ordinary local drive paths to the existing canonical selection before transport,
