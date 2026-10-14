@@ -234,8 +234,33 @@ fn path_kind(text: &str) -> &'static str {
 }
 
 #[cfg(windows)]
+fn same_directory_spelling(left: &Path, right: &Path) -> io::Result<bool> {
+    let (drive, names) = drive_parts(left)?;
+    let (expected_drive, expected_names) = drive_parts(right)?;
+    Ok(drive.eq_ignore_ascii_case(&expected_drive)
+        && names.len() == expected_names.len()
+        && names.iter().zip(expected_names).all(|(name, expected)| {
+            name.as_encoded_bytes()
+                .eq_ignore_ascii_case(expected.as_encoded_bytes())
+        }))
+}
+
+#[cfg(windows)]
+fn admitted_directory_spelling(
+    observed: &Path,
+    original: &Path,
+    canonical: &Path,
+) -> io::Result<bool> {
+    // Both expected names have already been bound to the retained native object.
+    // This does not discover or follow an arbitrary observed alias.
+    Ok(same_directory_spelling(observed, original)?
+        || same_directory_spelling(observed, canonical)?)
+}
+
+#[cfg(windows)]
 pub(super) struct NativeSkill {
     path: PathBuf,
+    canonical_path: PathBuf,
     directory: File,
     file: File,
     directory_id: (u32, u64),
@@ -262,11 +287,25 @@ impl NativeSkill {
         if digest(&mut file)? != expected {
             return Err(io::ErrorKind::InvalidData.into());
         }
+        let directory_id = security::file_identity(&directory_file)?;
+        let directory_permissions = file_security::capture(&directory_file)?;
+        // canonicalize can change component spelling as well as the prefix.
+        // Establish its authority only after the original no-reparse open, and
+        // then reopen that name through the same native no-reparse boundary.
+        let canonical_path = std::fs::canonicalize(directory)?;
+        drive_parts(&canonical_path)?;
+        let canonical_directory = security::open_identity(&canonical_path, true)?;
+        if security::file_identity(&canonical_directory)? != directory_id
+            || file_security::capture(&canonical_directory)? != directory_permissions
+        {
+            return Err(io::ErrorKind::PermissionDenied.into());
+        }
         Ok(Self {
             path: directory.to_owned(),
-            directory_id: security::file_identity(&directory_file)?,
+            canonical_path,
+            directory_id,
             file_id: security::file_identity(&file)?,
-            directory_permissions: file_security::capture(&directory_file)?,
+            directory_permissions,
             file_permissions: file_security::capture(&file)?,
             directory: directory_file,
             file,
@@ -301,17 +340,10 @@ impl NativeSkill {
             if path_kind(observed) == "rejected" {
                 return Ok(false);
             }
-            let (drive, names) = drive_parts(Path::new(observed))?;
-            let (expected_drive, expected_names) = drive_parts(&self.path)?;
             // This is a read boundary, not an identity decision: only the
-            // expected absolute location may be queried. Kernel FileID and
-            // the retained descriptor remain the authority after admission.
-            Ok(drive.eq_ignore_ascii_case(&expected_drive)
-                && names.len() == expected_names.len()
-                && names.iter().zip(expected_names).all(|(name, expected)| {
-                    name.as_encoded_bytes()
-                        .eq_ignore_ascii_case(expected.as_encoded_bytes())
-                }))
+            // original or proven canonical name may be queried. Kernel FileID
+            // and the retained descriptor remain the authority after admission.
+            admitted_directory_spelling(Path::new(observed), &self.path, &self.canonical_path)
         })();
         if !matches!(admitted, Ok(true)) {
             return "rejected";
@@ -440,6 +472,11 @@ mod tests {
         let (root, mut held) = native();
         let extended = std::fs::canonicalize(root.path()).unwrap();
         assert_eq!(
+            security::file_identity(&security::open_identity(&extended, true).unwrap()).unwrap(),
+            held.directory_id,
+            "the canonical name must open the original retained directory"
+        );
+        assert_eq!(
             held.directory_identity(root.path().to_str().unwrap()),
             "same"
         );
@@ -463,6 +500,40 @@ mod tests {
         assert_eq!(observed.path_identity, "same");
         assert_eq!(observed.expected_binding, "unchanged");
         assert_eq!(observed.candidate_relation, "same_native_directory");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_skill_diagnostic_admits_only_original_or_proven_canonical_components() {
+        let original = Path::new(r"C:\SHORT~1\private");
+        let canonical = Path::new(r"\\?\C:\Long directory name\private");
+        // A prefix projection alone cannot cover canonical component changes.
+        // The previous original-only admission rejects this canonical name.
+        assert!(!same_directory_spelling(canonical, original).unwrap());
+        assert!(admitted_directory_spelling(canonical, original, canonical).unwrap());
+        assert!(
+            admitted_directory_spelling(
+                Path::new(r"c:\Long directory name\PRIVATE"),
+                original,
+                canonical
+            )
+            .unwrap()
+        );
+        for rejected in [
+            r"C:\Long directory name\other",
+            r"C:\other\private",
+            r"D:\Long directory name\private",
+            r"C:\Long directory name\private:stream",
+            r"C:\Long directory name\private\..\private",
+            r"\\server\share\private",
+            r"\\.\C:\Long directory name\private",
+            r"relative\private",
+        ] {
+            assert!(
+                !admitted_directory_spelling(Path::new(rejected), original, canonical)
+                    .unwrap_or(false)
+            );
+        }
     }
 
     #[cfg(windows)]
