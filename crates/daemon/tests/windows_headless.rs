@@ -253,29 +253,138 @@ impl InstalledProduct {
     }
 
     fn verify_prepared_installation_refuses_business_startup(&self) {
+        use hiroute_diagnostics::files::PrivateDir;
+        use hiroute_host_runtime::ServiceProxyEnvironment;
+        use hiroute_platform::file_security;
+        use std::ffi::{OsStr, OsString};
+        use std::io::{Seek, SeekFrom};
+
+        const JOURNAL: &str = "install-journal.json";
+        const PROXY: &str = "proxy-environment.json";
+        const PROXY_BOUND: u64 = 16 * 1024;
+
         let service_root = self.layout.data_root.join("service");
+        let data = PrivateDir::open_existing(&self.layout.data_root).unwrap();
+        let existing_service = data.open_existing_child("service").unwrap();
+        let existing_owner = existing_service
+            .as_ref()
+            .map(|_| security::open_owner_only(&service_root, true).unwrap());
+        if let Some(service) = &existing_service {
+            assert!(
+                service.open_read(JOURNAL).unwrap().is_none(),
+                "product fixture must not replace an existing installation journal"
+            );
+        }
+
+        // A real service run legitimately leaves this snapshot behind. On a
+        // fresh profile, use its actual writer first: the former whole-directory
+        // freshness assertion rejects this legal, empty production snapshot.
+        // Existing snapshots are borrowed unchanged, never overwritten.
+        let owns_proxy = existing_service
+            .as_ref()
+            .is_none_or(|service| service.open_read(PROXY).unwrap().is_none());
+        if owns_proxy {
+            ServiceProxyEnvironment::capture(std::iter::empty::<(OsString, OsString)>())
+                .unwrap()
+                .store(&self.layout.home)
+                .unwrap();
+            assert_eq!(
+                ServiceProxyEnvironment::load(&self.layout.home)
+                    .unwrap()
+                    .unwrap()
+                    .variables()
+                    .count(),
+                0
+            );
+        } else {
+            assert!(
+                ServiceProxyEnvironment::load(&self.layout.home)
+                    .unwrap()
+                    .is_some()
+            );
+        }
         assert!(
-            !service_root.exists(),
-            "product fixture requires a fresh installation maintenance directory"
+            service_root.is_dir(),
+            "the old freshness condition is false"
         );
-        security::create_owner_only_directory(&service_root).unwrap();
-        let path = service_root.join("install-journal.json");
-        let mut journal = security::create_owner_only_file(&path).unwrap();
-        serde_json::to_writer(
-            &mut journal,
-            &json!({
-                "schema": "hiroute.windows-install-journal/v1",
-                "operation": "install",
-                "phase": "prepared",
-                "old_marker": null,
-                "new_marker": null,
-                "old_definition": null,
-                "new_definition": null,
-                "files": []
-            }),
-        )
-        .unwrap();
-        journal.sync_all().unwrap();
+        let service = existing_service
+            .unwrap_or_else(|| data.open_existing_child("service").unwrap().unwrap());
+        let owner = existing_owner
+            .unwrap_or_else(|| security::open_owner_only(&service_root, true).unwrap());
+        let parent_identity = security::file_identity(&owner).unwrap();
+        assert!(
+            service.open_read(JOURNAL).unwrap().is_none(),
+            "only a fresh case-owned installation journal may be created"
+        );
+        let proxy_identity = service.open_read(PROXY).unwrap().unwrap().identity();
+        let mut proxy = security::open_identity_at(&owner, OsStr::new(PROXY), false).unwrap();
+        assert_eq!(security::file_link_count(&proxy).unwrap(), 1);
+        let proxy_native_identity = security::file_identity(&proxy).unwrap();
+        let proxy_permissions = file_security::capture(&proxy).unwrap();
+        let mut proxy_bytes = Vec::new();
+        (&mut proxy)
+            .take(PROXY_BOUND + 1)
+            .read_to_end(&mut proxy_bytes)
+            .unwrap();
+        assert!(proxy_bytes.len() as u64 <= PROXY_BOUND);
+        let preserved = |proxy: &mut std::fs::File| {
+            service.recheck_identity().unwrap();
+            assert_eq!(
+                PrivateDir::open_existing(&service_root).unwrap().identity(),
+                service.identity()
+            );
+            let reopened_parent = security::open_owner_only(&service_root, true).unwrap();
+            assert_eq!(
+                security::file_identity(&reopened_parent).unwrap(),
+                parent_identity
+            );
+            let reopened = security::open_identity_at(&owner, OsStr::new(PROXY), false).unwrap();
+            assert_eq!(
+                security::file_identity(&reopened).unwrap(),
+                proxy_native_identity
+            );
+            assert!(
+                file_security::capture(&reopened).unwrap() == proxy_permissions,
+                "maintenance admission must preserve the snapshot's native permissions"
+            );
+            proxy.seek(SeekFrom::Start(0)).unwrap();
+            let mut actual = Vec::new();
+            proxy
+                .take(PROXY_BOUND + 1)
+                .read_to_end(&mut actual)
+                .unwrap();
+            assert!(
+                actual == proxy_bytes,
+                "maintenance admission must preserve the snapshot's exact bytes"
+            );
+        };
+        preserved(&mut proxy);
+        let mut journal = service.create_new(JOURNAL).unwrap();
+        let journal_identity = journal.identity();
+        assert!(
+            matches!(
+                service.create_new(JOURNAL),
+                Err(hiroute_diagnostics::files::FileSafetyError::AlreadyExists)
+            ),
+            "journal creation must retain its exclusive freshness gate"
+        );
+        journal
+            .append(
+                &serde_json::to_vec(&json!({
+                    "schema": "hiroute.windows-install-journal/v1",
+                    "operation": "install",
+                    "phase": "prepared",
+                    "old_marker": null,
+                    "new_marker": null,
+                    "old_definition": null,
+                    "new_definition": null,
+                    "files": []
+                }))
+                .unwrap(),
+            )
+            .unwrap();
+        journal.sync().unwrap();
+        service.sync().unwrap();
         drop(journal);
         let child = Command::new(&self.daemon)
             .args(["--role", "all", "--standalone"])
@@ -332,8 +441,17 @@ impl InstalledProduct {
         assert!(
             lifecycle::query(&self.layout.lifecycle_endpoint(), &self.daemon, IO_BOUND).is_err()
         );
-        std::fs::remove_file(path).unwrap();
-        std::fs::remove_dir(service_root).unwrap();
+        preserved(&mut proxy);
+        service.remove_verified(JOURNAL, journal_identity).unwrap();
+        assert!(service.open_read(JOURNAL).unwrap().is_none());
+        preserved(&mut proxy);
+        drop(proxy);
+        if owns_proxy {
+            service.remove_verified(PROXY, proxy_identity).unwrap();
+        }
+        // The parent may predate this case or contain other legitimate files.
+        // Only the exact journal (and our own empty snapshot) is removed.
+        service.sync().unwrap();
     }
 
     fn cli(&self, args: &[&str]) -> Value {

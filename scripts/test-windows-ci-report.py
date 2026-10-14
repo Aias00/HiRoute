@@ -38,6 +38,29 @@ try {
   Require (@($errors).Count -eq 0)
  }
  . ([scriptblock]::Create($sources['native-scopes']))
+ $ordering=@($asts['native-replay'].FindAll({param($node)$node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Get-WindowsReplayRecipes'},$true))
+ Require ($ordering.Count -eq 1)
+ . ([scriptblock]::Create($ordering[0].Extent.Text))
+ $product=@(Get-WindowsRequiredRecipes product)
+ $captures=@($product|Sort-Object|ForEach-Object{[pscustomobject]@{name=$_;required_cases=@('fixture_'+$_);harness_arguments=@('--exact')}})
+ $before=$captures|ConvertTo-Json -Depth 5 -Compress
+ Require (($captures.name -join ',') -cne ($product -join ','))
+ $ordered=@(Get-WindowsReplayRecipes $captures $product)
+ Require ($ordered.Count -eq $product.Count)
+ Require (($ordered.name -join ',') -ceq ($product -join ','))
+ $same=$true
+ foreach($recipe in $ordered){$original=@($captures|Where-Object{$_.name -ceq $recipe.name});$same=$same -and $original.Count -eq 1 -and [object]::ReferenceEquals($recipe,$original[0])}
+ Require $same
+ Require (($captures|ConvertTo-Json -Depth 5 -Compress) -ceq $before)
+ Require ([Array]::IndexOf($ordered.name,'headless') -lt [Array]::IndexOf($ordered.name,'foreground-ctrl-c') -and [Array]::IndexOf($ordered.name,'headless') -lt [Array]::IndexOf($ordered.name,'foreground-ctrl-break'))
+ Reject {Get-WindowsReplayRecipes $captures @()}
+ Reject {Get-WindowsReplayRecipes @() $product}
+ Reject {Get-WindowsReplayRecipes @($captures|Select-Object -Skip 1) $product}
+ Reject {Get-WindowsReplayRecipes (@($captures)+@($captures[0])) $product}
+ Reject {Get-WindowsReplayRecipes (@($captures)+@([pscustomobject]@{name='foreign'})) $product}
+ Reject {Get-WindowsReplayRecipes $captures @($product|ForEach-Object{$_.ToUpperInvariant()})}
+ Reject {Get-WindowsReplayRecipes $captures (@($product)+@($product[0]))}
+ Reject {Get-WindowsReplayRecipes $captures (@($product)+@(''))}
  $required=@(Get-WindowsRequiredRecipes background)
  Require ($required.Count -eq 5)
  $runtime=@(Get-WindowsAssessmentNames background hosted execute)
@@ -74,7 +97,7 @@ try {
   $runtimeTrue=@($body.FindAll({param($node)$node -is [Management.Automation.Language.AssignmentStatementAst] -and $node.Left.Extent.Text -ceq '$result.runtime_executed' -and $node.Right.Extent.Text -ceq '$true'},$true))
   Require ($runtimeTrue.Count -eq 1 -and $runtimeTrue[0].Extent.StartOffset -gt $block.Extent.EndOffset)
  }
- if($state.count -ne 27){throw 'assessment-probe-counter'}
+ if($state.count -ne 42){throw 'assessment-probe-counter'}
  @{schema='hiroute.windows-assessment-tooling-probe/v1';scenario='tooling_policy_green';parser_files=$asts.Count;assertions=$state.count;source_files=$hashes;business_executed=$false;task_mutated=$false;product_runtime='not_assessed'}|ConvertTo-Json -Compress -Depth 5
 } catch {
  @{schema='hiroute.windows-assessment-tooling-probe/v1';scenario='red';assertions=$state.count;business_executed=$false;task_mutated=$false;product_runtime='not_assessed';hresult=$_.Exception.HResult}|ConvertTo-Json -Compress;exit 1
@@ -317,7 +340,10 @@ class AssessmentFeedback(unittest.TestCase):
         self.assertIn('ContinueStatementAst',body);self.assertIn('ReturnStatementAst',body)
         self.assertIn('business_executed=$false',body)
         self.assertNotIn('Start-Process',body);self.assertNotIn('New-ScheduledTask',body)
-        self.assertNotIn('$script:count',body);self.assertIn('$state.count -ne 27',body)
+        self.assertNotIn('$script:count',body);self.assertIn('$state.count -ne 42',body)
+        self.assertIn('Get-WindowsReplayRecipes $captures $product',body)
+        self.assertIn('[object]::ReferenceEquals',body)
+        self.assertIn("[Array]::IndexOf($ordered.name,'headless')",body)
 
 
 if __name__ == "__main__":

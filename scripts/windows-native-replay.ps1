@@ -13,6 +13,29 @@ param(
   [ValidateSet('full','hosted')][string]$Assessment='full'
 )
 $ErrorActionPreference = 'Stop'
+
+# Captures are serialized by filename. Execution retains the source producer's
+# order, including fixture prerequisites, without rewriting any capture object.
+function Get-WindowsReplayRecipes {
+  param([AllowEmptyCollection()][object[]]$Recipes, [AllowEmptyCollection()][string[]]$Required)
+  $byName = [Collections.Generic.Dictionary[string,object]]::new([StringComparer]::Ordinal)
+  foreach ($recipe in $Recipes) {
+    $name = [string]$recipe.name
+    if (-not $name -or $byName.ContainsKey($name)) { throw 'Unique named replay recipes required' }
+    $byName.Add($name, $recipe)
+  }
+  $selected = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+  foreach ($name in $Required) {
+    if (-not $name -or -not $selected.Add($name) -or -not $byName.ContainsKey($name)) {
+      throw 'Complete unique source recipe inventory required'
+    }
+  }
+  if ($Required.Count -eq 0 -or $byName.Count -ne $Required.Count) {
+    throw 'Complete scope recipe inventory required; partial producer artifacts cannot establish Windows 11 acceptance'
+  }
+  foreach ($name in $Required) { $byName[$name] }
+}
+
 $root = Split-Path $PSScriptRoot -Parent
 Set-Location $root
 . "$PSScriptRoot/windows-native-scopes.ps1"
@@ -39,11 +62,7 @@ python scripts/windows-native-runtime-audit.py --expected-sha $ExpectedSha --evi
 if ($LASTEXITCODE -ne 0) { throw 'Native import dependencies failed verification on the consumer' }
 $manifest = Get-Content "$bundle/native-artifacts.json" -Raw | ConvertFrom-Json
 $requiredRecipes = @(Get-WindowsRequiredRecipes $Scope)
-$actualRecipes = @($manifest.recipes | ForEach-Object { [string]$_.name })
-if ($actualRecipes.Count -ne $requiredRecipes.Count -or
-    (Compare-Object ($actualRecipes | Sort-Object) ($requiredRecipes | Sort-Object) -CaseSensitive)) {
-  throw 'Complete scope recipe inventory required; partial producer artifacts cannot establish Windows 11 acceptance'
-}
+$orderedRecipes = @(Get-WindowsReplayRecipes -Recipes @($manifest.recipes) -Required $requiredRecipes)
 @{ source_revision = $ExpectedSha; validation_revision = $env:GITHUB_SHA; scope = $Scope;
    assessment=$Assessment; runtime_recipes=@(Get-WindowsAssessmentNames $Scope $Assessment 'execute');
    deferred_recipes=@(Get-WindowsAssessmentNames $Scope $Assessment 'compile-only');
@@ -108,7 +127,7 @@ $failures = [System.Collections.Generic.List[string]]::new()
 $scopeExceptionFailed=$false
 try {
   if ($manifest.recipes.Count -eq 0) { throw 'Required replay inventory is empty' }
-  foreach ($recipe in $manifest.recipes) {
+  foreach ($recipe in $orderedRecipes) {
     $executable = Join-Path $bundle $recipe.executable
     $arguments = @()
     if ($recipe.filter) { $arguments += [string]$recipe.filter }
