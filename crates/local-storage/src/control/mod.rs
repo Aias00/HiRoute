@@ -44,6 +44,8 @@ mod journal;
 mod native_artifacts;
 #[path = "../agents/native_directories.rs"]
 mod native_directories;
+#[path = "../agents/native_reference.rs"]
+mod native_reference;
 #[path = "../agents/native_restoration_ack.rs"]
 mod native_restoration_ack;
 mod operation_status;
@@ -2719,6 +2721,9 @@ impl ManagedArtifactStore {
             .load_marker(operation_id, intent.effect_id())
             .map_err(|_| port(PortErrorCode::Unavailable, "artifact.marker.observe"))?
         else {
+            if let Some(state) = self.observe_native_file_reference(operation_id, intent)? {
+                return Ok(state);
+            }
             if let Some(state) = self.observe_unstaged_native_restoration(operation_id, intent)? {
                 return Ok(state);
             }
@@ -2803,6 +2808,12 @@ impl ManagedArtifactStore {
     }
 
     pub fn activate_artifact(&self, effect: &OwnedEffectV1) -> PortResult<OwnedEffectV1> {
+        if self.authenticate_native_file_reference_effect(effect)? {
+            if self.current_external_fingerprint(&effect.target)? != effect.after_fingerprint {
+                return Err(port(PortErrorCode::Conflict, "native.reference.changed"));
+            }
+            return Ok(effect.clone());
+        }
         let mut untouched = self
             .untouched_deletions
             .lock()
@@ -2924,6 +2935,9 @@ impl ManagedArtifactStore {
         // the user's cleanup, including recovery of a failed enclosing operation.
         if effect.compensation["schema"] == native_restoration_ack::ACK_SCHEMA {
             return Ok(CompensationOutcome::OwnershipLost);
+        }
+        if self.authenticate_native_file_reference_effect(effect)? {
+            return Ok(CompensationOutcome::AlreadyCompensated);
         }
         let operation_id = effect
             .compensation

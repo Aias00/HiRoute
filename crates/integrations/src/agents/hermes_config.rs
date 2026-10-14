@@ -291,11 +291,33 @@ impl HermesConfigRestoreV1 {
         if !self.original_enabled {
             enabled.retain(|v| v != HERMES_PLUGIN_NAME);
         }
+        let original = HermesDocument::parse(&self.original)?;
         changes.insert(
             vec!["plugins".into(), "enabled".into()],
-            Some(json!(enabled)),
+            if enabled.is_empty() && original.value.pointer("/plugins/enabled").is_none() {
+                None
+            } else {
+                Some(json!(enabled))
+            },
         );
-        let next = doc.edit(&changes)?;
+        let mut next = doc.edit(&changes)?;
+        // Removing the final owned member must not leave a YAML null overriding a native
+        // default. Only empty containers introduced by this adapter can be released.
+        for path in [
+            vec!["model".into()],
+            vec!["providers".into()],
+            vec!["plugins".into(), "entries".into()],
+            vec!["plugins".into()],
+        ] {
+            let restored = HermesDocument::parse(&next)?;
+            let value = at(&restored.value, &path);
+            let before = at(&original.value, &path);
+            if value.is_some_and(|v| v.is_null() || v.as_object().is_some_and(|m| m.is_empty()))
+                && before.is_none_or(|v| v.as_object().is_some_and(|m| m.is_empty()))
+            {
+                next = restored.edit(&BTreeMap::from([(path, before.cloned())]))?;
+            }
+        }
         let next_doc = HermesDocument::parse(&next)?;
         for key in self
             .after
@@ -323,6 +345,35 @@ fn refers_to(value: &Value, id: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn conditional_restore_releases_only_introduced_empty_containers() {
+        let model = AdditionalAgentModelV1 {
+            alias: "hiroute_test".into(),
+            protocol: hiroute_domain::AgentIngressProtocolV1::Responses,
+            context_window_tokens: 64000,
+            max_output_tokens: 8192,
+        };
+        for original in [
+            b"unrelated: true\n".as_slice(),
+            b"model: {}\nproviders: {}\nunrelated: true\n".as_slice(),
+        ] {
+            let (managed, record) = hermes_configure(
+                original,
+                None,
+                "hiroute-main-test",
+                "http://127.0.0.1:8317/v1",
+                &model,
+                "local-token",
+            )
+            .unwrap();
+            let mut edited = managed.to_vec();
+            edited.extend_from_slice(b"later: retained\n");
+            let restored = HermesDocument::parse(&record.restore(&edited).unwrap()).unwrap();
+            let mut expected = HermesDocument::parse(original).unwrap().value.clone();
+            expected["later"] = json!("retained");
+            assert_eq!(restored.value, expected);
+        }
+    }
     #[test]
     fn scoped_default_restore_keeps_foreign_edits_and_plugin_members() {
         let original=b"model:\n  default: glm-5.3\n  provider: glm\n  base_url: https://stale.example\nproviders:\n  glm:\n    api: https://coding.example\nplugins:\n  enabled: [other]\nauxiliary:\n  title: native # unchanged\n";

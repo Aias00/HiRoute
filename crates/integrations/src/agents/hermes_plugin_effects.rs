@@ -122,14 +122,15 @@ pub fn stage_hermes_plugin_configuration(
     let encoded = Zeroizing::new(
         serde_json::to_vec(&restore).map_err(|_| invalid("hermes.plugin.restore.encode"))?,
     );
-    port.save_native_restore(operation, intent, &encoded)?;
     if restore.borrowed {
-        return port.acknowledge_native_restoration(
+        return port.stage_native_file_reference(
             operation,
             intent,
             current.as_deref().map(Vec::as_slice),
+            &encoded,
         );
     }
+    port.save_native_restore(operation, intent, &encoded)?;
     let lineage = previous
         .map(|(id, original)| SkillFileEffectRef::from_intent(id, original))
         .transpose()
@@ -159,10 +160,14 @@ pub fn stage_hermes_plugin_restoration(
         return Err(conflict("hermes.plugin.preview.changed"));
     }
     if restore.borrowed {
-        return port.acknowledge_native_restoration(
+        let encoded = Zeroizing::new(
+            serde_json::to_vec(&restore).map_err(|_| invalid("hermes.plugin.restore.encode"))?,
+        );
+        return port.stage_native_file_reference(
             operation,
             intent,
             current.as_deref().map(Vec::as_slice),
+            &encoded,
         );
     }
     let lineage = SkillFileEffectRef::from_intent(original_operation, original)
