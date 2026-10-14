@@ -30,7 +30,11 @@ fn isolate(test: &str) -> bool {
     private_file(&source.path().join("agent/conversation_loop.py"), b"apply_llm_request_middleware(request, session_id=agent.session_id, model=agent.model, provider=agent.provider, base_url=agent.base_url, api_mode=agent.api_mode)\n");
     private_file(
         &source.path().join("tools/skills_tool.py"),
-        b"# structural fixture, never executed\n",
+        b"def _skills_dir(): return get_hermes_home() / \"skills\"\n# structural fixture, never executed\n",
+    );
+    private_file(
+        &source.path().join("hermes_cli/config.py"),
+        b"def load_config_readonly(): pass\n",
     );
     private_file(
         &source.path().join("pyproject.toml"),

@@ -9,6 +9,7 @@ def _identity(value):
         return False
     return (
         isinstance(value, str)
+        and value.isascii()
         and 0 < len(encoded) <= 128
         and not any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in value)
     )

@@ -212,6 +212,13 @@ impl LocalControlAdapter {
         )? {
             return Ok(false);
         }
+        self.hermes_operation_plugin_files_applied(operation)
+    }
+
+    pub(super) fn hermes_operation_plugin_files_applied(
+        &self,
+        operation: &(impl hiroute_domain::AgentOperationRead + ?Sized),
+    ) -> PortResult<bool> {
         let plugins: Vec<_> = operation
             .agent_input()
             .external

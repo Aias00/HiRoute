@@ -20,12 +20,9 @@ pub fn hermes_support_facts() -> HermesSupportFacts {
         .unwrap_or_default();
     let mut roots = Vec::new();
     for executable in executables.drain(..) {
-        let Ok(executable) = executable.canonicalize() else {
+        let Ok(Some(executable)) = super::executable::resolve(&executable) else {
             continue;
         };
-        if !executable.is_file() {
-            continue;
-        }
         if let Some(parent) = executable.parent() {
             roots.push(parent.to_path_buf());
             if let Some(p) = parent.parent() {
@@ -33,7 +30,7 @@ pub fn hermes_support_facts() -> HermesSupportFacts {
             }
         }
         let Some(text) = bounded_text(&executable, 64 * 1024) else {
-            continue;
+            break;
         };
         // Installed console scripts and the official shell launcher expose literal Python/
         // project locations. Read only those locations; never evaluate launcher text or env.
@@ -87,13 +84,17 @@ pub fn hermes_support_facts() -> HermesSupportFacts {
                 .iter()
                 .all(|field| compact.contains(field))
         });
-        let supported = plugins.contains("def register_middleware(")
+        let config =
+            bounded_text(&root.join("hermes_cli/config.py"), 2 * 1024 * 1024).unwrap_or_default();
+        let supported = config.contains("def load_config_readonly(")
+            && plugins.contains("def register_middleware(")
             && plugins.contains("plugins")
             && middleware.contains("def apply_llm_request_middleware(")
             && valid_call;
-        let skills = bounded_text(&root.join("tools/skills_tool.py"), 2 * 1024 * 1024)
-            .or_else(|| bounded_text(&root.join("hermes_cli/skills.py"), 2 * 1024 * 1024))
-            .is_some();
+        let skill_source =
+            bounded_text(&root.join("tools/skills_tool.py"), 2 * 1024 * 1024).unwrap_or_default();
+        let skills = skill_source.contains("def _skills_dir(")
+            && skill_source.contains("get_hermes_home() / \"skills\"");
         let project = bounded_text(&root.join("pyproject.toml"), 128 * 1024).unwrap_or_default();
         let version = project
             .lines()
@@ -110,7 +111,8 @@ pub fn hermes_support_facts() -> HermesSupportFacts {
                 .iter()
                 .map(|v| CanonicalDigest::of_bytes(v.as_bytes()))
                 .collect::<Vec<_>>(),
-            skills,
+            CanonicalDigest::of_bytes(config.as_bytes()),
+            CanonicalDigest::of_bytes(skill_source.as_bytes()),
         ))
         .expect("bounded native proof is serializable");
         return HermesSupportFacts {

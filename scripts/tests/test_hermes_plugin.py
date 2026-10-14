@@ -50,7 +50,7 @@ class HermesAdapterTests(unittest.TestCase):
 
     def test_missing_invalid_or_over_bound_identity_never_removes_route_authorization(self):
         adapter = plugin._adapter(configuration())
-        for identity in (None, "", "x\nheader", "x\x00", "x\x7f", "a" * 129, "\ud800"):
+        for identity in (None, "", "x\nheader", "x\x00", "x\x7f", "a" * 129, "正常", "\ud800"):
             with self.subTest(identity=repr(identity)):
                 result = adapter({"extra_headers": {"X-HERMES-SESSION-ID": "must-remove"}},
                                  provider="custom", model="plan-alias", base_url="http://127.0.0.1:5837/v1",

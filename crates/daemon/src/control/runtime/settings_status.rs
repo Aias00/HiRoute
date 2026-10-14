@@ -151,11 +151,17 @@ impl LocalControlAdapter {
         let class = self
             .settings_agent_for_context(&request.context_id)
             .ok_or(ControlReadError::NotFound)?;
-        if class == SettingsAgentClass::Hermes && request.native_target.is_some() {
-            self.hermes_target_for_context(&request.context_id, request.native_target.as_ref())?;
-        } else if class != SettingsAgentClass::Hermes && request.native_target.is_some() {
-            return Err(ControlReadError::Denied);
-        }
+        let requested_target =
+            if class == SettingsAgentClass::Hermes && request.native_target.is_some() {
+                Some(self.hermes_target_for_context(
+                    &request.context_id,
+                    request.native_target.as_ref(),
+                )?)
+            } else if class != SettingsAgentClass::Hermes && request.native_target.is_some() {
+                return Err(ControlReadError::Denied);
+            } else {
+                None
+            };
         let native_target = if class == SettingsAgentClass::Hermes {
             self.stores_lock()
                 .map_err(super::map_port)?
@@ -167,7 +173,7 @@ impl LocalControlAdapter {
                     hiroute_integrations::hermes_context_id(target.config_root())
                         == request.context_id
                 })
-                .or(request.native_target.clone())
+                .or(requested_target)
         } else {
             None
         };
@@ -337,12 +343,15 @@ impl LocalControlAdapter {
                     .map_err(super::map_port)?
                 };
                 if class == SettingsAgentClass::Hermes {
+                    let resources_installed = self
+                        .hermes_operation_plugin_files_applied(&operation)
+                        .map_err(super::map_port)?;
                     status.native_adapter = Some(
                         hiroute_application_api::AgentNativeAdapterStatusV1 {
-                            resources_installed: file_applied,
+                            resources_installed,
                             runtime_loading:
                                 hiroute_application_api::AgentNativeRuntimeLoadingV1::Unobserved,
-                            next_action: if file_applied {
+                            next_action: if resources_installed {
                                 hiroute_application_api::AgentNativeAdapterNextActionV1::ReloadPluginsIfRunning
                             } else {
                                 hiroute_application_api::AgentNativeAdapterNextActionV1::RepairOwnedResources

@@ -30,7 +30,11 @@ pub fn canonical_hermes_target(
         .to_str()
         .ok_or_else(|| hermes_error("profile path encoding"))?
         .to_owned();
-    Ok(AgentNativeTargetV1::Hermes { config_root })
+    let target = AgentNativeTargetV1::Hermes { config_root };
+    target
+        .validate()
+        .map_err(|_| hermes_error("canonical profile root"))?;
+    Ok(target)
 }
 
 pub fn hermes_subject(
