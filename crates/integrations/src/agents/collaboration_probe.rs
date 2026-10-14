@@ -1,9 +1,11 @@
 //! One local challenge: native Skill discovery, its contents read, and the installed CLI run.
-//! The endpoint issues only this fixed read-only command; it never forwards model requests.
+//! Windows first requires a real denied write as an independent sandbox control.
+//! The endpoint never forwards model requests.
 use serde_json::{Value, json};
 use std::{io::Write, path::Path, process::Command};
 
 mod launch_diagnostic;
+mod readonly_control;
 #[cfg(test)]
 use launch_diagnostic::NativeLaunchStage;
 use launch_diagnostic::native_launch_diagnostic;
@@ -13,6 +15,7 @@ pub(crate) struct CollaborationChallenge {
     contents: String,
     command: String,
     expected_cli: String,
+    readonly: Option<readonly_control::ReadOnlyControl>,
     issued: bool,
     completed: bool,
 }
@@ -162,11 +165,19 @@ impl CollaborationChallenge {
                 quote(&cli)?
             )
         };
+        let readonly = None;
+        #[cfg(windows)]
+        let readonly = if powershell {
+            Some(readonly_control::ReadOnlyControl::new(home, &suffix)?)
+        } else {
+            readonly
+        };
         Ok(Self {
             discovery,
             contents,
             command,
             expected_cli: expected_cli.trim().into(),
+            readonly,
             issued: false,
             completed: false,
         })
@@ -174,6 +185,12 @@ impl CollaborationChallenge {
 
     pub(crate) fn complete(&self) -> bool {
         self.completed
+    }
+
+    pub(crate) fn verify_after_stop(&self) -> Result<(), &'static str> {
+        self.readonly
+            .as_ref()
+            .map_or(Ok(()), readonly_control::ReadOnlyControl::verify_after_stop)
     }
 
     pub(crate) fn reply(&mut self, body: &Value) -> Result<Value, &'static str> {
@@ -190,15 +207,12 @@ impl CollaborationChallenge {
                     matches!(name, "exec_command" | "shell_command").then_some(name)
                 })
                 .ok_or("native read-only shell tool")?;
-            let args = if name == "exec_command" {
-                json!({"cmd":self.command, "max_output_tokens":2000, "yield_time_ms":1000, "login":false})
-            } else {
-                json!({"command":self.command, "timeout_ms":10000})
-            };
             self.issued = true;
-            return Ok(
-                json!([{"type":"function_call", "id":"fc_hiroute_probe", "call_id":"call_hiroute_probe", "name":name, "arguments":args.to_string(), "status":"completed"}]),
+            let command = self.readonly.as_ref().map_or_else(
+                || self.command.clone(),
+                |control| format!("{}; {}", control.command(), self.command),
             );
+            return Ok(shell_call(name, &command));
         }
         let result = body["input"].as_array().and_then(|input| {
             input.iter().find(|item| {
@@ -209,6 +223,18 @@ impl CollaborationChallenge {
         // content items (protocol/models.rs at a956835d). Match only that exact
         // correlated result; unrelated prompt text, images or metadata cannot prove it.
         let output = result.and_then(|item| responses_tool_text(&item["output"]));
+        if let Some(control) = self.readonly.as_mut() {
+            let output = output
+                .as_deref()
+                .ok_or("native read-only correlated result")?;
+            if let Err(error) = control.confirm(output) {
+                eprintln!(
+                    "native collaboration closed launch diagnostic: {:?}",
+                    native_launch_diagnostic(output)
+                );
+                return Err(error);
+            }
+        }
         let content_proved = output
             .as_ref()
             .is_some_and(|text| text.contains(&self.contents));
@@ -316,6 +342,15 @@ impl CollaborationChallenge {
     }
 }
 
+fn shell_call(name: &str, command: &str) -> Value {
+    let args = if name == "exec_command" {
+        json!({"cmd":command, "max_output_tokens":2000, "yield_time_ms":1000, "login":false})
+    } else {
+        json!({"command":command, "timeout_ms":10000})
+    };
+    json!([{"type":"function_call", "id":"fc_hiroute_probe", "call_id":"call_hiroute_probe", "name":name, "arguments":args.to_string(), "status":"completed"}])
+}
+
 fn responses_tool_text(output: &Value) -> Option<String> {
     if let Some(text) = output.as_str() {
         return Some(text.to_owned());
@@ -342,9 +377,48 @@ mod tests {
             contents: "contents-nonce".into(),
             command: "/trusted/hiroute schema list --output json".into(),
             expected_cli: "CLI-contract-output".into(),
+            readonly: None,
             issued: false,
             completed: false,
         }
+    }
+
+    #[test]
+    fn codex_readonly_control_precedes_the_skill_and_cli_and_requires_a_correlated_denial() {
+        let root = tempfile::tempdir().unwrap();
+        let mut check = challenge();
+        check.readonly =
+            Some(readonly_control::ReadOnlyControl::new(root.path(), "nonce").unwrap());
+        let tools = json!([{"name":"exec_command"}]);
+        let first = check
+            .reply(&json!({"input":"discovery-nonce", "tools":tools}))
+            .unwrap();
+        assert_eq!(first[0]["call_id"], "call_hiroute_probe");
+        let args: Value = serde_json::from_str(first[0]["arguments"].as_str().unwrap()).unwrap();
+        assert!(
+            args["cmd"]
+                .as_str()
+                .unwrap()
+                .contains("[System.IO.File]::WriteAllText(")
+        );
+        assert!(args["cmd"].as_str().unwrap().ends_with(&check.command));
+        for (call, output) in [
+            (
+                "wrong-call",
+                "hiroute-readonly-attempt-nonce\nhiroute-readonly-denied-nonce\ncontents-nonce CLI-contract-output",
+            ),
+            ("call_hiroute_probe", "contents-nonce CLI-contract-output"),
+            (
+                "call_hiroute_probe",
+                "hiroute-readonly-attempt-nonce\nhiroute-readonly-denied-nonce",
+            ),
+        ] {
+            assert!(check.reply(&json!({"tools":tools,"input":[{"type":"function_call_output", "call_id":call,"output":output}]})).is_err());
+            assert!(!check.complete());
+        }
+        check.reply(&json!({"tools":tools,"input":[{"type":"function_call_output", "call_id":"call_hiroute_probe","output":[{"type":"input_text","text":"hiroute-readonly-attempt-nonce\nhiroute-readonly-denied-nonce\ncontents-nonce CLI-contract-output"}]}]})).unwrap();
+        assert!(check.complete());
+        check.verify_after_stop().unwrap();
     }
 
     #[test]

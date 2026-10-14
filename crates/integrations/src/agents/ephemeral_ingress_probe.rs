@@ -61,6 +61,14 @@ impl CodexNativeIngressProbe {
         );
         let mut command = Command::new(&binary);
         command.arg("exec").arg("--ignore-rules");
+        #[cfg(windows)]
+        if collaboration {
+            // Codex 0.160.0 / a956835d core/exec_policy.rs rejects unmatched
+            // commands under readonly + Never when the Windows backend is Disabled.
+            // Select the actual restricted-token backend, retaining both restrictions.
+            // Never use an execpolicy allow rule: all explicit matches bypass sandboxing.
+            command.args(["-c", "windows.sandbox=\"unelevated\""]);
+        }
         command
             .args([
                 "--ephemeral",
@@ -149,6 +157,9 @@ impl CodexNativeIngressProbe {
             return Err(fail("native cleanup"));
         }
         result?;
+        if let Some(challenge) = &challenge {
+            challenge.verify_after_stop().map_err(fail)?;
+        }
         Ok(CodexIngressEvidence {
             observed: Instant::now(),
             observed_at: now(),
