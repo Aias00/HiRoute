@@ -259,10 +259,11 @@ fn mapping_spans(
                 rhs.split('#').next().is_some_and(|v| v.trim() == "{}"),
                 offset + line.len(),
             ));
-        } else if !trimmed.is_empty() && !trimmed.starts_with('#') {
-            if let Some(member) = members.last_mut() {
-                member.5 = offset + line.len();
-            }
+        } else if !trimmed.is_empty()
+            && !trimmed.starts_with('#')
+            && let Some(member) = members.last_mut()
+        {
+            member.5 = offset + line.len();
         }
         offset += line.len();
     }

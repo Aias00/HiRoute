@@ -173,9 +173,7 @@ pub fn hermes_configure(
             .filter(|k| k.starts_with("providers/"))
         {
             let path: Vec<_> = key.split('/').map(str::to_owned).collect();
-            if !changes.contains_key(&path) {
-                changes.insert(path, None);
-            }
+            changes.entry(path).or_insert(None);
         }
     }
     let bytes = doc.edit(&changes)?;
