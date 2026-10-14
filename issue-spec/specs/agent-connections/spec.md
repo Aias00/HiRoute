@@ -28,9 +28,20 @@ The current native model surfaces are:
 | Qoder | Explicit supplementary Plan providers; native default remains independent | Selected normally logged-in native context |
 | Pi | Per-Plan owned members in user models.json | Selected native Skills/resources |
 | DSH | Public standard Web/home composition and per-Plan provider rows | Public native Skills/CLI capabilities |
+| Hermes | One selected effective profile default main model using a published Plan alias | Collaboration unsupported; independent profile-local management Skill |
 
 A Fixed route always retains exact source/account/physical model. Selecting a plan
 never implies a Worker process or shared main-Agent ownership of that plan.
+
+Hermes management-Skill intent is independent of its model facet and uses keep, configure or restore, with omission meaning keep. Management-only preparation requires neither a Plan nor a model grant. Restoring the model facet preserves an independently prepared management Skill unless its own restore is selected. A non-keep Hermes collaboration intent is unsupported; neither model routing nor management-Skill preparation grants Worker authority.
+
+#### Scenario: Prepare Hermes management without model connection
+
+- **WHEN** a Hermes profile requests management-Skill preparation with its model facet kept
+- **THEN** only the independent management resource is prepared; no Plan, model grant or collaboration setup is required.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/119#issuecomment-6165296337
 
 ### Requirement: Settings bind current facts once through one transaction
 
@@ -81,7 +92,7 @@ Released Worker CLI does not require this token.
 
 Configuration depends on actual writable fields/paths, protocol expressibility,
 required catalog facts, and current authority, not a generic client version allowlist.
-Unknown/old/new labels or failed diagnostic version reads cannot alone block settings,
+Except for the expressly scoped Hermes new-connection support floor below, unknown/old/new labels or failed diagnostic version reads cannot alone block settings,
 preview, restore, or ordinary managed launch. Missing optional usage/refusal/reasoning
 metadata cannot be a blanket save gate; exact client window/protocol/vision declarations
 still require proof. Version labels do not enter settings business identity.
@@ -94,6 +105,16 @@ startup side effects cannot fall back into a daily home. Ordinary Claude setting
 Preview/Apply does not re-run `claude --version`. An unknown native provider in scan
 cannot make a valid executable/resource disappear when switching to an authorized plan.
 Only the action requiring an unproven capability is unavailable.
+
+A documented Hermes minimum supported native version may bound new Hermes model connections when older native interfaces cannot meet the managed-connection contract without disproportionate adaptation. This is a narrow Hermes connection support floor, not an exact-release allowlist for other Agents. Known below-floor or interface-deficient Hermes connections SHALL reject before native writes with actionable upgrade guidance, without automatically upgrading Hermes. Above-floor version labels alone do not prove compatibility. Passive Hermes scan and independent management-Skill preparation check only their own required capabilities; existing owned restore and accepted-operation recovery cannot be stranded solely by the new-connection floor.
+
+#### Scenario: Bound Hermes new-connection support without blocking owned restore
+
+- **WHEN** a Hermes installation is outside the declared new-model-connection support boundary but its owned restore effects remain safely expressible
+- **THEN** new connection reports incompatibility before native writes, while existing recovery/conditional restore follows its persisted target and ownership rather than a blanket version gate.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/119#issuecomment-6165296337
 
 ### Requirement: Configuration UI reports applied state, not invented verification
 
@@ -370,6 +391,33 @@ cross-request use fails. Result belongs to that tested surface/revision only, no
 all configured Agents or future service state. Verification uses isolated configuration
 rather than altering a live user's environment, and cannot substitute for ordinary
 native saved-route or real main-Agent delegation acceptance.
+
+### Requirement: Reversible Hermes profile connection and activation guidance
+
+HiRoute SHALL configure the selected effective Hermes profile's default main model to the chosen published Plan alias and automatically install and enable the required HiRoute integration resources when the connection is applied from CLI or Desktop. Native connection fields and resources SHALL follow existing reversible ownership and transaction contracts, preserving unrelated native configuration and user data. Connection status/guidance SHALL identify the configured scope, report statically known selection overrides and applicable reload/model-selection actions, and keep unobserved live selection unknown. Installed/enabled resources SHALL NOT be represented as proof that an already-running Hermes process loaded them. HiRoute SHALL publish its Hermes support boundary and reject an unsupported new model connection before native connection/resource writes with actionable upgrade guidance. A documented minimum supported Hermes version MAY bound that connection support; capability evidence is still required. Independent Skill preparation, passive scan and existing owned recovery/restore SHALL use their own required capabilities rather than a blanket new-connection version gate.
+
+#### Scenario: Connect and prepare resources in one workflow
+
+- **WHEN** the owner applies a supported Hermes profile connection to a published Plan
+- **THEN** the owned default/provider and required resources are prepared through the existing Operation without a separate manual plugin installation/enable step; successful saved state reports its scope and any remaining native loading action.
+
+#### Scenario: A conversation may retain another selection
+
+- **WHEN** a statically known channel/session selection overrides the managed default, or live selection cannot be established
+- **THEN** HiRoute reports the known configuration or unknown live state and applicable native switching/reload guidance without rewriting the override or resetting a conversation.
+
+#### Scenario: Restore the managed connection
+
+- **WHEN** the owner restores the Hermes connection after unrelated native edits
+- **THEN** existing conditional ownership restores the managed fields/resources and preserves unrelated changes; an owned-field conflict retains the existing conflict/recovery outcome.
+
+#### Scenario: An installation is outside the supported connection boundary
+
+- **WHEN** a selected installation is below a declared Hermes minimum or lacks a required model-connection interface
+- **THEN** HiRoute reports the missing support/capability and upgrade action before native connection/resource writes, without automatically upgrading Hermes or falsely completing the connection; readable scans and safe owned restore are not rejected solely by that gate.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/119#issuecomment-6165296337
 
 ## Implementation references
 

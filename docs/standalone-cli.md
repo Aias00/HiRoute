@@ -502,6 +502,40 @@ The advanced JSON interfaces below retain exact context semantics. A collaborati
 using Codex's model profile still returns `CAPABILITY_DENIED`, with
 `COLLABORATION_ROOT_CONTEXT_REQUIRED` guidance, instead of silently redirecting the request.
 
+## Hermes profile discovery and connection
+
+Select the absolute effective Hermes profile root explicitly. Agent discovery uses
+`agents scan --request-stdin --output json` with
+`{"native_target":{"kind":"hermes","config_root":"/ABSOLUTE/HERMES_PROFILE"}}`.
+Use the returned context ID in the shared settings Preview/Apply workflow and
+retain the same `native_target` in the settings spec.
+
+For source discovery, use `compute scan --request-stdin --output json` with
+`{"schema":"hiroute.compute-scan-request/v2","native_target":{"kind":"hermes","config_root":"/ABSOLUTE/HERMES_PROFILE"}}`.
+Choose a returned connection's opaque discovery reference and revision, then use
+`compute connection prepare` with that discovery and a stable `prepare_id`.
+This preparation privately rereads source credentials; no manual credential copy
+or model call is required. Select all returned selectable models initially, or an
+explicit subset requested by the user. Save an exact nonempty
+`selected_model_refs` array through compute Preview/Apply. Catalog candidates are
+distinct from native declarations and account entitlement; refresh never expands
+an accepted selection. Empty scan input retains the released V1 shape and
+one-model handles.
+
+Set `model.intent` to `configure` with
+`{"mode":"hermes_default","plan_id":"PUBLISHED_PLAN_ID","protocol":"responses"}`
+or the supported Messages transport. Normal Apply installs/enables the bundled
+adapter together with the default/provider settings. The selected native SDK and
+interfaces must support that transport. Saved state does not prove loading in a
+running Hermes process; follow the reload/selection guidance.
+
+Prepare the management Skill independently with
+`"management_skill":{"intent":"configure","settings":{}}` and `model: keep`.
+Use the shared restore workflow for either facet; model restore keeps an
+independent Skill. Hermes Worker/collaboration configuration is unsupported.
+The [native guide](../crates/integrations/src/agents/hermes/README.md) explains
+ownership, support and native channel/session selection.
+
 ## Connect, check, and restore Codex
 
 ```sh
@@ -952,7 +986,7 @@ hiroute subscription-proxy set --mode manual --url http://127.0.0.1:1187 --outpu
 hiroute service restart --output json
 ```
 
-An optional `--no-proxy example.com,192.168.0.0/16` adds bypass entries; local
+An optional `--no-proxy example.com,192.0.2.0/24` adds bypass entries; local
 addresses always bypass. Use `--mode direct` to clear inherited proxies, or
 `--mode inherit` to retain the existing service launch-environment policy.
 Saving does not interrupt the service; an explicit restart applies it and may

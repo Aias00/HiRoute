@@ -1,6 +1,6 @@
 # Agent settings feature
 
-This feature presents Codex, Claude Code and Qoder model routing and task collaboration. It translates an
+This feature presents supported Agent model routing, task collaboration and independent Hermes management. It translates an
 editable draft into the existing Agent settings intent; it does not discover installations,
 read credentials, authorize a route, or implement file recovery. The [code map](../../../../../docs/code-map/README.md) connects these boundaries
 to their production owners and executable contracts.
@@ -16,6 +16,7 @@ to their production owners and executable contracts.
 | [settings-request.ts](settings-request.ts) | Ecosystem-specific intent construction, independent model/collaboration restore intents, token changes that retain the saved selection, and capability-based prerequisite check selection. |
 | [AgentModelEditor.tsx](AgentModelEditor.tsx) | Explicit composition of [Codex](CodexModelEditor.tsx), [Claude](ClaudeModelEditor.tsx) and [Qoder](AdditionalModelEditor.tsx) forms and their saved-selection summary. Codex allowlist/default/native retention, Claude preset mappings and Qoder additional routes remain different concepts. |
 | [AgentSettingsFeedback.tsx](AgentSettingsFeedback.tsx) | Presentation of authoritative Preview blockers. |
+| [HermesModelEditor.tsx](HermesModelEditor.tsx), [HermesRootFields.tsx](HermesRootFields.tsx) | One Plan/protocol and explicit effective profile; root fields are shared with source scan. Automatic adapter preparation and unobserved native loading stay distinct. |
 | [collaboration-check-feedback.ts](collaboration-check-feedback.ts) | Versioned collaboration-check failures become safe login, Skill recovery and retry guidance; native output is never display text. |
 | [CodexAccessPanel.tsx](CodexAccessPanel.tsx) | Profile/root facts, mode controls, launch commands, ordinary file-conflict diagnosis and an existing pending Operation's recovery entry. |
 | [codex-launch.ts](codex-launch.ts), [codex-surfaces.ts](codex-surfaces.ts) | Confirmed command-copy eligibility and the distinction between detected executables and mode applicability. |
@@ -25,6 +26,11 @@ to their production owners and executable contracts.
 Qoder, Pi and DSH share the additional-route editor and explicitly selected Plan IDs
 through `qoder_additional`, `pi_additional` and `dsh_additional`. It does not
 edit the native default or show native catalogs, fixed-source choices or import controls.
+Hermes selects one default main-model Plan. Its management Skill has independent
+prepare/restore controls and needs no model connection or published Plan. Model
+restore retains that Skill. Pending model/Skill Operations use the shared exact
+retry entry. Statically known channel models are shown separately from unobserved
+live session selection; Worker/collaboration configuration is unavailable.
 Qoder's editor explains that the selected Qoder CLI must complete its own `/login`
 before using these routes. Saving configuration does not perform native sign-in or
 make a model call. A valid native login rejection in the separate Qoder Live check

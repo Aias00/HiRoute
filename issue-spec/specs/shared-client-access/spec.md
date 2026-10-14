@@ -184,6 +184,28 @@ cannot rely on build directories/libraries. Compile success does not prove runti
 compatibility; rejected file/dependency evidence is retained. Candidate/platform
 identity is explicit, and this evidence cannot replace macOS native or Windows checks.
 
+### Requirement: CLI and Desktop management of Hermes connections
+
+HiRoute SHALL add the selected effective Hermes profile as a managed target in the existing public CLI and Desktop Agent settings workflow. Both clients SHALL support selecting a published Plan, connecting or adjusting the profile, restoring managed settings and reading connection state through the shared backend. The CLI workflow SHALL be usable without Desktop. HiRoute SHALL make the existing management Skill discoverable in that profile independently of a model connection or task collaboration, with guidance for the existing source, decision-service and Plan commands. The existing shared-client-access and agent-connections contracts govern access, input, Operations and failures; this increment does not introduce a separate management API.
+
+#### Scenario: Configure Hermes through the headless CLI
+
+- **WHEN** a caller configures a routing Plan using existing public commands and connects a selected Hermes profile
+- **THEN** the Hermes-specific target and connection operations are available through the public CLI without a graphical step; a missing required service/profile capability is reported for that target.
+
+#### Scenario: Use the same connection from either client
+
+- **WHEN** the owner selects a locally accessible Hermes profile in Desktop or updates its connection through the CLI
+- **THEN** the existing Desktop Agent flow can configure, adjust, restore and read that same scoped backend state without manual native-file editing.
+
+#### Scenario: Prepare management guidance independently
+
+- **WHEN** the owner prepares the management Skill for a selected Hermes profile before connecting a model
+- **THEN** the Skill is discoverable and explains the public routing-configuration workflow without requiring a Plan, model grant or collaboration setup; unavailable CLI/service prerequisites remain explicit.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/119#issuecomment-6165289916
+
 ## Implementation references
 
 - [Client Core](../../../crates/client-core/src) and

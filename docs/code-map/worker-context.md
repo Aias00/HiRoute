@@ -25,6 +25,11 @@ retain rejection identity through compensation and client observation.
 Native defaults and collaboration stay independent;
 restoration must verify ownership rather than infer it from a provider name.
 
+Hermes uses an [explicit effective profile](../../crates/integrations/src/agents/hermes/README.md)
+and one default main-model Plan. Its bundled native middleware carries the real
+session into trusted Gateway correlation. Its management Skill is independent;
+Hermes has no Worker/collaboration transport.
+
 ## Follow a task through its owners
 
 | Step / question | Production owner | Boundary to preserve |

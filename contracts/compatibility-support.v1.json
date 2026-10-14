@@ -26,8 +26,10 @@
     "hiroute.agent-launch-descriptor-request/v1",
     "hiroute.agent-live-check-evidence/v1",
     "hiroute.agent-live-check-receipt/v1",
+    "hiroute.agent-management-skill-status/v1",
     "hiroute.agent-model-budget-conflict/v1",
     "hiroute.agent-model-grant/v3",
+    "hiroute.agent-model-grant/v4",
     "hiroute.agent-model-settings-status/v2",
     "hiroute.agent-plan-alias-registry/v1",
     "hiroute.agent-plan-catalog-query/v2",
@@ -42,6 +44,7 @@
     "hiroute.agent-routing-catalog/v1",
     "hiroute.agent-routing-overlay/v1",
     "hiroute.agent-scan-observation/v1",
+    "hiroute.agent-scan-request/v1",
     "hiroute.agent-settings-preview/v2",
     "hiroute.agent-settings-retry/v1",
     "hiroute.agent-surface-check/v1",
@@ -81,6 +84,7 @@
     "hiroute.compiled-agent-plan/v1",
     "hiroute.compiled-agent-plan/v3",
     "hiroute.compiled-planner-policy/v1",
+    "hiroute.compute-candidate-view/v2",
     "hiroute.compute-connection-apply-request/v1",
     "hiroute.compute-connection-authorization-request/v1",
     "hiroute.compute-connection-change/v1",
@@ -106,7 +110,9 @@
     "hiroute.compute-projection-identity/v1",
     "hiroute.compute-runtime-identity/v1",
     "hiroute.compute-runtime-state/v1",
+    "hiroute.compute-scan-request/v2",
     "hiroute.compute-scan-result/v1",
+    "hiroute.compute-scan-result/v2",
     "hiroute.compute-scanner-evidence/v1",
     "hiroute.compute-source-binding-identity/v1",
     "hiroute.compute-source-control/v1",
@@ -213,6 +219,10 @@
     "hiroute.gateway.request-authority/v2",
     "hiroute.gateway.sealed-candidate-execution/v1",
     "hiroute.header-secret-lease-request/v1",
+    "hiroute.hermes-config-restore/v1",
+    "hiroute.hermes-native-restore/v1",
+    "hiroute.hermes-native/v1",
+    "hiroute.hermes-plugin-restore/v1",
     "hiroute.launcher-upgrade-status/v1",
     "hiroute.launcher-upgrade/v1",
     "hiroute.machine-envelope/v2",
@@ -236,6 +246,7 @@
     "hiroute.native-claude-read/v1",
     "hiroute.native-credential-lease-request/v1",
     "hiroute.native-field-restore/v1",
+    "hiroute.native-file-reference/v1",
     "hiroute.native-files/v1",
     "hiroute.native-observation/v2",
     "hiroute.native-restoration-ack/v1",
@@ -289,6 +300,7 @@
     "hiroute.planner-input/v1",
     "hiroute.planner-output/v1",
     "hiroute.posix-artifact-fingerprint/v1",
+    "hiroute.prepare-discovered-model-connection-request/v1",
     "hiroute.prepared-discovery-input/v1",
     "hiroute.product-publication-marker/v1",
     "hiroute.product-publication-marker/v2",
@@ -332,6 +344,8 @@
     "hiroute.settings-claude-model-file/v1",
     "hiroute.settings-codex-model-file/v1",
     "hiroute.settings-dsh-model-file/v1",
+    "hiroute.settings-hermes-model-file/v1",
+    "hiroute.settings-hermes-plugin-file/v1",
     "hiroute.settings-login-item/v1",
     "hiroute.settings-model-publication/v1",
     "hiroute.settings-pi-model-file/v1",
@@ -843,9 +857,13 @@
         "hiroute.agent-model-grant"
       ],
       "current_contracts": [
-        "hiroute.agent-model-grant/v3"
+        "hiroute.agent-model-grant/v3",
+        "hiroute.agent-model-grant/v4"
       ],
-      "legacy_support": []
+      "legacy_support": [],
+      "owner": "domain/agents",
+      "reason": "One current grant type: consumerless grants retain the published v3 canonical bytes and meaning; explicitly sealed Hermes consumers use the v4 digest namespace. A caller header cannot create this authority.",
+      "removal_condition": "Retire the consumerless canonical projection only after supported released grants and their retained Operations/publications have an explicit conversion and recovery path."
     },
     {
       "subject": "stable_plan_version",
@@ -1044,6 +1062,20 @@
         "hiroute.compute-management-snapshot/v3"
       ],
       "legacy_support": []
+    },
+    {
+      "subject": "compute_scan_projection",
+      "audited_prefixes": [
+        "hiroute.compute-scan-result"
+      ],
+      "current_contracts": [
+        "hiroute.compute-scan-result/v1",
+        "hiroute.compute-scan-result/v2"
+      ],
+      "legacy_support": [],
+      "owner": "application-api/daemon/model-connections",
+      "reason": "The shared scanner retains the currently published empty-request V1 projection and one-model discovery handles. An explicit V2 request selects connection-point projection; credentials and source semantics have one private owner. Current CLI/Desktop consume the V2 shape without expanding old handles.",
+      "removal_condition": "Remove the V1 request/projection adapter only when the supported public caller policy retires the released V1 API and its one-model handles."
     }
   ],
   "forbidden_contracts": [
@@ -1403,6 +1435,20 @@
         "crates/daemon/tests/fixtures/collaboration-skill-v0.3.1/README.md",
         "crates/daemon/src/control/runtime/settings_entry_tests.rs",
         "crates/daemon/src/control/runtime/settings_entry_collaboration_tests.rs"
+      ]
+    },
+    {
+      "contract": "hiroute.agent-model-grant/v3",
+      "field": "omitted consumer on retained grant, operation and publication bytes",
+      "mode": "recovery_read_only",
+      "owner": "domain/agents",
+      "reason": "An absent consumer retains the exact released v3 digest and existing non-Hermes interpretation. Only a digest-bound Hermes consumer receives the new identity policy; absence is never inferred from a native header or user-agent.",
+      "removal_condition": "Remove this absent-field read behavior only with supported grant/publication/Operation conversion and old-to-new recovery evidence.",
+      "allowed_paths": [
+        "crates/domain/src/agents/model_grant.rs",
+        "crates/domain/src/publication/snapshot.rs",
+        "crates/gateway/src/publication/schema.rs",
+        "crates/gateway/src/dispatch/run.rs"
       ]
     }
   ]
