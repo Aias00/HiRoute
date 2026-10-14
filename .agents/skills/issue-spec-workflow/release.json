@@ -1,9 +1,9 @@
 {
   "schema": "issue-spec.generated-workflow/v1",
-  "release": "development-1008ee6",
-  "source_revision": "1008ee6ec1ae77818ad67de82ac6ea901fa769fa",
+  "release": "development",
+  "source_revision": "c68283910ca06f6a84f308d2be17c83d7c326b2f",
   "requirements_skill_content_id": "sha256:35e55ba3b52b377acbd36ca4305cd958e3bd593008d576a7a82c9b06ab862ed1",
-  "content_digest": "sha256:a6db97f59a05379c52889b4c2d5a1efd9f413363c0a4461bd579d51e8eedaaa7",
+  "content_digest": "sha256:632f267430505d91750d8b2055d799f867aa719b1b29a774cab4b5fd7bee6ea8",
   "files": [
     {
       "path": ".agents/skills/issue-spec-apply/SKILL.md",
@@ -15,7 +15,7 @@
     },
     {
       "path": ".agents/skills/issue-spec-propose/SKILL.md",
-      "sha256": "0a04d83927c496b2ff3b2f7fae827ba0d519312898a837839e7723b40751bf64"
+      "sha256": "618a3b0b8770bf43a9ef42afd243fee705bc18450c5021f892057413466b195b"
     },
     {
       "path": ".agents/skills/issue-spec-workflow/SKILL.md",
@@ -24,6 +24,10 @@
     {
       "path": ".agents/skills/issue-spec-workflow/references/implementation-review.md",
       "sha256": "448cfd953d847f0966aa12f0d880f603272abb73caba9a4709e4c6bf44ee5368"
+    },
+    {
+      "path": ".agents/skills/issue-spec-workflow/references/planning-scope.md",
+      "sha256": "e61e7e754b3643c4fdaa4e7b7d485f024d66756f77cbbce28a3db6f05306cc1f"
     },
     {
       "path": ".agents/skills/issue-spec-workflow/references/progressive-reading.md",
