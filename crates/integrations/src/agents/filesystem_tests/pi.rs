@@ -39,7 +39,7 @@ fn native_points_group_shared_binding_despite_legacy_model_handles_and_separate_
             .unwrap()
             .discovered_source_ref
     );
-    let points = super::super::native_api_connection_points(sources);
+    let points = crate::native_api_connection_points(sources);
     assert_eq!(points.len(), 3);
     let shared = points.iter().find(|p| p.sources.len() == 2).unwrap();
     assert_eq!(
@@ -58,17 +58,14 @@ fn native_point_identity_includes_root_and_selected_credential_origin_without_ex
     let second = tempfile::tempdir().unwrap();
     let scanner = source_scanner(first.path(), models(), json!({}));
     let other = source_scanner(second.path(), models(), json!({}));
-    let before =
-        super::super::native_api_connection_points(scanner.pi_api_sources().unwrap()).remove(0);
-    let other =
-        super::super::native_api_connection_points(other.pi_api_sources().unwrap()).remove(0);
+    let before = crate::native_api_connection_points(scanner.pi_api_sources().unwrap()).remove(0);
+    let other = crate::native_api_connection_points(other.pi_api_sources().unwrap()).remove(0);
     assert_ne!(before.key_digest, other.key_digest);
     write_secret_settings(
         &scanner.layout.pi_config_root.join("auth.json"),
         json!({"private-api":{"type":"api_key","key":"provider-fallback"}}),
     );
-    let after =
-        super::super::native_api_connection_points(scanner.pi_api_sources().unwrap()).remove(0);
+    let after = crate::native_api_connection_points(scanner.pi_api_sources().unwrap()).remove(0);
     assert_ne!(
         before.key_digest, after.key_digest,
         "equal material from a different native selector is not the same binding"
