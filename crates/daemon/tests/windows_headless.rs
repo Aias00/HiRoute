@@ -380,10 +380,17 @@ impl InstalledProduct {
             exit, 0,
             "actual protected-input CLI inherited handle failed"
         );
-        assert!(
-            child.empty().unwrap(),
-            "actual protected-input CLI leaked descendants"
-        );
+        // Require the held Job to become empty naturally after root exit.
+        // An immediate accounting sample can race with process removal;
+        // forced cleanup would hide the leak this assertion must detect.
+        let drained_by = Instant::now() + Duration::from_secs(5);
+        while !child.empty().unwrap() {
+            assert!(
+                Instant::now() < drained_by,
+                "actual protected-input CLI leaked descendants"
+            );
+            thread::sleep(Duration::from_millis(20));
+        }
         serde_json::from_slice(&stdout).unwrap()
     }
 

@@ -374,7 +374,7 @@ fn native_flow(config: WorkerInstallationConfig) -> Result<(), DelegationErrorV1
             protected_challenge(&challenge)?,
             "load",
         )?,
-        AcpSessionStart::Load(first.session.clone()),
+        AcpSessionStart::native_continuation(config.harness, first.session.clone()),
         "native-load",
         None,
     )?;
@@ -402,7 +402,7 @@ fn native_flow(config: WorkerInstallationConfig) -> Result<(), DelegationErrorV1
         )?,
         "native-cancel",
         &server,
-        AcpSessionStart::Load(loaded.session),
+        AcpSessionStart::native_continuation(config.harness, loaded.session),
     )?;
     assert!(
         server.request_count() >= 3,

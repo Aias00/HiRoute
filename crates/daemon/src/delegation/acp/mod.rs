@@ -35,6 +35,21 @@ pub enum AcpSessionStart {
     Resume(AcpSessionBinding),
 }
 
+impl AcpSessionStart {
+    /// DSH advertises the ACP resume extension instead of session/load. Both keep the
+    /// exact existing binding; run_session still validates its native identity and capability.
+    pub(crate) fn native_continuation(
+        harness: hiroute_domain::delegation::WorkerHarnessV1,
+        binding: AcpSessionBinding,
+    ) -> Self {
+        if harness == hiroute_domain::delegation::WorkerHarnessV1::DeepseekHarness {
+            Self::Resume(binding)
+        } else {
+            Self::Load(binding)
+        }
+    }
+}
+
 /// Internal profile output, never a raw Local Control payload. Authentication can contain
 /// a run secret: deliberately no Debug/Serialize implementation and no protocol logging.
 pub struct AcpRunInput {
@@ -126,15 +141,17 @@ where
         .on_receive_notification(
             async move |notification: SessionNotification, _cx| {
                 let mut state = notifications.lock().unwrap_or_else(|e| e.into_inner());
+                // Native adapters may announce configuration during session/new, before its
+                // response binds the session. Load also replays history. Neither belongs to
+                // this run's output, and an unbound startup notification is not lost output.
+                if !state.prompt_started {
+                    return Ok(());
+                }
                 let session_matches =
                     state.session.as_deref() == Some(notification.session_id.to_string().as_str());
                 let update = serde_json::to_value(notification.update).unwrap_or(Value::Null);
                 if !session_matches {
                     state.incomplete = true;
-                    return Ok(());
-                }
-                // session/load may replay old history: never append it as this run's output.
-                if !state.prompt_started {
                     return Ok(());
                 }
                 if update["sessionUpdate"] == "agent_message_chunk"
@@ -588,6 +605,8 @@ async fn phase<T>(
 mod identity_tests;
 #[cfg(test)]
 mod model_tests;
+#[cfg(test)]
+mod notification_tests;
 #[cfg(test)]
 mod security_tests;
 #[cfg(test)]

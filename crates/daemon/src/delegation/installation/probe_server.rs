@@ -365,12 +365,47 @@ fn serve_probe_request(
             WorkerHarnessV1::ClaudeCode => messages_stream(endpoint.model),
         }
     };
-    write!(
+    let written = write!(
         stream,
         "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response}",
         response.len()
+    );
+    finish_response_write(
+        written,
+        stall && endpoint.release_stall.load(Ordering::Acquire),
     )
-    .map_err(|_| DelegationErrorV1::ProtocolFailed)
+}
+
+fn finish_response_write(
+    result: std::io::Result<()>,
+    deliberate_cancel: bool,
+) -> Result<(), DelegationErrorV1> {
+    match result {
+        Ok(()) => Ok(()),
+        Err(error)
+            if deliberate_cancel
+                && matches!(
+                    error.kind(),
+                    std::io::ErrorKind::BrokenPipe
+                        | std::io::ErrorKind::ConnectionReset
+                        | std::io::ErrorKind::ConnectionAborted
+                ) =>
+        {
+            // The cancel probe has already validated bearer/model/body and observed this
+            // in-flight request before cancelling the real native client. That client may
+            // close its HTTP request immediately. Delivery to an aborted peer is not part
+            // of cancellation; ACP completion and stopped process scope remain required.
+            eprintln!("native acceptance loopback stage=cancelled-peer-disconnected");
+            Ok(())
+        }
+        Err(error) => {
+            eprintln!(
+                "native acceptance loopback stage=response-write-failed kind={:?} deliberate-cancel={deliberate_cancel}",
+                error.kind()
+            );
+            Err(DelegationErrorV1::ProtocolFailed)
+        }
+    }
 }
 
 fn probe_route(harness: WorkerHarnessV1, method: &str, target: &str) -> Option<ProbeRoute> {
@@ -461,6 +496,31 @@ fn responses_stream(model: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_deliberately_cancelled_peer_disconnect_is_not_a_probe_response_failure() {
+        for kind in [
+            std::io::ErrorKind::BrokenPipe,
+            std::io::ErrorKind::ConnectionReset,
+            std::io::ErrorKind::ConnectionAborted,
+        ] {
+            assert!(finish_response_write(Err(std::io::Error::from(kind)), true).is_ok());
+            assert_eq!(
+                finish_response_write(Err(std::io::Error::from(kind)), false),
+                Err(DelegationErrorV1::ProtocolFailed)
+            );
+        }
+        for kind in [
+            std::io::ErrorKind::TimedOut,
+            std::io::ErrorKind::PermissionDenied,
+            std::io::ErrorKind::InvalidData,
+        ] {
+            assert_eq!(
+                finish_response_write(Err(std::io::Error::from(kind)), true),
+                Err(DelegationErrorV1::ProtocolFailed)
+            );
+        }
+    }
 
     #[test]
     fn tool_responder_keeps_the_authenticated_native_http_boundary() {

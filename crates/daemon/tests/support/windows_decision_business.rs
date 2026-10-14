@@ -68,6 +68,19 @@ pub fn roundtrip(product: &InstalledProduct) {
     );
     test(product, &service);
     assert_eq!(*seen.lock().unwrap(), vec![("r1".to_owned(), 3)]);
+    // Without accept_digest this public command previews a change. Retain a
+    // valid r1 deletion preview, then attempt its actual submission after r2.
+    let stale_preview = cli(
+        product,
+        &["decision", "services", "apply"],
+        Some(&json!({"schema_version":{"major":1,"minor":0},
+            "spec":{"schema_version":{"major":1,"minor":0},"command_id":"decision.services.apply",
+                "resource_id":service["id"],"desired_state":{"id":service["id"],"expected_revision":1,"service":null}}})),
+    )["data"]
+        .clone();
+    let stale = json!({"schema_version":{"major":1,"minor":0},
+        "spec":stale_preview["normalized_spec"],"accept_digest":stale_preview["change_digest"],
+        "expected_revisions":stale_preview["expected_revisions"],"idempotency_key":"windows-decision-stale-delete"});
     let historical = service.clone();
     service["revision"] = json!(2);
     service["connection"]["auth_header"]["value_secret_ref"] = json!("decision/windows/r2");
@@ -96,8 +109,6 @@ pub fn roundtrip(product: &InstalledProduct) {
         ],
         "rotation must not mutate retained r1 credentials"
     );
-    let stale = json!({"schema_version":{"major":1,"minor":0},"spec":{"schema_version":{"major":1,"minor":0},"command_id":"decision.services.apply",
-        "resource_id":service["id"],"desired_state":{"id":service["id"],"expected_revision":0,"service":historical}}});
     let (exit, rejected) =
         business::command(product, &["decision", "services", "apply"], Some(&stale));
     assert_ne!(exit, 0);

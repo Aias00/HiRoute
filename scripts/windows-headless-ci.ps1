@@ -280,6 +280,13 @@ if ($Scope -eq 'components') {
     Invoke-RequiredTests $recipe.name @('-p',$recipe.package,'--lib',$recipe.case) @($recipe.case) @('--ignored','--exact','--nocapture')
   }
 } else {
+  Invoke-RequiredTests 'agent-acp-notifications' @('-p','hiroute-daemon','--lib','delegation::acp::notification_tests::') @(
+    'delegation::acp::notification_tests::startup_and_loaded_history_notifications_do_not_make_current_output_incomplete',
+    'delegation::acp::notification_tests::wrong_session_notification_during_prompt_still_marks_output_incomplete')
+  $cancelOracle = 'delegation::installation::probe_server::tests::only_deliberately_cancelled_peer_disconnect_is_not_a_probe_response_failure'
+  Invoke-RequiredTests 'agent-cancel-oracle' @('-p','hiroute-daemon','--lib',$cancelOracle) @($cancelOracle) @('--exact')
+  $mainOracle = 'agents::collaboration_probe::tests::codex_collaboration_accepts_correlated_native_text_content_items_only'
+  Invoke-RequiredTests 'agent-main-oracle' @('-p','hiroute-integrations','--lib',$mainOracle) @($mainOracle) @('--exact')
   $privateRoot = 'delegation::installation::installation_probe::windows_probe_root_creates_strict_private_directories_before_native_launch'
   Invoke-RequiredTests 'agent-private-root' @('-p','hiroute-daemon','--lib',$privateRoot) @($privateRoot) @('--exact','--nocapture')
   Initialize-WindowsAgentInputs

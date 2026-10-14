@@ -11,5 +11,10 @@
     "@agentclientprotocol/claude-agent-acp": "0.60.0",
     "@earendil-works/pi-coding-agent": "1.0.2",
     "@deepseek-ai/dsh": "0.2.0-rc.2"
+  },
+  "overrides": {
+    "@earendil-works/pi-coding-agent": {
+      "@earendil-works/pi-codemode": "1.0.2"
+    }
   }
 }

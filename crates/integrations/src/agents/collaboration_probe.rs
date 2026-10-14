@@ -195,16 +195,35 @@ impl CollaborationChallenge {
                 json!([{"type":"function_call", "id":"fc_hiroute_probe", "call_id":"call_hiroute_probe", "name":name, "arguments":args.to_string(), "status":"completed"}]),
             );
         }
-        let proved = body["input"].as_array().is_some_and(|input| {
-            input.iter().any(|item| {
-                item["type"] == "function_call_output"
-                    && item["call_id"] == "call_hiroute_probe"
-                    && item["output"].as_str().is_some_and(|output| {
-                        output.contains(&self.contents) && output.contains(&self.expected_cli)
-                    })
+        let result = body["input"].as_array().and_then(|input| {
+            input.iter().find(|item| {
+                item["type"] == "function_call_output" && item["call_id"] == "call_hiroute_probe"
             })
         });
+        // Codex 0.160.0 serializes native tool output as a string OR input_text
+        // content items (protocol/models.rs at a956835d). Match only that exact
+        // correlated result; unrelated prompt text, images or metadata cannot prove it.
+        let output = result.and_then(|item| responses_tool_text(&item["output"]));
+        let content_proved = output
+            .as_ref()
+            .is_some_and(|text| text.contains(&self.contents));
+        let cli_proved = output
+            .as_ref()
+            .is_some_and(|text| text.contains(&self.expected_cli));
+        let proved = content_proved && cli_proved;
         if !proved {
+            eprintln!(
+                "native collaboration checkpoint: correlated={} content-items={} skill-content={} cli-output={} output-bytes={} expected-cli-bytes={} truncated={}",
+                result.is_some(),
+                result.is_some_and(|item| item["output"].is_array()),
+                content_proved,
+                cli_proved,
+                output.as_ref().map_or(0, String::len),
+                self.expected_cli.len(),
+                output
+                    .as_ref()
+                    .is_some_and(|text| text.contains("truncated"))
+            );
             return Err("native Skill read and trusted CLI execution");
         }
         self.completed = true;
@@ -271,6 +290,22 @@ impl CollaborationChallenge {
     }
 }
 
+fn responses_tool_text(output: &Value) -> Option<String> {
+    if let Some(text) = output.as_str() {
+        return Some(text.to_owned());
+    }
+    let text = output
+        .as_array()?
+        .iter()
+        .filter_map(|item| {
+            (item["type"] == "input_text")
+                .then(|| item["text"].as_str())
+                .flatten()
+        })
+        .collect::<Vec<_>>();
+    (!text.is_empty()).then(|| text.join("\n"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -308,6 +343,27 @@ mod tests {
             assert!(!check.complete());
         }
         check.reply(&json!({"input":[{"type":"function_call_output", "call_id":"call_hiroute_probe", "output":"contents-nonce CLI-contract-output"}]})).unwrap();
+        assert!(check.complete());
+    }
+
+    #[test]
+    fn codex_collaboration_accepts_correlated_native_text_content_items_only() {
+        let mut check = challenge();
+        check
+            .reply(&json!({"input":"discovery-nonce", "tools":[{"name":"exec_command"}]}))
+            .unwrap();
+        for output in [
+            json!([{"type":"input_image","text":"contents-nonce CLI-contract-output"}]),
+            json!([{"type":"input_text","text":"contents-nonce"}]),
+            json!({"text":"contents-nonce CLI-contract-output"}),
+        ] {
+            assert!(check.reply(&json!({"input":[{"type":"function_call_output","call_id":"call_hiroute_probe","output":output}]})).is_err());
+            assert!(!check.complete());
+        }
+        let output = json!([{"type":"input_text","text":"contents-nonce"},
+            {"type":"input_text","text":"CLI-contract-output"}]);
+        assert!(check.reply(&json!({"input":[{"type":"function_call_output","call_id":"wrong-call","output":output}]})).is_err());
+        check.reply(&json!({"input":[{"type":"function_call_output","call_id":"call_hiroute_probe","output":output}]})).unwrap();
         assert!(check.complete());
     }
 

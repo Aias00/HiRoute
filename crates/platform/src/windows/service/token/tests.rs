@@ -574,7 +574,17 @@ fn launch_probe(
         .take(65536)
         .read_to_string(&mut errors)
         .unwrap();
-    assert!(child.empty().unwrap());
+    // The root's exit and the Job's zero-active-process observation are
+    // separate facts. Keep the held Job and require natural drainage within
+    // a bound; killing the Job here would conceal a descendant leak.
+    let drained_by = Instant::now() + Duration::from_secs(5);
+    while !child.empty().unwrap() {
+        assert!(
+            Instant::now() < drained_by,
+            "restricted child left active Job processes after exit"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
     (code, output, errors)
 }
 

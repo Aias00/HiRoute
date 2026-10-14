@@ -119,7 +119,7 @@ fn native_tools(config: WorkerInstallationConfig) -> Result<(), DelegationErrorV
             protected_challenge(&challenge)?,
             "tools-load",
         )?,
-        AcpSessionStart::Load(first.session.clone()),
+        AcpSessionStart::native_continuation(config.harness, first.session.clone()),
         "native-tools-load",
         None,
         CONTINUE_TOOLS,

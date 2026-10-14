@@ -147,6 +147,12 @@ and the five native Agent adapters. Subscription/provider tests use controlled e
 actual account login/refresh and upstream native clients require their own authorized
 acceptance evidence and pinned version records.
 
+Native Agent CI installs the committed `tools/windows-agent-fixtures` dependency lock.
+Pi 1.0.2's SDK requires pi-codemode 1.0.2; the fixture overrides only that transitive
+dependency because 1.2.0 removed an export still imported by this SDK. The selected
+CLI's actual SDK must pass capability admission. A working bundled CLI or a substituted
+SDK fixture cannot establish Worker, Continue or native tool support.
+
 The installed business journey covers fixed, smart-saving and custom plans,
 decision revisions, model ratings, Gateway receipts and observation after restart.
 Background login tests use the actual packaged CPA to check official authorization

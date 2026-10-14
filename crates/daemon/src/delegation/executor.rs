@@ -325,12 +325,7 @@ impl DelegationRunExecutor {
             (Some(previous), Some(binding))
                 if previous != &run.run_id && binding.native_session_id.is_some() =>
             {
-                if task.plan.harness == hiroute_domain::delegation::WorkerHarnessV1::DeepseekHarness
-                {
-                    AcpSessionStart::Resume(binding.clone())
-                } else {
-                    AcpSessionStart::Load(binding.clone())
-                }
+                AcpSessionStart::native_continuation(task.plan.harness, binding.clone())
             }
             _ => return Err(DelegationErrorV1::ResumeUnavailable),
         };
