@@ -381,6 +381,14 @@ if ($Scope -eq 'components') {
     ($launchCause + 'policy_and_native_context_captions_remain_ambiguous'),
     ($launchCause + 'malformed_or_truncated_rejection_wrappers_stay_unknown'))
   $selectionInput = 'worker::selection_windows::tests::'
+  $readonlyControl = 'agents::collaboration_probe::readonly_control::tests::'
+  Invoke-RequiredTests 'agent-codex-readonly-control' @('-p','hiroute-integrations','--lib','readonly_control') @(
+    ($readonlyControl + 'readonly_control_requires_actual_attempt_and_access_denial_not_just_absence'),
+    ($readonlyControl + 'readonly_control_rejects_echoed_policy_error_and_unrelated_receipts'),
+    ($readonlyControl + 'readonly_control_rejects_reversed_or_repeated_receipt_lines'),
+    ($readonlyControl + 'readonly_control_rejects_an_existing_file_and_any_write_before_or_after_receipt'),
+    ($readonlyControl + 'readonly_control_preserves_a_literal_path_and_only_catches_access_denial'),
+    'agents::collaboration_probe::tests::codex_readonly_control_precedes_the_skill_and_cli_and_requires_a_correlated_denial')
   Invoke-RequiredTests 'agent-native-reader' @('-p','hiroute-local-storage','--lib','control::windows_native_reader_tests::') @(Get-WindowsNativeReaderCases)
   $profileIdentity = 'delegation::installation::windows_tests::'
   Invoke-RequiredTests 'agent-worker-profile-identity' @('-p','hiroute-daemon','--lib',$profileIdentity) @(
