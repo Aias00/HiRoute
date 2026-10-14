@@ -464,6 +464,19 @@ if ($Scope -eq 'components') {
     ($toolDiagnostic + 'only_pinned_prelaunch_captions_establish_handler_preflight'),
     ($toolDiagnostic + 'facets_are_closed_and_shape_counts_do_not_invent_parsed_text'),
     ($toolDiagnostic + 'terminal_script_checkpoint_retains_failure_facts_without_proving_denial'))
+  $qoderSkill = 'agents::qoder_probe::skill_diagnostic::tests::'
+  Invoke-RequiredTests 'agent-qoder-skill-load-diagnostic' @('-p','hiroute-integrations','--lib',$qoderSkill) @(
+    ($qoderSkill + 'skill_diagnostic_separates_shape_header_path_and_body_without_exposing_content'),
+    ($qoderSkill + 'skill_diagnostic_separates_crlf_from_exact_body_and_rejects_missing_header_separator'),
+    ($qoderSkill + 'skill_diagnostic_does_not_confuse_assistant_or_tool_output_with_loaded_user_text'),
+    ($qoderSkill + 'windows_skill_diagnostic_binds_drive_spellings_to_one_actual_directory_and_content'),
+    ($qoderSkill + 'windows_skill_diagnostic_rejects_foreign_reparse_device_and_ads_paths'),
+    ($qoderSkill + 'windows_skill_diagnostic_detects_changed_content_on_the_same_retained_file'))
+  $qoderHttp = 'agents::qoder_probe::http::tests::'
+  Invoke-RequiredTests 'agent-qoder-skill-http-diagnostic' @('-p','hiroute-integrations','--lib',$qoderHttp) @(
+    ($qoderHttp + 'installed_skill_requires_correlated_call_and_actual_user_source'),
+    ($qoderHttp + 'model_claim_cannot_replace_cli_tool_evidence'),
+    ($qoderHttp + 'skill_receipt_diagnostics_do_not_admit_alternate_path_shape_or_newlines'))
   Invoke-RequiredTests 'agent-native-reader' @('-p','hiroute-local-storage','--lib','control::windows_native_reader_tests::') @(Get-WindowsNativeReaderCases)
   $profileIdentity = 'delegation::installation::windows_tests::'
   Invoke-RequiredTests 'agent-worker-profile-identity' @('-p','hiroute-daemon','--lib',$profileIdentity) @(
