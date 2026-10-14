@@ -113,9 +113,9 @@ pub fn process(
         .map(account::environment)
         .unwrap_or_else(|| std::env::vars_os().collect());
     environment.retain(|(key, _)| key != PROBE);
-    if execution_host::selected() {
+    if let Some(mode) = execution_host::mode() {
         environment.retain(|(key, _)| key != execution_host::VARIABLE);
-        environment.push((execution_host::VARIABLE.into(), "windows11-arm-x64".into()));
+        environment.push((execution_host::VARIABLE.into(), mode.into()));
     }
     if fixture {
         environment.push((PROBE.into(), "1".into()));

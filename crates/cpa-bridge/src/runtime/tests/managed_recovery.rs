@@ -225,7 +225,11 @@ fn saved_enabled_managed_recovery_preserves_bounded_restart_policy() {
     let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(FakeBackend::default());
     let control = Arc::new(FakeControl::default());
-    let managed = runtime(&root, backend.clone(), control.clone());
+    let mut managed = runtime(&root, backend.clone(), control.clone());
+    // This case checks the production crash window, not whether real private
+    // file/owner transactions finish within the fixture's one-second window.
+    // Explicit event ages below cover slow validation without sleeping.
+    managed.spec.restart_policy.window = RestartPolicy::default().window;
     let account = write_managed_identity(&managed, "saved-account");
     assert!(matches!(
         managed.ensure_saved_runtime_ready(&account, 1),
@@ -247,12 +251,19 @@ fn saved_enabled_managed_recovery_preserves_bounded_restart_policy() {
         assert!(
             matches!(managed.ensure_saved_runtime_ready(&account, 1).unwrap(), CpaHealth::Ready { restart_count: actual, .. } if actual == restart_count)
         );
+        let mut inner = managed.inner.lock();
+        assert_eq!(inner.crashes.len(), usize::try_from(restart_count).unwrap());
+        let recorded = std::time::Instant::now() - Duration::from_secs(2);
+        for crash in &mut inner.crashes {
+            *crash = recorded;
+        }
     }
     backend.crash_latest(2);
-    assert!(matches!(
-        managed.ensure_saved_runtime_ready(&account, 1),
-        Err(CpaLifecycleError::CrashLoop(_))
-    ));
+    let outcome = managed.ensure_saved_runtime_ready(&account, 1);
+    assert!(
+        matches!(&outcome, Err(CpaLifecycleError::CrashLoop(_))),
+        "third managed crash must exhaust the two-restart production budget: {outcome:?}"
+    );
     assert_eq!(backend.spawn_count(), 3);
     assert!(
         managed

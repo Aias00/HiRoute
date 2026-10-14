@@ -175,6 +175,7 @@ impl Modes {
             "INVALID_ARGUMENTS",
         );
         assert_eq!(cli(product, &["routing", "list"], None)["data"], before);
+        super::windows_free_admission::run(product, primary.binding_id());
         assert!(
             executions.lock().unwrap().is_empty() && decisions.lock().unwrap().is_empty(),
             "paid Free rejection and plan publication must make zero inference/decision requests"

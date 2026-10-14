@@ -137,6 +137,10 @@ fn generated_auth_files_keep_user_owner_and_inherited_private_acl() {
     std::fs::hard_link(root.join("one.json"), root.join("alias.json")).unwrap();
     assert!(source.inspect().is_err());
     std::fs::remove_file(root.join("alias.json")).unwrap();
+    // The verification handle deliberately retains the directory object. A
+    // successful Windows deletion remains pending until this final test-owned
+    // handle closes; do not mistake that lifetime for failed session cleanup.
+    drop(parent);
     remove_session_tree(&root, true).unwrap();
     assert!(!root.exists());
 }

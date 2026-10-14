@@ -17,6 +17,13 @@ const CALL_IDS: [&str; 5] = [
     "native_shell",
 ];
 
+#[path = "native_tools_history_probe.rs"]
+mod history_probe;
+
+pub(super) fn observe_claude_history(path: &Path) {
+    history_probe::observe_transcript(path);
+}
+
 struct Skill {
     name: String,
     discovery: String,
@@ -159,8 +166,10 @@ impl ToolsOracle {
             if self.next != CALL_IDS.len() || self.pending {
                 return failed("continue-before-completion");
             }
-            let output = correlated_result(body, CALL_IDS[4])
-                .ok_or_else(|| failure("continue-native-tool-history"))?;
+            let output = correlated_result(body, CALL_IDS[4]).ok_or_else(|| {
+                history_probe::observe_request(body);
+                failure("continue-native-tool-history")
+            })?;
             self.verify_shell(&output)?;
             self.fixture.assert_effects()?;
             self.loaded = true;

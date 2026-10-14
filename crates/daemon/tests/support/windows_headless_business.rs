@@ -10,6 +10,7 @@ use std::sync::{
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use hiroute_domain::UpstreamProtocol;
 use hiroute_platform::windows::job::{Child, Launch, Stream};
 use serde_json::{Value, json};
 
@@ -40,6 +41,7 @@ impl Business {
             KEY,
             upstream.address,
             32768,
+            UpstreamProtocol::Responses,
             Some(upstream),
         )
     }
@@ -64,7 +66,36 @@ impl Business {
         context_tokens: u64,
     ) -> Self {
         assert!((16384..=1_000_000).contains(&context_tokens));
-        Self::save_at(product, candidate_ref, key, address, context_tokens, None)
+        Self::save_on_with_protocol(
+            product,
+            candidate_ref,
+            key,
+            address,
+            context_tokens,
+            UpstreamProtocol::Responses,
+        )
+    }
+
+    /// Declare the actual Native transport and probe it before public Save.
+    /// The loopback oracle supplies upstream bytes, never a HiRoute response.
+    pub fn save_on_with_protocol(
+        product: &InstalledProduct,
+        candidate_ref: &str,
+        key: &str,
+        address: SocketAddr,
+        context_tokens: u64,
+        protocol: UpstreamProtocol,
+    ) -> Self {
+        assert!((16384..=1_000_000).contains(&context_tokens));
+        Self::save_at(
+            product,
+            candidate_ref,
+            key,
+            address,
+            context_tokens,
+            protocol,
+            None,
+        )
     }
 
     pub fn binding_id(&self) -> &str {
@@ -80,6 +111,7 @@ impl Business {
         key: &str,
         address: SocketAddr,
         context_tokens: u64,
+        protocol: UpstreamProtocol,
         upstream: Option<Upstream>,
     ) -> Self {
         assert!(
@@ -103,11 +135,15 @@ impl Business {
             &["compute", "connection", "test"],
             Some(&json!({
                 "kind":"native", "request":{
-                    "draft":draft(address, candidate_ref, context_tokens),
+                    "draft":draft(address, candidate_ref, context_tokens, protocol),
                     "input_candidate":{"candidate_ref":candidate_ref,"candidate_revision":1}
                 }
             })),
         );
+        check_diagnostic(&checked["data"]);
+        if let Some(upstream) = &upstream {
+            upstream.diagnostic();
+        }
         assert_eq!(checked["data"]["authentication"], "verified");
         assert_eq!(checked["data"]["inference"], "verified");
         assert_eq!(checked["data"]["candidate"]["fact_state"], "complete");
@@ -261,6 +297,10 @@ impl Business {
             &["compute", "connection", "test"],
             Some(&self.recheck(sequence)),
         );
+        check_diagnostic(&checked["data"]);
+        if let Some(upstream) = &self.upstream {
+            upstream.diagnostic();
+        }
         assert_eq!(checked["data"]["directory"], "available");
         assert_eq!(checked["data"]["authentication"], "verified");
         assert_eq!(
@@ -362,13 +402,20 @@ pub(crate) fn assert_operation(product: &InstalledProduct, operation_id: &str) {
     }
 }
 
-fn draft(address: SocketAddr, candidate_ref: &str, context_tokens: u64) -> Value {
+fn draft(
+    address: SocketAddr,
+    candidate_ref: &str,
+    context_tokens: u64,
+    protocol: UpstreamProtocol,
+) -> Value {
     let declared = |value: Value| json!({"value":value,"basis":"user_declared"});
+    let protocol = serde_json::to_value(protocol).unwrap();
+    let profile = format!("profile/custom/{}", protocol.as_str().unwrap());
     json!({
         "inference_model_id":MODEL,"candidate_ref":candidate_ref,"lineage_ref":format!("lineage/{candidate_ref}"),
         "display_name":NAME,"existing_source_id":null,"edit_revision":1,"check_id":"check/windows/public-native",
         "base_url":format!("http://{address}/v1"),"base_kind":"api_root","request_path_override":null,
-        "inventory_path_override":"/v1/models","protocol":"responses","protocol_profile_id":"profile/custom/responses",
+        "inventory_path_override":"/v1/models","protocol":protocol,"protocol_profile_id":profile,
         "protocol_profile_revision":1,"authentication":{"kind":"bearer"},"configuration_revision":1,
         "models":[{"upstream_model_id":MODEL,"display_name":"Windows Native model","catalog_configuration_id":null,
             "membership":"user_declared","capabilities":{
@@ -572,6 +619,13 @@ struct Upstream {
     thread: Option<JoinHandle<()>>,
 }
 impl Upstream {
+    fn diagnostic(&self) {
+        let ledger = self.ledger.lock().unwrap();
+        eprintln!(
+            "Windows Native oracle: posts={}, gets={}, rejected={}, malformed={}",
+            ledger.posts, ledger.gets, ledger.rejected, ledger.malformed
+        );
+    }
     fn start() -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
@@ -621,6 +675,53 @@ impl Upstream {
             "unexpected actual authenticated saved-source GET count"
         );
     }
+}
+
+/// Only native enums, allowlisted issue codes and numeric facts are diagnostic.
+/// Do not print the typed DTO: it also carries target and candidate selectors.
+fn check_diagnostic(value: &Value) {
+    use hiroute_application_api::ModelConnectionCheckViewV1;
+    let check: ModelConnectionCheckViewV1 = serde_json::from_value(value.clone())
+        .expect("Native connection check must conform to its production DTO");
+    let codes: Vec<_> = check
+        .issues
+        .iter()
+        .take(32)
+        .map(|issue| match issue.code.as_str() {
+            "NEEDS_CREDENTIAL"
+            | "RESPONSE_TOO_LARGE"
+            | "AUTH_REJECTED"
+            | "DIRECTORY_FORBIDDEN"
+            | "DIRECTORY_UNAVAILABLE"
+            | "RATE_LIMITED"
+            | "REDIRECT_REJECTED"
+            | "DIRECTORY_FAILED"
+            | "DIRECTORY_INVALID"
+            | "MODEL_LIMIT_REACHED"
+            | "DIRECTORY_PARTIAL"
+            | "DIRECTORY_TRUNCATED"
+            | "INVALID_CHECK_LIMITS"
+            | "CHECK_CANCELLED"
+            | "CHECK_TIMEOUT"
+            | "AUTH_INPUT_INVALID"
+            | "TRANSPORT_FAILED"
+            | "TOOL_CALL_NOT_VERIFIED"
+            | "INFERENCE_FAILED" => issue.code.as_str(),
+            _ => "UNRECOGNIZED_ISSUE_CODE",
+        })
+        .collect();
+    eprintln!(
+        "Windows Native check: reachability={:?}, authentication={:?}, directory={:?}, protocol={:?}, inference={:?}, checked_models={}, invalid_models={}, pages={}, issue_count={}, codes={codes:?}",
+        check.reachability,
+        check.authentication,
+        check.directory,
+        check.protocol,
+        check.inference,
+        check.checked_model_count,
+        check.invalid_model_count,
+        check.pages_read,
+        check.issues.len()
+    );
 }
 impl Drop for Upstream {
     fn drop(&mut self) {

@@ -1,7 +1,9 @@
 //! Required opt-in gates execute fixed official clients through the production Worker lifecycle.
 //! The local model specifies tools; the native clients must discover resources, run tools,
 //! persist exact history and produce independently checked filesystem effects.
-use super::super::native_tools_probe::{CONTINUE_TOOLS, ToolsFixture, ToolsOracle};
+use super::super::native_tools_probe::{
+    CONTINUE_TOOLS, ToolsFixture, ToolsOracle, observe_claude_history,
+};
 use super::*;
 
 fn native_tools(config: WorkerInstallationConfig) -> Result<(), DelegationErrorV1> {
@@ -92,6 +94,14 @@ fn native_tools(config: WorkerInstallationConfig) -> Result<(), DelegationErrorV
         config.harness,
         native_session_id,
     )?;
+    if config.harness == WorkerHarnessV1::ClaudeCode {
+        let transcript = TaskSessionRoot::native_transcript_path(
+            session.path(),
+            config.harness,
+            native_session_id,
+        )?;
+        observe_claude_history(&transcript);
+    }
     let required = history
         .into_iter()
         .map(std::path::PathBuf::from)

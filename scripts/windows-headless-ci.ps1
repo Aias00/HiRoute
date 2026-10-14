@@ -310,6 +310,10 @@ if ($Scope -eq 'components') {
   Invoke-RequiredTests 'agent-cancel-oracle' @('-p','hiroute-daemon','--lib',$cancelOracle) @($cancelOracle) @('--exact')
   $mainOracle = 'agents::collaboration_probe::tests::codex_collaboration_accepts_correlated_native_text_content_items_only'
   Invoke-RequiredTests 'agent-main-oracle' @('-p','hiroute-integrations','--lib',$mainOracle) @($mainOracle) @('--exact')
+  $historyOracle = 'delegation::installation::installation_probe::native_tools_probe::history_probe::tests::'
+  Invoke-RequiredTests 'agent-history-oracle' @('-p','hiroute-daemon','--lib',$historyOracle) @(
+    ($historyOracle + 'closed_history_shape_distinguishes_missing_failed_and_alternate_results'),
+    ($historyOracle + 'closed_history_diagnostics_cannot_include_arbitrary_native_values'))
   $privateRoot = 'delegation::installation::installation_probe::windows_probe_root_creates_strict_private_directories_before_native_launch'
   Invoke-RequiredTests 'agent-private-root' @('-p','hiroute-daemon','--lib',$privateRoot) @($privateRoot) @('--exact','--nocapture')
   Initialize-WindowsAgentInputs

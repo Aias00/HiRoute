@@ -85,19 +85,40 @@ impl ClaudeProfileReader for ControlledReader {
 }
 
 fn write_source(path: &Path, token: &str) {
-    private_atomic_write(
-        path,
-        &serde_json::to_vec(&serde_json::json!({
-            "claudeAiOauth": {
-                "accessToken": token,
-                "refreshToken": "TEST_REFRESH_MUST_REMAIN_NATIVE",
-                "expiresAt": u64::MAX,
-                "scopes": ["user:profile", "user:inference"]
-            }
-        }))
-        .unwrap(),
-    )
-    .unwrap();
+    private_atomic_write(path, &source_bytes(token)).unwrap();
+}
+
+fn source_bytes(token: &str) -> Vec<u8> {
+    serde_json::to_vec(&serde_json::json!({
+        "claudeAiOauth": {
+            "accessToken": token,
+            "refreshToken": "TEST_REFRESH_MUST_REMAIN_NATIVE",
+            "expiresAt": u64::MAX,
+            "scopes": ["user:profile", "user:inference"]
+        }
+    }))
+    .unwrap()
+}
+
+fn rotate_source_while_reading(path: &Path, token: &str) {
+    #[cfg(not(windows))]
+    write_source(path, token);
+    #[cfg(windows)]
+    {
+        use std::io::Write as _;
+        // The borrowed reader pins its native file against replacement while
+        // remote profile IO is outstanding. Native refresh may still update the
+        // same object; keep that real write boundary rather than relaxing it.
+        let mut writer = hiroute_platform::windows::security::open_read_write(path).unwrap();
+        let identity = hiroute_platform::windows::security::file_identity(&writer).unwrap();
+        writer.set_len(0).unwrap();
+        writer.write_all(&source_bytes(token)).unwrap();
+        writer.sync_all().unwrap();
+        assert_eq!(
+            hiroute_platform::windows::security::file_identity(&writer).unwrap(),
+            identity
+        );
+    }
 }
 
 fn source(root: &Path, token: &str, reader: &Arc<ControlledReader>) -> BorrowedClaudeAuthSpec {
@@ -214,7 +235,7 @@ fn slow_old_revision_does_not_hold_up_new_identity_or_overwrite_its_result() {
         let old_spec = spec.clone();
         let old = thread::spawn(move || old_spec.inspect());
         gate.wait_entered();
-        write_source(spec.source_path(), "new-access");
+        rotate_source_while_reading(spec.source_path(), "new-access");
         let new_spec = spec.clone();
         let (completed, completion) = mpsc::channel();
         let new = thread::spawn(move || {

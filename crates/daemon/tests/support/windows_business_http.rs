@@ -16,11 +16,18 @@ pub struct Request {
     pub method: String,
     pub path: String,
     authorization: Option<String>,
+    headers: Vec<(String, String)>,
     pub body: Value,
 }
 impl Request {
     pub fn authenticated(&self, secret: &str) -> bool {
         self.authorization.as_deref() == Some(secret)
+    }
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers
+            .iter()
+            .find(|(key, _)| key.eq_ignore_ascii_case(name))
+            .map(|(_, value)| value.as_str())
     }
 }
 pub struct Reply {
@@ -125,8 +132,10 @@ fn read_request(stream: &mut TcpStream) -> Request {
     assert_eq!(first.next(), Some("HTTP/1.1"));
     let mut length = 0;
     let mut authorization = None;
+    let mut headers = Vec::new();
     for line in lines.filter(|line| !line.is_empty()) {
         let (name, value) = line.split_once(':').unwrap();
+        headers.push((name.to_owned(), value.trim().to_owned()));
         if name.eq_ignore_ascii_case("content-length") {
             length = value.trim().parse::<usize>().unwrap();
         }
@@ -150,6 +159,7 @@ fn read_request(stream: &mut TcpStream) -> Request {
         method,
         path,
         authorization,
+        headers,
         body,
     }
 }

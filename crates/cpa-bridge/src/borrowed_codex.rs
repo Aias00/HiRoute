@@ -903,7 +903,10 @@ pub(super) fn acquire_lock(path: &Path) -> Result<File, CpaLifecycleError> {
     validate_private_file(path).map_err(|_| CpaLifecycleError::InvalidBorrowedCodexAuth)?;
     match file.try_lock_exclusive() {
         Ok(()) => Ok(file),
-        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+        // fs2 returns the native lock-conflict code. On Windows this is
+        // ERROR_LOCK_VIOLATION, whose ErrorKind is not WouldBlock. Do not map
+        // arbitrary permission/share failures to an existing authorized lease.
+        Err(error) if error.raw_os_error() == fs2::lock_contended_error().raw_os_error() => {
             Err(CpaLifecycleError::BorrowedCodexAuthAlreadyLeased)
         }
         Err(_) => Err(CpaLifecycleError::BorrowedCodexAuthIo),

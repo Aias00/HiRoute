@@ -177,7 +177,19 @@ pub(super) fn assert_committed(product: &InstalledProduct, plan: &str, count: us
                                 .is_some_and(|pair| [(31, 12), (37, 13)].contains(&pair))
                         })
                 {
-                    assert_eq!(usage["native_model"], MODEL);
+                    let ordinal = usage["attempt_ordinal"].as_u64().unwrap();
+                    let started = facts["data"]["facts"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .find(|fact| {
+                            fact["event_kind"] == "attempt_started"
+                                && fact["attempt_ordinal"].as_u64() == Some(ordinal)
+                        })
+                        .expect(
+                            "same public request must retain its exact actual attempt identity",
+                        );
+                    assert_eq!(started["native_model"], MODEL);
                     observed_usage.0 += usage["input_tokens"].as_u64().unwrap();
                     observed_usage.1 += usage["output_tokens"].as_u64().unwrap();
                     observed.insert(id.to_owned());

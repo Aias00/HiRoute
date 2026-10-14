@@ -67,7 +67,16 @@ pub fn assert_committed(product: &InstalledProduct, plan: &str) {
                         usage["input_tokens"].as_u64().unwrap(),
                         usage["output_tokens"].as_u64().unwrap(),
                     );
-                    assert_eq!(usage["native_model"], MODEL);
+                    let ordinal = usage["attempt_ordinal"].as_u64().unwrap();
+                    let started = values
+                        .iter()
+                        .find(|fact| {
+                            fact["event_kind"] == "attempt_started"
+                                && fact["attempt_ordinal"].as_u64() == Some(ordinal)
+                        })
+                        .expect("the actual request must contain its attempt model identity");
+                    assert_eq!(started["native_model"], MODEL);
+                    assert_eq!(started["attempt_ordinal"], usage["attempt_ordinal"]);
                     assert_eq!(usage["cache_read_tokens"], 3);
                     assert_eq!(usage["reasoning_tokens"], 2);
                     assert!(!values.is_empty());

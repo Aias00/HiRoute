@@ -1,4 +1,4 @@
-//! Evidence for x64 user-mode execution on a real Windows 11 ARM64 host.
+//! Evidence for actual x64 execution on Windows 11 x64 or ARM64 hosts.
 //! An opted-in client gate never infers native architecture from shell variables.
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
@@ -14,7 +14,8 @@ use windows_sys::Win32::System::Threading::{
 };
 
 pub const VARIABLE: &str = "HIROUTE_WINDOWS_EXECUTION_HOST";
-const MODE: &str = "windows11-arm-x64";
+const ARM_MODE: &str = "windows11-arm-x64";
+const X64_MODE: &str = "windows11-x64";
 const AMD64: u16 = 0x8664;
 const ARM64: u16 = 0xaa64;
 
@@ -55,15 +56,18 @@ unsafe extern "system" {
     fn RtlGetVersion(version: *mut VersionInformation) -> i32;
 }
 
-pub fn selected() -> bool {
+pub fn mode() -> Option<&'static str> {
     match std::env::var(VARIABLE) {
-        Ok(mode) => {
-            assert_eq!(mode, MODE, "unknown execution-host evidence mode");
-            true
-        }
-        Err(std::env::VarError::NotPresent) => false,
+        Ok(mode) if mode == ARM_MODE => Some(ARM_MODE),
+        Ok(mode) if mode == X64_MODE => Some(X64_MODE),
+        Ok(_) => panic!("unknown execution-host evidence mode"),
+        Err(std::env::VarError::NotPresent) => None,
         Err(error) => panic!("execution-host evidence mode is invalid: {error}"),
     }
+}
+
+pub fn selected() -> bool {
+    mode().is_some()
 }
 
 pub fn current() -> Option<Value> {
@@ -180,13 +184,23 @@ fn process(handle: HANDLE) -> Value {
         unsafe { IsWow64Process2(handle, &mut wow_machine, &mut native_machine) },
         0
     );
-    assert_eq!(native_machine, ARM64, "actual host must be ARM64");
+    let arm = mode().unwrap() == ARM_MODE;
+    assert_eq!(
+        native_machine,
+        if arm { ARM64 } else { AMD64 },
+        "actual native host machine must match the explicit evidence mode"
+    );
+    if !arm {
+        assert_eq!(wow_machine, 0, "native x64 must not use WOW64 emulation");
+    }
     // x64 emulation does not require the x86 WOW64 layer. Keep the raw value,
     // while using ProcessMachineTypeInfo for the actual x64 process architecture.
     json!({
         "host_os":"Windows 11", "os_version":format!("{}.{}.{}", version.major, version.minor, version.build),
-        "host_machine":"ARM64", "process_machine":"AMD64", "execution":"x64_emulation",
+        "host_machine":if arm { "ARM64" } else { "AMD64" }, "process_machine":"AMD64",
+        "execution":if arm { "x64_emulation" } else { "native_x64" },
         "native_machine":native_machine, "wow_process_machine":wow_machine,
-        "process_machine_attributes":machine.attributes, "arm64_native_evidence":false
+        "process_machine_attributes":machine.attributes, "arm64_native_evidence":false,
+        "x64_native_evidence":!arm
     })
 }

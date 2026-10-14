@@ -9,10 +9,16 @@ mod windows_claude_connection;
 mod windows_decision_business;
 #[path = "support/windows_execution_host.rs"]
 mod windows_execution_host;
+#[path = "support/windows_free_admission.rs"]
+mod windows_free_admission;
+#[path = "support/windows_gateway_foreground_recovery.rs"]
+mod windows_gateway_foreground_recovery;
 #[path = "support/windows_headless_business.rs"]
 mod windows_headless_business;
 #[path = "support/windows_model_ratings.rs"]
 mod windows_model_ratings;
+#[path = "support/windows_native_protocols.rs"]
+mod windows_native_protocols;
 #[path = "support/windows_routing_business.rs"]
 mod windows_routing_business;
 #[path = "support/windows_routing_modes.rs"]
@@ -131,8 +137,21 @@ impl InstalledProduct {
     }
 
     fn start(&self) -> RunningDaemon {
-        let mut child = Command::new(&self.daemon)
-            .args(["--role", "all", "--standalone"])
+        self.start_with_entry(false)
+    }
+
+    fn start_via_cli(&self) -> RunningDaemon {
+        self.start_with_entry(true)
+    }
+
+    fn start_with_entry(&self, cli: bool) -> RunningDaemon {
+        let mut command = Command::new(if cli { &self.stable } else { &self.daemon });
+        if cli {
+            command.args(["service", "run"]);
+        } else {
+            command.args(["--role", "all", "--standalone"]);
+        }
+        let mut child = command
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -183,10 +202,23 @@ impl InstalledProduct {
         let ready = readiness
             .recv_timeout(Duration::from_secs(45))
             .expect("real standalone daemon must emit its production readiness frame");
-        assert_eq!(
-            ready["process_id"].as_u64(),
-            Some(u64::from(running.child.id()))
-        );
+        if cli {
+            let actual =
+                lifecycle::query(&self.layout.lifecycle_endpoint(), &self.daemon, IO_BOUND)
+                    .unwrap();
+            assert_eq!(ready["process_id"].as_u64(), Some(u64::from(actual.pid)));
+            assert_ne!(
+                actual.pid,
+                running.child.id(),
+                "service run wrapper must identify the actual daemon separately"
+            );
+            assert!(!actual.exited().unwrap());
+        } else {
+            assert_eq!(
+                ready["process_id"].as_u64(),
+                Some(u64::from(running.child.id()))
+            );
+        }
         running.listen = ready["gateway_listen"].as_str().unwrap().parse().unwrap();
         assert_eq!(
             ready["control_endpoint"],
@@ -677,6 +709,7 @@ fn actual_windows_complete_public_headless_business() {
     windows_decision_business::roundtrip(&product);
     let routing = windows_routing_business::Routing::setup(&product);
     let modes = windows_routing_modes::Modes::setup(&product);
+    let mut native = windows_native_protocols::NativeProtocols::setup(&product);
     let ratings = windows_model_ratings::Ratings::run(&product);
     let mut workers = windows_worker_business::WorkerBusiness::run(
         &product,
@@ -684,6 +717,8 @@ fn actual_windows_complete_public_headless_business() {
             &routing.plan.plan_id,
             &modes.smart.plan_id,
             &modes.custom.plan_id,
+            &native.chat.plan.plan_id,
+            &native.messages.plan.plan_id,
         ],
     );
     let claude =
@@ -697,6 +732,8 @@ fn actual_windows_complete_public_headless_business() {
     claude.launch(&product, &routing.plan.alias);
     routing.assert_native_launch_reached_upstream();
     modes.traffic(&product, first.listen, workers.connection_id());
+    native.traffic(&product, first.listen, workers.connection_id());
+    let gateway_recovery = windows_gateway_foreground_recovery::Recovery::begin(&product, &first);
     lifecycle::stop(
         &product.layout.lifecycle_endpoint(),
         &product.daemon,
@@ -704,10 +741,13 @@ fn actual_windows_complete_public_headless_business() {
     )
     .unwrap();
     first.wait(true);
-    let mut business_recovered = product.start();
+    gateway_recovery.recover_without_manager(&product);
+    let mut business_recovered = product.start_via_cli();
     gateway_ready(business_recovered.listen);
+    gateway_recovery.recovered(&product, &business_recovered);
     ratings.recovered(&product);
     modes.recovered(&product, business_recovered.listen, workers.connection_id());
+    native.recovered(&product);
     workers.recovered(&product);
     claude.recovered(&product);
     workers.restore(&product);

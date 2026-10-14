@@ -323,11 +323,15 @@ impl Drop for ReclaimGuard {
 
 fn lock_reclaim(parent: &Path) -> Result<ReclaimGuard, OwnerError> {
     let file = open_reclaim_file(parent)?;
-    file.try_lock_exclusive()
-        .map_err(|error| match error.kind() {
-            std::io::ErrorKind::WouldBlock => OwnerError::ReclaimContended,
-            _ => OwnerError::Io(error),
-        })?;
+    file.try_lock_exclusive().map_err(|error| {
+        // Only the lock API's native conflict code authorizes the typed busy
+        // result. Windows ERROR_LOCK_VIOLATION is not ErrorKind::WouldBlock.
+        if error.raw_os_error() == fs2::lock_contended_error().raw_os_error() {
+            OwnerError::ReclaimContended
+        } else {
+            OwnerError::Io(error)
+        }
+    })?;
     Ok(ReclaimGuard(file))
 }
 

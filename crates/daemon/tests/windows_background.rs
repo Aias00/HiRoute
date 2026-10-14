@@ -19,6 +19,8 @@ mod windows_background_upgrade_business;
 mod windows_candidate_source;
 #[path = "support/windows_execution_host.rs"]
 mod windows_execution_host;
+#[path = "support/windows_gateway_recovery.rs"]
+mod windows_gateway_recovery;
 #[path = "support/windows_subscription_login.rs"]
 mod windows_subscription_login;
 #[path = "support/windows_token_launcher.rs"]
@@ -423,6 +425,7 @@ fn task_native_background_lua_gateway_control_stop_crash_recovery_and_autostart(
     assert_eq!(first["sid"], sid);
     assert_eq!(first["session"], expected_session);
     assert_status(&token, &cli, "windows-task-user", true);
+    windows_gateway_recovery::exercise(&token, &cli, &first, &sid, expected_session);
     let oauth_pending = windows_subscription_login::run_before_restart(&mut |args, request| {
         subscription_cli(&token, &cli, args, request)
     });
@@ -635,6 +638,7 @@ fn scm_standard_owner_pending_admin_finalize_session_zero_gateway_control_and_de
         "real SCM business runtime must operate without an interactive owner logon"
     );
     assert_status(token, &cli, "windows-scm-user", true);
+    windows_gateway_recovery::exercise(token, &cli, &first, &account.sid, 0);
     let oauth_pending = windows_subscription_login::run_before_restart(&mut |args, request| {
         subscription_cli(token, &cli, args, request)
     });

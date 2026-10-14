@@ -81,7 +81,10 @@ the whole verified package with fresh administrator ACLs before Task/SCM tests.
 Static PE import auditing rejects Debug CRT dependencies; actual process launch
 still owns DLL resolution and runtime acceptance. The `windows-11-arm` hosted
 consumer explicitly records x64 emulation on ARM64, which does not establish
-native ARM64 product support. Consumer results retain the producer revision and
+native ARM64 product support. An explicitly selected `windows11-x64` replay also
+accepts a real x64 Windows 11 workstation; it checks the actual OS and process
+machine and records native x64 separately. This option does not provision a runner
+or supply an interactive login. Consumer results retain the producer revision and
 have their own runtime scenario evidence.
 
 The toolchain comes from `rust-toolchain.toml`. Cargo sources are cached, not

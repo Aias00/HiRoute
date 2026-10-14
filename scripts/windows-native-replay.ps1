@@ -8,7 +8,8 @@ param(
   [string[]]$RelatedRun = @(),
   [string]$BaselineManifest,
   [string]$BaselineArchive,
-  [string]$BaselineRevision
+  [string]$BaselineRevision,
+  [ValidateSet('windows11-arm-x64','windows11-x64')][string]$ExecutionHost = 'windows11-arm-x64'
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -18,13 +19,16 @@ Set-Location $root
 $bundle = (Resolve-Path $Bundle).Path
 $evidence = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Evidence)
 $os = Get-CimInstance Win32_OperatingSystem
+$hostArchitecture = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
+$expectedArchitecture = if ($ExecutionHost -eq 'windows11-arm-x64') { 'Arm64' } else { 'X64' }
+$runtimeExecution = if ($ExecutionHost -eq 'windows11-arm-x64') { 'x64_emulation' } else { 'native_x64' }
 if (-not $IsWindows -or $os.ProductType -ne 1 -or [int]$os.BuildNumber -lt 22000 -or
-    [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString() -ne 'Arm64') {
-  throw 'This replay gate requires the actual Windows 11 ARM64 hosted machine'
+    $hostArchitecture -cne $expectedArchitecture) {
+  throw 'Replay requires an actual Windows 11 machine matching the explicit execution host'
 }
 New-Item -ItemType Directory -Force $evidence | Out-Null
 $env:HIROUTE_BUILD_SOURCE_SHA = $ExpectedSha
-$env:HIROUTE_WINDOWS_EXECUTION_HOST = 'windows11-arm-x64'
+$env:HIROUTE_WINDOWS_EXECUTION_HOST = $ExecutionHost
 $env:HIROUTE_WINDOWS_SOURCE_ROOT = $root
 $env:CARGO_TERM_COLOR = 'never'
 python scripts/windows-native-artifacts.py verify --expected-sha $ExpectedSha --evidence $bundle > "$evidence/artifact-verification.json"
@@ -40,8 +44,9 @@ if ($actualRecipes.Count -ne $requiredRecipes.Count -or
 }
 @{ source_revision = $ExpectedSha; validation_revision = $env:GITHUB_SHA; scope = $Scope;
    plan = $Plan; phase = $Phase; related_runs = $RelatedRun; caption = $os.Caption;
-   version = $os.Version; host_architecture = 'Arm64'; target_architecture = 'X64';
-   execution = 'x64_emulation'; arm64_native_evidence = $false;
+   version = $os.Version; host_architecture = $hostArchitecture; target_architecture = 'X64';
+   execution = $runtimeExecution; arm64_native_evidence = $false;
+   x64_native_evidence = ($ExecutionHost -eq 'windows11-x64');
    image_version = $env:ImageVersion; rustc = $manifest.build.rustc_verbose;
    cargo = 'Exact compiler-artifact replay; Cargo not run on consumer';
    producer_revision = $manifest.build.source_sha
@@ -104,7 +109,7 @@ try {
                  source_revision = $ExpectedSha; ignored = 0; process_exit = $null;
                  plan = $Plan; phase = $Phase; related_runs = $RelatedRun;
                  command = @($executable) + $arguments + @('--test-threads=1') + $harness;
-                 producer_target = $manifest.build.target; execution = 'x64_emulation' }
+                 producer_target = $manifest.build.target; execution = $runtimeExecution }
     $started = Get-Date
     try {
       & $executable @arguments --list @harness 2>&1 | Tee-Object "$evidence/$name-inventory.log"
