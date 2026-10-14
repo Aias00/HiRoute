@@ -58,7 +58,7 @@ function Get-WindowsRequiredRecipes {
     'product' { return @('artifacts','cpa','core-cpa-bridge','replay-fragmentation','headless','credential-options','worker-materials',
       'worker-cleanup','authority-key','native-endpoint','native-home','startup-admission','live-capture') }
     'core' { return @(Get-WindowsCorePackages | ForEach-Object { $_ -replace '^hiroute-','core-' }) }
-    'background' { return @('background-capture','packaged-proxy-oracle','packaged-foreground','background','background-standard-owner') }
+    'background' { return @((Get-WindowsBackgroundDisposition).Keys) }
     'upgrade' { return @('upgrade') }
     'accounts' { return @(Get-WindowsQoderAccountRecipes | ForEach-Object { $_.name }) }
     'agents' {
@@ -69,5 +69,49 @@ function Get-WindowsRequiredRecipes {
         @(Get-WindowsMainAgentCases | ForEach-Object { 'main-' + (($_ -split 'actual_windows_')[1] -replace '_','-') })
     }
     default { throw 'Unknown required native scope' }
+  }
+}
+
+# This is the one complete background name inventory. The value selects hosted
+# execution only; full assessment executes every entry. Additions need an explicit
+# disposition and cannot silently inherit a hosted waiver.
+function Get-WindowsBackgroundDisposition {
+  $policy = [ordered]@{
+    'background-capture'='execute'; 'packaged-proxy-oracle'='execute'; 'packaged-foreground'='execute';
+    'background'='compile-only'; 'background-standard-owner'='compile-only'
+  }
+  if ($policy.Count -eq 0 -or @($policy.Values | Where-Object { $_ -cnotin @('execute','compile-only') }).Count -gt 0) {
+    throw 'Complete typed background disposition required'
+  }
+  return $policy
+}
+function Get-WindowsRuntimeDisposition {
+  param([string]$Scope, [string]$Name, [ValidateSet('full','hosted')][string]$Assessment='full')
+  $required = @(Get-WindowsRequiredRecipes $Scope)
+  if ($Name -cnotin $required) { throw 'Unknown required native recipe' }
+  if ($Assessment -eq 'full') { return 'execute' }
+  if ($Scope -cne 'background') { throw 'Hosted assessment is limited to background' }
+  $policy = Get-WindowsBackgroundDisposition
+  if ($Name -cnotin $policy.Keys) { throw 'Unknown hosted background recipe' }
+  return $policy[$Name]
+}
+function Get-WindowsAssessmentNames {
+  param([string]$Scope, [ValidateSet('full','hosted')][string]$Assessment='full',
+        [ValidateSet('execute','compile-only')][string]$Disposition='execute')
+  return @(Get-WindowsRequiredRecipes $Scope | Where-Object {
+    (Get-WindowsRuntimeDisposition -Scope $Scope -Name $_ -Assessment $Assessment) -ceq $Disposition
+  })
+}
+
+function Assert-WindowsDeferredInventory {
+  param([Parameter(Mandatory)][string]$Inventory, [Parameter(Mandatory)][string[]]$Required)
+  $listed = @([regex]::Matches($Inventory, '(?m)^(\S+): test\r?$') | ForEach-Object { $_.Groups[1].Value })
+  $unique = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+  foreach ($case in $Required) {
+    if (-not $case -or -not $unique.Add($case)) { throw 'Nonempty unique deferred cases required' }
+  }
+  if ($Required.Count -eq 0 -or $listed.Count -ne $Required.Count -or
+      (Compare-Object ($listed | Sort-Object) ($Required | Sort-Object) -CaseSensitive)) {
+    throw 'Exact nonzero deferred inventory required'
   }
 }

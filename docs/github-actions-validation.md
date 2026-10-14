@@ -12,7 +12,7 @@ native Windows acceptance uses `scripts/windows-headless-ci.ps1`.
 | `gateway-core-dedicated.yml` | Manual or reusable | Hosted Linux production stability and socket churn |
 | `p0-gateway-final-gates.yml` | Manual | Aggregate the three current hosted workflows |
 | `build-release.yml` | Manual, exact dispatch SHA | Native macOS ARM64/Intel DMGs and Linux/Windows x86_64/ARM64 archives; uploads candidate assets and integrity evidence for the existing release publisher |
-| `windows-headless.yml` | PR, main push, manual, reusable | Native MSVC primitives, full shared business libraries, foreground control/Gateway, logged-on Task installation and fixed upstream Agent clients; complete x64 artifact replay on Windows 11 ARM64 |
+| `windows-headless.yml` | PR, main push, manual, reusable | Native MSVC primitives, shared business libraries, foreground control/Gateway and fixed upstream clients; complete background artifacts with explicit deferred Task acceptance; x64 artifact replay on Windows 11 ARM64 |
 
 Normal Rust checks select the organization `Default` runner group with the
 `cncf-ubuntu-16-64-x86` label. The organization must permit this public repository
@@ -74,10 +74,31 @@ a standard account with `LogonUser` also does not create an existing interactive
 desktop login. These defaults cannot establish the required standard-owner Task
 result. The standard-owner gate requires an actual logged-in standard token; the
 separate administrator-controlled Task gate also requires its linked limited token.
-Each selected gate
+With the default `-Assessment full`, each selected gate
 remains failed when those prerequisites are absent. Read-only RDP service and
 port facts alone do not establish such a login or a passing background task.
 SCM and logout continuity are optional, outside the required background scope.
+
+The public hosted workflow selects `-Assessment hosted` for the `background`
+scope on both machines. This mode requires `-CaptureArtifacts` on the producer
+and preserves the complete five-recipe inventory, actual compiler records, PE
+verification and full package. Its single source disposition table is in
+`windows-native-scopes.ps1`. It executes `background-capture`,
+`packaged-proxy-oracle` and `packaged-foreground` (eight current cases). It compiles,
+captures and lists `background` and `background-standard-owner` without running
+their bodies. A missing or additional case, compile/capture/PE failure, unknown
+recipe or failed executed case fails the hosted assessment.
+
+Deferred results have `scenario=not_assessed`, `executed=0`,
+`runtime_executed=false`, `process_exit=null`, and verified compilation, inventory
+and capture facts. They do not represent a failed Task prerequisite being turned
+into a pass. `validation-feedback.json` records the complete runtime/deferred
+partition; even a successful hosted assessment has `scenario=not_assessed`,
+`full_scope=false`, `candidate_complete=false` and
+`background_acceptance=not_assessed`. Real logged-owner execution and upgrade
+remain distinct acceptance gates. A workstation caller selects `full` (the
+default) and runs every original gate. Existing focused drivers without an
+assessment field retain their selected-case verdicts without a full-scope claim.
 The separate candidate upgrade gate uses two distinct, fully verified source revisions
 and independently restages the original baseline with fresh administrator trust.
 It preserves actual public Source/Key/Plan, Agent restoration, Gateway traffic and
@@ -88,7 +109,8 @@ For a separately selected Windows 11 workstation run, `-CaptureArtifacts` record
 the exact Cargo `compiler-artifact` executable for every required test recipe,
 the product binaries, locked source inputs and complete package bytes. The
 `windows-native-replay.ps1` consumer rejects a partial scope, verifies every hash
-and source SHA, and runs those executables without rebuilding Rust. It restages
+and source SHA, and uses the same assessment partition without rebuilding Rust.
+In `full` mode it runs every captured recipe. It restages
 the whole verified package with fresh administrator ACLs before Task/SCM tests.
 Static PE import auditing rejects Debug CRT dependencies; actual process launch
 still owns DLL resolution and runtime acceptance. The `windows-11-arm` hosted
@@ -136,6 +158,7 @@ The adapter can be tested without Rust compilation or remote access:
 python3 scripts/test-ci-run.py
 python3 scripts/test-ci-shards.py
 python3 scripts/ci-shards.py check
+python3 scripts/test-windows-ci-report.py
 ```
 
 ## Coverage boundaries

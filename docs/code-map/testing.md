@@ -133,6 +133,18 @@ integrities and official Qoder archive hashes; the
 and native verdict. A build or client initialize is not evidence of tool execution,
 provider login, Windows 11, or another processor architecture.
 
+[Native scope dispositions](../../scripts/windows-native-scopes.ps1) own the
+complete background recipe names and the hosted runtime/deferred partition.
+Hosted producer and replay retain every compiler artifact and exact nonempty
+inventory while deferring the two logged-owner Task bodies. The feedback adapter
+checks zero execution, null exit and actual capture/list facts against the original
+verified manifest; missing compilation or a failed executable gate stays red.
+Its successful hosted assessment remains `not_assessed` for background acceptance,
+with no full-scope or complete-candidate claim. Use default `full` for actual
+logged-owner acceptance; that mode keeps every original runtime gate. See
+[hosted evidence limits](../github-actions-validation.md) and the adapter's
+[regressions](../../scripts/test-windows-ci-report.py) before changing this boundary.
+
 The [installed management journey](../../crates/daemon/tests/support/windows_management_business.rs)
 keeps Host collaboration receipts, native defaults and model authority separate.
 Its foreground doctor/logs negatives do not replace the

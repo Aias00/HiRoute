@@ -9,13 +9,15 @@ param(
   [string]$BaselineManifest,
   [string]$BaselineArchive,
   [string]$BaselineRevision,
-  [ValidateSet('windows11-arm-x64','windows11-x64')][string]$ExecutionHost = 'windows11-arm-x64'
+  [ValidateSet('windows11-arm-x64','windows11-x64')][string]$ExecutionHost = 'windows11-arm-x64',
+  [ValidateSet('full','hosted')][string]$Assessment='full'
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 Set-Location $root
 . "$PSScriptRoot/windows-native-scopes.ps1"
 . "$PSScriptRoot/windows-upgrade-inputs.ps1"
+if ($Assessment -eq 'hosted' -and $Scope -cne 'background') { throw 'Hosted assessment is limited to background' }
 $bundle = (Resolve-Path $Bundle).Path
 $evidence = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Evidence)
 $os = Get-CimInstance Win32_OperatingSystem
@@ -39,10 +41,13 @@ $manifest = Get-Content "$bundle/native-artifacts.json" -Raw | ConvertFrom-Json
 $requiredRecipes = @(Get-WindowsRequiredRecipes $Scope)
 $actualRecipes = @($manifest.recipes | ForEach-Object { [string]$_.name })
 if ($actualRecipes.Count -ne $requiredRecipes.Count -or
-    (Compare-Object ($actualRecipes | Sort-Object) ($requiredRecipes | Sort-Object))) {
+    (Compare-Object ($actualRecipes | Sort-Object) ($requiredRecipes | Sort-Object) -CaseSensitive)) {
   throw 'Complete scope recipe inventory required; partial producer artifacts cannot establish Windows 11 acceptance'
 }
 @{ source_revision = $ExpectedSha; validation_revision = $env:GITHUB_SHA; scope = $Scope;
+   assessment=$Assessment; runtime_recipes=@(Get-WindowsAssessmentNames $Scope $Assessment 'execute');
+   deferred_recipes=@(Get-WindowsAssessmentNames $Scope $Assessment 'compile-only');
+   full_scope=($Assessment -eq 'full'); candidate_complete=$false;
    plan = $Plan; phase = $Phase; related_runs = $RelatedRun; caption = $os.Caption;
    version = $os.Version; os_product_type = [int]$os.ProductType; os_build_number = [int]$os.BuildNumber;
    host_architecture = $hostArchitecture; target_architecture = 'X64';
@@ -100,6 +105,7 @@ if ($Scope -in @('agents','accounts','upgrade')) {
 }
 
 $failures = [System.Collections.Generic.List[string]]::new()
+$scopeExceptionFailed=$false
 try {
   if ($manifest.recipes.Count -eq 0) { throw 'Required replay inventory is empty' }
   foreach ($recipe in $manifest.recipes) {
@@ -114,15 +120,34 @@ try {
                  plan = $Plan; phase = $Phase; related_runs = $RelatedRun;
                  command = @($executable) + $arguments + @('--test-threads=1') + $harness;
                  producer_target = $manifest.build.target; execution = $runtimeExecution }
+    $disposition=Get-WindowsRuntimeDisposition -Scope $Scope -Name $name -Assessment $Assessment
+    $result.assessment=$Assessment
+    $result.runtime_executed=$false
+    $result.artifact_capture_verified=$true
+    $result.build_status='compiled'
+    $result.inventory_verified=$false
+    $result.inventory_exit=$null
     $started = Get-Date
     try {
       & $executable @arguments --list @harness 2>&1 | Tee-Object "$evidence/$name-inventory.log"
+      $result.inventory_exit=$LASTEXITCODE
       if ($LASTEXITCODE -ne 0) { throw "$name native executable inventory failed" }
       $inventory = Get-Content "$evidence/$name-inventory.log" -Raw
       foreach ($case in $required) {
         $escaped = [regex]::Escape($case)
         if ($inventory -notmatch "(?m)^${escaped}: test`r?$") { throw "Required replay case missing: $case" }
       }
+      $result.inventory_verified=$true
+      if ($disposition -eq 'compile-only') {
+        Assert-WindowsDeferredInventory -Inventory $inventory -Required $required
+        $result.command=@($executable)+$arguments+@('--list')+$harness
+        $result.scenario='not_assessed'
+        $result.build_status='compiled'
+        $result.inventory_verified=$true
+        $result.deferred_reason='requires_real_logged_owner'
+        continue
+      }
+      $result.runtime_executed=$true
       $result.command_started_at = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() / 1000.0
       & $executable @arguments --test-threads=1 @harness 2>&1 | Tee-Object "$evidence/$name.log"
       $result.process_exit = $LASTEXITCODE
@@ -145,7 +170,17 @@ try {
       $result | ConvertTo-Json -Depth 5 | Out-File -Encoding utf8 "$evidence/$name-result.json"
     }
   }
+} catch {
+  $scopeExceptionFailed=$true
+  throw
 } finally {
+  @{ schema='hiroute.windows-native-scope-outcome/v1'; source_revision=$ExpectedSha; scope=$Scope;
+     assessment=$Assessment; invocation_failed=($scopeExceptionFailed -or $failures.Count -gt 0);
+     failure_count=$failures.Count; capture_requested=$true; artifact_verification_passed=$true;
+     runtime_import_audit_passed=$true;
+     native_manifest_sha256=(Get-FileHash -LiteralPath "$bundle/native-artifacts.json" -Algorithm SHA256).Hash.ToLowerInvariant();
+     native_bundle=$bundle
+  } | ConvertTo-Json -Depth 5 | Out-File -Encoding utf8 "$evidence/scope-outcome.json"
   python scripts/windows-ci-report.py $evidence
   if ($LASTEXITCODE -ne 0) { throw 'Windows 11 validation feedback could not be generated' }
 }

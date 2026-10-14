@@ -13,15 +13,22 @@ param(
   [string]$BaselineArchive,
   [string]$BaselineRevision,
   [switch]$CaptureArtifacts,
-  [switch]$InventoryOnly
+  [switch]$InventoryOnly,
+  [ValidateSet('full','hosted')][string]$Assessment='full'
 )
 $ErrorActionPreference = 'Stop'
 $evidence = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Evidence)
 $failures = [System.Collections.Generic.List[string]]::new()
+$scopeExceptionFailed = $false
+$artifactVerified = $false
+$importsVerified = $false
 $root = Split-Path $PSScriptRoot -Parent
 Set-Location $root
 . "$PSScriptRoot/windows-native-scopes.ps1"
 . "$PSScriptRoot/windows-upgrade-inputs.ps1"
+if ($Assessment -eq 'hosted' -and ($Scope -cne 'background' -or -not $CaptureArtifacts -or $InventoryOnly)) {
+  throw 'Hosted assessment requires complete background artifact capture'
+}
 if ($InventoryOnly -and ($Scope -notin @('components','background','agents','accounts') -or $CaptureArtifacts)) {
   throw 'Inventory export requires a static native scope and no artifact capture'
 }
@@ -40,6 +47,9 @@ $env:CARGO_TERM_COLOR = 'never'
 $env:CARGO_INCREMENTAL = '0'
 $os = Get-CimInstance Win32_OperatingSystem
 @{ source_revision = $ExpectedSha; validation_revision = $env:GITHUB_SHA; scope = $Scope;
+   assessment=$Assessment; runtime_recipes=@(Get-WindowsAssessmentNames $Scope $Assessment 'execute');
+   deferred_recipes=@(Get-WindowsAssessmentNames $Scope $Assessment 'compile-only');
+   full_scope=($Assessment -eq 'full'); candidate_complete=$false;
    plan = $Plan; phase = $Phase; related_runs = $RelatedRun; caption = $os.Caption;
    version = $os.Version; cpu_count = [Environment]::ProcessorCount;
    host_architecture = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString();
@@ -73,15 +83,25 @@ function Invoke-RequiredTests {
                source_revision = $ExpectedSha; ignored = 0; process_exit = $null;
                plan = $Plan; phase = $Phase; related_runs = $RelatedRun;
                command = @('cargo','test','--locked') + $CargoArguments + @('--','--test-threads=1') + $HarnessArguments }
+  $disposition=Get-WindowsRuntimeDisposition -Scope $Scope -Name $Name -Assessment $Assessment
+  $result.assessment=$Assessment
+  $result.runtime_executed=$false
+  $result.artifact_capture_verified=$false
+  $result.build_status='not_assessed'
+  $result.inventory_verified=$false
+  $result.inventory_exit=$null
   $started = Get-Date
   try {
     cargo test --locked @CargoArguments -- --list 2>&1 | Tee-Object "$evidence/$Name-inventory.log"
+    $result.inventory_exit=$LASTEXITCODE
     if ($LASTEXITCODE -ne 0) { throw "$Name inventory failed to build" }
     $inventory = Get-Content "$evidence/$Name-inventory.log" -Raw
     foreach ($case in $Required) {
       $escaped = [regex]::Escape($case)
       if ($inventory -notmatch "(?m)^${escaped}: test`r?$") { throw "Required case not selected: $case" }
     }
+    $result.build_status='compiled'
+    $result.inventory_verified=$true
     if ($CaptureArtifacts) {
       # Cargo's progress belongs to stderr even with --message-format=json.
       # Keep the compiler-artifact stream parseable and retain diagnostics separately.
@@ -95,8 +115,20 @@ function Invoke-RequiredTests {
         ConvertTo-Json -Depth 5 | Out-File -Encoding utf8 "$evidence/$Name-recipe.json"
       python scripts/windows-native-artifacts.py capture --expected-sha $ExpectedSha --evidence $evidence --name $Name --cargo-json "$evidence/$Name-cargo-artifacts.log" --recipe-json "$evidence/$Name-recipe.json"
       if ($LASTEXITCODE -ne 0) { throw "$Name executable provenance failed" }
+      $result.artifact_capture_verified=$true
+    }
+    if ($disposition -eq 'compile-only') {
+      if (-not $CaptureArtifacts -or -not $result.artifact_capture_verified) { throw 'Verified deferred executable capture required' }
+      Assert-WindowsDeferredInventory -Inventory $inventory -Required $Required
+      $result.command=@('cargo','test','--locked')+$CargoArguments+@('--no-run','--message-format=json')
+      $result.scenario='not_assessed'
+      $result.build_status='compiled'
+      $result.inventory_verified=$true
+      $result.deferred_reason='requires_real_logged_owner'
+      return
     }
     $result.command_started_at = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() / 1000.0
+    $result.runtime_executed=$true
     cargo test --locked @CargoArguments -- --test-threads=1 @HarnessArguments 2>&1 | Tee-Object "$evidence/$Name.log"
     $result.process_exit = $LASTEXITCODE
     $result.command_finished_at = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() / 1000.0
@@ -488,12 +520,15 @@ if ($Scope -eq 'components') {
     Invoke-RequiredTests $name @('-p','hiroute-integrations','--lib',$case) @($case) @('--ignored','--exact','--nocapture')
   }
 }
+} catch {
+  $scopeExceptionFailed = $true
+  throw
 } finally {
   if ($InventoryOnly) {
     $requiredNames = @(Get-WindowsRequiredRecipes $Scope)
     $actualNames = @($inventoryRecipes | ForEach-Object { $_.name })
     if ($actualNames.Count -ne $requiredNames.Count -or
-        (Compare-Object ($actualNames | Sort-Object) ($requiredNames | Sort-Object))) { throw 'Complete source inventory required' }
+        (Compare-Object ($actualNames | Sort-Object) ($requiredNames | Sort-Object) -CaseSensitive)) { throw 'Complete source inventory required' }
     @{ schema='hiroute.windows-native-source-inventory/v1'; source_revision=$ExpectedSha;
        scope=$Scope; scenario='inventory_only'; runtime_executed=$false; recipes=@($inventoryRecipes.ToArray()) } |
       ConvertTo-Json -Depth 8 | Out-File -Encoding utf8 "$evidence/source-recipe-inventory.json"
@@ -504,13 +539,23 @@ if ($Scope -eq 'components') {
     if ($Scope -in @('background','upgrade') -and (Test-Path "$evidence/package-result.json") -and (Get-Item "$evidence/package-result.json").Length -gt 0) {
       $artifactArgs += @('--package-result',"$evidence/package-result.json")
     }
-    python scripts/windows-native-artifacts.py @artifactArgs
+    python scripts/windows-native-artifacts.py @artifactArgs > "$evidence/artifact-finalization.json"
     if ($LASTEXITCODE -ne 0) { $failures.Add('Native replay artifacts could not be finalized') }
     else {
+      python scripts/windows-native-artifacts.py verify --expected-sha $ExpectedSha --evidence $evidence > "$evidence/artifact-verification.json"
+      if ($LASTEXITCODE -ne 0) { $failures.Add('Final native artifact verification failed') }
+      else { $artifactVerified=$true }
       python scripts/windows-native-runtime-audit.py --expected-sha $ExpectedSha --evidence $evidence > "$evidence/runtime-audit.json"
       if ($LASTEXITCODE -ne 0) { $failures.Add('Native imports require an unavailable Debug CRT or could not be verified') }
+      else { $importsVerified=$true }
     }
   }
+  @{ schema='hiroute.windows-native-scope-outcome/v1'; source_revision=$ExpectedSha; scope=$Scope;
+     assessment=$Assessment; invocation_failed=($scopeExceptionFailed -or $failures.Count -gt 0);
+     failure_count=$failures.Count; capture_requested=[bool]$CaptureArtifacts;
+     artifact_verification_passed=$artifactVerified; runtime_import_audit_passed=$importsVerified;
+     native_manifest_sha256=$(if($artifactVerified){(Get-FileHash -LiteralPath "$evidence/native-artifacts.json" -Algorithm SHA256).Hash.ToLowerInvariant()}else{$null})
+  } | ConvertTo-Json -Depth 5 | Out-File -Encoding utf8 "$evidence/scope-outcome.json"
   python scripts/windows-ci-report.py $evidence
   if ($LASTEXITCODE -ne 0) { throw 'Native validation feedback could not be generated' }
   }
