@@ -112,6 +112,7 @@ function discoveryFailureMessage(code: string, language: 'zh' | 'en'): string {
 }
 
 function discoveredAgentName(agentId: string, language: 'zh' | 'en') {
+  if (agentId.toLocaleLowerCase().includes('hermes')) return 'Hermes';
   if (agentId.toLocaleLowerCase().includes('claude')) return 'Claude Code';
   if (agentId.toLocaleLowerCase().includes('codex')) return 'Codex';
   return language === 'zh' ? '本机 Agent' : 'Local agent';
