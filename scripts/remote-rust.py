@@ -31,6 +31,17 @@ SHARED_BUILD_JOBS = 8
 EXCLUSIVE_BUILD_JOBS = WORKBENCH_SLOTS * SHARED_BUILD_JOBS
 
 
+def workbench_path(value):
+    """A remote HOME-relative path, safe in SSH commands and JSON bootstrap."""
+    if not isinstance(value, str):
+        raise ValueError("workbench must be a HOME-relative path")
+    value = value[2:] if value.startswith("~/") else value
+    if (not re.fullmatch(r"[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*", value)
+            or any(part in (".", "..") for part in value.split("/"))):
+        raise ValueError("workbench must be a HOME-relative path without traversal or shell syntax")
+    return value
+
+
 def reporting():
     path = Path(__file__).with_name("validation-report.py")
     if not path.exists():  # Immutable SSH controller's matching helper.
@@ -527,7 +538,11 @@ def worker(request_path):
             raise RuntimeError("Unknown checkout retention policy")
         if os.environ.get("CARGO_TARGET_DIR") or os.environ.get("CARGO_BUILD_TARGET_DIR"):
             raise RuntimeError("Remove target directory overrides from the remote environment")
-        with capacity(root, request["exclusive"]) as slots:
+        # Every configured repository shares the original account-wide locks.
+        # Existing controllers still use these paths, including legacy slots.
+        capacity_root = Path.home() / workbench_path(request["capacity_root"]) if request.get("capacity_root") else root
+        capacity_root.mkdir(parents=True, exist_ok=True)
+        with capacity(capacity_root, request["exclusive"]) as slots:
             result["capacity_acquired_at"] = time.time()
             result["queue_seconds"] = round(time.monotonic() - queued_clock, 3)
             execution_clock = time.monotonic()
@@ -677,10 +692,13 @@ def require_dag_report(result):
 
 # Bootstrap is deliberately independent of the candidate: it runs the committed driver
 # selected by the caller, records its SHA, and never copies their uncommitted source.
-BOOTSTRAP = '''import hashlib,json,os,pathlib,subprocess,sys,uuid
+BOOTSTRAP = '''import hashlib,json,os,pathlib,re,subprocess,sys,uuid
 os.umask(0o077)
 p=json.load(sys.stdin)
-r=pathlib.Path.home()/".local/share/hiroute-rust"
+relative=p.pop("workbench",".local/share/hiroute-rust")
+parts=relative.split("/")
+if not re.fullmatch(r"[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*",relative) or any(part in (".","..") for part in parts): raise RuntimeError("invalid workbench path")
+r=pathlib.Path.home()/relative
 r.mkdir(parents=True,exist_ok=True)
 c=r/"controllers";c.mkdir(exist_ok=True)
 source=p.pop("source")
@@ -770,16 +788,19 @@ def main():
     if len(sys.argv) == 3 and sys.argv[1] == "_worker":
         worker(Path(sys.argv[2]))
         return
-    if len(sys.argv) == 3 and sys.argv[1] == "_cleanup":
-        print(json.dumps(cleanup_terminal_run(Path.home() / ROOT, sys.argv[2]), indent=2, ensure_ascii=False))
+    if len(sys.argv) in (3, 4) and sys.argv[1] == "_cleanup":
+        root = Path.home() / workbench_path(sys.argv[3] if len(sys.argv) == 4 else ROOT)
+        print(json.dumps(cleanup_terminal_run(root, sys.argv[2]), indent=2, ensure_ascii=False))
         return
-    if len(sys.argv) == 5 and sys.argv[1] == "_gc":
-        print(json.dumps(gc_terminal_runs(Path.home() / ROOT, int(sys.argv[2]),
+    if len(sys.argv) in (5, 6) and sys.argv[1] == "_gc":
+        root = Path.home() / workbench_path(sys.argv[5] if len(sys.argv) == 6 else ROOT)
+        print(json.dumps(gc_terminal_runs(root, int(sys.argv[2]),
                                           sys.argv[3] == "apply", sys.argv[4] == "include-retained"),
                          indent=2, ensure_ascii=False))
         return
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", help="Override host from ~/.config/hiroute/remote-rust.json")
+    parser.add_argument("--workbench", help="Remote HOME-relative root; overrides remote-rust.json")
     sub = parser.add_subparsers(dest="action", required=True)
     run = sub.add_parser("run", help="Queue a focused Cargo command against a pushed commit")
     run.add_argument("--ref", required=True, help="Advertised branch, e.g. refs/heads/codex/my-proposal")
@@ -810,9 +831,14 @@ def main():
     gc.add_argument("--include-retained", action="store_true",
                     help="Also select runs submitted with --retention always")
     args = parser.parse_args()
-    if not args.host:
+    if not args.host or not args.workbench:
         config = json.loads(CONFIG.read_text()) if CONFIG.exists() else {}
+    if not args.host:
         args.host = config.get("host")
+    try:
+        workbench = workbench_path(args.workbench or config.get("workbench", ROOT))
+    except ValueError as error:
+        parser.error(str(error))
     if not args.host or args.host.startswith("-") or any(c.isspace() for c in args.host):
         parser.error("Configure an SSH host in ~/.config/hiroute/remote-rust.json")
     if args.action == "run":
@@ -834,6 +860,7 @@ def main():
         payload = dict(id=time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:8],
                        sha=sha, ref=args.ref, command=cargo, exclusive=args.exclusive or full_test(cargo),
                        timeout=args.timeout, origin=command(["git", "remote", "get-url", "origin"]),
+                       workbench=workbench, capacity_root=ROOT,
                        retention=args.retention, executor_sha=executor_sha,
                        reuse_checkout=args.reuse_checkout, continue_checkout=args.continue_checkout,
                        schedule=args.schedule,
@@ -856,7 +883,7 @@ def main():
             parser.error("wait --timeout must be between 0 and 55 seconds")
         remote = ("python3 -c " + shlex.quote(WAIT_BOOTSTRAP) + " "
                   + shlex.quote(args.id) + " " + str(args.timeout) + " "
-                  + shlex.quote("~/" + ROOT))
+                  + shlex.quote("~/" + workbench))
         completed = subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15",
                                     args.host, remote])
         if completed.returncode:
@@ -869,22 +896,22 @@ def main():
         filename = "result.json" if args.action == "status" else "command.log"
         operation = "cat" if args.action == "status" else "tail -n 100"
         subprocess.run(["ssh", "-o", "BatchMode=yes", args.host,
-                        operation + " ~/" + ROOT + "/runs/" + args.id + "/" + filename], check=True)
+                        operation + " ~/" + workbench + "/runs/" + args.id + "/" + filename], check=True)
     else:
         if args.action == "cleanup":
             try:
                 validate_run_id(args.id)
             except ValueError as error:
                 parser.error(str(error))
-            driver_args = ["_cleanup", args.id]
+            driver_args = ["_cleanup", args.id, workbench]
         else:
             if args.older_than < 0:
                 parser.error("--older-than must be non-negative")
             driver_args = ["_gc", str(args.older_than), "apply" if args.apply else "preview",
-                           "include-retained" if args.include_retained else "default"]
+                           "include-retained" if args.include_retained else "default", workbench]
         executor_sha = command(["git", "rev-parse", "HEAD"])
         source = command(["git", "show", executor_sha + ":scripts/remote-rust.py"]) + "\n"
-        payload = dict(mode="maintenance", driver_args=driver_args, executor_sha=executor_sha,
+        payload = dict(mode="maintenance", workbench=workbench, driver_args=driver_args, executor_sha=executor_sha,
                        executor_digest=hashlib.sha256(source.encode()).hexdigest(), source=source)
         remote = "source ~/.bashrc >/dev/null 2>&1; exec python3 -c " + shlex.quote(BOOTSTRAP)
         subprocess.run(["ssh", "-o", "BatchMode=yes", args.host, "bash -lc " + shlex.quote(remote)],

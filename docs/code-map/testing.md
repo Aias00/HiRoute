@@ -3,6 +3,10 @@
 [Code map](README.md) · [Desktop scenarios](../../apps/desktop/tests/README.md) ·
 [Agent/Worker scenarios](worker-context.md#representative-scenarios)
 
+[Execution locations](../validation-routing.md) owns caller HOME routing,
+per-origin SSH workbenches, shared compiler capacity and separate candidate/driver
+revision identities. A runner setup failure is not a product test result.
+
 Choose a user promise, then the layer that can observe its failure. Keep tests
 beside that owner and preserve independent assertions. A focused filesystem
 conflict test can document a product guarantee more precisely than another broad
