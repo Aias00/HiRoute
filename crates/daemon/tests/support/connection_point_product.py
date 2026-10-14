@@ -63,7 +63,7 @@ def run(repository):
                    'native_target': {'kind': 'hermes', 'config_root': str(hermes)}}
         scan = data(product, 'compute scan', request)
         assert scan['schema'] == 'hiroute.compute-scan-result/v2'
-        hermes_point = next(p for p in scan['connections'] if p['agent_id'] == 'agent_hermes_default' and p['provider_id'] == 'team-native')
+        hermes_point = next(p for p in scan['connections'] if p['agent_id'] == 'agent_hermes_default' and p['native_provider_id'] == 'team-native')
         pi_point = next(p for p in scan['connections'] if p['agent_id'] == 'agent_pi_default')
         assert hermes_point['default_model_id'] == 'first'
         assert hermes_point['declared_model_ids'] == ['first', 'second']
@@ -88,7 +88,7 @@ def run(repository):
         assert all(m['membership'] == 'observed' for m in candidate['models'])
         assert all(path.read_bytes() == contents for path, contents in before.items()), 'Scan/prepare mutated a native source'
         assert not data(product, 'compute list')['sources'], 'Scan/prepare saved a source'
-        coding_point = next(p for p in scan['connections'] if p.get('provider_id') == 'china-coding')
+        coding_point = next(p for p in scan['connections'] if p.get('native_provider_id') == 'china-coding')
         assert coding_point['connection_option_id'] == 'zhipu.coding-chat.cn.v1'
         assert coding_point['declared_model_ids'] == ['glm-5.3']
         coding = prepare(product, coding_point, 'prepare/point-product/coding')
@@ -104,7 +104,7 @@ def run(repository):
         status, _ = apply(product, draft, 'point-source-stale', success=False)
         assert status != 0 and not data(product, 'compute list')['sources']
         fresh = data(product, 'compute scan', request)
-        point = next(p for p in fresh['connections'] if p['agent_id'] == 'agent_hermes_default' and p['provider_id'] == 'team-native')
+        point = next(p for p in fresh['connections'] if p['agent_id'] == 'agent_hermes_default' and p['native_provider_id'] == 'team-native')
         candidate = prepare(product, point, 'prepare/point-product/fresh')
         selection = [m['model_ref'] for m in candidate['models'] if m['selectable']]
         draft = preview(product, candidate, selection)

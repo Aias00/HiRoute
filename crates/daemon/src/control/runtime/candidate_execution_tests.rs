@@ -2,6 +2,7 @@ use super::*;
 use hiroute_domain::{
     GatewayNativeProviderStateEmissionV1, GatewayNativeReasoningRenderV1,
     GatewayNativeReasoningValueV1, GatewayReasoningControlKindV1, NativeReasoningCapabilityV1,
+    NativeReasoningRenderConventionV1,
 };
 #[path = "candidate_execution_tests/native_protocol_profiles.rs"]
 mod native_protocol_profiles;
