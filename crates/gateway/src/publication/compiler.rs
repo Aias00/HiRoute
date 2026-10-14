@@ -70,6 +70,7 @@ pub(crate) struct CompiledModelExecution {
 
 #[derive(Clone, Debug)]
 pub(crate) struct CompiledGrant {
+    pub consumer: Option<hiroute_domain::AgentModelConsumerV1>,
     pub grant_id: Arc<str>,
     pub generation: u64,
     pub bearer_token_sha256: Arc<str>,
@@ -1064,6 +1065,7 @@ fn compile_grant(grant: &GrantV1, revision: u64) -> Result<CompiledGrant, Public
         })
         .collect::<Result<BTreeMap<_, _>, PublicationInstallError>>()?;
     Ok(CompiledGrant {
+        consumer: grant.consumer,
         grant_id: grant.grant_id.clone().into(),
         generation: grant.generation,
         bearer_token_sha256: grant.bearer_token_sha256.clone().into(),

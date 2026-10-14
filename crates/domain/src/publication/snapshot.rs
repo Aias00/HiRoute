@@ -21,6 +21,8 @@ pub enum GatewayModelRouteV2 {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct GatewayProjectedGrantV2 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub consumer: Option<crate::AgentModelConsumerV1>,
     pub grant_id: String,
     pub generation: u64,
     pub bearer_token_sha256: CanonicalDigest,
@@ -126,6 +128,7 @@ pub(super) fn project_grants(
                 bearer_token_sha256: grant.bearer_token_sha256,
                 protocol,
                 route_protocols: grant.model_grant.route_protocols,
+                consumer: grant.model_grant.consumer,
                 routes,
             })
         })

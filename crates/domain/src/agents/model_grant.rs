@@ -58,9 +58,18 @@ impl ModelRequestRouteV2 {
     }
 }
 
+/// Sealed native consumer classification. Headers and User-Agent never produce this authority.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentModelConsumerV1 {
+    Hermes,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AgentModelGrantV2 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub consumer: Option<AgentModelConsumerV1>,
     pub protocol: AgentIngressProtocolV1,
     pub routes: BTreeMap<String, AgentModelRouteV2>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -123,7 +132,13 @@ impl AgentModelGrantV2 {
                 return Err(AgentConnectionError::InvalidGrant);
             }
         }
-        Self::seal_routes(protocol, routes, route_protocols)
+        Self::seal_routes_with_consumer(
+            protocol,
+            routes,
+            route_protocols,
+            matches!(selection, AgentModelSelectionV2::HermesDefault { .. })
+                .then_some(AgentModelConsumerV1::Hermes),
+        )
     }
 
     pub fn from_plan_ids(
@@ -193,8 +208,17 @@ impl AgentModelGrantV2 {
 
     pub fn seal_routes(
         protocol: AgentIngressProtocolV1,
+        routes: BTreeMap<String, AgentModelRouteV2>,
+        route_protocols: BTreeMap<String, AgentIngressProtocolV1>,
+    ) -> Result<Self, AgentConnectionError> {
+        Self::seal_routes_with_consumer(protocol, routes, route_protocols, None)
+    }
+
+    pub fn seal_routes_with_consumer(
+        protocol: AgentIngressProtocolV1,
         mut routes: BTreeMap<String, AgentModelRouteV2>,
         route_protocols: BTreeMap<String, AgentIngressProtocolV1>,
+        consumer: Option<AgentModelConsumerV1>,
     ) -> Result<Self, AgentConnectionError> {
         for route in routes.values_mut() {
             if let AgentModelRouteV2::Fixed { binding, .. } = route {
@@ -203,8 +227,9 @@ impl AgentModelGrantV2 {
                     .map_err(|_| AgentConnectionError::InvalidGrant)?;
             }
         }
-        let digest = Self::route_digest(protocol, &routes, &route_protocols)?;
+        let digest = Self::route_digest(protocol, &routes, &route_protocols, consumer)?;
         let grant = Self {
+            consumer,
             protocol,
             routes,
             route_protocols,
@@ -224,7 +249,18 @@ impl AgentModelGrantV2 {
         protocol: AgentIngressProtocolV1,
         routes: &BTreeMap<String, AgentModelRouteV2>,
         protocols: &BTreeMap<String, AgentIngressProtocolV1>,
+        consumer: Option<AgentModelConsumerV1>,
     ) -> Result<CanonicalDigest, AgentConnectionError> {
+        if consumer.is_some() {
+            return CanonicalDigest::of(&(
+                "hiroute.agent-model-grant/v4",
+                protocol,
+                routes,
+                protocols,
+                consumer,
+            ))
+            .map_err(|_| AgentConnectionError::Encoding);
+        }
         if protocols.is_empty() {
             CanonicalDigest::of(&("hiroute.agent-model-grant/v3", protocol, routes))
         } else {
@@ -235,6 +271,13 @@ impl AgentModelGrantV2 {
 
     pub fn validate(&self) -> Result<(), AgentConnectionError> {
         if self.routes.is_empty()
+            || (self.consumer.is_some()
+                && (self.routes.len() != 1
+                    || !self.route_protocols.is_empty()
+                    || self
+                        .routes
+                        .values()
+                        .any(|route| !matches!(route, AgentModelRouteV2::Plan { .. }))))
             || self.route_protocols.iter().any(|(name, protocol)| {
                 *protocol == self.protocol
                     || !matches!(self.routes.get(name), Some(AgentModelRouteV2::Plan { .. }))
@@ -283,7 +326,13 @@ impl AgentModelGrantV2 {
                 }
             }
         }
-        if Self::route_digest(self.protocol, &self.routes, &self.route_protocols)? != self.digest {
+        if Self::route_digest(
+            self.protocol,
+            &self.routes,
+            &self.route_protocols,
+            self.consumer,
+        )? != self.digest
+        {
             return Err(AgentConnectionError::DigestMismatch);
         }
         Ok(())
@@ -295,6 +344,11 @@ impl AgentModelGrantV2 {
     ) -> Result<(), AgentConnectionError> {
         self.validate()?;
         selection.validate()?;
+        let expected = matches!(selection, AgentModelSelectionV2::HermesDefault { .. })
+            .then_some(AgentModelConsumerV1::Hermes);
+        if self.consumer != expected {
+            return Err(AgentConnectionError::InvalidGrant);
+        }
         if !matches!(selection, AgentModelSelectionV2::HermesDefault { protocol: selected, .. } if *selected == self.protocol)
             && !matches!(
                 (selection, self.protocol),
@@ -421,6 +475,40 @@ mod tests {
             allowed_plan_ids: [AgentPlanId::parse("plan/example").unwrap()].into(),
             default_selection,
         }
+    }
+
+    #[test]
+    fn hermes_consumer_is_digest_bound_and_legacy_absence_retains_its_bytes() {
+        let legacy = grant();
+        let bytes = serde_json::to_value(&legacy).unwrap();
+        assert!(bytes.get("consumer").is_none());
+        assert_eq!(
+            legacy.digest,
+            CanonicalDigest::of(&(
+                "hiroute.agent-model-grant/v3",
+                legacy.protocol,
+                &legacy.routes
+            ))
+            .unwrap()
+        );
+        let hermes = AgentModelGrantV2::seal_routes_with_consumer(
+            legacy.protocol,
+            legacy.routes.clone(),
+            BTreeMap::new(),
+            Some(AgentModelConsumerV1::Hermes),
+        )
+        .unwrap();
+        let selection = AgentModelSelectionV2::HermesDefault {
+            plan_id: AgentPlanId::parse("plan/example").unwrap(),
+            protocol: AgentIngressProtocolV1::Responses,
+        };
+        assert!(hermes.validate_selection(&selection).is_ok());
+        assert!(legacy.validate_selection(&selection).is_err());
+        assert_eq!(serde_json::to_value(&hermes).unwrap()["consumer"], "hermes");
+        assert_ne!(hermes.digest, legacy.digest);
+        let mut unbound = hermes;
+        unbound.consumer = None;
+        assert!(unbound.validate().is_err());
     }
 
     #[test]

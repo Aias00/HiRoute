@@ -226,6 +226,8 @@ pub struct AliasPlanV1 {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct GrantV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub consumer: Option<hiroute_domain::AgentModelConsumerV1>,
     pub grant_id: String,
     pub generation: u64,
     pub bearer_token_sha256: String,
@@ -548,6 +550,17 @@ impl GatewayPublicationSnapshotV3 {
                 || !is_sha256(&grant.bearer_token_sha256)
                 || !token_verifiers.insert(grant.bearer_token_sha256.as_str())
                 || grant.routes.is_empty()
+                || (grant.consumer.is_some()
+                    && (grant.routes.len() != 1
+                        || !grant.route_protocols.is_empty()
+                        || !matches!(
+                            grant.protocol,
+                            IngressProtocol::Responses | IngressProtocol::Messages
+                        )
+                        || grant
+                            .routes
+                            .values()
+                            .any(|route| !matches!(route, ModelRouteV2::Plan { .. }))))
                 || grant.route_protocols.iter().any(|(name, protocol)| {
                     *protocol == grant.protocol
                         || !matches!(grant.routes.get(name), Some(ModelRouteV2::Plan { .. }))

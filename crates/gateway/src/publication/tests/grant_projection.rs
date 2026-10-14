@@ -214,6 +214,7 @@ fn mixed_plan_grant_authorizes_only_each_selected_protocol_after_restart() {
         alias.protocols.push(IngressProtocol::Messages);
     }
     snapshot.grants = vec![GrantV1 {
+        consumer: None,
         grant_id: "mixed-plan-protocols".into(),
         generation: 1,
         bearer_token_sha256: token_sha256("mixed-protocol-token"),

@@ -36,6 +36,108 @@ fn worker_continue_keeps_conversation_identity_without_joining_other_tasks() {
     assert_eq!(invalid.session_scope(), "request_scoped");
 }
 
+fn managed_plan(consumer: Option<hiroute_domain::AgentModelConsumerV1>) -> AuthorizedRequestPlan {
+    use crate::server::dispatch::GatewayRequestAuthority;
+    use crate::server::publication::{
+        GatewayPublicationInstaller,
+        tests::{TestDirectory, publish, snapshot},
+    };
+    let directory = TestDirectory::new();
+    let installer = std::sync::Arc::new(
+        GatewayPublicationInstaller::open(directory.path().join("publication.json")).unwrap(),
+    );
+    let mut publication = snapshot(1, "native-consumer-test");
+    publication.grants[0].consumer = consumer;
+    publication.payload_digest = publication.canonical_digest().unwrap();
+    publish(&installer, publication);
+    GatewayRequestAuthority::new(installer)
+        .authorize_bytes(
+            IngressProtocol::Responses,
+            Some("Bearer token-alpha"),
+            br#"{"model":"alpha"}"#,
+            std::time::Instant::now(),
+        )
+        .unwrap()
+}
+
+#[test]
+fn managed_hermes_requires_its_real_identity_and_never_infers_equal_content() {
+    let authorized = managed_plan(Some(hiroute_domain::AgentModelConsumerV1::Hermes));
+    assert!(authorized.is_hermes_consumer());
+    let real_user = request("Equal real user content.");
+    let mut headers = HeaderMap::new();
+    for claims in [
+        vec![],
+        vec![("x-hermes-session-id", "")],
+        vec![
+            ("x-hermes-session-id", "one"),
+            ("x-hermes-session-id", "one"),
+        ],
+        vec![("x-hermes-session-id", "one"), ("session-id", "one")],
+        vec![("session-id", "other-client")],
+    ] {
+        headers.clear();
+        for (name, value) in claims {
+            headers.append(name, value.parse().unwrap());
+        }
+        let facts = identity_facts(
+            &authorized,
+            IngressProtocol::Responses,
+            &headers,
+            &serde_json::json!({}),
+            &real_user,
+            &[1; 32],
+            &[2; 32],
+        );
+        assert_eq!(facts.session_scope(), "request_scoped");
+    }
+    headers.clear();
+    headers.insert(
+        "x-hermes-session-id",
+        "one-real-native-session".parse().unwrap(),
+    );
+    let facts = identity_facts(
+        &authorized,
+        IngressProtocol::Responses,
+        &headers,
+        &serde_json::json!({}),
+        &real_user,
+        &[1; 32],
+        &[2; 32],
+    );
+    assert_eq!(facts.hold_identity().unwrap().0, "hermes_session");
+    assert_eq!(facts.session_scope(), "conversation");
+    headers.insert("x-hermes-session-id", "a".repeat(129).parse().unwrap());
+    let facts = identity_facts(
+        &authorized,
+        IngressProtocol::Responses,
+        &headers,
+        &serde_json::json!({}),
+        &real_user,
+        &[1; 32],
+        &[2; 32],
+    );
+    assert_eq!(facts.session_scope(), "request_scoped");
+}
+
+#[test]
+fn claimed_hermes_user_agent_does_not_establish_managed_consumer_authority() {
+    let authorized = managed_plan(None);
+    assert!(!authorized.is_hermes_consumer());
+    let mut headers = HeaderMap::new();
+    headers.insert("user-agent", "Hermes/0.19.1".parse().unwrap());
+    let facts = identity_facts(
+        &authorized,
+        IngressProtocol::Responses,
+        &headers,
+        &serde_json::json!({}),
+        &request("A complete real user prompt."),
+        &[1; 32],
+        &[2; 32],
+    );
+    assert_eq!(facts.hold_identity().unwrap().0, "inferred_first_user");
+}
+
 fn request(text: &str) -> ModelRequestIRV1 {
     ModelRequestIRV1 {
         native_body: None,
