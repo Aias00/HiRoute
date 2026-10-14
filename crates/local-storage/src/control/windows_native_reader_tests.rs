@@ -5,7 +5,7 @@ use hiroute_platform::{durable, file_security, windows::security};
 use std::cell::Cell;
 use std::io::Write;
 
-const TARGET: &str = "agents/native";
+const TARGET: &str = "agents/codex";
 
 fn artifact_store(root: &Path, target: &Path) -> ManagedArtifactStore {
     ManagedArtifactStore::open_with_external_target(
@@ -274,13 +274,33 @@ fn windows_native_reader_private_restore_and_native_cipher_reopen_preserve_autho
     borrowed(&path, b"original configuration");
     assert!(native_permissions::read_private_restore_file(&path).is_err());
     let store = artifact_store(root.path(), &path);
+    // The reader fixture must use the registered setup tuple before exercising
+    // native restore I/O. Both components of the old tuple were unregistered.
+    for (target, mode) in [
+        ("agents/native", 0o600),
+        (TARGET, 0o600),
+        ("agents/native", 0o640),
+    ] {
+        assert!(matches!(
+            ExternalEffectIntentV1::from_registered_adapter(
+                "agent-setup",
+                OwnedEffectKind::AgentArtifact,
+                target,
+                None,
+                json!({"configured": true}),
+                mode,
+                false,
+            ),
+            Err(hiroute_domain::OperationValidationError::UnregisteredEffectPlan)
+        ));
+    }
     let intent = ExternalEffectIntentV1::from_registered_adapter(
         "agent-setup",
         OwnedEffectKind::AgentArtifact,
         TARGET,
         store.current_external_fingerprint(TARGET).unwrap(),
         json!({"configured": true}),
-        0o600,
+        0o640,
         false,
     )
     .unwrap();
@@ -301,6 +321,10 @@ fn windows_native_reader_private_restore_and_native_cipher_reopen_preserve_autho
         .collect::<Vec<_>>();
     assert_eq!(sealed.len(), 1);
     let sealed = &sealed[0];
+    security::verify_owner_only(sealed, false).unwrap();
+    let sealed_permissions = native_permissions(sealed);
+    let sealed_identity =
+        security::file_identity(&security::open_identity(sealed, false).unwrap()).unwrap();
     let ciphertext = fs::read(sealed).unwrap();
     assert!(
         !ciphertext
@@ -318,6 +342,11 @@ fn windows_native_reader_private_restore_and_native_cipher_reopen_preserve_autho
         protected
     );
     assert_eq!(fs::read(sealed).unwrap(), ciphertext);
+    assert_eq!(native_permissions(sealed), sealed_permissions);
+    assert_eq!(
+        security::file_identity(&security::open_identity(sealed, false).unwrap()).unwrap(),
+        sealed_identity
+    );
     let alias = root.path().join("restore-alias");
     fs::hard_link(sealed, &alias).unwrap();
     assert!(reopened.load_native_restore(&operation, &intent).is_err());
