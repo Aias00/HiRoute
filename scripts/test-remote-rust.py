@@ -22,6 +22,70 @@ spec.loader.exec_module(runner)
 
 
 class Contract(unittest.TestCase):
+    def test_separate_workbench_submission_readback_and_maintenance_keep_the_selected_root(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / 'remote-rust.json'
+            config.write_text(json.dumps({'host': 'fixture-host', 'workbench': '.local/share/github-workbench'}))
+            key = '20260905-010203-abcdef12'
+            for action in ('status', 'logs', 'wait', 'cleanup', 'gc'):
+                arguments = [action] + ([] if action == 'gc' else [key])
+                with self.subTest(action=action), patch.object(runner, 'CONFIG', config), \
+                     patch.object(runner, 'command', return_value='a' * 40), \
+                     patch.object(runner.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)) as ssh, \
+                     patch.object(runner.sys, 'argv', ['remote-rust.py', *arguments]):
+                    runner.main()
+                if action in ('cleanup', 'gc'):
+                    payload = json.loads(ssh.call_args.kwargs['input'])
+                    self.assertEqual(payload['workbench'], '.local/share/github-workbench')
+                    self.assertEqual(payload['driver_args'][-1], '.local/share/github-workbench')
+                else:
+                    self.assertIn('github-workbench', ssh.call_args.args[0][-1])
+                with patch.object(runner, 'CONFIG', config), \
+                     patch.object(runner.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)) as ssh, \
+                     patch.object(runner.sys, 'argv', ['remote-rust.py', '--workbench', runner.ROOT, 'status', key]):
+                    runner.main()
+                self.assertIn(runner.ROOT + '/runs/', ssh.call_args.args[0][-1])
+
+    def test_configured_bootstrap_keeps_repository_files_separate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = '# immutable fixture driver\n'
+            payload = dict(source=source, executor_sha='a' * 40, sha='b' * 40,
+                           executor_digest=hashlib.sha256(source.encode()).hexdigest(),
+                           id='run-1', workbench='.local/share/github-workbench')
+            with patch('pathlib.Path.home', return_value=Path(directory)), \
+                 patch('sys.stdin', io.StringIO(json.dumps(payload))), patch('sys.stdout', io.StringIO()), \
+                 patch('os.umask'), patch('subprocess.Popen'):
+                exec(runner.BOOTSTRAP, {})
+            self.assertTrue((Path(directory) / payload['workbench'] / 'runs/run-1/request.json').exists())
+            self.assertFalse((Path(directory) / runner.ROOT / 'runs').exists())
+
+    def test_new_repository_worker_respects_an_existing_workbench_capacity_lease(self):
+        with tempfile.TemporaryDirectory() as directory:
+            account = Path(directory)
+            old = account / runner.ROOT
+            old.mkdir(parents=True)
+            new = account / '.local/share/github-workbench'
+            key = '20260905-010203-abcdef12'
+            run = new / 'runs' / key
+            run.mkdir(parents=True)
+            request = dict(id=key, ref='refs/heads/fixture', sha='a' * 40, executor_sha='a' * 40,
+                           command=['cargo', 'check'], retention='always', exclusive=False,
+                           capacity_root=runner.ROOT, plan='shared-capacity', phase='focused', timeout=10)
+            runner.save(run / 'request.json', request)
+            actual_capacity = runner.capacity
+            with actual_capacity(old, True), patch.object(runner.Path, 'home', return_value=account), \
+                 patch.object(runner, 'capacity', side_effect=lambda root, exclusive: actual_capacity(root, exclusive, time.monotonic())):
+                runner.worker(run / 'request.json')
+            result = json.loads((run / 'result.json').read_text())
+            self.assertEqual((result['status'], result['blocker']), ('blocked', 'capacity_timeout'))
+            self.assertFalse((new / 'repository.git').exists())
+
+    def test_workbench_path_rejects_shell_and_traversal_before_ssh(self):
+        for bad in ('../other', '/tmp/repo', 'a/../b', 'a b', 'a;command', '$(command)', '', '.', 'a//b'):
+            with self.subTest(path=bad), self.assertRaises(ValueError):
+                runner.workbench_path(bad)
+        self.assertEqual(runner.workbench_path('~/.local/share/github-workbench'), '.local/share/github-workbench')
+
     def test_eight_shared_slots_and_exclusive_build_really_exclude_each_other(self):
         import contextlib
         with tempfile.TemporaryDirectory() as directory, contextlib.ExitStack() as stack:

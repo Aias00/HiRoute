@@ -1,0 +1,336 @@
+# Build and test locations
+
+The caller's `~/.config/hiroute/validation.json` selects execution locations.
+Locations are personal configuration, never repository requirements. `backend`,
+`desktop`, and `frontend` are independent targets; Pilot always follows `desktop`.
+Linux can build backend code locally while macOS Desktop/Pilot runs over SSH.
+A Mac can keep Desktop local and send backend commands to its Linux workbench.
+
+Use `python3 scripts/validation.py show` to inspect routing and
+`python3 scripts/validation.py doctor desktop` for read-only host/tool/GUI checks.
+No configuration means local backend/frontend on Linux; on macOS, an existing
+`remote-rust.json` keeps selecting the SSH Linux backend. Desktop defaults local
+only on macOS; other hosts must configure a macOS target explicitly. Invalid
+configuration or unavailable hosts fail rather than silently changing locations.
+
+Example for a Linux caller (replace the SSH alias with your personal alias):
+
+```json
+{
+  "version": 1,
+  "targets": {
+    "backend": {"transport": "local", "jobs": 20},
+    "frontend": {"transport": "local"},
+    "desktop": {
+      "transport": "ssh",
+      "host": "my-mac",
+      "repo": "~/git/HiRoute",
+      "path": ["~/.cargo/bin", "/opt/homebrew/bin", "~/.local/bin"],
+      "pilot_cli": "~/my-private-pilot-tools/bin/tauri-pilot"
+    }
+  }
+}
+```
+
+On macOS, use `desktop: {"transport": "local"}` and
+`backend: {"transport": "ssh", "host": "my-linux"}`. The SSH backend uses the
+existing `remote-rust.py` workbench; its checkout, capacity, committed driver,
+retention and pushed-candidate rules remain unchanged. Select its HOME-relative
+`workbench` in `remote-rust.json`; direct runner commands can override it with
+`--workbench` to read old runs. Repositories with different origins use distinct
+checkouts while sharing the same account-wide compiler capacity locks. `repo`/`path`/`pilot_cli`
+are interpreted on the execution host, never expanded using the caller's HOME.
+The wrapper sends argument arrays as JSON, not interpolated shell commands.
+
+## Commands
+
+```sh
+python3 scripts/validation.py backend run --ref refs/heads/codex/my-change -- \
+  cargo test --locked -p hiroute-daemon
+python3 scripts/validation.py frontend build
+python3 scripts/validation.py frontend test
+python3 scripts/validation.py --frontend-dist /absolute/mac/candidate/apps/desktop/dist \
+  desktop run --ref refs/heads/codex/my-change \
+  --cargo-only -- cargo check --locked -p hiroute-desktop --features desktop-pilot --all-targets
+```
+
+`run` defaults to the **caller's** HEAD, including over SSH. Local backend runs
+use `local-rust.py --source local`, select committed source into a fresh worktree,
+and need no push; dirty working files are not included. SSH/native Desktop
+validation retains origin-fetch validation and needs the selected commit pushed.
+Local backend checks imply `--cargo-only`; Desktop preserves the existing explicit
+scenario assessment. `jobs` applies to local-rust execution and defaults to 2;
+SSH backend workbench retains its existing 8/64-job capacity policy.
+
+For a busy local backend, pass `backend run --wait-for-lock` to wait on the existing
+exclusive host lock inside the runner. Local-rust Desktop runs support the same
+option; the SSH backend workbench keeps its own queue. Cleanup still fails fast
+when another owner is active. Waiting never starts a second compiler or changes
+the exact candidate, default target directory or evidence rules.
+
+Arguments after `backend`/`desktop` otherwise follow the selected runner's CLI.
+SSH backend returns a queued run ID and supports `wait/status/logs/cleanup/gc`.
+Use `backend wait RUN_ID --timeout 50` for one compact terminal or timeout
+observation; repeat a bounded wait when necessary, and inspect full status/logs
+for failures or specific evidence. A wait timeout does not change the run state.
+Local-rust (including Desktop over SSH) runs in the foreground, prints its result,
+and supports `finish/preview/apply/keep/release/retire/gc`. Its logs stay beside its
+result on that host. SSH interruption is not proof of completion: inspect that
+host's run record before retrying. This wrapper adds no queue for Mac builds.
+Existing direct runner commands remain available.
+
+### Native consumer compilation
+
+The plan's `native_checks` contains a configured-Mac `command_template` for known
+Desktop consumers, including shared Worker request and launch contracts. Fill its
+required branch ref, exact candidate SHA, same-candidate built frontend directory
+on the Mac and feature plan before executing; the placeholders are not executable
+arguments. Run it after those contracts integrate,
+before expensive native journeys. Add applicable `--related-run` options before
+the `--` boundary and use `--phase final` for final validation. SSH requires the
+candidate pushed on the specified branch.
+
+`hiroute-desktop` has no default runtime feature. A featureless `cargo check` or
+library test does not compile the Tauri bridge. The managed `--frontend-dist`
+procedure uses `desktop-pilot.py config`, including the `pilot:default` capability;
+enable `desktop-pilot` to supply that plugin's ACL manifest. It includes
+`desktop-runtime`, so `--all-targets` still checks both production and test
+consumers without executing them. Runtime-only features do not match this Pilot
+configuration. Missing Mac/configuration remains an unexecuted obligation, not a
+reason to run the command on Linux.
+
+A successful same-candidate Pilot build includes the production bridge through
+`desktop-pilot`, but ordinary `cargo build` does not compile its test targets.
+Record feature/target coverage before reusing evidence; frontend/mock IPC tests
+and backend builds cannot substitute for this compile gate. Native business
+acceptance remains a separate obligation.
+
+### Reuse one retained backend checkout for product smoke
+
+For repeated validation on the same pushed SHA, first run with `--retention always`.
+After it completes, submit another command with `--reuse-checkout FIRST_RUN_ID`, the
+same `--sha` and branch, and the same build-slot class. The workbench checks the owner
+run, SHA, origin, committed executor, clean worktree and Git registration before using
+its default `target/`. A checkout lease serializes reuse and prevents owner cleanup
+while a borrower runs. Borrower cleanup keeps the owner checkout; after borrowers
+finish, `backend cleanup FIRST_RUN_ID` releases it.
+
+```sh
+python3 scripts/validation.py backend run --ref refs/heads/codex/my-change \
+  --retention always --plan my-change --phase focused -- \
+  cargo test --locked -p hiroute-product-e2e --test smoke_cli default_two_domain_smoke -- --exact
+# Read its run ID and confirm completion before submitting the next command.
+python3 scripts/validation.py backend run --ref refs/heads/codex/my-change \
+  --reuse-checkout FIRST_RUN_ID --plan my-change --phase final \
+  --related-run FIRST_RUN_ID -- \
+  cargo test --locked -p hiroute-product-e2e --test smoke_cli default_two_domain_smoke -- --exact
+```
+
+This is an explicit workflow for exact-candidate repeats; ordinary backend runs
+still get separate checkouts. Reuse is refused after source, driver or checkout
+changes. Product smoke checks the cached recipe and binary digest, keeping per-run
+runtime directories, challenges, process evidence and verdicts separate. Gateway
+and Control have distinct staged `hirouted` binaries under that checkout's `target/`.
+The first build remains necessary. Compare actual cold/warm timing in the reports.
+
+### Continue an integration checkout and schedule the final workspace
+
+Start the integration's first backend command with `--retention always` and a
+nonempty `--plan`. For each subsequent command, use `--continue-checkout LAST_RUN_ID`
+and the same plan/branch. The source may advance to a descendant committed SHA;
+the runner retains the checkout's own target while validating current source and
+recording a new result. Continue only after the previous worker stops. Stale run
+IDs, dirty source, changed executor implementation and a different plan are rejected.
+Cleanup belongs to the first checkout owner, after all commands finish. Keep each
+run's original SHA when citing evidence; cached artifacts are not scenario evidence.
+
+For the frozen final full backend candidate, use the bounded DAG schedule:
+
+```sh
+python3 scripts/validation.py backend run --ref refs/heads/codex/my-change \
+  --continue-checkout LAST_RUN_ID --schedule workspace-dag --exclusive \
+  --plan my-change --phase final --related-run LAST_RUN_ID -- \
+  cargo test --locked --workspace --exclude hiroute-desktop --all-features
+```
+
+The DAG reserves all eight workbench slots through checkout, compilation and
+execution. It compiles the exact workspace selection once, lists every compiled
+test target, records each executable's digest and checks the case-name set against
+its terminal result. The smoke test executable is copied before its preparation
+command can relink it. Other test executables are checked before and after use;
+a changed artifact fails the run. The checkout keeps its default `target/`.
+
+The CPA bridge library runs first on its own with one test thread. Its external
+process fixtures release a selected loopback port before the child binds it;
+overlapping listeners can take that port and receive a plaintext readiness probe.
+This isolation keeps every listed case and the same executable digest/audit checks.
+It does not change the production port handoff. A failed isolated target follows
+the same default fail-fast rule before preparation or other runtime targets start.
+
+One Cargo writer then prepares the attested CLI, ordinary daemon and Gateway roles,
+then separately builds the feature-qualified daemon required by publication crash
+recovery tests. Normal tests run in a bounded four-target pool while products are
+prepared. Product process targets wait for the correct role; the three prepared
+smoke cases use independent private runtimes. Doctests run after the other tasks
+finish. Missing or changed artifacts and missing listed cases fail rather than
+falling back to a runtime Cargo build. Default failure handling stops admitting
+new targets; `--no-fail-fast` explicitly collects the whole selected scope.
+
+The run result distinguishes correctness from the five-minute performance target.
+`queue_seconds`, `execution_seconds` and `end_to_end_seconds` use the workbench's
+monotonic clock; execution starts when capacity is acquired and includes checkout,
+builds, tests, cleanup and reporting. Phase durations overlap and must not be
+summed. A new checkout, a retained checkout with another candidate SHA, and a
+same-SHA repeat are separate performance conditions.
+
+Both `workspace-dag` and the older `workspace-smoke` schedule accept only the exact
+command above, optionally with `--no-fail-fast`. `workspace-smoke` remains an
+explicit rollback path and is never run automatically after a DAG failure. Other
+selectors, profiles and filters use the ordinary runner. A bridge over the old
+three-slot locks keeps legacy and eight-slot workers mutually exclusive.
+
+## Pilot from either development machine
+
+### Reuse one build across scenarios
+
+`validation.py pilot-build acquire --ref REF --sha SHA --owner TASK --case CASE`
+acquires an explicit owner lease on a retained build. Repeat `--case` for the
+required scenarios. The fixed Debug profile builds Desktop, daemon and CLI plus
+the frontend in the same exact-candidate managed checkout. It never adopts old
+unattested binaries. A match requires candidate, origin, command/profile,
+toolchain/build environment and executor hashes, and rechecks exported frontend
+contents and all three executable identities/digests. Same-owner acquire is
+idempotent; different owners share binaries with independent leases and sessions.
+An invalid existing bundle is retained and reported, not silently rebuilt.
+
+Use `pilot-build start --lease LEASE --case CASE` to launch each scenario with
+the existing isolated Pilot launcher. It returns the session and socket for
+`pilot-cli`. All scenarios for that lease use the same build. These managed
+bundles must be launched through this entry so sessions are registered before
+launch; direct `pilot start` is refused for them. There is no arbitrary command
+or release-profile override in this reusable build profile.
+
+After actual assertions and saving unique debug evidence, use
+`pilot-build finish --lease LEASE --case CASE=green --evidence-saved`, repeating
+`--case` for every declared case (also accepting red/expected_red/not_executed).
+Missing, duplicate and unstarted green cases fail. Finish stops only that lease's
+verified sessions, saves diagnostics and verdicts, and releases its ownership.
+The last finished lease triggers the existing local-rust preview/apply cleanup;
+another owner, uncertain process identity or changed source retains the build.
+Finish can be repeated to retry a refused cleanup without rewriting verdicts.
+
+The npm dependency directory and generated frontend/native build files are
+removed from the exclusively owned managed checkout after a successful build;
+the small frontend output/digest and build logs are saved alongside run evidence.
+No second frontend checkout or binary copy is retained. Cleanup preserves session
+roots/screenshots/logs and original run evidence, including failed and unexecuted
+scenarios; it never turns successful compilation into E2E green. Build failures
+and interrupted/unknown acquisitions remain kept for diagnosis. `pilot-build
+status --lease LEASE` reports the exact build and ownership state. There is no
+automatic cleanup of other owners or historical Mac runs.
+
+Both `pilot-build` and `pilot config/start/status/stop` transfer the caller's same
+small content-addressed Python tooling bundle to the selected host's HOME. Build
+inputs record its hashes. These commands do not modify or execute the host's
+developer-checkout drivers, and missing or invalid bundles fail without falling
+back to those drivers. Use the same caller checkout throughout a session so all
+operations use the same tool revision. `pilot config` reads Desktop configuration
+from the execution repository set in `validation.json`; the wrapper supplies that
+path to the bundled driver. Direct local `desktop-pilot.py config` still defaults
+to its own checkout. Both callers use the same execution account and configuration
+to share the host's cache and locks. Existing manual build/start/finish commands
+below remain available for ordinary, non-reuse builds.
+
+```sh
+python3 scripts/validation.py pilot-build acquire \
+  --ref refs/heads/codex/my-change --owner my-task \
+  --case model-save --case agent-restore
+# Use the lease printed above. Both starts use the same three binaries.
+python3 scripts/validation.py pilot-build start --lease LEASE --case model-save
+# Use the returned socket with pilot-cli; run real actions and assertions.
+# Optionally stop each completed session with pilot stop before starting the next.
+python3 scripts/validation.py pilot-build start --lease LEASE --case agent-restore
+python3 scripts/validation.py pilot-build status --lease LEASE
+# Only after real assertions and saving any unique evidence:
+python3 scripts/validation.py pilot-build finish --lease LEASE \
+  --case model-save=green --case agent-restore=green --evidence-saved
+```
+
+`acquire` defaults to the caller's committed HEAD; that candidate must be available
+from the execution repository's origin. Its frontend is built automatically, so
+this flow needs neither `--frontend-dist` nor a separate frontend checkout. The
+execution checkout's Rust toolchain file must match the candidate before tool
+versions are captured. Compiler/frontend environment overrides are fingerprinted;
+different PATH/build flags/tool versions intentionally prevent reuse. Configure
+the same Desktop PATH on the Mac and Linux callers when they use the same Mac.
+For reusable builds an explicit `path` is followed by standard Unix system paths
+and the user's Cargo bin, without appending the caller's interactive/SSH PATH.
+The cached run remains evidence for its original SHA, never for later edits.
+Build process exit and per-owner scenario verdicts are recorded separately.
+
+Missing session metadata after interrupted startup is unknown ownership, even
+when a process scan is empty. Such a lease stays open for diagnosis; do not bypass
+it with raw release/retire commands. A failed build prints its retained run ID and
+does not silently create another build on retry. These retained failures still
+use the existing owner-led diagnostic and cleanup procedure.
+
+Use the [existing accurate-candidate build procedure](desktop-tauri-pilot.md).
+Build the frontend on the Mac from the same exact candidate as Rust, using a
+dedicated checkout if its developer checkout has changes. Configure an additional
+SSH frontend target in a separate `--config` file when necessary; ordinary Linux
+frontend checks and the Mac's embedded frontend are different outputs.
+
+For the Rust step, `--frontend-dist` is an execution-host path. The wrapper calls
+`desktop-pilot.py config` there and passes its output to the Rust child as
+`TAURI_CONFIG`; it does not forward the caller's environment or Linux paths.
+
+```sh
+python3 scripts/validation.py --frontend-dist /absolute/mac/candidate/apps/desktop/dist \
+  desktop run --ref refs/heads/codex/my-change --sha FULL_SHA --keep -- \
+  cargo build --locked -p hiroute-desktop -p hiroute-daemon -p hiroute-cli \
+  --features hiroute-desktop/desktop-pilot \
+  --bin hiroute-desktop --bin hirouted --bin hiroute
+python3 scripts/validation.py pilot start --app /absolute/mac/managed/target/debug/hiroute-desktop \
+  --build-run RUN_ID --source-sha FULL_SHA
+python3 scripts/validation.py pilot-cli --socket /absolute/mac/session/runtime/PILOT.sock ping
+python3 scripts/validation.py pilot-cli --socket /absolute/mac/session/runtime/PILOT.sock state --json
+python3 scripts/validation.py pilot status --session /absolute/mac/session/session.json
+python3 scripts/validation.py pilot stop --session /absolute/mac/session/session.json
+python3 scripts/validation.py desktop finish RUN_ID --verdict green --evidence-saved
+```
+
+Install/configure the private Pilot CLI on the Mac per the existing guide. Its
+version must be 0.7.3 and must match the plugin. Socket, screenshots, session paths,
+build records and cleanup all belong to the Mac. The wrapper does not weaken
+artifact/process ownership checks or expose the socket over TCP. Preserve actual
+scenario assertions and both roles' Debug evidence; `ping` alone is not WebView
+or product success. E2E build exit 1 with process_exit=0/scenario=unassessed retains
+its existing meaning. Only finish green after assessing real scenarios.
+
+Desktop requires an available GUI login session for the execution user. The
+read-only doctor checks `gui/<uid>` and the console owner on macOS. A successful
+check is a prerequisite, not proof that SSH-launched WebView works; validate
+`state` and the real page journey. If the host needs GUI LaunchAgent dispatch,
+configure and validate that separately; the wrapper does not install a service,
+log in users, or replace the existing process-group launcher.
+
+## Evidence and rollout
+
+Ordinary remote calls execute the scripts in the configured repository; reusable
+Pilot lifecycle calls use the hashed tooling bundle described above. `doctor` reports
+their hashes and checkout revision; keep tooling revisions in sync when using
+new runner flags. No source sync or edits to a developer checkout happen implicitly.
+`path` explicitly extends execution PATH without depending on interactive shell
+initialization. Configuration contains no passwords or tokens; SSH uses the user's
+normal keys/configuration and host-key verification.
+
+Local-rust retains the Mac's existing shared lock; Linux has its own host lock.
+Do not concurrently use a separately configured SSH workbench and local-rust on
+the same account to bypass capacity limits; select one runner for that host.
+Each checkout retains its default target and shares only sccache compiler objects.
+
+Routing/runner changes use their Python regression tests, including source
+selection, quoting, platform selection and failures, plus contract convergence.
+These tests do not prove Rust compilation or Pilot product journeys. Final
+environment acceptance requires a real local Rust candidate and a real Mac
+Desktop/Pilot journey, recorded separately with actual revisions and scenarios.

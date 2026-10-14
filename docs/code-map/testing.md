@@ -119,3 +119,11 @@ Code-map and local ownership-guide edits require link/owner review and the selec
 contract checks, not new model calls. Runtime-embedded Markdown and shipped Skills
 can change behavior and need their actual consumers. Instructions and compilation
 remain distinct from executed business evidence.
+
+Repository agent policy under `.agents/` and `issue-spec/project/` is separate from
+the product-installed collaboration Skill. The selector maps known project skill
+scripts to their own tests; unknown skill code and runtime-embedded documents
+still require consumer investigation. Repository ignore rules select publication-policy
+regressions; optional ignored skills are not public-checkout test dependencies.
+See [instruction ownership](../../.agents/README.md)
+for pinned generation and actual host discovery.

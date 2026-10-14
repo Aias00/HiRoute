@@ -129,10 +129,10 @@ impl LocalControlAdapter {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "agent_connection_endpoint_tests.rs"]
 mod endpoint_tests;
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub(super) use endpoint_tests::{
     assert_persisted_endpoint_convergence, open_endpoint_test_artifacts,
 };

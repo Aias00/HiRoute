@@ -48,21 +48,28 @@ sys.exit(101 if bad else 0)
 
 
 class Schedule(unittest.TestCase):
-    def run_dag_isolation_fixture(self, fail_cpa=False, fail_fast=True, omit_cpa=False):
+    def run_dag_isolation_fixture(self, fail_cpa=False, fail_fast=True, omit_cpa=False,
+                                  fail_observation=False, omit_observation=False,
+                                  duplicate_observation=False):
         """Exercise the real DAG controller with bounded fake build/target processes."""
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             run = root / 'run'
             run.mkdir()
-            names = ['hiroute_cpa_bridge', 'hiroute_gateway', 'smoke_cli']
+            names = ['hiroute_cpa_bridge', 'hiroute_observation', 'hiroute_gateway', 'smoke_cli']
             if omit_cpa:
                 names.remove('hiroute_cpa_bridge')
+            if omit_observation:
+                names.remove('hiroute_observation')
+            if duplicate_observation:
+                names.append('hiroute_observation')
             targets = [dict(name=name, package=name.replace('_', '-'), source=name,
                             cwd=str(root), test_source='src/lib.rs', label=name)
                        for name in names]
             metadata = {'packages': [dict(id=row['package'], name=row['package'])
                                      for row in targets]}
             cpa_done = threading.Event()
+            observation_done = threading.Event()
             admitted = []
 
             class FixtureRunner:
@@ -82,6 +89,8 @@ class Schedule(unittest.TestCase):
                 def start_locked_command(args, _cwd, _env, output, _handles):
                     if '--no-run' not in args:
                         self.assertTrue(cpa_done.is_set(), 'CPA must finish before preparation/doctests')
+                        self.assertTrue(observation_done.is_set(),
+                                        'Observation deadlines must not overlap preparation/doctests')
                     if '--doc' in args:
                         output.write('   Doc-tests fixture\nrunning 1 test\n'
                                      'test fixture_doc ... ok\n'
@@ -94,15 +103,27 @@ class Schedule(unittest.TestCase):
                 for item in selected:
                     name = item['name']
                     if name == 'hiroute_cpa_bridge':
-                        self.assertEqual([row['name'] for row in selected], [name],
-                                         'CPA fixtures must have their own target lane')
+                        self.assertFalse({row['name'] for row in selected}
+                                         - {'hiroute_cpa_bridge', 'hiroute_observation'},
+                                         'Isolated libraries must not share other target processes')
+                        self.assertEqual(kwargs['workers'], 1,
+                                         'The two isolated libraries must not overlap')
                         self.assertEqual(item.get('test_threads'), 1,
                                          'CPA port handoffs must not race inside its binary')
                         cpa_done.set()
+                    elif name == 'hiroute_observation':
+                        self.assertTrue(cpa_done.is_set())
+                        self.assertEqual(kwargs['workers'], 1)
+                        self.assertEqual(item.get('test_threads'), 8,
+                                         'Keep the complete library at its existing parallelism')
+                        observation_done.set()
                     else:
                         self.assertTrue(cpa_done.is_set(), 'No runtime target may overlap CPA')
+                        self.assertTrue(observation_done.is_set(),
+                                        'No other runtime target may overlap Observation')
                     admitted.append(name)
-                    failed = fail_cpa and name == 'hiroute_cpa_bridge'
+                    failed = ((fail_cpa and name == 'hiroute_cpa_bridge')
+                              or (fail_observation and name == 'hiroute_observation'))
                     path = run / ('fixture-' + name + '.log')
                     path.write_text(name + '\n')
                     results.append(dict(name=name, log=str(path), complete=not failed,
@@ -111,6 +132,7 @@ class Schedule(unittest.TestCase):
                     stop_event = kwargs.get('stop_event', _args[-1] if _args else None)
                     if failed and fail_fast and stop_event is not None:
                         stop_event.set()
+                        break
                 return results
 
             mocks = dict(dag_catalog=lambda *_args: targets,
@@ -136,10 +158,18 @@ class Schedule(unittest.TestCase):
     def test_cpa_isolation_keeps_every_target_and_case(self):
         result, admitted, _ = self.run_dag_isolation_fixture()
         self.assertTrue(result['complete'], result)
-        self.assertEqual(admitted, ['hiroute_cpa_bridge', 'hiroute_gateway', 'smoke_cli'])
-        self.assertEqual(result['expected_tests'], 3)
-        self.assertEqual(result['executed_targets'], 3)
-        self.assertEqual(result['counts'], dict(passed=4, failed=0, ignored=0))
+        self.assertEqual(admitted, ['hiroute_cpa_bridge', 'hiroute_observation',
+                                    'hiroute_gateway', 'smoke_cli'])
+        self.assertEqual(result['expected_tests'], 4)
+        self.assertEqual(result['executed_targets'], 4)
+        self.assertEqual(result['counts'], dict(passed=5, failed=0, ignored=0))
+
+    def test_observation_deadline_isolation_preserves_parallelism_and_all_targets(self):
+        result, admitted, _ = self.run_dag_isolation_fixture()
+        self.assertTrue(result['complete'], result)
+        self.assertEqual(admitted.index('hiroute_observation'), 1)
+        self.assertEqual(result['expected_tests'], 4)
+        self.assertEqual(result['executed_targets'], 4)
 
     def test_failed_isolated_target_obeys_fail_fast_and_keeps_its_log(self):
         result, admitted, log = self.run_dag_isolation_fixture(fail_cpa=True)
@@ -149,14 +179,38 @@ class Schedule(unittest.TestCase):
         self.assertIn('hiroute_cpa_bridge', log)
         result, admitted, _ = self.run_dag_isolation_fixture(fail_cpa=True, fail_fast=False)
         self.assertFalse(result['complete'])
-        self.assertEqual(len(admitted), 3)
+        self.assertEqual(len(admitted), 4)
+        self.assertEqual(result['counts']['failed'], 1)
+
+    def test_failed_observation_target_keeps_failure_and_blocks_preparation(self):
+        result, admitted, log = self.run_dag_isolation_fixture(fail_observation=True)
+        self.assertFalse(result['complete'])
+        self.assertEqual(admitted, ['hiroute_cpa_bridge', 'hiroute_observation'])
+        self.assertEqual(result['executed_targets'], 2)
+        self.assertIn('hiroute_observation', log)
+        result, admitted, _ = self.run_dag_isolation_fixture(
+            fail_observation=True, fail_fast=False)
+        self.assertFalse(result['complete'])
+        self.assertEqual(len(admitted), 4)
         self.assertEqual(result['counts']['failed'], 1)
 
     def test_missing_cpa_isolation_target_cannot_silently_narrow_the_schedule(self):
         result, admitted, _ = self.run_dag_isolation_fixture(omit_cpa=True)
         self.assertFalse(result['complete'])
         self.assertEqual(admitted, [])
-        self.assertIn('CPA library target', result['error'])
+        self.assertIn('hiroute-cpa-bridge library target', result['error'])
+
+    def test_missing_observation_target_cannot_silently_narrow_the_schedule(self):
+        result, admitted, _ = self.run_dag_isolation_fixture(omit_observation=True)
+        self.assertFalse(result['complete'])
+        self.assertEqual(admitted, [])
+        self.assertIn('hiroute-observation library target', result['error'])
+
+    def test_duplicate_observation_target_cannot_duplicate_coverage(self):
+        result, admitted, _ = self.run_dag_isolation_fixture(duplicate_observation=True)
+        self.assertFalse(result['complete'])
+        self.assertEqual(admitted, [])
+        self.assertIn('hiroute-observation library target', result['error'])
 
     def test_isolated_binary_runs_all_cases_with_one_thread_and_exec_audit(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -193,6 +247,7 @@ class Schedule(unittest.TestCase):
             self.assertTrue(results[0]['complete'], results)
             self.assertEqual(results[0]['counts'], dict(passed=1, failed=0, ignored=1))
             self.assertEqual(results[0]['exec_audit']['cargo_rustc_starts'], 0)
+            self.assertLessEqual(results[0]['started_at'], results[0]['finished_at'])
 
     def test_gateway_runtime_consumers_wait_for_prepared_products(self):
         tests = Path(__file__).resolve().parents[1] / 'tools/e2e-harness/tests'

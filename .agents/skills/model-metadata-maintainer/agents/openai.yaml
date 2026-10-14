@@ -1,0 +1,4 @@
+interface:
+  display_name: "Model Metadata"
+  short_description: "Maintain complete current model metadata and source evidence"
+  default_prompt: "Use $model-metadata-maintainer to maintain the current model-metadata catalog with complete fields and traceable source evidence."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "HiRoute Public PR"
+  short_description: "Prepare HiRoute changes for public GitHub PRs"
+  default_prompt: "Use $hiroute-public-pr to audit the outgoing task history and deliver a public HiRoute GitHub pull request."

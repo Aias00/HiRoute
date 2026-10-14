@@ -1,0 +1,37 @@
+{
+  "schema": "issue-spec.generated-workflow/v1",
+  "release": "development-1008ee6",
+  "source_revision": "1008ee6ec1ae77818ad67de82ac6ea901fa769fa",
+  "requirements_skill_content_id": "sha256:35e55ba3b52b377acbd36ca4305cd958e3bd593008d576a7a82c9b06ab862ed1",
+  "content_digest": "sha256:a6db97f59a05379c52889b4c2d5a1efd9f413363c0a4461bd579d51e8eedaaa7",
+  "files": [
+    {
+      "path": ".agents/skills/issue-spec-apply/SKILL.md",
+      "sha256": "fc230ae5d6b59c8a20c283540662c8ad0f9efc6136d5c16879b94c04f4050204"
+    },
+    {
+      "path": ".agents/skills/issue-spec-github/SKILL.md",
+      "sha256": "a2a1cfeb647e737f66dbbbd97a53cfc752c84395ee4f6f080d7bfab3ee48d7d5"
+    },
+    {
+      "path": ".agents/skills/issue-spec-propose/SKILL.md",
+      "sha256": "0a04d83927c496b2ff3b2f7fae827ba0d519312898a837839e7723b40751bf64"
+    },
+    {
+      "path": ".agents/skills/issue-spec-workflow/SKILL.md",
+      "sha256": "d12c41fa6d97680dccf02671ba7f0d954e044bd4602febb382b041e322cab02c"
+    },
+    {
+      "path": ".agents/skills/issue-spec-workflow/references/implementation-review.md",
+      "sha256": "448cfd953d847f0966aa12f0d880f603272abb73caba9a4709e4c6bf44ee5368"
+    },
+    {
+      "path": ".agents/skills/issue-spec-workflow/references/progressive-reading.md",
+      "sha256": "ecdec3c7fa7ab4f32f443d7b9c85ca6f4608b290f271ca01db6767cd53d495f5"
+    },
+    {
+      "path": ".agents/skills/issue-spec-workflow/references/question-decisions.md",
+      "sha256": "ba9beef4bc7867f96b98ec648ca4dffa4c839e1dd00d845e667f9d19a867e80e"
+    }
+  ]
+}

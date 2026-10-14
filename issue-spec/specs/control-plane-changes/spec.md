@@ -1,0 +1,132 @@
+# Control-plane changes
+
+## Purpose
+
+All product clients submit typed intent through one recoverable Application
+transaction. Preview, durable admission, external effects, and observed completion
+have separate meanings.
+
+## Requirements
+
+### Requirement: One transaction path owns durable writes
+
+Domain planners MUST interpret product intent and build a validated change. CLI,
+Desktop, and protected host actions use the same Application admission, writer,
+Operation journal, ownership, and recovery path. Clients cannot directly write
+business databases, Secret storage, native Agent files, or Gateway publication.
+
+Preview returns normalized intent, changes, relevant risk/external effects,
+dependencies, and confirmation identity without creating an Operation or pending
+executable object. Editable drafts are explicit domain data, not implicit Preview
+effects. Apply binds local user scope, operation, confirmed intent, relevant versions,
+and idempotency key. Accepted, running, succeeded, rolled back, repair-required,
+conflict, denied, unsupported, and unavailable states MUST remain distinguishable.
+No missing production adapter may return a fake success.
+
+#### Scenario: Reuse a submission key
+
+- **WHEN** the same local scope/action/key is retried with identical canonical intent
+- **THEN** it MUST resolve the original Operation without duplicate effects;
+  a different intent under that key conflicts instead of replacing it.
+
+### Requirement: Changes validate the facts they consume
+
+Planning/admission MUST capture and recheck exact resource revisions, source/Key
+identity and generation, catalog/capability facts, related active publication, and
+managed native-file fingerprints. Where a single atomic read is impossible, validate
+consistency before additional effects or reject the stale intent. Serial writers
+and conservative conflicts are allowed; automatic merges are not required.
+
+Successful changes preserve unrelated plans, aliases, sources, and Agent grants.
+Rollback acts only on effects the Operation still owns, never subsequent foreign
+or user changes. Catalog/source changes cannot silently reorder frozen plans.
+Restarts recover accepted operations through the same recorded steps/effect proofs;
+read failure or an in-memory object is not proof of completion.
+
+### Requirement: Local management is distinct from model-call authority
+
+A client able to access the local control socket through the OS may manage local
+configuration without a Desktop/CLI-specific Apply capability. Only validated
+transaction admission writes. Queries/Preview do not. Extra owner/mode/peer-UID
+rejection is not part of local access; [OS-access rules](../local-data-and-diagnostics/spec.md)
+retain type, identity, revision, and cleanup protections.
+
+Internal maintenance is allowed only for durably approved enabled connector-owned
+sources in the trusted local context. It binds stable source ID, expected revision,
+current source evidence, and idempotency to the same writer/Operation/validation
+receipt. Source existence, enabled state, and evidence are rechecked before commit.
+It cannot revive deleted/scan-only sources or bypass transaction authority.
+
+Gateway grants remain separate from local management. Discovery and dispatch agree
+on active publication, stable invocation names, protocol conditions, and the latest
+successful pinned subscription directory/stable CPA binding. Token generation is
+not their authorization join key; unobserved provider changes may still be rejected
+upstream. Ordinary DTOs/Preview/Operations/diagnostics expose only safe allowlisted
+references, not Key, Agent bearer, or native auth contents.
+
+### Requirement: Publication success includes installed runtime state
+
+Publication validates schema/digest, reference closure, immutable plan versions,
+and stable aliases. Persistence, Gateway install, product active pointer, and
+Operation completion MUST converge atomically or through durable recovery to the
+actual result. New requests freeze the complete new catalog/grants/execution plan;
+in-flight requests retain their admitted version.
+
+Gateway reachable protocols derive from current Agent grants rather than creating
+a second plan content version. Failure preserves/restores the previous executable
+version and draft. If none exists, service is explicitly unavailable with no
+upstream effects. Empty legal execution state stops corresponding new calls with
+NoNewCalls; an unsafe transition fails and preserves old effective state. Saving a
+database row alone cannot prove publication or revocation.
+
+#### Scenario: Crash between install and active-pointer commit
+
+- **WHEN** Gateway installation occurred but durable finalization was interrupted
+- **THEN** restart MUST reconcile the same Operation to actual installed/current
+  state or explicit repair; it cannot invent success or admit a partial publication.
+
+### Requirement: Ordinary plan publication binds the full editing intent
+
+Normal publish MUST bind submitted complete input, target plan, relevant versions,
+and exact draft-consumption intent using the Application writer. The UI's explicit
+publish action need not perform a second full Preview that the user did not see.
+Independent Preview retains full validation and zero Operation/publication/inference
+side effects. Other product actions keep their own required confirmation flow.
+
+Admission rechecks sources, credentials/accounts, aliases, resource/draft versions,
+and dynamic CPA/runtime evidence. An unchanged database revision or reused old
+observation cannot prove external identity unchanged. Direct publication consumes
+only the exact bound draft revision and may publish current edited input; newer
+drafts survive. Failure/replay resumes the same Operation and installed recovery
+contract, not merely a saved plan record. [Installed consumer budgets](../routing-plans/spec.md)
+are checked at both admission and the install checkpoint, with safe conflict facts
+retained through compensation and query.
+
+### Requirement: Cached validation does not replace durable checkpoint truth
+
+Within one valid publication execution context, immutable validated Operation
+content MAY be reused instead of fully decoding it at every step. Committed steps,
+generation, identity, authorization, and actual installation still require their
+normal checks. In the normal path, successive stages do not re-decode the complete
+Operation JSON. Failed journal writes cannot advance the in-memory committed view.
+Cold loads, independent recovery, changed objects, or invalidated context perform
+full durable-input validation rather than trusting matching Operation ID/generation.
+Dynamic dependencies are always rechecked at their original boundaries.
+
+### Requirement: Durable business identity survives implementation changes
+
+Persisted contracts MUST store frozen business facts and their contract identity,
+including original confirmation, idempotency, steps, and effect ownership. Compiler,
+serializer, decoder, memory layout, and rebuildable derived checks cannot alone
+change plan/grant/task/Operation identity. Step proofs, completion receipts, and
+journal CAS bind stable input. One current core model receives strictly validated
+supported legacy data at its conversion boundary. Reader removal requires explicit
+support retirement with a viable upgrade/recovery path and registry/test updates.
+
+## Implementation references
+
+- [Application operation workflows](../../../crates/application/src/operations) and
+  [durable journal](../../../crates/domain/src/operation/journal.rs).
+- [Publication checkpoint](../../../crates/domain/src/operation/publication_checkpoint.rs)
+  and [transaction guards](../../../crates/local-storage/src/control/transaction_v2_tests.rs).
+- [Production publication scenarios](../../../crates/daemon/tests/publication_process.rs).

@@ -20,6 +20,22 @@ runner_spec.loader.exec_module(runner)
 
 
 class SelectionTests(unittest.TestCase):
+    def test_local_gc_selects_shared_cleanup_and_wrapper_without_product_builds(self):
+        for path in sorted(plan.LOCAL_GC_TOOLING):
+            with self.subTest(path=path):
+                result = plan.select([path])
+                self.assertFalse(result['rust'])
+                self.assertFalse(result['frontend'])
+                self.assertEqual(result['product_checks'], [])
+                for name in ('test-local-rust.py', 'test-local-rust-gc.py'):
+                    self.assertIn(['python3', 'scripts/' + name], result['commands'])
+        command = ['python3', 'scripts/test-local-rust-gc.py']
+        self.assertIn(command, plan.select(['scripts/local-rust.py'])['commands'])
+        self.assertIn(command, plan.select([], full=True)['commands'])
+        mixed = plan.select(['scripts/local-rust-gc.py', 'crates/daemon/src/lib.rs'])
+        self.assertTrue(mixed['rust'])
+        self.assertIn('daemon', mixed['groups'])
+
     def test_pi_runtime_contract_changes_select_local_capability_regressions(self):
         check = ['node', '--test', plan.PI_SDK_CONTRACT_TEST]
         for path in ('crates/integrations/src/agents/pi_runtime.rs',
@@ -709,6 +725,36 @@ class IntegrationPreflightTests(unittest.TestCase):
         self.assertEqual(early['targets'], [])
         self.assertFalse(any(c[0] == 'cargo' for c in early['commands']))
         self.assertTrue(early['diagnostic_only'])
+
+    def test_public_project_agent_policy_does_not_build_product_binaries(self):
+        paths = ['.gitignore', 'CLAUDE.md', '.agents/README.md', '.issue-spec/config.json', 'issue-spec/config.yaml',
+                 'issue-spec/project/workflow.md', '.claude/skills/issue-spec-apply',
+                 '.agents/skills/hiroute-implementation-writer/SKILL.md',
+                 '.agents/skills/issue-spec-workflow/release.json']
+        result = plan.select(paths)
+        self.assertEqual(result['mode'], 'affected')
+        self.assertFalse(result['rust'])
+        self.assertFalse(result['frontend'])
+        self.assertEqual(result['product_checks'], [])
+        self.assertIn(['python3', '.agents/skills/hiroute-public-pr/scripts/test_public_surface.py'],
+                      result['commands'])
+        mixed = plan.select(paths + ['crates/daemon/src/control/runtime/agent_connection.rs'])
+        self.assertTrue(mixed['rust'])
+        self.assertTrue(mixed['product_checks'])
+
+    def test_project_skill_tools_select_their_actual_script_consumers(self):
+        for name, filename in [('hiroute-cu', 'scripts/loop.mjs'),
+                               ('hiroute-public-pr', 'scripts/public_surface.py'),
+                               ('model-metadata-maintainer', 'scripts/scan_client_repo.py')]:
+            with self.subTest(skill=name):
+                result = plan.select(['.agents/skills/' + name + '/' + filename])
+                self.assertFalse(result['rust'])
+                self.assertFalse(result['frontend'])
+                for command in plan.AGENT_TOOL_COMMANDS[name]:
+                    self.assertIn(command, result['commands'])
+        for path in ['.agents/skills/unknown/SKILL.md', '.claude/skills/unknown',
+                     'assets/skills/hiroute-cu/SKILL.md']:
+            self.assertEqual(plan.select([path])['mode'], 'full')
 
     def test_only_the_known_operator_skill_is_tooling(self):
         final = plan.select(['.agents/skills/hiroute-integrate/SKILL.md'])
