@@ -127,6 +127,11 @@ prepared product roles.
 The [Windows CI entry](../../scripts/windows-headless-ci.ps1) requires nonempty
 native inventories for primitives, shared libraries, installed foreground and
 Task/SCM business paths, and fixed upstream clients. The
+[canonical native link configuration](../../scripts/build-release.py) also owns
+the Debug checks' static CRT; [captured-source inputs](../../scripts/windows-native-artifacts.py)
+bind its CMake toolchain, and the [PE import gate](../../scripts/windows-native-runtime-audit.py)
+rejects redistributable VC runtime dependencies before replay.
+The
 [fixture producer](../../scripts/windows-agent-fixtures.py) binds exact npm
 integrities and official Qoder archive hashes; the
 [feedback adapter](../../scripts/windows-ci-report.py) retains the original SHA
@@ -152,7 +157,11 @@ Its foreground doctor/logs negatives do not replace the
 The [standard-owner Task journey](../../crates/daemon/tests/support/windows_background_standard.rs)
 executes as its own actual logged-on standard user, with no administrator group
 or alternate token. It requires an absent installation and SID-derived Task,
-then verifies native identity, Control/Gateway, recovery and guarded uninstall.
+then verifies native identity, Control/Gateway recovery, public service restart,
+packaged login lifecycle, recovery and guarded uninstall. The
+[shared authorization checks](../../crates/daemon/tests/support/windows_subscription_authorization.rs)
+cover public missing/wrong-kind/stale Result/Release rejection; they do not prove
+valid provider authorization.
 WTS account lookup retains actual SID validity and equality independently of
 the API's input buffer capacity; follow this fixture for identity prerequisites.
 The self-reexecuted owner fixture starts its closed result frame on a new line,

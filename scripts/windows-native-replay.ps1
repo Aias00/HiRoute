@@ -35,7 +35,7 @@ $env:HIROUTE_WINDOWS_SOURCE_ROOT = $root
 $env:CARGO_TERM_COLOR = 'never'
 python scripts/windows-native-artifacts.py verify --expected-sha $ExpectedSha --evidence $bundle > "$evidence/artifact-verification.json"
 if ($LASTEXITCODE -ne 0) { throw 'Replay artifacts failed exact source and byte verification' }
-python scripts/windows-native-runtime-audit.py --expected-sha $ExpectedSha --evidence $bundle > "$evidence/runtime-audit.json"
+python scripts/windows-native-runtime-audit.py --expected-sha $ExpectedSha --evidence $bundle --require-static-crt > "$evidence/runtime-audit.json"
 if ($LASTEXITCODE -ne 0) { throw 'Native import dependencies failed verification on the consumer' }
 $manifest = Get-Content "$bundle/native-artifacts.json" -Raw | ConvertFrom-Json
 $requiredRecipes = @(Get-WindowsRequiredRecipes $Scope)

@@ -42,6 +42,23 @@ if ($LASTEXITCODE -ne 0) { throw 'Candidate has tracked changes' }
 if ($env:CARGO_TARGET_DIR -or $env:CARGO_BUILD_TARGET_DIR) { throw 'Checkout-local Cargo target required' }
 New-Item -ItemType Directory -Force $evidence | Out-Null
 if (-not $InventoryOnly) {
+$contextScript = @'
+import importlib.util, json, os
+from pathlib import Path
+spec = importlib.util.spec_from_file_location('native_release_context', Path('scripts/build-release.py'))
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+context = module.windows_release_environment('x86_64-pc-windows-msvc', dict(os.environ))
+print(json.dumps({key: context[key] for key in ('CARGO_ENCODED_RUSTFLAGS', 'CMAKE_TOOLCHAIN_FILE')}))
+'@
+$contextJson = python -c $contextScript
+if ($LASTEXITCODE -ne 0) { throw 'Canonical Windows static CRT compile context failed' }
+$context = $contextJson | ConvertFrom-Json
+if (@($context.PSObject.Properties.Name).Count -ne 2 -or
+    $context.CARGO_ENCODED_RUSTFLAGS -cne ("-C" + [char]31 + "target-feature=+crt-static") -or
+    -not $context.CMAKE_TOOLCHAIN_FILE) { throw 'Canonical Windows compile context differs' }
+$env:CARGO_ENCODED_RUSTFLAGS = $context.CARGO_ENCODED_RUSTFLAGS
+$env:CMAKE_TOOLCHAIN_FILE = $context.CMAKE_TOOLCHAIN_FILE
 $env:HIROUTE_BUILD_SOURCE_SHA = $ExpectedSha
 $env:CARGO_TERM_COLOR = 'never'
 $env:CARGO_INCREMENTAL = '0'
@@ -552,7 +569,7 @@ if ($Scope -eq 'components') {
       python scripts/windows-native-artifacts.py verify --expected-sha $ExpectedSha --evidence $evidence > "$evidence/artifact-verification.json"
       if ($LASTEXITCODE -ne 0) { $failures.Add('Final native artifact verification failed') }
       else { $artifactVerified=$true }
-      python scripts/windows-native-runtime-audit.py --expected-sha $ExpectedSha --evidence $evidence > "$evidence/runtime-audit.json"
+      python scripts/windows-native-runtime-audit.py --expected-sha $ExpectedSha --evidence $evidence --require-static-crt > "$evidence/runtime-audit.json"
       if ($LASTEXITCODE -ne 0) { $failures.Add('Native imports require an unavailable Debug CRT or could not be verified') }
       else { $importsVerified=$true }
     }

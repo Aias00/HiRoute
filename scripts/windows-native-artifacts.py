@@ -26,6 +26,8 @@ RESERVED = re.compile(r"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)", re.I)
 MAX_FILE = 2 * 1024 * 1024 * 1024
 MAX_JSON = 32 * 1024 * 1024
 SOURCE_FILES = (
+    "scripts/build-release.py",
+    "scripts/windows-release-toolchain.cmake",
     "scripts/install-standalone-windows.py",
     "scripts/package-standalone.py",
     "scripts/package-standalone-windows.py",

@@ -56,6 +56,15 @@ an officially prepared private profile; missing credentials fail that scope.
 Pull request jobs receive no provider credentials. Passing ordinary CI does not
 establish official-account acceptance, which remains a separate release gate.
 
+Native x64 Debug checks reuse the Windows Release static CRT configuration from
+`build-release.py`, including its CMake toolchain and compiler-override rejection.
+Both configuration sources are bound in the captured artifact provenance.
+Producer and replay import audits reject ordinary and delayed redistributable VC
+runtime DLL dependencies; the hosted image's installed runtime must not conceal
+a missing dependency on a clean workstation. Native OS `msvcrt.dll` and UCRT
+imports remain allowed. Static imports alone do not prove process launch or
+release acceptance; those require their actual runtime gates.
+
 Background jobs build the unchanged pinned CPA with its two native bootstrap
 security cases and use the production package generator twice. The administrator
 receives a separate verified complete package. Task acceptance exercises the

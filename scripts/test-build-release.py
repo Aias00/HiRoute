@@ -5,6 +5,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 from pathlib import Path
 import struct
 import subprocess
@@ -297,6 +298,32 @@ class CandidateTests(unittest.TestCase):
             with patch.object(self.candidate, "script", return_value=json.dumps({**packaged, field: value})):
                 with self.assertRaises(ValueError):
                     self.candidate.desktop()
+
+
+class NativeCompilerContextTests(unittest.TestCase):
+    def run_context(self, overrides=None):
+        text = (REPO / 'scripts/windows-headless-ci.ps1').read_text()
+        matches = re.findall(r"\$contextScript = @'\n(.*?)\n'@", text, re.S)
+        self.assertEqual(len(matches), 1)
+        environment = {'PATH': os.environ.get('PATH', ''), 'HIROUTE_FIXTURE_SECRET': 'must-not-be-emitted'}
+        environment.update(overrides or {})
+        return subprocess.run([sys.executable, '-I', '-c', matches[0]], cwd=REPO,
+                              env=environment, capture_output=True, timeout=15)
+
+    def test_native_debug_entry_reuses_canonical_release_linkage_without_environment_leak(self):
+        process = self.run_context()
+        self.assertEqual(process.returncode, 0, process.stderr)
+        value = json.loads(process.stdout)
+        self.assertEqual(set(value), {'CARGO_ENCODED_RUSTFLAGS', 'CMAKE_TOOLCHAIN_FILE'})
+        self.assertEqual(value['CARGO_ENCODED_RUSTFLAGS'], '-C\x1ftarget-feature=+crt-static')
+        self.assertEqual(Path(value['CMAKE_TOOLCHAIN_FILE']), REPO / 'scripts/windows-release-toolchain.cmake')
+        self.assertNotIn(b'must-not-be-emitted', process.stdout)
+
+    def test_native_entry_rejects_conflicting_compiler_flags_before_cargo(self):
+        process = self.run_context({'RUSTFLAGS': '-C target-feature=-crt-static'})
+        self.assertNotEqual(process.returncode, 0)
+        self.assertEqual(process.stdout, b'')
+        self.assertIn(b'compiler overrides must be absent', process.stderr)
 
 
 if __name__ == "__main__":

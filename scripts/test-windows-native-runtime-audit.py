@@ -155,6 +155,27 @@ class ReceiptAudit(unittest.TestCase):
         self.assertEqual(value["dependency_gate"], "red")
         self.assertEqual(value["debug_crt_images"], [value["images"][0]["path"]])
 
+    def assert_static_context_rejection(self, data):
+        args = self.prepare(data)
+        self.assertEqual(audit.audit(args)['dependency_gate'], 'green')  # Old Debug-only gate.
+        args.require_static_crt = True
+        with self.assertRaisesRegex(ValueError, 'no redistributable VC runtime DLL imports'):
+            audit.audit(args)
+
+    def test_static_context_rejects_real_ordinary_release_crt_import(self):
+        self.assert_static_context_rejection(image(("VCRUNTIME140.dll",)))
+
+    def test_static_context_rejects_real_delay_release_crt_import(self):
+        self.assert_static_context_rejection(image(("KERNEL32.dll",), ("MSVCP140.dll",)))
+
+    def test_static_context_allows_native_os_crt_and_keeps_runtime_unassessed(self):
+        args = self.prepare(image(("KERNEL32.dll", "MSVCRT.dll", "UCRTBASE.dll")))
+        args.require_static_crt = True
+        value = audit.audit(args)
+        self.assertEqual(value['dependency_gate'], 'green')
+        self.assertEqual(value['dll_resolution_and_runtime'], 'not_assessed')
+        self.assertEqual(value['production_release_acceptance'], 'not_assessed')
+
     def test_complete_verified_package_and_all_captured_products_are_audited(self):
         with patch.object(receipts, "small_pe", return_value=image(delayed=("ucrtbased.dll",))):
             self.fixture.test_product_and_full_verified_package_bytes_use_portable_captured_paths()

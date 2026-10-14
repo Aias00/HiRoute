@@ -31,6 +31,8 @@ mod windows_qoder_user_models;
 mod windows_routing_business;
 #[path = "support/windows_routing_modes.rs"]
 mod windows_routing_modes;
+#[path = "support/windows_subscription_authorization.rs"]
+mod windows_subscription_authorization;
 #[path = "support/windows_user_model_receipts.rs"]
 mod windows_user_model_receipts;
 #[path = "support/windows_user_models.rs"]

@@ -28,6 +28,8 @@ mod windows_execution_host;
 mod windows_gateway_recovery;
 #[path = "support/windows_management_service.rs"]
 mod windows_management_service;
+#[path = "support/windows_subscription_authorization.rs"]
+mod windows_subscription_authorization;
 #[path = "support/windows_subscription_login.rs"]
 mod windows_subscription_login;
 #[path = "support/windows_token_launcher.rs"]

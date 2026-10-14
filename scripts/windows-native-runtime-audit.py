@@ -210,6 +210,8 @@ def audit(args):
     source = directives(args, artifacts)
     artifacts.verify(args)
     blocked = [item["path"] for item in images if item["imports"]["debug_crt"]]
+    if getattr(args, 'require_static_crt', False) and any(item['imports']['release_vc_runtime'] for item in images):
+        raise ValueError('Native static CRT requires no redistributable VC runtime DLL imports')
     return {"schema": SCHEMA, "source_sha": args.expected_sha,
             "cargo_lock_sha256": captured["build"]["cargo_lock_sha256"], "target": captured["build"]["target"],
             "images": images, "zlib_ng_object_directives": source,
@@ -224,6 +226,8 @@ def main():
     parser.add_argument("--evidence", type=Path, required=True)
     parser.add_argument("--cargo-json", type=Path)
     parser.add_argument("--dumpbin", type=Path)
+    parser.add_argument("--require-static-crt", action="store_true",
+                        help="Reject release VC runtime DLL imports as well as Debug CRT dependencies")
     args = parser.parse_args()
     try:
         value = audit(args)
