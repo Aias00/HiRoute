@@ -631,8 +631,17 @@ fn usage(facts: &Value, phase: usize) -> Option<&Value> {
             && fact["output_tokens"] == oracle::USAGE[phase].1
     })
 }
-fn assert_usage(fact: &Value, phase: usize) {
-    assert_eq!(fact["native_model"], oracle::MODEL);
+fn assert_usage(facts: &Value, fact: &Value, phase: usize) {
+    assert_eq!(fact["event_kind"], "usage_and_cache");
+    let ordinal = fact["attempt_ordinal"].as_u64().unwrap();
+    assert!(
+        facts["facts"].as_array().unwrap().iter().any(|start| {
+            start["event_kind"] == "attempt_started"
+                && start["attempt_ordinal"] == ordinal
+                && start["native_model"] == oracle::MODEL
+        }),
+        "reported usage must belong to the actual model attempt in this request"
+    );
     assert_eq!(fact["input_tokens"], oracle::USAGE[phase].0);
     assert_eq!(fact["output_tokens"], oracle::USAGE[phase].1);
     assert_eq!(fact["cache_read_tokens"], 3);
@@ -665,7 +674,7 @@ fn observed(program: &Path, plan: &str, phase: usize) -> Receipt {
                 let id = row["request_id"].as_str().unwrap();
                 let receipt = facts(program, id);
                 if let Some(fact) = usage(&receipt, phase) {
-                    assert_usage(fact, phase);
+                    assert_usage(&receipt, fact, phase);
                     let values = receipt["facts"].as_array().unwrap();
                     assert!(
                         values
@@ -719,7 +728,7 @@ fn assert_receipt(program: &Path, plan: &str, saved: &Receipt) {
     let facts = facts(program, &saved.request);
     let fact = usage(&facts, saved.phase)
         .expect("package maintenance lost the original actual usage fact");
-    assert_usage(fact, saved.phase);
+    assert_usage(&facts, fact, saved.phase);
     assert_eq!(
         value_digest(fact),
         saved.usage_sha256,
