@@ -24,6 +24,9 @@ mod installation_probe;
 #[cfg(test)]
 #[path = "installation/probe_server.rs"]
 mod probe_server;
+#[cfg(all(test, windows))]
+#[path = "installation/windows_tests.rs"]
+mod windows_tests;
 pub(crate) use availability::WorkerExecutorAvailabilityRegistry;
 pub(crate) use discovery::{
     discover as discover_worker_dependencies, validate_persisted_installation_for_run,
@@ -433,10 +436,30 @@ impl WorkerProfileSource for ManagedWorkerProfileSource {
             .join(run_root_name(&task.workspace_id, task, run)?);
         let (native_context, workspace) = match session.borrowed_context()? {
             Some(context) => {
-                if fs::canonicalize(&input.workspace_path)
+                #[cfg(windows)]
+                let same_workspace = {
+                    // The descriptor retains a path, while the accepted task retains its
+                    // native object identity. A replaced pathname cannot adopt a new root.
+                    let actual = super::profile::windows_workspace(
+                        input
+                            .workspace_path
+                            .to_str()
+                            .ok_or(DelegationErrorV1::ResumeUnavailable)?,
+                    )
                     .map_err(|_| DelegationErrorV1::ResumeUnavailable)?
-                    != context.workspace
-                {
+                    .0;
+                    actual == task.workspace
+                        && super::profile::same_windows_directory(
+                            &input.workspace_path,
+                            &context.workspace,
+                        )
+                        .map_err(|_| DelegationErrorV1::ResumeUnavailable)?
+                };
+                #[cfg(not(windows))]
+                let same_workspace = fs::canonicalize(&input.workspace_path)
+                    .map_err(|_| DelegationErrorV1::ResumeUnavailable)?
+                    == context.workspace;
+                if !same_workspace {
                     return Err(DelegationErrorV1::ResumeUnavailable);
                 }
                 if run.continued_from.is_some() {

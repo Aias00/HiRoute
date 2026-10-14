@@ -168,6 +168,15 @@ pub(crate) fn windows_workspace(
     ))
 }
 
+/// Compare directory objects through the existing workspace admission boundary. Ordinary
+/// and verbatim Win32 spellings can name the same object; spelling alone is not identity.
+#[cfg(windows)]
+pub(crate) fn same_windows_directory(left: &Path, right: &Path) -> Result<bool, DelegationErrorV1> {
+    let left = windows_workspace(left.to_str().ok_or(DelegationErrorV1::InvalidArguments)?)?.0;
+    let right = windows_workspace(right.to_str().ok_or(DelegationErrorV1::InvalidArguments)?)?.0;
+    Ok(left == right)
+}
+
 /// Native Node/CLI cwd and history encoders use ordinary Win32 path spelling.
 /// Rust canonicalize's verbatim prefix is an I/O detail, not native history identity.
 pub(crate) fn native_path(path: &Path) -> PathBuf {
@@ -285,5 +294,22 @@ mod windows_tests {
         std::fs::rename(&path, &renamed).unwrap();
         std::fs::create_dir(&path).unwrap();
         assert_ne!(windows_workspace(path.to_str().unwrap()).unwrap().0, first);
+    }
+
+    #[test]
+    fn same_directory_accepts_verbatim_spelling_but_rejects_a_replaced_object() {
+        let fixture = tempfile::tempdir().unwrap();
+        let path = fixture.path().join("workspace % ! 空 格");
+        std::fs::create_dir(&path).unwrap();
+        let extended = std::fs::canonicalize(&path).unwrap();
+        let ordinary = native_path(&extended);
+        assert_ne!(extended, ordinary);
+        assert!(same_windows_directory(&extended, &ordinary).unwrap());
+
+        let previous = fixture.path().join("previous-workspace");
+        std::fs::rename(&ordinary, &previous).unwrap();
+        std::fs::create_dir(&ordinary).unwrap();
+        assert!(!same_windows_directory(&previous, &ordinary).unwrap());
+        assert!(same_windows_directory(&ordinary, &ordinary.join("missing")).is_err());
     }
 }

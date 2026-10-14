@@ -2,7 +2,7 @@
 //! inspected. Sharing deletion on traversal handles is safe here: renaming an
 //! ancestor cannot retarget a subsequent NtCreateFile RootDirectory operation.
 
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::os::windows::ffi::OsStrExt;
@@ -36,6 +36,53 @@ pub(super) fn open(
     create: bool,
     descriptor: Option<&SECURITY_DESCRIPTOR>,
 ) -> io::Result<File> {
+    let (root, mut names) = split(path)?;
+    let mut parent = open_root(&root, SHARE_ALL)?;
+    let Some(leaf) = names.pop() else {
+        return if directory && !create {
+            Ok(parent)
+        } else {
+            Err(invalid_path())
+        };
+    };
+    for name in names {
+        parent = relative(&parent, name, true, GENERIC_READ, SHARE_ALL, false, None)?;
+    }
+    relative(&parent, leaf, directory, access, share, create, descriptor)
+}
+
+/// Retain every inspected directory without delete sharing and the leaf without
+/// write/delete sharing. Unlike ordinary relative traversal, this read lease
+/// preserves the entire admitted pathname until the caller releases it.
+pub(super) fn retained_read(path: &Path) -> io::Result<(File, Vec<File>, OsString)> {
+    let (root, mut names) = split(path)?;
+    let leaf = names.pop().ok_or_else(invalid_path)?;
+    let mut parents = vec![open_root(&root, FILE_SHARE_READ | FILE_SHARE_WRITE)?];
+    for name in names {
+        let parent = parents.last().ok_or_else(invalid_path)?;
+        parents.push(relative(
+            parent,
+            name,
+            true,
+            GENERIC_READ,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            false,
+            None,
+        )?);
+    }
+    let file = relative(
+        parents.last().ok_or_else(invalid_path)?,
+        leaf,
+        false,
+        GENERIC_READ,
+        FILE_SHARE_READ,
+        false,
+        None,
+    )?;
+    Ok((file, parents, leaf.to_owned()))
+}
+
+fn split(path: &Path) -> io::Result<(PathBuf, Vec<&OsStr>)> {
     let mut root = PathBuf::new();
     let mut names = Vec::new();
     for component in path.components() {
@@ -57,23 +104,17 @@ pub(super) fn open(
     if !path.is_absolute() || !root.is_absolute() {
         return Err(invalid_path());
     }
-    let mut parent = OpenOptions::new()
+    Ok((root, names))
+}
+
+fn open_root(root: &Path, share: u32) -> io::Result<File> {
+    let parent = OpenOptions::new()
         .read(true)
-        .share_mode(SHARE_ALL)
+        .share_mode(share)
         .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
         .open(root)?;
     check_type(&parent, true)?;
-    let Some(leaf) = names.pop() else {
-        return if directory && !create {
-            Ok(parent)
-        } else {
-            Err(invalid_path())
-        };
-    };
-    for name in names {
-        parent = relative(&parent, name, true, GENERIC_READ, SHARE_ALL, false, None)?;
-    }
-    relative(&parent, leaf, directory, access, share, create, descriptor)
+    Ok(parent)
 }
 
 pub(super) fn relative(

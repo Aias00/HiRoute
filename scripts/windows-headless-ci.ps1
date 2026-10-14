@@ -208,6 +208,9 @@ if ($Scope -eq 'components') {
     'native_permissions_survive_atomic_restore_and_detect_acl_changes',
     'sealed_readonly_artifact_rename_preserves_bytes_identity_and_native_permissions',
     'readonly_atomic_restore_preserves_permissions_and_requires_target_write_attributes')
+  Invoke-RequiredTests 'read-leases' @('-p','hiroute-platform','--test','windows_read_lease') @(
+    'read_lease_preserves_borrowed_acl_and_pins_file_and_all_ancestors',
+    'read_lease_rejects_aliases_without_mutating_their_targets')
   Invoke-RequiredTests 'platform-unit' @('-p','hiroute-platform','--lib') @(
     'durable::tests::initial_private_publication_never_replaces_a_committed_key',
     'local_record::tests::rejects_wrong_channel_direction_truncation_end_and_oversize',
@@ -378,6 +381,14 @@ if ($Scope -eq 'components') {
     ($launchCause + 'policy_and_native_context_captions_remain_ambiguous'),
     ($launchCause + 'malformed_or_truncated_rejection_wrappers_stay_unknown'))
   $selectionInput = 'worker::selection_windows::tests::'
+  Invoke-RequiredTests 'agent-native-reader' @('-p','hiroute-local-storage','--lib','control::windows_native_reader_tests::') @(Get-WindowsNativeReaderCases)
+  $profileIdentity = 'delegation::installation::windows_tests::'
+  Invoke-RequiredTests 'agent-worker-profile-identity' @('-p','hiroute-daemon','--lib',$profileIdentity) @(
+    ($profileIdentity + 'managed_new_profile_accepts_the_same_workspace_without_verbatim_spelling'),
+    ($profileIdentity + 'native_root_new_to_continue_reopens_verbatim_base_with_exact_retained_identity'),
+    ($profileIdentity + 'retained_native_root_rejects_a_junction_spelling_of_its_managed_base'))
+  $directoryIdentity = 'delegation::profile::native_context::windows_tests::same_directory_accepts_verbatim_spelling_but_rejects_a_replaced_object'
+  Invoke-RequiredTests 'agent-worker-directory-identity' @('-p','hiroute-daemon','--lib',$directoryIdentity) @($directoryIdentity) @('--exact')
   Invoke-RequiredTests 'agent-cli-selection' @('-p','hiroute-cli','--lib',$selectionInput) @(
     ($selectionInput + 'ordinary_inputs_bind_the_same_native_files_and_canonical_digest_without_mutation'),
     ($selectionInput + 'canonical_completed_selection_replays_before_missing_file_inspection'),

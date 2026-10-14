@@ -2,6 +2,7 @@
 //! a generated shim, JavaScript, Node, or a native Agent.
 use super::*;
 use hiroute_platform::windows::security;
+use hiroute_platform_test_support::junction::create as junction;
 use std::{fs, io::Write};
 
 struct NpmFixture {
@@ -324,79 +325,4 @@ fn windows_pi_scanner_rejects_original_package_and_entry_junctions() {
     fs::remove_dir(declared_alias).unwrap();
     fixture.assert_admitted(&fixture.entry);
     fixture.assert_admitted(&fixture.shim);
-}
-
-/// Test-owned mount point, using the documented FSCTL_SET_REPARSE_POINT ABI.
-/// No cmd parser, Developer Mode, or symbolic-link privilege is needed.
-fn junction(alias: &Path, target: &Path) -> std::io::Result<()> {
-    use std::os::windows::{fs::OpenOptionsExt, io::AsRawHandle};
-    #[link(name = "kernel32")]
-    unsafe extern "system" {
-        fn DeviceIoControl(
-            handle: *mut std::ffi::c_void,
-            code: u32,
-            input: *const std::ffi::c_void,
-            input_len: u32,
-            output: *mut std::ffi::c_void,
-            output_len: u32,
-            returned: *mut u32,
-            overlapped: *mut std::ffi::c_void,
-        ) -> i32;
-    }
-    if !alias.is_absolute() || !target.is_absolute() {
-        return Err(std::io::ErrorKind::InvalidInput.into());
-    }
-    directory(alias);
-    let target = target
-        .to_str()
-        .ok_or(std::io::ErrorKind::InvalidInput)?
-        .replace('/', "\\");
-    let target = target.strip_prefix("\\\\?\\").unwrap_or(&target);
-    let substitute = format!("\\??\\{target}").encode_utf16().collect::<Vec<_>>();
-    let print = target.encode_utf16().collect::<Vec<_>>();
-    let length = 16 + (substitute.len() + print.len() + 2) * 2;
-    if length > 16384 {
-        return Err(std::io::ErrorKind::InvalidInput.into());
-    }
-    let mut aligned = vec![0u32; length.div_ceil(4)];
-    // SAFETY: the u32-aligned allocation owns this complete writable byte range.
-    let bytes =
-        unsafe { std::slice::from_raw_parts_mut(aligned.as_mut_ptr().cast::<u8>(), length) };
-    bytes[0..4].copy_from_slice(&0xa0000003u32.to_le_bytes());
-    bytes[4..6].copy_from_slice(&((length - 8) as u16).to_le_bytes());
-    bytes[10..12].copy_from_slice(&((substitute.len() * 2) as u16).to_le_bytes());
-    bytes[12..14].copy_from_slice(&(((substitute.len() + 1) * 2) as u16).to_le_bytes());
-    bytes[14..16].copy_from_slice(&((print.len() * 2) as u16).to_le_bytes());
-    for (index, word) in substitute
-        .into_iter()
-        .chain(Some(0))
-        .chain(print)
-        .chain(Some(0))
-        .enumerate()
-    {
-        bytes[16 + index * 2..18 + index * 2].copy_from_slice(&word.to_le_bytes());
-    }
-    let file = fs::OpenOptions::new()
-        .write(true)
-        .custom_flags(0x02000000 | 0x00200000)
-        .open(alias)?;
-    let mut returned = 0;
-    // SAFETY: the newly created owned directory receives a bounded, fully
-    // initialized mount-point buffer; output and asynchronous operation unused.
-    if unsafe {
-        DeviceIoControl(
-            file.as_raw_handle().cast(),
-            0x000900a4,
-            aligned.as_ptr().cast(),
-            length as u32,
-            std::ptr::null_mut(),
-            0,
-            &mut returned,
-            std::ptr::null_mut(),
-        )
-    } == 0
-    {
-        return Err(std::io::Error::last_os_error());
-    }
-    Ok(())
 }

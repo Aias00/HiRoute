@@ -133,6 +133,17 @@ restores creation-recomputed DACL control on the unpublished held stage before
 exact permission verification. Native artifact
 activation uses a sealed-file transition; it does not reopen read-only payloads
 for data writes or clear a target's attributes before replacement.
+Windows Agent configuration and restoration reads share the
+[artifact snapshot reader](../../crates/local-storage/src/control/native_permissions.rs).
+Its [read lease](../../crates/platform/src/windows/read_lease.rs) retains all
+reparse-free ancestors and the regular file while bounded bytes, native identity
+and permissions are checked. Native targets keep their existing size limits and
+borrowed ACLs; private restore files additionally require their private owner.
+Worker New and Continue compare ordinary and verbatim directory spellings through
+the existing [native workspace identity](../../crates/daemon/src/delegation/profile/native_context.rs).
+The [managed profile](../../crates/daemon/src/delegation/installation.rs) and
+[retained root reader](../../crates/daemon/src/delegation/profile/materials.rs)
+still require the recorded marker, volume/file identity and complete ancestry.
 
 Keep a change with the owner that can enforce it. Extend a native leaf for a real
 ecosystem difference; reuse settings, admission, lifecycle and observation owners.

@@ -39,10 +39,22 @@ function Get-WindowsCorePackages {
     'hiroute-client-core','hiroute-observation','hiroute-integrations','hiroute-local-storage',
     'hiroute-gateway-core','hiroute-gateway','hiroute-host-runtime','hiroute-cli')
 }
+function Get-WindowsNativeReaderCases {
+  $prefix = 'control::windows_native_reader_tests::'
+  return @(
+    ($prefix + 'windows_native_reader_ports_preserve_missing_and_borrowed_content_permissions'),
+    ($prefix + 'windows_native_reader_enforces_cap_before_read_and_accepts_exact_bound'),
+    ($prefix + 'windows_native_reader_rejects_directory_hardlink_and_junction_aliases'),
+    ($prefix + 'windows_native_reader_lease_denies_data_write_and_file_or_ancestor_replacement'),
+    ($prefix + 'windows_native_reader_rejects_live_writer_without_changing_source'),
+    ($prefix + 'windows_native_reader_rejects_acl_change_on_same_held_identity'),
+    ($prefix + 'windows_native_reader_reopen_binds_identity_without_changing_fingerprint_contract'),
+    ($prefix + 'windows_native_reader_private_restore_and_native_cipher_reopen_preserve_authority'))
+}
 function Get-WindowsRequiredRecipes {
   param([Parameter(Mandatory)][string]$Scope)
   switch ($Scope) {
-    'components' { return @('platform','platform-unit','jobs','diagnostics','scm-owner') }
+    'components' { return @('platform','read-leases','platform-unit','jobs','diagnostics','scm-owner') }
     'product' { return @('artifacts','cpa','core-cpa-bridge','replay-fragmentation','headless','credential-options','worker-materials',
       'worker-cleanup','authority-key','native-endpoint','native-home','startup-admission','live-capture') }
     'core' { return @(Get-WindowsCorePackages | ForEach-Object { $_ -replace '^hiroute-','core-' }) }
@@ -51,7 +63,7 @@ function Get-WindowsRequiredRecipes {
     'accounts' { return @(Get-WindowsQoderAccountRecipes | ForEach-Object { $_.name }) }
     'agents' {
       return @('agent-private-root','agent-private-node','agent-path-identity','agent-managed-path','agent-account-fixture','agent-pi-sdk',
-        'agent-acp-notifications','agent-cancel-oracle','agent-main-oracle','agent-launch-oracle','agent-launch-cause','agent-cli-selection','agent-npm-inspection','agent-pi-locator','agent-worker-failure-oracle','agent-history-oracle',
+        'agent-acp-notifications','agent-cancel-oracle','agent-main-oracle','agent-launch-oracle','agent-launch-cause','agent-cli-selection','agent-npm-inspection','agent-pi-locator','agent-native-reader','agent-worker-profile-identity','agent-worker-directory-identity','agent-worker-failure-oracle','agent-history-oracle',
         'agent-native-codex-ingress','agent-native-source-oracle','agent-worker-dependency-oracle','agent-business-oracle','agent-http','agent-public-business','agent-user-models','agent-user-model-oracle','agent-qoder-user-model-oracle','agent-management','agent-management-oracle','agent-live-history','agent-legacy-history') +
         @(Get-WindowsDaemonAgentCases | ForEach-Object { 'agent-' + (($_ -split 'actual_')[1] -replace '_','-') }) +
         @(Get-WindowsMainAgentCases | ForEach-Object { 'main-' + (($_ -split 'actual_windows_')[1] -replace '_','-') })

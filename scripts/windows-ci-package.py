@@ -25,6 +25,13 @@ def command(*args):
     return subprocess.check_output(list(map(str, args)), cwd=ROOT, text=True, encoding="utf-8").strip()
 
 
+def apply_acl(*args):
+    # icacls writes localized status text in the Windows console code page.
+    # No caller consumes it: preserve failure status without decoding that text.
+    subprocess.run(["icacls", *map(str, args)], cwd=ROOT, check=True,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+
+
 def trusted_extraction(packager, manifest, archive, trusted):
     verified = packager.verify(manifest, archive)
     trusted.mkdir(parents=True, exist_ok=False)
@@ -36,9 +43,9 @@ def trusted_extraction(packager, manifest, archive, trusted):
     # regular files can leave an empty DACL while icacls reports success.
     for entry in [trusted] + sorted(trusted.rglob("*")):
         flags = "(OI)(CI)" if entry.is_dir() else ""
-        command("icacls", entry, "/inheritance:r", "/grant:r",
+        apply_acl(entry, "/inheritance:r", "/grant:r",
                 f"*S-1-5-32-544:{flags}F", f"*S-1-5-18:{flags}F", f"*S-1-5-11:{flags}RX")
-    command("icacls", trusted, "/setowner", "*S-1-5-32-544", "/T")
+    apply_acl(trusted, "/setowner", "*S-1-5-32-544", "/T")
     return verified
 
 

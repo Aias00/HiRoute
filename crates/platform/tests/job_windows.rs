@@ -116,7 +116,7 @@ fn job_probe() {
         return;
     }
     if mode == "credential" {
-        let handle: u64 = std::env::args().last().unwrap().parse().unwrap();
+        let handle: u64 = std::env::args().next_back().unwrap().parse().unwrap();
         let credential = read_inherited_credential(handle, 256, Duration::from_secs(2)).unwrap();
         assert_eq!(&credential[..], b"public-test-carrier\n");
         // The fixture has reached the real child reader, not merely process creation.

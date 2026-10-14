@@ -31,3 +31,6 @@ unicode-normalization.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 hiroute-platform = { path = "../platform" }
+
+[target.'cfg(windows)'.dev-dependencies]
+hiroute-platform-test-support = { path = "../platform/test-support" }

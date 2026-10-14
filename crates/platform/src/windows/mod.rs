@@ -8,6 +8,7 @@ pub mod launcher;
 pub mod lifecycle;
 mod path;
 pub mod pipe;
+mod read_lease;
 pub mod scm_owner;
 pub mod sealed_host;
 pub mod security;

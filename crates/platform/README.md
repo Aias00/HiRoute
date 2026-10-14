@@ -13,6 +13,10 @@ checks the opened object type and rejects reparse points. Existing directory
 handles retain identity across renames; private creation and ordinary file reads
 deny deletion sharing. `open_owner_only` applies the explicitly requested private
 descriptor check; it is not a repair or blanket admission rule for native files.
+`open_read_lease` retains the whole reparse-free pathname for a bounded snapshot:
+every ancestor denies deletion and the regular, single-link file denies data
+writes and deletion. Reopening uses the final held parent; readers compare
+metadata, identity and native permission facts without adopting external ACLs.
 `open_read_write` opens an existing regular file without create, truncate or
 DELETE permission and denies deletion while it is held. Storage lock owners use
 it to preserve the admitted object's identity and native permissions.

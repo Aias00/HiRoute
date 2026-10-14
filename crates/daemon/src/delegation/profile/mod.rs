@@ -25,7 +25,7 @@ pub use native_context::NativeWorkerContext;
 #[cfg(test)]
 pub(crate) use native_context::native_path as native_context_path;
 #[cfg(windows)]
-pub(crate) use native_context::windows_workspace;
+pub(crate) use native_context::{same_windows_directory, windows_workspace};
 
 mod materials;
 pub(crate) use materials::native_history;

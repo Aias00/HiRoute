@@ -4,6 +4,7 @@ import importlib.util
 import json
 from pathlib import Path
 import tempfile
+import subprocess
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -115,6 +116,34 @@ class RestagedBaseline(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'archive digest'):
             staging.restage(self.args)
         self.assertEqual(self.extractions, [])
+
+
+class LocalizedAclStatus(unittest.TestCase):
+    def invocation(self, args, **kwargs):
+        # Model a successful CP936 status line at the OS process boundary.
+        # The old UTF-8 command reader throws before its caller can use exit 0.
+        status = '成功处理了 1 个文件'.encode('gbk')
+        if kwargs.get('text'):
+            return status.decode(kwargs['encoding'])
+        self.assertEqual(args[0], 'icacls')
+        self.assertEqual(kwargs['stdout'], subprocess.DEVNULL)
+        self.assertEqual(kwargs['stderr'], subprocess.PIPE)
+        self.assertIs(kwargs['check'], True)
+        return subprocess.CompletedProcess(args, 0)
+
+    def test_successful_localized_status_is_not_decoded_as_package_data(self):
+        with patch.object(staging.subprocess, 'run', side_effect=self.invocation), \
+             patch.object(staging.subprocess, 'check_output', side_effect=self.invocation):
+            with self.assertRaises(UnicodeDecodeError):
+                staging.command('icacls', 'test-owned-file')
+            staging.apply_acl('test-owned-file', '/inheritance:r', '/grant:r', '*S-1-5-18:F')
+
+    def test_acl_command_failure_still_stops_package_admission(self):
+        failure = subprocess.CalledProcessError(5, ['icacls'], stderr=b'localized failure')
+        with patch.object(staging.subprocess, 'run', side_effect=failure):
+            with self.assertRaises(subprocess.CalledProcessError) as observed:
+                staging.apply_acl('test-owned-file', '/setowner', '*S-1-5-32-544')
+        self.assertIs(observed.exception, failure)
 
 
 if __name__ == '__main__':

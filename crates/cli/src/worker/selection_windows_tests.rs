@@ -50,7 +50,7 @@ fn ordinary_inputs_bind_the_same_native_files_and_canonical_digest_without_mutat
         ..source
     };
     let original = security::open_identity(&cli, false).unwrap();
-    let permissions = hiroute_platform::windows::file_security::capture(&original).unwrap();
+    let permissions = hiroute_platform::file_security::capture(&original).unwrap();
     let prepared = prepare(source.clone()).unwrap();
     let expected = WorkerDependenciesSelectRequestV1 {
         cli_path: std::fs::canonicalize(&cli)
@@ -112,7 +112,7 @@ fn ordinary_inputs_bind_the_same_native_files_and_canonical_digest_without_mutat
         b"manual executable is never run"
     );
     assert_eq!(
-        hiroute_platform::windows::file_security::capture(&original).unwrap(),
+        hiroute_platform::file_security::capture(&original).unwrap(),
         permissions
     );
     drop(original);
@@ -230,7 +230,7 @@ fn selection_input_rejects_device_unc_streams_and_real_junctions_without_adoptio
     let fixture = Fixture::new();
     let cli = fixture.file("client.exe", b"untouched dependency");
     let held = security::open_identity(&cli, false).unwrap();
-    let permissions = hiroute_platform::windows::file_security::capture(&held).unwrap();
+    let permissions = hiroute_platform::file_security::capture(&held).unwrap();
     for spelling in [
         r"\\server\share\client.exe",
         r"\\?\UNC\server\share\client.exe",
@@ -249,7 +249,7 @@ fn selection_input_rejects_device_unc_streams_and_real_junctions_without_adoptio
     std::fs::remove_dir(alias).unwrap();
     assert_eq!(std::fs::read(&cli).unwrap(), b"untouched dependency");
     assert_eq!(
-        hiroute_platform::windows::file_security::capture(&held).unwrap(),
+        hiroute_platform::file_security::capture(&held).unwrap(),
         permissions
     );
 }

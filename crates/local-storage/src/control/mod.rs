@@ -38,6 +38,8 @@ mod test_native_permissions;
 mod transaction_v2_tests;
 #[cfg(all(test, windows))]
 mod windows_artifacts_tests;
+#[cfg(all(test, windows))]
+mod windows_native_reader_tests;
 
 mod agent_check;
 mod agent_read;

@@ -202,11 +202,25 @@ impl TaskSessionRoot {
         root.validate()?;
         self.check_binding(root.harness, &root.workspace_root_identity)?;
         let base = checked_directory(session_base)?;
+        let same_managed_base = if continuing {
+            #[cfg(windows)]
+            {
+                root.managed_base_path.as_deref().is_some_and(|recorded| {
+                    super::native_context::same_windows_directory(Path::new(recorded), &base)
+                        .unwrap_or(false)
+                })
+            }
+            #[cfg(not(windows))]
+            {
+                root.managed_base_path.as_deref() == Some(base.to_string_lossy().as_ref())
+            }
+        } else {
+            true
+        };
         if self.path.parent() != Some(base.as_path())
             || self.path.file_name().and_then(|name| name.to_str())
                 != Some(root.relative_root.as_str())
-            || (continuing
-                && root.managed_base_path.as_deref() != Some(base.to_string_lossy().as_ref()))
+            || !same_managed_base
         {
             return Err(if continuing {
                 DelegationErrorV1::ResumeUnavailable
