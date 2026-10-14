@@ -407,6 +407,10 @@ export function Agents({
   const qoderRecoveryOperation = selected?.agent_id === 'agent_qoder_default'
     && !selected.status_error && ['pending', 'needs_attention'].includes(selectedModel?.state ?? '')
     ? selectedModel?.operation_id : undefined;
+  const hermesRecoveryOperation = selected?.agent_id === 'agent_hermes_default' && !selected.status_error
+    ? [selectedModel, selectedManagement].find(facet => ['pending', 'needs_attention'].includes(facet?.state ?? ''))?.operation_id
+    : undefined;
+  const settingsRecoveryOperation = qoderRecoveryOperation ?? hermesRecoveryOperation;
   async function retrySettingsOperation(operationId: string) {
     if (!selected?.context_id || busy || !snapshot?.trusted_authority) return;
     setBusy(true); setActionError('');
@@ -530,14 +534,14 @@ export function Agents({
                 {selected.status_error && <div className="callout warn" data-error-code={selected.status_error}><UiIcon name="warning" /><div><strong>{text('暂时无法核实 Agent 状态', 'Agent status is temporarily unavailable')}</strong><p>{text('当前仍显示已发现的 Agent；重新读取成功前不会把未知状态当作已接入。', 'The detected Agent remains visible. Unknown status is not treated as connected until it can be read again.')}</p><button className="btn" type="button" onClick={() => void refresh()}>{text('重新读取', 'Try again')}</button></div></div>}
                 {executableStatus}
                 {selectedHasDrift && <div className="callout warn"><UiIcon name="warning" /><div><strong>{text('接入配置已变化', 'Connection settings changed')}</strong><p>{text('HiRoute 不会覆盖已变化的设置。请在“连接详情与恢复”中恢复需要的路由配置。', 'HiRoute will not overwrite changed settings. Restore the required routing configuration under Connection details and recovery.')}</p></div></div>}
-                {qoderRecoveryOperation && <div className="callout warn" role="alert" data-qoder-model-recovery>
+                {settingsRecoveryOperation && <div className="callout warn" role="alert" data-qoder-model-recovery={qoderRecoveryOperation ? true : undefined} data-hermes-settings-recovery={hermesRecoveryOperation ? true : undefined}>
                   <UiIcon name="warning" /><div>
-                    <strong>{text('模型路由配置尚未完成', 'Model routing configuration is incomplete')}</strong>
-                    <p>{text('请先保存自己的编辑，恢复本次操作开始后发生的配置文件改动，再继续原操作。HiRoute 不会强制覆盖文件；任务协作保持独立。', 'Save your edits and undo configuration changes made since this operation started, then resume it. HiRoute will not force an overwrite; task collaboration remains independent.')}</p>
-                    <button className="btn" type="button" disabled={busy || Boolean(editor) || !snapshot.trusted_authority} onClick={() => void retrySettingsOperation(qoderRecoveryOperation)}>{text('重新检查并继续原操作', 'Recheck and resume operation')}</button>
+                    <strong>{hermesRecoveryOperation ? text('Hermes 配置尚未完成', 'Hermes configuration is incomplete') : text('模型路由配置尚未完成', 'Model routing configuration is incomplete')}</strong>
+                    <p>{hermesRecoveryOperation ? text('请先保存自己的编辑，恢复本次操作开始后发生的文件改动，再继续原操作。HiRoute 不会强制覆盖文件。', 'Save your edits and undo file changes made since this operation started, then resume it. HiRoute will not force an overwrite.') : text('请先保存自己的编辑，恢复本次操作开始后发生的配置文件改动，再继续原操作。HiRoute 不会强制覆盖文件；任务协作保持独立。', 'Save your edits and undo configuration changes made since this operation started, then resume it. HiRoute will not force an overwrite; task collaboration remains independent.')}</p>
+                    <button className="btn" type="button" disabled={busy || Boolean(editor) || !snapshot.trusted_authority} onClick={() => void retrySettingsOperation(settingsRecoveryOperation)}>{text('重新检查并继续原操作', 'Recheck and resume operation')}</button>
                   </div>
                 </div>}
-                {selectedPending && !qoderRecoveryOperation && !selected.codex_access?.pending_operation && <div className="oc-status-row" role="status"><span className="oc-spinner" /><p>{text('路由配置正在应用，完成后会自动更新。', 'Routing settings are being applied and will update automatically.')}</p></div>}
+                {selectedPending && !settingsRecoveryOperation && !selected.codex_access?.pending_operation && <div className="oc-status-row" role="status"><span className="oc-spinner" /><p>{text('路由配置正在应用，完成后会自动更新。', 'Routing settings are being applied and will update automatically.')}</p></div>}
                 {agentSupportsModelRouting(selected.agent_id) && !agentHasNoModelConnection(selected) && <section className="detail-section v3-agent-section">
                   <div className="detail-section-head"><h3>{text('模型路由', 'Model routing')}</h3><button className="btn btn-quiet" data-agent-facet="model" disabled={busy || selectedPending || !selected.context_id || !agentEcosystem(selected.agent_id) || !mutable} onClick={event => open(selected, 'model', event.currentTarget)}>{modelSelection ? text('调整', 'Edit') : text('启用', 'Enable')}</button>{selectedModel?.restore_point_ref && <button className="btn btn-quiet" disabled={busy || selectedPending || !mutable} onClick={event => void change(selected, 'model', true, event.currentTarget)}>{text('停用', 'Disable')}</button>}</div>
                   <p>{modelSelection ? <>{text('当前选择：', 'Current selection: ')}<strong>{selectionSummary}</strong></> : selected.agent_id === 'agent_qoder_default'
