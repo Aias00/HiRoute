@@ -1104,7 +1104,7 @@
       "field": "task-owned native home without borrowed-native-context.json",
       "mode": "recovery_read_only",
       "owner": "worker-native-context",
-      "reason": "Continue existing private-root Worker tasks with their original native history and owned cleanup. New tasks bind borrowed native context explicitly; a damaged or partially missing binding must never fall back to the legacy scanner.",
+      "reason": "Continue existing private-root Worker tasks with their original native history and owned cleanup. The existing scanner encodes native path components as portable slash-separated relative paths without changing retained file identity. New tasks bind borrowed native context explicitly; a damaged or partially missing binding must never fall back to the legacy scanner.",
       "removal_condition": "Retire only after all retained tasks and supported backups no longer contain private-root native sessions, together with the frozen recovery fixtures.",
       "allowed_paths": [
         "crates/daemon/src/delegation/profile/materials.rs",

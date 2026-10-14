@@ -84,6 +84,7 @@ enum Terminal {
 
 struct TailFixture {
     journal: Arc<TerminalJournal>,
+    root: PathBuf,
     history: PathBuf,
     terminal: Terminal,
     tail_written: Arc<AtomicBool>,
@@ -96,6 +97,7 @@ impl TailFixture {
         fixture_private_directory(&projects);
         Self {
             journal,
+            root: root.to_owned(),
             history: projects.join("native-session.jsonl"),
             terminal,
             tail_written: Arc::default(),
@@ -109,6 +111,61 @@ impl TailFixture {
             .await
             .unwrap()
             .unwrap();
+    }
+}
+
+impl TailFixture {
+    /// Sample after the adapter has joined. These closed facts do not participate in
+    /// the checkpoint's two-second wait or reveal fixture paths/history content.
+    fn history_facts(&self) -> Value {
+        let direct = fs::symlink_metadata(&self.history).ok();
+        let relative_portable = self
+            .history
+            .strip_prefix(&self.root)
+            .ok()
+            .and_then(std::path::Path::to_str)
+            .is_some_and(hiroute_domain::delegation::valid_native_history_path);
+        let reader = match TaskSessionRoot::native_transcript_path(
+            &self.root,
+            WorkerHarnessV1::ClaudeCode,
+            "native-session",
+        ) {
+            Ok(_) => "resolved",
+            Err(DelegationErrorV1::ResumeUnavailable) => "resume_unavailable",
+            Err(_) => "other_error",
+        };
+        #[cfg(windows)]
+        let native = {
+            use hiroute_platform::windows::security;
+            security::open_identity(&self.history, false).map_or_else(
+                |_| json!({"held_open":false,"owner_acl":false,"single_link":false,
+                    "same_held_identity":false}),
+                |held| json!({
+                    "held_open": true,
+                    "owner_acl": security::verify_owner_only_handle(&held, false).is_ok(),
+                    "single_link": security::file_link_count(&held).ok() == Some(1),
+                    "same_held_identity": security::file_identity(&held).ok().is_some_and(|first| {
+                        security::open_identity(&self.history, false)
+                            .and_then(|second| security::file_identity(&second))
+                            .ok()
+                            == Some(first)
+                    }),
+                }),
+            )
+        };
+        #[cfg(not(windows))]
+        let native = Value::Null;
+        json!({
+            "tail_written": self.tail_written.load(Ordering::SeqCst),
+            "direct_file": direct
+                .as_ref()
+                .is_some_and(|metadata| metadata.is_file() && !metadata.file_type().is_symlink()),
+            "direct_len": direct.as_ref().map(std::fs::Metadata::len),
+            "relative_portable": relative_portable,
+            "reader": reader,
+            "reader_len": claude_history_len(&self.root, "native-session"),
+            "native": native,
+        })
     }
 }
 
@@ -280,7 +337,11 @@ async fn claude_terminal_checkpoint_keeps_transport_live_until_final_tail() {
         .unwrap();
     fixture.joined().await;
     assert!(result.execution.as_ref().unwrap().text.is_empty());
-    assert!(result.native_history_settled);
+    let facts = fixture.history_facts();
+    assert!(
+        result.native_history_settled,
+        "closed history facts: {facts}"
+    );
     assert!(result.stop.as_ref().unwrap().scope_stopped);
     assert!(fixture.tail_written.load(Ordering::SeqCst));
     assert_eq!(fs::read(&fixture.history).unwrap(), b"final-tail\n");

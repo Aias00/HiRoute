@@ -146,6 +146,8 @@ impl Oracle {
         })
     }
 
+    // Each input freezes a distinct native resource, route or correlated receipt.
+    #[allow(clippy::too_many_arguments)]
     pub fn main(
         skill: PathBuf,
         contents: String,
@@ -189,7 +191,7 @@ impl Oracle {
                 }
             }
             if let Some(output) = outputs.get("main_result") {
-                let result = envelope(&output);
+                let result = envelope(output);
                 assert_eq!(result["data"]["run_state"], "succeeded");
                 assert!(
                     result["data"]["result"]
@@ -221,7 +223,7 @@ impl Oracle {
                 let mut latest = accepted.clone();
                 let mut index = 0;
                 while let Some(output) = outputs.get(&format!("main_wait_{index}")) {
-                    latest = envelope(&output);
+                    latest = envelope(output);
                     same_run(&latest, &accepted);
                     index += 1;
                 }
@@ -268,7 +270,7 @@ impl Oracle {
                     ),
                 )
             } else if let Some(output) = outputs.get("main_plans") {
-                let directory = envelope(&output);
+                let directory = envelope(output);
                 let candidates: Vec<_> = directory["data"]["plans"]
                     .as_array()
                     .unwrap()

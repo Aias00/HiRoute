@@ -481,7 +481,7 @@ fn pi_sdk_after_failed_public_check(cwd: &Path, env: &[(OsString, OsString)]) {
                 env: &environment,
                 cwd: Some(cwd),
                 stdin: Stream::Null,
-                stdout: Stream::File(&output),
+                stdout: Stream::File(output),
                 stderr: Stream::Null,
             })?;
             let deadline = Instant::now() + Duration::from_secs(15);

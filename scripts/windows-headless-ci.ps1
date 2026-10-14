@@ -311,6 +311,12 @@ if ($Scope -eq 'components') {
     Invoke-RequiredTests 'background-capture' @('-p','hiroute-daemon','--test','windows_background','windows_token_launcher::capture_tests::') @(
       'windows_token_launcher::capture_tests::native_capture_requires_last_writer_close_for_eof',
       'windows_token_launcher::capture_tests::native_capture_bounds_output_and_never_reports_unknown_stage_data')
+    $packagedProxy = 'windows_packaged_foreground::proxy_observation::tests::'
+    Invoke-RequiredTests 'packaged-proxy-oracle' @('-p','hiroute-daemon','--test','windows_headless',$packagedProxy) @(
+      ($packagedProxy + 'only_exact_pinned_updater_origin_is_an_approved_rejected_connect'),
+      ($packagedProxy + 'credentials_bodies_unknown_headers_and_ambiguous_hosts_stay_red'),
+      ($packagedProxy + 'actual_loopback_connect_is_rejected_without_tls_then_observes_peer_eof'),
+      ($packagedProxy + 'empty_closed_socket_is_not_a_successful_proxy_observation'))
     $packaged = 'actual_windows_packaged_foreground_subscription_lifecycle'
     Invoke-RequiredTests 'packaged-foreground' @('-p','hiroute-daemon','--test','windows_headless',$packaged) @($packaged) @('--ignored','--exact','--nocapture')
     Invoke-RequiredTests 'background' @('-p','hiroute-daemon','--test','windows_background','task_native_background_lua_gateway_control_stop_crash_recovery_and_autostart') @(
@@ -332,6 +338,8 @@ if ($Scope -eq 'components') {
     'delegation::acp::notification_tests::startup_and_loaded_history_notifications_do_not_make_current_output_incomplete',
     'delegation::acp::notification_tests::wrong_session_notification_during_prompt_still_marks_output_incomplete')
   Invoke-RequiredTests 'agent-live-history' @('-p','hiroute-daemon','--lib','delegation::lifecycle::tests::terminal::') @(Get-WindowsLiveHistoryCases)
+  $legacyHistory = 'delegation::profile::tests::materials_tests::legacy_private_history_retains_portable_paths_and_reopens_exact_session'
+  Invoke-RequiredTests 'agent-legacy-history' @('-p','hiroute-daemon','--lib',$legacyHistory) @($legacyHistory) @('--exact')
   $userModelOracle = 'windows_user_models::native::diagnostic_tests::'
   Invoke-RequiredTests 'agent-user-model-oracle' @('-p','hiroute-daemon','--test','windows_headless',$userModelOracle) @(
     ($userModelOracle + 'public_check_phase_is_distinct_from_ordinary_native_model_invocation'),
@@ -391,6 +399,10 @@ if ($Scope -eq 'components') {
   $userModels = 'actual_windows_pi_and_dsh_persisted_user_models'
   Invoke-RequiredTests 'agent-user-models' @('-p','hiroute-daemon','--test','windows_headless',$userModels) @($userModels) @('--ignored','--exact','--nocapture')
   $management = 'actual_windows_installed_management_commands'
+  $managementOracle = 'windows_management_business::tests::'
+  Invoke-RequiredTests 'agent-management-oracle' @('-p','hiroute-daemon','--test','windows_headless',$managementOracle) @(
+    ($managementOracle + 'management_daemon_unavailable_hint_requires_exact_negative_logs_envelope'),
+    ($managementOracle + 'management_stderr_rejects_mixed_vendor_and_unknown_output'))
   Invoke-RequiredTests 'agent-management' @('-p','hiroute-daemon','--test','windows_headless',$management) @($management) @('--ignored','--exact','--nocapture')
   foreach ($case in (Get-WindowsDaemonAgentCases)) {
     $name = 'agent-' + ($case -split 'actual_')[1] -replace '_','-'

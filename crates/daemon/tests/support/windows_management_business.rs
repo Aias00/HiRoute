@@ -9,7 +9,10 @@ use super::windows_headless_business::{Business, assert_operation, cli};
 use super::windows_routing_business::{Plan, grant};
 use super::windows_user_models::Contexts;
 use super::{InstalledProduct, assert_no_secret, security};
-use hiroute_application_api::{AgentModelSettingsStateV2, AgentSettingsStatusV2};
+use hiroute_application_api::{
+    AgentModelSettingsStateV2, AgentSettingsStatusV2, ErrorCode, MACHINE_ENVELOPE_SCHEMA_V2,
+    MachineEnvelopeV2, MachineStatus,
+};
 use hiroute_domain::AgentCollaborationTriggerModeV2;
 use hiroute_platform::windows::job::{Child, Launch, Stream};
 use serde_json::{Value, json};
@@ -22,6 +25,42 @@ use zeroize::Zeroizing;
 
 const AGENT: &str = "agent_pi_default";
 const BOUND: u64 = hiroute_application_api::LOCAL_CONTROL_MAX_FRAME_BYTES as u64;
+// Published by CLI render() for DAEMON_UNAVAILABLE, including JSON output. This
+// exact negative logs result is expected only because this foreground fixture
+// has no installed native manager. It is not permission to emit native logs.
+const DAEMON_UNAVAILABLE_HINT: &str = "HiRoute 服务不可用。Standalone 请运行 `hiroute service status`，并在需要时运行 `hiroute service start`；Desktop 请启动或恢复应用。隔离实例请检查运行目录。不会自动启动或重放请求。\n";
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum StderrKind {
+    Empty,
+    DaemonUnavailableHint,
+    Unknown,
+}
+
+fn stderr_kind(bytes: &[u8]) -> StderrKind {
+    if bytes.is_empty() {
+        StderrKind::Empty
+    } else if bytes == DAEMON_UNAVAILABLE_HINT.as_bytes() {
+        StderrKind::DaemonUnavailableHint
+    } else {
+        StderrKind::Unknown
+    }
+}
+
+fn stderr_allowed(
+    stage: &str,
+    exit: i32,
+    status: Option<MachineStatus>,
+    code: Option<ErrorCode>,
+    kind: StderrKind,
+) -> bool {
+    (kind == StderrKind::Empty && stage != "logs")
+        || (stage == "logs"
+            && exit == i32::from(MachineStatus::Unavailable.exit_code())
+            && status == Some(MachineStatus::Unavailable)
+            && code == Some(ErrorCode::DaemonUnavailable)
+            && kind == StderrKind::DaemonUnavailableHint)
+}
 
 /// Requires a fresh InstalledProduct and a daemon started with contexts.variables().
 /// Public transactions alone create the model and Skill files. This does not
@@ -521,10 +560,10 @@ impl<'a> Commands<'a> {
     }
     fn ok(&mut self, args: &[&str], body: Option<&Value>) -> Value {
         let (exit, value) = self.call(args, body);
-        let code = value["error"]["code"].as_str().unwrap_or("none");
+        let code = serde_json::from_value::<ErrorCode>(value["error"]["code"].clone()).ok();
         assert_eq!(
             exit, 0,
-            "installed management command failed with closed code: {code}"
+            "installed management command failed with closed code: {code:?}"
         );
         assert!(matches!(
             value["status"].as_str(),
@@ -619,14 +658,144 @@ impl<'a> Commands<'a> {
             bytes
         };
         let bytes = read(&mut output);
+        let stderr = read(&mut error);
+        // Classify before asserting, without printing response fields, native
+        // captions or stderr bytes. Unknown enum values cannot become evidence.
+        let value = serde_json::from_slice::<Value>(&bytes).ok();
+        let envelope = value.as_ref().and_then(|value| {
+            serde_json::from_value::<MachineEnvelopeV2<Value>>(value.clone()).ok()
+        });
+        let status = envelope.as_ref().map(|envelope| envelope.status);
+        let code = envelope
+            .as_ref()
+            .and_then(|envelope| envelope.error.as_ref().map(|error| error.code));
+        let kind = stderr_kind(&stderr);
+        eprintln!(
+            "Windows installed management result: stage={stage}, sequence={}, exit={exit}, native_exit={}, status={status:?}, error={code:?}, envelope_valid={}, stdout_bytes={}, stderr_bytes={}, stderr_kind={kind:?}",
+            self.sequence,
+            exit as u32,
+            envelope.is_some(),
+            bytes.len(),
+            stderr.len(),
+        );
+        let envelope = envelope.unwrap_or_else(|| {
+            panic!("installed management did not return a typed MachineEnvelope at stage={stage}")
+        });
+        assert_eq!(
+            envelope.schema_version, MACHINE_ENVELOPE_SCHEMA_V2,
+            "installed management returned an unexpected machine schema at stage={stage}"
+        );
+        assert_eq!(
+            exit,
+            i32::from(envelope.status.exit_code()),
+            "installed management exit contradicts its typed status at stage={stage}"
+        );
         assert!(
-            read(&mut error).is_empty(),
-            "public management CLI emitted unexpected stderr"
+            stderr_allowed(stage, exit, status, code, kind),
+            "public management CLI emitted unexpected stderr at stage={stage}, kind={kind:?}"
         );
         (
             exit,
-            serde_json::from_slice(&bytes)
-                .expect("installed management returns the real MachineEnvelope"),
+            value.unwrap_or_else(|| {
+                panic!("installed management did not return machine JSON at stage={stage}")
+            }),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn management_daemon_unavailable_hint_requires_exact_negative_logs_envelope() {
+        let kind = stderr_kind(DAEMON_UNAVAILABLE_HINT.as_bytes());
+        assert_eq!(kind, StderrKind::DaemonUnavailableHint);
+        assert!(stderr_allowed(
+            "logs",
+            6,
+            Some(MachineStatus::Unavailable),
+            Some(ErrorCode::DaemonUnavailable),
+            kind,
+        ));
+        assert!(!stderr_allowed(
+            "logs",
+            6,
+            Some(MachineStatus::Unavailable),
+            Some(ErrorCode::DaemonUnavailable),
+            StderrKind::Empty,
+        ));
+        for (stage, exit, status, code) in [
+            (
+                "doctor",
+                6,
+                Some(MachineStatus::Unavailable),
+                Some(ErrorCode::DaemonUnavailable),
+            ),
+            (
+                "native-collaboration-check",
+                6,
+                Some(MachineStatus::Unavailable),
+                Some(ErrorCode::DaemonUnavailable),
+            ),
+            (
+                "logs",
+                0,
+                Some(MachineStatus::Unavailable),
+                Some(ErrorCode::DaemonUnavailable),
+            ),
+            (
+                "logs",
+                6,
+                Some(MachineStatus::Succeeded),
+                Some(ErrorCode::DaemonUnavailable),
+            ),
+            (
+                "logs",
+                6,
+                Some(MachineStatus::Unavailable),
+                Some(ErrorCode::GatewayUnavailable),
+            ),
+            ("logs", 6, None, Some(ErrorCode::DaemonUnavailable)),
+            ("logs", 6, Some(MachineStatus::Unavailable), None),
+        ] {
+            assert!(!stderr_allowed(stage, exit, status, code, kind));
+        }
+    }
+
+    #[test]
+    fn management_stderr_rejects_mixed_vendor_and_unknown_output() {
+        let mut appended = DAEMON_UNAVAILABLE_HINT.as_bytes().to_vec();
+        appended.extend_from_slice(b"native caption\n");
+        let mut prefixed = b"native caption\n".to_vec();
+        prefixed.extend_from_slice(DAEMON_UNAVAILABLE_HINT.as_bytes());
+        let without_newline = DAEMON_UNAVAILABLE_HINT.trim_end().as_bytes().to_vec();
+        let crlf = DAEMON_UNAVAILABLE_HINT.replace('\n', "\r\n").into_bytes();
+        for bytes in [
+            appended,
+            prefixed,
+            without_newline,
+            crlf,
+            b"native caption\n".to_vec(),
+            vec![0xff],
+        ] {
+            let kind = stderr_kind(&bytes);
+            assert_eq!(kind, StderrKind::Unknown);
+            assert!(!stderr_allowed(
+                "logs",
+                6,
+                Some(MachineStatus::Unavailable),
+                Some(ErrorCode::DaemonUnavailable),
+                kind,
+            ));
+        }
+        assert_eq!(stderr_kind(b""), StderrKind::Empty);
+        assert!(stderr_allowed(
+            "doctor",
+            0,
+            Some(MachineStatus::Succeeded),
+            None,
+            StderrKind::Empty,
+        ));
     }
 }

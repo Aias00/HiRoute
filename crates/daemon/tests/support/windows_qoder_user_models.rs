@@ -5,8 +5,7 @@
 mod native;
 #[path = "windows_qoder_user_models_oracle.rs"]
 mod oracle;
-#[path = "windows_user_model_receipts.rs"]
-mod receipts;
+use super::windows_user_model_receipts as receipts;
 #[path = "windows_qoder_user_models_settings.rs"]
 mod settings;
 pub use native::Contexts;

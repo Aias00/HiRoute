@@ -1,7 +1,7 @@
 //! Public observation joins actual independently counted native model requests.
-use super::super::InstalledProduct;
-use super::super::windows_headless_business::cli;
-use super::super::windows_routing_business::MODEL;
+use super::InstalledProduct;
+use super::windows_headless_business::cli;
+use super::windows_routing_business::MODEL;
 use hiroute_domain::ObservationFactsPageV2;
 use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};

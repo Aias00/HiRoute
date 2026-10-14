@@ -146,6 +146,8 @@ Only registered old Codex/Claude tasks may use the legacy private-root recovery
 path in the [compatibility registry](../../contracts/compatibility-support.v1.json).
 A corrupted current binding is not legacy absence. Resource discovery and native
 permission policy are separate; using one OS account does not make HOME a sandbox.
+The legacy scanner encodes filesystem components with `/` at the retained-path
+boundary; native Windows separators do not change that portable contract.
 
 `Preparing` is committed before any native process can spawn. Cancelling an
 `Accepted` run therefore atomically records `Cancelled` with complete cleanup;

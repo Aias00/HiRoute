@@ -257,14 +257,13 @@ fn function(
     arguments: Value,
 ) -> Result<Value, &'static str> {
     let declaration = tool(body, name).ok_or("native-tool-declaration")?;
-    if let Some(required) = declaration["parameters"]["required"].as_array() {
-        if required
+    if let Some(required) = declaration["parameters"]["required"].as_array()
+        && required
             .iter()
             .filter_map(Value::as_str)
             .any(|field| arguments.get(field).is_none())
-        {
-            return Err("native-tool-arguments");
-        }
+    {
+        return Err("native-tool-arguments");
     }
     Ok(
         json!({"id":format!("fc_{suffix}"),"type":"function_call","status":"completed","call_id":format!("call_{suffix}"),"name":name,"arguments":arguments.to_string()}),

@@ -4,6 +4,8 @@
 //! No account, callback, token exchange or model inference is fabricated.
 #[path = "windows_subscription_login.rs"]
 mod login;
+#[path = "windows_packaged_proxy_observation.rs"]
+mod proxy_observation;
 
 use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
@@ -46,12 +48,11 @@ pub fn run() {
     });
     checkpoint("pkce-cancel-forget-before-restart");
 
-    // A listener is only a fail-closed observation of unexpected external hops.
-    // An account-free auth URL has no authorized token/discovery/model request;
-    // zero accepts is explicitly not a positive outbound proxy proof.
-    let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
-    proxy.set_nonblocking(true).unwrap();
-    let proxy_url = format!("http://{}", proxy.local_addr().unwrap());
+    // The stock binary starts a fixed version updater without an account. The
+    // observer rejects every connection; only the pinned updater origin is an
+    // approved CONNECT attempt. It neither decrypts nor forwards the request.
+    let proxy = proxy_observation::Observation::new();
+    let proxy_url = proxy.url().to_owned();
     let configured = cli(
         product,
         &[
@@ -83,8 +84,10 @@ pub fn run() {
     // at the original native layout, not an env-derived synthetic endpoint.
     let foreign_home = product.root.join("unselected-home-override");
     security::create_owner_only_directory(&foreign_home).unwrap();
+    proxy.phase(proxy_observation::Phase::ManualStart);
     let mut second = Foreground::start(product, Some(&foreign_home));
     super::gateway_ready(second.listen);
+    proxy.phase(proxy_observation::Phase::RestartRecovery);
     login::assert_after_restart(
         &mut |arguments, request| public_login(product, arguments, request),
         pending,
@@ -92,8 +95,8 @@ pub fn run() {
     assert_snapshot(product, &manual["config"], true);
     assert!(proxy_view(product)["config"] == manual["config"]);
     assert!(std::fs::read_dir(&foreign_home).unwrap().next().is_none());
-    manual_policy_login(product);
-    assert_no_external_hop(&proxy);
+    manual_policy_login(product, &proxy);
+    proxy.assert_approved_only();
     checkpoint("restart-expired-and-launch-snapshot");
 
     let restored = cli(
@@ -107,13 +110,16 @@ pub fn run() {
     assert!(desired["config"]["revision"] != manual["config"]["revision"]);
     assert_snapshot(product, &desired["config"], false);
     second.stop(product);
+    proxy.phase(proxy_observation::Phase::RestoreInherited);
     let mut third = Foreground::start(product, None);
     super::gateway_ready(third.listen);
     assert_snapshot(product, &desired["config"], true);
     assert!(proxy_view(product)["config"] == desired["config"]);
-    assert_no_external_hop(&proxy);
+    proxy.assert_approved_only();
     package.verify_bytes();
     third.stop(product);
+    // Final ledger is checked only after all actual packaged descendants exited.
+    proxy.finish();
     checkpoint("restore-and-natural-job-empty");
     eprintln!(
         "packaged foreground limits: installer=not-executed, logged-owner-task=not-executed, \
@@ -164,14 +170,15 @@ fn assert_snapshot(product: &InstalledProduct, expected: &Value, applied: bool) 
     );
 }
 
-fn assert_no_external_hop(listener: &TcpListener) {
+fn assert_no_declared_decision_hop(listener: &TcpListener) {
     match listener.accept() {
         Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
-        _ => panic!("account-free OAuth generated an unapproved proxy hop"),
+        _ => panic!("declaration-only custom decision generated an unapproved endpoint hop"),
     }
 }
 
-fn manual_policy_login(product: &InstalledProduct) {
+fn manual_policy_login(product: &InstalledProduct, proxy: &proxy_observation::Observation) {
+    proxy.phase(proxy_observation::Phase::LoginStart);
     let started = cli(
         product,
         &["compute", "connection", "login"],
@@ -182,7 +189,12 @@ fn manual_policy_login(product: &InstalledProduct) {
     assert!(session["account_ref"].is_null() && session["candidate"].is_null());
     assert!(session["authorization_url"].is_string());
     let id = session["login_ref"].as_str().unwrap();
-    for (action, state) in [("cancel", "cancelled"), ("forget", "forgotten")] {
+    proxy.require_updater_origin();
+    for (action, state, phase) in [
+        ("cancel", "cancelled", proxy_observation::Phase::LoginCancel),
+        ("forget", "forgotten", proxy_observation::Phase::LoginForget),
+    ] {
+        proxy.phase(phase);
         let result = cli(
             product,
             &["compute", "connection", "login"],
@@ -262,7 +274,7 @@ fn authorization_rejections(product: &InstalledProduct) {
         "approval_operation":stale,"validation_ref":"validation/foreground/stale","validation_revision":1}}),
         "REVISION_CONFLICT",
     );
-    assert_no_external_hop(&endpoint);
+    assert_no_declared_decision_hop(&endpoint);
     checkpoint("authorize-missing-wrong-kind-and-stale");
 }
 
@@ -660,6 +672,36 @@ impl Foreground {
                 IO_BOUND
             )
             .is_err()
+        );
+    }
+}
+
+impl Drop for Foreground {
+    fn drop(&mut self) {
+        if self.readers.is_empty() {
+            return; // Normal stop already observed exit/Job empty and joined EOF.
+        }
+        let terminate_requested = self.child.terminate().is_ok();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut root_exited = false;
+        let mut job_empty = false;
+        while Instant::now() < deadline {
+            root_exited = self.child.exit_code().is_ok_and(|exit| exit.is_some());
+            job_empty = self.child.empty().unwrap_or(false);
+            if root_exited && job_empty {
+                break;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        // A failure's exact owned-tree cleanup never changes its red outcome.
+        // Retain bounded evidence without printing arbitrary captured output.
+        if root_exited && job_empty {
+            for reader in self.readers.drain(..) {
+                let _ = reader.join();
+            }
+        }
+        eprintln!(
+            "packaged foreground failure cleanup: terminate-requested={terminate_requested}, root-exited={root_exited}, owned-job-empty={job_empty}, natural-scenario-success=false"
         );
     }
 }

@@ -4,8 +4,7 @@
 mod native;
 #[path = "windows_user_model_oracle.rs"]
 mod oracle;
-#[path = "windows_user_model_receipts.rs"]
-mod receipts;
+use super::windows_user_model_receipts as receipts;
 pub use native::Contexts;
 
 use super::windows_business_http as http;

@@ -425,10 +425,21 @@ fn legacy_native_history(
             let relative = path
                 .strip_prefix(&root)
                 .ok()
-                .and_then(Path::to_str)
+                .and_then(|relative| {
+                    relative
+                        .components()
+                        .map(|component| match component {
+                            Component::Normal(value) => value.to_str(),
+                            _ => None,
+                        })
+                        .collect::<Option<Vec<_>>>()
+                        .map(|components| components.join("/"))
+                })
                 .filter(|value| valid_native_history_path(value))
                 .ok_or(DelegationErrorV1::ResumeUnavailable)?;
-            paths.push(relative.to_owned());
+            // Native separators are an OS detail; retained history uses the existing
+            // portable relative-path contract, including on Windows.
+            paths.push(relative);
         }
     }
     paths.sort();
