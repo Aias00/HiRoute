@@ -74,6 +74,16 @@ pub fn windows_claude_version(
 
 /// Resolve only a declared bin from a known npm producer next to its generated shim.
 pub fn windows_npm_entry(shim: &Path) -> io::Result<PathBuf> {
+    windows_npm_entry_with_inspection(shim, |_| Ok(()))
+}
+
+/// The caller may retain reparse-free manifest and declared-entry identities
+/// until its validation or launch completes. Inspection happens before either
+/// pathname is read or canonicalized; the existing npm producer parser is shared.
+pub fn windows_npm_entry_with_inspection(
+    shim: &Path,
+    mut inspect: impl FnMut(&Path) -> io::Result<()>,
+) -> io::Result<PathBuf> {
     let name = shim
         .file_stem()
         .and_then(|name| name.to_str())
@@ -109,6 +119,7 @@ pub fn windows_npm_entry(shim: &Path) -> io::Result<PathBuf> {
     };
     let root = modules.join(package);
     let manifest = root.join("package.json");
+    inspect(&manifest)?;
     if std::fs::metadata(&manifest)?.len() > 64 * 1024 {
         return Err(io::Error::other("npm manifest bound"));
     }
@@ -127,6 +138,8 @@ pub fn windows_npm_entry(shim: &Path) -> io::Result<PathBuf> {
             })
         })
         .ok_or_else(|| io::Error::other("npm bin"))?;
+    let entry = root.join(bin);
+    inspect(&entry)?;
     let root = std::fs::canonicalize(root)?;
     let entry = std::fs::canonicalize(root.join(bin))?;
     if !entry.starts_with(&root) || !entry.is_file() {
@@ -542,5 +555,51 @@ mod tests {
             .unwrap();
             assert!(windows_npm_entry(&shim).is_err());
         }
+    }
+
+    #[test]
+    fn windows_npm_inspection_runs_before_manifest_read_and_entry_canonicalization() {
+        let root = super::super::probe_files::temporary("hiroute-npm-inspection-").unwrap();
+        let package = root.path().join("node_modules/@deepseek-ai/dsh");
+        std::fs::create_dir_all(package.join("lib")).unwrap();
+        let shim = root.path().join("dsh.cmd");
+        let manifest = package.join("package.json");
+        let entry = package.join("lib/bin.js");
+        std::fs::write(&shim, "do not evaluate this shim").unwrap();
+        std::fs::write(&manifest, b"malformed JSON must not be read").unwrap();
+        let mut inspected = Vec::new();
+        let rejected = windows_npm_entry_with_inspection(&shim, |path| {
+            inspected.push(path.to_owned());
+            Err(io::ErrorKind::PermissionDenied.into())
+        })
+        .unwrap_err();
+        assert_eq!(rejected.kind(), io::ErrorKind::PermissionDenied);
+        assert_eq!(inspected, [manifest.clone()]);
+
+        std::fs::write(
+            &manifest,
+            br#"{"name":"@deepseek-ai/dsh","bin":{"dsh":"./lib/bin.js"}}"#,
+        )
+        .unwrap();
+        inspected.clear();
+        let rejected = windows_npm_entry_with_inspection(&shim, |path| {
+            inspected.push(path.to_owned());
+            if inspected.len() == 2 {
+                Err(io::ErrorKind::PermissionDenied.into())
+            } else {
+                Ok(())
+            }
+        })
+        .unwrap_err();
+        assert_eq!(rejected.kind(), io::ErrorKind::PermissionDenied);
+        assert_eq!(inspected, [manifest, package.join("./lib/bin.js")]);
+        assert!(
+            !entry.exists(),
+            "inspection must run before resolving a missing entry"
+        );
+        std::fs::write(&entry, b"never execute").unwrap();
+        let inspected_entry = windows_npm_entry_with_inspection(&shim, |_| Ok(())).unwrap();
+        assert_eq!(inspected_entry, windows_npm_entry(&shim).unwrap());
+        assert_eq!(inspected_entry, std::fs::canonicalize(entry).unwrap());
     }
 }

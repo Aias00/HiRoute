@@ -5,6 +5,8 @@
 mod cancel;
 #[path = "windows_worker_dependency_selection.rs"]
 mod dependency_selection;
+#[path = "windows_worker_failure_diagnostics.rs"]
+mod failure_diagnostics;
 #[path = "windows_worker_oracle.rs"]
 mod oracle;
 
@@ -110,7 +112,7 @@ impl WorkerBusiness {
         let replay = command(product, &direct_args, None, Duration::from_secs(180));
         same_identity(&replay["data"], &direct["data"]);
         assert_eq!(replay["data"]["replayed"], true);
-        let result = wait_result(product, direct.clone());
+        let result = wait_result(product, direct.clone(), &worker);
         assert!(result["result"].as_str().unwrap().contains(&receipt));
         assert_eq!(
             std::fs::read_to_string(workspace.join("direct 中文 % ! ' &.txt"))
@@ -356,7 +358,7 @@ impl WorkerBusiness {
         );
         assert_eq!(continued["data"]["task_id"], self.direct["task_id"]);
         assert_ne!(continued["data"]["run_id"], self.direct["run_id"]);
-        let result = wait_result(product, continued);
+        let result = wait_result(product, continued, &self.worker);
         assert!(
             result["result"]
                 .as_str()
@@ -463,16 +465,24 @@ fn select_pi(product: &InstalledProduct) {
         &selected("HIROUTE_WORKER_NODE"),
     );
     let revision = selection.request.expected_selection_revision;
-    // The old fixture submitted valid ordinary drive paths instead of the actual
-    // discovery's canonical tuple. Exercise that real public rejection before
-    // admitting the same held objects through the current producer.
-    let (exit, rejected) = command_outcome(
-        product,
-        &["worker", "dependencies", "select"],
-        Some(&serde_json::to_value(&selection.rejected_ordinary).unwrap()),
-        Duration::from_secs(120),
-    );
-    assert_eq!(exit, 2, "ordinary dependency tuple must be rejected");
+    // Direct LocalControl still binds the caller's exact tuple. Only the CLI
+    // ordinary input boundary projects actual identities before transport.
+    let client = hiroute_client_core::Client::new(
+        "hiroute-cli",
+        hiroute_client_core::LocalEndpoint::from_runtime_root(&product.layout.runtime_root),
+    )
+    .with_timeout(Duration::from_secs(120));
+    let rejected =
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(client.select_worker_dependencies(
+                "windows-direct-canonical-contract",
+                &selection.ordinary,
+            ))
+            .unwrap_or_else(|_| panic!("direct LocalControl canonical contract transport failed"));
+    let rejected = serde_json::to_value(rejected).unwrap();
     assert_eq!(
         dependency_selection::error_code(&rejected),
         "INVALID_ARGUMENTS"
@@ -499,12 +509,12 @@ fn select_pi(product: &InstalledProduct) {
             .unwrap()["revision"]
             .as_u64(),
         Some(revision),
-        "ordinary tuple rejection must not consume the selection revision"
+        "direct noncanonical tuple rejection must not consume the selection revision"
     );
     let selected = command(
         product,
         &["worker", "dependencies", "select"],
-        Some(&serde_json::to_value(&selection.request).unwrap()),
+        Some(&serde_json::to_value(&selection.ordinary).unwrap()),
         Duration::from_secs(120),
     );
     assert_eq!(selected["operation"]["state"], "succeeded");
@@ -519,6 +529,21 @@ fn select_pi(product: &InstalledProduct) {
             .unwrap(),
         revision + 1
     );
+    let replay = command(
+        product,
+        &["worker", "dependencies", "select"],
+        Some(&serde_json::to_value(&selection.request).unwrap()),
+        Duration::from_secs(120),
+    );
+    assert_eq!(
+        replay["operation"], selected["operation"],
+        "ordinary and canonical CLI input must reuse one Operation"
+    );
+    assert_eq!(
+        replay["data"]["selection_revisions"],
+        selected["data"]["selection_revisions"]
+    );
+    assert_eq!(replay["data"]["selected"], selected["data"]["selected"]);
 }
 fn exec_args<'a>(
     plan: &'a str,
@@ -547,7 +572,7 @@ fn same_identity(current: &Value, expected: &Value) {
         assert_eq!(current[field], expected[field]);
     }
 }
-fn wait_result(product: &InstalledProduct, accepted: Value) -> Value {
+fn wait_result(product: &InstalledProduct, accepted: Value, worker: &oracle::Oracle) -> Value {
     let task = accepted["data"]["task_id"].as_str().unwrap();
     let run = accepted["data"]["run_id"].as_str().unwrap();
     let deadline = Instant::now() + Duration::from_secs(180);
@@ -577,6 +602,23 @@ fn wait_result(product: &InstalledProduct, accepted: Value) -> Value {
             Duration::from_secs(30),
         );
         same_identity(&current["data"], &accepted["data"]);
+    }
+    if current["data"]["run_state"] != "succeeded" {
+        // Query the real public result before the unchanged success assertion.
+        // Arbitrary native/model text remains only in memory, never diagnostics.
+        let (exit, result) = command_outcome(
+            product,
+            &["worker", "result", "--run", run],
+            None,
+            Duration::from_secs(30),
+        );
+        let (ledger, poisoned) = match worker.ledger.lock() {
+            Ok(ledger) => (ledger, false),
+            Err(error) => (error.into_inner(), true),
+        };
+        let receipt =
+            failure_diagnostics::receipt(&current, &result, task, run, exit, &ledger, poisoned);
+        println!("Windows public Worker terminal facts: {receipt}");
     }
     assert_eq!(
         current["data"]["run_state"], "succeeded",

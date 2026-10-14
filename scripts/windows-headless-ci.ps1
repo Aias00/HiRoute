@@ -371,7 +371,27 @@ if ($Scope -eq 'components') {
     ($launchCause + 'fixed_windows_api_captions_preserve_only_their_own_codes'),
     ($launchCause + 'repeated_fixed_caption_keeps_one_cause_and_code'),
     ($launchCause + 'sandbox_preparation_context_does_not_invent_a_win32_error'),
-    ($launchCause + 'wrapped_tool_error_is_not_assumed_to_be_an_os_create_failure'))
+    ($launchCause + 'wrapped_tool_error_is_not_assumed_to_be_an_os_create_failure'),
+    ($launchCause + 'exec_policy_rejection_requires_native_wrapper_and_exact_fixed_reason'),
+    ($launchCause + 'policy_caption_in_plain_or_quoted_command_does_not_claim_native_creation'),
+    ($launchCause + 'nested_unified_create_retains_known_and_unknown_os_errors'),
+    ($launchCause + 'policy_and_native_context_captions_remain_ambiguous'),
+    ($launchCause + 'malformed_or_truncated_rejection_wrappers_stay_unknown'))
+  $selectionInput = 'worker::selection_windows::tests::'
+  Invoke-RequiredTests 'agent-cli-selection' @('-p','hiroute-cli','--lib',$selectionInput) @(
+    ($selectionInput + 'ordinary_inputs_bind_the_same_native_files_and_canonical_digest_without_mutation'),
+    ($selectionInput + 'canonical_completed_selection_replays_before_missing_file_inspection'),
+    ($selectionInput + 'selection_input_rejects_device_unc_streams_and_real_junctions_without_adoption'),
+    ($selectionInput + 'ordinary_npm_shim_uses_the_shared_declared_bin_parser_and_rejects_reparse_bins'))
+  $npmInspection = 'agents::windows_runtime::tests::windows_npm_inspection_runs_before_manifest_read_and_entry_canonicalization'
+  Invoke-RequiredTests 'agent-npm-inspection' @('-p','hiroute-integrations','--lib',$npmInspection) @($npmInspection) @('--exact')
+  $piLocator = 'agents::filesystem::pi_native::windows_tests::'
+  Invoke-RequiredTests 'agent-pi-locator' @('-p','hiroute-integrations','--lib',$piLocator) @(
+    ($piLocator + 'windows_pi_scanner_binds_local_npm_shim_to_declared_entry_without_evaluation'),
+    ($piLocator + 'windows_pi_scanner_binds_global_npm_shim_to_declared_entry_without_evaluation'),
+    ($piLocator + 'windows_pi_scanner_rejects_unknown_producer_escaping_bin_and_identity_mismatch'),
+    ($piLocator + 'windows_pi_scanner_rejects_original_package_and_entry_junctions'),
+    ($piLocator + 'windows_pi_direct_entry_ignores_outer_nonregular_manifest_after_nearest_package_match'))
   $historyOracle = 'delegation::installation::installation_probe::native_tools_probe::history_probe::tests::'
   Invoke-RequiredTests 'agent-history-oracle' @('-p','hiroute-daemon','--lib',$historyOracle) @(
     ($historyOracle + 'closed_history_shape_distinguishes_missing_failed_and_alternate_results'),
@@ -403,6 +423,10 @@ if ($Scope -eq 'components') {
   Invoke-RequiredTests 'agent-worker-dependency-oracle' @('-p','hiroute-daemon','--test','windows_headless',$dependencyOracle) @(
     ($dependencyOracle + 'closed_worker_diagnostic_never_returns_a_path_payload_or_unknown_key'),
     ($dependencyOracle + 'discovery_selection_requires_one_exact_held_native_file_identity'))
+  $workerFailureOracle = 'windows_worker_business::failure_diagnostics::tests::'
+  Invoke-RequiredTests 'agent-worker-failure-oracle' @('-p','hiroute-daemon','--test','windows_headless',$workerFailureOracle) @(
+    ($workerFailureOracle + 'terminal_facts_publish_typed_states_and_correlations_without_result_or_locator_text'),
+    ($workerFailureOracle + 'unknown_terminal_shapes_and_excessive_counts_remain_closed_and_unattributed'))
   $publicBusiness = 'actual_windows_complete_public_headless_business'
   Invoke-RequiredTests 'agent-public-business' @('-p','hiroute-daemon','--test','windows_headless',$publicBusiness) @($publicBusiness) @('--ignored','--exact','--nocapture')
   $userModels = 'actual_windows_pi_and_dsh_persisted_user_models'

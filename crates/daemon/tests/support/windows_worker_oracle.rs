@@ -16,12 +16,41 @@ pub const MAIN: &str = "WINDOWS-PUBLIC-MAIN-AGENT";
 pub const CANCEL: &str = "WINDOWS-PUBLIC-WORKER-CANCEL";
 pub const RESIDUAL: &str = "WINDOWS-PUBLIC-WORKER-RESIDUAL";
 
+#[derive(Clone, Copy)]
+pub enum WorkerStage {
+    ModelRequest,
+    CancelRequest,
+    ResidualRequest,
+    ContinuationRequest,
+    SkillResult,
+    WriteResult,
+    ReadResult,
+}
+impl WorkerStage {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::ModelRequest => "model-request-observed",
+            Self::CancelRequest => "cancel-request-observed",
+            Self::ResidualRequest => "residual-request-observed",
+            Self::ContinuationRequest => "continuation-request-observed",
+            Self::SkillResult => "correlated-skill-result-observed",
+            Self::WriteResult => "correlated-write-result-observed",
+            Self::ReadResult => "correlated-read-result-observed",
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct Ledger {
     pub requests: usize,
     pub completed: BTreeSet<String>,
     pub continued: usize,
     pub main_completed: Option<Value>,
+    pub worker_stage: Option<WorkerStage>,
+    pub worker_skill_results: usize,
+    pub worker_write_results: usize,
+    pub worker_read_results: usize,
+    pub worker_continuation_requests: usize,
 }
 pub struct Oracle {
     server: http::Server,
@@ -32,8 +61,10 @@ impl Oracle {
         let workspace = workspace.to_owned();
         let nonce = nonce.to_owned();
         Self::start(move |body, ledger| {
+            ledger.worker_stage = Some(WorkerStage::ModelRequest);
             let text = native_text(body);
             if text.contains(RESIDUAL) {
+                ledger.worker_stage = Some(WorkerStage::ResidualRequest);
                 assert!(correlated(body, "worker_residual").is_none());
                 // The actual native tool supplies its Windows PID and this run's
                 // TEMP selector. No model-generated locator or credential is used.
@@ -68,6 +99,7 @@ impl Oracle {
                 );
             }
             if text.contains(CANCEL) {
+                ledger.worker_stage = Some(WorkerStage::CancelRequest);
                 assert!(
                     correlated(body, "worker_cancel").is_none(),
                     "cancelled native tool must not complete another model turn"
@@ -97,6 +129,8 @@ impl Oracle {
             let receipt = format!("worker-{role}-{nonce}");
             let artifact = workspace.join(format!("{role} 中文 % ! ' &.txt"));
             if text.contains(CONTINUE) {
+                ledger.worker_stage = Some(WorkerStage::ContinuationRequest);
+                ledger.worker_continuation_requests += 1;
                 assert_eq!(role, "direct");
                 assert!(
                     correlated(body, "worker_read").is_some_and(|output| output.contains(&receipt)),
@@ -111,6 +145,8 @@ impl Oracle {
                 "Main requests must never reach the Worker source"
             );
             if let Some(output) = correlated(body, "worker_read") {
+                ledger.worker_stage = Some(WorkerStage::ReadResult);
+                ledger.worker_read_results += 1;
                 assert!(
                     output.contains(&receipt),
                     "native Worker read did not return its artifact receipt"
@@ -120,10 +156,14 @@ impl Oracle {
                 return text_reply(body, &receipt);
             }
             if correlated(body, "worker_write").is_some() {
+                ledger.worker_stage = Some(WorkerStage::WriteResult);
+                ledger.worker_write_results += 1;
                 assert_eq!(std::fs::read_to_string(&artifact).unwrap().trim(), receipt);
                 return function_reply(body, "worker_read", "read", json!({"path":artifact}));
             }
             if let Some(output) = correlated(body, "worker_skill") {
+                ledger.worker_stage = Some(WorkerStage::SkillResult);
+                ledger.worker_skill_results += 1;
                 assert!(
                     contents
                         .lines()

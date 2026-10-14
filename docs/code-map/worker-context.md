@@ -69,6 +69,19 @@ capture output in private files and retain the process Job until all owned tools
 stop. Follow those owners for shell, environment, timeout or background-session
 differences rather than duplicating ecosystem lifecycle code.
 
+[CLI dependency input](../../crates/cli/src/worker/selection_windows.rs) projects
+ordinary local drive paths to the existing canonical selection before transport,
+retaining file and ancestor leases through the call. Already canonical requests
+preserve completed-operation replay even after the selected files disappear;
+Application still owns the canonical tuple, revision and durable transaction.
+The shared npm reader lets callers inspect original manifest and declared-entry
+names before reading or canonicalizing them. The [Pi locator](../../crates/integrations/src/agents/pi_native.rs)
+uses that boundary to bind a generated shim to the package's declared entry and
+manifest digest without evaluating the shim or changing borrowed ownership.
+Direct Pi entries retain the [single package reader](../../crates/integrations/src/agents/pi_runtime.rs)
+and its nearest-match semantics; original declared-bin names are inspected before
+canonicalization, so an alias cannot disappear from the identity check.
+
 ### Pi compatibility is a capability contract
 
 Selected dependency checks allow bounded cold startup: native version reads have

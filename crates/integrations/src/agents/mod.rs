@@ -35,7 +35,7 @@ pub(crate) mod windows_runtime;
 #[cfg(windows)]
 pub use windows_runtime::{
     spawn_windows_native_probe, windows_agent_command, windows_claude_version,
-    windows_native_system_environment, windows_npm_entry,
+    windows_native_system_environment, windows_npm_entry, windows_npm_entry_with_inspection,
 };
 mod dsh_config;
 mod dsh_sources;

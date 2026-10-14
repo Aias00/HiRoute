@@ -28,6 +28,17 @@ pub struct PiCliInstallation {
 pub fn pi_cli_installation(
     cli: &Path,
 ) -> Result<PiCliInstallation, super::AgentFilesystemScanError> {
+    pi_cli_installation_with_inspection(cli, |_| Ok(()))
+}
+
+/// Inspect only files the existing package reader uses: qualifying manifests
+/// before their bytes are read, then the declared entry before canonicalizing.
+/// Callers can retain native leases without changing the nearest-package search
+/// or interpreting npm declarations a second time.
+pub fn pi_cli_installation_with_inspection(
+    cli: &Path,
+    mut inspect: impl FnMut(&Path) -> std::io::Result<()>,
+) -> Result<PiCliInstallation, super::AgentFilesystemScanError> {
     use super::AgentFilesystemScanError::SourceUnavailable;
     let cli = std::fs::canonicalize(cli).map_err(|_| SourceUnavailable)?;
     // npm/pnpm may move the entry; the owning manifest, not a depth or filename,
@@ -40,6 +51,7 @@ pub fn pi_cli_installation(
         if !metadata.is_file() || metadata.len() > 64 * 1024 {
             continue;
         }
+        inspect(&manifest).map_err(|_| SourceUnavailable)?;
         let bytes = std::fs::read(&manifest).map_err(|_| SourceUnavailable)?;
         let package: serde_json::Value =
             serde_json::from_slice(&bytes).map_err(|_| SourceUnavailable)?;
@@ -50,7 +62,9 @@ pub fn pi_cli_installation(
             .pointer("/bin/pi")
             .and_then(serde_json::Value::as_str)
             .ok_or(SourceUnavailable)?;
-        let entry = std::fs::canonicalize(root.join(bin)).map_err(|_| SourceUnavailable)?;
+        let declared = root.join(bin);
+        inspect(&declared).map_err(|_| SourceUnavailable)?;
+        let entry = std::fs::canonicalize(declared).map_err(|_| SourceUnavailable)?;
         let version = package["version"]
             .as_str()
             .filter(|v| !v.is_empty() && v.len() <= 128)

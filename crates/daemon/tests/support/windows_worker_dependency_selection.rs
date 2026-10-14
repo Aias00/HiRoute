@@ -109,7 +109,7 @@ fn retain_directory(path: &Path) -> File {
 
 pub(super) struct Selection {
     pub request: WorkerDependenciesSelectRequestV1,
-    pub rejected_ordinary: WorkerDependenciesSelectRequestV1,
+    pub ordinary: WorkerDependenciesSelectRequestV1,
     _held: Vec<File>,
 }
 
@@ -142,18 +142,18 @@ pub(super) fn select(discovered: &Value, cli: &Path, node: &Path) -> Selection {
             .expect("fixed dependency path must be Unicode")
             .to_owned()
     };
-    let rejected_ordinary = WorkerDependenciesSelectRequestV1 {
+    let ordinary = WorkerDependenciesSelectRequestV1 {
         cli_path: ordinary(cli),
         node_path: Some(ordinary(node)),
         ..request.clone()
     };
     assert!(
-        request.valid() && rejected_ordinary.valid() && request != rejected_ordinary,
+        request.valid() && ordinary.valid() && request != ordinary,
         "same-file canonical tuple must distinguish the old ordinary fixture"
     );
     Selection {
         request,
-        rejected_ordinary,
+        ordinary,
         _held: held,
     }
 }
@@ -215,6 +215,7 @@ pub(super) fn command_label(args: &[&str]) -> &'static str {
         ),
         ("worker.exec", &["worker", "exec"][..]),
         ("worker.wait", &["worker", "wait"][..]),
+        ("worker.result", &["worker", "result"][..]),
         ("worker.continue", &["worker", "continue"][..]),
         (
             "agents.collaboration.configure",
@@ -293,6 +294,7 @@ mod tests {
             command_label(&["private-account-path"]),
             "other-public-worker-command"
         );
+        assert_eq!(command_label(&["worker", "result"]), "worker.result");
         for value in [
             json!({"error":{"code":"INVALID_ARGUMENTS","message_key":"cli.error.invalid_arguments"}}),
             json!({"error":{"code":"CAPABILITY_UNAVAILABLE","message_key":"worker.dependencies.pi_sdk.timeout"}}),
@@ -372,8 +374,8 @@ mod tests {
         }
         let selection = select(&data(&view), &cli, &node);
         assert_eq!(selection.request.expected_selection_revision, 3);
-        assert_ne!(selection.request, selection.rejected_ordinary);
-        assert!(selection.request.valid() && selection.rejected_ordinary.valid());
+        assert_ne!(selection.request, selection.ordinary);
+        assert!(selection.request.valid() && selection.ordinary.valid());
         drop(selection);
         view.candidates[0] = row(WorkerDependencyComponentV1::Cli, &foreign);
         assert!(std::panic::catch_unwind(|| select(&data(&view), &cli, &node)).is_err());

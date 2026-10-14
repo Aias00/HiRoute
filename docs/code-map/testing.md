@@ -158,6 +158,15 @@ binds the locked npm fixture directory before daemon startup, then submits actua
 discovery candidates only when their held FileIDs match the pinned CLI and Node.
 The transaction keeps its canonical tuple and digest contract; same-byte foreign
 files and duplicate candidates cannot replace an admitted dependency.
+The public journey rejects a noncanonical direct LocalControl request, then
+proves ordinary CLI input and canonical replay share one Operation and revision.
+[CLI native input tests](../../crates/cli/src/worker/selection_windows_tests.rs)
+also preserve completed canonical replay after file deletion. The
+[Pi locator regressions](../../crates/integrations/src/agents/pi_native/windows_tests.rs)
+cover original npm/package paths and reparse rejection before canonicalization.
+[Worker terminal facts](../../crates/daemon/tests/support/windows_worker_failure_diagnostics.rs)
+publish typed result states and bounded, independently observed oracle counters;
+they retain neither arbitrary result text nor a guessed per-run failure cause.
 
 The same native entry's `-InventoryOnly` exports static scope recipes through its
 actual required-test producer without Cargo, package preparation or client launch.
