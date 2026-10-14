@@ -60,6 +60,61 @@ function changeSelect(select, value) {
 const configureSpecs = () => calls('preview_agent_settings').map(item => item.payload.input.spec);
 
 const scenarios = [
+  scenario('hermes.routing.root-cancel-and-save', ['hermes', 'agent-model-routing'], 'Hermes keeps its explicit root and one Plan through cancellation and normal save', async () => {
+    c().reset(); c().agents = c().hermesFresh();
+    c().agents.plans.plans = c().agents.plans.plans.filter(plan => plan.head.status === 'enabled').slice(0, 1);
+    await tick();
+    await until(() => [...document.querySelectorAll('.native-list .list-row')].some(row => row.textContent.includes('Hermes')), 'Hermes list row');
+    [...document.querySelectorAll('.native-list .list-row')].find(row => row.textContent.includes('Hermes')).click();
+    await until(() => document.querySelector('[data-agent-id="agent_hermes_default"] .detail-hero'), 'Hermes details');
+    assert(!facet('collaboration'), 'Hermes exposes unsupported collaboration controls');
+    await openEditor('model', false);
+    assert(dialog().querySelector('input[readonly]')?.value === '/tmp/hermes-profile-fixture', 'Hermes root is missing');
+    assert(dialog().querySelector('select').value, 'Sole enabled Plan was not selected');
+    [...dialog().querySelectorAll('button')].find(button => button.textContent === '取消').click();
+    await until(() => !dialog(), 'Hermes cancelled');
+    assert(configureSpecs().length === 0, 'Cancel submitted Hermes settings');
+    await openEditor('model', false); await save();
+    const spec = configureSpecs().at(-1);
+    assert(spec.native_target.config_root === '/tmp/hermes-profile-fixture' && spec.model.settings.mode === 'hermes_default', 'Hermes save lost target or mode');
+    assert(spec.model.settings.plan_id === c().agents.plans.plans[0].agent_plan_id && spec.model.settings.protocol === 'responses', 'Hermes save changed Plan/protocol');
+    assert(!spec.management_skill && spec.collaboration.intent === 'keep', 'Model save changed an independent facet');
+  }),
+  scenario('hermes.management.independent-without-plan', ['hermes', 'agent-management'], 'Hermes management preparation needs neither a model connection nor a Plan', async () => {
+    c().reset(); c().agents = c().hermesFresh(); c().agents.plans.plans = []; await tick();
+    await until(() => [...document.querySelectorAll('.native-list .list-row')].some(row => row.textContent.includes('Hermes')), 'Hermes management row');
+    [...document.querySelectorAll('.native-list .list-row')].find(row => row.textContent.includes('Hermes')).click();
+    await until(() => facet('management_skill'), 'Management preparation');
+    await openEditor('management_skill', false); await save();
+    const spec = configureSpecs().at(-1);
+    assert(spec.model.intent === 'keep' && spec.management_skill.intent === 'configure', 'Management preparation changed model intent');
+    assert(spec.native_target.config_root === '/tmp/hermes-profile-fixture', 'Management preparation lost profile scope');
+    assert(calls('check_agent_live').length === 0 && calls('check_agent_authentication').length === 0, 'Independent preparation ran a model check');
+  }),
+  scenario('hermes.routing.unavailable-and-exact-recovery', ['hermes', 'agent-recovery'], 'Hermes retains unavailable selections and retries the original scoped Operation', async () => {
+    c().reset(); c().agents = c().hermesConfigured();
+    const agent = c().agents.agents.find(a => a.agent_id === 'agent_hermes_default');
+    agent.settings.current_selection.plan_id = 'unavailable-hermes-plan'; await tick();
+    await until(() => [...document.querySelectorAll('.native-list .list-row')].some(row => row.textContent.includes('Hermes')), 'Configured Hermes row');
+    [...document.querySelectorAll('.native-list .list-row')].find(row => row.textContent.includes('Hermes')).click();
+    await until(() => facet('model'), 'Configured Hermes detail');
+    assert(text().includes('native-channel-model') && text().includes('加载状态尚未确认'), 'Static overrides or unobserved loading guidance is missing');
+    await openEditor('model', false);
+    assert(dialog().querySelector('select').value === 'unavailable-hermes-plan', 'Unavailable saved Plan was replaced');
+    assert(submit().disabled, 'Unavailable Plan can be applied');
+    [...dialog().querySelectorAll('button')].find(button => button.textContent === '取消').click();
+    await until(() => !dialog(), 'Unavailable selection cancelled');
+    agent.settings.state = 'needs_attention'; agent.settings.operation_id = 'operation/hermes-pending'; agent.settings.current_selection = null;
+    c().refresh(); await tick();
+    await until(() => document.querySelector('[data-hermes-settings-recovery] button'), 'Hermes recovery action');
+    c().handlers.retry_agent_settings = payload => {
+      assert(payload.input.context_id === agent.context_id && payload.input.operation_id === 'operation/hermes-pending', 'Hermes retry rebound its Operation or root');
+      agent.settings.state = 'configured'; return {};
+    };
+    document.querySelector('[data-hermes-settings-recovery] button').click();
+    await until(() => calls('retry_agent_settings').length === 1, 'Original Hermes operation retried');
+    assert(configureSpecs().length === 0, 'Recovery submitted a replacement operation');
+  }),
   scenario('claude.routing.blocker-guidance', ['agent-model-routing'], 'Claude save explains configuration and route blockers without applying or making a model call', async () => {
     await fresh('notRunnable', true);
     c().handlers.preview_agent_settings = () => ({

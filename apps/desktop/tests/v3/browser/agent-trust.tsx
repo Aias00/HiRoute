@@ -18,6 +18,22 @@ const codexOf = (snapshot: AgentSnapshot) => modelAgent(snapshot, 'agent_codex_d
 function registered(): AgentSnapshot {
   return structuredClone(readyAgents);
 }
+function hermesAgent(configured = false): AgentSnapshot {
+  const snapshot = registered();
+  const target = { kind: 'hermes' as const, config_root: '/tmp/hermes-profile-fixture' };
+  snapshot.agents.push({
+    ...claudeOf(snapshot), agent_id: 'agent_hermes_default', context_id: 'agent-context/hermes/fixture',
+    version: '0.19.1', native_target: target, configuration_state: configured ? 'configured' : 'not_configured',
+    available_surfaces: ['hermes_cli'],
+    settings: { state: configured ? 'configured' : 'not_configured', model_verified: false,
+      native_target: target, restore_point_ref: configured ? 'restore/hermes' : null,
+      current_selection: configured ? { mode: 'hermes_default', plan_id: snapshot.plans.plans[0].agent_plan_id, protocol: 'responses' } : null,
+      management_skill: { schema: 'hiroute.agent-management-skill-status/v1', state: 'not_configured', restore_point_ref: null, operation_id: null, operation_state: null },
+      native_adapter: configured ? { resources_installed: true, runtime_loading: 'unobserved', next_action: 'reload_plugins_if_running', known_channel_models: ['native-channel-model'] } : undefined,
+    },
+  });
+  return snapshot;
+}
 function notRunnable(): AgentSnapshot {
   const snapshot = registered();
   const agent = claudeOf(snapshot);
@@ -160,6 +176,8 @@ const control = {
   qoderConfigured: () => additionalAgent(true),
   qoderRouted: () => additionalRouted(),
   additionalRouted,
+  hermesFresh: () => hermesAgent(),
+  hermesConfigured: () => hermesAgent(true),
 };
 Object.assign(window, { agentTrust: control });
 
