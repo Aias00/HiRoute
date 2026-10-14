@@ -50,3 +50,26 @@ mod tests;
 
 #[cfg(test)]
 mod no_new_calls_tests;
+
+// Shared native-consumer fixture uses the production publication/authentication path.
+#[cfg(test)]
+pub(crate) fn authorized_native_consumer_fixture(
+    consumer: Option<hiroute_domain::AgentModelConsumerV1>,
+) -> crate::server::request_plan::AuthorizedRequestPlan {
+    let directory = tests::TestDirectory::new();
+    let installer = std::sync::Arc::new(
+        GatewayPublicationInstaller::open(directory.path().join("publication.json")).unwrap(),
+    );
+    let mut publication = tests::snapshot(1, "native-consumer-test");
+    publication.grants[0].consumer = consumer;
+    publication.payload_digest = publication.canonical_digest().unwrap();
+    tests::publish(&installer, publication);
+    crate::server::dispatch::GatewayRequestAuthority::new(installer)
+        .authorize_bytes(
+            crate::server::request_plan::IngressProtocol::Responses,
+            Some("Bearer token-alpha"),
+            br#"{"model":"alpha"}"#,
+            std::time::Instant::now(),
+        )
+        .unwrap()
+}

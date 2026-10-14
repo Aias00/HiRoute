@@ -37,27 +37,7 @@ fn worker_continue_keeps_conversation_identity_without_joining_other_tasks() {
 }
 
 fn managed_plan(consumer: Option<hiroute_domain::AgentModelConsumerV1>) -> AuthorizedRequestPlan {
-    use crate::server::dispatch::GatewayRequestAuthority;
-    use crate::server::publication::{
-        GatewayPublicationInstaller,
-        tests::{TestDirectory, publish, snapshot},
-    };
-    let directory = TestDirectory::new();
-    let installer = std::sync::Arc::new(
-        GatewayPublicationInstaller::open(directory.path().join("publication.json")).unwrap(),
-    );
-    let mut publication = snapshot(1, "native-consumer-test");
-    publication.grants[0].consumer = consumer;
-    publication.payload_digest = publication.canonical_digest().unwrap();
-    publish(&installer, publication);
-    GatewayRequestAuthority::new(installer)
-        .authorize_bytes(
-            IngressProtocol::Responses,
-            Some("Bearer token-alpha"),
-            br#"{"model":"alpha"}"#,
-            std::time::Instant::now(),
-        )
-        .unwrap()
+    crate::server::publication::authorized_native_consumer_fixture(consumer)
 }
 
 #[test]
