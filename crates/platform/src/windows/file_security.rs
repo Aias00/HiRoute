@@ -10,13 +10,16 @@ use windows_sys::Win32::Foundation::{GENERIC_READ, GENERIC_WRITE, LocalFree};
 use windows_sys::Win32::Security::Authorization::{
     ConvertSecurityDescriptorToStringSecurityDescriptorW,
     ConvertStringSecurityDescriptorToSecurityDescriptorW, GetSecurityInfo, SE_FILE_OBJECT,
+    SetSecurityInfo,
 };
 use windows_sys::Win32::Security::{
-    DACL_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION, SECURITY_DESCRIPTOR,
+    DACL_SECURITY_INFORMATION, GetSecurityDescriptorControl, GetSecurityDescriptorDacl,
+    OWNER_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION, SE_DACL_AUTO_INHERITED,
+    SE_DACL_PROTECTED, SECURITY_DESCRIPTOR, UNPROTECTED_DACL_SECURITY_INFORMATION,
 };
 use windows_sys::Win32::Storage::FileSystem::{
     DELETE, FILE_ATTRIBUTE_NORMAL, FILE_ATTRIBUTE_READONLY, FILE_BASIC_INFO, FILE_SHARE_NONE,
-    FileBasicInfo, SetFileInformationByHandle,
+    FileBasicInfo, SetFileInformationByHandle, WRITE_DAC,
 };
 
 const SECURITY_FIELDS: u32 = OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION;
@@ -61,14 +64,80 @@ pub(crate) fn create(path: &Path, permissions: &WindowsPermissions) -> io::Resul
     // A failure leaves the existing target untouched, rather than losing owner/ACL.
     // SAFETY: Windows returned a validated security descriptor in this allocation.
     let descriptor_ref = unsafe { &*descriptor.0.cast::<SECURITY_DESCRIPTOR>() };
-    super::path::open(
+    let mut control = 0;
+    let mut revision = 0;
+    // SAFETY: the decoded descriptor remains live throughout creation.
+    if unsafe { GetSecurityDescriptorControl(descriptor.0, &mut control, &mut revision) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let restore_inheritance = control & SE_DACL_AUTO_INHERITED != 0;
+    let file = super::path::open(
         path,
         false,
-        GENERIC_READ | GENERIC_WRITE | DELETE,
+        GENERIC_READ | GENERIC_WRITE | DELETE | if restore_inheritance { WRITE_DAC } else { 0 },
         FILE_SHARE_NONE,
         true,
         Some(descriptor_ref),
-    )
+    )?;
+    if capture(&file)?.descriptor != permissions.descriptor {
+        // Native creation recomputes DACL inheritance control and can drop AI
+        // from a descriptor captured after SetSecurityInfo. Restore the exact
+        // captured DACL through this unpublished held object; never normalize
+        // away control bits or modify the existing target by pathname.
+        if !restore_inheritance {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "native permissions differ",
+            ));
+        }
+        restore_created_dacl(&file, descriptor.0)?;
+        if capture(&file)?.descriptor != permissions.descriptor {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "native permissions differ",
+            ));
+        }
+    }
+    Ok(file)
+}
+
+fn restore_created_dacl(file: &File, descriptor: *mut c_void) -> io::Result<()> {
+    let mut present = 0;
+    let mut defaulted = 0;
+    let mut dacl = null_mut();
+    let mut control = 0;
+    let mut revision = 0;
+    // SAFETY: decode owns this validated descriptor through the synchronous
+    // update. The file is our held, exclusive, unpublished regular-file stage.
+    if unsafe {
+        GetSecurityDescriptorDacl(descriptor, &mut present, &mut dacl, &mut defaulted) == 0
+            || GetSecurityDescriptorControl(descriptor, &mut control, &mut revision) == 0
+    } || present == 0
+    {
+        return Err(invalid_descriptor());
+    }
+    let protection = if control & SE_DACL_PROTECTED != 0 {
+        PROTECTED_DACL_SECURITY_INFORMATION
+    } else {
+        UNPROTECTED_DACL_SECURITY_INFORMATION
+    };
+    // The owner was assigned and checked by native creation; no owner privilege
+    // is added here. WRITE_DAC is checked by Windows for this same held stage.
+    let result = unsafe {
+        SetSecurityInfo(
+            file.as_raw_handle().cast(),
+            SE_FILE_OBJECT,
+            DACL_SECURITY_INFORMATION | protection,
+            null_mut(),
+            null_mut(),
+            dacl,
+            null_mut(),
+        )
+    };
+    if result != 0 {
+        return Err(io::Error::from_raw_os_error(result as i32));
+    }
+    Ok(())
 }
 
 pub(crate) fn apply_read_only(file: &File, read_only: bool) -> io::Result<()> {

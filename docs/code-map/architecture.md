@@ -124,7 +124,10 @@ borrow an explicitly prepared private profile and never obtain account authority
 from pull-request environment secrets.
 Stopped Windows source snapshots preserve native permissions through
 [streamed backup copying](../../crates/local-storage/src/backup/source_snapshot.rs)
-and the [durable stage owner](../../crates/platform/src/durable.rs). Native artifact
+and the [durable stage owner](../../crates/platform/src/durable.rs); the
+[native descriptor owner](../../crates/platform/src/windows/file_security.rs)
+restores creation-recomputed DACL control on the unpublished held stage before
+exact permission verification. Native artifact
 activation uses a sealed-file transition; it does not reopen read-only payloads
 for data writes or clear a target's attributes before replacement.
 

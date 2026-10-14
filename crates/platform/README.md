@@ -102,6 +102,9 @@ platform flushes and publishes it.
 `file_security` captures the actual Windows owner/DACL SDDL and read-only flag
 from a held file. Conditional native restoration authenticates these facts along
 with content; it creates its stage with the recorded descriptor and verifies the
-result before publication. Existing native files retain their accessible ACLs
-during reading. A descriptor that the account cannot restore fails before target
+result before publication. Native creation may recompute DACL inheritance control.
+The unpublished held stage restores the captured DACL through `SetSecurityInfo`
+when necessary and must retain the exact captured descriptor; control bits are
+never discarded from equality or journal authentication. Existing native files
+retain their accessible ACLs during reading. A descriptor that the account cannot restore fails before target
 replacement. Unix artifact modes and released fingerprints remain unchanged.
