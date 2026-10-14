@@ -260,6 +260,9 @@ if ($Scope -eq 'components') {
     'inherited_credential_rejects_invalid_stdio_file_and_noninherited_handles',
     'inherited_credential_pipe_timeout_and_byte_limit_are_bounded',
     'inherited_credential_crosses_an_explicit_job_child_handle_list') @('--skip','job_probe')
+  Invoke-RequiredTests 'console' @('-p','hiroute-platform','--test','windows_console','gui_') @(
+    'gui_request_without_a_parent_console_preserves_pipes_and_creates_no_console',
+    'gui_attach_preserves_inherited_pipes_with_a_real_parent_console')
   Invoke-RequiredTests 'diagnostics' @('-p','hiroute-diagnostics','--test','windows_files_safety') @(
     'held_directory_read_write_enumerate_rename_and_remove_ignore_a_path_replacement',
     'existing_accessible_native_acl_is_preserved_and_new_objects_are_private',
@@ -292,6 +295,10 @@ if ($Scope -eq 'components') {
   $fragmented = 'server::core_runtime::adapters::tests::replay_ten_thousand_small_fields_use_one_stream_and_linear_template_scan'
   Invoke-RequiredTests 'replay-fragmentation' @('-p','hiroute-gateway','--lib',$fragmented) @($fragmented) @('--exact')
   Invoke-RequiredTests 'headless' @('-p','hiroute-daemon','--test','windows_headless',$headless) @($headless) @('--exact')
+  $foregroundC = 'windows_foreground_console::actual_windows_service_run_ctrl_c_drains_the_gui_daemon_and_preserves_pipes'
+  $foregroundBreak = 'windows_foreground_console::actual_windows_service_run_ctrl_break_drains_the_gui_daemon_and_preserves_pipes'
+  Invoke-RequiredTests 'foreground-ctrl-c' @('-p','hiroute-daemon','--test','windows_headless',$foregroundC) @($foregroundC) @('--exact','--nocapture')
+  Invoke-RequiredTests 'foreground-ctrl-break' @('-p','hiroute-daemon','--test','windows_headless',$foregroundBreak) @($foregroundBreak) @('--exact','--nocapture')
   Invoke-RequiredTests 'credential-options' @('-p','hiroute-cli','--lib','windows_handle_carrier_') @(
     'args::tests::windows_handle_carrier_rejects_missing_invalid_and_conflicting_authority',
     'args::tests::windows_handle_carrier_is_separate_from_a_typed_request_source')

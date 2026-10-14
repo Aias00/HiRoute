@@ -160,6 +160,13 @@ so the parent can require an exact prefix independently of libtest's pretty
 caption; a successful child exit alone does not establish a received result.
 Its policy toggles do not establish console closure, RDP reconnection or a login
 trigger; those need external session evidence.
+The [console owner](../../crates/platform/src/windows/console.rs) keeps the GUI
+daemon detached for background launch and preserves inherited pipes when explicit
+foreground use attaches the parent console. Its [native primitive cases](../../crates/platform/tests/windows_console.rs)
+use isolated consoles; the [public foreground cases](../../crates/daemon/tests/support/windows_foreground_console.rs)
+require the actual CLI to wait for natural daemon drainage after Ctrl-C and
+Ctrl-Break. Their test-owned installation does not replace complete-package or
+logged-owner Task acceptance.
 The [complete-package foreground CPA journey](../../crates/daemon/tests/support/windows_packaged_foreground.rs)
 executes before the required logged-owner Task, so missing WTS prerequisites cannot
 hide stock CPA startup, public PKCE cancellation/expiry or launch-snapshot failures.
