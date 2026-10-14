@@ -104,6 +104,7 @@ pub fn negotiate_hello(client: &ClientHelloV1) -> Result<ServerHelloV1, ErrorV1>
             "client-access-v1".to_owned(),
             "protected-client-grant-v2".to_owned(),
             "planned-command-registry-v1".to_owned(),
+            "compute-discovery-points-v2".to_owned(),
         ],
     })
 }
@@ -929,6 +930,7 @@ pub(crate) fn command_response_schema(command_id: &str) -> &'static str {
         "compute.scan" => "hiroute.compute-scan-result/union",
         "compute.list" | "compute.show" => "hiroute.compute-management-snapshot/v2",
         "compute.connection.options" => "hiroute.compute-connection-options/v1",
+        "compute.connection.prepare" => "hiroute.compute-candidate-view/v2",
         "compute.connection.preview" => "hiroute.compute-connection-preview/union",
         "compute.connection.apply" => "hiroute.operation-view/v1",
         "compute.connection.authorize" => "hiroute.compute-subscription-check-result/v2",

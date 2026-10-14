@@ -2,6 +2,9 @@
 use super::CommandKind;
 
 pub(super) fn command_effect(command_id: &str, kind: CommandKind) -> &'static str {
+    if command_id == "compute.connection.prepare" {
+        return "local_candidate_preparation";
+    }
     if command_id == "agent.launch" {
         return "managed_local_process";
     }
@@ -33,6 +36,12 @@ pub(super) fn command_network(command_id: &str, kind: CommandKind) -> &'static s
 pub(super) fn automation(command_id: &str) -> &'static str {
     if command_id == "compute.connection.login" {
         return "Keep the returned login_ref for status, cancel and forget. After uncertain delivery, list/status the existing session before starting again or resubmitting a one-use callback. Never persist the authorization URL or put callback material in argv, environment, logs or ordinary request JSON.";
+    }
+    if command_id == "compute.connection.prepare" {
+        return "Reuse the opaque discovery reference and revision exactly. Prepare privately rereads native facts and returns selectable model refs. Save all currently selectable refs by default or the explicit requested subset through Preview/Apply; never omit selection or treat all as a wildcard.";
+    }
+    if command_id == "compute.scan" {
+        return "No input retains released V1 rows. Request hiroute.compute-scan-request/v2 explicitly for connection points, with the selected native_target for Hermes. No scan result is a saved source or account entitlement.";
     }
     if command_id == "worker.executors" {
         return "Ready permits a managed launch attempt, not a promise of execution or authorization. Optional capabilities remain unknown until the actual ACP handshake; start, load and cancel report real outcomes.";
@@ -112,6 +121,9 @@ pub(super) fn effects(command_id: &str, kind: CommandKind) -> &'static str {
             | "agents.restore.apply"
     ) {
         return "Same-UID Application-owned journaled operation after exact spec, digest, revision, and idempotency checks.";
+    }
+    if command_id == "compute.connection.prepare" {
+        return "Registers a private ephemeral candidate and protected credential reference after exact source reread. Does not save a source, mutate native files or call a model.";
     }
     if command_id == "agent.launch" {
         return "Creates one owner-only temporary launch overlay, directly spawns the exact managed Agent executable without a shell, and removes the overlay after child exit; no persistent user configuration is changed.";

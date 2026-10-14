@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+mod compute_discovery;
 mod delegation;
 mod plan_authoring;
 mod subscription_login;
@@ -541,6 +542,7 @@ pub fn generated_contract_files() -> Vec<GeneratedContractFile> {
     ]);
 
     files.extend(plan_authoring::files());
+    files.extend(compute_discovery::files());
     let file_digests = files
         .iter()
         .map(|(path, contents)| {
@@ -585,6 +587,8 @@ mod tests {
                 "agent-check-request.v1.schema.json",
                 "agent-launch-descriptor-request.v1.schema.json",
                 "agent-plan-catalog-query.v2.schema.json",
+                "agent-scan-request.v1.schema.json",
+                "compute-scan-request.union.schema.json",
                 "contract-set.v1.json",
                 "coverage-manifest.v1.json",
                 "delegation-cancel-request.v1.schema.json",
@@ -606,6 +610,7 @@ mod tests {
                 "plan-editor.v2.schema.json",
                 "plan-lifecycle-change.v1.schema.json",
                 "planned-manifest.v1.json",
+                "prepare-discovered-model-connection-request.v1.schema.json",
                 "publication-checkpoint-change.v1.schema.json",
                 "session-list-query.v1.schema.json",
                 "session-lookup.v1.schema.json",

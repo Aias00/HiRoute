@@ -9,6 +9,12 @@ fn real_process_decision_services_and_branch_publication() {
     run_script("decision_services_product.py");
 }
 
+/// Current released CLI point scan/preparation shares the native multi-model exact-save boundary.
+#[test]
+fn released_cli_connection_points_prepare_and_save_exact_models() {
+    run_script("connection_point_product.py");
+}
+
 /// Client-bundled release assets, actual binaries and production inherited authority FDs.
 #[test]
 fn real_process_publication_crashes_recover_without_reapplying() {
