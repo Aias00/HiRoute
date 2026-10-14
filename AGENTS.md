@@ -2,7 +2,6 @@
 
 - Use current Issue/Design decisions, repository durable specs, code and executable tests as authority. Requirements must be self-contained. Resolve consequential conflicts before affected implementation, while continuing unrelated work.
 - Start from the [code map](docs/code-map/README.md) to find the production owner and a representative scenario. Update affected map entries and local guides when responsibilities, entry points or contract boundaries change; keep detailed requirements in their owning specs.
-- Preserve unrelated work and stay within declared ownership. A single-change owner handles its own convergence; in explicitly coordinated work, the designated owner finalizes shared manifests, lockfiles and registries.
 - Follow [agent instruction ownership](.agents/README.md) when changing instructions or skills. Claude uses repository skills exposed through `.claude/skills/` and must not load Codex-only skills through indirect references.
 - Before writing GitHub Issues, PRs or attachments, read and follow `rules` and `guidance.shared` in `issue-spec/config.yaml`. Keep process records in the corresponding Issue/PR and raw evidence in ignored artifacts.
 - Before every authorized public push, including validation pushes, use [public PR checks](.agents/skills/hiroute-public-pr/SKILL.md) on the complete outgoing history. Human review and merge remain the default.
