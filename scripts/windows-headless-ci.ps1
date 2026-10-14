@@ -41,7 +41,7 @@ git diff --exit-code HEAD --
 if ($LASTEXITCODE -ne 0) { throw 'Candidate has tracked changes' }
 if ($env:CARGO_TARGET_DIR -or $env:CARGO_BUILD_TARGET_DIR) { throw 'Checkout-local Cargo target required' }
 New-Item -ItemType Directory -Force $evidence | Out-Null
-if (-not $InventoryOnly) {
+function Initialize-WindowsNativeBuildContext {
 $contextScript = @'
 import importlib.util, json, os
 from pathlib import Path
@@ -59,6 +59,9 @@ if (@($context.PSObject.Properties.Name).Count -ne 2 -or
     -not $context.CMAKE_TOOLCHAIN_FILE) { throw 'Canonical Windows compile context differs' }
 $env:CARGO_ENCODED_RUSTFLAGS = $context.CARGO_ENCODED_RUSTFLAGS
 $env:CMAKE_TOOLCHAIN_FILE = $context.CMAKE_TOOLCHAIN_FILE
+}
+if (-not $InventoryOnly) {
+Initialize-WindowsNativeBuildContext
 $env:HIROUTE_BUILD_SOURCE_SHA = $ExpectedSha
 $env:CARGO_TERM_COLOR = 'never'
 $env:CARGO_INCREMENTAL = '0'
@@ -447,8 +450,10 @@ if ($Scope -eq 'components') {
     ($readonlyControl + 'readonly_control_script_facts_are_closed_nonce_bound_and_never_satisfy_denial'),
     ($readonlyControl + 'readonly_control_script_facts_reject_duplicate_unknown_and_malformed_failure_rows'),
     ($readonlyControl + 'readonly_control_windows_parser_checks_actual_command_without_execution'),
+    ($readonlyControl + 'readonly_control_console_diagnostics_preserve_exact_frames_and_cannot_replace_denial'),
     'agents::collaboration_probe::readonly_control::parser_probe::readonly_parser_trace_requires_ordered_actual_entry_parse_and_completion',
     'agents::collaboration_probe::readonly_control::parser_probe::readonly_parser_trace_limits_native_failure_facts_without_retaining_dynamic_output',
+    'agents::collaboration_probe::readonly_control::parser_probe::readonly_parser_console_frames_preserve_parse_input_and_reject_echo_as_completion',
     'agents::collaboration_probe::tests::codex_readonly_control_precedes_the_skill_and_cli_and_requires_a_correlated_denial',
     'agents::collaboration_probe::tests::readonly_rejection_observes_closed_tool_facts_before_early_return',
     'agents::collaboration_probe::tests::readonly_facts_preserve_missing_correlation_and_echo_duplicate_gates')
