@@ -418,6 +418,12 @@ pub enum ComputeProjectionReadError {
 /// exact scanner intersection, and durable compute reads; Application owns command semantics.
 pub trait ComputeFactsPort: Send + Sync {
     fn scan_compute(&self) -> Result<ComputeScanResultV1, ControlReadError>;
+    fn scan_compute_points(
+        &self,
+        _request: &hiroute_application_api::ComputeScanRequestV2,
+    ) -> Result<hiroute_application_api::ComputeScanResultV2, ControlReadError> {
+        Err(ControlReadError::Unavailable)
+    }
 
     fn connection_options(&self) -> Result<ComputeConnectionOptionsResultV1, ControlReadError>;
 

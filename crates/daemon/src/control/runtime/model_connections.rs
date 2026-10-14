@@ -36,6 +36,7 @@ mod discovered;
 mod key_inputs;
 mod key_masks;
 mod pi_discovered;
+mod points;
 mod presentation;
 mod registered;
 mod saved;

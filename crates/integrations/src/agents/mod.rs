@@ -47,9 +47,11 @@ mod dsh_config;
 mod dsh_sources;
 #[cfg(test)]
 mod dsh_tests;
+mod native_points;
 mod observed_capabilities;
 mod pi_runtime;
 mod pi_sources;
+pub use native_points::*;
 pub use pi_sources::{NativeApiSource, PiApiSource};
 mod qoder;
 pub use pi_runtime::*;

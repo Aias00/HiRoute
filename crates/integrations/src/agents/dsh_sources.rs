@@ -238,6 +238,47 @@ impl FilesystemAgentScannerV1 {
                     ));
                 }
                 sources.push(NativeApiSource {
+                    point_binding: endpoint.map(|endpoint| super::NativeApiPointBindingV1 {
+                        native_scope: CanonicalDigest::of(&(
+                            "dsh-native-scope/v1",
+                            &self.layout.dsh_config_root,
+                        ))
+                        .expect("native scope"),
+                        provider_definition: format!(
+                            "{}/llm-pi-ai/providers/{provider_id}",
+                            if home_patch
+                                .config("llm-pi-ai")
+                                .map_err(|_| Error::InvalidConfig)?
+                                .is_some()
+                            {
+                                "cordis.patch.yml"
+                            } else {
+                                "profiles/hiroute.yml"
+                            }
+                        ),
+                        endpoint: endpoint.into(),
+                        endpoint_selector: format!("providers/{provider_id}/baseURL"),
+                        protocol_selector: format!("providers/{provider_id}/api"),
+                        model_override_scope: None,
+                        credential_binding: format!(
+                            "providers/{provider_id}/apiKeyEnv:{}:{}:{}",
+                            reference.unwrap_or("missing"),
+                            if reference.is_some_and(|r| std::env::var(r)
+                                .ok()
+                                .is_some_and(|v| !v.is_empty()))
+                            {
+                                "process_environment"
+                            } else {
+                                "credential_reference_file"
+                            },
+                            CanonicalDigest::of(&(
+                                "dsh-credential-file-location/v1",
+                                &credentials_path
+                            ))
+                            .expect("native credential location")
+                            .as_str()
+                        ),
+                    }),
                     provider_id: provider_id.clone(),
                     model_id: id.into(),
                     protocol,

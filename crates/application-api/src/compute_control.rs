@@ -15,6 +15,55 @@ pub const COMPUTE_CONNECTION_PREVIEW_SCHEMA_V1: &str = "hiroute.compute-connecti
 #[serde(deny_unknown_fields)]
 pub struct ComputeScanRequestV1 {}
 
+pub const COMPUTE_SCAN_REQUEST_SCHEMA_V2: &str = "hiroute.compute-scan-request/v2";
+pub const COMPUTE_SCAN_RESULT_SCHEMA_V2: &str = "hiroute.compute-scan-result/v2";
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ComputeScanRequestV2 {
+    pub schema: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_target: Option<hiroute_domain::AgentNativeTargetV1>,
+}
+impl ComputeScanRequestV2 {
+    pub fn valid(&self) -> bool {
+        self.schema == COMPUTE_SCAN_REQUEST_SCHEMA_V2
+            && self
+                .native_target
+                .as_ref()
+                .is_none_or(|t| t.validate().is_ok())
+    }
+}
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ComputeConnectionPointV2 {
+    pub point_id: String,
+    pub agent_id: String,
+    pub display_name: String,
+    pub native_provider_id: Option<String>,
+    pub protocol: Option<hiroute_domain::UpstreamProtocol>,
+    pub declared_model_ids: Vec<String>,
+    pub default_model_id: Option<String>,
+    pub configuration_state: String,
+    pub discovery: Option<ComputeDiscoveryRefV1>,
+    pub actions_required: Vec<String>,
+}
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ComputeScanDiagnosticV2 {
+    pub agent_id: String,
+    pub reason: String,
+    pub native_provider_id: Option<String>,
+    pub model_id: Option<String>,
+}
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ComputeScanResultV2 {
+    pub schema: String,
+    pub catalog: ComputeCatalogProvenanceViewV1,
+    pub connections: Vec<ComputeConnectionPointV2>,
+    pub diagnostics: Vec<ComputeScanDiagnosticV2>,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputePermissionActionV1 {

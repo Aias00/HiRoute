@@ -272,6 +272,12 @@ fn projection_expectation_for_ids(
 }
 
 impl ComputeFactsPort for LocalControlAdapter {
+    fn scan_compute_points(
+        &self,
+        request: &hiroute_application_api::ComputeScanRequestV2,
+    ) -> Result<hiroute_application_api::ComputeScanResultV2, ControlReadError> {
+        self.compute_point_scan(request)
+    }
     fn scan_compute(&self) -> Result<ComputeScanResultV1, ControlReadError> {
         let catalog = self
             .release_catalog
@@ -601,7 +607,7 @@ fn scan_item(
     })
 }
 
-fn public_provenance(
+pub(in crate::control::runtime) fn public_provenance(
     value: &hiroute_domain::ComputeCatalogProvenanceV1,
 ) -> ComputeCatalogProvenanceViewV1 {
     ComputeCatalogProvenanceViewV1 {

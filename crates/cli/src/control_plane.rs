@@ -78,7 +78,11 @@ pub(crate) fn command_payload(
         "prices.effective" => Some(request::<GetEffectivePricesV2>(options)),
         "prices.override.preview" => Some(request::<PreviewPriceOverrideChangeV2>(options)),
         "prices.override.apply" => Some(request::<ApplyPriceOverrideChangeV2>(options)),
-        "compute.scan" => Some(empty::<ComputeScanRequestV1>(options)),
+        "compute.scan" => Some(if options.is_empty() {
+            empty::<ComputeScanRequestV1>(options)
+        } else {
+            compute_scan(options)
+        }),
         "compute.list" => Some(empty::<ComputeManagementQueryV2>(options)),
         "compute.show" => Some(positional(options, |source_id| ComputeManagementQueryV2 {
             source_id: Some(source_id),
@@ -142,6 +146,20 @@ fn compute_preview(options: &[String]) -> Result<Value, ErrorCode> {
 fn typed_value<T: DeserializeOwned + Serialize>(value: Value) -> Result<Value, ErrorCode> {
     let request: T = request_input::deserialize(value)?;
     serde_json::to_value(request).map_err(|_| ErrorCode::Internal)
+}
+
+fn compute_scan(options: &[String]) -> Result<Value, ErrorCode> {
+    let value = request_input::read(options, MAX_REQUEST_BYTES)?;
+    if value.get("schema").is_some() {
+        let parsed: hiroute_application_api::ComputeScanRequestV2 =
+            request_input::deserialize(value)?;
+        if !parsed.valid() {
+            return Err(ErrorCode::InvalidArguments);
+        }
+        serde_json::to_value(parsed).map_err(|_| ErrorCode::Internal)
+    } else {
+        typed_value::<ComputeScanRequestV1>(value)
+    }
 }
 
 fn routing_request(options: &[String], apply: bool) -> Result<Value, ErrorCode> {
