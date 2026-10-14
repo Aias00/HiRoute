@@ -113,8 +113,12 @@ def assessment(provenance, records, evidence):
                 raise ValueError('Native case record differs from captured required cases')
         verified = read_json(evidence / 'artifact-verification.json')
         audited = read_json(evidence / 'runtime-audit.json')
-        if (verified.get('source_sha') != provenance['source_revision'] or verified.get('recipes') != len(expected)
-                or verified.get('files') != len(manifest['files']) or audited.get('source_sha') != provenance['source_revision']
+        # The canonical CLI emits schema/source_sha/recipes. The in-process
+        # verifier above checks every manifest file and complete package byte.
+        if (set(verified) != {'schema', 'source_sha', 'recipes'}
+                or verified.get('schema') != manifest.get('schema')
+                or verified.get('source_sha') != provenance['source_revision'] or verified.get('recipes') != len(expected)
+                or audited.get('source_sha') != provenance['source_revision']
                 or audited.get('dependency_gate') != 'green' or audited.get('dll_resolution_and_runtime') != 'not_assessed'
                 or audited.get('production_release_acceptance') != 'not_assessed'):
             raise ValueError('Native artifact verification or import audit differs')

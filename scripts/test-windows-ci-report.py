@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Ensure native verdicts and original revisions survive feedback generation."""
 import importlib.util
+import ast
 import base64
 import copy
 import hashlib
@@ -162,7 +163,8 @@ class AssessmentFeedback(unittest.TestCase):
                 (self.root / (name + '.log')).write_text('Running tests\\fixture.rs (fixture.exe)\n'
                     + f'test result: ok. {count} passed; 0 failed; 0 ignored; finished in 0.1s\n')
             self.records.append(row)
-        self.manifest = dict(recipes=[dict(name=row['name'], required_cases=row['cases']) for row in self.records],
+        self.manifest = dict(schema='hiroute.windows-native-artifacts/v1',
+                             recipes=[dict(name=row['name'], required_cases=row['cases']) for row in self.records],
                              files=[{'fixture_only': index} for index in range(10)], package={'fixture_only': True},
                              product_binaries={'hiroute':'fixture-cli', 'hirouted':'fixture-daemon'})
         (self.root / 'native-artifacts.json').write_text(json.dumps(self.manifest))
@@ -170,7 +172,20 @@ class AssessmentFeedback(unittest.TestCase):
             scope='background', assessment='hosted', invocation_failed=False, failure_count=0,
             capture_requested=True, artifact_verification_passed=True, runtime_import_audit_passed=True,
             native_manifest_sha256=hashlib.sha256((self.root/'native-artifacts.json').read_bytes()).hexdigest())
-        (self.root / 'artifact-verification.json').write_text(json.dumps(dict(source_sha='a'*40, recipes=5, files=10)))
+        # Evaluate the exact canonical CLI's success receipt, rather than adding
+        # a field that the real producer never emits.
+        tree = ast.parse((Path(__file__).parent / 'windows-native-artifacts.py').read_bytes())
+        receipts = [node.args[0].args[0] for node in ast.walk(tree)
+                    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'print'
+                    and node.args and isinstance(node.args[0], ast.Call)
+                    and isinstance(node.args[0].func, ast.Attribute) and node.args[0].func.attr == 'dumps'
+                    and node.args[0].args and isinstance(node.args[0].args[0], ast.Dict)]
+        self.assertEqual(len(receipts), 1)
+        value = dict(self.manifest, build={'source_sha': 'a'*40})
+        receipt = eval(compile(ast.Expression(receipts[0]), '<canonical-native-receipt>', 'eval'),
+                       {'__builtins__': {}, 'len': len}, {'value': value})
+        self.assertEqual(set(receipt), {'schema', 'source_sha', 'recipes'})
+        (self.root / 'artifact-verification.json').write_text(json.dumps(receipt))
         (self.root / 'runtime-audit.json').write_text(json.dumps(dict(source_sha='a'*40, dependency_gate='green',
             dll_resolution_and_runtime='not_assessed', production_release_acceptance='not_assessed')))
         self.patch = mock.patch.object(module, 'verify_artifacts', return_value=self.manifest)
