@@ -38,6 +38,7 @@ impl LocalControlAdapter {
         self.artifacts
             .register_external_targets(bindings)
             .map_err(|_| ControlReadError::Denied)?;
+        self.remember_hermes_scan_target(&target)?;
         Ok(target)
     }
 

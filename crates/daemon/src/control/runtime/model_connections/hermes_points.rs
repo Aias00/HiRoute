@@ -5,14 +5,14 @@ use hiroute_domain::AgentNativeTargetV1;
 use hiroute_integrations::{HermesApiDiscoveryV1, HermesSourceDiagnosticV1, NativeApiSource};
 
 impl LocalControlAdapter {
-    pub(super) fn remember_hermes_scan_target(
+    pub(in crate::control::runtime) fn remember_hermes_scan_target(
         &self,
         target: &AgentNativeTargetV1,
     ) -> Result<(), ControlReadError> {
         let canonical = hiroute_integrations::canonical_hermes_target(target)
             .map_err(|_| ControlReadError::Denied)?;
         let id = hiroute_integrations::hermes_context_id(canonical.config_root());
-        let mut targets = self
+        let targets = self
             .hermes_scan_targets
             .lock()
             .map_err(|_| ControlReadError::Unavailable)?;
@@ -26,23 +26,11 @@ impl LocalControlAdapter {
     pub(in crate::control::runtime) fn hermes_source_facts(
         &self,
     ) -> Result<HermesApiDiscoveryV1, ControlReadError> {
-        let mut targets = self
+        let targets = self
             .hermes_scan_targets
             .lock()
             .map_err(|_| ControlReadError::Unavailable)?
             .clone();
-        for target in self
-            .stores_lock()
-            .map_err(super::super::map_port)?
-            .control()
-            .agent_settings_native_targets(&WorkspaceId::default())
-            .map_err(super::super::map_port)?
-        {
-            targets.insert(
-                hiroute_integrations::hermes_context_id(target.config_root()),
-                target,
-            );
-        }
         let mut facts = HermesApiDiscoveryV1 {
             sources: Vec::new(),
             diagnostics: Vec::new(),
@@ -67,23 +55,11 @@ impl LocalControlAdapter {
         &self,
         expected: &NativeApiSource,
     ) -> Result<(zeroize::Zeroizing<String>, ProtectedSecret), ControlReadError> {
-        let mut targets = self
+        let targets = self
             .hermes_scan_targets
             .lock()
             .map_err(|_| ControlReadError::Unavailable)?
             .clone();
-        for target in self
-            .stores_lock()
-            .map_err(super::super::map_port)?
-            .control()
-            .agent_settings_native_targets(&WorkspaceId::default())
-            .map_err(super::super::map_port)?
-        {
-            targets.insert(
-                hiroute_integrations::hermes_context_id(target.config_root()),
-                target,
-            );
-        }
         let scope = expected
             .point_binding
             .as_ref()

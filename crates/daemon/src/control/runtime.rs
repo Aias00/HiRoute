@@ -376,6 +376,7 @@ impl ProductionControlRuntime {
         )
         .map_err(|e| e.to_string())?;
         let mut scoped_targets = Vec::new();
+        let mut hermes_scan_targets = BTreeMap::new();
         for target in stores
             .control()
             .agent_settings_native_targets(&WorkspaceId::default())
@@ -385,6 +386,7 @@ impl ProductionControlRuntime {
             if !context.starts_with("agent-context/hermes/") {
                 return Err("invalid native target".into());
             }
+            hermes_scan_targets.insert(context.clone(), target.clone());
             scoped_targets.extend(
                 hiroute_integrations::hermes_external_targets(target.config_root())
                     .map_err(|e| e.to_string())?,
@@ -490,7 +492,7 @@ impl ProductionControlRuntime {
             ),
             model_connection_cancellations: Mutex::new(BTreeMap::new()),
             prepared_discoveries: Mutex::new(BTreeMap::new()),
-            hermes_scan_targets: Mutex::new(BTreeMap::new()),
+            hermes_scan_targets: Mutex::new(hermes_scan_targets),
             permission_findings: Mutex::new(BTreeMap::new()),
             admission: hiroute_application::TransactionRuntime::default(),
             plan_admission,
