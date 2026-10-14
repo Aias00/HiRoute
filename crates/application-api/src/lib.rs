@@ -269,7 +269,7 @@ mod protocol_tests {
                 .map(|command| &command.path)
                 .collect::<BTreeSet<_>>()
                 .len(),
-            87
+            88
         );
         assert_eq!(
             commands
@@ -277,7 +277,7 @@ mod protocol_tests {
                 .map(|command| &command.operation_id)
                 .collect::<BTreeSet<_>>()
                 .len(),
-            87
+            88
         );
         for operation in ["GetClientServiceStatus", "ListWorkPlans"] {
             let command = command_by_operation(operation).unwrap();
@@ -302,7 +302,7 @@ mod protocol_tests {
             CommandLifecycle::Released
         );
         let release = release_manifest();
-        assert_eq!(release.commands.len(), 51);
+        assert_eq!(release.commands.len(), 52);
         assert!(release.commands.iter().all(|command| {
             command.lifecycle == CommandLifecycle::Released
                 && command.positive.state == CoverageState::Executable
