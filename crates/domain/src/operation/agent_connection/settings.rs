@@ -230,7 +230,7 @@ pub(super) fn validate_skill_selection(
     payload: &Value,
 ) -> Result<(), OperationValidationError> {
     let settings = decode_spec(spec)?;
-    let action = match settings.collaboration {
+    let action = match settings.skill_intent() {
         AgentFacetIntent::Configure { .. } => "install",
         AgentFacetIntent::Restore { .. } => "remove",
         AgentFacetIntent::Keep => return Err(OperationValidationError::UnregisteredEffectPlan),

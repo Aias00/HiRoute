@@ -6,12 +6,11 @@
 //! daemon; the CLI and a future Desktop cannot reach storage, discovery, or observation ports.
 
 use hiroute_application_api::{
-    AgentCheckRequestV1, ApplyRequestV1, ApplyResultV1, CanonicalDigest, ClientEmptyRequestV1,
-    CommandLifecycle, ErrorCode, ErrorV1, LocalControlRequestV2, MachineEnvelopeV2,
-    OperationCancelRequestV1, OperationLookupV1, OperationReferenceV1, PreviewRequestV1,
-    RevisionSetV1, SetupApplyRequestV1, SetupRequestV1, WORKER_SETTINGS_GET_OPERATION_V1,
-    WORKER_SETTINGS_SET_OPERATION_V1, command_by_id, command_by_operation, release_manifest,
-    reserved_operation,
+    AgentCheckRequestV1, ApplyRequestV1, ApplyResultV1, CanonicalDigest, CommandLifecycle,
+    ErrorCode, ErrorV1, LocalControlRequestV2, MachineEnvelopeV2, OperationCancelRequestV1,
+    OperationLookupV1, OperationReferenceV1, PreviewRequestV1, RevisionSetV1, SetupApplyRequestV1,
+    SetupRequestV1, WORKER_SETTINGS_GET_OPERATION_V1, WORKER_SETTINGS_SET_OPERATION_V1,
+    command_by_id, command_by_operation, release_manifest, reserved_operation,
 };
 use hiroute_domain::{ObservationQueryError, WorkspaceId};
 use serde_json::{Value, json};

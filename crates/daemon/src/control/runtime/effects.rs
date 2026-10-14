@@ -315,7 +315,38 @@ impl ExternalEffectPort for LocalControlAdapter {
         &self,
         operation: &hiroute_domain::OperationV1,
     ) -> PortResult<()> {
-        self.finish_product_activation(operation)
+        self.finish_product_activation(operation)?;
+        for intent in operation.plan.external() {
+            if hiroute_application::agent_connection::is_settings_hermes_plugin(intent)
+                && matches!(hiroute_application::agent_connection::settings_hermes_plugin_file_for_operation(operation, intent)?.change, hiroute_application::agent_connection::HermesPluginFileAction::Restore { .. })
+                && self.artifacts.read_native_target(intent.target())?.is_none() {
+                self.artifacts.cleanup_native_parents(&operation.operation_id, intent)?;
+            }
+            if intent.effect_id() == "agent-connection-routing-skill"
+                && intent.desired()["transaction"] == "settings"
+                && intent.desired()["payload"]["action"] == "remove"
+            {
+                let (_, record) =
+                    hiroute_application::agent_connection::settings_skill_file_record(
+                        &operation.operation_id,
+                        intent,
+                    )?;
+                let actual = self
+                    .stores_lock()?
+                    .control()
+                    .skill_installation(&operation.workspace_id, &record.root_ref)?;
+                if actual.as_ref() != Some(&record) {
+                    return Err(invalid("skill.cleanup.record.binding"));
+                }
+                hiroute_application::agent_connection::finish_collaboration_skill_removal(
+                    &self.artifacts,
+                    &operation.operation_id,
+                    intent,
+                    &record,
+                )?;
+            }
+        }
+        Ok(())
     }
     fn current_external_fingerprint(&self, target: &str) -> PortResult<Option<CanonicalDigest>> {
         if target.starts_with("compute-subscription/") {
