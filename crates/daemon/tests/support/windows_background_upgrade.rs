@@ -4,7 +4,10 @@ use std::time::Duration;
 
 use serde_json::Value;
 
-use super::{Cleanup, Inputs, assert_status, fixture, windows_account, windows_token_launcher};
+use super::{
+    Cleanup, Inputs, assert_status, fixture, windows_account, windows_background_task,
+    windows_token_launcher,
+};
 
 fn desired_port(gateway: &Value) -> u16 {
     gateway["connect_address"]
@@ -33,13 +36,8 @@ fn task_native_candidate_upgrade_recovers_prepared_rollback_and_preserves_busine
         baseline.version_directory, candidate.version_directory,
         "candidate roots must differ; same package repair cannot prove version replacement"
     );
-    let token = windows_account::current_restricted();
+    let windows_background_task::Owner { token, session } = windows_background_task::owner();
     let staged = windows_token_launcher::StagedFixture::create(&token);
-    let account = hiroute_platform::windows::service::account_name_for_sid(
-        &windows_account::token_sid(&token),
-    )
-    .unwrap();
-    let session = windows_account::interactive_session(&account);
     let layout = candidate.owner_layout(&token);
     let old_cli = baseline.owner_cli(&layout);
     assert_eq!(baseline.install(&token, false)["installed"], true);

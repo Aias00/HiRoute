@@ -8,6 +8,8 @@
 mod windows_account;
 #[path = "support/windows_background_fixture.rs"]
 mod windows_background_fixture;
+#[path = "support/windows_background_task.rs"]
+mod windows_background_task;
 #[path = "support/windows_background_upgrade.rs"]
 mod windows_background_upgrade;
 #[path = "support/windows_candidate_source.rs"]
@@ -379,11 +381,12 @@ fn windows_background_owner_fixture() {
 fn task_native_background_lua_gateway_control_stop_crash_recovery_and_autostart() {
     let _privileges = windows_account::Privileges::enable();
     let input = Inputs::load();
-    let token = windows_account::current_restricted();
+    let windows_background_task::Owner {
+        token,
+        session: expected_session,
+    } = windows_background_task::owner();
     let staged = windows_token_launcher::StagedFixture::create(&token);
     let sid = background::current_sid_string().unwrap();
-    let account = service::account_name_for_sid(&windows_account::token_sid(&token)).unwrap();
-    let expected_session = windows_account::interactive_session(&account);
     windows_account::assert_standard(&token, &sid);
     let layout = input.owner_layout(&token);
     let cli = input.owner_cli(&layout);

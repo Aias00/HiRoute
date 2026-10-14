@@ -334,6 +334,7 @@ pub fn entry() {
         );
         return;
     }
+    launcher::assert_fixture_stdio();
     let mut bytes = Vec::new();
     std::io::stdin()
         .lock()
