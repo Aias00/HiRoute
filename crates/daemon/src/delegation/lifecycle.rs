@@ -1,5 +1,8 @@
 //! One bounded execution over the small launcher. No production fallback for a missing backend.
-use super::acp::{AcpRunInput, AcpRunJournal, AcpRunOutcome, run_acp_with_progress};
+use super::acp::{
+    AcpRunInput, AcpRunJournal, AcpRunOutcome, AcpTerminalCheckpoint,
+    run_acp_with_terminal_checkpoint,
+};
 use super::finalization::DelegationFinalizationLease;
 use super::platform::*;
 use super::profile::TaskSessionRoot;
@@ -17,6 +20,8 @@ const CLAUDE_HISTORY_QUIET: Duration = Duration::from_millis(200);
 const CLAUDE_HISTORY_POLL: Duration = Duration::from_millis(25);
 
 mod startup;
+mod terminal;
+use terminal::LiveTerminalCheckpoint;
 
 #[derive(Clone, Copy)]
 enum HistoryBaseline {
@@ -207,7 +212,8 @@ pub(crate) async fn execute(
         let _ = journal.execution_failed(DelegationErrorV1::DeadlineExceeded);
         return Err(DelegationErrorV1::DeadlineExceeded);
     }
-    let history_checkpoint = ClaudeHistoryCheckpoint::capture(&request.profile, &input);
+    let terminal_checkpoint = ClaudeHistoryCheckpoint::capture(&request.profile, &input)
+        .map(|history| Arc::new(LiveTerminalCheckpoint::new(journal.clone(), history)));
     let startup = match startup::StartupPermit::acquire(
         request.profile.codex_initialization_root(),
         input.deadline,
@@ -278,24 +284,33 @@ pub(crate) async fn execute(
             let deadline = input.deadline;
             let acp_cancel = tokio_util::sync::CancellationToken::new();
             input.cancellation = acp_cancel.clone();
-            let future = run_acp_with_progress(
+            let future = run_acp_with_terminal_checkpoint(
                 worker.stdout,
                 worker.stdin,
                 input,
                 acp_journal,
                 progress_sink,
+                terminal_checkpoint
+                    .as_ref()
+                    .map(|checkpoint| checkpoint.clone() as Arc<dyn AcpTerminalCheckpoint>),
             );
             tokio::pin!(future);
             tokio::select! {
                 biased;
                 _ = outer_cancel.cancelled() => {
                     // Failure remains visible through the idempotent stop_intent below.
-                    early_stop_error = journal.stop_intent().err();
+                    early_stop_error = terminal_checkpoint.as_ref().map_or_else(
+                        || journal.stop_intent().err(),
+                        |checkpoint| checkpoint.revoke(),
+                    );
                     acp_cancel.cancel();
                     future.await
                 },
                 _ = tokio::time::sleep_until(deadline) => {
-                    early_stop_error = journal.stop_intent().err();
+                    early_stop_error = terminal_checkpoint.as_ref().map_or_else(
+                        || journal.stop_intent().err(),
+                        |checkpoint| checkpoint.revoke(),
+                    );
                     acp_cancel.cancel();
                     future.await
                 },
@@ -303,28 +318,36 @@ pub(crate) async fn execute(
             }
         }
     };
-    let finalization = journal.begin_finalization();
-    let execution = match execution {
-        Ok(outcome) => journal.completed(&outcome).map(|()| outcome),
-        Err(error) => {
-            let _ = journal.execution_failed(error);
-            Err(error)
+    let (execution, finalization, native_history_settled) = match terminal_checkpoint
+        .as_ref()
+        .and_then(|checkpoint| checkpoint.take_receipt())
+    {
+        Some(receipt) => (
+            receipt.execution,
+            receipt.finalization,
+            receipt.history_settled,
+        ),
+        None => {
+            let finalization = journal.begin_finalization();
+            let execution = match execution {
+                Ok(outcome) => journal.completed(&outcome).map(|()| outcome),
+                Err(error) => {
+                    let _ = journal.execution_failed(error);
+                    Err(error)
+                }
+            };
+            let settled = execution.is_ok() && terminal_checkpoint.is_none();
+            (execution, finalization, settled)
         }
     };
-    let stop_intent_error = early_stop_error.or(journal.stop_intent().err());
-    // The terminal result and credential revocation stay authoritative. Claude's ACP prompt
-    // response can precede its append-only transcript flush, so keep the owned process alive only
-    // long enough to observe the exact file change become quiet. A timeout affects Continue
-    // eligibility, never the already-recorded task result.
-    let native_history_settled = match (&execution, history_checkpoint.as_ref()) {
-        (Ok(outcome), Some(checkpoint)) if outcome.stop_reason != "cancelled" => {
-            checkpoint
-                .wait_until_settled(outcome.session.native_session_id.as_deref())
-                .await
-        }
-        (Ok(_), None) => true,
-        _ => false,
-    };
+    let cleanup_stop_error = terminal_checkpoint.as_ref().map_or_else(
+        || journal.stop_intent().err(),
+        |checkpoint| checkpoint.revoke(),
+    );
+    let stop_intent_error = early_stop_error.or(cleanup_stop_error);
+    // Claude's terminal callback already published/revoked and observed the exact
+    // native file before ACP EOF. Non-Claude/error/cancel paths retain the usual
+    // finalization above; only the outer lifecycle stops the held process scope.
     // Even if persistence fails, do not abandon a held child. Return both pieces of evidence.
     let stop = stop_owned(platform, &worker.identity).await;
     if let Some(capture) = progress_capture {

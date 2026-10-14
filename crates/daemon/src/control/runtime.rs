@@ -118,7 +118,7 @@ struct RuntimeOpenOverrides {
     storage_startup: hiroute_local_storage::StorageStartupOptions,
 }
 
-fn native_agent_home() -> Result<PathBuf, String> {
+pub(crate) fn native_agent_home() -> Result<PathBuf, String> {
     #[cfg(windows)]
     {
         // This selector exists only in the libtest child launched by test_support.

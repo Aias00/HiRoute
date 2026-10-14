@@ -879,13 +879,26 @@ fn isolated_owner_recovery_case(case: &str) -> bool {
         .output()
         .unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
+    let code = output.status.code();
+    #[cfg(windows)]
+    let native_code = code.map(|value| format!("0x{:08x}", value as u32));
+    #[cfg(not(windows))]
+    let native_code: Option<String> = None;
+    const TAIL_BOUND: usize = 4096;
+    let stdout_tail =
+        String::from_utf8_lossy(&output.stdout[output.stdout.len().saturating_sub(TAIL_BOUND)..]);
+    let stderr_tail =
+        String::from_utf8_lossy(&output.stderr[output.stderr.len().saturating_sub(TAIL_BOUND)..]);
     assert!(
         output.status.success()
             && stdout
                 .lines()
                 .any(|line| line == format!("test {case} ... ok")),
-        "isolated owner recovery must execute its exact case: {stdout} {}",
-        String::from_utf8_lossy(&output.stderr)
+        "isolated owner recovery must execute its exact case: code={code:?} \
+         windows_native_code={native_code:?} stdout_bytes={} stderr_bytes={} \
+         stdout_tail={stdout_tail:?} stderr_tail={stderr_tail:?}",
+        output.stdout.len(),
+        output.stderr.len(),
     );
     true
 }

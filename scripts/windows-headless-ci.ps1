@@ -311,6 +311,8 @@ if ($Scope -eq 'components') {
     Invoke-RequiredTests 'background-capture' @('-p','hiroute-daemon','--test','windows_background','windows_token_launcher::capture_tests::') @(
       'windows_token_launcher::capture_tests::native_capture_requires_last_writer_close_for_eof',
       'windows_token_launcher::capture_tests::native_capture_bounds_output_and_never_reports_unknown_stage_data')
+    $packaged = 'actual_windows_packaged_foreground_subscription_lifecycle'
+    Invoke-RequiredTests 'packaged-foreground' @('-p','hiroute-daemon','--test','windows_headless',$packaged) @($packaged) @('--ignored','--exact','--nocapture')
     Invoke-RequiredTests 'background' @('-p','hiroute-daemon','--test','windows_background','task_native_background_lua_gateway_control_stop_crash_recovery_and_autostart') @(
       'task_native_background_lua_gateway_control_stop_crash_recovery_and_autostart') @('--exact','--nocapture')
   } else {
@@ -329,6 +331,7 @@ if ($Scope -eq 'components') {
   Invoke-RequiredTests 'agent-acp-notifications' @('-p','hiroute-daemon','--lib','delegation::acp::notification_tests::') @(
     'delegation::acp::notification_tests::startup_and_loaded_history_notifications_do_not_make_current_output_incomplete',
     'delegation::acp::notification_tests::wrong_session_notification_during_prompt_still_marks_output_incomplete')
+  Invoke-RequiredTests 'agent-live-history' @('-p','hiroute-daemon','--lib','delegation::lifecycle::tests::terminal::') @(Get-WindowsLiveHistoryCases)
   $cancelOracle = 'delegation::installation::probe_server::tests::only_deliberately_cancelled_peer_disconnect_is_not_a_probe_response_failure'
   Invoke-RequiredTests 'agent-cancel-oracle' @('-p','hiroute-daemon','--lib',$cancelOracle) @($cancelOracle) @('--exact')
   $mainOracle = 'agents::collaboration_probe::tests::codex_collaboration_accepts_correlated_native_text_content_items_only'
@@ -366,6 +369,8 @@ if ($Scope -eq 'components') {
   Invoke-RequiredTests 'agent-public-business' @('-p','hiroute-daemon','--test','windows_headless',$publicBusiness) @($publicBusiness) @('--ignored','--exact','--nocapture')
   $userModels = 'actual_windows_pi_and_dsh_persisted_user_models'
   Invoke-RequiredTests 'agent-user-models' @('-p','hiroute-daemon','--test','windows_headless',$userModels) @($userModels) @('--ignored','--exact','--nocapture')
+  $management = 'actual_windows_installed_management_commands'
+  Invoke-RequiredTests 'agent-management' @('-p','hiroute-daemon','--test','windows_headless',$management) @($management) @('--ignored','--exact','--nocapture')
   foreach ($case in (Get-WindowsDaemonAgentCases)) {
     $name = 'agent-' + ($case -split 'actual_')[1] -replace '_','-'
     Invoke-RequiredTests $name @('-p','hiroute-daemon','--lib',$case) @($case) @('--ignored','--exact','--nocapture')

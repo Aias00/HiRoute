@@ -21,6 +21,8 @@ mod windows_candidate_source;
 mod windows_execution_host;
 #[path = "support/windows_gateway_recovery.rs"]
 mod windows_gateway_recovery;
+#[path = "support/windows_management_service.rs"]
+mod windows_management_service;
 #[path = "support/windows_subscription_login.rs"]
 mod windows_subscription_login;
 #[path = "support/windows_token_launcher.rs"]
@@ -425,6 +427,10 @@ fn task_native_background_lua_gateway_control_stop_crash_recovery_and_autostart(
     assert_eq!(first["sid"], sid);
     assert_eq!(first["session"], expected_session);
     assert_status(&token, &cli, "windows-task-user", true);
+    // This Task gate retains the actual same-SID logged-on owner. Public CLI
+    // calls use its limited token; the independent held log read uses that same
+    // account, never the optional SCM fixture's different administrative owner.
+    windows_management_service::run(&mut |args| subscription_cli(&token, &cli, args, None));
     windows_gateway_recovery::exercise(&token, &cli, &first, &sid, expected_session);
     let oauth_pending = windows_subscription_login::run_before_restart(&mut |args, request| {
         subscription_cli(&token, &cli, args, request)

@@ -583,9 +583,8 @@ fn start_cpa(
         shutdown_timeout: Duration::from_secs(5),
         restart_policy: RestartPolicy::default(),
     };
-    let home = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .ok_or(RoleAllError::InvalidConfiguration)?;
+    let home =
+        crate::control::native_agent_home().map_err(|_| RoleAllError::InvalidConfiguration)?;
     let mut claude_spec = codex_spec.clone();
     claude_spec.instance_id = "hiroute-claude".into();
     claude_spec.state_root = config.storage_root.join("cpa-claude/state");
@@ -655,10 +654,11 @@ fn start_cpa(
 }
 
 fn selected_codex_auth() -> Result<PathBuf, RoleAllError> {
-    let home = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .filter(|path| path.is_absolute())
-        .ok_or(RoleAllError::InvalidConfiguration)?;
+    let home =
+        crate::control::native_agent_home().map_err(|_| RoleAllError::InvalidConfiguration)?;
+    if !home.is_absolute() {
+        return Err(RoleAllError::InvalidConfiguration);
+    }
     hiroute_integrations::agents::codex_subscription_auth_from_environment(&home)
         .map_err(|_| RoleAllError::InvalidConfiguration)
 }

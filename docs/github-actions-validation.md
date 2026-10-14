@@ -60,11 +60,14 @@ Background jobs build the unchanged pinned CPA with its two native bootstrap
 security cases and use the production package generator twice. The administrator
 receives a separate verified complete package. The required Task case exercises
 the actual logged-on owner, least-privilege launch, stop/recovery and login autostart.
-GitHub-hosted Windows uses an administrator with UAC disabled. This account has no
-linked limited token; creating a standard account with `LogonUser` also does not
-create an existing interactive desktop login. These defaults cannot establish the
-required standard-owner Task result. That gate needs a separately provisioned real
-login and normal UAC, and remains failed when those prerequisites are absent.
+The current hosted images execute as the built-in administrator without a linked
+limited token. Native inspection found `EnableLUA=1` and administrator consent
+prompts disabled; that policy does not give this account a split token. Creating
+a standard account with `LogonUser` also does not create an existing interactive
+desktop login. These defaults cannot establish the required standard-owner Task
+result. That gate requires an actual logged-in owner with a limited token, and
+remains failed when those prerequisites are absent. Read-only RDP service and
+port facts alone do not establish such a login or a passing background task.
 SCM and logout continuity are optional, outside the required background scope.
 The separate candidate upgrade gate uses two distinct, fully verified source revisions
 and independently restages the original baseline with fresh administrator trust.

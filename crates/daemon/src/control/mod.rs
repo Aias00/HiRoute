@@ -35,6 +35,7 @@ pub(crate) use managed::start_control_with_agent_grants;
 #[cfg(any(unix, windows))]
 pub use managed::{ManagedControlError, ManagedControlHandle, ManagedControlPhase, start_control};
 pub use runtime::ProductionControlRuntime;
+pub(crate) use runtime::native_agent_home;
 
 #[cfg(any(unix, windows))]
 pub(crate) trait AgentGrantResolverPort: Send + Sync {

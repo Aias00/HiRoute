@@ -11,6 +11,7 @@ use hiroute_domain::delegation::DelegationErrorV1;
 use serde_json::{Map, Value, json};
 use std::future::Future;
 use std::path::PathBuf;
+use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -84,11 +85,22 @@ pub trait AcpRunJournal: Send + Sync {
     fn allow_permission_once(&self, request: &Value) -> bool;
 }
 
+#[derive(Clone)]
 pub struct AcpRunOutcome {
     pub session: AcpSessionBinding,
     pub stop_reason: String,
     pub text: String,
     pub content_incomplete: bool,
+}
+
+/// Lifecycle-only terminal work that must finish before dropping the live ACP transport.
+/// No protocol or persisted field is added. The lifecycle keeps terminal publication,
+/// credential revocation and exact native history observation in their original order.
+pub(crate) trait AcpTerminalCheckpoint: Send + Sync {
+    fn before_transport_close<'a>(
+        &'a self,
+        outcome: &'a AcpRunOutcome,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
 }
 
 #[derive(Default)]
@@ -118,6 +130,21 @@ pub(crate) async fn run_acp_with_progress<R, W>(
     input: AcpRunInput,
     journal: Arc<dyn AcpRunJournal>,
     progress: Option<ProgressSink>,
+) -> Result<AcpRunOutcome, DelegationErrorV1>
+where
+    R: AsyncRead + Unpin + Send + 'static,
+    W: AsyncWrite + Unpin + Send + 'static,
+{
+    run_acp_with_terminal_checkpoint(reader, writer, input, journal, progress, None).await
+}
+
+pub(crate) async fn run_acp_with_terminal_checkpoint<R, W>(
+    reader: R,
+    writer: W,
+    input: AcpRunInput,
+    journal: Arc<dyn AcpRunJournal>,
+    progress: Option<ProgressSink>,
+    terminal_checkpoint: Option<Arc<dyn AcpTerminalCheckpoint>>,
 ) -> Result<AcpRunOutcome, DelegationErrorV1>
 where
     R: AsyncRead + Unpin + Send + 'static,
@@ -207,7 +234,20 @@ where
         .connect_with(
             transport::bounded_transport(reader, writer),
             async move |connection: ConnectionTo<Agent>| {
-                Ok(run_session(connection, input, journal, updates, progress).await)
+                let outcome =
+                    run_session(connection, input, journal, updates.clone(), progress).await;
+                // A terminal response ends tool permission and text admission even while
+                // a native transcript is draining on this still-live connection.
+                updates
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .prompt_started = false;
+                if let (Ok(outcome), Some(checkpoint)) = (&outcome, terminal_checkpoint)
+                    && outcome.stop_reason != "cancelled"
+                {
+                    checkpoint.before_transport_close(outcome).await;
+                }
+                Ok(outcome)
             },
         );
     tokio::pin!(connected);

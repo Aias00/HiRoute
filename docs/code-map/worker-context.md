@@ -57,7 +57,8 @@ Do not duplicate the shared admission, process or retention lifecycle for an eco
 On Windows, [native launch admission](../../crates/integrations/src/agents/windows_runtime.rs)
 resolves known npm producers to their declared JavaScript entry and selected Node;
 it never evaluates a `.cmd` shim. System shell selectors come from the actual
-Windows system directory. Worker HOME discovery uses the account's native profile,
+Windows system directory. Worker and CPA subscription-source HOME discovery use
+the same account native-profile selector in the daemon control runtime,
 while explicit ecosystem configuration roots retain their existing meaning.
 [Managed Claude drive paths](../../crates/integrations/src/agents/managed_launch/windows.rs)
 project Rust's verbatim spelling only after reparse-free native file identity
@@ -125,6 +126,15 @@ session creation/load. The [ACP owner](../../crates/daemon/src/delegation/acp/RE
 adds an actionable `[HiRoute]` reason to the existing Worker progress window;
 [lifecycle](../../crates/daemon/src/delegation/lifecycle.rs) flushes it after owned
 process cleanup. This host explanation is separate from the model result.
+
+Claude [terminal finalization](../../crates/daemon/src/delegation/lifecycle/terminal.rs)
+keeps ACP live while the exact native transcript drains after result publication
+and credential revocation. Terminal tool/text admission closes first; bounded
+history observation controls Continue eligibility. An interrupted observation
+retains the published result and finalization lease with history readiness false.
+Follow the [ACP guide](../../crates/daemon/src/delegation/acp/README.md) and
+[causal tests](../../crates/daemon/src/delegation/lifecycle/tests/terminal.rs) for
+this ordering; installed native tools and Continue require their own acceptance.
 
 The task root owns context descriptors and exact-session bindings. Run roots own
 temporary launch materials and credentials. Borrowed HOME/config/history remain

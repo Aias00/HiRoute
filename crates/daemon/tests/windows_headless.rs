@@ -15,10 +15,14 @@ mod windows_free_admission;
 mod windows_gateway_foreground_recovery;
 #[path = "support/windows_headless_business.rs"]
 mod windows_headless_business;
+#[path = "support/windows_management_business.rs"]
+mod windows_management_business;
 #[path = "support/windows_model_ratings.rs"]
 mod windows_model_ratings;
 #[path = "support/windows_native_protocols.rs"]
 mod windows_native_protocols;
+#[path = "support/windows_packaged_foreground.rs"]
+mod windows_packaged_foreground;
 #[path = "support/windows_routing_business.rs"]
 mod windows_routing_business;
 #[path = "support/windows_routing_modes.rs"]
@@ -808,4 +812,27 @@ fn actual_windows_pi_and_dsh_persisted_user_models() {
     println!(
         "Windows ordinary Pi/DSH user models: public Preview/Apply, persisted providers, ordinary native Gateway requests, private grant rotation, installed user Skill and real public CLI invocation, actual restart, independent Restore and retained same-request receipts"
     );
+}
+
+#[test]
+#[ignore = "requires explicit pinned real Pi, DSH and Node artifacts"]
+fn actual_windows_installed_management_commands() {
+    let product = InstalledProduct::create();
+    let contexts = windows_user_models::Contexts::prepare(&product);
+    let mut daemon = product.start_with_environment(false, contexts.variables());
+    gateway_ready(daemon.listen);
+    windows_management_business::run(&product, &contexts);
+    lifecycle::stop(
+        &product.layout.lifecycle_endpoint(),
+        &product.daemon,
+        Duration::from_secs(30),
+    )
+    .unwrap();
+    daemon.wait(true);
+}
+
+#[test]
+#[ignore = "requires the verified complete production Windows package"]
+fn actual_windows_packaged_foreground_subscription_lifecycle() {
+    windows_packaged_foreground::run();
 }

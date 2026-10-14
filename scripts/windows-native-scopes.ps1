@@ -15,6 +15,16 @@ function Get-WindowsMainAgentCases {
     'agents::windows_collaboration_tests::actual_windows_codex_native_skill_executes_the_public_cli',
     'agents::windows_collaboration_tests::actual_windows_claude_native_skill_executes_the_public_cli')
 }
+function Get-WindowsLiveHistoryCases {
+  $prefix = 'delegation::lifecycle::tests::terminal::'
+  return @(
+    ($prefix + 'claude_terminal_checkpoint_keeps_transport_live_until_final_tail'),
+    ($prefix + 'eof_before_claude_checkpoint_prevents_final_tail'),
+    ($prefix + 'claude_cancel_and_protocol_error_do_not_wait_for_history'),
+    ($prefix + 'claude_disconnect_after_terminal_keeps_completion_without_history_ready'),
+    ($prefix + 'interrupted_terminal_checkpoint_retains_lease_completion_and_false_readiness'),
+    ($prefix + 'terminal_publication_failure_does_not_wait_or_double_write'))
+}
 function Get-WindowsQoderAccountRecipes {
   return @(
     @{ name = 'account-qoder-lifecycle'; package = 'hiroute-daemon'; case = 'delegation::installation::installation_probe::windows_acceptance::actual_windows_qoder_new_load_and_cancel_use_the_selected_native_acp' },
@@ -33,13 +43,13 @@ function Get-WindowsRequiredRecipes {
     'product' { return @('artifacts','cpa','core-cpa-bridge','replay-fragmentation','headless','credential-options','worker-materials',
       'worker-cleanup','authority-key','native-endpoint','native-home','startup-admission','live-capture') }
     'core' { return @(Get-WindowsCorePackages | ForEach-Object { $_ -replace '^hiroute-','core-' }) }
-    'background' { return @('background-capture','background') }
+    'background' { return @('background-capture','packaged-foreground','background') }
     'upgrade' { return @('upgrade') }
     'accounts' { return @(Get-WindowsQoderAccountRecipes | ForEach-Object { $_.name }) }
     'agents' {
       return @('agent-private-root','agent-private-node','agent-path-identity','agent-managed-path','agent-account-fixture','agent-pi-sdk',
         'agent-acp-notifications','agent-cancel-oracle','agent-main-oracle','agent-launch-oracle','agent-history-oracle',
-        'agent-native-codex-ingress','agent-business-oracle','agent-http','agent-public-business','agent-user-models') +
+        'agent-native-codex-ingress','agent-business-oracle','agent-http','agent-public-business','agent-user-models','agent-management','agent-live-history') +
         @(Get-WindowsDaemonAgentCases | ForEach-Object { 'agent-' + (($_ -split 'actual_')[1] -replace '_','-') }) +
         @(Get-WindowsMainAgentCases | ForEach-Object { 'main-' + (($_ -split 'actual_windows_')[1] -replace '_','-') })
     }

@@ -129,6 +129,16 @@ integrities and official Qoder archive hashes; the
 and native verdict. A build or client initialize is not evidence of tool execution,
 provider login, Windows 11, or another processor architecture.
 
+The [installed management journey](../../crates/daemon/tests/support/windows_management_business.rs)
+keeps Host collaboration receipts, native defaults and model authority separate.
+Its foreground doctor/logs negatives do not replace the
+[real Task doctor/logs helper](../../crates/daemon/tests/support/windows_management_service.rs).
+The [complete-package foreground CPA journey](../../crates/daemon/tests/support/windows_packaged_foreground.rs)
+executes before the required logged-owner Task, so missing WTS prerequisites cannot
+hide stock CPA startup, public PKCE cancellation/expiry or launch-snapshot failures.
+Its marker is test-owned; installer, Task and authorized outbound model traffic
+remain separate required evidence.
+
 The same native entry's `-InventoryOnly` exports static scope recipes through its
 actual required-test producer without Cargo, package preparation or client launch.
 Use the exact old checkout's export to compare upgrade baseline cases, filters and
