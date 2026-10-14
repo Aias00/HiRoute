@@ -432,7 +432,10 @@ impl FilesystemAgentScannerV1 {
                         );
                         self.layout.claude_executable.clone()
                     }
-                    AgentKindV1::Qoder | AgentKindV1::Pi | AgentKindV1::DeepseekHarness => continue,
+                    AgentKindV1::Qoder
+                    | AgentKindV1::Pi
+                    | AgentKindV1::DeepseekHarness
+                    | AgentKindV1::Hermes => continue,
                 };
                 #[cfg(unix)]
                 if installation.profile.kind == AgentKindV1::Codex

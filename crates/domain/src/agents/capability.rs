@@ -55,6 +55,8 @@ pub enum CapabilityReason {
 pub enum AgentAction {
     ConfigureModel,
     InstallCollaborationSkill,
+    InstallManagementSkill,
+    RemoveManagementSkill,
     RestoreModel,
     RemoveCollaborationSkill,
     VerifyModel,
@@ -70,6 +72,8 @@ impl AgentAction {
                 AtomicManagedReplace,
                 IngressAuthentication,
             ],
+            Self::InstallManagementSkill => &[AtomicManagedReplace, SkillLoading],
+            Self::RemoveManagementSkill => &[AtomicManagedReplace],
             Self::InstallCollaborationSkill => {
                 &[AtomicManagedReplace, SkillLoading, TrustedCliExecution]
             }

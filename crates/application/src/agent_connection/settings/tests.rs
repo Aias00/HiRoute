@@ -24,6 +24,7 @@ fn facts() -> AgentSettingsFacts {
     )
     .unwrap();
     AgentSettingsFacts {
+        native_target: None,
         context_id: "agent-context/test".into(),
         dependency_digest,
         capabilities,
@@ -191,6 +192,8 @@ fn legacy_collaboration_fields_are_rejected_and_capability_drift_still_blocks() 
         .is_err()
     );
     let spec = AgentSettingsSpecV2 {
+        native_target: None,
+        management_skill: None,
         schema_version: AGENT_SETTINGS_SCHEMA_V2,
         context_id: "agent-context/test".into(),
         model: AgentFacetIntent::Keep,
@@ -228,6 +231,8 @@ fn legacy_collaboration_fields_are_rejected_and_capability_drift_still_blocks() 
 #[test]
 fn agent_settings_restore_reference_cannot_cross_context_or_facet() {
     let spec = AgentSettingsSpecV2 {
+        native_target: None,
+        management_skill: None,
         schema_version: AGENT_SETTINGS_SCHEMA_V2,
         context_id: "agent-context/test".into(),
         model: AgentFacetIntent::Restore {
@@ -482,6 +487,7 @@ fn codex_plan_selections_preview_only_with_catalog_facts() {
         )
         .unwrap();
         AgentSettingsFacts {
+            native_target: None,
             context_id: "agent-context/test".into(),
             dependency_digest,
             capabilities,

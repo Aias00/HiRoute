@@ -61,6 +61,9 @@ impl ManagedCollaborationSkill {
         }
         if let Some(reference) = &self.file_effect {
             reference.validate()?;
+            if reference.effect_id != "agent-connection-routing-skill" {
+                return Err(InvalidSkillRecord);
+            }
         }
         if self.file_ownership == CollaborationSkillFileOwnership::BorrowedIdentical
             && self.file_effect.is_some()
@@ -110,8 +113,12 @@ impl SkillFileEffectRef {
         Ok(value)
     }
     pub fn validate(&self) -> Result<(), InvalidSkillRecord> {
-        if self.effect_id != "agent-connection-routing-skill"
-            || !identity(&self.target)
+        if !matches!(
+            self.effect_id.as_str(),
+            "agent-connection-routing-skill"
+                | "agent-connection-hermes-plugin-module"
+                | "agent-connection-hermes-plugin-manifest"
+        ) || !identity(&self.target)
             || CanonicalDigest::parse(self.intent_digest.as_str().to_owned()).is_err()
         {
             return Err(InvalidSkillRecord);

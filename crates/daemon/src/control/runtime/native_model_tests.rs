@@ -95,6 +95,7 @@ fn settings_status_joins_surface_checks_with_the_active_publication_revision() {
     let status = || {
         adapter
             .model_settings_status(&AgentSettingsStatusRequestV2 {
+                native_target: None,
                 schema_version: AGENT_SETTINGS_SCHEMA_V2,
                 context_id: context.clone(),
             })

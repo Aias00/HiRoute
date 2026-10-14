@@ -4,8 +4,9 @@ pub use hiroute_domain::{
     AGENT_SETTINGS_SCHEMA_V2, AgentAccessTokenIntentV1, AgentClaudePresetMappingsV2,
     AgentClaudePresetSelectionV2, AgentClaudePresetValuesV2, AgentCollaborationSelectionV2,
     AgentCollaborationTriggerModeV2, AgentFacetIntent, AgentFixedModelSelectionV2,
-    AgentModelDefaultSelectionV2, AgentModelSelectionV2, AgentModelSurfaceV2, AgentSettingsFacet,
-    AgentSettingsSpecV2, CodexNativeModelModeV2,
+    AgentManagementSkillSelectionV1, AgentModelDefaultSelectionV2, AgentModelSelectionV2,
+    AgentModelSurfaceV2, AgentNativeTargetV1, AgentSettingsFacet, AgentSettingsSpecV2,
+    CodexNativeModelModeV2,
 };
 use serde::{Deserialize, Serialize};
 
@@ -100,6 +101,8 @@ pub struct AgentSettingsPreviewRequestV2 {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AgentSettingsStatusRequestV2 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_target: Option<AgentNativeTargetV1>,
     pub schema_version: hiroute_domain::SchemaVersion,
     pub context_id: String,
 }
@@ -199,6 +202,8 @@ pub struct AgentModelSettingsStatusV2 {
     /// configuration also grants Worker authority.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub collaboration: Option<AgentCollaborationSettingsStatusV2>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub management_skill: Option<AgentManagementSkillStatusV1>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -242,6 +247,9 @@ impl AgentModelSettingsStatusV2 {
                 AgentModelSurfaceV2::CodexCli | AgentModelSurfaceV2::CodexDesktop
             ),
             AgentModelSelectionV2::ClaudeLauncher { surfaces, .. } => surfaces.contains(surface),
+            AgentModelSelectionV2::HermesDefault { .. } => {
+                *surface == AgentModelSurfaceV2::HermesCli
+            }
             AgentModelSelectionV2::DshAdditional { .. } => *surface == AgentModelSurfaceV2::DshCli,
             AgentModelSelectionV2::PiAdditional { .. } => *surface == AgentModelSurfaceV2::PiCli,
             AgentModelSelectionV2::QoderAdditional { .. } => {
@@ -463,3 +471,13 @@ pub struct AgentSettingsRetryV1 {
 #[cfg(test)]
 #[path = "agent_settings_status_tests.rs"]
 mod status_contract_tests;
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentManagementSkillStatusV1 {
+    pub schema: String,
+    pub state: AgentModelSettingsStateV2,
+    pub operation_id: Option<String>,
+    pub operation_state: Option<String>,
+    pub restore_point_ref: Option<String>,
+}

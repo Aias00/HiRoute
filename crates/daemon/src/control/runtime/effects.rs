@@ -113,6 +113,10 @@ impl LocalControlAdapter {
             hiroute_application::agent_connection::decode_settings_additional_model_file(intent)?;
             return Ok(None);
         }
+        if hiroute_application::agent_connection::is_settings_hermes_model(intent) {
+            hiroute_application::agent_connection::decode_settings_hermes_model_file(intent)?;
+            return Ok(None);
+        }
         let envelope: AgentConfigurationEnvelopeV1 =
             serde_json::from_value(intent.desired().clone())
                 .map_err(|_| invalid("agent-config.intent.decode"))?;
@@ -247,6 +251,9 @@ impl ExternalEffectPort for LocalControlAdapter {
         if super::native_additional_model::is_settings_additional_model(intent) {
             self.validate_additional_model_dependencies(operation, intent)?;
         }
+        if hiroute_application::agent_connection::is_settings_hermes_model(intent) {
+            self.validate_hermes_model_dependencies(operation, intent)?;
+        }
         if intent.effect_id() == "agent-connection-routing-skill"
             && intent.desired()["transaction"] == "settings"
         {
@@ -278,6 +285,9 @@ impl ExternalEffectPort for LocalControlAdapter {
         }
         // Resolve known native adapters before a capability is consumed or an Operation exists.
         self.native_claude_change(intent)?;
+        if hiroute_application::agent_connection::is_settings_hermes_plugin(intent) {
+            hiroute_application::agent_connection::decode_settings_hermes_plugin_file(intent)?;
+        }
         self.permission_intent(intent)?;
         self.validate_publication_admission(intent)
     }
@@ -370,6 +380,12 @@ impl ExternalEffectPort for LocalControlAdapter {
         }
         if super::native_additional_model::is_settings_additional_model(intent) {
             return self.stage_settings_additional_model(operation, intent);
+        }
+        if hiroute_application::agent_connection::is_settings_hermes_model(intent) {
+            return self.stage_settings_hermes_model(operation, intent);
+        }
+        if hiroute_application::agent_connection::is_settings_hermes_plugin(intent) {
+            return self.stage_settings_hermes_plugin(operation, intent);
         }
         let Some(permission) = self.permission_intent(intent)? else {
             if let Some(change) = self.native_claude_change(intent)? {

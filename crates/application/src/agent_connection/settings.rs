@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub struct AgentSettingsFacts {
+    pub native_target: Option<hiroute_domain::AgentNativeTargetV1>,
     pub context_id: String,
     pub dependency_digest: CanonicalDigest,
     pub capabilities: AgentCapabilitySet,
@@ -78,6 +79,7 @@ pub enum SettingsBlockReason {
     QoderDefaultInUse,
     AdditionalDefaultInUse,
     QoderModelFileConflict,
+    HermesModelFileConflict,
     CodexContextOverride,
     ClaudeContextOverride,
     ClaudePlanCapabilityUnavailable,
@@ -131,6 +133,22 @@ pub fn preview_agent_settings(
     {
         return Err(SettingsPlanningError::InvalidSelection);
     }
+    let hermes = spec.context_id.starts_with("agent-context/hermes/");
+    if spec
+        .native_target
+        .as_ref()
+        .is_some_and(|target| target.validate().is_err())
+        || (!hermes && (spec.native_target.is_some() || spec.management_skill.is_some()))
+        || (hermes && !matches!(spec.collaboration, AgentFacetIntent::Keep))
+    {
+        return Err(SettingsPlanningError::InvalidSelection);
+    }
+    if hermes {
+        spec.native_target = facts.native_target.clone();
+        if spec.native_target.is_none() {
+            return Err(SettingsPlanningError::InvalidContext);
+        }
+    }
     spec.protected_native_model_ids.clear();
     if let Some(model) = facts.model.as_ref().and_then(SettingsModelFacts::codex) {
         spec.protected_native_model_ids = if model.require_native_model_routes {
@@ -156,7 +174,9 @@ pub fn preview_agent_settings(
     let mut changed_facets = BTreeSet::new();
     let mut blockers = Vec::new();
     if let Some(reason) = facts.model.as_ref().and_then(|model| match &model.native {
-        SettingsModelNativeFacts::Additional(facts) => facts.model_conflict,
+        SettingsModelNativeFacts::Additional(facts) | SettingsModelNativeFacts::Hermes(facts) => {
+            facts.model_conflict
+        }
         _ => None,
     }) {
         if !matches!(
@@ -164,6 +184,7 @@ pub fn preview_agent_settings(
             SettingsBlockReason::QoderDefaultInUse
                 | SettingsBlockReason::QoderModelFileConflict
                 | SettingsBlockReason::AdditionalDefaultInUse
+                | SettingsBlockReason::HermesModelFileConflict
         ) {
             return Err(SettingsPlanningError::InvalidSelection);
         }
@@ -241,6 +262,14 @@ pub fn preview_agent_settings(
                     .common
                     .available_surfaces
                     .contains(&hiroute_domain::AgentModelSurfaceV2::DshCli)
+            {
+                return Err(SettingsPlanningError::InvalidSelection);
+            }
+            if matches!(settings, AgentModelSelectionV2::HermesDefault { .. })
+                != model
+                    .common
+                    .available_surfaces
+                    .contains(&hiroute_domain::AgentModelSurfaceV2::HermesCli)
             {
                 return Err(SettingsPlanningError::InvalidSelection);
             }
@@ -413,6 +442,39 @@ pub fn preview_agent_settings(
                     model_ids: Vec::new(),
                 });
             }
+        }
+    }
+    if let Some(intent) = &spec.management_skill {
+        let facet = AgentSettingsFacet::ManagementSkill;
+        match intent {
+            AgentFacetIntent::Keep => {}
+            AgentFacetIntent::Configure { .. } => {
+                changed_facets.insert(facet);
+                require(
+                    facts,
+                    AgentAction::InstallManagementSkill,
+                    facet,
+                    &mut blockers,
+                );
+            }
+            AgentFacetIntent::Restore { restore_point_ref } => {
+                changed_facets.insert(facet);
+                restore(
+                    facts,
+                    AgentAction::RemoveManagementSkill,
+                    facet,
+                    restore_point_ref,
+                    &mut blockers,
+                );
+            }
+        }
+        if !matches!(intent, AgentFacetIntent::Keep) && facts.collaboration_file_conflict {
+            blockers.push(AgentSettingsBlock {
+                facet,
+                reason: SettingsBlockReason::SkillFileConflict,
+                capabilities: Vec::new(),
+                model_ids: Vec::new(),
+            });
         }
     }
     if changed_facets.is_empty() {
@@ -596,6 +658,9 @@ fn validate_model_default(
     let invalid = || SettingsPlanningError::InvalidSelection;
     let claude_presets;
     let default_name = match settings {
+        AgentModelSelectionV2::HermesDefault { plan_id, .. } => grant.routes.iter().find_map(|(name, route)| {
+            matches!(route, AgentModelRouteV2::Plan { plan_id: selected, .. } if selected == plan_id).then_some(name.as_str())
+        }),
         AgentModelSelectionV2::CodexDefault { default_selection, .. } => match default_selection {
             AgentModelDefaultSelectionV2::PreserveNative => facts.codex().ok_or_else(invalid)?.native_default_model.as_deref(),
             AgentModelDefaultSelectionV2::FixedModel { client_model_id } => Some(client_model_id.as_str()),

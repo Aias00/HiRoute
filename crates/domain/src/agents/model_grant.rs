@@ -76,19 +76,21 @@ impl AgentModelGrantV2 {
         fixed_bindings: &BTreeMap<String, AttemptOwnedCandidateV1>,
     ) -> Result<Self, AgentConnectionError> {
         selection.validate()?;
-        if !matches!(
-            (selection, protocol),
-            (
-                AgentModelSelectionV2::CodexDefault { .. }
-                    | AgentModelSelectionV2::QoderAdditional { .. }
-                    | AgentModelSelectionV2::PiAdditional { .. }
-                    | AgentModelSelectionV2::DshAdditional { .. },
-                AgentIngressProtocolV1::Responses
-            ) | (
-                AgentModelSelectionV2::ClaudeLauncher { .. },
-                AgentIngressProtocolV1::Messages
+        if !matches!(selection, AgentModelSelectionV2::HermesDefault { protocol: selected, .. } if *selected == protocol)
+            && !matches!(
+                (selection, protocol),
+                (
+                    AgentModelSelectionV2::CodexDefault { .. }
+                        | AgentModelSelectionV2::QoderAdditional { .. }
+                        | AgentModelSelectionV2::PiAdditional { .. }
+                        | AgentModelSelectionV2::DshAdditional { .. },
+                    AgentIngressProtocolV1::Responses
+                ) | (
+                    AgentModelSelectionV2::ClaudeLauncher { .. },
+                    AgentIngressProtocolV1::Messages
+                )
             )
-        ) {
+        {
             return Err(AgentConnectionError::InvalidGrant);
         }
         let mut routes = BTreeMap::new();
@@ -293,19 +295,21 @@ impl AgentModelGrantV2 {
     ) -> Result<(), AgentConnectionError> {
         self.validate()?;
         selection.validate()?;
-        if !matches!(
-            (selection, self.protocol),
-            (
-                AgentModelSelectionV2::CodexDefault { .. }
-                    | AgentModelSelectionV2::QoderAdditional { .. }
-                    | AgentModelSelectionV2::PiAdditional { .. }
-                    | AgentModelSelectionV2::DshAdditional { .. },
-                AgentIngressProtocolV1::Responses
-            ) | (
-                AgentModelSelectionV2::ClaudeLauncher { .. },
-                AgentIngressProtocolV1::Messages
+        if !matches!(selection, AgentModelSelectionV2::HermesDefault { protocol: selected, .. } if *selected == self.protocol)
+            && !matches!(
+                (selection, self.protocol),
+                (
+                    AgentModelSelectionV2::CodexDefault { .. }
+                        | AgentModelSelectionV2::QoderAdditional { .. }
+                        | AgentModelSelectionV2::PiAdditional { .. }
+                        | AgentModelSelectionV2::DshAdditional { .. },
+                    AgentIngressProtocolV1::Responses
+                ) | (
+                    AgentModelSelectionV2::ClaudeLauncher { .. },
+                    AgentIngressProtocolV1::Messages
+                )
             )
-        ) {
+        {
             return Err(AgentConnectionError::InvalidGrant);
         }
         let plans = self

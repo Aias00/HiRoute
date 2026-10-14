@@ -233,13 +233,23 @@ impl ApplicationService {
         if request.protected_grant.is_some() {
             return failed(ErrorCode::CapabilityDenied, request.request_id);
         }
-        if serde_json::from_value::<ClientEmptyRequestV1>(request.payload).is_err() {
+        let Ok(input) =
+            serde_json::from_value::<hiroute_application_api::AgentScanRequestV1>(request.payload)
+        else {
+            return failed(ErrorCode::InvalidArguments, request.request_id);
+        };
+        if input.native_target.is_some() && request.operation_id != "ScanAgents" {
             return failed(ErrorCode::InvalidArguments, request.request_id);
         }
         let Some(ports) = self.ports.as_ref() else {
             return failed(ErrorCode::DaemonUnavailable, request.request_id);
         };
-        match ports.discovery.discover() {
+        let result = match &input.native_target {
+            Some(target) if target.validate().is_ok() => ports.discovery.discover_target(target),
+            Some(_) => return failed(ErrorCode::InvalidArguments, request.request_id),
+            None => ports.discovery.discover(),
+        };
+        match result {
             Ok(agents) => succeeded(json!({"agents": agents}), request.request_id),
             Err(error) => failed(map_control_error(error), request.request_id),
         }

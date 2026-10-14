@@ -171,6 +171,7 @@ impl LocalControlAdapter {
                 template,
             },
             facts: AgentSettingsFacts {
+                native_target: None,
                 context_id: spec.context_id.clone(),
                 dependency_digest,
                 capabilities,

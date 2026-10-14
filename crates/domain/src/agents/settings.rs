@@ -20,6 +20,10 @@ pub enum AgentFacetIntent<T> {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "mode", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AgentModelSelectionV2 {
+    HermesDefault {
+        plan_id: AgentPlanId,
+        protocol: crate::AgentIngressProtocolV1,
+    },
     DshAdditional {
         allowed_plan_ids: BTreeSet<AgentPlanId>,
         #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -64,6 +68,7 @@ pub enum AgentModelSurfaceV2 {
     QoderCli,
     PiCli,
     DshCli,
+    HermesCli,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -111,6 +116,7 @@ impl AgentModelSelectionV2 {
         fallback: crate::AgentIngressProtocolV1,
     ) -> crate::AgentIngressProtocolV1 {
         match self {
+            Self::HermesDefault { protocol, .. } => *protocol,
             Self::QoderAdditional { plan_protocols, .. }
             | Self::PiAdditional { plan_protocols, .. } => {
                 plan_protocols.get(id).copied().unwrap_or(fallback)
@@ -129,12 +135,14 @@ impl AgentModelSelectionV2 {
             }
             Self::QoderAdditional { .. }
             | Self::PiAdditional { .. }
-            | Self::DshAdditional { .. } => &[],
+            | Self::DshAdditional { .. }
+            | Self::HermesDefault { .. } => &[],
         }
     }
 
     pub fn allowed_plan_ids(&self) -> BTreeSet<AgentPlanId> {
         match self {
+            Self::HermesDefault { plan_id, .. } => [plan_id.clone()].into(),
             Self::CodexDefault {
                 allowed_plan_ids, ..
             }
@@ -207,6 +215,7 @@ impl AgentModelSelectionV2 {
                     return Err(invalid);
                 }
             }
+            Self::HermesDefault { .. } => {}
         }
         Ok(())
     }
@@ -234,6 +243,10 @@ pub enum AgentCollaborationTriggerModeV2 {
 pub struct AgentSettingsSpecV2 {
     pub schema_version: SchemaVersion,
     pub context_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_target: Option<crate::AgentNativeTargetV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub management_skill: Option<AgentFacetIntent<crate::AgentManagementSkillSelectionV1>>,
     #[serde(default)]
     pub model: AgentFacetIntent<AgentModelSelectionV2>,
     #[serde(default)]
@@ -264,13 +277,54 @@ pub enum AgentAccessTokenIntentV1 {
 }
 
 impl AgentSettingsSpecV2 {
+    /// Shared file ownership is distinct from collaboration authority. Hermes selects its
+    /// management resource; the other clients retain their collaboration resource semantics.
+    pub fn skill_intent(&self) -> AgentFacetIntent<()> {
+        if self.context_id.starts_with("agent-context/hermes/") {
+            match self.management_skill.as_ref() {
+                None | Some(AgentFacetIntent::Keep) => AgentFacetIntent::Keep,
+                Some(AgentFacetIntent::Configure { .. }) => {
+                    AgentFacetIntent::Configure { settings: () }
+                }
+                Some(AgentFacetIntent::Restore { restore_point_ref }) => {
+                    AgentFacetIntent::Restore {
+                        restore_point_ref: restore_point_ref.clone(),
+                    }
+                }
+            }
+        } else {
+            match &self.collaboration {
+                AgentFacetIntent::Keep => AgentFacetIntent::Keep,
+                AgentFacetIntent::Configure { .. } => AgentFacetIntent::Configure { settings: () },
+                AgentFacetIntent::Restore { restore_point_ref } => AgentFacetIntent::Restore {
+                    restore_point_ref: restore_point_ref.clone(),
+                },
+            }
+        }
+    }
+
+    pub fn skill_facet(&self) -> AgentSettingsFacet {
+        if self.context_id.starts_with("agent-context/hermes/") {
+            AgentSettingsFacet::ManagementSkill
+        } else {
+            AgentSettingsFacet::Collaboration
+        }
+    }
     /// Restore commands may keep other facets, but cannot configure or grant new access.
     pub fn is_restore_only(&self) -> bool {
         matches!(self.access_token, AgentAccessTokenIntentV1::Keep)
             && !matches!(self.model, AgentFacetIntent::Configure { .. })
             && !matches!(self.collaboration, AgentFacetIntent::Configure { .. })
+            && !matches!(
+                self.management_skill,
+                Some(AgentFacetIntent::Configure { .. })
+            )
             && (matches!(self.model, AgentFacetIntent::Restore { .. })
-                || matches!(self.collaboration, AgentFacetIntent::Restore { .. }))
+                || matches!(self.collaboration, AgentFacetIntent::Restore { .. })
+                || matches!(
+                    self.management_skill,
+                    Some(AgentFacetIntent::Restore { .. })
+                ))
     }
 }
 
@@ -279,4 +333,5 @@ impl AgentSettingsSpecV2 {
 pub enum AgentSettingsFacet {
     Model,
     Collaboration,
+    ManagementSkill,
 }

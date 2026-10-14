@@ -38,6 +38,12 @@ pub struct SettingsModelFileFacts {
 /// selected only by the daemon's registered scanner/profile join, never by a public request.
 #[allow(clippy::large_enum_variant)] // These short-lived planner facts stay typed and allocation-free.
 pub enum SettingsModelTargetFacts {
+    Hermes {
+        provider_id: String,
+        endpoint: String,
+        model: hiroute_domain::AdditionalAgentModelV1,
+        plugins: Vec<super::HermesPluginFileFacts>,
+    },
     Codex {
         provider_id: String,
         endpoint: String,
@@ -100,6 +106,22 @@ impl AgentSettingsPlanningInput {
                     grant.clone(),
                 )?;
                 let action = match &file.target {
+                    SettingsModelTargetFacts::Hermes {
+                        provider_id,
+                        endpoint,
+                        model,
+                        ..
+                    } => {
+                        if !matches!(settings, AgentModelSelectionV2::HermesDefault { .. }) {
+                            return Err(invalid());
+                        }
+                        SettingsModelAction::Hermes(super::HermesModelFileAction::Configure {
+                            previous_operation: file.active_configuration.clone(),
+                            provider_id: provider_id.clone(),
+                            endpoint: endpoint.clone(),
+                            model: model.clone(),
+                        })
+                    }
                     SettingsModelTargetFacts::Codex {
                         provider_id,
                         endpoint,
@@ -207,6 +229,11 @@ impl AgentSettingsPlanningInput {
                     return Err(invalid());
                 }
                 let action = match &file.target {
+                    SettingsModelTargetFacts::Hermes { .. } => {
+                        SettingsModelAction::Hermes(super::HermesModelFileAction::Restore {
+                            original_operation: operation.clone(),
+                        })
+                    }
                     SettingsModelTargetFacts::Codex { .. } => {
                         SettingsModelAction::Codex(CodexModelFileAction::Restore {
                             original_operation: operation.clone(),
@@ -283,6 +310,39 @@ impl AgentSettingsPlanningInput {
                     let file = self.model_file.as_ref().ok_or_else(invalid)?;
                     let model = self.facts.model.as_ref().ok_or_else(invalid)?;
                     match action {
+                        SettingsModelAction::Hermes(change) => {
+                            let SettingsModelTargetFacts::Hermes { plugins, .. } = &file.target
+                            else {
+                                return Err(invalid());
+                            };
+                            if matches!(change, super::HermesModelFileAction::Configure { .. }) {
+                                for facts in plugins {
+                                    external.push(super::settings_hermes_plugin_file_intent(
+                                        control,
+                                        &self.facts.context_id,
+                                        facts,
+                                        &change,
+                                    )?);
+                                }
+                            }
+                            external.push(super::settings_hermes_model_file_intent(
+                                control,
+                                &self.facts.context_id,
+                                file.expected_content.clone(),
+                                file.before_fingerprint.clone(),
+                                change.clone(),
+                            )?);
+                            if matches!(change, super::HermesModelFileAction::Restore { .. }) {
+                                for facts in plugins {
+                                    external.push(super::settings_hermes_plugin_file_intent(
+                                        control,
+                                        &self.facts.context_id,
+                                        facts,
+                                        &change,
+                                    )?);
+                                }
+                            }
+                        }
                         SettingsModelAction::Codex(change) => {
                             if let Some(catalog) =
                                 model.codex().and_then(|facts| facts.model_catalog.as_ref())
@@ -350,7 +410,7 @@ impl AgentSettingsPlanningInput {
         preview: &AgentSettingsPreview,
     ) -> Result<SettingsSkillAction, OperationValidationError> {
         let invalid = || OperationValidationError::UnregisteredEffectPlan;
-        match &preview.spec.collaboration {
+        match &preview.spec.skill_intent() {
             AgentFacetIntent::Keep => Ok(SettingsSkillAction::default()),
             AgentFacetIntent::Configure { .. } => {
                 let plan = plan_skill_install(
@@ -389,7 +449,7 @@ impl AgentSettingsPlanningInput {
             AgentFacetIntent::Restore { restore_point_ref } => {
                 let current = self.skill_file.before.as_ref().ok_or_else(invalid)?;
                 if self.facts.restore_points.get(restore_point_ref)
-                    != Some(&hiroute_application_api::AgentSettingsFacet::Collaboration)
+                    != Some(&preview.spec.skill_facet())
                 {
                     return Err(invalid());
                 }
@@ -429,6 +489,7 @@ impl AgentSettingsPlanningInput {
 }
 
 enum SettingsModelAction {
+    Hermes(super::HermesModelFileAction),
     Additional(Option<CanonicalDigest>, super::AdditionalModelFileAction),
     Codex(CodexModelFileAction),
     Claude(ClaudeModelFileAction),

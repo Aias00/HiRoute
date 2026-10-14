@@ -249,6 +249,12 @@ pub trait ControlStatePort: Send + Sync {
 
 pub trait AgentDiscoveryPort: Send + Sync {
     fn discover(&self) -> Result<Vec<DiscoveredAgentV1>, ControlReadError>;
+    fn discover_target(
+        &self,
+        _target: &hiroute_domain::AgentNativeTargetV1,
+    ) -> Result<Vec<DiscoveredAgentV1>, ControlReadError> {
+        Err(ControlReadError::Unavailable)
+    }
 }
 
 pub trait ApplicationClockPort: Send + Sync {

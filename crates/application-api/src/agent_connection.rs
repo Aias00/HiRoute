@@ -12,6 +12,14 @@ pub const AGENT_CONNECT_SPEC_SCHEMA_V1: SchemaVersion = SchemaVersion::new(1, 0)
 pub const AGENT_CONNECTION_PREVIEW_SCHEMA_V1: &str = "hiroute.agent-connection-preview/v1";
 pub const AGENT_CONNECTION_STATUS_SCHEMA_V1: &str = "hiroute.agent-connection-status/v1";
 
+/// Empty input retains the released scan. Only an explicit selected target opts into Hermes.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentScanRequestV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_target: Option<hiroute_domain::AgentNativeTargetV1>,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AgentConnectSpecV1 {

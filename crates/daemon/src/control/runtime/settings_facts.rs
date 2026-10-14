@@ -34,6 +34,8 @@ mod additional_model;
 mod codex_association;
 #[path = "settings_facts/codex_models.rs"]
 mod codex_models;
+mod hermes;
+mod hermes_model;
 mod qoder;
 use codex_association::{
     connector_account_matches, endpoint_matches_target, mark_catalog_structure_proven,
@@ -58,6 +60,7 @@ pub(super) enum SettingsAgentClass {
     Qoder,
     Pi,
     Dsh,
+    Hermes,
 }
 
 impl SettingsAgentClass {
@@ -72,6 +75,7 @@ impl SettingsAgentClass {
             Self::Qoder => "agent_qoder_default",
             Self::Pi => "agent_pi_default",
             Self::Dsh => "agent_dsh_default",
+            Self::Hermes => "agent_hermes_default",
         }
     }
 
@@ -82,18 +86,23 @@ impl SettingsAgentClass {
             Self::Qoder => "qoder",
             Self::Pi => "pi",
             Self::Dsh => "dsh",
+            Self::Hermes => "hermes",
         }
     }
 
-    pub(super) fn native_path(self, scanner: &FilesystemAgentScannerV1) -> std::path::PathBuf {
-        match self {
+    pub(super) fn native_path(
+        self,
+        scanner: &FilesystemAgentScannerV1,
+    ) -> Option<std::path::PathBuf> {
+        Some(match self {
             Self::Codex => scanner.codex_user_config_target(),
             Self::CodexProfile => scanner.codex_profile_config_target(),
             Self::Claude => scanner.claude_user_settings_target(),
             Self::Qoder => scanner.qoder_user_config_target(),
             Self::Pi => scanner.pi_user_models_target(),
             Self::Dsh => scanner.dsh_user_models_target(),
-        }
+            Self::Hermes => return None,
+        })
     }
 
     pub(super) fn skill_root_ref(self) -> &'static str {
@@ -103,10 +112,14 @@ impl SettingsAgentClass {
             Self::Qoder => "skill-root/agent_qoder_default",
             Self::Pi => "skill-root/agent_pi_default",
             Self::Dsh => "skill-root/agent_dsh_default",
+            Self::Hermes => "skill-root/hermes-explicit-target-required",
         }
     }
 
     pub(super) fn skill_target(self) -> Result<String, hiroute_domain::OperationValidationError> {
+        if self == Self::Hermes {
+            return Err(hiroute_domain::OperationValidationError::UnregisteredEffectPlan);
+        }
         let (profile_id, integration_profile_ref) = match self {
             Self::Codex | Self::CodexProfile => (
                 hiroute_integrations::CODEX_PROFILE_ID_V1,
@@ -120,6 +133,9 @@ impl SettingsAgentClass {
                 hiroute_integrations::PI_PROFILE_ID_V1,
                 hiroute_integrations::PI_INTEGRATION_PROFILE_REF_V1,
             ),
+            Self::Hermes => {
+                return Err(hiroute_domain::OperationValidationError::UnregisteredEffectPlan);
+            }
             Self::Dsh => (
                 hiroute_integrations::DSH_PROFILE_ID_V1,
                 hiroute_integrations::DSH_INTEGRATION_PROFILE_REF_V1,
@@ -152,6 +168,17 @@ impl LocalControlAdapter {
     }
 
     pub(super) fn settings_agent_for_context(&self, context: &str) -> Option<SettingsAgentClass> {
+        if context
+            .strip_prefix("agent-context/hermes/sha256:")
+            .is_some_and(|id| {
+                id.len() == 64
+                    && id
+                        .bytes()
+                        .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+            })
+        {
+            return Some(SettingsAgentClass::Hermes);
+        }
         [
             SettingsAgentClass::Codex,
             SettingsAgentClass::CodexProfile,
@@ -165,7 +192,9 @@ impl LocalControlAdapter {
     }
 
     pub(super) fn settings_context(&self, class: SettingsAgentClass) -> String {
-        let path = class.native_path(&self.scanner);
+        let Some(path) = class.native_path(&self.scanner) else {
+            return String::new();
+        };
         let digest = CanonicalDigest::of_bytes(path.as_os_str().as_encoded_bytes());
         format!(
             "agent-context/{}/{}",
@@ -181,6 +210,9 @@ impl LocalControlAdapter {
         let class = self
             .settings_agent_for_context(&spec.context_id)
             .ok_or(ControlReadError::NotFound)?;
+        if class == SettingsAgentClass::Hermes {
+            return self.capture_hermes_settings_facts(spec);
+        }
         self.check_codex_slot(spec, class)?;
         let first = self.settings_snapshot(spec, class)?;
         let second = self.settings_snapshot(spec, class)?;
@@ -408,7 +440,10 @@ impl LocalControlAdapter {
                 SettingsAgentClass::Claude
             }
             SettingsAgentClass::Claude => SettingsAgentClass::Codex,
-            SettingsAgentClass::Qoder | SettingsAgentClass::Pi | SettingsAgentClass::Dsh => {
+            SettingsAgentClass::Qoder
+            | SettingsAgentClass::Pi
+            | SettingsAgentClass::Dsh
+            | SettingsAgentClass::Hermes => {
                 return Err(ControlReadError::Denied);
             }
         };
@@ -476,7 +511,7 @@ impl LocalControlAdapter {
                 selected_collaboration_restore = Some(original.operation_id.clone());
             }
             let model = match class {
-                SettingsAgentClass::Qoder | SettingsAgentClass::Pi | SettingsAgentClass::Dsh => return Err(ControlReadError::Denied),
+                SettingsAgentClass::Qoder | SettingsAgentClass::Pi | SettingsAgentClass::Dsh | SettingsAgentClass::Hermes => return Err(ControlReadError::Denied),
                 SettingsAgentClass::Codex | SettingsAgentClass::CodexProfile => original
                     .plan
                     .external()
@@ -612,7 +647,10 @@ impl LocalControlAdapter {
             None
         };
         let native_default_model = match class {
-            SettingsAgentClass::Qoder | SettingsAgentClass::Pi | SettingsAgentClass::Dsh => {
+            SettingsAgentClass::Qoder
+            | SettingsAgentClass::Pi
+            | SettingsAgentClass::Dsh
+            | SettingsAgentClass::Hermes => {
                 return Err(ControlReadError::Denied);
             }
             SettingsAgentClass::Codex | SettingsAgentClass::CodexProfile => codex_catalog_summary
@@ -902,7 +940,10 @@ impl LocalControlAdapter {
             ))
             .map_err(|_| ControlReadError::Corrupt)?;
         let model_target = match class {
-            SettingsAgentClass::Qoder | SettingsAgentClass::Pi | SettingsAgentClass::Dsh => {
+            SettingsAgentClass::Qoder
+            | SettingsAgentClass::Pi
+            | SettingsAgentClass::Dsh
+            | SettingsAgentClass::Hermes => {
                 return Err(ControlReadError::Denied);
             }
             SettingsAgentClass::Codex | SettingsAgentClass::CodexProfile => {
@@ -947,6 +988,7 @@ impl LocalControlAdapter {
                 template,
             },
             facts: AgentSettingsFacts {
+                native_target: None,
                 context_id: spec.context_id.clone(),
                 dependency_digest,
                 capabilities,

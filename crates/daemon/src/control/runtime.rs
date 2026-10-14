@@ -72,11 +72,13 @@ mod delegation_task_queries;
 mod delegation_tasks;
 mod delegation_worker;
 mod effects;
+mod hermes_management_status;
 mod model_catalog;
 mod model_connections;
 mod mutation;
 mod native_additional_model;
 mod native_claude_model;
+mod native_hermes;
 mod native_model;
 mod plan_content;
 mod plan_content_snapshot;
@@ -373,6 +375,21 @@ impl ProductionControlRuntime {
             hiroute_integrations::DSH_INTEGRATION_PROFILE_REF_V1,
         )
         .map_err(|e| e.to_string())?;
+        let mut scoped_targets = Vec::new();
+        for target in stores
+            .control()
+            .agent_settings_native_targets(&WorkspaceId::default())
+            .map_err(|e| e.to_string())?
+        {
+            let context = hiroute_integrations::hermes_context_id(target.config_root());
+            if !context.starts_with("agent-context/hermes/") {
+                return Err("invalid native target".into());
+            }
+            scoped_targets.extend(
+                hiroute_integrations::hermes_external_targets(target.config_root())
+                    .map_err(|e| e.to_string())?,
+            );
+        }
         let artifacts = stores
             .open_managed_artifacts_with_external_targets(
                 storage_root.join("managed-artifacts"),
@@ -429,7 +446,9 @@ impl ProductionControlRuntime {
                             .map_err(|error| error.to_string())?,
                         scanner.qoder_user_skill_target(),
                     ),
-                ],
+                ]
+                .into_iter()
+                .chain(scoped_targets),
             )
             .map_err(|error| error.to_string())?;
         let observation_workspace_key = observation_workspace_key(storage_root)?;
@@ -1378,6 +1397,7 @@ fn discovered_agent(
                 AgentKindV1::Qoder => QODER_PROFILE_ID_V1,
                 AgentKindV1::Pi => hiroute_integrations::PI_PROFILE_ID_V1,
                 AgentKindV1::DeepseekHarness => hiroute_integrations::DSH_PROFILE_ID_V1,
+                AgentKindV1::Hermes => hiroute_integrations::HERMES_PROFILE_ID_V1,
             }
             .to_owned(),
             version.clone(),
