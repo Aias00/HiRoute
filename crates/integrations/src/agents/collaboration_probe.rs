@@ -405,7 +405,12 @@ mod tests {
             assert!(check.reply(&json!({"tools":tools,"input":[{"type":"function_call_output", "call_id":call,"output":output}]})).is_err());
             assert!(!check.complete());
         }
-        check.reply(&json!({"tools":tools,"input":[{"type":"function_call_output", "call_id":"call_hiroute_probe","output":[{"type":"input_text","text":"hiroute-readonly-attempt-nonce\nhiroute-readonly-denied-nonce\ncontents-nonce CLI-contract-output"}]}]})).unwrap();
+        let frames = check
+            .readonly
+            .as_ref()
+            .unwrap()
+            .full_language_fixture_frames();
+        check.reply(&json!({"tools":tools,"input":[{"type":"function_call_output", "call_id":"call_hiroute_probe","output":[{"type":"input_text","text":format!("{frames}hiroute-readonly-attempt-nonce\nhiroute-readonly-denied-nonce\ncontents-nonce CLI-contract-output")}]}]})).unwrap();
         assert!(check.complete());
         check.verify_after_stop().unwrap();
     }
@@ -486,7 +491,14 @@ mod tests {
             }), Err("native read-only write rejection"));
             assert!(!check.complete());
         }
-        let text = "hiroute-readonly-attempt-nonce\nhiroute-readonly-denied-nonce\ncontents-nonce CLI-contract-output";
+        let text = format!(
+            "{}hiroute-readonly-attempt-nonce\nhiroute-readonly-denied-nonce\ncontents-nonce CLI-contract-output",
+            check
+                .readonly
+                .as_ref()
+                .unwrap()
+                .full_language_fixture_frames()
+        );
         let mut facts_seen = false;
         check.reply_observed(&json!({"input":[{"type":"function_call_output","call_id":"call_hiroute_probe","output":text}]}), |facts| {
             facts_seen = true;

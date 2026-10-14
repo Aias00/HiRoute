@@ -4,7 +4,13 @@
 use std::path::{Path, PathBuf};
 
 #[cfg(test)]
+mod clm_tests;
+#[cfg(test)]
 mod parser_probe;
+#[cfg(any(windows, test))]
+mod script;
+#[cfg(all(test, windows))]
+mod windows_tests;
 
 #[derive(Debug, Eq, PartialEq)]
 pub(super) struct ReceiptFacts {
@@ -79,6 +85,7 @@ pub(super) struct ReadOnlyControl {
     pipeline_mode_prefix: String,
     pipeline_failure_prefix: String,
     pipeline_error_prefix: String,
+    filesystem_denial: String,
     verified: bool,
 }
 
@@ -104,17 +111,28 @@ impl ReadOnlyControl {
         let pipeline_failure_prefix =
             format!("hiroute-readonly-pipeline-failure-{pipeline_nonce}:");
         let pipeline_error_prefix = format!("hiroute-readonly-pipeline-error-{pipeline_nonce}:");
+        let filesystem_denial = format!(
+            "hiroute-readonly-filesystem-denied-{pipeline_nonce}:UnauthorizedAccess:-2147024891:18:GetContentWriterUnauthorizedAccessError"
+        );
         // One physical command line prevents a rejected tool's echoed command
         // from containing a receipt as a standalone output line. Policy rejection,
         // invalid syntax and unrelated I/O failures must stay red.
-        // Literal pipeline diagnostics do not call cmdlets or .NET methods. They
-        // distinguish script entry from a failure of the first Console method,
-        // including ConstrainedLanguage. Original Console and write receipts
-        // remain the independent authority; neither diagnostic proves denial.
-        // PowerShell v7.4.13 Binders.cs uses the exact constrained-method error ID.
-        let command = format!(
-            "$ErrorActionPreference = 'Stop'; $hirouteProbePhase = 'entered'; try {{ '{pipeline_entered}'; switch ($ExecutionContext.SessionState.LanguageMode) {{ 'FullLanguage' {{ '{pipeline_mode_prefix}FullLanguage' }} 'ConstrainedLanguage' {{ '{pipeline_mode_prefix}ConstrainedLanguage' }} 'RestrictedLanguage' {{ '{pipeline_mode_prefix}RestrictedLanguage' }} 'NoLanguage' {{ '{pipeline_mode_prefix}NoLanguage' }} default {{ '{pipeline_mode_prefix}Unknown' }} }}; [Console]::WriteLine('{entered}'); switch ($ExecutionContext.SessionState.LanguageMode) {{ 'FullLanguage' {{ [Console]::WriteLine('{mode_prefix}FullLanguage') }} 'ConstrainedLanguage' {{ [Console]::WriteLine('{mode_prefix}ConstrainedLanguage') }} 'RestrictedLanguage' {{ [Console]::WriteLine('{mode_prefix}RestrictedLanguage') }} 'NoLanguage' {{ [Console]::WriteLine('{mode_prefix}NoLanguage') }} default {{ [Console]::WriteLine('{mode_prefix}Unknown') }} }}; $hirouteProbePhase = 'console-attempt'; [Console]::WriteLine('{attempted}'); $hirouteProbePhase = 'file-write'; try {{ [System.IO.File]::WriteAllText('{literal}', 'hiroute-readonly-unexpected-write'); [Console]::WriteLine('hiroute-readonly-write-succeeded'); exit 1 }} catch [System.UnauthorizedAccessException] {{ $hirouteProbePhase = 'console-denial'; [Console]::WriteLine('{denied}') }} }} catch {{ '{pipeline_failure_prefix}' + $hirouteProbePhase + ':' + [string][int]$_.Exception.HResult + ':' + [string][int]$_.CategoryInfo.Category; if ($_.FullyQualifiedErrorId -ceq 'MethodInvocationNotSupportedInConstrainedLanguage') {{ '{pipeline_error_prefix}ConstrainedMethodInvocation' }} else {{ '{pipeline_error_prefix}Unknown' }}; [Console]::WriteLine('{failure_prefix}' + $hirouteProbePhase + ':' + [string][int]$_.Exception.HResult + ':' + [string][int]$_.CategoryInfo.Category); throw }}"
-        );
+        // Literal output works in CLM without suppressing the actual filesystem
+        // operation. The command owner keeps FullLanguage's original .NET gate
+        // and requires an independent typed filesystem receipt for CLM.
+        let command = script::command(script::Frames {
+            literal: &literal,
+            attempted: &attempted,
+            denied: &denied,
+            entered: &entered,
+            mode: &mode_prefix,
+            failure: &failure_prefix,
+            pipeline_entered: &pipeline_entered,
+            pipeline_mode: &pipeline_mode_prefix,
+            pipeline_failure: &pipeline_failure_prefix,
+            pipeline_error: &pipeline_error_prefix,
+            filesystem_denial: &filesystem_denial,
+        });
         Ok(Self {
             path,
             command,
@@ -127,6 +145,7 @@ impl ReadOnlyControl {
             pipeline_mode_prefix,
             pipeline_failure_prefix,
             pipeline_error_prefix,
+            filesystem_denial,
             verified: false,
         })
     }
@@ -138,6 +157,16 @@ impl ReadOnlyControl {
     #[cfg(test)]
     fn verified(&self) -> bool {
         self.verified
+    }
+
+    #[cfg(test)]
+    pub(super) fn full_language_fixture_frames(&self) -> String {
+        // Synthetic protocol fixtures use the current producer's exact frames;
+        // this helper performs no shell execution or filesystem write.
+        format!(
+            "{}\n{}FullLanguage\n{}\n{}FullLanguage\n",
+            self.pipeline_entered, self.pipeline_mode_prefix, self.entered, self.mode_prefix
+        )
     }
 
     pub(super) fn receipt_facts(&self, output: &str) -> ReceiptFacts {
@@ -210,12 +239,56 @@ impl ReadOnlyControl {
             .zip(denied)
             .is_some_and(|(attempt, denial)| attempt < denial);
         let absent = require_absent(&self.path).is_ok();
+        let facts = self.receipt_facts(output);
+        let supported = |mode_matches, mode: &LanguageMode| {
+            mode_matches == 1
+                && matches!(
+                    mode,
+                    LanguageMode::FullLanguage | LanguageMode::ConstrainedLanguage
+                )
+        };
+        let diagnostics_valid = facts.script.entered_matches == 1
+            && facts.pipeline.entered_matches == 1
+            && supported(facts.script.mode_matches, &facts.script.mode)
+            && supported(facts.pipeline.mode_matches, &facts.pipeline.mode)
+            && facts.script.mode == facts.pipeline.mode
+            && facts.script.failure_matches == 0
+            && facts.pipeline.failure_matches == 0
+            && facts.pipeline.error_matches == 0
+            && matching_lines(output, "hiroute-readonly-write-succeeded")
+                .next()
+                .is_none();
+        let clm = facts.script.mode == LanguageMode::ConstrainedLanguage
+            || facts.pipeline.mode == LanguageMode::ConstrainedLanguage;
+        let typed = unique_line(output, &self.filesystem_denial);
+        let filesystem_prefix = self.filesystem_denial.split_once(':').unwrap().0;
+        let typed_rows = output
+            .lines()
+            .filter(|line| {
+                line.trim()
+                    .strip_prefix(filesystem_prefix)
+                    .is_some_and(|suffix| suffix.starts_with(':'))
+            })
+            .count();
+        let clm_valid = if !clm {
+            typed_rows == 0
+        } else {
+            facts.script.entered_matches == 1
+                && facts.pipeline.entered_matches == 1
+                && facts.script.mode_matches == 1
+                && facts.pipeline.mode_matches == 1
+                && typed_rows == 1
+                && attempted
+                    .zip(typed)
+                    .zip(denied)
+                    .is_some_and(|((attempt, typed), denial)| attempt < typed && typed < denial)
+        };
         eprintln!(
             "native collaboration readonly control: shell-attempted={} access-denied={} receipt-order={ordered} file-absent={absent}",
             attempted.is_some(),
             denied.is_some()
         );
-        if !ordered || !absent {
+        if !ordered || !absent || !diagnostics_valid || !clm_valid {
             return Err("native read-only write rejection");
         }
         self.verified = true;
@@ -305,7 +378,7 @@ mod tests {
             assert!(control.verify_after_stop().is_err());
         }
         let mut control = ReadOnlyControl::new(root.path(), "nonce").unwrap();
-        control.confirm("Final output:\nhiroute-readonly-attempt-nonce\r\nhiroute-readonly-denied-nonce\r\n").unwrap();
+        control.confirm(&format!("{}Final output:\nhiroute-readonly-attempt-nonce\r\nhiroute-readonly-denied-nonce\r\n", control.full_language_fixture_frames())).unwrap();
         control.verify_after_stop().unwrap();
     }
 
@@ -354,7 +427,10 @@ mod tests {
         assert!(!control.verified());
         std::fs::remove_file(&control.path).unwrap();
         control
-            .confirm("hiroute-readonly-attempt-nonce\nhiroute-readonly-denied-nonce")
+            .confirm(&format!(
+                "{}hiroute-readonly-attempt-nonce\nhiroute-readonly-denied-nonce",
+                control.full_language_fixture_frames()
+            ))
             .unwrap();
         std::fs::write(&control.path, b"late unexpected write").unwrap();
         assert!(control.verify_after_stop().is_err());
@@ -388,7 +464,7 @@ mod tests {
         assert!(
             control
                 .command()
-                .contains("[Console]::WriteLine('hiroute-readonly-entered-private-nonce')")
+                .contains("'hiroute-readonly-entered-private-nonce';")
         );
         for (caption, mode) in [
             ("FullLanguage", LanguageMode::FullLanguage),
@@ -436,17 +512,17 @@ mod tests {
         assert!(
             control
                 .command()
-                .contains("[Console]::WriteLine('hiroute-readonly-entered-console-nonce')")
-        );
-        assert!(
-            control.command().contains(
-                "[Console]::WriteLine('hiroute-readonly-mode-console-nonce:FullLanguage')"
-            )
+                .contains("'hiroute-readonly-entered-console-nonce';")
         );
         assert!(
             control
                 .command()
-                .contains("[Console]::WriteLine('hiroute-readonly-failure-console-nonce:' +")
+                .contains("'hiroute-readonly-mode-console-nonce:FullLanguage'")
+        );
+        assert!(
+            control
+                .command()
+                .contains("'hiroute-readonly-failure-console-nonce:' +")
         );
         let echo = control.receipt_facts(control.command());
         assert_eq!(echo.script.entered_matches, 0);
@@ -461,7 +537,8 @@ mod tests {
         assert!(control.confirm(diagnostics).is_err());
         assert!(!control.verified());
         let receipts = format!(
-            "{diagnostics}hiroute-readonly-attempt-console-nonce\r\nhiroute-readonly-denied-console-nonce\r\n"
+            "{}hiroute-readonly-attempt-console-nonce\r\nhiroute-readonly-denied-console-nonce\r\n",
+            control.full_language_fixture_frames()
         );
         control.confirm(&receipts).unwrap();
         control.verify_after_stop().unwrap();
@@ -548,17 +625,14 @@ mod tests {
             command
                 .find(&format!("'{}';", control.pipeline_entered))
                 .unwrap()
-                < command.find("[Console]::WriteLine(").unwrap()
+                < command.find("[System.IO.File]::WriteAllText(").unwrap()
         );
         assert!(
             command
                 .find(&format!("'{}' +", control.pipeline_failure_prefix))
                 .unwrap()
                 < command
-                    .find(&format!(
-                        "[Console]::WriteLine('{}' +",
-                        control.failure_prefix
-                    ))
+                    .find(&format!("'{}' +", control.failure_prefix))
                     .unwrap()
         );
         assert!(command.contains("[System.IO.File]::WriteAllText("));
