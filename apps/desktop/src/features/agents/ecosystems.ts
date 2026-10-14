@@ -1,6 +1,6 @@
 import type { AgentModelSelection, AgentModelSurface } from './types';
 
-export type AgentEcosystem = 'codex' | 'claude' | 'qoder' | 'pi' | 'dsh';
+export type AgentEcosystem = 'codex' | 'claude' | 'qoder' | 'pi' | 'dsh' | 'hermes';
 
 /** Only these current integrations have settings editors; discovery is independent. */
 export function agentEcosystem(agentId: string): AgentEcosystem | null {
@@ -10,13 +10,14 @@ export function agentEcosystem(agentId: string): AgentEcosystem | null {
     case 'agent_dsh_default': return 'dsh';
     case 'agent_pi_default': return 'pi';
     case 'agent_qoder_default': return 'qoder';
+    case 'agent_hermes_default': return 'hermes';
     default: return null;
   }
 }
 
 export function agentSupportsModelRouting(agentId: string): boolean {
   const ecosystem = agentEcosystem(agentId);
-  return ecosystem === 'codex' || ecosystem === 'claude' || ecosystem === 'qoder' || ecosystem === 'pi' || ecosystem === 'dsh';
+  return ecosystem === 'codex' || ecosystem === 'claude' || ecosystem === 'qoder' || ecosystem === 'pi' || ecosystem === 'dsh' || ecosystem === 'hermes';
 }
 
 /** A saved selection must belong to the actual integration, including token-only edits. */
@@ -26,6 +27,7 @@ export function agentModelSelectionMatches(agentId: string, selection: AgentMode
     case 'claude': return selection.mode === 'claude_launcher';
     case 'dsh': return selection.mode === 'dsh_additional';
     case 'pi': return selection.mode === 'pi_additional';
+    case 'hermes': return selection.mode === 'hermes_default';
     case 'qoder': return selection.mode === 'qoder_additional';
     default: return false;
   }
@@ -38,6 +40,7 @@ export function agentDisplayName(agentId: string, language: 'zh' | 'en'): string
     case 'dsh': return 'DeepSeek Harness';
     case 'pi': return 'Pi';
     case 'qoder': return 'Qoder';
+    case 'hermes': return 'Hermes';
     default: return agentId.toLowerCase().includes('cursor') ? 'Cursor' : language === 'zh' ? '本机 Agent' : 'Local Agent';
   }
 }
@@ -61,6 +64,12 @@ export function surfaceName(surface: AgentModelSurface): string {
     case 'dsh_cli': return 'DeepSeek Harness';
     case 'pi_cli': return 'Pi CLI';
     case 'qoder_cli': return 'Qoder CLI';
+    case 'hermes_cli': return 'Hermes';
     default: return surface;
   }
+}
+
+export function agentSupportsCollaboration(agentId: string): boolean {
+  const ecosystem = agentEcosystem(agentId);
+  return ecosystem !== null && ecosystem !== 'hermes';
 }

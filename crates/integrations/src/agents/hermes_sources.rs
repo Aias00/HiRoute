@@ -64,7 +64,7 @@ fn enabled(entry: &Value) -> bool {
             value.trim().to_lowercase().as_str(),
             "false" | "0" | "no" | "off"
         ),
-        Some(Value::Number(value)) => value.as_i64() != Some(0),
+        Some(Value::Number(value)) => value.as_f64() != Some(0.0),
         _ => false,
     }
 }

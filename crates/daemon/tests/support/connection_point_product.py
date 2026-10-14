@@ -75,7 +75,7 @@ def run(repository):
             assert status != 0
         legacy = data(product, 'compute scan')
         assert legacy['schema'] == 'hiroute.compute-scan-result/v1' and 'connections' not in legacy
-        legacy_pi = next(p for p in legacy['items'] if p['agent_id'] == 'agent_pi_default' and p['observed_model_id'] == 'first')
+        legacy_pi = next(p for p in legacy['items'] if p['agent_id'] == 'agent_pi_default' and p.get('observed_model_id') == 'first')
         single = prepare(product, legacy_pi, 'prepare/point-product/legacy')
         assert [m['upstream_model_id'] for m in single['models']] == ['first']
         multiple = prepare(product, pi_point, 'prepare/point-product/multiple')
