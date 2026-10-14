@@ -11,8 +11,8 @@ use hiroute_host_runtime::{StandaloneInstallRecordV1, StandaloneLayout};
 use hiroute_platform::windows::{background, lifecycle};
 use serde_json::Value;
 use windows_sys::Win32::Security::{
-    CreateWellKnownSid, EqualSid, GetLengthSid, LookupAccountNameW, SID_NAME_USE, SidTypeUser,
-    TOKEN_GROUPS, TokenGroups, WinBuiltinAdministratorsSid,
+    CreateWellKnownSid, EqualSid, GetLengthSid, IsValidSid, LookupAccountNameW, SID_NAME_USE,
+    SidTypeUser, TOKEN_GROUPS, TokenGroups, WinBuiltinAdministratorsSid,
 };
 use windows_sys::Win32::System::RemoteDesktop::{
     WTS_CURRENT_SERVER_HANDLE, WTS_INFO_CLASS, WTSActive, WTSConnectState, WTSDisconnected,
@@ -231,16 +231,25 @@ fn real_standard_session() -> (String, u32) {
         0,
         "WTS owner cannot be resolved to its actual SID"
     );
+    // LookupAccountNameW only specifies the required cbSid on insufficient
+    // capacity; success can leave our original capacity (72) unchanged. Validate
+    // the actual SID before asking GetLengthSid, then bound that native length.
+    // https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-lookupaccountnamew
     assert!(
-        sid_size as usize <= std::mem::size_of_val(&native_sid)
-            && use_kind == SidTypeUser
-            && unsafe { GetLengthSid(native_sid.as_ptr().cast_mut().cast()) } == sid_size
-            && unsafe {
-                EqualSid(
-                    native_sid.as_ptr().cast_mut().cast(),
-                    sid.as_ptr().cast_mut().cast(),
-                )
-            } != 0,
+        sid_size as usize <= std::mem::size_of_val(&native_sid) && use_kind == SidTypeUser,
+        "WTS owner lookup returned an invalid capacity or account kind"
+    );
+    let resolved_sid = native_sid.as_ptr().cast_mut().cast();
+    assert_ne!(
+        unsafe { IsValidSid(resolved_sid) },
+        0,
+        "WTS owner lookup did not produce a valid native SID"
+    );
+    let actual_size = unsafe { GetLengthSid(resolved_sid) };
+    assert!(
+        actual_size != 0
+            && actual_size as usize <= std::mem::size_of_val(&native_sid)
+            && unsafe { EqualSid(resolved_sid, sid.as_ptr().cast_mut().cast()) } != 0,
         "actual WTS owner SID differs from the controller token"
     );
     println!(

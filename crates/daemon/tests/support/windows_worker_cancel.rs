@@ -5,7 +5,7 @@ use hiroute_platform::windows::security;
 use serde_json::{Value, json};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::Read;
+use std::io::{self, Read};
 use std::os::windows::io::{AsRawHandle, FromRawHandle};
 use std::path::{Path, PathBuf};
 use std::thread;
@@ -61,17 +61,19 @@ pub(super) fn verify(
     let started = workspace.join("cancel-started.txt");
     let late = workspace.join("cancel-late.txt");
     let deadline = Instant::now() + Duration::from_secs(30);
-    while !started.is_file() {
+    let expected_started = format!("started-{nonce}");
+    loop {
+        let ready = started_receipt_ready(&started, &expected_started)
+            .expect("native cancellation receipt could not be read through its held identity");
         assert!(
             Instant::now() < deadline,
-            "real native tool child did not start before the cancellation deadline"
+            "real native tool child did not publish its complete receipt before the cancellation deadline"
         );
+        if ready {
+            break;
+        }
         thread::sleep(Duration::from_millis(10));
     }
-    assert_eq!(
-        std::fs::read_to_string(started).unwrap().trim(),
-        format!("started-{nonce}")
-    );
     assert!(!late.exists());
     let cancelled = command(
         product,
@@ -368,4 +370,83 @@ fn residual(
     );
     assert!(!late.exists());
     (late, task_id.to_owned())
+}
+
+/// Shell redirection creates the file before printf publishes its bytes. Retain a
+/// reparse-free read handle, but allow the real producer to finish writing. Empty
+/// and partial contents are pending within the original deadline, never success.
+fn started_receipt_ready(path: &Path, expected: &str) -> io::Result<bool> {
+    let file = match security::open_identity(path, false) {
+        Ok(file) => file,
+        Err(error)
+            if error.kind() == io::ErrorKind::NotFound || error.raw_os_error() == Some(32) =>
+        {
+            return Ok(false);
+        }
+        Err(error) => return Err(error),
+    };
+    const BOUND: u64 = 4096;
+    if file.metadata()?.len() > BOUND || security::file_link_count(&file)? != 1 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "native cancellation receipt exceeds its bound or aliases another file",
+        ));
+    }
+    let mut bytes = Vec::new();
+    file.take(BOUND + 1).read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > BOUND {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "native cancellation receipt grew beyond its bound",
+        ));
+    }
+    let text = std::str::from_utf8(&bytes)
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "native receipt is not UTF-8"))?;
+    Ok(text.trim() == expected)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::started_receipt_ready;
+    use hiroute_platform::windows::security;
+    use std::io::Write;
+
+    #[test]
+    fn cancellation_waits_for_the_complete_native_receipt_after_file_creation() {
+        let root = std::env::temp_dir().join(format!(
+            "hiroute-cancel-publication-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        drop(security::create_owner_only_directory(&root).unwrap());
+        struct Cleanup(std::path::PathBuf);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                std::fs::remove_dir_all(&self.0).unwrap();
+            }
+        }
+        let _cleanup = Cleanup(root.clone());
+        let path = root.join("cancel-started.txt");
+        let expected = "started-publication-nonce";
+        assert!(!started_receipt_ready(&path, expected).unwrap());
+        drop(security::create_owner_only_file(&path).unwrap());
+        let mut producer = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
+        // This is the observed source20 race: is_file is true while the old
+        // immediate read sees an empty string. No sleep/scheduler luck is needed.
+        assert!(path.is_file());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "");
+        assert!(!started_receipt_ready(&path, expected).unwrap());
+        producer.write_all(b"started-publication-").unwrap();
+        producer.flush().unwrap();
+        assert!(!started_receipt_ready(&path, expected).unwrap());
+        producer.write_all(b"nonce\n").unwrap();
+        producer.flush().unwrap();
+        assert!(started_receipt_ready(&path, expected).unwrap());
+        assert!(!started_receipt_ready(&path, "started-another-nonce").unwrap());
+        drop(producer);
+        assert!(started_receipt_ready(&path, expected).unwrap());
+    }
 }
