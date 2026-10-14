@@ -35,7 +35,7 @@ impl CpaControlPlane for CancellingControl {
 }
 
 fn runtime(
-    root: &tempfile::TempDir,
+    root: &crate::private_test_support::TempDir,
     backend: Arc<FakeBackend>,
     control: Arc<FakeControl>,
     managed: bool,
@@ -62,7 +62,7 @@ fn cancelled_orphan_authentication_restores_owner_before_retry() {
         return;
     }
     for (managed, stop_only) in [(false, false), (true, false), (true, true)] {
-        let root = tempfile::tempdir().unwrap();
+        let root = crate::private_test_support::tempdir().unwrap();
         let backend = Arc::new(FakeBackend::default());
         let control = Arc::new(FakeControl::default());
         let first = runtime(&root, backend.clone(), control.clone(), managed);

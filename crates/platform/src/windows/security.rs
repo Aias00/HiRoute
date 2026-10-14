@@ -1,4 +1,4 @@
-use std::ffi::c_void;
+use std::ffi::{OsStr, c_void};
 use std::fs::File;
 use std::io;
 use std::os::windows::io::AsRawHandle;
@@ -209,6 +209,25 @@ pub(crate) fn verify_process_user(pid: u32) -> io::Result<()> {
 pub fn open_identity(path: &Path, directory: bool) -> io::Result<File> {
     super::path::open(
         path,
+        directory,
+        GENERIC_READ,
+        if directory {
+            super::path::SHARE_ALL
+        } else {
+            FILE_SHARE_READ | FILE_SHARE_WRITE
+        },
+        false,
+        None,
+    )
+}
+
+/// Open an existing object relative to a retained, reparse-free directory.
+/// File handles deny deletion so borrowed readers can retain native identity
+/// through admission without changing the object's owner or permissions.
+pub fn open_identity_at(parent: &File, name: &OsStr, directory: bool) -> io::Result<File> {
+    super::path::relative(
+        parent,
+        name,
         directory,
         GENERIC_READ,
         if directory {

@@ -263,9 +263,12 @@ if ($Scope -eq 'components') {
   $env:HIROUTE_WINDOWS_ADMIN_CLI = $package.administrator_cli
   $env:HIROUTE_WORKER_DAEMON_BINARY = $package.worker_daemon
   if ($Scope -eq 'background') {
+    Invoke-RequiredTests 'background-capture' @('-p','hiroute-daemon','--test','windows_background','windows_token_launcher::capture_tests::') @(
+      'windows_token_launcher::capture_tests::native_capture_requires_last_writer_close_for_eof',
+      'windows_token_launcher::capture_tests::native_capture_bounds_output_and_never_reports_unknown_stage_data')
     Invoke-RequiredTests 'background' @('-p','hiroute-daemon','--test','windows_background') @(
       'task_native_background_lua_gateway_control_stop_crash_recovery_and_autostart',
-      'scm_standard_owner_pending_admin_finalize_session_zero_gateway_control_and_delete') @('--skip','windows_background_owner_fixture','--skip','windows_background_upgrade::','--nocapture')
+      'scm_standard_owner_pending_admin_finalize_session_zero_gateway_control_and_delete') @('--skip','windows_background_owner_fixture','--skip','windows_background_upgrade::','--skip','windows_token_launcher::capture_tests::','--nocapture')
   } else {
     $env:HIROUTE_WINDOWS_BASELINE_PACKAGE_MANIFEST = (Resolve-Path $BaselineManifest).Path
     $env:HIROUTE_WINDOWS_BASELINE_PACKAGE_ARCHIVE = (Resolve-Path $BaselineArchive).Path

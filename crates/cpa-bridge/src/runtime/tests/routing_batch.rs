@@ -4,8 +4,8 @@ use super::*;
 #[test]
 fn explicit_subscription_recheck_refreshes_version_before_forced_catalog_discovery() {
     use std::os::unix::fs::PermissionsExt;
-    let root = tempfile::tempdir().unwrap();
-    let logs = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
+    let logs = crate::private_test_support::tempdir().unwrap();
     ensure_private_dir(logs.path()).unwrap();
     let diagnostics_root = logs.path().join("d");
     let report = DiagnosticRuntime::start(RuntimeConfig {
@@ -130,8 +130,8 @@ fn failed_discovery_records_a_safe_control_stage_and_preserves_failure() {
             "control_rejected",
         ),
     ] {
-        let root = tempfile::tempdir().unwrap();
-        let logs = tempfile::tempdir().unwrap();
+        let root = crate::private_test_support::tempdir().unwrap();
+        let logs = crate::private_test_support::tempdir().unwrap();
         ensure_private_dir(logs.path()).unwrap();
         let diagnostics_root = logs.path().join("d");
         let report = DiagnosticRuntime::start(RuntimeConfig {
@@ -179,7 +179,7 @@ fn failed_discovery_records_a_safe_control_stage_and_preserves_failure() {
 #[test]
 fn routing_batch_probe_cost_is_constant_for_models_protocols_and_credentials() {
     for (plan_candidates, workspace_candidates) in [(1, 1), (5, 5), (10, 10), (1, 40)] {
-        let root = tempfile::tempdir().unwrap();
+        let root = crate::private_test_support::tempdir().unwrap();
         let backend = Arc::new(FakeBackend::default());
         let control = Arc::new(FakeControl::default());
         let mut codex = snapshot(CpaAccountKind::Codex, 'a', "gpt-5.5");
@@ -305,7 +305,7 @@ fn routing_batch_probe_cost_is_constant_for_models_protocols_and_credentials() {
 
 #[test]
 fn routing_batch_rejects_restart_even_when_target_epochs_are_preserved() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(FakeBackend::default());
     let control = Arc::new(FakeControl::default());
     control.set_accounts(vec![snapshot(CpaAccountKind::Codex, 'a', "gpt-5.5")]);
@@ -333,7 +333,7 @@ fn routing_batch_refreshes_external_account_generation_management_and_authentica
         "authentication",
         "shutdown",
     ] {
-        let root = tempfile::tempdir().unwrap();
+        let root = crate::private_test_support::tempdir().unwrap();
         let backend = Arc::new(FakeBackend::default());
         let control = Arc::new(FakeControl::default());
         control.set_accounts(vec![snapshot(CpaAccountKind::Codex, 'a', "gpt-5.5")]);

@@ -154,21 +154,8 @@ pub fn process(
         }
     };
     let (stdin, stdout_file, stderr_file) = child.pipes();
-    let reader = |file: File| {
-        thread::spawn(move || {
-            let mut output = Vec::new();
-            file.take(BOUND as u64 + 1)
-                .read_to_end(&mut output)
-                .unwrap();
-            assert!(
-                output.len() <= BOUND,
-                "native command output exceeds test bound"
-            );
-            output
-        })
-    };
-    let stdout = reader(stdout_file);
-    let stderr = reader(stderr_file);
+    let mut stdout = launcher::Capture::new(stdout_file);
+    let mut stderr = launcher::Capture::new(stderr_file);
     if let Some(input) = input {
         stdin
             .unwrap()
@@ -179,13 +166,34 @@ pub fn process(
     }
     let deadline = Instant::now() + timeout;
     let code = loop {
+        stdout
+            .poll(BOUND)
+            .expect("bounded native stdout capture failed");
+        stderr
+            .poll(BOUND)
+            .expect("bounded native stderr capture failed");
         if let Some(code) = child.exit_code().unwrap() {
             break code;
         }
-        assert!(
-            Instant::now() < deadline,
-            "native command exceeded its bounded timeout"
-        );
+        if Instant::now() >= deadline {
+            let stage = stderr.fixture_stage();
+            let output_bytes = stdout.bytes().len();
+            let error_bytes = stderr.bytes().len();
+            child
+                .terminate()
+                .expect("native timeout Job termination failed");
+            let cleanup_deadline = Instant::now() + Duration::from_secs(5);
+            while (child.exit_code().unwrap().is_none() || !child.empty().unwrap())
+                && Instant::now() < cleanup_deadline
+            {
+                thread::sleep(Duration::from_millis(10));
+            }
+            panic!(
+                "native command exceeded its bounded timeout: fixture_stage={stage}, stdout_bytes={output_bytes}, stderr_bytes={error_bytes}, held_root_exited={}, held_job_empty={}",
+                child.exit_code().unwrap().is_some(),
+                child.empty().unwrap(),
+            );
+        }
         thread::sleep(Duration::from_millis(20));
     };
     let empty_deadline = Instant::now() + Duration::from_secs(2);
@@ -196,8 +204,6 @@ pub fn process(
     if leaked {
         child.terminate().unwrap();
     }
-    let output = stdout.join().unwrap();
-    let error = stderr.join().unwrap();
     assert!(
         child.empty().unwrap(),
         "transient native command leaked descendants"
@@ -206,6 +212,25 @@ pub fn process(
         !leaked,
         "native command exit left a live descendant beyond its cleanup bound"
     );
+    let capture_deadline = Instant::now() + Duration::from_secs(2);
+    while (!stdout.eof() || !stderr.eof()) && Instant::now() < capture_deadline {
+        stdout
+            .poll(BOUND)
+            .expect("bounded native stdout capture failed");
+        stderr
+            .poll(BOUND)
+            .expect("bounded native stderr capture failed");
+        thread::sleep(Duration::from_millis(10));
+    }
+    assert!(
+        stdout.eof() && stderr.eof(),
+        "native stdio did not close after held root/Job exit: stdout_eof={}, stderr_eof={}, fixture_stage={}",
+        stdout.eof(),
+        stderr.eof(),
+        stderr.fixture_stage(),
+    );
+    let output = stdout.into_bytes();
+    let error = stderr.into_bytes();
     if secret && code != 0 {
         return json!({"code":code,"result":null});
     }
@@ -334,19 +359,25 @@ pub fn entry() {
         );
         return;
     }
+    eprintln!("HIROUTE_NATIVE_BACKGROUND_STAGE=entry");
     launcher::assert_fixture_stdio();
+    eprintln!("HIROUTE_NATIVE_BACKGROUND_STAGE=stdio-verified");
     let mut bytes = Vec::new();
+    eprintln!("HIROUTE_NATIVE_BACKGROUND_STAGE=request-reading");
     std::io::stdin()
         .lock()
         .take(16385)
         .read_to_end(&mut bytes)
         .unwrap();
+    eprintln!("HIROUTE_NATIVE_BACKGROUND_STAGE=request-eof");
     assert!(!bytes.is_empty() && bytes.len() <= 16384);
     let request: Request = serde_json::from_slice(&bytes).unwrap();
+    eprintln!("HIROUTE_NATIVE_BACKGROUND_STAGE=request-parsed");
     execution_host::current();
     let current = account::process_token(std::process::id());
     let sid = background::current_sid_string().unwrap();
     account::assert_standard(&current, &sid);
+    eprintln!("HIROUTE_NATIVE_BACKGROUND_STAGE=owner-verified");
     let result = match request.action.as_str() {
         "transaction-snapshot"
         | "transaction-verify"
@@ -583,6 +614,7 @@ pub fn entry() {
         }
         _ => panic!("unknown owner fixture action"),
     };
+    eprintln!("HIROUTE_NATIVE_BACKGROUND_STAGE=action-completed");
     println!("{OUTPUT}{}", serde_json::to_string(&result).unwrap());
 }
 

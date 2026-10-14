@@ -1,5 +1,5 @@
 use std::collections::BTreeSet;
-#[cfg(any(not(windows), test))]
+#[cfg(not(windows))]
 use std::fs;
 #[cfg(not(windows))]
 use std::fs::OpenOptions;

@@ -1,7 +1,7 @@
 use super::*;
 
 fn runtime(
-    root: &tempfile::TempDir,
+    root: &crate::private_test_support::TempDir,
     backend: Arc<FakeBackend>,
     control: Arc<FakeControl>,
 ) -> ManagedCpaRuntime {
@@ -44,7 +44,7 @@ fn leave_orphan(runtime: ManagedCpaRuntime) -> PathBuf {
 
 #[test]
 fn stopped_or_never_started_managed_recovery_has_zero_spawn_or_control_contact() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(FakeBackend::default());
     let control = Arc::new(FakeControl::default());
     let managed = runtime(&root, backend.clone(), control.clone());
@@ -70,7 +70,7 @@ fn managed_orphan_stop_authenticates_but_never_replaces_for_proxy_change() {
     ) {
         return;
     }
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(FakeBackend::default());
     let control = Arc::new(FakeControl::default());
     let first = runtime(&root, backend.clone(), control.clone())
@@ -104,7 +104,7 @@ fn managed_stop_preserves_unauthenticated_or_owned_process_and_files() {
     ) {
         return;
     }
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(FakeBackend::default());
     let control = Arc::new(FakeControl::default());
     let first = runtime(&root, backend.clone(), control.clone());
@@ -142,7 +142,7 @@ fn dead_managed_child_cleanup_does_not_restart_or_probe() {
     ) {
         return;
     }
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(FakeBackend::default());
     let control = Arc::new(FakeControl::default());
     let first = runtime(&root, backend.clone(), control.clone());
@@ -161,7 +161,7 @@ fn dead_managed_child_cleanup_does_not_restart_or_probe() {
 #[test]
 fn oauth_control_and_authentication_inspection_never_restart_crashed_writer() {
     for operation in ["status", "callback", "cancel", "inspect"] {
-        let root = tempfile::tempdir().unwrap();
+        let root = crate::private_test_support::tempdir().unwrap();
         let backend = Arc::new(FakeBackend::default());
         let control = Arc::new(FakeControl::default());
         let managed = runtime(&root, backend.clone(), control.clone());
@@ -222,7 +222,7 @@ fn write_managed_identity(runtime: &ManagedCpaRuntime, account: &str) -> String 
 
 #[test]
 fn saved_enabled_managed_recovery_preserves_bounded_restart_policy() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(FakeBackend::default());
     let control = Arc::new(FakeControl::default());
     let managed = runtime(&root, backend.clone(), control.clone());
@@ -267,7 +267,7 @@ fn saved_enabled_managed_recovery_preserves_bounded_restart_policy() {
 
 #[test]
 fn managed_recovery_rejects_pending_disabled_stale_or_changed_account() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(FakeBackend::default());
     let control = Arc::new(FakeControl::default());
     let managed = runtime(&root, backend.clone(), control);
@@ -328,7 +328,7 @@ fn native_saved_recovery_rejects_revoked_or_replaced_authority_before_restart() 
         "suspended",
         "changed-account",
     ] {
-        let root = tempfile::tempdir().unwrap();
+        let root = crate::private_test_support::tempdir().unwrap();
         let backend = Arc::new(FakeBackend::default());
         let control = Arc::new(FakeControl::default());
         let native = fixture_runtime(&root, backend.clone(), control.clone(), 2);
@@ -436,7 +436,7 @@ fn saved_subscription_recovery_restores_exact_routing_after_transient_failure(is
         "attempt-credential-read",
         "startup-catalog",
     ] {
-        let root = tempfile::tempdir().unwrap();
+        let root = crate::private_test_support::tempdir().unwrap();
         let backend = Arc::new(FakeBackend::default());
         let control = Arc::new(FakeControl::default());
         control.set_accounts(vec![snapshot(CpaAccountKind::Codex, 'a', "gpt-5.5")]);
@@ -559,7 +559,7 @@ fn saved_subscription_recovery_restores_exact_routing_after_transient_failure(is
 
 #[test]
 fn saved_managed_recovery_revalidates_disappeared_account_and_model() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(FakeBackend::default());
     let control = Arc::new(FakeControl::default());
     control.set_accounts(vec![snapshot(CpaAccountKind::Codex, 'a', "gpt-5.5")]);
@@ -608,7 +608,7 @@ fn saved_managed_recovery_revalidates_disappeared_account_and_model() {
 #[test]
 fn revoked_requests_and_passive_discovery_never_restart_a_managed_writer() {
     for revocation in ["suspended", "disabled", "removed", "pending"] {
-        let root = tempfile::tempdir().unwrap();
+        let root = crate::private_test_support::tempdir().unwrap();
         let backend = Arc::new(FakeBackend::default());
         let control = Arc::new(FakeControl::default());
         control.set_accounts(vec![snapshot(CpaAccountKind::Codex, 'a', "gpt-5.5")]);
@@ -664,7 +664,7 @@ fn revoked_requests_and_passive_discovery_never_restart_a_managed_writer() {
 
 #[test]
 fn admitted_request_and_explicit_disabled_check_keep_bounded_recovery() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(FakeBackend::default());
     let control = Arc::new(FakeControl::default());
     control.set_accounts(vec![snapshot(CpaAccountKind::Codex, 'a', "gpt-5.5")]);
@@ -710,7 +710,7 @@ fn retained_targets_validate_each_process_catalog_in_both_subscription_modes() {
     }
     for managed in [false, true] {
         for recovery in ["fresh", "adopt", "crash"] {
-            let root = tempfile::tempdir().unwrap();
+            let root = crate::private_test_support::tempdir().unwrap();
             let backend = Arc::new(FakeBackend::default());
             let control = Arc::new(FakeControl::default());
             control.set_accounts(vec![snapshot(CpaAccountKind::Codex, 'a', "gpt-5.5")]);

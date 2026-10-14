@@ -3,7 +3,7 @@
 //! its held process has joined the cleanup Job and its actual token is checked.
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io;
+use std::io::{self, Read};
 use std::mem::{size_of, zeroed};
 use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::{AsRawHandle, FromRawHandle};
@@ -24,6 +24,108 @@ unsafe extern "system" {
         attributes: *const SECURITY_ATTRIBUTES,
         size: u32,
     ) -> i32;
+    fn PeekNamedPipe(
+        pipe: HANDLE,
+        buffer: *mut std::ffi::c_void,
+        size: u32,
+        read: *mut u32,
+        available: *mut u32,
+        left: *mut u32,
+    ) -> i32;
+}
+
+/// Poll one uniquely owned synchronous anonymous-pipe reader. No detached reader
+/// thread or unbounded join can outlive a failed fixture. Only BROKEN_PIPE proves
+/// EOF; an empty currently-connected pipe does not.
+pub struct Capture {
+    file: File,
+    bytes: Vec<u8>,
+    eof: bool,
+}
+impl Capture {
+    pub fn new(file: File) -> Self {
+        Self {
+            file,
+            bytes: Vec::new(),
+            eof: false,
+        }
+    }
+    pub fn poll(&mut self, bound: usize) -> io::Result<()> {
+        if self.eof {
+            return Ok(());
+        }
+        // A single poll is bounded even if a live producer writes continuously.
+        for _ in 0..64 {
+            let mut available = 0;
+            if unsafe {
+                PeekNamedPipe(
+                    self.file.as_raw_handle().cast(),
+                    null_mut(),
+                    0,
+                    null_mut(),
+                    &mut available,
+                    null_mut(),
+                )
+            } == 0
+            {
+                let error = io::Error::last_os_error();
+                if error.raw_os_error() == Some(ERROR_BROKEN_PIPE as i32) {
+                    self.eof = true;
+                    return Ok(());
+                }
+                return Err(error);
+            }
+            if available == 0 {
+                return Ok(());
+            }
+            let mut chunk = [0; 4096];
+            let limit = chunk.len().min(available as usize);
+            let count = self.file.read(&mut chunk[..limit])?;
+            if count == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "native capture read made no progress after a nonempty peek",
+                ));
+            }
+            if self.bytes.len() + count > bound {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "native command output exceeds test bound",
+                ));
+            }
+            self.bytes.extend_from_slice(&chunk[..count]);
+        }
+        Ok(())
+    }
+    pub fn eof(&self) -> bool {
+        self.eof
+    }
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.bytes
+    }
+    pub fn fixture_stage(&self) -> &'static str {
+        const PREFIX: &[u8] = b"HIROUTE_NATIVE_BACKGROUND_STAGE=";
+        let mut stage = "not-observed";
+        for line in self.bytes.split(|byte| *byte == b'\n') {
+            let Some(value) = line.strip_prefix(PREFIX) else {
+                continue;
+            };
+            match value.strip_suffix(b"\r").unwrap_or(value) {
+                b"entry" => stage = "entry",
+                b"stdio-verified" => stage = "stdio-verified",
+                b"request-reading" => stage = "request-reading",
+                b"request-eof" => stage = "request-eof",
+                b"request-parsed" => stage = "request-parsed",
+                b"owner-verified" => stage = "owner-verified",
+                b"action-completed" => stage = "action-completed",
+                _ => {}
+            }
+        }
+        stage
+    }
 }
 
 fn owned(handle: HANDLE) -> io::Result<File> {
@@ -379,6 +481,83 @@ impl Child {
         } else {
             Ok(())
         }
+    }
+    fn stop_and_wait(&self) -> io::Result<()> {
+        if !self.empty()? {
+            self.terminate()?;
+        }
+        if unsafe { WaitForSingleObject(self.process.as_raw_handle().cast(), 5000) }
+            != WAIT_OBJECT_0
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "native held owner process cleanup did not finish",
+            ));
+        }
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while !self.empty()? {
+            if std::time::Instant::now() >= deadline {
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "native held owner Job cleanup did not finish",
+                ));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        Ok(())
+    }
+}
+impl Drop for Child {
+    fn drop(&mut self) {
+        let cleanup = self.stop_and_wait();
+        if std::thread::panicking() {
+            if cleanup.is_err() {
+                eprintln!("native held owner fixture cleanup failed");
+            }
+        } else {
+            cleanup.expect("native held owner fixture cleanup failed");
+        }
+    }
+}
+
+#[cfg(test)]
+mod capture_tests {
+    use super::{Capture, pipe};
+    use std::io::{ErrorKind, Write};
+
+    #[test]
+    fn native_capture_requires_last_writer_close_for_eof() {
+        let (mut writer, reader) = pipe(false).unwrap();
+        let duplicate = writer.try_clone().unwrap();
+        let mut capture = Capture::new(reader);
+        capture.poll(1024).unwrap();
+        assert!(!capture.eof(), "a connected empty pipe is not EOF");
+        writer
+            .write_all(b"HIROUTE_NATIVE_BACKGROUND_STAGE=request-reading\n")
+            .unwrap();
+        capture.poll(1024).unwrap();
+        assert_eq!(capture.fixture_stage(), "request-reading");
+        drop(writer);
+        capture.poll(1024).unwrap();
+        assert!(!capture.eof(), "a duplicate writer prevents actual EOF");
+        drop(duplicate);
+        capture.poll(1024).unwrap();
+        assert!(capture.eof());
+    }
+
+    #[test]
+    fn native_capture_bounds_output_and_never_reports_unknown_stage_data() {
+        let (mut writer, reader) = pipe(false).unwrap();
+        let mut capture = Capture::new(reader);
+        writer
+            .write_all(b"HIROUTE_NATIVE_BACKGROUND_STAGE=entry\r\nHIROUTE_NATIVE_BACKGROUND_STAGE=private-fixture-value\n")
+            .unwrap();
+        capture.poll(1024).unwrap();
+        assert_eq!(capture.fixture_stage(), "entry");
+        let (mut writer, reader) = pipe(false).unwrap();
+        let mut capture = Capture::new(reader);
+        writer.write_all(&[b'x'; 32]).unwrap();
+        assert_eq!(capture.poll(16).unwrap_err().kind(), ErrorKind::InvalidData);
     }
 }
 

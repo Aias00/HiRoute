@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 struct Fixture {
-    root: tempfile::TempDir,
+    root: crate::private_test_support::TempDir,
     address: SocketAddr,
     patches: Arc<AtomicUsize>,
     reject_patch: Arc<AtomicBool>,
@@ -17,9 +17,16 @@ struct Fixture {
 
 impl Fixture {
     fn new() -> Self {
-        let root = tempfile::tempdir().unwrap();
+        let root = crate::private_test_support::tempdir().unwrap();
         let path = root.path().join("codex-a.json");
+        #[cfg(not(windows))]
         fs::write(
+            &path,
+            br#"{"prefix":"hiroute-codex-current","request_retry":0,"disable_cooling":true}"#,
+        )
+        .unwrap();
+        #[cfg(windows)]
+        crate::config::private_atomic_write(
             &path,
             br#"{"prefix":"hiroute-codex-current","request_retry":0,"disable_cooling":true}"#,
         )

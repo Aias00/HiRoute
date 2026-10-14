@@ -169,7 +169,7 @@ pub(super) struct ActiveFixture {
     account: String,
     target: crate::PreparedCpaTarget,
     pub(super) capability: CpaDownstreamCredentialCapability,
-    _root: tempfile::TempDir,
+    _root: crate::private_test_support::TempDir,
 }
 
 impl ActiveFixture {
@@ -234,7 +234,7 @@ fn fresh_context() -> CpaRequestContext {
 }
 
 pub(super) fn active_fixture(kind: SourceKind) -> ActiveFixture {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(FakeBackend::default());
     let fake_control = Arc::new(FakeControl::default());
     let template = fixture_runtime(&root, Arc::clone(&backend), Arc::clone(&fake_control), 2);

@@ -33,7 +33,7 @@ function Get-WindowsRequiredRecipes {
     'product' { return @('artifacts','cpa','core-cpa-bridge','replay-fragmentation','headless','credential-options','worker-materials',
       'worker-cleanup','authority-key','native-endpoint','native-home','startup-admission','live-capture') }
     'core' { return @(Get-WindowsCorePackages | ForEach-Object { $_ -replace '^hiroute-','core-' }) }
-    'background' { return @('background') }
+    'background' { return @('background-capture','background') }
     'upgrade' { return @('upgrade') }
     'accounts' { return @(Get-WindowsQoderAccountRecipes | ForEach-Object { $_.name }) }
     'agents' {

@@ -8,7 +8,7 @@ use super::*;
 
 #[test]
 fn borrowed_codex_reenabled_source_leases_without_auth_rotation() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(FakeBackend::default());
     let control = Arc::new(FakeControl::default());
     control.set_accounts(vec![snapshot(CpaAccountKind::Codex, 'a', "codex-model")]);
@@ -85,7 +85,7 @@ fn borrowed_codex_reenabled_source_leases_without_auth_rotation() {
 
 #[test]
 fn borrowed_codex_rotation_and_deletion_revoke_attempts_inside_cpa() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(FakeBackend::default());
     let control = Arc::new(FakeControl::default());
     control.set_accounts(vec![snapshot(CpaAccountKind::Codex, 'a', "codex-model")]);
@@ -244,7 +244,7 @@ fn borrowed_codex_rotation_and_deletion_revoke_attempts_inside_cpa() {
 
 #[test]
 fn borrowed_codex_account_replacement_is_rejected_before_managed_auth_changes() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(FakeBackend::default());
     let control = Arc::new(FakeControl::default());
     control.set_accounts(vec![snapshot(CpaAccountKind::Codex, 'a', "codex-model")]);
@@ -334,7 +334,7 @@ fn borrowed_codex_account_replacement_is_rejected_before_managed_auth_changes() 
 fn stock_cpa_v7_2_140_accepts_managed_auth_ready_and_shutdown_contract() {
     let binary = PathBuf::from(std::env::var("HIROUTE_STOCK_CPA_BIN").unwrap());
     let digest = std::env::var("HIROUTE_STOCK_CPA_SHA256").unwrap();
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let auth_dir = ensure_private_dir(&root.path().join("auth")).unwrap();
     let mut account = serde_json::Map::from_iter([("type".into(), json!("claude"))]);
     account.insert(
@@ -429,7 +429,7 @@ fn stock_cpa_v7_2_140_real_borrowed_codex_responses_smoke() {
         .unwrap_or_else(|_| "gpt-5.6-terra".to_owned());
     let source_before = private_test_file_digest(&source);
     let source_metadata_before = fs::symlink_metadata(&source).unwrap();
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let auth_dir = ensure_private_dir(&root.path().join("auth")).unwrap();
     let spec = CpaRuntimeSpec {
         instance_id: "real-stock-contract".into(),

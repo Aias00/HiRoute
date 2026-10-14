@@ -141,7 +141,7 @@ fn cancelled_ready_start_retains_owner_and_auth_lock_when_stop_fails_until_retry
     ) {
         return;
     }
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(FakeBackend::default());
     let fake_control = Arc::new(FakeControl::default());
     let template = fixture_runtime(&root, backend.clone(), fake_control.clone(), 2)
