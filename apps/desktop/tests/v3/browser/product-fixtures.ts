@@ -491,13 +491,13 @@ export function mockProductInvoke(command: string, payload: Record<string, any> 
     ...localSubscriptionCandidate,
     ...(fresh ? {} : { existing_source_id: 'source/codex/subscription' }),
   }] };
-  if (command === 'compute_scan') return { items: fresh ? [] : [{
+  if (command === 'compute_scan') return { diagnostics: [], connections: fresh ? [] : [{
     agent_id: 'agent_claude_default',
     supported: false,
     configuration_state: 'registered_with_protected_input',
     connection_option_id: 'zhipu.coding-plan.cn.v1',
-    observed_model_id: 'glm-5.3',
-    inventory_eligible: true,
+    connection_ref: 'connection-point/claude-component', context_ref: 'native-scope/claude-component',
+    display_name: '智谱 Coding Plan', protocol: 'messages', declared_model_ids: ['glm-5.3'], default_model_id: 'glm-5.3',
     discovery: {
       discovery_ref: `discovery/${'a'.repeat(64)}`,
       discovery_revision: '8091638379121373450',

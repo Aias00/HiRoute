@@ -215,7 +215,7 @@ const scenarios = [
     assert(!button('管理凭据'), 'ConnectorOwned exposed manual keys');
   }],
   ['scan empty, runtime unavailable and failed remain distinct', async () => {
-    await fresh(control => { control.subscriptions = []; control.handlers.compute_scan = () => ({ items: [] }); });
+    await fresh(control => { control.subscriptions = []; control.handlers.compute_scan = () => ({ connections: [], diagnostics: [] }); });
     await scan();
     assert(text().includes('没有发现可复用的 Codex / Claude Code 订阅'), 'Successful empty scan missing');
     await click('完成');
@@ -259,7 +259,7 @@ const scenarios = [
       assert(!button('保存接入') && c().changes === 0, 'Stale candidate was saved');
       assert(calls('apply_compute_save').length === (stage === 'apply_compute_save' ? 1 : 0), 'Unexpected Apply attempt');
       const next = { ...c().discovered, discovery: { discovery_ref: `discovery/${'b'.repeat(64)}`, discovery_revision: '2' } };
-      c().handlers.compute_scan = () => ({ items: [next] });
+      c().handlers.compute_scan = () => ({ connections: [next], diagnostics: [] });
       delete c().handlers[stage];
       await click('重新扫描'); await until(() => text().includes('可复用的订阅'), 'rescan complete');
       await connect('智谱 Coding Plan');

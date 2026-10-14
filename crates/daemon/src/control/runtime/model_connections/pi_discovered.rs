@@ -244,7 +244,9 @@ impl LocalControlAdapter {
             trusted_lineage_digest: None,
             display_name: format!(
                 "{} · {}",
-                if source
+                if source.source_ref.starts_with("hermes-source/") {
+                    "Hermes"
+                } else if source
                     .credential
                     .as_ref()
                     .is_some_and(|c| c.field_selector == "env.ANTHROPIC_AUTH_TOKEN")

@@ -88,6 +88,25 @@ For a Native API source:
    `compute connection apply` with an exact compute-management v2 save.
 5. Verify the Operation and `compute list`/`compute show`; then release protected input.
 
+For a discovered native connection point (including a selected Hermes profile):
+
+1. Request the current scan explicitly: `compute scan --request-stdin --output json` with
+   `{"schema":"hiroute.compute-scan-request/v2"}`. For Hermes include
+   `"native_target":{"kind":"hermes","config_root":"/ABSOLUTE/EFFECTIVE/HERMES/ROOT"}`.
+   Do not infer the IM user's profile from the service process environment.
+2. Select a returned connection's opaque `discovery`; preserve its exact revision. Use
+   `compute connection prepare --request-stdin --output json` with only that `discovery` and
+   a stable `prepare_id`. HiRoute rereads and prepares credentials privately; no manual secret
+   copying, model call or native configuration write is needed.
+3. Initially choose **all currently selectable** models returned by that candidate, unless the
+   user requested a subset. `Observed` models were declared locally; `Catalog` models are
+   qualified candidates for this product and protocol, not account entitlement or tested inference.
+4. Construct the concrete nonempty `selected_model_refs` array from that returned snapshot.
+   Save through the existing compute Preview/Apply pair. Omission and `all` are never wildcards.
+   No selectable models blocks saving. Cancel and rescan never save or add models; a later
+   directory update does not expand an accepted selection. Source/credential drift requires a
+   fresh scan and preparation, followed by the user's original explicit selection.
+
 For subscriptions, start with `compute connection options`. Choose only a returned candidate,
 preview/apply the subscription check, read it through `compute connection authorize`, and save the
 returned checked candidate and validation through the same compute save pair. Keep discovery,

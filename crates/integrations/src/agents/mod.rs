@@ -31,6 +31,8 @@ pub use hermes_target::*;
 mod hermes_support;
 pub use hermes_support::*;
 mod hermes_sources;
+#[cfg(test)]
+mod hermes_sources_tests;
 pub use hermes_sources::*;
 mod hermes_discovery;
 pub use hermes_discovery::*;
