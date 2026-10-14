@@ -10,6 +10,7 @@ Follow the shared [Durable contract maintenance](../../issue-spec-workflow/refer
 - Extract confirmed requirements into testable behavior: user outcomes, authorization, data lifecycle, compatibility, meaningful failure behavior and necessary architectural invariants.
 - Capture technical constraints only when they protect a lasting contract, not merely because the current implementation has a particular helper, database table or tuning value.
 - Keep source Issue/typed-artifact references for traceability, separate from normative requirements. For a selected Proposal projection, declare complete resulting requirements and use preview/apply/check; MODIFIED replaces all scenarios inside the target Requirement. For a simple-Issue change, use the ordinary repository edit/review path without manufacturing Proposal artifacts.
+- Keep HiRoute's readable document titles and independent `Implementation references` sections. The CLI identifies capabilities by their path slugs and preserves those sections outside Requirement operations; do not rename titles to slugs or move references into the last Requirement. Inspect the preview for both retained references and correctly placed additions. Resolve unsupported structure before applying rather than dropping content or declaring a changed contract `UNCHANGED`.
 
 ## What not to promote
 
