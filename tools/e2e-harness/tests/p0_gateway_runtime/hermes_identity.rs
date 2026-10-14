@@ -1,0 +1,96 @@
+use super::*;
+use hiroute_gateway::server::publication::token_sha256;
+use serde_json::{Value, json};
+
+#[test]
+fn hermes_equal_prompts_and_unproven_ids_are_isolated_by_the_real_listener() {
+    let simple = br#"{"answers":{"q0":{"type":"score","probabilities":{"0":0.9,"1":0.1}}}}"#;
+    let reply = |body| ProviderReply::Complete {
+        status: 200,
+        error_kind: None,
+        body,
+    };
+    let regular = NativeProvider::start(vec![reply(RESPONSES_OK); 11]);
+    let primary = NativeProvider::start(vec![]);
+    let decider = NativeProvider::start(vec![reply(simple.as_slice()); 11]);
+    let fixture = RuntimeFixture::launch_builtin_branches(&[&regular, &primary, &decider], true);
+    let mut publication = fixture.publication();
+    let grant = publication
+        .grants
+        .iter_mut()
+        .find(|grant| {
+            grant.protocol == hiroute_gateway::server::request_plan::IngressProtocol::Responses
+        })
+        .unwrap();
+    grant.consumer = Some(hiroute_domain::AgentModelConsumerV1::Hermes);
+    let mut other = grant.clone();
+    other.grant_id = "another-hermes-connection".into();
+    other.bearer_token_sha256 = token_sha256("another-hermes-fixture-token");
+    publication.grants.push(other);
+    publication.publication_revision += 1;
+    fixture.publish(&mut publication);
+    let body = serde_json::to_vec(&json!({"model":MODEL,"stream":false,
+        "input":[{"role":"user","content":"An identical real user task."}]}))
+    .unwrap();
+    let send = |headers: &[(&str, &str)]| {
+        let response = request(fixture.address, "POST", "/v1/responses", headers, &body);
+        assert_eq!(
+            response.status,
+            200,
+            "{}",
+            String::from_utf8_lossy(&response.body)
+        );
+    };
+    // Equal first-user content cannot join two concurrent native conversations.
+    std::thread::scope(|scope| {
+        for session in ["native-conversation-one", "native-conversation-two"] {
+            let send = &send;
+            scope.spawn(move || {
+                send(&[("X-HiRoute-Token", TOKEN), ("x-hermes-session-id", session)])
+            });
+        }
+    });
+    let long = "a".repeat(129);
+    for claims in [
+        vec![],
+        vec![
+            ("x-hermes-session-id", "same"),
+            ("x-hermes-session-id", "same"),
+        ],
+        vec![("x-hermes-session-id", "same"), ("session-id", "same")],
+        vec![("x-hermes-session-id", long.as_str())],
+    ] {
+        let mut headers = vec![("X-HiRoute-Token", TOKEN)];
+        headers.extend(claims);
+        send(&headers);
+        send(&headers);
+    }
+    // An equal raw ID under a different admitted connection is another conversation.
+    send(&[
+        ("X-HiRoute-Token", "another-hermes-fixture-token"),
+        ("x-hermes-session-id", "native-conversation-one"),
+    ]);
+    assert_eq!(
+        (regular.calls(), primary.calls(), decider.calls()),
+        (11, 0, 11)
+    );
+    let facts = wait_execution_facts(&fixture, 11);
+    let finished = facts
+        .iter()
+        .filter(|fact| fact.pointer("/fact/kind") == Some(&json!("request_finished")))
+        .collect::<Vec<_>>();
+    let conversations = finished
+        .iter()
+        .map(|fact| {
+            fact.pointer("/correlation/conversation_id")
+                .and_then(Value::as_str)
+                .expect("recorded conversation identity")
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(conversations.len(), 11);
+    let rendered = serde_json::to_string(&facts).unwrap();
+    assert!(
+        !rendered.contains("native-conversation-one")
+            && !rendered.contains("native-conversation-two")
+    );
+}
