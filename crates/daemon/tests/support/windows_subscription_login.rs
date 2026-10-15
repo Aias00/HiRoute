@@ -15,6 +15,7 @@ use std::collections::BTreeMap;
 pub struct Pending {
     sessions: Vec<(Provider, String)>,
     saved_sources: Vec<String>,
+    prior_logins: Vec<ComputeSubscriptionLoginSessionV1>,
 }
 
 type PublicCli<'a> = dyn FnMut(&[&str], Option<&Value>) -> Value + 'a;
@@ -137,12 +138,23 @@ pub fn run_before_restart(cli: &mut PublicCli<'_>) -> Pending {
     assert_discovery(cli);
     let original_sources = saved_sources(cli);
     let mut pending = Vec::new();
+    let mut prior_logins = Vec::new();
     for provider in [Provider::Codex, Provider::Claude] {
         let initial = login(cli, json!({"action":"list", "provider":provider}));
         assert!(
-            initial.sessions.is_empty(),
-            "OAuth gate requires an unused provider login store"
+            initial.sessions.iter().all(|session| {
+                !matches!(session.status, Status::Pending | Status::Authorized)
+                    && session.authorization_url.is_none()
+                    && session.callback_input_candidate.is_none()
+                    && session.account_ref.is_none()
+                    && session.candidate.is_none()
+            }),
+            "OAuth gate refuses existing active or account-bearing login sessions"
         );
+        // Ordinary-user uninstall preserves the store. Keep terminal receipts
+        // from previous runs and prove they remain unchanged, instead of
+        // clearing user state or requiring an unused profile on every replay.
+        prior_logins.extend(initial.sessions);
         let first = session(cli, json!({"action":"start", "provider":provider}));
         assert_state(&first, provider, &first.login_ref, Status::Pending);
         let first_challenge = assert_url(first.authorization_url.as_deref(), provider);
@@ -178,6 +190,7 @@ pub fn run_before_restart(cli: &mut PublicCli<'_>) -> Pending {
     Pending {
         sessions: pending,
         saved_sources: original_sources,
+        prior_logins,
     }
 }
 
@@ -208,6 +221,16 @@ pub fn assert_after_restart(cli: &mut PublicCli<'_>, pending: Pending) {
         );
         let forgotten = session(cli, json!({"action":"forget", "login_ref":id}));
         assert_state(&forgotten, provider, &id, Status::Forgotten);
+    }
+    for original in pending.prior_logins {
+        let retained = session(
+            cli,
+            json!({"action":"status", "login_ref":original.login_ref}),
+        );
+        assert!(
+            retained == original,
+            "OAuth lifecycle changed a prior terminal login receipt"
+        );
     }
     assert_discovery(cli);
     assert!(
