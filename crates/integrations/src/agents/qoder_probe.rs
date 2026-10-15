@@ -24,6 +24,9 @@ use serde_json::Value;
 
 #[path = "qoder_probe_http.rs"]
 mod http;
+#[cfg(test)]
+#[path = "qoder_probe_output_diagnostic_tests.rs"]
+mod output_diagnostic_tests;
 #[cfg(any(test, windows))]
 #[path = "qoder_probe_skill_diagnostic.rs"]
 mod skill_diagnostic;
@@ -377,8 +380,18 @@ impl QoderCollaborationProbe {
             safe_output_bound(&observer, challenge.step, requests, started.elapsed());
         }
         let status = result?;
-        let output = read_bounded(&root_path.join("output.private"), 512 * 1024)
-            .map_err(|_| qoder_error("native output bound"))?;
+        #[cfg(test)]
+        let final_read = observed_final_output(
+            &root_path.join("output.private"),
+            &observer,
+            challenge.step,
+            requests,
+            &started,
+            |diagnostic| diagnostic.emit(),
+        );
+        #[cfg(not(test))]
+        let final_read = read_bounded(&root_path.join("output.private"), 512 * 1024);
+        let output = final_read.map_err(|_| qoder_error("native output bound"))?;
         let result = output
             .split(|byte| *byte == b'\n')
             .filter_map(|line| serde_json::from_slice::<Value>(line).ok())
@@ -712,18 +725,140 @@ fn cli_baseline(cli: &Path, root: &Path) -> Result<String, QoderNativeError> {
 }
 
 #[cfg(test)]
+fn observed_final_output(
+    path: &Path,
+    observer: &File,
+    step: usize,
+    requests: usize,
+    started: &Instant,
+    observe: impl FnOnce(OutputReadDiagnostic),
+) -> std::io::Result<zeroize::Zeroizing<Vec<u8>>> {
+    read_bounded(path, 512 * 1024).inspect_err(|error| {
+        observe(output_read_diagnostic(
+            observer,
+            "final_read",
+            Some(error),
+            step,
+            requests,
+            started.elapsed(),
+        ));
+    })
+}
+
+#[cfg(test)]
 fn safe_output_bound(file: &File, step: usize, requests: usize, elapsed: Duration) {
-    use std::io::{Seek, SeekFrom};
-    let Ok(mut file) = file.try_clone() else {
-        return;
+    let diagnostic = output_read_diagnostic(file, "live_guard", None, step, requests, elapsed);
+    diagnostic.emit();
+    // Preserve the original closed frame for older observers. Only this
+    // original live-guard branch emits it; final reads have their own phase.
+    if let (Some(bytes), Some(types)) = (diagnostic.sampled_bytes, diagnostic.record_counts) {
+        eprintln!(
+            "native Qoder acceptance stage=output-bound challenge-step={step} requests={requests} elapsed-ms={} sampled-bytes={bytes} record-counts-system-assistant-user-result-stream-other-invalid={types:?}",
+            elapsed.as_millis(),
+        );
+    }
+}
+
+#[cfg(test)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
+struct ClosedOutputIo {
+    kind: &'static str,
+    raw_os_error: Option<i32>,
+}
+
+#[cfg(test)]
+impl ClosedOutputIo {
+    fn from_error(error: &std::io::Error) -> Self {
+        use std::io::ErrorKind;
+        let kind = match error.kind() {
+            ErrorKind::NotFound => "not_found",
+            ErrorKind::PermissionDenied => "permission_denied",
+            ErrorKind::InvalidInput => "invalid_input",
+            ErrorKind::InvalidData => "invalid_data",
+            ErrorKind::UnexpectedEof => "unexpected_eof",
+            ErrorKind::Interrupted => "interrupted",
+            ErrorKind::TimedOut => "timed_out",
+            ErrorKind::WouldBlock => "would_block",
+            ErrorKind::Unsupported => "unsupported",
+            ErrorKind::OutOfMemory => "out_of_memory",
+            ErrorKind::IsADirectory => "is_a_directory",
+            ErrorKind::NotADirectory => "not_a_directory",
+            ErrorKind::Other => "other",
+            _ => "unknown",
+        };
+        Self {
+            kind,
+            raw_os_error: error.raw_os_error(),
+        }
+    }
+}
+
+#[cfg(test)]
+#[derive(Debug, serde::Serialize)]
+struct OutputReadDiagnostic {
+    phase: &'static str,
+    challenge_step: usize,
+    requests: usize,
+    elapsed_ms: u128,
+    observer_length: Option<u64>,
+    observer_metadata_error: Option<ClosedOutputIo>,
+    read_error: Option<ClosedOutputIo>,
+    sample_stage: &'static str,
+    sample_error: Option<ClosedOutputIo>,
+    sampled_bytes: Option<usize>,
+    record_counts: Option<[usize; 7]>,
+}
+
+#[cfg(test)]
+impl OutputReadDiagnostic {
+    fn emit(&self) {
+        eprintln!(
+            "native Qoder acceptance stage=output-read diagnostic={}",
+            serde_json::to_string(self).expect("closed output-read facts are serializable")
+        );
+    }
+}
+
+#[cfg(test)]
+fn output_read_diagnostic(
+    file: &File,
+    phase: &'static str,
+    error: Option<&std::io::Error>,
+    step: usize,
+    requests: usize,
+    elapsed: Duration,
+) -> OutputReadDiagnostic {
+    let metadata = file.metadata();
+    let mut diagnostic = OutputReadDiagnostic {
+        phase,
+        challenge_step: step,
+        requests,
+        elapsed_ms: elapsed.as_millis(),
+        observer_length: metadata.as_ref().ok().map(std::fs::Metadata::len),
+        observer_metadata_error: metadata.as_ref().err().map(ClosedOutputIo::from_error),
+        read_error: error.map(ClosedOutputIo::from_error),
+        sample_stage: "clone",
+        sample_error: None,
+        sampled_bytes: None,
+        record_counts: None,
     };
-    if file.seek(SeekFrom::Start(0)).is_err() {
-        return;
+    if let Err(error) = sample_output(file, &mut diagnostic) {
+        diagnostic.sample_error = Some(ClosedOutputIo::from_error(&error));
     }
+    diagnostic
+}
+
+#[cfg(test)]
+fn sample_output(file: &File, diagnostic: &mut OutputReadDiagnostic) -> std::io::Result<()> {
+    // All callers run only after stop has confirmed the native process scope.
+    // Cloning shares the writer's seek pointer, so this must never run live.
+    use std::io::{Seek, SeekFrom};
+    let mut file = file.try_clone()?;
+    diagnostic.sample_stage = "seek";
+    file.seek(SeekFrom::Start(0))?;
+    diagnostic.sample_stage = "read";
     let mut bytes = zeroize::Zeroizing::new(Vec::new());
-    if file.take(512 * 1024).read_to_end(&mut bytes).is_err() {
-        return;
-    }
+    file.take(512 * 1024).read_to_end(&mut bytes)?;
     let mut types = [0usize; 7];
     for line in bytes.split(|byte| *byte == b'\n') {
         let parsed = serde_json::from_slice::<Value>(line).ok();
@@ -738,11 +873,10 @@ fn safe_output_bound(file: &File, step: usize, requests: usize, elapsed: Duratio
         };
         types[index] += 1;
     }
-    eprintln!(
-        "native Qoder acceptance stage=output-bound challenge-step={step} requests={requests} elapsed-ms={} sampled-bytes={} record-counts-system-assistant-user-result-stream-other-invalid={types:?}",
-        elapsed.as_millis(),
-        bytes.len()
-    );
+    diagnostic.sample_stage = "complete";
+    diagnostic.sampled_bytes = Some(bytes.len());
+    diagnostic.record_counts = Some(types);
+    Ok(())
 }
 
 #[cfg(all(test, unix))]
