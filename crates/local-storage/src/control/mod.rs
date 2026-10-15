@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fs;
 #[cfg(not(windows))]
-use std::fs::{File, OpenOptions};
+use std::fs::OpenOptions;
 use std::io::Read;
 #[cfg(not(windows))]
 use std::io::Write;

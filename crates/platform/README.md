@@ -12,7 +12,7 @@ temporary directory removal. Unix and Windows implementations stay in separate
 leaves. Storage preparation preserves existing Unix directory modes; it does not
 adopt borrowed Agent directories. New objects receive 0700/0600 modes or the current
 Windows user's private descriptor at creation. Executable run materials retain their
-explicit Unix 0700 intent. Reads reject linked/special leaf entries without changing
+explicit Unix 0700 intent. Reads reject symlinks, reparse points and special leaf entries without changing
 permissions; Windows private reads also validate the owner/DACL. Payload limits,
 format checks, storage error mapping and borrowed configuration restoration remain
 with their existing owners.

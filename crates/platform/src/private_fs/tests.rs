@@ -136,7 +136,8 @@ fn windows_owned_root_stays_pinned_and_private_read_does_not_repair_borrowed_acl
     assert!(fs::rename(&path, fixture.path().join("moved")).is_err());
     let borrowed = fixture.path().join("borrowed");
     let mut permissions = file_security::private_defaults(false).unwrap();
-    permissions.descriptor.push_str("(A;;GR;;;WD)");
+    // Use the concrete file-read mask: native creation maps generic GR to FR.
+    permissions.descriptor.push_str("(A;;FR;;;WD)");
     crate::durable::write_windows_atomic(&borrowed, b"preserve", &permissions).unwrap();
     let file = security::open_identity(&borrowed, false).unwrap();
     let before = file_security::capture(&file).unwrap();
