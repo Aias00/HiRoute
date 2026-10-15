@@ -4,6 +4,21 @@ use serde_json::{Value, json};
 
 #[test]
 fn hermes_equal_prompts_and_unproven_ids_are_isolated_by_the_real_listener() {
+    assert_native_identity(false);
+}
+
+#[test]
+fn hermes_chat_identity_is_admitted_and_isolated_by_the_real_listener() {
+    assert_native_identity(true);
+}
+
+fn assert_native_identity(chat: bool) {
+    use hiroute_gateway::server::request_plan::IngressProtocol;
+    let protocol = if chat {
+        IngressProtocol::ChatCompletions
+    } else {
+        IngressProtocol::Responses
+    };
     let simple = br#"{"answers":{"q0":{"type":"score","probabilities":{"0":0.9,"1":0.1}}}}"#;
     let reply = |body| ProviderReply::Complete {
         status: 200,
@@ -18,9 +33,7 @@ fn hermes_equal_prompts_and_unproven_ids_are_isolated_by_the_real_listener() {
     let grant = publication
         .grants
         .iter_mut()
-        .find(|grant| {
-            grant.protocol == hiroute_gateway::server::request_plan::IngressProtocol::Responses
-        })
+        .find(|grant| grant.protocol == protocol)
         .unwrap();
     grant.consumer = Some(hiroute_domain::AgentModelConsumerV1::Hermes);
     let mut other = grant.clone();
@@ -29,11 +42,24 @@ fn hermes_equal_prompts_and_unproven_ids_are_isolated_by_the_real_listener() {
     publication.grants.push(other);
     publication.publication_revision += 1;
     fixture.publish(&mut publication);
-    let body = serde_json::to_vec(&json!({"model":MODEL,"stream":false,
-        "input":[{"role":"user","content":"An identical real user task."}]}))
+    let body = serde_json::to_vec(&if chat {
+        json!({"model":MODEL,"stream":false,"messages":[{"role":"user","content":"An identical real user task."}]})
+    } else {
+        json!({"model":MODEL,"stream":false,"input":[{"role":"user","content":"An identical real user task."}]})
+    })
     .unwrap();
     let send = |headers: &[(&str, &str)]| {
-        let response = request(fixture.address, "POST", "/v1/responses", headers, &body);
+        let response = request(
+            fixture.address,
+            "POST",
+            if chat {
+                "/v1/chat/completions"
+            } else {
+                "/v1/responses"
+            },
+            headers,
+            &body,
+        );
         assert_eq!(
             response.status,
             200,

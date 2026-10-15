@@ -149,7 +149,7 @@ def run(repository):
         options = data(product, 'routing options', {})['candidates']
         for model in saved['models']:
             option = next(o for o in options if o['binding_id'] == model['binding_id'])
-            assert option['routable'] and 'responses' in option['ingress_protocols'] and 'messages' in option['ingress_protocols']
+            assert option['routable'] and {'responses', 'chat_completions', 'messages'} <= set(option['ingress_protocols'])
             assert option['reasoning']['profiles'] == ['low', 'high', 'max']
         print(json.dumps({'scenario': 'released-cli-connection-points', 'state': 'green',
                           'cases': ['legacy-one-model', 'private-multi-model-prepare', 'hermes-default-chat',

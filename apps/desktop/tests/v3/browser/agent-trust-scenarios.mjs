@@ -86,6 +86,15 @@ const scenarios = [
     assert(spec.native_target.config_root === '/tmp/hermes-profile-fixture' && spec.model.settings.mode === 'hermes_default', 'Hermes save lost target or mode');
     assert(spec.model.settings.plan_id === c().agents.plans.plans[0].agent_plan_id && spec.model.settings.protocol === 'responses', 'Hermes save changed Plan/protocol');
     assert(!spec.management_skill && spec.collaboration.intent === 'keep', 'Model save changed an independent facet');
+    await openEditor('model', false);
+    const protocol = dialog().querySelector('[data-plan-protocol] select');
+    assert([...protocol.options].some(option => option.value === 'chat_completions' && !option.disabled), 'Hermes cannot select native Chat Completions');
+    changeSelect(protocol, 'chat_completions'); await tick(); await save();
+    const chatSpec = configureSpecs().at(-1);
+    assert(chatSpec.model.settings.protocol === 'chat_completions' && chatSpec.model.settings.plan_id === spec.model.settings.plan_id,
+      'Hermes Chat selection was lost or changed the selected Plan');
+    assert(chatSpec.native_target.config_root === spec.native_target.config_root && !chatSpec.management_skill,
+      'Hermes Chat selection changed its target or independent management facet');
   }),
   scenario('hermes.management.independent-without-plan', ['hermes', 'agent-management'], 'Hermes management preparation needs neither a model connection nor a Plan', async () => {
     c().reset(); c().agents = c().hermesFresh(); c().agents.plans.plans = []; await tick();
@@ -166,6 +175,8 @@ const scenarios = [
   scenario('codex.enable.draft-cancel', ['agent-model-routing'], 'Codex first enable is a ready-to-submit draft and cancel does not apply', async () => {
     await freshCodex('cliOnly', true);
     await openEditor('model', false);
+    assert(![...dialog().querySelectorAll('[data-plan-protocol] option')].some(option => option.value === 'chat_completions'),
+      'Hermes Chat choice leaked into Codex routing');
     assert(!dialog().querySelector('[role="switch"]'), 'Redundant enable switch remains');
     assert(dialog().querySelector('[data-agent-service-responsibility]')?.textContent.includes('启用不会自动设置开机启动'), 'Enabling routing promises automatic startup');
     const route = dialog().querySelector('[data-agent-plan-id] input');

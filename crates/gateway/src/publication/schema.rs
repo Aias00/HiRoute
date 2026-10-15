@@ -555,7 +555,9 @@ impl GatewayPublicationSnapshotV3 {
                         || !grant.route_protocols.is_empty()
                         || !matches!(
                             grant.protocol,
-                            IngressProtocol::Responses | IngressProtocol::Messages
+                            IngressProtocol::Responses
+                                | IngressProtocol::Messages
+                                | IngressProtocol::ChatCompletions
                         )
                         || grant
                             .routes
