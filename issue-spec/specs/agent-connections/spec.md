@@ -394,7 +394,18 @@ native saved-route or real main-Agent delegation acceptance.
 
 ### Requirement: Reversible Hermes profile connection and activation guidance
 
+Desktop SHALL show Hermes alongside other supported Agents before a profile is
+selected. Configuration-directory selection belongs in Hermes details. An
+unscoped entry SHALL NOT imply installation, connection or settings authority;
+settings actions require the existing backend-validated effective profile.
+Selecting or reading a directory SHALL NOT configure routes or install resources.
+
 HiRoute SHALL configure the selected effective Hermes profile's default main model to the chosen published Plan alias and automatically install and enable the required HiRoute integration resources when the connection is applied from CLI or Desktop. Native connection fields and resources SHALL follow existing reversible ownership and transaction contracts, preserving unrelated native configuration and user data. Connection status/guidance SHALL identify the configured scope, report statically known selection overrides and applicable reload/model-selection actions, and keep unobserved live selection unknown. Installed/enabled resources SHALL NOT be represented as proof that an already-running Hermes process loaded them. HiRoute SHALL publish its Hermes integration requirements and reject a new connection before native writes only when required plugin/configuration or transport/header interfaces are incompatible. Older version labels and optional reasoning-replay limitations SHALL produce upgrade guidance rather than block an otherwise compatible connection. Independent Skill preparation, passive scan and existing owned recovery/restore SHALL use their own required capabilities rather than a blanket new-connection version gate.
+
+#### Scenario: Open Hermes before selecting a profile
+
+- **WHEN** Desktop has no discovered Hermes profile
+- **THEN** Hermes remains in the common Agent list, with directory selection in its details and settings disabled until a valid selected profile is returned; cancel or read failure preserves the current connection and native files.
 
 #### Scenario: Connect and prepare resources in one workflow
 

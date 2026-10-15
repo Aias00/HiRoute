@@ -31,6 +31,12 @@ prepare/restore controls and needs no model connection or published Plan. Model
 restore retains that Skill. Pending model/Skill Operations use the shared exact
 retry entry. Statically known channel models are shown separately from unobserved
 live session selection; Worker/collaboration configuration is unavailable.
+Hermes appears in the common Agent list even before a profile is selected. This
+presentation entry has no context or settings authority. Its details contain the
+configuration-directory control, reusing `HermesRootFields` and `agent_snapshot`
+for a selected target; successful discovery replaces the unscoped entry. Existing
+backend profiles remain authoritative. Directory reads, cancellation and failures
+never configure routing, prepare resources or imply that Hermes is installed.
 Qoder's editor explains that the selected Qoder CLI must complete its own `/login`
 before using these routes. Saving configuration does not perform native sign-in or
 make a model call. A valid native login rejection in the separate Qoder Live check

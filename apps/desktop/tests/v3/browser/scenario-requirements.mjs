@@ -1,6 +1,7 @@
 // Reviewed capability gates. New discovered scenarios run in full mode automatically.
 // Retire a required ID only with an explicit replacement of its unique guarantee.
 export const agentTrustRequired = ['codex.restore.conflict-active',
+  'hermes.discovery.parallel-entry',
   'hermes.routing.root-cancel-and-save',
   'hermes.management.independent-without-plan',
   'hermes.routing.unavailable-and-exact-recovery',

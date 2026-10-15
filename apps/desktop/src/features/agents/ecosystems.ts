@@ -1,4 +1,15 @@
-import type { AgentModelSelection, AgentModelSurface } from './types';
+import type { Agent, AgentModelSelection, AgentModelSurface } from './types';
+
+/** A supported integration stays discoverable before a native profile is selected.
+ * This entry is presentation only: no context or settings authority is invented.
+ */
+export function agentPageEntries(agents: Agent[]): Agent[] {
+  if (agents.some(agent => agent.agent_id === 'agent_hermes_default')) return agents;
+  return [...agents, {
+    agent_id: 'agent_hermes_default', version: '', context_id: null,
+    configuration_state: 'profile_not_selected', settings: null, status_error: null,
+  }];
+}
 
 export type AgentEcosystem = 'codex' | 'claude' | 'qoder' | 'pi' | 'dsh' | 'hermes';
 

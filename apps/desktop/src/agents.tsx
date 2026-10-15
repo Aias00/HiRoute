@@ -8,7 +8,7 @@ import { agentEditorSeed, agentModelFormInvalid, editorFingerprint, EMPTY_EDITOR
 import { AgentSettingsFeedback } from './features/agents/AgentSettingsFeedback';
 import { AgentModelEditor, modelSelectionSummary } from './features/agents/AgentModelEditor';
 import { HermesRootFields } from './features/agents/HermesRootFields';
-import { agentBrand, agentDisplayName, agentEcosystem, agentSupportsCollaboration, agentSupportsModelRouting } from './features/agents/ecosystems';
+import { agentBrand, agentDisplayName, agentEcosystem, agentPageEntries, agentSupportsCollaboration, agentSupportsModelRouting } from './features/agents/ecosystems';
 import { agentHasNoModelConnection, agentModelStatus } from './features/agents/status';
 import { collaborationCheckFailureMessage } from './features/agents/collaboration-check-feedback';
 import { agentSettingsSpec, agentTokenSpec, prerequisiteCheck } from './features/agents/settings-request';
@@ -395,8 +395,9 @@ export function Agents({
 
   const plans = snapshot?.plans.plans ?? [];
   const enabledPlans = plans.filter(plan => plan.head.status === 'enabled');
-  const selected = snapshot?.agents.find(agent => agentKey(agent) === selectedAgent || agent.agent_id === selectedAgent)
-    ?? (selectedAgent === null ? snapshot?.agents[0] : undefined);
+  const agents = snapshot ? agentPageEntries(snapshot.agents) : [];
+  const selected = agents.find(agent => agentKey(agent) === selectedAgent || agent.agent_id === selectedAgent)
+    ?? (selectedAgent === null ? agents[0] : undefined);
   const selectedManagement = agentModelStatus(selected)?.management_skill;
   const selectedCollaboration = selected?.settings?.collaboration;
   const selectedModel = agentModelStatus(selected);
@@ -481,7 +482,6 @@ export function Agents({
   </div> : null;
 
   return <ProductPage title="Agent" subtitle={text('在你常用的 Agent 中使用智能路由', 'Use smart routing in your usual Agent')} flush className="agents-page">
-    <button type="button" className="btn" disabled={busy} onClick={() => { setActionError(''); setHermesRootOpen(true); }}>{text('选择 Hermes 配置目录', 'Select Hermes configuration directory')}</button>
     {hermesRootOpen && <Dialog open title={text('选择 Hermes 配置目录', 'Select Hermes configuration directory')} closeLabel={text('取消', 'Cancel')} closeDisabled={busy} onClose={() => setHermesRootOpen(false)} footer={<><button className="btn" type="button" disabled={busy} onClick={() => setHermesRootOpen(false)}>{text('取消', 'Cancel')}</button><button className="btn btn-primary" type="submit" form="hermes-root-selection" disabled={busy || !hermesRoot.trim().startsWith('/')}>{busy ? text('读取中…', 'Reading…') : text('读取配置', 'Read configuration')}</button></>}>
       <form id="hermes-root-selection" className="agent-form" onSubmit={event => { event.preventDefault(); void discoverHermes(); }}><HermesRootFields value={hermesRoot} onChange={setHermesRoot} disabled={busy} language={language} />{actionError && <p className="oc-inline-error" role="alert">{agentActionErrorMessage(actionError, language)}</p>}</form>
     </Dialog>}
@@ -494,17 +494,19 @@ export function Agents({
       {!snapshot && loadError && <div className="empty-state" data-error-code={loadError}><div><span className="empty-icon"><UiIcon name="agent" /></span><h2>{text('暂时无法读取 Agent', 'Agents are temporarily unavailable')}</h2><p>{text('请确认本机服务正在运行，然后重试。', 'Make sure the local service is running, then retry.')}</p><button className="btn btn-primary" type="button" onClick={() => void refresh()}>{text('重试', 'Retry')}</button></div></div>}
       {tab === 'tasks'
         ? <AgentTasks language={language} read={taskRead} initialTaskId={initialTaskId} onCancel={onTaskCancel} onConfirmResidual={onTaskConfirmResidual} onOpenSession={onOpenTaskSession} onBackToAgents={() => setTab('configuration')} onRefresh={onOpenTasks} onLoadMore={onLoadMoreTasks} onReadTask={onReadTask} onLoadTaskResult={onLoadTaskResult} active={active} />
-        : snapshot && !snapshot.agents.length
+        : snapshot && !agents.length
           ? <div className="empty-state"><div><span className="empty-icon"><UiIcon name="agent" /></span><h2>{text('没有发现可接入的 Agent', 'No compatible Agent found')}</h2><p>{text('安装或启动支持的 Agent 后再返回此页。', 'Install or start a supported Agent, then return here.')}</p><button className="btn" type="button" onClick={() => void refresh()}>{text('重新扫描', 'Scan again')}</button></div></div>
           : tab === 'configuration' && <div className={`split-view oc-agents${showAgentList ? '' : ' oc-agent-detail-open'}`}>
             <aside className="master-pane">
               <nav className="master-list native-list" aria-label={text('Agent 列表', 'Agent list')}>
-                {snapshot?.agents.map(agent => {
+                {agents.map(agent => {
                   const active = selected ? agentKey(selected) === agentKey(agent) : false;
                   const stateNeedsRecovery = needsRecovery(agentModelStatus(agent)?.state) || needsRecovery(agent.settings?.collaboration?.state);
                   const statePending = agentModelStatus(agent)?.state === 'pending' || agent.settings?.collaboration?.state === 'pending';
                   const executableState = executableDiagnostic(agent.configuration_state);
-                  const stateLabel = agent.status_error
+                  const stateLabel = agent.configuration_state === 'profile_not_selected'
+                    ? text('未选择配置目录', 'Configuration directory not selected')
+                    : agent.status_error
                     ? text('状态待确认', 'Status unverified')
                     : executableState
                       ? executableState.label
@@ -528,6 +530,12 @@ export function Agents({
               <div className="oc-model-back"><button className="btn btn-quiet" type="button" onClick={() => setShowAgentList(true)}><UiIcon name="arrowLeft" />{text('返回 Agent 列表', 'Back to Agents')}</button></div>
               {selected && snapshot && <div className="detail-inner" data-agent-id={selected.agent_id}>
                 <header className="detail-hero"><div className="detail-identity"><BrandIcon kind={brand(selected)} label={`${agentName(selected)} logo`} /><div><h2>{agentName(selected)}</h2><p>{text('选择你需要的路由能力', 'Choose the routing capabilities you need')}</p></div></div></header>
+                {agentEcosystem(selected.agent_id) === 'hermes' && <section className="detail-section v3-agent-section" data-hermes-profile>
+                  <div className="detail-section-head"><h3>{text('配置目录', 'Configuration directory')}</h3><button type="button" className="btn btn-quiet" data-hermes-select-root disabled={busy} onClick={() => { setHermesRoot(selected.native_target?.config_root ?? ''); setActionError(''); setHermesRootOpen(true); }}>{selected.native_target ? text('更改', 'Change') : text('选择目录', 'Select directory')}</button></div>
+                  {selected.native_target
+                    ? <p className="field-help">{selected.native_target.config_root}</p>
+                    : <p>{text('选择本机 Hermes 实际使用的配置目录，即可配置模型路由和 HiRoute 管理 Skill。独立 profile 请选对应目录。', 'Select the configuration directory used by Hermes on this computer to configure model routing and the HiRoute management Skill. For a separate profile, select its directory.')}</p>}
+                </section>}
                 {!mutable && !selected.codex_access?.pending_operation && <div className="callout warn"><UiIcon name="warning" /><div><strong>{text('Agent 配置可以查看，暂时不能修改', 'Agent settings are viewable but cannot be changed')}</strong><p>{text('本机服务尚未就绪，连接恢复后即可保存配置。', 'The local service is not ready. Reconnect before saving.')}</p></div></div>}
                 {selected.codex_access && <CodexAccessPanel access={selected.codex_access} language={language} retryDisabled={busy || Boolean(editor) || !snapshot.trusted_authority} onRetry={async () => {
                   const access = selected.codex_access;
@@ -570,7 +578,6 @@ export function Agents({
                   {selectedManagement?.restore_point_ref && <button className="btn" disabled={busy || !mutable} onClick={event => void change(selected, 'management_skill', true, event.currentTarget)}>{text('恢复管理 Skill', 'Restore management Skill')}</button>}
                   <p className="field-help">{text('Hermes 的 Worker 和任务协作配置不在此接入中。', 'This integration does not configure Hermes as a Worker or enable task collaboration.')}</p>
                 </section>}
-                {selected.native_target && <p className="field-help">{text('配置目录', 'Configuration directory')} · {selected.native_target.config_root}</p>}
                 {selectedModel?.native_adapter && <p className="field-help" data-hermes-resource-state>{selectedModel.native_adapter.resources_installed
                   ? text('适配插件已准备；当前 Hermes 进程的加载状态尚未确认。请重新加载插件或开启新会话。', 'Adapter files are prepared; loading in the current Hermes process is unobserved. Reload plugins or start a new session.')
                   : text('适配资源需要修复；请检查自己的文件编辑后重新保存配置。', 'Adapter resources need repair. Review your file edits and save the settings again.')}</p>}

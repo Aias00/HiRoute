@@ -197,6 +197,9 @@ mockIPC(async (command, payload) => {
 });
 
 function Harness() {
+  const presentation = new URLSearchParams(location.search);
+  const language = presentation.get('language') === 'en' ? 'en' : 'zh';
+  const theme = presentation.get('theme') === 'light' ? 'light' : 'dark';
   const [generation, setGeneration] = useState(0);
   const [refresh, setRefresh] = useState(0);
   const [operation, setOperation] = useState<OperationReference | null>(null);
@@ -211,11 +214,11 @@ function Harness() {
     setRefresh(0);
     setGeneration(value => value + 1);
   };
-  return <PresentationRoot language="zh" theme="dark" textScale={1}>
+  return <PresentationRoot language={language} theme={theme} textScale={1}>
     <div className="app-window">
       <div role="note" style={{ gridColumn: '1 / -1', gridRow: 1 }}>组件测试：所有 IPC 为 mock；不连接 Tauri、daemon 或真实安装。</div>
       <main className="main" style={{ gridColumn: '1 / -1', gridRow: 2 }}>
-      <Agents key={generation} language="zh" refreshVersion={refresh} operation={operation} mutationAllowed onMutation={() => { control.mutations += 1; }} onOperation={(operation, presentation) => { control.operations.push({ operation, presentation }); setOperation(operation); }} />
+      <Agents key={generation} language={language} refreshVersion={refresh} operation={operation} mutationAllowed onMutation={() => { control.mutations += 1; }} onOperation={(operation, presentation) => { control.operations.push({ operation, presentation }); setOperation(operation); }} />
     </main></div>
   </PresentationRoot>;
 }

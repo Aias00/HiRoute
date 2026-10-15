@@ -26,7 +26,9 @@ Native defaults and collaboration stay independent;
 restoration must verify ownership rather than infer it from a provider name.
 
 Hermes uses an [explicit effective profile](../../crates/integrations/src/agents/hermes/README.md)
-and one default main-model Plan. Its bundled native middleware carries the real
+and one default main-model Plan. Desktop keeps Hermes in the common Agent list;
+its details select the profile through the existing target-read flow before settings
+become available. Its bundled native middleware carries the real
 session into trusted Gateway correlation. Its management Skill is independent;
 Hermes has no Worker/collaboration transport.
 

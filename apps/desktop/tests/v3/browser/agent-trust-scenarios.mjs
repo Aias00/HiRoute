@@ -60,6 +60,46 @@ function changeSelect(select, value) {
 const configureSpecs = () => calls('preview_agent_settings').map(item => item.payload.input.spec);
 
 const scenarios = [
+  scenario('hermes.discovery.parallel-entry', ['hermes', 'agent-discovery'], 'Hermes remains alongside other Agents and selects its profile from details without writes', async () => {
+    c().reset(); await tick();
+    const hermesRows = () => [...document.querySelectorAll('.native-list .list-row')].filter(row => row.textContent.includes('Hermes'));
+    await until(() => hermesRows().length === 1, 'Unscoped Hermes list row');
+    assert(document.querySelectorAll('.native-list .list-row').length === c().agents.agents.length + 1, 'Existing Agent entries changed');
+    assert(!document.querySelector('[data-hermes-select-root]'), 'Hermes directory control leaked into another Agent');
+    assert(![...document.querySelectorAll('button')].some(button => button.textContent === '选择 Hermes 配置目录'), 'Hermes has a page-level directory entry');
+    hermesRows()[0].click();
+    await until(() => document.querySelector('[data-hermes-profile]'), 'Hermes profile details');
+    assert(hermesRows()[0].textContent.includes('未选择配置目录'), 'Unselected profile is presented as installed or connected');
+    assert(facet('model').disabled && facet('management_skill').disabled, 'Unscoped entry acquired settings authority');
+    assert(!facet('collaboration'), 'Unscoped Hermes exposes collaboration');
+    const rootControl = () => document.querySelector('[data-hermes-select-root]');
+    rootControl().click(); await until(() => dialog(), 'Profile dialog');
+    assert(document.activeElement === dialog().querySelector('input'), 'Profile field did not receive focus');
+    [...dialog().querySelectorAll('button')].find(button => button.textContent === '取消').click();
+    await until(() => !dialog(), 'Profile selection cancelled');
+    assert(calls('agent_snapshot').length === 1, 'Cancel read or changed the profile');
+    rootControl().click(); await until(() => dialog(), 'Profile dialog reopened');
+    const input = dialog().querySelector('input');
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '/tmp/hermes-profile-fixture');
+    input.dispatchEvent(new Event('input', { bubbles: true })); await tick();
+    c().handlers.agent_snapshot = () => { throw new Error('AGENT_INPUT_INVALID'); };
+    submit().click(); await until(() => dialog()?.querySelector('[role="alert"]'), 'Invalid profile feedback');
+    assert(input.value === '/tmp/hermes-profile-fixture' && !submit().disabled, 'Failed read lost the path or retry');
+    assert(facet('model').disabled && hermesRows().length === 1, 'Failed read fabricated a configured profile');
+    c().handlers.agent_snapshot = payload => {
+      assert(payload.nativeTargets?.length === 1 && payload.nativeTargets[0].config_root === input.value, 'Read did not use the selected native target');
+      return c().hermesFresh();
+    };
+    submit().click(); await until(() => !dialog() && !facet('model').disabled, 'Selected Hermes profile');
+    assert(hermesRows().length === 1, 'Selected profile duplicated its placeholder');
+    assert(document.querySelector('[data-hermes-profile]').textContent.includes('/tmp/hermes-profile-fixture'), 'Details lost the selected scope');
+    rootControl().click(); await until(() => dialog(), 'Change profile');
+    assert(dialog().querySelector('input').value === '/tmp/hermes-profile-fixture', 'Change profile did not retain the current directory');
+    [...dialog().querySelectorAll('button')].find(button => button.textContent === '取消').click();
+    await until(() => !dialog(), 'Change profile cancelled');
+    assert(configureSpecs().length === 0 && calls('check_agent_live').length === 0 && calls('check_agent_authentication').length === 0,
+      'Profile navigation configured settings or called a model');
+  }),
   scenario('hermes.routing.root-cancel-and-save', ['hermes', 'agent-model-routing'], 'Hermes keeps its explicit root and one Plan through cancellation and normal save', async () => {
     c().reset(); c().agents = c().hermesFresh();
     c().agents.plans.plans = c().agents.plans.plans.filter(plan => plan.head.status === 'enabled').slice(0, 1);
