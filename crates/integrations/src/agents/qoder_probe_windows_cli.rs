@@ -6,6 +6,86 @@ mod tests {
     use hiroute_platform::{file_security, windows::security};
     use std::io::{Read, Seek, SeekFrom};
 
+    // These fixed facts describe the first captured line; they never authorize
+    // a shell or retain its arbitrary version text. Unknown remains unknown.
+    #[derive(Debug, Eq, PartialEq)]
+    struct VersionFacts {
+        bytes: usize,
+        lines: usize,
+        utf8: bool,
+        empty: bool,
+        first_line_empty: bool,
+        gnu_header: bool,
+        gnu_header_present: bool,
+        msys_suffix: bool,
+        triplet: &'static str,
+        bom: bool,
+        nul: bool,
+    }
+
+    fn version_facts(bytes: &[u8]) -> VersionFacts {
+        let text = std::str::from_utf8(bytes).ok();
+        let first = text
+            .and_then(|text| text.lines().next())
+            .unwrap_or_default();
+        let triplet = first
+            .rsplit_once(" (")
+            .and_then(|(_, tail)| tail.strip_suffix(')'));
+        let triplet = match triplet {
+            Some("x86_64-pc-msys") => "msys-x64",
+            Some("aarch64-pc-msys") => "msys-arm64",
+            Some("i686-pc-msys") => "msys-x86",
+            Some("x86_64-pc-cygwin") => "cygwin-x64",
+            Some("x86_64-pc-linux-gnu" | "x86_64-unknown-linux-gnu") => "linux-x64",
+            Some("x86_64-w64-mingw32") => "mingw-x64",
+            Some(_) => "unknown",
+            None => "absent",
+        };
+        VersionFacts {
+            bytes: bytes.len(),
+            lines: text.map_or(0, |text| text.lines().count()),
+            utf8: text.is_some(),
+            empty: bytes.is_empty(),
+            first_line_empty: first.is_empty(),
+            gnu_header: first.starts_with("GNU bash, version "),
+            gnu_header_present: text.is_some_and(|text| {
+                text.lines()
+                    .any(|line| line.starts_with("GNU bash, version "))
+            }),
+            msys_suffix: first.contains("-pc-msys"),
+            triplet,
+            bom: bytes.starts_with(&[0xef, 0xbb, 0xbf]),
+            nul: bytes.contains(&0),
+        }
+    }
+
+    fn version_diagnostic_controls() {
+        let known = b"GNU bash, version 5.2.37(1)-release (x86_64-pc-msys)\r\nCopyright\r\n";
+        let facts = version_facts(known);
+        assert!(facts.gnu_header && facts.gnu_header_present && facts.msys_suffix);
+        assert_eq!(facts.triplet, "msys-x64");
+        assert!(facts.utf8 && !facts.empty && !facts.bom && !facts.nul);
+        assert_eq!(facts.lines, 2);
+        let empty = version_facts(b"");
+        assert!(empty.empty && empty.first_line_empty && !empty.gnu_header);
+        assert_eq!(empty.triplet, "absent");
+        let linux = version_facts(b"GNU bash, version 5.2.37(1)-release (x86_64-pc-linux-gnu)\n");
+        assert!(linux.gnu_header && !linux.msys_suffix);
+        assert_eq!(linux.triplet, "linux-x64");
+        let prefixed = version_facts(b"\nGNU bash, version 5.2.37(1)-release (x86_64-pc-msys)\n");
+        assert!(prefixed.first_line_empty && prefixed.gnu_header_present && !prefixed.gnu_header);
+        let unknown = version_facts(b"GNU bash, version 5.2.37(1)-release (unknown)\n");
+        assert_eq!(unknown.triplet, "unknown");
+        assert!(!unknown.msys_suffix);
+        assert!(
+            version_facts(b"\xef\xbb\xbfGNU bash, version 5.2.37(1)-release (x86_64-pc-msys)\n")
+                .bom
+        );
+        assert!(!version_facts(b"\xff").utf8);
+        assert!(version_facts(b"GNU bash\0").nul);
+        assert!(!version_facts(b"arbitrary shell (x86_64-pc-msys)\n").gnu_header);
+    }
+
     fn selected(name: &str) -> PathBuf {
         std::env::var_os(name)
             .map(PathBuf::from)
@@ -86,6 +166,7 @@ mod tests {
     #[test]
     #[ignore = "explicit actual Git for Windows Bash and source-bound candidate hiroute.exe; required CI selects exactly this case"]
     fn windows_qoder_bash_executes_the_same_cli_with_literal_drive_path() {
+        version_diagnostic_controls();
         let selected_bash = selected("HIROUTE_VALIDATION_GIT_BASH_BINARY");
         let bash =
             super::super::super::managed_launch::windows_executable_path(&selected_bash).unwrap();
@@ -109,6 +190,21 @@ mod tests {
         let (code, version, stderr_empty) = run(&bash, &["--version"], root.path(), "version");
         assert_eq!(code, 0);
         assert!(stderr_empty);
+        let facts = version_facts(&version);
+        eprintln!(
+            "native Qoder Bash version diagnostic: bytes={} lines={} utf8={} empty={} first_line_empty={} gnu_header={} gnu_header_present={} msys_suffix={} triplet={} bom={} nul={}",
+            facts.bytes,
+            facts.lines,
+            facts.utf8,
+            facts.empty,
+            facts.first_line_empty,
+            facts.gnu_header,
+            facts.gnu_header_present,
+            facts.msys_suffix,
+            facts.triplet,
+            facts.bom,
+            facts.nul,
+        );
         let version = std::str::from_utf8(&version).unwrap();
         assert!(
             version.lines().next().is_some_and(
