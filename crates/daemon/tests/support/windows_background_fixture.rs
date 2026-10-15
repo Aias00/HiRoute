@@ -169,8 +169,8 @@ pub fn process(
     let (stdin, stdout_file, stderr_file) = child.pipes();
     let mut stdout = launcher::Capture::new(stdout_file);
     let mut stderr = launcher::Capture::new(stderr_file);
-    // An owner command relays a real public JSON response, including install
-    // preservation metadata that grows with retained user state. Give that
+    // An owner command relays a real public JSON response, including log tails
+    // that grow during repeated installed-runtime checks. Give that
     // envelope the existing Control response bound too. Pure fixture metadata
     // and arbitrary stderr keep their smaller test bound.
     let public_command = fixture

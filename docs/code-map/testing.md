@@ -177,8 +177,8 @@ the API's input buffer capacity; follow this fixture for identity prerequisites.
 The self-reexecuted owner fixture starts its closed result frame on a new line,
 so the parent can require an exact prefix independently of libtest's pretty
 caption; a successful child exit alone does not establish a received result.
-Owner command envelopes share the public Control response bound, so retained
-installation-state metadata is admissible on repeated runs; other fixture
+Owner command envelopes share the public Control response bound, so real
+diagnostic log tails are admissible on repeated runs; other fixture
 metadata and stderr retain their smaller capture bounds.
 Its policy toggles do not establish console closure, RDP reconnection or a login
 trigger; those need external session evidence.
