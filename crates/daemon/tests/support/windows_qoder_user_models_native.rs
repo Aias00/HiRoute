@@ -334,6 +334,20 @@ fn run(
     // Native stdout/stderr, account metadata, arguments and paths never appear
     // in diagnostics. Even the error class is selected from a closed vocabulary.
     if failure.is_some() || exit != Some(0) {
+        if action == "public-collaboration-check" {
+            // Only typed public failure enums leave this capture, never the
+            // envelope, request IDs, native stderr or account/provider data.
+            let value = serde_json::from_slice::<Value>(&output).unwrap_or(Value::Null);
+            let code = serde_json::from_value::<hiroute_application_api::ErrorCode>(
+                value["error"]["code"].clone(),
+            )
+            .ok();
+            let reason = serde_json::from_value::<
+                hiroute_application_api::AgentCollaborationCheckFailureReasonV1,
+            >(value["data"]["reason"].clone())
+            .ok();
+            eprintln!("Windows ordinary Qoder public failure: code={code:?}, reason={reason:?}");
+        }
         eprintln!(
             "Windows ordinary Qoder checkpoint: action={action}, failure={}, exit_code={}, natural_tree={}, stdout_bytes={}, stderr_bytes={}, output_class={}",
             failure.unwrap_or("nonzero-exit"),
