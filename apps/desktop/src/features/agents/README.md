@@ -37,6 +37,11 @@ configuration-directory control, reusing `HermesRootFields` and `agent_snapshot`
 for a selected target; successful discovery replaces the unscoped entry. Existing
 backend profiles remain authoritative. Directory reads, cancellation and failures
 never configure routing, prepare resources or imply that Hermes is installed.
+With no explicit target, the Desktop host checks its caller's nonempty
+`HERMES_HOME`, otherwise `HOME/.hermes`, and sends an existing profile through that
+same backend scan. It does not guess an IM process's profile. An unavailable
+explicit root never falls back to another; an unreadable default remains visible
+without hiding other Agents. Hermes uses its own bundled mark in the common icon component.
 Qoder's editor explains that the selected Qoder CLI must complete its own `/login`
 before using these routes. Saving configuration does not perform native sign-in or
 make a model call. A valid native login rejection in the separate Qoder Live check

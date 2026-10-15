@@ -13,17 +13,36 @@ pub struct HermesSupportFacts {
 }
 
 pub fn hermes_support_facts() -> HermesSupportFacts {
-    let mut executables: Vec<PathBuf> = std::env::var_os("PATH")
-        .map(|v| {
-            std::env::split_paths(&v)
-                .take(64)
-                .map(|p| p.join("hermes"))
-                .collect()
-        })
-        .unwrap_or_default();
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let executable = selected_hermes_executable(
+        super::executable::resolve(Path::new("hermes")),
+        home.as_deref(),
+    );
+    inspect_installation(executable)
+}
+
+fn selected_hermes_executable(
+    primary: Result<Option<PathBuf>, super::executable::ProbeFailure>,
+    home: Option<&Path>,
+) -> Option<PathBuf> {
+    match primary {
+        Ok(Some(path)) => Some(path),
+        // A broken selected command cannot be replaced by an unrelated installation.
+        Err(_) => None,
+        Ok(None) => super::executable::resolve(
+            &home
+                .filter(|home| home.is_absolute())?
+                .join(".hermes-bundle/venv/bin/hermes"),
+        )
+        .ok()
+        .flatten(),
+    }
+}
+
+fn inspect_installation(executables: impl IntoIterator<Item = PathBuf>) -> HermesSupportFacts {
     let mut roots = Vec::new();
     let mut interpreters = Vec::new();
-    for executable in executables.drain(..) {
+    for executable in executables {
         let Ok(Some(executable)) = super::executable::resolve(&executable) else {
             continue;
         };
@@ -295,6 +314,71 @@ fn inspect_sdks(paths: &[PathBuf]) -> HermesSdkSupport {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn hermes_packaged_installation_is_inspected_without_running_its_launcher() {
+        use std::os::unix::fs::PermissionsExt;
+        let home = tempfile::tempdir().unwrap();
+        let prefix = home.path().join(".hermes-bundle/venv");
+        let executable = prefix.join("bin/hermes");
+        std::fs::create_dir_all(executable.parent().unwrap()).unwrap();
+        let sentinel = home.path().join("must-not-execute");
+        std::fs::write(
+            &executable,
+            format!(
+                "#!{}\nraise RuntimeError({:?})\n",
+                prefix.join("bin/python3").display(),
+                sentinel
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let site = prefix.join("lib/python3.13/site-packages");
+        for (file, text) in [
+            ("hermes_cli/plugins.py", "plugins\ndef register_middleware("),
+            (
+                "hermes_cli/middleware.py",
+                "def apply_llm_request_middleware(",
+            ),
+            ("hermes_cli/config.py", "def load_config_readonly("),
+            (
+                "agent/turn_api_request.py",
+                "apply_llm_request_middleware(session_id=agent.session_id, model=agent.model, provider=agent.provider, base_url=agent.base_url, api_mode=agent.api_mode)",
+            ),
+            (
+                "tools/skills_tool.py",
+                "def _skills_dir(\nget_hermes_home() / \"skills\"",
+            ),
+            (
+                "openai/resources/chat/completions/completions.py",
+                "def create(self, *, extra_headers: dict): pass",
+            ),
+        ] {
+            let path = site.join(file);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        }
+        let selected = selected_hermes_executable(Ok(None), Some(home.path())).unwrap();
+        assert_eq!(selected, executable.canonicalize().unwrap());
+        let support = inspect_installation([selected]);
+        assert!(support.middleware && support.skills && support.chat_sdk);
+        assert!(!support.responses_sdk && !support.messages_sdk);
+        assert!(!sentinel.exists());
+        // Preserve first-command selection, even if another package would pass inspection.
+        let first = home.path().join("selected/hermes");
+        assert_eq!(
+            selected_hermes_executable(Ok(Some(first.clone())), Some(home.path())),
+            Some(first)
+        );
+        assert!(
+            selected_hermes_executable(
+                Err(super::super::executable::ProbeFailure::NotExecutable),
+                Some(home.path())
+            )
+            .is_none()
+        );
+    }
 
     #[test]
     fn chat_sdk_headers_are_required_independently_of_other_transports() {

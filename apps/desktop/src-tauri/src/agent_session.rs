@@ -433,15 +433,32 @@ impl Session {
             agents: Vec<AgentEntry>,
         }
         let mut scan: Scan = query(&self.client, "ListAgents", &ClientEmptyRequestV1 {}).await?;
+        let automatic = targets.is_empty();
+        let targets = if automatic {
+            super::agent_discovery::default_hermes_target()
+                .into_iter()
+                .collect()
+        } else {
+            targets
+        };
         for target in targets {
-            let selected: Scan = query(
+            let selected: Result<Scan, DesktopFailure> = query(
                 &self.client,
                 "ScanAgents",
                 &hiroute_application_api::AgentScanRequestV1 {
-                    native_target: Some(target),
+                    native_target: Some(target.clone()),
                 },
             )
-            .await?;
+            .await;
+            let selected = match selected {
+                Ok(selected) => selected,
+                Err(_) if automatic => {
+                    scan.agents
+                        .push(super::agent_discovery::unreadable_hermes(target));
+                    continue;
+                }
+                Err(error) => return Err(error),
+            };
             for agent in selected.agents {
                 scan.agents.retain(|existing| {
                     existing.agent_id != agent.agent_id || existing.context_id != agent.context_id

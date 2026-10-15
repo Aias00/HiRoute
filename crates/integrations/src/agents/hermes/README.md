@@ -29,6 +29,12 @@ SDK interfaces, not a numeric minimum. Preserve the existing dependency digest
 inputs for accepted-operation continuity, without requiring replay source markers.
 HiRoute does not upgrade Hermes or alter native reasoning. Scan, management
 preparation and owned restore retain their action-specific capabilities.
+Installed-source inspection reuses the shared executable resolver (including
+normal user/system bin locations). When no command is found, it can inspect the
+bundled installation's `~/.hermes-bundle/venv/bin/hermes` console script. A selected
+or broken primary command is never replaced merely to find passing capabilities.
+The launcher is not executed; source and SDK facts remain bound to its literal
+interpreter/package paths.
 - [Passive sources](../hermes_sources.rs) read the selected profile's static
   providers/default and literal profile environment. Helpers, rotating custom
   credential pools and unresolved composition remain unavailable. Unrelated native

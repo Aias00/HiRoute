@@ -56,13 +56,14 @@ export function agentDisplayName(agentId: string, language: 'zh' | 'en'): string
   }
 }
 
-export function agentBrand(agentId: string): 'codex' | 'claude-code' | 'qoder' | 'pi' | 'dsh' | 'agent' {
+export function agentBrand(agentId: string): 'codex' | 'claude-code' | 'qoder' | 'pi' | 'dsh' | 'hermes' | 'agent' {
   switch (agentEcosystem(agentId)) {
     case 'codex': return 'codex';
     case 'claude': return 'claude-code';
     case 'dsh': return 'dsh';
     case 'pi': return 'pi';
     case 'qoder': return 'qoder';
+    case 'hermes': return 'hermes';
     default: return 'agent';
   }
 }

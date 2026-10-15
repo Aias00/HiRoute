@@ -60,6 +60,23 @@ function changeSelect(select, value) {
 const configureSpecs = () => calls('preview_agent_settings').map(item => item.payload.input.spec);
 
 const scenarios = [
+  scenario('hermes.discovery.brand-and-known-profile', ['hermes', 'agent-discovery'], 'Hermes shows its own mark and the discovered profile without a separate selection step', async () => {
+    c().reset(); c().agents = c().hermesFresh(); await tick();
+    const rows = () => [...document.querySelectorAll('.native-list .list-row')].filter(row => row.textContent.includes('Hermes'));
+    await until(() => rows().length === 1, 'Discovered Hermes'); rows()[0].click();
+    await until(() => document.querySelector('[data-hermes-profile]'), 'Discovered Hermes details');
+    await until(() => [...document.querySelectorAll('[data-brand="hermes"] img')].length === 2
+      && [...document.querySelectorAll('[data-brand="hermes"] img')].every(img => img.complete && img.naturalWidth > 0), 'Hermes brand images');
+    assert(!facet('model').disabled && document.querySelector('[data-hermes-profile]').textContent.includes('/tmp/hermes-profile-fixture'), 'Discovered profile still requires directory selection');
+    assert(document.querySelector('[data-hermes-select-root]').textContent === '更改', 'Discovered profile cannot change scope');
+    assert(configureSpecs().length === 0 && calls('check_agent_live').length === 0, 'Discovery changed native settings or called a model');
+    const agent = c().agents.agents.find(a => a.agent_id === 'agent_hermes_default');
+    agent.context_id = null; agent.settings = null; agent.status_error = 'AGENT_STATUS_UNAVAILABLE'; agent.configuration_state = 'profile_unavailable';
+    c().refresh(); await tick();
+    await until(() => document.querySelector('[data-error-code="AGENT_STATUS_UNAVAILABLE"]'), 'Unreadable default profile');
+    assert(rows().length === 1 && document.querySelectorAll('.native-list .list-row').length === c().agents.agents.length, 'An unreadable profile hid or duplicated Agents');
+    assert(facet('model').disabled && !document.querySelector('[data-hermes-select-root]').disabled, 'Unreadable profile has settings authority or cannot change directory');
+  }),
   scenario('hermes.discovery.parallel-entry', ['hermes', 'agent-discovery'], 'Hermes remains alongside other Agents and selects its profile from details without writes', async () => {
     c().reset(); await tick();
     const hermesRows = () => [...document.querySelectorAll('.native-list .list-row')].filter(row => row.textContent.includes('Hermes'));
