@@ -49,7 +49,14 @@ pub fn exercise(call: &mut PublicCall<'_>) {
     // A real standard-owner installation preserves business state on uninstall.
     // Each run needs its own operation identity rather than colliding with a
     // retained declaration from an earlier interrupted acceptance attempt.
-    let id = format!("windows-authorization-boundary-{}", uuid::Uuid::new_v4().simple());
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let id = format!(
+        "windows-authorization-boundary-{}-{nonce}",
+        std::process::id()
+    );
     let service = json!({"id":id,"revision":1,"name":"Foreground authorization boundary",
         "connection":{"kind":"custom","endpoint":format!("http://{}/decision",endpoint.local_addr().unwrap()),
             "timeout_ms":1000,"auth_header":null}});
