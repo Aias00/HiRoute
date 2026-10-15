@@ -146,6 +146,19 @@ fn cli(program: &Path, arguments: &[&str], stage: &'static str) -> Value {
 /// authorization URLs remain bounded in memory; failure diagnostics never
 /// interpolate an envelope, URL, input, provider text or native configuration.
 fn public_call(program: &Path, arguments: &[&str], request: Option<&Value>) -> (i64, Value) {
+    // Only fixed command labels enter diagnostics, never request or OAuth bytes.
+    let stage = match arguments {
+        ["compute", "scan", ..] => "scan",
+        ["compute", "list", ..] => "compute-list",
+        ["compute", "connection", "options", ..] => "connection-options",
+        ["compute", "connection", "authorize", ..] => "authorization",
+        ["compute", "connection", "login", ..] => "subscription-login",
+        ["decision", "services", "apply", ..] => "decision-apply",
+        ["service", "restart", ..] => "service-restart",
+        ["gateway", ..] => "gateway-recovery",
+        _ => "other",
+    };
+    eprintln!("standard background public command: stage={stage}");
     let mut args: Vec<OsString> = arguments.iter().map(OsString::from).collect();
     if request.is_some() && !arguments.contains(&"--request-stdin") {
         args.push("--request-stdin".into());
