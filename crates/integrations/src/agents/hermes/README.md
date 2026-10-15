@@ -27,6 +27,11 @@ The upstream replay fix first ships in stable v0.21.7
 Source distributions may report `0.0.0`; inspect actual plugin/configuration and
 SDK interfaces, not a numeric minimum. Preserve the existing dependency digest
 inputs for accepted-operation continuity, without requiring replay source markers.
+PM-managed installations are inspected through their literal launcher and its
+owning tool store's committed environment record. Only the selected dependency
+generation supplies SDK facts; missing, malformed or out-of-install selections
+remain unavailable. Inspection does not execute the launcher, import native code
+or search older environments for a passing SDK.
 HiRoute does not upgrade Hermes or alter native reasoning. Scan, management
 preparation and owned restore retain their action-specific capabilities.
 Installed-source inspection reuses the shared executable resolver (including

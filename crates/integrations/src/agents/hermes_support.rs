@@ -2,6 +2,8 @@
 use hiroute_domain::CanonicalDigest;
 use std::path::{Path, PathBuf};
 
+mod managed_runtime;
+
 pub struct HermesSupportFacts {
     pub version: String,
     pub middleware: bool,
@@ -44,7 +46,7 @@ fn inspect_installation(executables: impl IntoIterator<Item = PathBuf>) -> Herme
     let mut roots = Vec::new();
     let mut interpreters = Vec::new();
     for executable in executables {
-        let Ok(Some(executable)) = super::executable::resolve(&executable) else {
+        let Some((executable, text)) = selected_launcher(&executable) else {
             continue;
         };
         if let Some(parent) = executable.parent() {
@@ -53,9 +55,6 @@ fn inspect_installation(executables: impl IntoIterator<Item = PathBuf>) -> Herme
                 roots.push(p.to_path_buf());
             }
         }
-        let Some(text) = bounded_text(&executable, 64 * 1024) else {
-            break;
-        };
         // Installed console scripts and the official shell launcher expose literal Python/
         // project locations. Read only those locations; never evaluate launcher text or env.
         for word in
@@ -66,6 +65,8 @@ fn inspect_installation(executables: impl IntoIterator<Item = PathBuf>) -> Herme
             if !path.is_absolute() || raw.contains(['$', '`', '\0']) {
                 continue;
             }
+            // PM launchers embed the source directory itself, rather than a script in it.
+            roots.push(path.to_path_buf());
             if path
                 .file_name()
                 .and_then(|name| name.to_str())
@@ -89,7 +90,6 @@ fn inspect_installation(executables: impl IntoIterator<Item = PathBuf>) -> Herme
     let sdk_paths = python_package_paths(&interpreters);
     roots.extend(sdk_paths.iter().cloned());
     roots.extend(editable_source_roots(&sdk_paths));
-    let sdk = inspect_sdks(&sdk_paths);
     roots.sort();
     roots.dedup();
     for root in roots.into_iter().take(256) {
@@ -102,6 +102,9 @@ fn inspect_installation(executables: impl IntoIterator<Item = PathBuf>) -> Herme
         if plugins.is_empty() && middleware.is_empty() && skill_source.is_empty() {
             continue;
         }
+        let selected_sdk_paths =
+            managed_runtime::sdk_paths(&root, &interpreters).unwrap_or_else(|| sdk_paths.clone());
+        let sdk = inspect_sdks(&selected_sdk_paths);
         let shell_source =
             bounded_text(&root.join("tools/terminal_tool.py"), 2 * 1024 * 1024).unwrap_or_default();
         let shell =
@@ -185,6 +188,33 @@ fn inspect_installation(executables: impl IntoIterator<Item = PathBuf>) -> Herme
         messages_sdk: false,
         dependency_digest: CanonicalDigest::of_bytes(b"hermes-native-interfaces/unavailable"),
     }
+}
+
+/// Follow only a literal, argument-preserving Hermes launcher handoff. Never run shell text.
+fn selected_launcher(executable: &Path) -> Option<(PathBuf, String)> {
+    let mut selected = super::executable::resolve(executable).ok()??;
+    let mut visited = Vec::new();
+    for _ in 0..4 {
+        if visited.contains(&selected) {
+            return None;
+        }
+        visited.push(selected.clone());
+        let text = bounded_text(&selected, 64 * 1024)?;
+        let handoff = text.lines().find_map(|line| {
+            let command = line.strip_prefix("exec ")?.strip_suffix(" \"$@\"")?;
+            let path = command.trim_matches(['\'', '"']);
+            let candidate = Path::new(path);
+            (candidate.is_absolute()
+                && candidate.file_name().is_some_and(|name| name == "hermes")
+                && !path.contains(['$', '`', '\0']))
+            .then_some(candidate.to_path_buf())
+        });
+        let Some(next) = handoff else {
+            return Some((selected, text));
+        };
+        selected = super::executable::resolve(&next).ok()??;
+    }
+    None
 }
 
 fn bounded_text(path: &Path, bound: u64) -> Option<String> {
@@ -467,5 +497,108 @@ mod tests {
         let messages_only = inspect_sdks(&paths);
         assert!(!messages_only.responses && messages_only.messages);
         assert_ne!(both.digest, messages_only.digest);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn pm_launcher_inspects_only_its_committed_environment_without_execution() {
+        use std::os::unix::fs::PermissionsExt;
+        let temporary = tempfile::tempdir().unwrap();
+        let project = temporary.path().join("native");
+        let owner = temporary.path().join("profile");
+        let python = owner.join("tools/python-native/bin/python3");
+        let executable = project.join(".hermes/bin/hermes");
+        let sentinel = temporary.path().join("must-not-execute");
+        let write = |path: &Path, text: &str| {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        };
+        write(&python, "#!/bin/sh\nexit 97\n");
+        write(
+            &executable,
+            &format!(
+                "#!/bin/sh\ntouch '{}'\nexec {} -I -c 'import sys; sys.path.insert(0, \"{}\")'\n",
+                sentinel.display(),
+                python.display(),
+                project.display(),
+            ),
+        );
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        for (file, text) in [
+            ("hermes_cli/plugins.py", "plugins\ndef register_middleware("),
+            (
+                "hermes_cli/middleware.py",
+                "def apply_llm_request_middleware(",
+            ),
+            ("hermes_cli/config.py", "def load_config_readonly("),
+            (
+                "agent/turn_api_request.py",
+                "apply_llm_request_middleware(session_id=agent.session_id, model=agent.model, provider=agent.provider, base_url=agent.base_url, api_mode=agent.api_mode)",
+            ),
+            (
+                "tools/skills_tool.py",
+                "def _skills_dir(\nget_hermes_home() / \"skills\"",
+            ),
+            ("tools/terminal_tool.py", "def terminal_tool("),
+            (
+                "pm/environments.py",
+                "def install_key(\ndef _recorded_venv(",
+            ),
+        ] {
+            write(&project.join(file), text);
+        }
+        let canonical = project.canonicalize().unwrap();
+        let key = CanonicalDigest::of_bytes(canonical.to_str().unwrap().as_bytes());
+        let state = owner.join("installs").join(&key.as_str()[7..23]);
+        let selected = state.join("environments/selected/venv");
+        let unused = state.join("environments/unused/venv");
+        let sdk = "lib/python3.14/site-packages/openai/resources/chat/completions/completions.py";
+        let cfg = format!("home = {}\n", python.parent().unwrap().display());
+        for environment in [&selected, &unused] {
+            write(&environment.join("pyvenv.cfg"), &cfg);
+            write(
+                &environment.join(sdk),
+                "def create(self, *, extra_headers: dict): pass",
+            );
+        }
+        let facts = state.join("facts.json");
+        let select = |environment: &Path| {
+            write(&facts, &serde_json::json!({"schema": 1, "packages": {"venv": {"environment": environment}}}).to_string());
+        };
+        select(&selected);
+        let first = inspect_installation([executable.clone()]);
+        assert!(first.middleware && first.skills && first.shell && first.chat_sdk);
+        let wrapper = temporary.path().join("bin/hermes");
+        write(
+            &wrapper,
+            &format!("#!/bin/sh\nexec '{}' \"$@\"\n", executable.display()),
+        );
+        std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(inspect_installation([wrapper.clone()]).chat_sdk);
+        std::fs::remove_file(selected.join(sdk)).unwrap();
+        let missing = inspect_installation([executable.clone()]);
+        assert!(
+            !missing.chat_sdk,
+            "an unused generation must not supply the SDK"
+        );
+        assert_ne!(first.dependency_digest, missing.dependency_digest);
+        select(&unused);
+        assert!(inspect_installation([executable.clone()]).chat_sdk);
+        let foreign = temporary.path().join("foreign");
+        write(&foreign.join("pyvenv.cfg"), &cfg);
+        write(
+            &foreign.join(sdk),
+            "def create(self, *, extra_headers: dict): pass",
+        );
+        select(&foreign);
+        assert!(!inspect_installation([executable.clone()]).chat_sdk);
+        write(&facts, "invalid JSON");
+        assert!(!inspect_installation([executable]).chat_sdk);
+        write(
+            &wrapper,
+            &format!("#!/bin/sh\nexec '{}' \"$@\"\n", wrapper.display()),
+        );
+        assert!(!inspect_installation([wrapper]).middleware);
+        assert!(!sentinel.exists());
     }
 }
