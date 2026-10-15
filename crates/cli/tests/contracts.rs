@@ -51,6 +51,7 @@ fn release_manifest_is_a_strict_subset_of_planned_registry() {
             "compute.scan",
             "compute.list",
             "compute.show",
+            "compute.connection.prepare",
             "compute.connection.options",
             "compute.connection.preview",
             "compute.connection.apply",
