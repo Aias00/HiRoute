@@ -89,6 +89,12 @@ evidence, distinguishing the whole native turn from its final stable Astra segme
 The calculator includes the writing source hash and keeps decision reuse distinct
 from cache hits.
 
+It also reports a hypothetical uniform Astra price-cut sensitivity: the whole-task
+break-even price for each pair, with Qwen prices, usage and outcomes held as
+recorded, and the payback of one Astra-to-Qwen prefix rebuild. The article's
+cache-cost figures are rebuilt with the other figures by
+`python3 experiments/render_figures.py`.
+
 ## Add an experiment
 
 Create `cases/<name>/` with a README, task inputs, parameter/provenance record,

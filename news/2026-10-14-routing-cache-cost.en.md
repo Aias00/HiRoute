@@ -8,6 +8,7 @@ Smart routing gives different work to different models. A natural question follo
 - **The loss happens once and gets spread out.** Only the first request after a switch misses the cache; later calls use the cache again. The more calls in a turn, the thinner the loss is spread.
 - **The amount is limited, and direction matters.** Losing 100,000 tokens of cache on the primary model, Astra, costs at most about $1.15. Switching toward the cheaper Qwen actually lowers the cost of processing that old context.
 - **The whole-task margin is large.** In the Astra × Qwen experiment, even if every all-Astra input token were billed at the cache price, mixed routing was still about 90% cheaper per task, leaving about $1.65 of headroom — roughly another 140,000 tokens of Astra cache rebuilding.
+- **Even a steep primary-model price cut leaves the conclusion intact.** In this experiment, Astra would need a price cut of about 95% for the two approaches to break even.
 
 The sections below walk through each point. Every figure can be recomputed with the [offline calculator](../experiments/cache_cost_analysis.py); the calculation basis is collected at the end.
 
@@ -43,6 +44,8 @@ Picture this: your conversation with an agent has reached 100,000 tokens, and yo
 - **The tool calls that follow:** the new model now has this conversation cached and only processes the new tool results (say 2,000 tokens each time), matching the no-switch case.
 
 In other words, the switch adds exactly one "100,000 tokens missed." Looked at across the whole turn, later calls dilute it:
+
+[![After one switch, the turn's hit rate recovers with more calls: 99 points lower after one call, only 4.2 points lower after twenty](assets/cache-amortization-en.svg)](assets/cache-amortization-en.svg)
 
 | Calls in the turn | Hit rate without switching | Hit rate after switching | Difference |
 | --- | ---: | ---: | ---: |
@@ -126,14 +129,51 @@ Mixed routing uses its cost upper bound and all-Astra its lower bound, which wor
 | Pair 2 | About $1.83 | About $0.147 | About 92% | About $1.68 |
 | Pair 3 | About $1.83 | About $0.178 | About 90% | About $1.65 |
 
-However good the cache, it only lowers input charges, not output. And Qwen's ordinary input price is already below Astra's cache-read price. The cache discount cannot change the conclusion.
+This comparison is deliberately lopsided: all-Astra hits the cache on every input, while Qwen in mixed routing never hits it at all (Qwen reported zero cache reads in the experiment, and the cost upper bound bills all its input at the more expensive cache-write price). Mixed routing is still about 90% cheaper. However good the cache, it only lowers input charges, not output. And Qwen's ordinary input price is already below Astra's cache-read price.
 
 **Headroom** is how much extra overhead mixed routing can absorb before it stops being cheaper: about $1.65–$1.68 per task here. Compared with the earlier figures:
+
+[![Per-task cost compared with one cache loss: all Astra costs about $1.83–$2.07, mixed routing about $0.178, leaving about $1.65 of headroom; losing 10,000 tokens of Astra cache adds only $0.115](assets/cache-headroom-en.svg)](assets/cache-headroom-en.svg)
 
 - Losing 10,000 tokens of Astra cache once costs $0.115, about 7% of the headroom.
 - The full headroom equals roughly another 140,000 tokens of Astra cache rebuilding.
 
 "Extra overhead" covers only cache rebuilding, routing decisions, or rework added beyond the experiment's recorded bill, so nothing is counted twice.
+
+## What if Astra gets cheaper?
+
+The conclusions above use the prices at the time of the experiment. Primary models often get cheaper, so how far would Astra's price have to fall before switching to Qwen stops paying off? The calculations below cut every Astra price by the same proportion and keep Qwen's prices, both approaches' token usage, and the delivery outcomes unchanged.
+
+### One switch: up to an ~81% Astra price cut, switching saves money immediately
+
+When switching toward Qwen, compare two prices: Astra's cache-read price for keeping the old prefix, and Qwen's first-processing price for rebuilding it. Today Astra reads cache at $1 per million tokens, while Qwen's first processing costs at most about $0.19. As long as Astra's price falls by no more than about 81% (to about 19% of today), switching is cheaper on the spot; there is no cache loss to recover at all.
+
+Beyond that, a switch costs an up-front rebuild. After the switch, though, every call reads the old prefix from Qwen's cache, which is cheaper than reading it on Astra, so later calls earn the rebuild back. For a 100,000-token old prefix, counting only the cost of reading that prefix and ignoring other savings such as output:
+
+| Astra price (today = 100%) | One-time extra cost of switching | Saved on each later call | Calls to pay back |
+| --- | ---: | ---: | ---: |
+| 100% | None; about $0.081 saved immediately | About $0.099 | Immediate |
+| 20% | None; about $0.001 saved immediately | About $0.019 | Immediate |
+| 10% | About $0.0086 | About $0.0085 | About 1 |
+| 5% | About $0.014 | About $0.0035 | About 4 |
+
+### Whole task: Astra would need a ~95% price cut to break even
+
+[![All-Astra cost as a multiple of mixed routing as Astra's price falls: about 10.3× today, about 3.4× at 20%, and break-even at about 5.1%](assets/cache-price-break-even-en.svg)](assets/cache-price-break-even-en.svg)
+
+Across the whole task, Astra's price would have to fall to about 5% of today — a cut of about 95% — before all-Astra matched mixed routing. And that is still the calculation most favorable to all-Astra: every Astra input is billed at the cache-read price, while mixed routing uses its cost upper bound with every Qwen input treated as uncached.
+
+Why doesn't break-even require equal prices? At break-even, Astra's output price is about $2.6 per million tokens, still about 6.4 times Qwen's. But in this task, Qwen's six source-verification components produced about 160,000 output tokens, while all-Astra produced only about 34,000 for all seven components — Qwen wrote about 4.7 times as much. Part of the price advantage is offset by the larger volume.
+
+> **Actual cost multiple ≈ price multiple ÷ usage multiple**
+
+### A more general way to do the math
+
+The example also suggests a way to judge any pair of models without relying on specific prices:
+
+1. **Does the switch save money on the spot?** Compare the primary model's cache-read price with the economy model's first-processing price. If the former is higher, the switch has no cache cost.
+2. **How soon does it pay back?** The one-time rebuild cost ÷ the amount saved on each later call gives the number of calls to break even.
+3. **Is the whole task cheaper?** Compare what each model actually spends on the same work — price × actual usage — rather than the price alone. Whenever that difference exceeds cache rebuilding, routing decisions, and rework, smart routing saves money.
 
 ## Bottom line: keep the economy model working, upgrade when needed
 
@@ -152,4 +192,6 @@ HiRoute aims to let an economy model keep handling the work it suits, and bring 
 - **Call counts:** a turn runs from one user instruction to the end of that native Agent turn; a call is one business-model request. One response can contain several tool invocations, and routing-decision requests are counted separately. Writing counts come from the [per-turn structured records](../experiments/results/decision-routing-20261006/results.json) for Qwen 3.8 Max and GLM 5.3: 310 requests across 42 normally completed turns, median 5.5, mean 7.38, with 51 requests in six interrupted turns reported separately. HTTPX counts come from the [coding experiment](../experiments/cases/unattended-engineering/README.md): one instruction generated 40 requests (25 Qwen, 15 Astra), with two compactions, 30 accepted requests, and 10 cancellations. The final 14 consecutive Astra requests began with a reassessment after compaction; they show how long continuous execution can run, not a controlled new-user-message switch.
 - **Switch-direction table:** it already includes the price difference between models, so the cache-loss amounts above must not be added again. New input, output, routing decisions, and rework still belong in the whole-task bill.
 - **Whole-task costs:** these include all subject attempts, structural retries, and reported Jev decision costs. Some cache-write quantities were not reported and are treated as intervals, so the comparison uses the mixed upper bound against the all-Astra lower bound. Ordinary input, cache reads, and cache writes do not overlap; billed reasoning tokens are already included in output. The all-input-cached Astra cost keeps the observed output usage and is a fixed-usage sensitivity calculation. Savings are calculated at full precision and rounded down.
+- **Price-cut analysis:** a hypothetical price-sensitivity calculation, not a new experiment. Astra's ordinary input, cache-read, cache-write, and output prices fall by the same proportion; Qwen prices, Jev decision costs, both approaches' token usage, and delivery outcomes stay as recorded. The whole-task break-even and figure use pair 3; pair 2 gives nearly the same result (about 5.15% of today). The per-switch payback table counts only reading a 100,000-token old prefix and bills Qwen's first processing at the cache-write price.
+- **Figures:** generated by `experiments/render_figures.py` from the same frozen evidence.
 - **Reproduction and scope:** recompute call counts, costs, and hypothetical comparisons with the [offline calculator](../experiments/cache_cost_analysis.py), following the [reproduction instructions](../experiments/README.md). The records support these specific workloads; a real task should be assessed with its own context length, call volume, and delivery quality.
