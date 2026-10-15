@@ -337,6 +337,14 @@ class HostedReleasePolicyTests(unittest.TestCase):
         self.assertEqual(workflow.count('-Phase final'), 2)
         self.assertEqual(workflow.count('-ExpectedSha $env:GITHUB_SHA'), 2)
 
+    def test_windows_replay_requires_successful_producers(self):
+        workflow = (REPO / '.github/workflows/windows-headless.yml').read_text()
+        replay = workflow.split('\n  windows11:\n', 1)[1]
+        self.assertRegex(replay, r'(?m)^    needs: native$')
+        # Default job success admission skips replay after failed or cancelled
+        # producers; always() remains appropriate only for evidence upload steps.
+        self.assertNotRegex(replay, r'(?m)^    (if|continue-on-error):')
+
     def test_release_assets_cannot_build_when_windows_gate_fails(self):
         workflow = (REPO / '.github/workflows/build-release.yml').read_text()
         jobs = dict(re.findall(r'^  ([\w-]+):\n(.*?)(?=^  [\w-]+:\n|\Z)',

@@ -283,6 +283,7 @@ impl ReadOnlyControl {
                     .zip(denied)
                     .is_some_and(|((attempt, typed), denial)| attempt < typed && typed < denial)
         };
+        #[cfg(test)]
         eprintln!(
             "native collaboration readonly control: shell-attempted={} access-denied={} receipt-order={ordered} file-absent={absent}",
             attempted.is_some(),

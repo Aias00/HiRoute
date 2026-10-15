@@ -2884,7 +2884,7 @@ impl ManagedArtifactStore {
                 hiroute_platform::durable::rename_windows_sealed_file(&stage, &target)
                     .map_err(|_| port(PortErrorCode::Unavailable, "artifact.activate.rename"))?;
                 #[cfg(not(windows))]
-                hiroute_platform::durable::rename(&stage, &target)
+                fs::rename(&stage, &target)
                     .map_err(|_| port(PortErrorCode::Unavailable, "artifact.activate.rename"))?;
             } else {
                 if current.is_some() {

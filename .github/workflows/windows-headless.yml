@@ -69,7 +69,6 @@ jobs:
   windows11:
     name: windows11-x64 (${{ matrix.scope }})
     needs: native
-    if: always()
     strategy:
       fail-fast: false
       matrix:

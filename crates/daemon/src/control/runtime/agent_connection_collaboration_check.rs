@@ -3,10 +3,12 @@ use hiroute_application::control::CollaborationCheckError;
 use hiroute_application_api::AgentCollaborationCheckFailureReasonV1 as Reason;
 use hiroute_integrations::QoderNativeError;
 
+#[cfg(test)]
 #[path = "agent_connection_qoder_diagnostic.rs"]
 mod diagnostic;
 
 pub(super) fn qoder_failure(error: QoderNativeError) -> CollaborationCheckError {
+    #[cfg(test)]
     eprintln!("{}{}", diagnostic::PREFIX, diagnostic::stage(error.stage));
     let reason = match error.stage {
         "native login required" => Reason::LoginRequired,

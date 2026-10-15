@@ -33,30 +33,16 @@ pub fn directory_barrier(path: impl AsRef<Path>) -> io::Result<()> {
 }
 
 pub fn rename(source: impl AsRef<Path>, target: impl AsRef<Path>) -> io::Result<()> {
-    rename_inner(source.as_ref(), target.as_ref(), true)
-}
-
-fn rename_inner(source: &Path, target: &Path, replace: bool) -> io::Result<()> {
     #[cfg(windows)]
     {
-        crate::windows::durable::rename(source, target, replace)
+        crate::windows::durable::rename(source.as_ref(), target.as_ref(), true)
     }
     #[cfg(not(windows))]
     {
-        if replace {
-            fs::rename(source, target)?;
-        } else {
-            // Atomic no-clobber publication for complete initial key files.
-            fs::hard_link(source, target)?;
-            directory_barrier(
-                target
-                    .parent()
-                    .ok_or_else(|| io::Error::other("missing parent"))?,
-            )?;
-            fs::remove_file(source)?;
-        }
+        fs::rename(source, target.as_ref())?;
         directory_barrier(
             target
+                .as_ref()
                 .parent()
                 .ok_or_else(|| io::Error::other("missing parent"))?,
         )
@@ -64,7 +50,52 @@ fn rename_inner(source: &Path, target: &Path, replace: bool) -> io::Result<()> {
 }
 
 pub fn write_private_new(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    write_private(path, bytes, false)
+    #[cfg(windows)]
+    {
+        write_private(path, bytes, false)
+    }
+    #[cfg(not(windows))]
+    {
+        // Preserve the released Unix create_new contract. A hard-link publication
+        // would add a filesystem requirement and leave two links after a crash,
+        // which the existing private-material and orphan readers correctly reject.
+        let mut file = create_private_new(path)?;
+        file.write_all(bytes)?;
+        file.sync_all()
+    }
+}
+
+#[cfg(not(windows))]
+fn create_private_new(path: &Path) -> io::Result<File> {
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    options.open(path)
+}
+
+#[cfg(unix)]
+struct UnpublishedStage<'a> {
+    path: &'a Path,
+    device: u64,
+    inode: u64,
+}
+
+#[cfg(unix)]
+impl Drop for UnpublishedStage<'_> {
+    fn drop(&mut self) {
+        use std::os::unix::fs::MetadataExt;
+        if let Ok(named) = fs::symlink_metadata(self.path) {
+            if named.dev() == self.device && named.ino() == self.inode {
+                // A completed rename removes this name. On failure, remove only
+                // this writer's unpublished stage, never a replacement entry.
+                let _ = fs::remove_file(self.path);
+            }
+        }
+    }
 }
 
 pub fn write_private_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
@@ -134,15 +165,16 @@ fn publish_with_permissions(
         None => crate::windows::security::create_owner_only_file(&temporary)?,
     };
     #[cfg(not(windows))]
-    let mut file = {
-        let mut options = OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
+    let mut file = create_private_new(&temporary)?;
+    #[cfg(unix)]
+    let _cleanup = {
+        use std::os::unix::fs::MetadataExt;
+        let held = file.metadata()?;
+        UnpublishedStage {
+            path: &temporary,
+            device: held.dev(),
+            inode: held.ino(),
         }
-        options.open(&temporary)?
     };
     write(&mut file)?;
     file.sync_all()?;
@@ -175,21 +207,11 @@ fn publish_with_permissions(
     #[cfg(not(windows))]
     {
         let _ = permissions;
-        if let Err(error) = rename_inner(&temporary, path, replace) {
-            if error.kind() == io::ErrorKind::AlreadyExists {
-                use std::os::unix::fs::MetadataExt;
-                let held = file.metadata()?;
-                let named = fs::symlink_metadata(&temporary)?;
-                if held.dev() == named.dev() && held.ino() == named.ino() {
-                    fs::remove_file(&temporary)?;
-                    directory_barrier(parent)?;
-                }
-            }
-            return Err(error);
-        }
+        debug_assert!(replace, "Unix initial writes use create_new directly");
+        rename(&temporary, path)?;
     }
-    // A failed write leaves an uncommitted uniquely named private stage. Existing
-    // journals never interpret that stage as a committed key or target.
+    // Windows retains uncertain stages for the owning journal. Unix drops only
+    // its still-unpublished, identity-matched stage on ordinary I/O failure.
     Ok(())
 }
 
@@ -210,5 +232,57 @@ mod tests {
         );
         write_private_atomic(&key, b"complete-replacement").unwrap();
         assert_eq!(fs::read(&key).unwrap(), b"complete-replacement");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn failed_replacement_removes_its_stage_and_preserves_the_committed_file() {
+        use std::os::unix::fs::MetadataExt;
+        let fixture = tempfile::tempdir().unwrap();
+        let key = fixture.path().join("key");
+        write_private_new(&key, b"committed").unwrap();
+        let error = publish_with_permissions(&key, true, None, |file| {
+            file.write_all(b"partial")?;
+            Err(io::Error::other("injected write failure"))
+        })
+        .unwrap_err();
+        assert_eq!(error.to_string(), "injected write failure");
+        assert_eq!(fs::read(&key).unwrap(), b"committed");
+        assert_eq!(fs::metadata(&key).unwrap().nlink(), 1);
+        assert_eq!(fs::metadata(&key).unwrap().mode() & 0o777, 0o600);
+        assert_eq!(fs::read_dir(fixture.path()).unwrap().count(), 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn failed_rename_removes_only_the_unpublished_stage() {
+        let fixture = tempfile::tempdir().unwrap();
+        let target = fixture.path().join("directory");
+        fs::create_dir(&target).unwrap();
+        fs::write(target.join("keep"), b"unchanged").unwrap();
+        assert!(write_private_atomic(&target, b"replacement").is_err());
+        assert_eq!(fs::read(target.join("keep")).unwrap(), b"unchanged");
+        assert_eq!(fs::read_dir(fixture.path()).unwrap().count(), 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn failed_writer_does_not_unlink_a_replacement_stage_entry() {
+        let fixture = tempfile::tempdir().unwrap();
+        let target = fixture.path().join("target");
+        let moved = fixture.path().join("moved-owned-stage");
+        let mut substituted = None;
+        let result = publish_with_permissions(&target, true, None, |file| {
+            file.write_all(b"owned")?;
+            let stage = fs::read_dir(fixture.path())?.next().unwrap()?.path();
+            fs::rename(&stage, &moved)?;
+            fs::write(&stage, b"foreign")?;
+            substituted = Some(stage);
+            Err(io::Error::other("injected namespace replacement"))
+        });
+        assert!(result.is_err());
+        assert!(!target.exists());
+        assert_eq!(fs::read(moved).unwrap(), b"owned");
+        assert_eq!(fs::read(substituted.unwrap()).unwrap(), b"foreign");
     }
 }

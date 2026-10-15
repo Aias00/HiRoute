@@ -84,8 +84,11 @@ identity checks, while allowing filesystem caching during fragmented writes.
 Replay flushes the complete payload with `sync_all` before sealing it. Persistent
 keys, journals and namespace transitions retain their write-through factories.
 
-`durable` publishes complete payloads through unique private stages. Initial key
-publication cannot replace an existing key. Windows stages and namespace
+`durable` replaces files through unique private stages. Initial publication cannot
+replace an existing key: Unix preserves the released `create_new`, mode-0600 write
+and file flush, without requiring hard links; Windows stages a complete payload
+before no-clobber publication. Failed Unix replacements remove only the writer's
+still-unpublished stage with matching device/inode identity. Windows stages and namespace
 transitions use write-through handles; file payloads use `FlushFileBuffers` before
 and after held-source, held-parent rename. Windows directory barriers retain the
 inspected identity and do not claim POSIX directory fsync. Existing operation and

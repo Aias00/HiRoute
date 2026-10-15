@@ -4,13 +4,17 @@
 use serde_json::{Value, json};
 use std::{io::Write, path::Path, process::Command};
 
+#[cfg(test)]
 mod launch_diagnostic;
+#[cfg(any(windows, test))]
 mod readonly_control;
+#[cfg(test)]
 mod tool_diagnostic;
 #[cfg(test)]
 use launch_diagnostic::NativeLaunchStage;
 #[cfg(test)]
 use launch_diagnostic::native_launch_diagnostic;
+#[cfg(test)]
 use tool_diagnostic::{SelectedTool, ToolResultDiagnostic};
 
 pub(crate) struct CollaborationChallenge {
@@ -18,7 +22,9 @@ pub(crate) struct CollaborationChallenge {
     contents: String,
     command: String,
     expected_cli: String,
+    #[cfg(any(windows, test))]
     readonly: Option<readonly_control::ReadOnlyControl>,
+    #[cfg(test)]
     selected_tool: SelectedTool,
     issued: bool,
     completed: bool,
@@ -92,8 +98,11 @@ impl CollaborationChallenge {
         command
             .args(["schema", "list", "--output", "json"])
             .env_clear()
-            .env("HOME", home)
-            .env("PATH", super::native_ingress_probe::native_probe_path());
+            .env("HOME", home);
+        #[cfg(unix)]
+        command.env("PATH", "/usr/bin:/bin");
+        #[cfg(windows)]
+        command.env("PATH", super::native_ingress_probe::native_probe_path());
         #[cfg(unix)]
         let (bytes, success) = {
             let output = command.output().map_err(|_| "trusted CLI baseline")?;
@@ -169,6 +178,7 @@ impl CollaborationChallenge {
                 quote(&cli)?
             )
         };
+        #[cfg(any(windows, test))]
         let readonly = None;
         #[cfg(windows)]
         let readonly = if powershell {
@@ -181,7 +191,9 @@ impl CollaborationChallenge {
             contents,
             command,
             expected_cli: expected_cli.trim().into(),
+            #[cfg(any(windows, test))]
             readonly,
+            #[cfg(test)]
             selected_tool: SelectedTool::Unknown,
             issued: false,
             completed: false,
@@ -193,19 +205,33 @@ impl CollaborationChallenge {
     }
 
     pub(crate) fn verify_after_stop(&self) -> Result<(), &'static str> {
-        self.readonly
-            .as_ref()
-            .map_or(Ok(()), readonly_control::ReadOnlyControl::verify_after_stop)
+        #[cfg(any(windows, test))]
+        {
+            self.readonly
+                .as_ref()
+                .map_or(Ok(()), readonly_control::ReadOnlyControl::verify_after_stop)
+        }
+        #[cfg(not(any(windows, test)))]
+        {
+            Ok(())
+        }
     }
 
     pub(crate) fn reply(&mut self, body: &Value) -> Result<Value, &'static str> {
-        self.reply_observed(body, ToolResultDiagnostic::emit)
+        #[cfg(test)]
+        {
+            self.reply_observed(body, ToolResultDiagnostic::emit)
+        }
+        #[cfg(not(test))]
+        {
+            self.reply_observed(body)
+        }
     }
 
     fn reply_observed(
         &mut self,
         body: &Value,
-        mut observe: impl FnMut(&ToolResultDiagnostic),
+        #[cfg(test)] mut observe: impl FnMut(&ToolResultDiagnostic),
     ) -> Result<Value, &'static str> {
         if !self.issued {
             // A nonce absent from the user prompt must have come from native Skill discovery.
@@ -220,12 +246,18 @@ impl CollaborationChallenge {
                     matches!(name, "exec_command" | "shell_command").then_some(name)
                 })
                 .ok_or("native read-only shell tool")?;
-            self.selected_tool = SelectedTool::from_name(name);
+            #[cfg(test)]
+            {
+                self.selected_tool = SelectedTool::from_name(name);
+            }
             self.issued = true;
+            #[cfg(any(windows, test))]
             let command = self.readonly.as_ref().map_or_else(
                 || self.command.clone(),
                 |control| format!("{}; {}", control.command(), self.command),
             );
+            #[cfg(not(any(windows, test)))]
+            let command = self.command.clone();
             return Ok(shell_call(name, &command));
         }
         let result = body["input"].as_array().and_then(|input| {
@@ -237,19 +269,23 @@ impl CollaborationChallenge {
         // content items (protocol/models.rs at a956835d). Match only that exact
         // correlated result; unrelated prompt text, images or metadata cannot prove it.
         let output = result.and_then(|item| responses_tool_text(&item["output"]));
-        let diagnostic = ToolResultDiagnostic::capture(
-            self.selected_tool,
-            result,
-            output.as_deref(),
-            &self.contents,
-            &self.expected_cli,
-            self.readonly
-                .as_ref()
-                .map(|control| control.receipt_facts(output.as_deref().unwrap_or_default())),
-        );
-        // Observe before correlation/readonly rejection: the old early return
-        // discarded the only native tool result's diagnostic facts.
-        observe(&diagnostic);
+        #[cfg(test)]
+        {
+            let diagnostic = ToolResultDiagnostic::capture(
+                self.selected_tool,
+                result,
+                output.as_deref(),
+                &self.contents,
+                &self.expected_cli,
+                self.readonly
+                    .as_ref()
+                    .map(|control| control.receipt_facts(output.as_deref().unwrap_or_default())),
+            );
+            // Native acceptance keeps closed failure facts before rejection;
+            // production probes do not compile or emit these test diagnostics.
+            observe(&diagnostic);
+        }
+        #[cfg(any(windows, test))]
         if let Some(control) = self.readonly.as_mut() {
             let output = output
                 .as_deref()
@@ -332,7 +368,14 @@ impl CollaborationChallenge {
 
 fn shell_call(name: &str, command: &str) -> Value {
     let args = if name == "exec_command" {
-        json!({"cmd":command, "max_output_tokens":2000, "yield_time_ms":1000, "login":false})
+        let args = json!({"cmd":command, "max_output_tokens":2000, "yield_time_ms":1000});
+        #[cfg(windows)]
+        let args = {
+            let mut args = args;
+            args["login"] = json!(false);
+            args
+        };
+        args
     } else {
         json!({"command":command, "timeout_ms":10000})
     };
@@ -523,7 +566,10 @@ mod tests {
         assert_eq!(call[0]["call_id"], "call_hiroute_probe");
         let arguments: Value =
             serde_json::from_str(call[0]["arguments"].as_str().unwrap()).unwrap();
+        #[cfg(windows)]
         assert_eq!(arguments["login"], false);
+        #[cfg(unix)]
+        assert!(arguments.get("login").is_none());
         assert!(!check.complete());
         for (id, output) in [
             ("wrong-call", "contents-nonce CLI-contract-output"),
