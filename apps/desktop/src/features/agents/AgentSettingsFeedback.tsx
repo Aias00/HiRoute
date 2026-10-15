@@ -37,10 +37,14 @@ export function AgentSettingsFeedback({ preview, agent: selected, facet, default
           ? text('Qoder 当前默认模型仍引用将被移除的 HiRoute 路由。请先在 Qoder 中通过 /model 切换到其他模型，再重试；HiRoute 不会替你更改默认模型。', 'Qoder’s current default still uses a HiRoute route being removed. Switch to another model with /model in Qoder, then retry; HiRoute will not change the default for you.')
         : block.reason === 'qoder_model_file_conflict'
           ? text('Qoder 中的受管路由配置已变化。请核对用户修改后重新预览；HiRoute 不会覆盖冲突字段或无关配置，任务协作无需停用。', 'Managed Qoder route settings have changed. Review your edits, then preview again; HiRoute will not overwrite conflicting fields or unrelated settings. Task collaboration can stay enabled.')
+        : block.reason === 'hermes_model_file_conflict'
+          ? text('无法安全编辑 Hermes 主模型或插件配置。请检查所选配置目录的格式、受管字段和同名插件后重新预览；当前配置未修改。', 'Hermes main-model or plugin configuration cannot be edited safely. Check the selected configuration format, managed fields and existing plugin, then preview again. Configuration was not changed.')
         : block.reason === 'model_plan_unavailable' && selected?.agent_id === 'agent_codex_default' && defaultChoice.kind === 'preserve_native'
           ? text('当前默认模型名称或所选路由无法用于 Codex Responses。请在“默认选择”中改选已勾选且支持该入口的路由；若要保留原生模型，请先接入对应来源。配置未修改。', 'The current default model name or a selected route cannot be used by Codex Responses. Under Default selection, choose an enabled route that supports this ingress; to preserve a native model, connect its source first. Configuration was not changed.')
         : block.reason === 'model_plan_unavailable' && selected?.agent_id === 'agent_codex_default'
           ? text('所选路由、固定来源或当前默认模型无法用于 Codex Responses。请核对路由是否已启用并支持该入口协议，或改选可用路由；配置未修改。', 'A selected route, fixed source, or current default model cannot be used by Codex Responses. Check that the route is enabled and supports this ingress protocol, or choose an available route. Configuration was not changed.')
+        : block.reason === 'model_plan_unavailable' && selected?.agent_id === 'agent_hermes_default'
+          ? text('所选路由当前不可用。请确认路由已启用，并支持所选 Hermes 接入协议。', 'The selected route is unavailable. Confirm it is enabled and supports the selected Hermes ingress protocol.')
         : block.reason === 'model_plan_unavailable'
           ? text('所选路由或原生默认模型当前不可用。请检查路由是否已启用、支持当前 Agent 的入口协议；Claude 的 Opus、Sonnet、Haiku 映射都需要可用的目标。', 'A selected route or native default model is unavailable. Check that routes are enabled and support this Agent’s ingress protocol; each Claude Opus, Sonnet and Haiku mapping needs a usable target.')
         : block.reason === 'codex_context_override'
