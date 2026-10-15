@@ -544,7 +544,7 @@ export function Agents({
                   <div className="detail-section-head"><h3>{text('配置目录', 'Configuration directory')}</h3><button type="button" className="btn btn-quiet" data-hermes-select-root disabled={busy || scanning} onClick={() => { setHermesRoot(selected.native_target?.config_root ?? ''); setActionError(''); setHermesRootOpen(true); }}>{selected.native_target ? text('更改', 'Change') : text('手动选择目录', 'Select directory manually')}</button></div>
                   {selected.native_target
                     ? <p className="field-help">{selected.native_target.config_root}</p>
-                    : <p>{text('选择本机 Hermes 实际使用的配置目录，即可配置模型路由和 HiRoute 管理 Skill。独立 profile 请选对应目录。', 'Select the configuration directory used by Hermes on this computer to configure model routing and the HiRoute management Skill. For a separate profile, select its directory.')}</p>}
+                    : <p>{text('选择本机 Hermes 实际使用的配置目录，即可配置模型路由、任务路由和 HiRoute 管理 Skill。独立 profile 请选对应目录。', 'Select the configuration directory used by Hermes on this computer to configure model routing, task routing and the HiRoute management Skill. For a separate profile, select its directory.')}</p>}
                 </section>}
                 {!mutable && !selected.codex_access?.pending_operation && <div className="callout warn"><UiIcon name="warning" /><div><strong>{text('Agent 配置可以查看，暂时不能修改', 'Agent settings are viewable but cannot be changed')}</strong><p>{text('本机服务尚未就绪，连接恢复后即可保存配置。', 'The local service is not ready. Reconnect before saving.')}</p></div></div>}
                 {selected.codex_access && <CodexAccessPanel access={selected.codex_access} language={language} retryDisabled={busy || Boolean(editor) || !snapshot.trusted_authority} onRetry={async () => {
