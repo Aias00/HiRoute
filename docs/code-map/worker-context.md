@@ -76,6 +76,8 @@ accepts equivalent disk spellings only after native identity, captured permissio
 content checks; it rejects foreign/reparse paths, changed files and split messages.
 The [HTTP peer](../../crates/integrations/src/agents/qoder_probe_http.rs) still requires
 correlated native Skill and CLI results. No credential contents enter these checks.
+The [private workspace projection](../../crates/integrations/src/agents/qoder_probe_workspace.rs)
+binds Qoder and Git Bash to one ordinary drive spelling of the same private directory.
 Its `Bash` call uses Git Bash syntax on Windows: the selected CLI's native DOS
 path is quoted for Bash. The separate PowerShell tool is not that execution boundary;
 see the [probe ownership guide](../../crates/integrations/src/agents/QODER_PROBE.md).

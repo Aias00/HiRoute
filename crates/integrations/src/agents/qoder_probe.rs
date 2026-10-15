@@ -36,6 +36,9 @@ mod skill_diagnostic;
 #[cfg(all(test, windows))]
 #[path = "qoder_probe_windows_cli.rs"]
 mod windows_cli;
+#[cfg(windows)]
+#[path = "qoder_probe_workspace.rs"]
+mod workspace;
 
 const CONTRACT: &str = "hiroute.qoder-borrowed-context-collaboration/v1";
 const MARKER: &str = "hiroute-local-challenge-no-authority";
@@ -175,8 +178,12 @@ impl QoderCollaborationProbe {
         let settings_before = settings_receipt(context)?;
         let root = super::probe_files::temporary("hiroute-qoder-check-")
             .map_err(|_| qoder_error("private workspace"))?;
+        #[cfg(not(windows))]
         let root_path =
             fs::canonicalize(root.path()).map_err(|_| qoder_error("private workspace"))?;
+        #[cfg(windows)]
+        let (root_path, _root_identity) =
+            workspace::retain(root.path()).map_err(|_| qoder_error("private workspace"))?;
         let workspace = root_path.join("workspace");
         let temporary = root_path.join("tmp");
         for path in [&workspace, &temporary] {

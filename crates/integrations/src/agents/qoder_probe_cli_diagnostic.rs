@@ -21,6 +21,7 @@ pub(crate) struct Facts {
     marker_denied: bool,
     marker_timed_out: bool,
     marker_truncat: bool,
+    marker_shell_cwd_reset: bool,
 }
 
 impl Facts {
@@ -49,6 +50,7 @@ impl Facts {
             marker_denied: lower.contains("denied"),
             marker_timed_out: lower.contains("timed out"),
             marker_truncat: lower.contains("truncat"),
+            marker_shell_cwd_reset: actual.contains("\nShell cwd was reset to "),
         })
     }
 
@@ -87,6 +89,11 @@ mod tests {
                 .expected_prefix
         );
         assert!(!Facts::observe("", expected).unwrap().expected_prefix);
+        assert!(
+            Facts::observe("{}\nShell cwd was reset to private/path", expected)
+                .unwrap()
+                .marker_shell_cwd_reset
+        );
         let error = Facts::observe("private/path Permission denied; approval timed out; TRUNCATED; No such file; not found", expected).unwrap();
         assert!(
             error.marker_denied

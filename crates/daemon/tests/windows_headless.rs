@@ -70,6 +70,7 @@ pub(crate) struct InstalledProduct {
     daemon: PathBuf,
     stable: PathBuf,
     stable_daemon: PathBuf,
+    preserve_on_failure: bool,
 }
 
 impl InstalledProduct {
@@ -143,6 +144,7 @@ impl InstalledProduct {
         serde_json::to_writer(&mut marker, &record).unwrap();
         marker.flush().unwrap();
         Self {
+            preserve_on_failure: false,
             layout,
             root,
             cli,
@@ -607,6 +609,12 @@ impl Drop for InstalledProduct {
             &self.daemon,
             Duration::from_secs(5),
         );
+        if self.preserve_on_failure && std::thread::panicking() {
+            // Borrowed settings may reference this installation. Keep the public
+            // restore point and exact binaries until recovery has completed.
+            eprintln!("Windows borrowed-account failure: installation retained for public restore");
+            return;
+        }
         let _ = std::fs::remove_file(&self.stable);
         let _ = std::fs::remove_file(&self.stable_daemon);
         let _ = std::fs::remove_file(&self.layout.marker_path);
@@ -946,7 +954,8 @@ fn actual_windows_pi_and_dsh_persisted_user_models() {
 #[test]
 #[ignore = "requires the fixed real Qoder image and official private account login"]
 fn actual_windows_qoder_persisted_user_models_with_official_account() {
-    let product = InstalledProduct::create();
+    let mut product = InstalledProduct::create();
+    product.preserve_on_failure = true;
     let contexts = windows_qoder_user_models::Contexts::borrow(&product);
     let mut first = product.start_with_environment(false, contexts.variables());
     gateway_ready(first.listen);

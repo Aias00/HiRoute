@@ -52,6 +52,14 @@ missing observations in older evidence remain unknown.
 
 ## Windows Bash command
 
+The private probe workspace is passed to Qoder with an ordinary drive path.
+Its original owner-only directory is opened before canonicalization, and the
+ordinary spelling must round-trip to the same canonical path and native identity.
+The held directory remains alive through the probe. Passing Rust's verbatim
+spelling across Qoder and Git Bash can make their workspace comparisons disagree
+and add a shell-cwd-reset notice to the tool result. That notice is not accepted
+as a substitute for the exact CLI baseline.
+
 Qoder CLI 1.1.65's Bash tool uses Git Bash on Windows; its separate PowerShell
 tool does not change Bash syntax. The command producer reuses native executable
 admission, verifies that the ordinary drive/forward-slash spelling opens that
