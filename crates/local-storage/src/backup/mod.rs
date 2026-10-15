@@ -562,13 +562,7 @@ impl BackupSet {
             .ok_or(LocalStorageError::InvalidData)?;
         let attempt = random_attempt_id()?;
         let stage = parent.join(format!(".{name}.{attempt}.restore-set"));
-        #[cfg(windows)]
-        drop(hiroute_platform::windows::security::create_owner_only_directory(&stage)?);
-        #[cfg(not(windows))]
-        {
-            fs::create_dir(&stage)?;
-            set_owner_directory_permissions(&stage)?;
-        }
+        hiroute_platform::private_fs::create_directory(&stage)?;
 
         for (backup, name) in [
             (&self.control, "control.db"),
