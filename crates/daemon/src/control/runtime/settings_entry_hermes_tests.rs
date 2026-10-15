@@ -132,13 +132,6 @@ impl Fixture {
             "native_target":{"kind":"hermes","config_root":self.profile}, "model":{"intent":"keep"}})
     }
     fn model_spec(&self, index: usize) -> serde_json::Value {
-        self.model_spec_protocol(index, AgentIngressProtocolV1::Responses)
-    }
-    fn model_spec_protocol(
-        &self,
-        index: usize,
-        protocol: AgentIngressProtocolV1,
-    ) -> serde_json::Value {
         let publication = self
             .runtime
             .adapter
@@ -154,10 +147,14 @@ impl Fixture {
             .published_agent_plans()
             .unwrap()
             .into_iter()
-            .filter(|p| p.active && p.supported_ingress.contains(&protocol))
+            .filter(|p| {
+                p.active
+                    && p.supported_ingress
+                        .contains(&AgentIngressProtocolV1::Responses)
+            })
             .collect();
         let mut spec = self.base();
-        spec["model"] = json!({"intent":"configure","settings":{"mode":"hermes_default","plan_id":plans[index].agent_plan_id,"protocol":protocol}});
+        spec["model"] = json!({"intent":"configure","settings":{"mode":"hermes_default","plan_id":plans[index].agent_plan_id,"protocol":"responses"}});
         spec
     }
     fn status(&self) -> serde_json::Value {
@@ -286,7 +283,8 @@ fn old_chat_can_configure_without_reasoning_replay_but_required_interfaces_still
     let sdk = source
         .join("venv/lib/python3.13/site-packages/openai/resources/chat/completions/completions.py");
     let middleware = source.join("hermes_cli/middleware.py");
-    let spec = fixture.model_spec_protocol(0, AgentIngressProtocolV1::ChatCompletions);
+    let mut spec = fixture.model_spec(0);
+    spec["model"]["settings"]["protocol"] = json!("chat_completions");
     let preview = || {
         fixture.service.dispatch_wire(request(
             "PreviewAgentConnectionChange",

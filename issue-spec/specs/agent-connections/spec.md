@@ -421,7 +421,6 @@ HiRoute SHALL configure the selected effective Hermes profile's default main mod
 - **WHEN** required integration interfaces are available but Hermes lacks optional reasoning replay
 - **THEN** connection Preview/Apply remains available, and guidance recommends an upgraded Hermes version without claiming that reasoning replay is complete.
 
-
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/119#issuecomment-6165296337
 
