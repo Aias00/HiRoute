@@ -311,7 +311,7 @@ fn old_chat_can_configure_without_reasoning_replay_but_required_interfaces_still
             result
                 .error
                 .as_ref()
-                .is_some_and(|error| error.code == ErrorCode::CapabilityDenied)
+                .is_some_and(|error| error.code == api::ErrorCode::CapabilityDenied)
                 || result
                     .data
                     .as_ref()
