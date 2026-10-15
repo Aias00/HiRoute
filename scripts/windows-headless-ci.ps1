@@ -299,6 +299,8 @@ if ($Scope -eq 'components') {
     ($state + 'post_uninstall_disposition_refuses_present_marker_without_touching_state'),
     ($state + 'former_recursive_state_cleanup_fails_the_preservation_oracle'),
     ($state + 'native_post_uninstall_preserves_file_ids_permissions_links_and_reparse_state'))
+  $upgradeCleanup = 'windows_background_upgrade::transport::tests::standard_upgrade_cleanup_refuses_foreign_or_reparse_marker_and_preserves_state'
+  Invoke-RequiredTests 'background-upgrade-cleanup' @('-p','hiroute-daemon','--test','windows_background',$upgradeCleanup) @($upgradeCleanup) @('--exact')
 } elseif ($Scope -eq 'product') {
   cargo check --locked -p hiroute-daemon -p hiroute-cli --all-targets --keep-going 2>&1 | Tee-Object "$evidence/headless-build.log"
   if ($LASTEXITCODE -ne 0) { throw 'Full headless compilation failed; business scenarios are not executed' }
@@ -393,6 +395,8 @@ if ($Scope -eq 'components') {
       'task_native_background_lua_gateway_control_stop_crash_recovery_and_autostart') @('--exact','--nocapture')
     $standardOwner = 'windows_background_standard::task_real_standard_logged_on_owner_installs_runs_recovers_and_uninstalls'
     Invoke-RequiredTests 'background-standard-owner' @('-p','hiroute-daemon','--test','windows_background',$standardOwner) @($standardOwner) @('--exact','--nocapture')
+    $standardUpgrade = 'windows_background_upgrade::task_real_standard_logged_on_owner_upgrade_recovers_rollback_and_preserves_business_state'
+    Invoke-RequiredTests 'background-standard-upgrade' @('-p','hiroute-daemon','--test','windows_background',$standardUpgrade) @($standardUpgrade) @('--exact','--nocapture')
   } else {
     Initialize-WindowsUpgradeBaseline -ExpectedSha $ExpectedSha -BaselineRevision $BaselineRevision -BaselineManifest $BaselineManifest -BaselineArchive $BaselineArchive -Evidence $evidence
     Invoke-RequiredTests 'upgrade' @('-p','hiroute-daemon','--test','windows_background','windows_background_upgrade::task_native_candidate_upgrade_recovers_prepared_rollback_and_preserves_business_state') @(
@@ -424,7 +428,15 @@ if ($Scope -eq 'components') {
     ($qoderUserOracle + 'native::tests::native_terminal_requires_exact_success_receipt_and_one_session'),
     ($qoderUserOracle + 'oracle::tests::ordinary_qoder_protocol_oracle_requires_independent_request_and_exact_usage'),
     ($qoderUserOracle + 'oracle::tests::ordinary_qoder_skill_oracle_rejects_uncorrelated_error_and_fake_cli_success'),
+    ($qoderUserOracle + 'oracle::skill::tests::ordinary_qoder_skill_requires_one_exact_array_body_and_admitted_directory'),
+    ($qoderUserOracle + 'oracle::skill::tests::ordinary_qoder_skill_native_binding_accepts_proven_drive_spelling_and_releases_restore'),
+    ($qoderUserOracle + 'oracle::skill::tests::ordinary_qoder_skill_native_binding_rejects_foreign_reparse_links_and_changed_permissions'),
+    ($qoderUserOracle + 'oracle::skill::tests::ordinary_qoder_bash_cli_preserves_stable_hardlink_identity_and_literal_spelling'),
     ($qoderUserOracle + 'settings::tests::ordinary_qoder_defaults_oracle_preserves_user_fields_and_jsonc_literals'))
+  $qoderToolsShell = 'delegation::installation::installation_probe::native_tools_probe::shell_tests::'
+  Invoke-RequiredTests 'agent-qoder-tools-shell' @('-p','hiroute-daemon','--lib',$qoderToolsShell) @(
+    ($qoderToolsShell + 'qoder_tool_receipt_uses_bash_without_changing_other_native_shell_contracts'),
+    ($qoderToolsShell + 'qoder_tool_bash_resources_bind_native_spellings_and_keep_empty_output_unproven'))
   $cancelOracle = 'delegation::installation::probe_server::tests::only_deliberately_cancelled_peer_disconnect_is_not_a_probe_response_failure'
   Invoke-RequiredTests 'agent-cancel-oracle' @('-p','hiroute-daemon','--lib',$cancelOracle) @($cancelOracle) @('--exact')
   $mainOracle = 'agents::collaboration_probe::tests::codex_collaboration_accepts_correlated_native_text_content_items_only'

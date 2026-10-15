@@ -90,12 +90,15 @@ SCM and logout continuity are optional, outside the required background scope.
 
 The public hosted workflow selects `-Assessment hosted` for the `background`
 scope on both machines. This mode requires `-CaptureArtifacts` on the producer
-and preserves the complete five-recipe inventory, actual compiler records, PE
+and preserves the complete six-recipe inventory, actual compiler records, PE
 verification and full package. Its single source disposition table is in
 `windows-native-scopes.ps1`. It executes `background-capture`,
 `packaged-proxy-oracle` and `packaged-foreground` (eight current cases). It compiles,
-captures and lists `background` and `background-standard-owner` without running
-their bodies. A missing or additional case, compile/capture/PE failure, unknown
+captures and lists `background`, `background-standard-owner` and
+`background-standard-upgrade` without running their bodies. The last recipe
+requires separately admitted genuine baseline and candidate packages and the
+actual standard owner's session; hosted compilation cannot establish upgrade
+or rollback. A missing or additional case, compile/capture/PE failure, unknown
 recipe or failed executed case fails the hosted assessment.
 
 Deferred results have `scenario=not_assessed`, `executed=0`,

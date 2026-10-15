@@ -72,7 +72,7 @@ function Initialize-WindowsQoderBashFixture {
 function Get-WindowsRequiredRecipes {
   param([Parameter(Mandatory)][string]$Scope)
   switch ($Scope) {
-    'components' { return @('platform','read-leases','platform-unit','jobs','console','diagnostics','scm-owner','background-state') }
+    'components' { return @('platform','read-leases','platform-unit','jobs','console','diagnostics','scm-owner','background-state','background-upgrade-cleanup') }
     'product' { return @('artifacts','cpa','core-cpa-bridge','replay-fragmentation','headless','foreground-ctrl-c','foreground-ctrl-break','credential-options','worker-materials',
       'worker-cleanup','authority-key','native-endpoint','native-home','startup-admission','live-capture') }
     'core' { return @(Get-WindowsCorePackages | ForEach-Object { $_ -replace '^hiroute-','core-' }) }
@@ -81,7 +81,7 @@ function Get-WindowsRequiredRecipes {
     'accounts' { return @(Get-WindowsQoderAccountRecipes | ForEach-Object { $_.name }) }
     'agents' {
       return @('agent-private-root','agent-private-node','agent-path-identity','agent-managed-path','agent-account-fixture','agent-pi-sdk',
-        'agent-acp-notifications','agent-cancel-oracle','agent-main-oracle','agent-launch-oracle','agent-launch-cause','agent-codex-readonly-control','agent-codex-tool-diagnostic','agent-qoder-skill-load-diagnostic','agent-qoder-skill-http-diagnostic','agent-qoder-cli-bash','agent-cli-selection','agent-npm-inspection','agent-pi-locator','agent-native-reader','agent-worker-profile-identity','agent-worker-directory-identity','agent-worker-failure-oracle','agent-history-oracle',
+        'agent-acp-notifications','agent-cancel-oracle','agent-main-oracle','agent-launch-oracle','agent-launch-cause','agent-codex-readonly-control','agent-codex-tool-diagnostic','agent-qoder-skill-load-diagnostic','agent-qoder-skill-http-diagnostic','agent-qoder-cli-bash','agent-qoder-tools-shell','agent-cli-selection','agent-npm-inspection','agent-pi-locator','agent-native-reader','agent-worker-profile-identity','agent-worker-directory-identity','agent-worker-failure-oracle','agent-history-oracle',
         'agent-native-codex-ingress','agent-native-source-oracle','agent-worker-dependency-oracle','agent-worker-cancel-publication','agent-worker-residual-binding','agent-worker-residual-oracle','agent-business-oracle','agent-http','agent-public-business','agent-user-models','agent-user-model-oracle','agent-qoder-user-model-oracle','agent-management','agent-management-oracle','agent-live-history','agent-legacy-history') +
         @(Get-WindowsDaemonAgentCases | ForEach-Object { 'agent-' + (($_ -split 'actual_')[1] -replace '_','-') }) +
         @(Get-WindowsMainAgentCases | ForEach-Object { 'main-' + (($_ -split 'actual_windows_')[1] -replace '_','-') })
@@ -96,7 +96,8 @@ function Get-WindowsRequiredRecipes {
 function Get-WindowsBackgroundDisposition {
   $policy = [ordered]@{
     'background-capture'='execute'; 'packaged-proxy-oracle'='execute'; 'packaged-foreground'='execute';
-    'background'='compile-only'; 'background-standard-owner'='compile-only'
+    'background'='compile-only'; 'background-standard-owner'='compile-only';
+    'background-standard-upgrade'='compile-only'
   }
   if ($policy.Count -eq 0 -or @($policy.Values | Where-Object { $_ -cnotin @('execute','compile-only') }).Count -gt 0) {
     throw 'Complete typed background disposition required'

@@ -166,13 +166,13 @@ class AssessmentFeedback(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.runtime = ['background-capture', 'packaged-proxy-oracle', 'packaged-foreground']
-        self.deferred = ['background', 'background-standard-owner']
+        self.deferred = ['background', 'background-standard-owner', 'background-standard-upgrade']
         self.provenance = dict(source_revision='a'*40, assessment='hosted', scope='background',
             runtime_recipes=self.runtime, deferred_recipes=self.deferred, full_scope=False, candidate_complete=False,
             host_architecture='X64', cargo='cargo fixture', rustc='rustc fixture', plan='windows-headless',
             phase='focused', related_runs=[])
         self.records = []
-        for name, count in zip(self.runtime + self.deferred, [2,5,1,1,1]):
+        for name, count in zip(self.runtime + self.deferred, [2,5,1,1,1,1]):
             cases = [name.replace('-', '_') + '_case_' + str(index) for index in range(count)]
             deferred = name in self.deferred
             row = dict(name=name, source_revision='a'*40, assessment='hosted', scenario='not_assessed' if deferred else 'green',
@@ -188,7 +188,7 @@ class AssessmentFeedback(unittest.TestCase):
             self.records.append(row)
         self.manifest = dict(schema='hiroute.windows-native-artifacts/v1',
                              recipes=[dict(name=row['name'], required_cases=row['cases']) for row in self.records],
-                             files=[{'fixture_only': index} for index in range(10)], package={'fixture_only': True},
+                             files=[{'fixture_only': index} for index in range(11)], package={'fixture_only': True},
                              product_binaries={'hiroute':'fixture-cli', 'hirouted':'fixture-daemon'})
         (self.root / 'native-artifacts.json').write_text(json.dumps(self.manifest))
         self.outcome = dict(schema='hiroute.windows-native-scope-outcome/v1', source_revision='a'*40,
@@ -228,7 +228,7 @@ class AssessmentFeedback(unittest.TestCase):
         self.assertEqual(value['scenario'], 'not_assessed');self.assertTrue(value['assessment_checks_passed'])
         self.assertFalse(value['candidate_complete']);self.assertFalse(value['full_scope'])
         self.assertEqual(value['background_acceptance'], 'not_assessed')
-        self.assertEqual(value['runtime_cases_executed'], 8);self.assertEqual(value['deferred_cases'], 2)
+        self.assertEqual(value['runtime_cases_executed'], 8);self.assertEqual(value['deferred_cases'], 3)
         record = json.loads((self.root/'feedback/background/result.json').read_text())
         self.assertEqual(record['status'], 'not_assessed');self.assertIsNone(record['process_exit'])
         derived = json.loads((self.root/'feedback/background/validation-report.json').read_text())
@@ -268,7 +268,7 @@ class AssessmentFeedback(unittest.TestCase):
         value = self.collect()
         self.assertEqual(value['scenario'],'green');self.assertTrue(value['full_scope'])
         self.assertEqual(value['background_acceptance'],'green');self.assertFalse(value['candidate_complete'])
-        self.assertEqual(value['runtime_cases_executed'],10);self.assertEqual(value['deferred_cases'],0)
+        self.assertEqual(value['runtime_cases_executed'],11);self.assertEqual(value['deferred_cases'],0)
         self.records[-1].update(scenario='not_assessed',runtime_executed=False,process_exit=None,executed=0)
         with self.assertRaises(ValueError):self.collect()
 

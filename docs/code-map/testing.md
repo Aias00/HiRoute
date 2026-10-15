@@ -141,7 +141,7 @@ provider login, Windows 11, or another processor architecture.
 [Native scope dispositions](../../scripts/windows-native-scopes.ps1) own the
 complete background recipe names and the hosted runtime/deferred partition.
 Hosted producer and replay retain every compiler artifact and exact nonempty
-inventory while deferring the two logged-owner Task bodies. The feedback adapter
+inventory while deferring the three logged-owner Task bodies. The feedback adapter
 checks zero execution, null exit and actual capture/list facts against the original
 verified manifest; missing compilation or a failed executable gate stays red.
 Its successful hosted assessment remains `not_assessed` for background acceptance,
@@ -169,6 +169,13 @@ so the parent can require an exact prefix independently of libtest's pretty
 caption; a successful child exit alone does not establish a received result.
 Its policy toggles do not establish console closure, RDP reconnection or a login
 trigger; those need external session evidence.
+The [Task upgrade journey](../../crates/daemon/tests/support/windows_background_upgrade.rs)
+shares its original recovery, rollback and business-state assertions between the
+alternate-token gate and a separate actual-standard-owner gate. Its
+[process and cleanup boundary](../../crates/daemon/tests/support/windows_background_upgrade_transport.rs)
+uses ordinary process creation for the latter and refuses cleanup without the
+exact installation record. Same-OS package qualification does not establish the
+original full Windows 11 baseline or execution of either upgrade case.
 The [console owner](../../crates/platform/src/windows/console.rs) keeps the GUI
 daemon detached for background launch and preserves inherited pipes when explicit
 foreground use attaches the parent console. Its [native primitive cases](../../crates/platform/tests/windows_console.rs)
@@ -235,6 +242,13 @@ executes the selected candidate CLI, including literal special-character drive p
 and retains exact output equality. Its required native recipe selects an explicit
 Git for Windows image through a validation-only input; WSL or an absent shell cannot
 supply a passing result.
+The [Qoder tool fixture](../../crates/daemon/src/delegation/installation/native_tools_probe.rs)
+and [saved-model Skill oracle](../../crates/daemon/tests/support/windows_qoder_user_models_skill.rs)
+use the same Bash execution contract with separate causal controls. Their
+[native path binding](../../crates/daemon/tests/support/windows_qoder_native_paths.rs)
+retains ordinary and proven canonical spellings, permits the stable CLI's
+existing hardlink, and releases Skill leases before production restoration.
+These fixtures do not substitute for actual account-backed tool execution.
 
 The same native entry's `-InventoryOnly` exports static scope recipes through its
 actual required-test producer without Cargo, package preparation or client launch.
