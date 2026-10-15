@@ -169,12 +169,19 @@ pub fn process(
     let (stdin, stdout_file, stderr_file) = child.pipes();
     let mut stdout = launcher::Capture::new(stdout_file);
     let mut stderr = launcher::Capture::new(stderr_file);
-    // Public CLI catalog envelopes use the same response bound as Control.
-    // Owner fixture frames and arbitrary stderr keep their smaller test bound.
-    let stdout_bound = if fixture {
-        BOUND
-    } else {
+    // An owner command relays a real public JSON response, including install
+    // preservation metadata that grows with retained user state. Give that
+    // envelope the existing Control response bound too. Pure fixture metadata
+    // and arbitrary stderr keep their smaller test bound.
+    let public_command = fixture
+        && input.is_some_and(|bytes| {
+            serde_json::from_slice::<Request>(bytes)
+                .is_ok_and(|request| request.action == "command")
+        });
+    let stdout_bound = if !fixture || public_command {
         hiroute_application_api::LOCAL_CONTROL_MAX_FRAME_BYTES
+    } else {
+        BOUND
     };
     if let Some(input) = input {
         stdin
