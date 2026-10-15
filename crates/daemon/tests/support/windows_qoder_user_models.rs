@@ -399,6 +399,9 @@ impl UserModels {
     fn collaboration(&self, product: &InstalledProduct, contexts: &Contexts) {
         let before = Snapshot::read(&self.file);
         let spec = collaboration_spec(&self.context);
+        // Model Configure/rotation changes the native settings dependency. The
+        // previous collaboration proof must be renewed against those saved bytes.
+        contexts.check_collaboration(product);
         apply(
             product,
             "connect",
@@ -421,6 +424,7 @@ impl UserModels {
         assert_configured(&status(product, &self.context), &self.routes);
         // Reinstall the independently proven facet, then retain it over the real
         // restart and restore models first to exercise the opposite facet order.
+        contexts.check_collaboration(product);
         apply(
             product,
             "connect",
