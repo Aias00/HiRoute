@@ -531,6 +531,14 @@ adapter together with the default/provider settings. The selected native SDK and
 interfaces must support that transport. Saved state does not prove loading in a
 running Hermes process; follow the reload/selection guidance.
 
+Native Chat requires Hermes v0.21.7 or newer with route-aware reasoning replay.
+Hermes 0.19.1 drops reasoning content on a local Chat tool continuation; HiRoute
+rejects new Chat connections missing the replay interface before native writes.
+Source distributions may report `0.0.0`, so the selected source and SDK interfaces
+are checked independently of version labels. HiRoute does not upgrade Hermes
+automatically. Passive scanning, management preparation and safe restore remain
+available under their own capabilities.
+
 Prepare the management Skill independently with
 `"management_skill":{"intent":"configure","settings":{}}` and `model: keep`.
 Use the shared restore workflow for either facet; model restore keeps an

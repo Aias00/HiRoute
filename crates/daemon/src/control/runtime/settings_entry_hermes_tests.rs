@@ -270,6 +270,81 @@ fn management_only_is_independent_and_recoverable_without_model_publication() {
 }
 
 #[test]
+fn chat_requires_native_reasoning_replay_before_writes_but_skill_remains_independent() {
+    if isolate(
+        "control::runtime::native_model::tests::settings_entry_tests::hermes::chat_requires_native_reasoning_replay_before_writes_but_skill_remains_independent",
+    ) {
+        return;
+    }
+    let fixture = Fixture::new(true);
+    let source = std::env::split_paths(&std::env::var_os("PATH").unwrap())
+        .next()
+        .unwrap();
+    private_file(
+        &source.join(
+            "venv/lib/python3.13/site-packages/openai/resources/chat/completions/completions.py",
+        ),
+        b"def create(*, extra_headers: Headers): pass\n",
+    );
+    let mut spec = fixture.model_spec(0);
+    spec["model"]["settings"]["protocol"] = json!("chat_completions");
+    let preview = fixture.service.dispatch_wire(request(
+        "PreviewAgentConnectionChange",
+        json!({"spec":spec}),
+        None,
+    ));
+    assert_eq!(preview.data.unwrap()["applicable"], false);
+    assert_eq!(
+        fs::read(fixture.profile.join("config.yaml")).unwrap(),
+        ORIGINAL
+    );
+    assert!(!fixture.profile.join("plugins/hiroute").exists());
+    let mut management = fixture.base();
+    management["management_skill"] = json!({"intent":"configure","settings":{}});
+    apply(
+        &fixture.service,
+        &fixture.runtime,
+        management,
+        "hermes-old-chat-skill",
+    );
+    assert_eq!(fixture.status()["management_skill"]["state"], "configured");
+
+    // Bounded source-interface fixture, never executed. Actual native main-loop replay
+    // is qualified separately against the pinned Hermes release.
+    private_file(&source.join("agent/message_sanitization.py"), b"def reasoning_replay_route():\n    pass\n_LOCAL_CARRIERS = frozenset({RC, R})\ncarriers = _LOCAL_CARRIERS if base_url and is_local_endpoint(str(base_url)) else _DEFAULT_CARRIERS\napi_msg[RC] = text if text is not None else \" \"\n");
+    private_file(
+        &source.join("agent/reasoning_params.py"),
+        b"def _reasoning_replay_route(self):\n    pass\n",
+    );
+    private_file(
+        &source.join("agent/agent_runtime_helpers.py"),
+        b"apply_reasoning_content_policy(source_msg, api_msg, *agent._reasoning_replay_route())\n",
+    );
+    apply(
+        &fixture.service,
+        &fixture.runtime,
+        spec,
+        "hermes-chat-replay",
+    );
+    assert_eq!(fixture.status()["state"], "configured");
+    assert_eq!(
+        fixture.status()["current_selection"]["protocol"],
+        "chat_completions"
+    );
+    apply(
+        &fixture.service,
+        &fixture.runtime,
+        fixture.restore(),
+        "hermes-chat-replay-restore",
+    );
+    assert_eq!(
+        fs::read(fixture.profile.join("config.yaml")).unwrap(),
+        ORIGINAL
+    );
+    assert_eq!(fixture.status()["management_skill"]["state"], "configured");
+}
+
+#[test]
 fn model_resources_rehydrate_after_restart_and_restore_without_touching_skill() {
     if isolate(
         "control::runtime::native_model::tests::settings_entry_tests::hermes::model_resources_rehydrate_after_restart_and_restore_without_touching_skill",
