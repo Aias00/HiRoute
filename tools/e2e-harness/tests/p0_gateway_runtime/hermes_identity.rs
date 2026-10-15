@@ -19,6 +19,7 @@ fn assert_native_identity(chat: bool) {
     } else {
         IngressProtocol::Responses
     };
+    let token = if chat { CHAT_TOKEN } else { TOKEN };
     let simple = br#"{"answers":{"q0":{"type":"score","probabilities":{"0":0.9,"1":0.1}}}}"#;
     let reply = |body| ProviderReply::Complete {
         status: 200,
@@ -72,7 +73,7 @@ fn assert_native_identity(chat: bool) {
         for session in ["native-conversation-one", "native-conversation-two"] {
             let send = &send;
             scope.spawn(move || {
-                send(&[("X-HiRoute-Token", TOKEN), ("x-hermes-session-id", session)])
+                send(&[("X-HiRoute-Token", token), ("x-hermes-session-id", session)])
             });
         }
     });
@@ -86,7 +87,7 @@ fn assert_native_identity(chat: bool) {
         vec![("x-hermes-session-id", "same"), ("session-id", "same")],
         vec![("x-hermes-session-id", long.as_str())],
     ] {
-        let mut headers = vec![("X-HiRoute-Token", TOKEN)];
+        let mut headers = vec![("X-HiRoute-Token", token)];
         headers.extend(claims);
         send(&headers);
         send(&headers);
