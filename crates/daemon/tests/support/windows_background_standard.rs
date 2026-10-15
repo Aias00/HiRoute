@@ -62,7 +62,9 @@ pub(super) fn current_owner(request: fixture::Request, bound: Duration) -> Value
         let output = result["stdout"].as_str().unwrap_or_default();
         let error = result["stderr"].as_str().unwrap_or_default();
         let marker = "HIROUTE_NATIVE_BACKGROUND_RESULT=";
-        let failure = if error.contains("native exit timestamp must precede") {
+        let failure = if error.contains("oracle requires a bounded content-length request") {
+            "oracle-rejected-transfer-encoding"
+        } else if error.contains("native exit timestamp must precede") {
             "forced-stop-missed-native-exit-bound"
         } else if error.contains("forced user stop must terminate") {
             "forced-stop-runtime-remained"
@@ -93,8 +95,18 @@ pub(super) fn current_owner(request: fixture::Request, bound: Duration) -> Value
             })
         })
         .unwrap_or(("unknown", 0));
+        let (http_phase, http_status) = error
+            .lines()
+            .find_map(|text| {
+                let text = text.strip_prefix("upgrade Gateway HTTP facts: phase=")?;
+                let (phase, status) = text.split_once(", status=")?;
+                let phase = phase.parse::<u8>().ok()?;
+                let status = status.parse::<u16>().ok()?;
+                (phase < 3 && (100..600).contains(&status)).then_some((phase, status))
+            })
+            .unwrap_or((0, 0));
         eprintln!(
-            "standard-owner frame facts: stage={stage}, failure={failure}, origin={origin}, line={line}, stdout_bytes={}, stderr_bytes={}, marker_seen={}, exact_line_count={}",
+            "standard-owner frame facts: stage={stage}, failure={failure}, origin={origin}, line={line}, http_phase={http_phase}, http_status={http_status}, stdout_bytes={}, stderr_bytes={}, marker_seen={}, exact_line_count={}",
             output.len(),
             error.len(),
             output.contains(marker),

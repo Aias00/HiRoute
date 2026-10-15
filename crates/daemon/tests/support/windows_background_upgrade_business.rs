@@ -662,18 +662,38 @@ fn traffic(program: &Path, saved: &Saved, phase: usize) -> Receipt {
             "an unauthenticated real Gateway request reached the route"
         );
     }
+    assert_eq!(
+        http::post_with_headers(
+            gateway,
+            "/v1/responses",
+            None,
+            &[("X-HiRoute-Token", "invalid-windows-upgrade-token")],
+            &body,
+        )
+        .status,
+        401,
+        "an invalid local model grant must not reach the saved upstream"
+    );
     let token = grant(program, &saved.context);
     let native_session = format!("windows-upgrade-{}", oracle::PHASES[phase]);
     let response = http::post_with_headers(
         gateway,
         "/v1/responses",
-        Some(&token),
+        None,
         &[
+            // This native Responses carrier is distinct from delegated runs.
+            ("X-HiRoute-Token", &token),
             ("thread-id", &native_session),
             ("session-id", &native_session),
         ],
         &body,
     );
+    if response.status != 200 {
+        eprintln!(
+            "upgrade Gateway HTTP facts: phase={phase}, status={}",
+            response.status
+        );
+    }
     assert_eq!(
         response.status, 200,
         "real saved route/credential could not execute after package maintenance"
