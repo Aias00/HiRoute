@@ -41,6 +41,11 @@ hiroute service stop --output json
 Starting, stopping, restarting, logs and doctor use the same CLI family. Business
 readiness requires Local Control to answer and the actual Gateway listener to be ready.
 Task registration or a successful process-manager call alone cannot establish readiness.
+The verified Task action supervises a separate business process under the same user.
+It waits for the complete child Job to stop and retries an unexpected exit up to three
+times, with a one-minute interval. A normal runtime stop ends the action; stopping the
+owned Task also stops its child tree and cancels a pending retry. Scheduler failure
+settings remain useful for action-launch failures, but do not establish runtime recovery.
 Foreground operation remains available through `hiroute service run`.
 `service logs` returns at most the last 256 KiB of `daemon/current.jsonl` and
 `daemon/previous-1.jsonl`. It reads existing diagnostic objects through held directory

@@ -26,6 +26,8 @@ use zeroize::{Zeroize, Zeroizing};
 mod ready;
 #[cfg(any(unix, windows))]
 mod standalone;
+#[cfg(windows)]
+mod windows_task;
 use ready::{write_ready_frame, write_startup_failure_frame};
 #[cfg(any(unix, windows))]
 use standalone::{apply_standalone_defaults, run_all_standalone};
@@ -41,6 +43,8 @@ struct Arguments {
     windows_service: Option<String>,
     #[cfg(windows)]
     foreground_parent_console: bool,
+    #[cfg(windows)]
+    windows_task_runtime: bool,
     storage_root: Option<PathBuf>,
     runtime_root: Option<PathBuf>,
     listen: Option<SocketAddr>,
@@ -76,6 +80,15 @@ fn main() {
         }
     }
     let mut arguments = parse_arguments();
+    #[cfg(windows)]
+    if arguments.windows_task_runtime
+        && (!arguments.standalone
+            || arguments.role.as_deref() != Some("all")
+            || arguments.windows_service.is_some()
+            || arguments.foreground_parent_console)
+    {
+        exit_usage();
+    }
     #[cfg(windows)]
     if arguments.foreground_parent_console
         && (!arguments.standalone
@@ -118,6 +131,26 @@ fn main() {
     if hiroute_platform::windows::security::initialize_current_process_private_defaults().is_err() {
         eprintln!("hirouted private process defaults unavailable");
         std::process::exit(6);
+    }
+    #[cfg(windows)]
+    if arguments.standalone
+        && arguments.role.as_deref() == Some("all")
+        && !arguments.windows_task_runtime
+        && !arguments.foreground_parent_console
+        && std::env::args_os()
+            .skip(1)
+            .eq(["--role", "all", "--standalone"]
+                .into_iter()
+                .map(std::ffi::OsString::from))
+    {
+        match windows_task::run_if_installed_task() {
+            Ok(true) => return,
+            Ok(false) => {}
+            Err(error) => {
+                eprintln!("hirouted failed: {error}");
+                std::process::exit(6);
+            }
+        }
     }
     if arguments.standalone
         && let Err(error) = apply_standalone_defaults(&mut arguments)
@@ -481,6 +514,8 @@ fn parse_arguments() -> Arguments {
             }
             #[cfg(windows)]
             "--foreground-parent-console" => parsed.foreground_parent_console = true,
+            #[cfg(windows)]
+            "--windows-task-runtime" => parsed.windows_task_runtime = true,
             "--storage-root" => parsed.storage_root = value(&mut arguments).map(PathBuf::from),
             "--runtime-root" => parsed.runtime_root = value(&mut arguments).map(PathBuf::from),
             "--listen" => {

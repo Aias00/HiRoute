@@ -159,6 +159,12 @@ executes as its own actual logged-on standard user, with no administrator group
 or alternate token. It requires an absent installation and SID-derived Task,
 then verifies native identity, Control/Gateway recovery, public service restart,
 packaged login lifecycle, recovery and guarded uninstall. The
+[Task action supervisor](../../crates/daemon/src/control/windows_task.rs) keeps
+the registered arguments and persisted definition unchanged while owning a
+same-user business child and its complete Job. The real crash case must observe
+a new authenticated business process, and a requested stop must cancel recovery;
+Scheduler action completion or restart settings alone do not prove that behavior.
+The
 [shared authorization checks](../../crates/daemon/tests/support/windows_subscription_authorization.rs)
 cover public missing/wrong-kind/stale Result/Release rejection; they do not prove
 valid provider authorization.
