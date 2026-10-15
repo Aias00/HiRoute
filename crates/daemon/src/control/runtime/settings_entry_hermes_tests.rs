@@ -75,6 +75,9 @@ struct Fixture {
 }
 impl Fixture {
     fn new(models: bool) -> Self {
+        Self::with_publication(models, golden_publication_plans_only())
+    }
+    fn with_publication(models: bool, publication: GatewayPublicationV1) -> Self {
         let root = crate::test_support::private_tempdir();
         let profile = root.path().join("chosen-profile");
         private_file(&profile.join("config.yaml"), ORIGINAL);
@@ -111,7 +114,7 @@ impl Fixture {
         )
         .unwrap();
         let runtime = if models {
-            configure_runtime_with_initial(&storage, runtime, golden_publication_plans_only())
+            configure_runtime_with_initial(&storage, runtime, publication)
         } else {
             runtime
         };
@@ -269,6 +272,37 @@ fn management_only_is_independent_and_recoverable_without_model_publication() {
     );
 }
 
+// The frozen catalog predates Chat admission. Add a declared Chat renderer to
+// each fixture candidate without broadening the released Plan advice projection.
+fn chat_publication() -> GatewayPublicationV1 {
+    let mut publication = golden_publication_plans_only().into_current().unwrap();
+    for plan in &mut publication.plans {
+        let mut body = plan.body.as_ref().clone();
+        for group in &mut body.materialized.attempt_owned.groups {
+            for candidate in &mut group.candidates {
+                let mut chat = candidate
+                    .protocol_profiles
+                    .iter()
+                    .find(|profile| {
+                        profile.ingress_protocol == hiroute_domain::UpstreamProtocol::Responses
+                    })
+                    .unwrap()
+                    .clone();
+                chat.path_id = "fixture-chat-to-responses".into();
+                chat.ingress_protocol = hiroute_domain::UpstreamProtocol::ChatCompletions;
+                candidate.protocol_profiles.push(chat);
+                candidate.protocol_profile_digest =
+                    CanonicalDigest::of(&candidate.protocol_profiles).unwrap();
+            }
+        }
+        body.materialized_route_digest = body.materialized.route_digest().unwrap();
+        *plan = hiroute_domain::CompiledAgentPlanV1::seal_current(body).unwrap();
+    }
+    publication.plan_heads.clear();
+    publication.validate_current_contract().unwrap();
+    publication
+}
+
 #[test]
 fn old_chat_can_configure_without_reasoning_replay_but_required_interfaces_still_block() {
     if isolate(
@@ -276,7 +310,7 @@ fn old_chat_can_configure_without_reasoning_replay_but_required_interfaces_still
     ) {
         return;
     }
-    let fixture = Fixture::new(true);
+    let fixture = Fixture::with_publication(true, chat_publication());
     let source = std::env::split_paths(&std::env::var_os("PATH").unwrap())
         .next()
         .unwrap();
@@ -326,7 +360,9 @@ fn old_chat_can_configure_without_reasoning_replay_but_required_interfaces_still
     }
     private_file(&sdk, b"def create(*, extra_headers: Headers): pass\n");
     private_file(&middleware, b"def apply_llm_request_middleware(): pass\n");
-    assert_eq!(preview().data.unwrap()["applicable"], true);
+    let result = preview();
+    assert!(result.error.is_none(), "{result:?}");
+    assert_eq!(result.data.unwrap()["applicable"], true);
     apply(
         &fixture.service,
         &fixture.runtime,
