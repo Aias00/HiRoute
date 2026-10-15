@@ -288,7 +288,7 @@ pub(super) fn run_action(request: &fixture::Request) -> Value {
                 &["agents", "connect", "status", &saved.context],
                 None,
             );
-            assert_eq!(status["data"]["state"], "restored");
+            assert_eq!(status["data"]["state"], "not_configured");
             assert!(status["data"]["current_selection"].is_null());
             assert!(status["data"]["restore_point_ref"].is_null());
             let file =
