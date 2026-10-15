@@ -15,6 +15,7 @@ export function AgentSettingsFeedback({ preview, agent: selected, facet, default
 }) {
   if (!preview || preview.applicable) return null;
   const text = (zh: string, en: string) => language === 'zh' ? zh : en;
+  const management = facet === 'management_skill';
   const blockedCheckScope = facet ? prerequisiteCheck(preview, facet) : null;
   return <div className="callout warn agent-feedback" role="status">
     <UiIcon name="warning" />
@@ -51,7 +52,9 @@ export function AgentSettingsFeedback({ preview, agent: selected, facet, default
         : block.reason === 'claude_context_window_unsupported'
           ? text('所选计划的共同窗口低于 Claude Code 的 100K 最低值。请调整计划窗口或使用 Codex。', 'The shared plan window is below Claude Code’s 100K minimum. Adjust the plan window or use Codex.')
         : block.reason === 'skill_file_conflict'
-          ? text('同名任务委派技能内容不同；原文件已保留。请先移走或明确处理该文件后再预览。', 'A task delegation skill with different content already exists. The original was preserved; move or explicitly resolve it before previewing again.')
+          ? management
+            ? text('同名 HiRoute 管理 Skill 内容不同；原文件已保留。请先处理该文件后再预览。', 'A HiRoute management Skill with different content already exists. The original was preserved; resolve it before previewing again.')
+            : text('同名任务委派技能内容不同；原文件已保留。请先移走或明确处理该文件后再预览。', 'A task delegation skill with different content already exists. The original was preserved; move or explicitly resolve it before previewing again.')
         : capabilities.has('effective_configuration')
           ? text('无法确认当前有效配置。请检查启动进程的环境变量、项目和受管配置是否覆盖用户设置，处理冲突后重新保存；只更改 HOME 不会清除环境变量。', 'The effective configuration could not be confirmed. Check whether process environment variables, project or managed settings override user settings, resolve conflicts, then save again. Changing HOME does not clear environment variables.')
         : capabilities.has('atomic_managed_replace')
@@ -61,7 +64,9 @@ export function AgentSettingsFeedback({ preview, agent: selected, facet, default
         : block.reason === 'restore_point_unavailable'
           ? text('当前配置的恢复记录不可用。请刷新连接详情并核对原来的操作记录，再重试恢复。', 'The restore record for this configuration is unavailable. Refresh connection details and check the original operation before retrying restore.')
         : capabilities.has('skill_loading') || capabilities.has('trusted_cli_execution')
-          ? text('任务委派技能尚未确认。', 'Task delegation skill capability is unconfirmed.')
+          ? management
+            ? text('尚未确认 Hermes 能加载管理 Skill。请检查所选 Hermes 安装及本机 CLI。', 'Hermes management Skill loading is unconfirmed. Check the selected Hermes installation and local CLI.')
+            : text('任务委派技能尚未确认。', 'Task delegation skill capability is unconfirmed.')
           : text('有前置条件尚未满足，请检查当前 Agent 状态。', 'A prerequisite is unmet. Check the current Agent state.');
       return <p key={index}>{message}</p>;
     })}
