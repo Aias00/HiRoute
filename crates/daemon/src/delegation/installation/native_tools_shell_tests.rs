@@ -99,3 +99,98 @@ fn qoder_tool_bash_resources_bind_native_spellings_and_keep_empty_output_unprove
         "owned fixture leases end with their lifecycle"
     );
 }
+
+/// This is a native-filesystem/oracle control, not an upstream Agent execution.
+/// The full Worker gate separately proves owned stop before this final check.
+#[cfg(windows)]
+#[test]
+fn qoder_tool_final_effects_reject_late_same_identity_output_truncation() {
+    use hiroute_platform::{file_security, windows::security};
+    use std::io::Write;
+    let outer = tempfile::tempdir().unwrap();
+    let root = outer.path().join("qoder late output 中文 ' &");
+    security::create_owner_only_directory(&root).unwrap();
+    let home = root.join("home");
+    let config = root.join("config");
+    let workspace = root.join("workspace");
+    for path in [&home, &config, &workspace] {
+        security::create_owner_only_directory(path).unwrap();
+    }
+    let fixture =
+        ToolsFixture::prepare(WorkerHarnessV1::QoderCli, &home, &config, &workspace).unwrap();
+    let discovery = fixture
+        .skills
+        .iter()
+        .map(|skill| skill.discovery.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let mut body = json!({"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":discovery}]}],
+        "tools":[{"name":"Skill"},{"name":"Read"},{"name":"Edit"},{"name":"Bash"}]});
+    let append = |body: &mut Value, id: &str, output: String| {
+        body["input"].as_array_mut().unwrap().push(json!({
+            "type":"function_call_output","call_id":id,"is_error":false,"output":output
+        }));
+    };
+    let mut oracle = ToolsOracle::new(fixture);
+    oracle.respond(&body).unwrap();
+    for id in [0, 1] {
+        let text = fs::read_to_string(&oracle.fixture.skills[id].file).unwrap();
+        append(&mut body, CALL_IDS[id], text);
+        oracle.respond(&body).unwrap();
+    }
+    let text = fs::read_to_string(&oracle.fixture.target).unwrap();
+    append(&mut body, CALL_IDS[2], text);
+    oracle.respond(&body).unwrap();
+    {
+        let mut edited = security::open_read_write(&oracle.fixture.target).unwrap();
+        edited.set_len(0).unwrap();
+        writeln!(edited, "{}", oracle.fixture.after).unwrap();
+        edited.sync_all().unwrap();
+    }
+    append(&mut body, CALL_IDS[3], oracle.fixture.after.clone());
+    oracle.respond(&body).unwrap();
+    let output = &oracle.fixture.shell_receipt;
+    {
+        let mut writer = security::open_read_write(output).unwrap();
+        writeln!(writer, "{}", oracle.fixture.receipt).unwrap();
+        writer.sync_all().unwrap();
+    }
+    let held = security::open_identity(output, false).unwrap();
+    let identity = security::file_identity(&held).unwrap();
+    let descriptor = file_security::capture(&held).unwrap();
+    let text = std::iter::once(oracle.fixture.after.as_str())
+        .chain(std::iter::once(oracle.fixture.receipt.as_str()))
+        .chain(
+            oracle
+                .fixture
+                .skills
+                .iter()
+                .flat_map(|skill| [skill.contents.as_str(), skill.executed.as_str()]),
+        )
+        .collect::<Vec<_>>()
+        .join("\n");
+    append(&mut body, CALL_IDS[4], text);
+    oracle.respond(&body).unwrap();
+    assert_eq!(oracle.next, CALL_IDS.len());
+    oracle.assert_effects().unwrap();
+    // Simulate the concrete late action after the correlated terminal request:
+    // close the actual writer before evaluating the final stopped-scope oracle.
+    {
+        let writer = security::open_read_write(&oracle.fixture.shell_receipt).unwrap();
+        writer.set_len(0).unwrap();
+        writer.sync_all().unwrap();
+    }
+    assert_eq!(security::file_identity(&held).unwrap(), identity);
+    assert!(file_security::capture(&held).unwrap() == descriptor);
+    assert!(
+        oracle
+            .fixture
+            .qoder_bash_inputs
+            .iter()
+            .all(|binding| binding.verify().is_ok())
+    );
+    assert!(
+        oracle.assert_effects().is_err(),
+        "a former live receipt cannot authorize changed final output bytes"
+    );
+}

@@ -76,6 +76,10 @@ fn native_tools(config: WorkerInstallationConfig) -> Result<(), DelegationErrorV
         None,
         "Use native-tools-user and native-tools-project. Read the probe file, edit it, execute the skill receipts, and finish with OK.",
     )?;
+    oracle
+        .lock()
+        .map_err(|_| DelegationErrorV1::ProtocolFailed)?
+        .assert_effects()?;
     eprintln!(
         "native Windows tools checkpoint: native-effects-proved harness={:?} local-requests={}",
         config.harness,
@@ -134,6 +138,10 @@ fn native_tools(config: WorkerInstallationConfig) -> Result<(), DelegationErrorV
         None,
         CONTINUE_TOOLS,
     )?;
+    oracle
+        .lock()
+        .map_err(|_| DelegationErrorV1::ProtocolFailed)?
+        .assert_effects()?;
     if loaded.session != first.session
         || !oracle
             .lock()

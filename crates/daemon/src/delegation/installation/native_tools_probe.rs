@@ -200,6 +200,12 @@ impl ToolsOracle {
         }
     }
 
+    /// Called again only after lifecycle has proved the owned process scope stopped.
+    /// Correlated HTTP receipts observed while the client was live are not final files.
+    pub(super) fn assert_effects(&self) -> Result<(), DelegationErrorV1> {
+        self.fixture.assert_effects()
+    }
+
     pub(super) fn respond(&mut self, body: &Value) -> Result<String, DelegationErrorV1> {
         if native_text(body).contains(CONTINUE_TOOLS) {
             if self.next != CALL_IDS.len() || self.pending {
