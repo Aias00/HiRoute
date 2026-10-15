@@ -22,6 +22,9 @@ use hiroute_domain::{
 };
 use serde_json::Value;
 
+#[cfg(all(test, unix))]
+#[path = "qoder_probe_bash_parse_tests.rs"]
+mod bash_parse_tests;
 #[path = "qoder_probe_http.rs"]
 mod http;
 #[cfg(test)]
@@ -896,7 +899,11 @@ mod tests {
                 .output()
                 .unwrap()
         };
-        assert_eq!(parse(&old).status.code(), Some(2));
+        let rejected = parse(&old);
+        let control = parse(bash_parse_tests::MINIMAL_INVALID);
+        assert!(bash_parse_tests::correlated_rejection(
+            &old, &rejected, &control
+        ));
         let parsed = parse(&new);
         assert!(parsed.status.success() && parsed.stdout.is_empty() && parsed.stderr.is_empty());
     }
