@@ -377,7 +377,7 @@ mod tests {
             assert_eq!(doc.value["providers"][provider]["transport"], transport);
             assert_eq!(doc.value["providers"][provider]["api"], base);
             assert_eq!(doc.value["user_note"], "preserve");
-            assert_eq!(record.restore(&managed).unwrap(), original);
+            assert_eq!(record.restore(&managed).unwrap().as_slice(), original);
         }
     }
 
