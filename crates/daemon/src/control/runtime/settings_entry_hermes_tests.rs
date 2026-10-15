@@ -286,14 +286,28 @@ fn chat_requires_native_reasoning_replay_before_writes_but_skill_remains_indepen
         ),
         b"def create(*, extra_headers: Headers): pass\n",
     );
-    let mut spec = fixture.model_spec(0);
-    spec["model"]["settings"]["protocol"] = json!("chat_completions");
-    let preview = fixture.service.dispatch_wire(request(
-        "PreviewAgentConnectionChange",
-        json!({"spec":spec}),
-        None,
-    ));
-    assert_eq!(preview.data.unwrap()["applicable"], false);
+    let target = hiroute_domain::AgentNativeTargetV1::Hermes {
+        config_root: fixture.profile.to_str().unwrap().into(),
+    };
+    let observe = || {
+        hiroute_integrations::hermes_settings_installation_for_protocol(
+            &target,
+            AgentIngressProtocolV1::ChatCompletions,
+        )
+        .unwrap()
+    };
+    let old = observe();
+    let ingress = |facts: &hiroute_domain::SupportedAgentInstallationV1| {
+        facts
+            .capability_evidence
+            .iter()
+            .find(|proof| {
+                proof.capability == hiroute_domain::AgentCapability::IngressAuthentication
+            })
+            .unwrap()
+            .state
+    };
+    assert_eq!(ingress(&old), hiroute_domain::CapabilityState::Unavailable);
     assert_eq!(
         fs::read(fixture.profile.join("config.yaml")).unwrap(),
         ORIGINAL
@@ -320,23 +334,9 @@ fn chat_requires_native_reasoning_replay_before_writes_but_skill_remains_indepen
         &source.join("agent/agent_runtime_helpers.py"),
         b"apply_reasoning_content_policy(source_msg, api_msg, *agent._reasoning_replay_route())\n",
     );
-    apply(
-        &fixture.service,
-        &fixture.runtime,
-        spec,
-        "hermes-chat-replay",
-    );
-    assert_eq!(fixture.status()["state"], "configured");
-    assert_eq!(
-        fixture.status()["current_selection"]["protocol"],
-        "chat_completions"
-    );
-    apply(
-        &fixture.service,
-        &fixture.runtime,
-        fixture.restore(),
-        "hermes-chat-replay-restore",
-    );
+    let current = observe();
+    assert_eq!(ingress(&current), hiroute_domain::CapabilityState::Proven);
+    assert_ne!(old.observation_digest, current.observation_digest);
     assert_eq!(
         fs::read(fixture.profile.join("config.yaml")).unwrap(),
         ORIGINAL
