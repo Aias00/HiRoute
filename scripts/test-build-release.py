@@ -326,5 +326,30 @@ class NativeCompilerContextTests(unittest.TestCase):
         self.assertIn(b'compiler overrides must be absent', process.stderr)
 
 
+class HostedReleasePolicyTests(unittest.TestCase):
+    def test_expensive_windows_assessment_is_release_or_manual_only(self):
+        workflow = (REPO / '.github/workflows/windows-headless.yml').read_text()
+        triggers = workflow.split('\non:\n', 1)[1].split('\npermissions:', 1)[0]
+        events = re.findall(r'^  ([a-z_]+):', triggers, re.M)
+        self.assertEqual(set(events), {'workflow_dispatch', 'workflow_call'})
+        self.assertNotIn('continue-on-error:', workflow)
+        self.assertEqual(workflow.count('ref: ${{ github.sha }}'), 2)
+        self.assertEqual(workflow.count('-Phase final'), 2)
+        self.assertEqual(workflow.count('-ExpectedSha $env:GITHUB_SHA'), 2)
+
+    def test_release_assets_cannot_build_when_windows_gate_fails(self):
+        workflow = (REPO / '.github/workflows/build-release.yml').read_text()
+        jobs = dict(re.findall(r'^  ([\w-]+):\n(.*?)(?=^  [\w-]+:\n|\Z)',
+                               workflow.split('\njobs:\n', 1)[1], re.M | re.S))
+        gate = jobs['windows-validation']
+        build = jobs['build']
+        self.assertIn('uses: ./.github/workflows/windows-headless.yml', gate)
+        self.assertNotRegex(gate, r'(?m)^    (if|continue-on-error):')
+        self.assertRegex(build, r'\A    needs: windows-validation\n')
+        self.assertNotRegex(build, r'(?m)^    (if|continue-on-error):')
+        self.assertIn('ref: ${{ github.sha }}', build)
+        self.assertIn('--expected-sha "$GITHUB_SHA"', build)
+
+
 if __name__ == "__main__":
     unittest.main()

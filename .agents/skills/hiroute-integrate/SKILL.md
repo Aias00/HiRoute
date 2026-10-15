@@ -42,6 +42,23 @@ the source change and let the convergence owner use the validation generator pro
 A checksum refresh is not evidence that a changed assertion still represents the contract.
 For affected Desktop journeys, resolve the required capable environment before a costly build.
 
+## Use platform builds and the development machine during iteration
+
+For Windows changes, follow [Windows iteration](../../../docs/validation-routing.md#windows-iteration-and-release-validation):
+run affected Linux checks, cross-compile the affected Windows production and test
+targets on the configured Linux workbench, then execute those exact artifacts on
+the configured Windows development machine. Retain the warm managed checkout
+across repairs. Compile affected macOS consumers through the configured Mac when
+shared contracts or Unix paths change; a Linux or Windows pass does not cover them.
+
+Select real Windows cases by the changed boundary: CLI/Gateway, native files and
+permissions, Worker/Agent, or installed background/upgrade. Do not start the hosted
+Windows matrix for each commit. The release-candidate workflow owns that expensive
+gate; its manual entry remains available for a CI-specific failure or unavailable
+development capability. Neither cross-compilation nor hosted compile-only cases
+replace required native business execution. Record any missing OS, architecture,
+interactive-user or account capability explicitly before declaring convergence.
+
 ## Diagnose once within the affected boundary
 
 Use the validation failure-repair route for reports, original evidence and affected checks.

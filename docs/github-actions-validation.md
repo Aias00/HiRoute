@@ -11,8 +11,18 @@ native Windows acceptance uses `scripts/windows-headless-ci.ps1`.
 | `p0-gateway-gates.yml` | Manual, reusable | Linux listener build, neutral loopback, H1/H2 lifecycle, replay/privacy tests, contract checks, benchmark harness smoke |
 | `gateway-core-dedicated.yml` | Manual or reusable | Hosted Linux production stability and socket churn |
 | `p0-gateway-final-gates.yml` | Manual | Aggregate the three current hosted workflows |
-| `build-release.yml` | Manual, exact dispatch SHA | Native macOS ARM64/Intel DMGs and Linux/Windows x86_64/ARM64 archives; uploads candidate assets and integrity evidence for the existing release publisher |
-| `windows-headless.yml` | PR, main push, manual, reusable | Native MSVC primitives, shared business libraries, foreground control/Gateway and fixed upstream clients; complete background artifacts with explicit deferred Task acceptance; x64 artifact replay on Windows 11 ARM64 |
+| `build-release.yml` | Manual, exact dispatch SHA | Requires the reusable Windows validation gate before building native macOS ARM64/Intel DMGs and Linux/Windows x86_64/ARM64 archives; uploads candidate assets and integrity evidence for the existing release publisher |
+| `windows-headless.yml` | Release-candidate call, explicit manual diagnosis | Native MSVC primitives, shared business libraries, foreground control/Gateway and fixed upstream clients; complete background artifacts with explicit deferred Task acceptance; x64 artifact replay on Windows 11 ARM64 |
+
+PR and main pushes do not automatically run the Windows matrix. During normal
+development, use [managed cross-compilation and affected execution on the Windows
+development machine](validation-routing.md#windows-iteration-and-release-validation).
+The release-candidate workflow calls the local reusable Windows workflow at the
+same commit, and every package build requires its success. Both native producer
+and Windows 11 replay bind `github.sha` and record the `final` phase. This gate
+runs before candidate assets are created, not after a GitHub Release is published.
+Manual Windows dispatch remains available for CI-specific diagnosis; it does not
+publish packages or establish the separately required user/account acceptance.
 
 Normal Rust checks select the organization `Default` runner group with the
 `cncf-ubuntu-16-64-x86` label. The organization must permit this public repository
@@ -53,7 +63,7 @@ Agent scope uses the shared required recipe inventory without provider accounts,
 rejection of missing or ambiguous account profiles. Qoder's four
 official-account recipes are a separately selected `accounts` scope, requiring
 an officially prepared private profile; missing credentials fail that scope.
-Pull request jobs receive no provider credentials. Passing ordinary CI does not
+Public Windows jobs receive no provider credentials. Passing ordinary CI does not
 establish official-account acceptance, which remains a separate release gate.
 
 Native x64 Debug checks reuse the Windows Release static CRT configuration from

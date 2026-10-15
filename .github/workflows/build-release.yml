@@ -7,7 +7,11 @@ permissions:
   contents: read
 
 jobs:
+  windows-validation:
+    uses: ./.github/workflows/windows-headless.yml
+
   build:
+    needs: windows-validation
     strategy:
       fail-fast: false
       matrix:

@@ -83,7 +83,8 @@ RELEASE_BUILD_TESTS = ("test-build-cpa.py", "test-build-release.py", "test-linux
                        "test-standalone-install.py", "test-standalone-windows.py", "test-windows-ci-package.py", "test-third-party-licenses.py")
 RELEASE_BUILD_TOOLING = {"scripts/linux-release-abi.py", "scripts/linux-release-runtime.py",
                          "scripts/linux-release-container.py", "scripts/linux-release-baseline.json",
-                         "scripts/linux-release.Dockerfile", ".github/workflows/build-release.yml", "scripts/build-release.py",
+                         "scripts/linux-release.Dockerfile", ".github/workflows/build-release.yml",
+                         ".github/workflows/windows-headless.yml", "scripts/build-release.py",
                          "scripts/build-cpa.py", "scripts/package-desktop.py",
                          "scripts/package-standalone.py", "scripts/install-standalone.py",
                          "scripts/install-standalone-windows.py", "scripts/windows-ci-package.py",
@@ -373,6 +374,7 @@ def select(paths, full=False):
             continue
         if path in WINDOWS_VALIDATION_TOOLING or path.startswith("tools/windows-agent-fixtures/"):
             windows_validation_tooling = True
+            release_build_tooling |= path in RELEASE_BUILD_TOOLING
             continue
         if path in RELEASE_BUILD_TOOLING:
             release_build_tooling = True

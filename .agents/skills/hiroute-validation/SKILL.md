@@ -19,6 +19,7 @@ loading every execution, diagnosis and retention guide.
 | --- | --- |
 | Select checks and consumers | [Test selection](../../../docs/test-selection.md), using the [test map](../../../docs/code-map/testing.md) to find the owning assertion. |
 | Execute backend, Desktop or Pilot checks | [Validation routing](../../../docs/validation-routing.md#commands); follow only the selected local/SSH runner or [Desktop Pilot](../../../docs/desktop-tauri-pilot.md) guide. Hosted CI has its [own entry](../../../docs/github-actions-validation.md). |
+| Iterate on Windows behavior | [Cross-compilation and development-machine execution](../../../docs/validation-routing.md#windows-iteration-and-release-validation); reserve the hosted Windows matrix for release candidates or an explicitly needed manual diagnosis. |
 | Diagnose a failure | The run's result, report and relevant logs, then [failure repair](../../../docs/validation-feedback.md#required-agent-feedback-loop). For product-path failures, also use [diagnostic troubleshooting](../../../docs/diagnostic-troubleshooting.md#diagnose-failures-before-rerunning). |
 | Retire build outputs | [Owner cleanup](../../../docs/local-rust-validation.md#owner-cleanup-during-buildfixretest) or the selected remote runner's cleanup flow. |
 | Prepare evidence and timing feedback | [Report interpretation](../../../docs/validation-feedback.md#read-the-report) and its required feedback loop. |

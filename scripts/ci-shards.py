@@ -32,6 +32,8 @@ INTEGRATION_SHARDS = {
         ("hiroute-diagnostics", "writer_bounds"),
         ("hiroute-diagnostics", "windows_files_safety"),
         ("hiroute-platform", "windows"),
+        ("hiroute-platform", "windows_console"),
+        ("hiroute-platform", "windows_read_lease"),
         ("hiroute-platform", "job_windows"),
         ("hiroute-platform", "windows_scm_owner"),
         ("hiroute-cli", "contracts"),

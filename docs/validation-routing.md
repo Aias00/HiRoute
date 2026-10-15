@@ -91,6 +91,74 @@ result on that host. SSH interruption is not proof of completion: inspect that
 host's run record before retrying. This wrapper adds no queue for Mac builds.
 Existing direct runner commands remain available.
 
+### Windows iteration and release validation
+
+Ordinary development uses the configured Linux workbench for Windows MSVC
+cross-compilation and the configured Windows development machine for affected
+native execution. The expensive hosted Windows producer/replay matrix runs from
+`build-release.yml` before release assets can build; `windows-headless.yml` also
+retains an explicit manual entry for diagnosis. PR and main pushes retain their
+ordinary Linux/frontend selection without automatically starting that matrix.
+
+1. Record the comparison base, committed candidate, affected consumers and native
+   cases from `test-plan.py --integration`. Run affected Linux tests as selected;
+   compile affected macOS consumers on the configured Mac when their contracts
+   change. Cross-compiling Windows does not validate either Unix runtime.
+2. Use the managed backend runner with a nonempty plan and retained checkout.
+   The Linux host must already have the matching Rust target, MSVC-compatible
+   linker and Windows SDK/import libraries in its personal toolchain configuration.
+   Record their versions and compiler flags. Keep SDK paths and remote host details
+   outside the repository. An unavailable toolchain is a build prerequisite gap,
+   not permission to substitute a GNU target for the supported MSVC target.
+   For release-equivalent x64 builds, preserve the static CRT contract owned by
+   `build-release.py`; a development compiler configuration is not release evidence.
+
+   ```sh
+   python3 scripts/validation.py backend run \
+     --ref refs/heads/codex/my-change --sha CANDIDATE_SHA \
+     --plan windows-my-change --phase focused --retention always -- \
+     cargo build --locked --target x86_64-pc-windows-msvc \
+     -p hiroute-cli -p hiroute-daemon --bins --message-format=json
+   python3 scripts/validation.py backend run \
+     --ref refs/heads/codex/my-change --sha CANDIDATE_SHA \
+     --plan windows-my-change --phase focused --retention always \
+     --continue-checkout LAST_STOPPED_RUN_ID -- \
+     cargo test --locked --target x86_64-pc-windows-msvc \
+     -p hiroute-daemon --test windows_headless --no-run --message-format=json
+   ```
+
+   Replace the example package/test selection with the affected inventory and
+   feature context. Continue from the last stopped run after each repair; preserve
+   its default `target/`, locks and cleanup owner. `--no-run` proves compilation
+   and linking only. A configured target runner must not silently execute via Wine.
+3. Export the exact Cargo `compiler-artifact` paths from the successful JSON output,
+   with the source SHA, driver SHA, target/features, compiler configuration, build
+   run IDs and SHA-256/size of every transferred EXE and fixture. Verify PE target
+   identity and recheck hashes after transfer. Use an isolated Windows staging
+   directory; do not select files by modification time or a glob over old builds.
+   Cross-built bundles are development evidence. The native artifact producer
+   deliberately requires a native Windows rustc host; do not rewrite that provenance
+   or feed a cross-built bundle into the native Windows 11 replay as if it were native.
+4. Execute only the affected test bodies and business paths on the Windows machine.
+   Use the [Windows scope inventory](../scripts/windows-native-scopes.ps1) and
+   [operating guide](standalone-windows.md) to identify required fixtures and owner
+   context. Installation/background/upgrade changes require the real installed
+   package and logged-on standard user; provider-account cases require an officially
+   prepared account. Reuse the same verified binaries across cases. A Server host
+   result records Server, not Windows 11; x64 execution does not prove native ARM64.
+5. Keep the original failed run and targeted repair result. At convergence, report
+   each required case's actual execution, source/artifact identity, OS/architecture,
+   user context and evidence. Reuse unaffected evidence only at its original SHA
+   with an explanation. Do not add RDP connectivity or real next-login exercises
+   unless the changed behavior or agreed acceptance scope requires them.
+
+At release, freeze the source and require the complete release-candidate workflow
+to pass for that same SHA. Hosted background compilation still leaves the documented
+logged-on-user and real-account gates separate; the release matrix does not turn
+them into runtime passes. A missing development capability requires an explicit
+capable environment or remains an unexecuted obligation. It must not be hidden by
+waiting until release or reporting compilation as complete acceptance.
+
 ### Native consumer compilation
 
 The plan's `native_checks` contains a configured-Mac `command_template` for known

@@ -1,8 +1,5 @@
 name: windows-headless
 on:
-  pull_request:
-  push:
-    branches: [main]
   workflow_dispatch:
   workflow_call:
 permissions:
@@ -22,6 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.sha }}
           persist-credentials: false
       - name: Repository Rust toolchain
         shell: pwsh
@@ -60,7 +58,7 @@ jobs:
         shell: pwsh
         run: |
           $assessment = if ('${{ matrix.scope }}' -ceq 'background') { 'hosted' } else { 'full' }
-          & scripts/windows-headless-ci.ps1 -Scope '${{ matrix.scope }}' -ExpectedSha $env:GITHUB_SHA -Evidence artifacts/windows -CpaSource "$env:RUNNER_TEMP/cpa" -Plan windows-headless -Phase focused -CaptureArtifacts -Assessment $assessment
+          & scripts/windows-headless-ci.ps1 -Scope '${{ matrix.scope }}' -ExpectedSha $env:GITHUB_SHA -Evidence artifacts/windows -CpaSource "$env:RUNNER_TEMP/cpa" -Plan windows-headless -Phase final -CaptureArtifacts -Assessment $assessment
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -81,6 +79,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.sha }}
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
@@ -106,7 +105,7 @@ jobs:
         shell: pwsh
         run: |
           $assessment = if ('${{ matrix.scope }}' -ceq 'background') { 'hosted' } else { 'full' }
-          & scripts/windows-native-replay.ps1 -Scope '${{ matrix.scope }}' -ExpectedSha $env:GITHUB_SHA -Bundle artifacts/producer -Evidence artifacts/windows11 -Plan windows-headless -Phase focused -RelatedRun $env:GITHUB_RUN_ID -Assessment $assessment
+          & scripts/windows-native-replay.ps1 -Scope '${{ matrix.scope }}' -ExpectedSha $env:GITHUB_SHA -Bundle artifacts/producer -Evidence artifacts/windows11 -Plan windows-headless -Phase final -RelatedRun $env:GITHUB_RUN_ID -Assessment $assessment
       - uses: actions/upload-artifact@v4
         if: always()
         with:

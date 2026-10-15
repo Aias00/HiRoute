@@ -128,6 +128,11 @@ Final backend DAG admission and preparation are owned by
 run in an isolated lane before other listeners; Gateway runtime consumers wait for
 prepared product roles.
 
+The [Windows iteration route](../validation-routing.md#windows-iteration-and-release-validation)
+uses managed MSVC cross-compilation and affected execution on the configured Windows
+development machine. The [release workflow](../../.github/workflows/build-release.yml)
+requires the reusable native Windows matrix before package builds; PR/main pushes
+do not start that expensive matrix.
 The [Windows CI entry](../../scripts/windows-headless-ci.ps1) requires nonempty
 native inventories for primitives, shared libraries, installed foreground and
 Task/SCM business paths, and fixed upstream clients. The
