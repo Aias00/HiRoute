@@ -17,6 +17,8 @@ pub struct AgentSettingsPlanningInput {
     pub subject: AgentConnectionTransactionSubjectV1,
     pub model_file: Option<SettingsModelFileFacts>,
     pub skill_file: SettingsSkillFileFacts,
+    /// The independent second resource. The primary slot retains accepted legacy semantics.
+    pub additional_skill_file: Option<SettingsSkillFileFacts>,
 }
 
 /// Non-secret backend facts, all included in the accepted dependency digest.
@@ -267,7 +269,24 @@ impl AgentSettingsPlanningInput {
             }
             AgentFacetIntent::Keep => (Vec::new(), None, None),
         };
-        let skill = self.skill_action(preview)?;
+        let skill = self.skill_action(preview, preview.spec.skill_facet(), &self.skill_file)?;
+        let additional_facet =
+            if preview.spec.skill_facet() == hiroute_domain::AgentSettingsFacet::Collaboration {
+                hiroute_domain::AgentSettingsFacet::ManagementSkill
+            } else {
+                hiroute_domain::AgentSettingsFacet::Collaboration
+            };
+        let additional = match &self.additional_skill_file {
+            Some(file) => self.skill_action(preview, additional_facet, file)?,
+            None if matches!(
+                preview.spec.skill_intent_for(additional_facet),
+                AgentFacetIntent::Keep
+            ) =>
+            {
+                SettingsSkillAction::default()
+            }
+            None => return Err(invalid()),
+        };
         // A permitted-plan selection can change without rewriting the shared Skill file: the
         // current root already carries the same template. Its desired collaboration state is
         // still durable in this confirmed settings operation, while Worker callability remains
@@ -275,19 +294,30 @@ impl AgentSettingsPlanningInput {
         if model_action.is_none()
             && skill.intent.is_none()
             && !skill.record_change
-            && matches!(preview.spec.collaboration, AgentFacetIntent::Keep)
+            && additional.intent.is_none()
+            && !additional.record_change
+            && preview.spec.keeps_skills()
         {
             return Err(invalid());
         }
-        confirmed.seal_effects(
+        let mut mutations = json!({
+            "expected_revisions":self.expected_revisions,
+            "skill_record_change":skill.record_change,
+            "skill_reference_change":&skill.reference_change,
+            "collaboration":self.collaboration_state,
+        });
+        if !matches!(
+            preview.spec.skill_intent_for(additional_facet),
+            AgentFacetIntent::Keep
+        ) {
+            mutations["additional_skill_record_change"] = json!(additional.record_change);
+            mutations["additional_skill_reference_change"] = json!(&additional.reference_change);
+        }
+        confirmed.seal_effects_with_skills(
             self.subject.clone(),
-            &json!({
-                "expected_revisions":self.expected_revisions,
-                "skill_record_change":skill.record_change,
-                "skill_reference_change":&skill.reference_change,
-                "collaboration":self.collaboration_state,
-            }),
+            &mutations,
             skill.intent.is_some(),
+            additional.intent.is_some(),
             model_mutations,
             |control| {
                 let mut external = Vec::new();
@@ -398,7 +428,20 @@ impl AgentSettingsPlanningInput {
                     )?);
                 }
                 if let Some(intent) = skill.intent {
-                    external.push(intent.render(control, self)?);
+                    external.push(intent.render(
+                        control,
+                        &self.facts.context_id,
+                        preview.spec.skill_facet(),
+                        &self.skill_file,
+                    )?);
+                }
+                if let Some(intent) = additional.intent {
+                    external.push(intent.render(
+                        control,
+                        &self.facts.context_id,
+                        additional_facet,
+                        self.additional_skill_file.as_ref().ok_or_else(invalid)?,
+                    )?);
                 }
                 Ok(external)
             },
@@ -408,30 +451,32 @@ impl AgentSettingsPlanningInput {
     fn skill_action(
         &self,
         preview: &AgentSettingsPreview,
+        facet: hiroute_domain::AgentSettingsFacet,
+        file: &SettingsSkillFileFacts,
     ) -> Result<SettingsSkillAction, OperationValidationError> {
         let invalid = || OperationValidationError::UnregisteredEffectPlan;
-        match &preview.spec.skill_intent() {
+        match &preview.spec.skill_intent_for(facet) {
             AgentFacetIntent::Keep => Ok(SettingsSkillAction::default()),
             AgentFacetIntent::Configure { .. } => {
                 let plan = plan_skill_install(
-                    &self.skill_file.root_ref,
+                    &file.root_ref,
                     &self.facts.context_id,
-                    &self.skill_file.template,
-                    self.skill_file.before.as_ref(),
-                    self.skill_file.observed_file.as_ref(),
+                    &file.template,
+                    file.before.as_ref(),
+                    file.observed_file.as_ref(),
                 )
                 .map_err(|_| invalid())?;
-                let record_change = self.skill_file.before.as_ref() != Some(&plan.next);
+                let record_change = file.before.as_ref() != Some(&plan.next);
                 let (intent, reference_change) = match plan.file_action {
                     SkillFileAction::Install => (Some(SkillIntent::Install(plan)), None),
                     SkillFileAction::Keep if record_change => (
                         None,
                         Some(settings_skill_reference_change(
                             &self.facts.context_id,
-                            &self.skill_file.target,
-                            self.skill_file.before.as_ref(),
+                            &file.target,
+                            file.before.as_ref(),
                             &plan,
-                            self.skill_file.before_fingerprint.clone(),
+                            file.before_fingerprint.clone(),
                             SkillReferenceAction::Add,
                         )?),
                     ),
@@ -447,18 +492,13 @@ impl AgentSettingsPlanningInput {
                 })
             }
             AgentFacetIntent::Restore { restore_point_ref } => {
-                let current = self.skill_file.before.as_ref().ok_or_else(invalid)?;
-                if self.facts.restore_points.get(restore_point_ref)
-                    != Some(&preview.spec.skill_facet())
-                {
+                let current = file.before.as_ref().ok_or_else(invalid)?;
+                if self.facts.restore_points.get(restore_point_ref) != Some(&facet) {
                     return Err(invalid());
                 }
-                let plan = plan_skill_remove(
-                    &self.facts.context_id,
-                    current,
-                    self.skill_file.observed_file.as_ref(),
-                )
-                .map_err(|_| invalid())?;
+                let plan =
+                    plan_skill_remove(&self.facts.context_id, current, file.observed_file.as_ref())
+                        .map_err(|_| invalid())?;
                 let record_change = &plan.next != current;
                 let (intent, reference_change) = match plan.file_action {
                     SkillFileAction::Remove => (Some(SkillIntent::Remove(plan)), None),
@@ -466,10 +506,10 @@ impl AgentSettingsPlanningInput {
                         None,
                         Some(settings_skill_reference_change(
                             &self.facts.context_id,
-                            &self.skill_file.target,
+                            &file.target,
                             Some(current),
                             &plan,
-                            self.skill_file.before_fingerprint.clone(),
+                            file.before_fingerprint.clone(),
                             SkillReferenceAction::Remove,
                         )?),
                     ),
@@ -511,19 +551,22 @@ impl SkillIntent {
     fn render(
         &self,
         control: &hiroute_domain::AgentConnectionControlIntentV1,
-        input: &AgentSettingsPlanningInput,
+        context_id: &str,
+        facet: hiroute_domain::AgentSettingsFacet,
+        file: &SettingsSkillFileFacts,
     ) -> Result<hiroute_domain::ExternalEffectIntentV1, OperationValidationError> {
         let (plan, template) = match self {
-            Self::Install(plan) => (plan, Some(&input.skill_file.template)),
+            Self::Install(plan) => (plan, Some(&file.template)),
             Self::Remove(plan) => (plan, None),
         };
-        settings_skill_file_intent(
+        settings_skill_file_intent_for_facet(
             control,
-            &input.facts.context_id,
-            input.skill_file.before.as_ref(),
+            context_id,
+            facet,
+            file.before.as_ref(),
             plan,
             template,
-            input.skill_file.before_fingerprint.clone(),
+            file.before_fingerprint.clone(),
         )
     }
 }

@@ -101,10 +101,16 @@ pub struct AgentSettingsPreviewRequestV2 {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AgentSettingsStatusRequestV2 {
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub include_skills: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native_target: Option<AgentNativeTargetV1>,
     pub schema_version: hiroute_domain::SchemaVersion,
     pub context_id: String,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -294,6 +300,8 @@ impl AgentModelSettingsStatusV2 {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AgentCollaborationSettingsStatusV2 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resource: Option<AgentSkillResourceStatusV1>,
     pub schema: String,
     pub state: AgentModelSettingsStateV2,
     pub operation_id: Option<String>,
@@ -503,9 +511,22 @@ mod status_contract_tests;
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AgentManagementSkillStatusV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resource: Option<AgentSkillResourceStatusV1>,
     pub schema: String,
     pub state: AgentModelSettingsStateV2,
     pub operation_id: Option<String>,
     pub operation_state: Option<String>,
     pub restore_point_ref: Option<String>,
+}
+
+/// Native file availability is separate from this context's managed reference and live loading.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentSkillResourceStatusV1 {
+    pub directory: String,
+    pub file_ownership: Option<hiroute_domain::CollaborationSkillFileOwnership>,
+    pub shared_context_count: usize,
+    pub native_available: bool,
+    pub runtime_loading: AgentNativeRuntimeLoadingV1,
 }

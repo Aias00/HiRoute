@@ -37,6 +37,7 @@ mod codex_models;
 mod hermes;
 mod hermes_model;
 mod qoder;
+pub(super) mod skills;
 use codex_association::{
     connector_account_matches, endpoint_matches_target, mark_catalog_structure_proven,
 };
@@ -210,12 +211,11 @@ impl LocalControlAdapter {
         let class = self
             .settings_agent_for_context(&spec.context_id)
             .ok_or(ControlReadError::NotFound)?;
-        if class == SettingsAgentClass::Hermes {
-            return self.capture_hermes_settings_facts(spec);
+        if !matches!(spec.model, AgentFacetIntent::Keep) {
+            self.check_codex_slot(spec, class)?;
         }
-        self.check_codex_slot(spec, class)?;
-        let first = self.settings_snapshot(spec, class)?;
-        let second = self.settings_snapshot(spec, class)?;
+        let first = self.complete_settings_snapshot(spec, class)?;
+        let second = self.complete_settings_snapshot(spec, class)?;
         if first.facts.dependency_digest != second.facts.dependency_digest {
             return Err(ControlReadError::SnapshotChanged);
         }
@@ -966,6 +966,7 @@ impl LocalControlAdapter {
             }
         };
         Ok(AgentSettingsPlanningInput {
+            additional_skill_file: None,
             collaboration_state,
             expected_revisions,
             subject,
@@ -988,6 +989,7 @@ impl LocalControlAdapter {
                 template,
             },
             facts: AgentSettingsFacts {
+                management_file_conflict: false,
                 native_target: None,
                 context_id: spec.context_id.clone(),
                 dependency_digest,

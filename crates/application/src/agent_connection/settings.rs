@@ -19,6 +19,7 @@ pub struct AgentSettingsFacts {
     /// No model facts or configuration target are needed by collaboration-only installations.
     pub model: Option<SettingsModelFacts>,
     pub collaboration_file_conflict: bool,
+    pub management_file_conflict: bool,
     pub restore_points: BTreeMap<String, AgentSettingsFacet>,
 }
 
@@ -138,8 +139,7 @@ pub fn preview_agent_settings(
         .native_target
         .as_ref()
         .is_some_and(|target| target.validate().is_err())
-        || (!hermes && (spec.native_target.is_some() || spec.management_skill.is_some()))
-        || (hermes && !matches!(spec.collaboration, AgentFacetIntent::Keep))
+        || (!hermes && spec.native_target.is_some())
     {
         return Err(SettingsPlanningError::InvalidSelection);
     }
@@ -449,6 +449,14 @@ pub fn preview_agent_settings(
         match intent {
             AgentFacetIntent::Keep => {}
             AgentFacetIntent::Configure { .. } => {
+                if facts.management_file_conflict {
+                    blockers.push(AgentSettingsBlock {
+                        facet,
+                        reason: SettingsBlockReason::SkillFileConflict,
+                        capabilities: Vec::new(),
+                        model_ids: Vec::new(),
+                    });
+                }
                 changed_facets.insert(facet);
                 require(
                     facts,
@@ -458,6 +466,14 @@ pub fn preview_agent_settings(
                 );
             }
             AgentFacetIntent::Restore { restore_point_ref } => {
+                if facts.management_file_conflict {
+                    blockers.push(AgentSettingsBlock {
+                        facet,
+                        reason: SettingsBlockReason::SkillFileConflict,
+                        capabilities: Vec::new(),
+                        model_ids: Vec::new(),
+                    });
+                }
                 changed_facets.insert(facet);
                 restore(
                     facts,

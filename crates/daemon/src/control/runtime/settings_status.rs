@@ -53,6 +53,7 @@ impl LocalControlAdapter {
             return Err(ControlReadError::Denied);
         }
         let (status, grant, _) = self.evaluate_model_settings(&AgentSettingsStatusRequestV2 {
+            include_skills: false,
             native_target: None,
             schema_version: hiroute_application_api::AGENT_SETTINGS_SCHEMA_V2,
             context_id: target.context_id.clone(),
@@ -82,6 +83,7 @@ impl LocalControlAdapter {
             == Some(SettingsAgentClass::CodexProfile)
         {
             AgentSettingsStatusRequestV2 {
+                include_skills: false,
                 native_target: None,
                 schema_version: request.schema_version,
                 context_id: self.settings_context(SettingsAgentClass::Codex),
@@ -89,10 +91,12 @@ impl LocalControlAdapter {
         } else {
             request.clone()
         };
-        if self.settings_agent_for_context(&request.context_id) == Some(SettingsAgentClass::Hermes)
-        {
-            status.management_skill = Some(self.hermes_management_settings_status(request)?);
-        } else {
+        let hermes = self.settings_agent_for_context(&request.context_id)
+            == Some(SettingsAgentClass::Hermes);
+        if hermes || request.include_skills {
+            status.management_skill = Some(self.management_settings_status(request)?);
+        }
+        if !hermes || request.include_skills {
             status.collaboration =
                 Some(self.collaboration_settings_status(&collaboration_request)?);
         }
@@ -106,6 +110,7 @@ impl LocalControlAdapter {
         context_id: &str,
     ) -> Result<Option<ConfiguredModelSettings>, ControlReadError> {
         let (_, _, join) = self.evaluate_model_settings(&AgentSettingsStatusRequestV2 {
+            include_skills: false,
             native_target: None,
             schema_version: hiroute_application_api::AGENT_SETTINGS_SCHEMA_V2,
             context_id: context_id.to_owned(),
@@ -126,6 +131,7 @@ impl LocalControlAdapter {
             .filter(|context| format!("agent-connection/{context}") == connection_id)
             .ok_or(ControlReadError::NotFound)?;
         let request = AgentSettingsStatusRequestV2 {
+            include_skills: false,
             native_target: None,
             schema_version: hiroute_application_api::AGENT_SETTINGS_SCHEMA_V2,
             context_id: context_id.to_owned(),

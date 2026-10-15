@@ -1,6 +1,5 @@
 //! The management Skill reports its own file ownership, never model or Worker authority.
 use super::*;
-use hiroute_application::agent_connection::codex_model_restore_point_ref;
 use hiroute_application_api::{
     AgentManagementSkillStatusV1, AgentModelSettingsStateV2 as State, AgentSettingsStatusRequestV2,
 };
@@ -10,17 +9,81 @@ use hiroute_domain::{
 };
 
 impl LocalControlAdapter {
-    pub(super) fn hermes_management_settings_status(
+    pub(super) fn skill_resource_status(
+        &self,
+        request: &AgentSettingsStatusRequestV2,
+        facet: hiroute_domain::AgentSettingsFacet,
+    ) -> Result<hiroute_application_api::AgentSkillResourceStatusV1, ControlReadError> {
+        let (root_ref, target) = self.settings_skill_resource(
+            &request.context_id,
+            request.native_target.as_ref(),
+            facet,
+        )?;
+        let path = self
+            .artifacts
+            .native_target_path(&target)
+            .map_err(super::map_port)?;
+        let record = self
+            .stores_lock()
+            .map_err(super::map_port)?
+            .control()
+            .skill_installation(&WorkspaceId::default(), &root_ref)
+            .map_err(super::map_port)?;
+        let bytes = self
+            .artifacts
+            .read_native_target(&target)
+            .map_err(super::map_port)?;
+        let native_available = bytes.as_ref().is_some_and(|bytes| {
+            let digest = CanonicalDigest::of_bytes(bytes);
+            if let Some(record) = &record {
+                return digest == record.content_digest;
+            }
+            if facet == hiroute_domain::AgentSettingsFacet::ManagementSkill {
+                digest
+                    == CanonicalDigest::of_bytes(include_bytes!(
+                        "../../../../../assets/skills/hiroute-management/SKILL.md"
+                    ))
+            } else {
+                // External content has no managed reference; discovery alone does not enable it.
+                false
+            }
+        });
+        Ok(hiroute_application_api::AgentSkillResourceStatusV1 {
+            directory: path
+                .parent()
+                .and_then(|p| p.to_str())
+                .ok_or(ControlReadError::Corrupt)?
+                .to_owned(),
+            file_ownership: record.as_ref().map(|r| r.file_ownership),
+            shared_context_count: record.as_ref().map_or(0, |r| r.contexts.len()),
+            native_available,
+            runtime_loading: hiroute_application_api::AgentNativeRuntimeLoadingV1::Unobserved,
+        })
+    }
+
+    pub(super) fn management_settings_status(
         &self,
         request: &AgentSettingsStatusRequestV2,
     ) -> Result<AgentManagementSkillStatusV1, ControlReadError> {
         let mut status = AgentManagementSkillStatusV1 {
+            resource: None,
             schema: "hiroute.agent-management-skill-status/v1".into(),
             state: State::NotConfigured,
             operation_id: None,
             operation_state: None,
             restore_point_ref: None,
         };
+        let (root_ref, file_target) = self.settings_skill_resource(
+            &request.context_id,
+            request.native_target.as_ref(),
+            hiroute_domain::AgentSettingsFacet::ManagementSkill,
+        )?;
+        if request.include_skills {
+            status.resource = Some(self.skill_resource_status(
+                request,
+                hiroute_domain::AgentSettingsFacet::ManagementSkill,
+            )?);
+        }
         let stores = self.stores_lock().map_err(super::map_port)?;
         let belongs = |operation: &dyn AgentOperationRead| -> Result<bool, ControlReadError> {
             let input = operation.agent_input();
@@ -75,10 +138,7 @@ impl LocalControlAdapter {
                 .map_err(|_| ControlReadError::Corrupt)?;
         let record = stores
             .control()
-            .skill_installation(
-                &WorkspaceId::default(),
-                &format!("skill-root/{}", request.context_id),
-            )
+            .skill_installation(&WorkspaceId::default(), &root_ref)
             .map_err(super::map_port)?;
         drop(stores);
         status.operation_id = Some(operation.operation_id.to_string());
@@ -92,15 +152,6 @@ impl LocalControlAdapter {
                 }
             }
             Some(AgentFacetIntent::Configure { .. }) => {
-                let target = self.hermes_target_for_context(
-                    &request.context_id,
-                    request.native_target.as_ref(),
-                )?;
-                let subject = hiroute_integrations::hermes_subject(target.config_root())
-                    .map_err(|_| ControlReadError::Corrupt)?;
-                let file_target = hiroute_domain::AgentConnectionEffectRoleV1::RoutingSkill
-                    .settings_target_for(&subject)
-                    .map_err(|_| ControlReadError::Corrupt)?;
                 let bytes = self
                     .artifacts
                     .read_native_target(&file_target)
@@ -116,8 +167,11 @@ impl LocalControlAdapter {
                 } else {
                     State::Drift
                 };
-                status.restore_point_ref =
-                    Some(codex_model_restore_point_ref(&operation.operation_id));
+                status.restore_point_ref = Some(super::settings_facts::skills::skill_restore_ref(
+                    &request.context_id,
+                    hiroute_domain::AgentSettingsFacet::ManagementSkill,
+                    &operation.operation_id,
+                ));
             }
             _ => return Err(ControlReadError::Corrupt),
         }

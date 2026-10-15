@@ -281,30 +281,9 @@ pub enum AgentAccessTokenIntentV1 {
 }
 
 impl AgentSettingsSpecV2 {
-    /// Shared file ownership is distinct from collaboration authority. Hermes selects its
-    /// management resource; the other clients retain their collaboration resource semantics.
+    /// The legacy slot remains readable with its original meaning in accepted Operations.
     pub fn skill_intent(&self) -> AgentFacetIntent<()> {
-        if self.context_id.starts_with("agent-context/hermes/") {
-            match self.management_skill.as_ref() {
-                None | Some(AgentFacetIntent::Keep) => AgentFacetIntent::Keep,
-                Some(AgentFacetIntent::Configure { .. }) => {
-                    AgentFacetIntent::Configure { settings: () }
-                }
-                Some(AgentFacetIntent::Restore { restore_point_ref }) => {
-                    AgentFacetIntent::Restore {
-                        restore_point_ref: restore_point_ref.clone(),
-                    }
-                }
-            }
-        } else {
-            match &self.collaboration {
-                AgentFacetIntent::Keep => AgentFacetIntent::Keep,
-                AgentFacetIntent::Configure { .. } => AgentFacetIntent::Configure { settings: () },
-                AgentFacetIntent::Restore { restore_point_ref } => AgentFacetIntent::Restore {
-                    restore_point_ref: restore_point_ref.clone(),
-                },
-            }
-        }
+        self.skill_intent_for(self.skill_facet())
     }
 
     pub fn skill_facet(&self) -> AgentSettingsFacet {
@@ -314,6 +293,40 @@ impl AgentSettingsSpecV2 {
             AgentSettingsFacet::Collaboration
         }
     }
+
+    pub fn skill_intent_for(&self, facet: AgentSettingsFacet) -> AgentFacetIntent<()> {
+        match facet {
+            AgentSettingsFacet::ManagementSkill => match self.management_skill.as_ref() {
+                None | Some(AgentFacetIntent::Keep) => AgentFacetIntent::Keep,
+                Some(AgentFacetIntent::Configure { .. }) => {
+                    AgentFacetIntent::Configure { settings: () }
+                }
+                Some(AgentFacetIntent::Restore { restore_point_ref }) => {
+                    AgentFacetIntent::Restore {
+                        restore_point_ref: restore_point_ref.clone(),
+                    }
+                }
+            },
+            AgentSettingsFacet::Collaboration => match &self.collaboration {
+                AgentFacetIntent::Keep => AgentFacetIntent::Keep,
+                AgentFacetIntent::Configure { .. } => AgentFacetIntent::Configure { settings: () },
+                AgentFacetIntent::Restore { restore_point_ref } => AgentFacetIntent::Restore {
+                    restore_point_ref: restore_point_ref.clone(),
+                },
+            },
+            AgentSettingsFacet::Model => AgentFacetIntent::Keep,
+        }
+    }
+
+    pub fn keeps_skills(&self) -> bool {
+        [
+            AgentSettingsFacet::ManagementSkill,
+            AgentSettingsFacet::Collaboration,
+        ]
+        .into_iter()
+        .all(|facet| matches!(self.skill_intent_for(facet), AgentFacetIntent::Keep))
+    }
+
     /// Restore commands may keep other facets, but cannot configure or grant new access.
     pub fn is_restore_only(&self) -> bool {
         matches!(self.access_token, AgentAccessTokenIntentV1::Keep)

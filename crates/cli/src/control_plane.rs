@@ -116,6 +116,7 @@ pub(crate) fn command_payload(
         "agents.connect.status" => Some(positional(options, |connection_id| {
             if connection_id.starts_with("agent-context/") {
                 serde_json::to_value(hiroute_application_api::AgentSettingsStatusRequestV2 {
+                    include_skills: true,
                     native_target: None,
                     schema_version: hiroute_application_api::AGENT_SETTINGS_SCHEMA_V2,
                     context_id: connection_id,

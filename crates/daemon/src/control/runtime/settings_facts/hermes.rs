@@ -42,20 +42,6 @@ impl LocalControlAdapter {
         Ok(target)
     }
 
-    pub(super) fn capture_hermes_settings_facts(
-        &self,
-        spec: &AgentSettingsSpecV2,
-    ) -> Result<AgentSettingsPlanningInput, ControlReadError> {
-        let first = self.hermes_settings_snapshot(spec)?;
-        let first = self.attach_hermes_model_facts(spec, first)?;
-        let second = self.hermes_settings_snapshot(spec)?;
-        let second = self.attach_hermes_model_facts(spec, second)?;
-        if first.facts.dependency_digest != second.facts.dependency_digest {
-            return Err(ControlReadError::SnapshotChanged);
-        }
-        Ok(second)
-    }
-
     pub(super) fn hermes_settings_snapshot(
         &self,
         spec: &AgentSettingsSpecV2,
@@ -206,6 +192,7 @@ impl LocalControlAdapter {
             ))
             .map_err(|_| ControlReadError::Corrupt)?;
         Ok(AgentSettingsPlanningInput {
+            additional_skill_file: None,
             collaboration_state,
             expected_revisions,
             subject,
@@ -219,11 +206,12 @@ impl LocalControlAdapter {
                 template,
             },
             facts: AgentSettingsFacts {
+                management_file_conflict: collaboration_file_conflict,
                 native_target: Some(target_scope),
                 context_id: spec.context_id.clone(),
                 dependency_digest,
                 capabilities,
-                collaboration_file_conflict,
+                collaboration_file_conflict: false,
                 restore_points,
                 model: None,
             },
@@ -231,7 +219,7 @@ impl LocalControlAdapter {
     }
 }
 
-fn management_template() -> Result<CollaborationSkillTemplate, ControlReadError> {
+pub(super) fn management_template() -> Result<CollaborationSkillTemplate, ControlReadError> {
     CollaborationSkillTemplate::bundled(
         "hermes-management-v1",
         include_str!("../../../../../../assets/skills/hiroute-management/SKILL.md"),

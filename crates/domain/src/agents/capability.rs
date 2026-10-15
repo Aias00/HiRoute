@@ -121,6 +121,15 @@ impl AgentCapabilitySet {
         self.0.get(&capability)
     }
 
+    /// Extend a trusted fact snapshot without turning stale capability evidence into proof.
+    pub fn rebind_dependency(&mut self, previous: &CanonicalDigest, current: &CanonicalDigest) {
+        for evidence in self.0.values_mut() {
+            if &evidence.dependency_digest == previous {
+                evidence.dependency_digest = current.clone();
+            }
+        }
+    }
+
     pub fn require(
         &self,
         action: AgentAction,

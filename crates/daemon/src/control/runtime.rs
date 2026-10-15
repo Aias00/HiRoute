@@ -392,6 +392,30 @@ impl ProductionControlRuntime {
                     .map_err(|e| e.to_string())?,
             );
         }
+        for (subject, collaboration) in [
+            (
+                &codex_subject,
+                home.join(".agents/skills/hiroute-collaboration/SKILL.md"),
+            ),
+            (
+                &claude_subject,
+                home.join(".claude/skills/hiroute-collaboration/SKILL.md"),
+            ),
+            (&qoder_subject, scanner.qoder_user_skill_target()),
+            (&pi_subject, scanner.pi_user_skill_target()),
+            (&dsh_subject, scanner.dsh_user_skill_target()),
+        ] {
+            let root = collaboration
+                .parent()
+                .and_then(|p| p.parent())
+                .ok_or("invalid Skill root")?;
+            scoped_targets.push((
+                AgentConnectionEffectRoleV1::ManagementSkill
+                    .settings_target_for(subject)
+                    .map_err(|e| e.to_string())?,
+                root.join("hiroute-management/SKILL.md"),
+            ));
+        }
         let artifacts = stores
             .open_managed_artifacts_with_external_targets(
                 storage_root.join("managed-artifacts"),

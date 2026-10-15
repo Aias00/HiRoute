@@ -472,6 +472,7 @@ impl Session {
                     &self.client,
                     "GetAgentConnectionStatus",
                     &AgentSettingsStatusRequestV2 {
+                        include_skills: true,
                         schema_version: AGENT_SETTINGS_SCHEMA_V2,
                         context_id: context_id.clone(),
                         native_target: agent.native_target.clone(),
@@ -639,6 +640,7 @@ impl Session {
                 &self.client,
                 "GetAgentConnectionStatus",
                 &AgentSettingsStatusRequestV2 {
+                    include_skills: true,
                     schema_version: AGENT_SETTINGS_SCHEMA_V2,
                     context_id: input.spec.context_id.clone(),
                     native_target: input.spec.native_target.clone(),

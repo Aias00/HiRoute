@@ -24,6 +24,7 @@ fn facts() -> AgentSettingsFacts {
     )
     .unwrap();
     AgentSettingsFacts {
+        management_file_conflict: false,
         native_target: None,
         context_id: "agent-context/test".into(),
         dependency_digest,
@@ -487,6 +488,7 @@ fn codex_plan_selections_preview_only_with_catalog_facts() {
         )
         .unwrap();
         AgentSettingsFacts {
+            management_file_conflict: false,
             native_target: None,
             context_id: "agent-context/test".into(),
             dependency_digest,

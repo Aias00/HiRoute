@@ -62,8 +62,12 @@ JSON source uses the logical request ID returned by the v2 session timeline.
   state, display text, or an Issue/handler being present.
 
 Do not install, uninstall, enable autostart, change a listener, contact a provider, apply a product
-change, modify Agent settings, submit/cancel work, or expose observation content unless the user
-requested that effect. Before a provider inference check, state that it can consume quota. This
+change, modify Agent settings, cancel work, or expose observation content unless the user
+requested that effect. Submit work only when the user requests delegation or an explicitly
+enabled, applicable `hiroute-collaboration` policy permits it. That collaboration Skill owns
+submission timing: explicit-only stays explicit-only; delegate-by-default still respects an
+answer-only request. Management preparation alone never enables default delegation. Never
+recursively delegate from a Worker or delegate coordination, status checks or result summaries. Before a provider inference check, state that it can consume quota. This
 Skill organizes public commands; Application remains the only business validator.
 
 ## Protected input

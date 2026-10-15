@@ -61,7 +61,12 @@ impl ManagedCollaborationSkill {
         }
         if let Some(reference) = &self.file_effect {
             reference.validate()?;
-            if reference.effect_id != "agent-connection-routing-skill" {
+            if !matches!(
+                reference.effect_id.as_str(),
+                "agent-connection-routing-skill"
+                    | "agent-connection-management-skill"
+                    | "agent-connection-collaboration-skill"
+            ) {
                 return Err(InvalidSkillRecord);
             }
         }
@@ -116,6 +121,8 @@ impl SkillFileEffectRef {
         if !matches!(
             self.effect_id.as_str(),
             "agent-connection-routing-skill"
+                | "agent-connection-management-skill"
+                | "agent-connection-collaboration-skill"
                 | "agent-connection-hermes-plugin-module"
                 | "agent-connection-hermes-plugin-manifest"
         ) || !identity(&self.target)

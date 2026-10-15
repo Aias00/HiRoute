@@ -254,7 +254,7 @@ impl ExternalEffectPort for LocalControlAdapter {
         if hiroute_application::agent_connection::is_settings_hermes_model(intent) {
             self.validate_hermes_model_dependencies(operation, intent)?;
         }
-        if intent.effect_id() == "agent-connection-routing-skill"
+        if hiroute_application::agent_connection::is_settings_skill_file(intent)
             && intent.desired()["transaction"] == "settings"
         {
             let stores = self.stores_lock()?;
@@ -279,7 +279,7 @@ impl ExternalEffectPort for LocalControlAdapter {
             .get("transaction")
             .and_then(serde_json::Value::as_str)
             == Some("settings")
-            && intent.effect_id() == "agent-connection-routing-skill"
+            && hiroute_application::agent_connection::is_settings_skill_file(intent)
         {
             hiroute_application::agent_connection::validate_settings_skill_file_intent(intent)?;
         }
@@ -325,7 +325,7 @@ impl ExternalEffectPort for LocalControlAdapter {
                 && self.artifacts.read_native_target(intent.target())?.is_none() {
                 self.artifacts.cleanup_native_parents(&operation.operation_id, intent)?;
             }
-            if intent.effect_id() == "agent-connection-routing-skill"
+            if hiroute_application::agent_connection::is_settings_skill_file(intent)
                 && intent.desired()["transaction"] == "settings"
                 && intent.desired()["payload"]["action"] == "remove"
             {
@@ -387,7 +387,7 @@ impl ExternalEffectPort for LocalControlAdapter {
             .get("transaction")
             .and_then(serde_json::Value::as_str)
             == Some("settings")
-            && intent.effect_id() == "agent-connection-routing-skill"
+            && hiroute_application::agent_connection::is_settings_skill_file(intent)
         {
             return hiroute_application::agent_connection::stage_settings_skill_file(
                 &self.artifacts,

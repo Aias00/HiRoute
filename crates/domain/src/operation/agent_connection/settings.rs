@@ -29,6 +29,38 @@ impl AgentConnectionControlIntentV1 {
             }),
         )
     }
+
+    pub fn from_settings_planner_with_skills<T: Serialize>(
+        subject: AgentConnectionTransactionSubjectV1,
+        spec: &ChangeSpecV1,
+        skill_file_change: bool,
+        additional_skill_file_change: bool,
+        payload: &T,
+    ) -> Result<Self, OperationValidationError> {
+        if !additional_skill_file_change {
+            return Self::from_settings_planner(subject, spec, skill_file_change, payload);
+        }
+        let settings = decode_spec(spec)?;
+        let additional = if settings.skill_facet() == crate::AgentSettingsFacet::Collaboration {
+            crate::AgentSettingsFacet::ManagementSkill
+        } else {
+            crate::AgentSettingsFacet::Collaboration
+        };
+        if matches!(
+            settings.skill_intent_for(additional),
+            AgentFacetIntent::Keep
+        ) || (skill_file_change && matches!(settings.skill_intent(), AgentFacetIntent::Keep))
+        {
+            return Err(OperationValidationError::UnregisteredEffectPlan);
+        }
+        Self::from_registered_planner(
+            AgentConnectionTransactionKindV1::Settings,
+            subject,
+            spec,
+            &serde_json::json!({"skill_file_change": skill_file_change,
+                "additional_skill_file_change": true, "state": registered_payload(payload)?}),
+        )
+    }
 }
 
 pub(super) fn decode_spec(
@@ -40,8 +72,7 @@ pub(super) fn decode_spec(
         || settings.schema_version != AGENT_SETTINGS_SCHEMA_V2
         || spec.resource_id.as_deref() != Some(settings.context_id.as_str())
         || !bounded_reference(&settings.context_id)
-        || (matches!(settings.model, AgentFacetIntent::Keep)
-            && matches!(settings.skill_intent(), AgentFacetIntent::Keep))
+        || (matches!(settings.model, AgentFacetIntent::Keep) && settings.keeps_skills())
     {
         return Err(OperationValidationError::UnregisteredEffectPlan);
     }
@@ -61,21 +92,24 @@ pub(super) fn decode_spec(
                 "agent-context/hermes/{}",
                 CanonicalDigest::of_bytes(target.config_root().as_bytes()).as_str()
             )
-            || !matches!(settings.collaboration, AgentFacetIntent::Keep)
             || matches!(&settings.model, AgentFacetIntent::Configure { settings } if !matches!(settings, crate::AgentModelSelectionV2::HermesDefault { .. }))
         {
             return Err(OperationValidationError::UnregisteredEffectPlan);
         }
     } else if settings.native_target.is_some()
-        || settings.management_skill.is_some()
         || matches!(&settings.model, AgentFacetIntent::Configure { settings } if matches!(settings, crate::AgentModelSelectionV2::HermesDefault { .. }))
     {
         return Err(OperationValidationError::UnregisteredEffectPlan);
     }
-    if let AgentFacetIntent::Restore { restore_point_ref } = settings.skill_intent()
-        && !bounded_reference(&restore_point_ref)
-    {
-        return Err(OperationValidationError::UnregisteredEffectPlan);
+    for facet in [
+        crate::AgentSettingsFacet::ManagementSkill,
+        crate::AgentSettingsFacet::Collaboration,
+    ] {
+        if let AgentFacetIntent::Restore { restore_point_ref } = settings.skill_intent_for(facet)
+            && !bounded_reference(&restore_point_ref)
+        {
+            return Err(OperationValidationError::UnregisteredEffectPlan);
+        }
     }
     match &settings.model {
         AgentFacetIntent::Configure { settings } => {
@@ -128,7 +162,11 @@ pub(super) fn validate_effects(
     let object = payload
         .as_object()
         .ok_or(OperationValidationError::UnregisteredEffectPlan)?;
-    if object.len() != 2 || !object.contains_key("state") {
+    if !(object.len() == 2
+        || (object.len() == 3
+            && object.get("additional_skill_file_change") == Some(&Value::Bool(true))))
+        || !object.contains_key("state")
+    {
         return Err(OperationValidationError::UnregisteredEffectPlan);
     }
     validate_payload_value(&object["state"])?;
@@ -156,6 +194,20 @@ pub(super) fn validate_effects(
     }
     if skill_file_change {
         required.insert(AgentConnectionEffectRoleV1::RoutingSkill);
+    }
+    if object.get("additional_skill_file_change") == Some(&Value::Bool(true)) {
+        let facet = if settings.skill_facet() == crate::AgentSettingsFacet::Collaboration {
+            crate::AgentSettingsFacet::ManagementSkill
+        } else {
+            crate::AgentSettingsFacet::Collaboration
+        };
+        if matches!(settings.skill_intent_for(facet), AgentFacetIntent::Keep) {
+            return Err(OperationValidationError::UnregisteredEffectPlan);
+        }
+        required.insert(
+            AgentConnectionEffectRoleV1::settings_skill(&settings.context_id, facet)
+                .ok_or(OperationValidationError::UnregisteredEffectPlan)?,
+        );
     }
     // A shared Skill reference or grant-only change may legitimately have no file effect.
     // The sealed planner decision is durable: dropping an expected file on replay is invalid.
@@ -227,10 +279,14 @@ mod tests;
 /// A renderer cannot silently install/remove a different context's shared Skill reference.
 pub(super) fn validate_skill_selection(
     spec: &ChangeSpecV1,
+    role: AgentConnectionEffectRoleV1,
     payload: &Value,
 ) -> Result<(), OperationValidationError> {
     let settings = decode_spec(spec)?;
-    let action = match settings.skill_intent() {
+    let facet = role
+        .settings_skill_facet(&settings.context_id)
+        .ok_or(OperationValidationError::UnregisteredEffectPlan)?;
+    let action = match settings.skill_intent_for(facet) {
         AgentFacetIntent::Configure { .. } => "install",
         AgentFacetIntent::Restore { .. } => "remove",
         AgentFacetIntent::Keep => return Err(OperationValidationError::UnregisteredEffectPlan),

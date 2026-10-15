@@ -6,6 +6,7 @@ pub struct HermesSupportFacts {
     pub version: String,
     pub middleware: bool,
     pub skills: bool,
+    pub shell: bool,
     pub chat_sdk: bool,
     pub responses_sdk: bool,
     pub messages_sdk: bool,
@@ -92,15 +93,19 @@ fn inspect_installation(executables: impl IntoIterator<Item = PathBuf>) -> Herme
     roots.sort();
     roots.dedup();
     for root in roots.into_iter().take(256) {
-        let Some(plugins) = bounded_text(&root.join("hermes_cli/plugins.py"), 2 * 1024 * 1024)
-        else {
+        let plugins =
+            bounded_text(&root.join("hermes_cli/plugins.py"), 2 * 1024 * 1024).unwrap_or_default();
+        let middleware = bounded_text(&root.join("hermes_cli/middleware.py"), 2 * 1024 * 1024)
+            .unwrap_or_default();
+        let skill_source =
+            bounded_text(&root.join("tools/skills_tool.py"), 2 * 1024 * 1024).unwrap_or_default();
+        if plugins.is_empty() && middleware.is_empty() && skill_source.is_empty() {
             continue;
-        };
-        let Some(middleware) =
-            bounded_text(&root.join("hermes_cli/middleware.py"), 2 * 1024 * 1024)
-        else {
-            continue;
-        };
+        }
+        let shell_source =
+            bounded_text(&root.join("tools/terminal_tool.py"), 2 * 1024 * 1024).unwrap_or_default();
+        let shell =
+            shell_source.contains("def terminal_tool(") && shell_source.contains("terminal");
         let calls = ["agent/turn_api_request.py", "agent/conversation_loop.py"]
             .into_iter()
             .filter_map(|p| bounded_text(&root.join(p), 2 * 1024 * 1024))
@@ -163,6 +168,7 @@ fn inspect_installation(executables: impl IntoIterator<Item = PathBuf>) -> Herme
             version,
             middleware: supported,
             skills,
+            shell,
             chat_sdk: sdk.chat,
             responses_sdk: sdk.responses,
             messages_sdk: sdk.messages,
@@ -173,6 +179,7 @@ fn inspect_installation(executables: impl IntoIterator<Item = PathBuf>) -> Herme
         version: "unknown".into(),
         middleware: false,
         skills: false,
+        shell: false,
         chat_sdk: false,
         responses_sdk: false,
         messages_sdk: false,

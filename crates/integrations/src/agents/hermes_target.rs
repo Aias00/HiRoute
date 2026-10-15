@@ -63,6 +63,10 @@ pub fn hermes_external_targets(root: &str) -> Result<Vec<(String, PathBuf)>, Her
             "skills/hiroute-management/SKILL.md",
         ),
         (
+            AgentConnectionEffectRoleV1::CollaborationSkill,
+            "skills/hiroute-collaboration/SKILL.md",
+        ),
+        (
             AgentConnectionEffectRoleV1::HermesPluginModule,
             "plugins/hiroute/__init__.py",
         ),

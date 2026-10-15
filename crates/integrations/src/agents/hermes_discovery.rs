@@ -132,6 +132,7 @@ fn hermes_installation(
                     },
             ),
             AgentCapability::SkillLoading => Some(support.skills),
+            AgentCapability::TrustedCliExecution => Some(support.shell),
             _ => None,
         };
         if let Some(available) = available {

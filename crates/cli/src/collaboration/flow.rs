@@ -135,6 +135,7 @@ fn workflow(
             client,
             "GetAgentConnectionStatus",
             json!(AgentSettingsStatusRequestV2 {
+                include_skills: true,
                 native_target: None,
                 schema_version: AGENT_SETTINGS_SCHEMA_V2,
                 context_id
@@ -151,6 +152,7 @@ fn workflow(
                 client,
                 "GetAgentConnectionStatus",
                 json!(AgentSettingsStatusRequestV2 {
+                    include_skills: true,
                     native_target: None,
                     schema_version: AGENT_SETTINGS_SCHEMA_V2,
                     context_id: context_id.clone()
