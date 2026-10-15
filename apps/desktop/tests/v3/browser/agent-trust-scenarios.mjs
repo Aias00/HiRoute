@@ -72,8 +72,11 @@ const scenarios = [
     assert(dialog().querySelector('input[readonly]')?.value === '/tmp/hermes-profile-fixture', 'Hermes root is missing');
     const routeLabel = dialog().querySelector('[data-hermes-main-routing] label:nth-of-type(2)');
     const labelText = document.createRange(); labelText.selectNodeContents(routeLabel.firstChild);
-    assert(labelText.getBoundingClientRect().height <= parseFloat(getComputedStyle(routeLabel).lineHeight) * 1.3,
-      'Hermes route label wraps vertically beside its control');
+    const textStyle = getComputedStyle(routeLabel.firstChild.nodeType === Node.ELEMENT_NODE ? routeLabel.firstChild : routeLabel);
+    const lineHeight = parseFloat(textStyle.lineHeight) || parseFloat(textStyle.fontSize) * 1.6;
+    const labelHeight = labelText.getBoundingClientRect().height;
+    assert(labelHeight <= lineHeight * 1.3,
+      `Hermes route label wraps vertically beside its control (${labelHeight}px versus ${lineHeight}px per line)`);
     assert(dialog().querySelector('select').value, 'Sole enabled Plan was not selected');
     [...dialog().querySelectorAll('button')].find(button => button.textContent === '取消').click();
     await until(() => !dialog(), 'Hermes cancelled');
