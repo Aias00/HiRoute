@@ -111,18 +111,6 @@ def analyze():
             'mixed_qwen_cache_read_tokens': sum(a['usage']['cache_read_tokens'] or 0 for a in mixed_attempts if a['model'] == 'qwen3.8-flash'),
             'astra_price_break_even_percent_of_frozen': astra_break_even_scale * 100,
         })
-    economy = rates['qwen3.8-flash']
-    # Astra -> Qwen with the old prefix: a one-time rebuild versus cheaper cached reads on later calls.
-    switch_payback = []
-    for percent in (100, 50, 20, 10, 5):
-        astra_read = primary['cache_read'] * percent / 100
-        premium = old_prefix * (economy['cache_write'] - astra_read) / million
-        saving = old_prefix * (astra_read - economy['cache_read']) / million
-        switch_payback.append({
-            'astra_price_percent_of_frozen': percent, 'one_time_rebuild_premium_usd': premium,
-            'later_call_prefix_read_saving_usd': saving,
-            'payback_calls': premium / saving if premium > 0 else Decimal(0),
-        })
     return {
         'basis': 'Historical API-equivalent prices checked 2026-10-03; fixed 2026-09-30 FX, not current billing.',
         'scope': 'Post-hoc sensitivity calculation with observed outputs fixed; not measured cache-hit rates or a new run.',
@@ -155,11 +143,7 @@ def analyze():
             'uncached_tokens_added_per_continuation': continuation_growth,
             'hit_rate_examples': new_turn_examples, 'prefix_cost_by_direction': directions,
         },
-        'astra_price_sensitivity': {
-            'kind': 'hypothetical uniform Astra price change; Qwen prices, usage and delivery outcomes held fixed',
-            'prefix_switch_parity_percent_of_frozen': economy['cache_write'] / primary['cache_read'] * 100,
-            'astra_to_qwen_switch_payback': switch_payback,
-        },
+        'astra_price_sensitivity': 'Per-pair break-even assumes a uniform Astra price change; Qwen prices, usage and outcomes held fixed.',
         'original_three_pair_gate_passed': assessment['original_three_pair_gate_passed'],
         'paid_model_calls': 0,
     }
