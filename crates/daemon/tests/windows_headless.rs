@@ -25,6 +25,8 @@ mod windows_model_ratings;
 mod windows_native_protocols;
 #[path = "support/windows_packaged_foreground.rs"]
 mod windows_packaged_foreground;
+#[path = "support/windows_qoder_daemon_diagnostic.rs"]
+mod windows_qoder_daemon_diagnostic;
 #[path = "support/windows_qoder_user_models.rs"]
 mod windows_qoder_user_models;
 #[path = "support/windows_routing_business.rs"]
@@ -634,11 +636,8 @@ impl RunningDaemon {
             );
             thread::sleep(Duration::from_millis(20));
         }
-        for reader in [&mut self.stdout_reader, &mut self.stderr_reader] {
-            if let Some(reader) = reader.take() {
-                assert_no_secret(&reader.join().unwrap());
-            }
-        }
+        windows_qoder_daemon_diagnostic::collect(&mut self.stdout_reader, false);
+        windows_qoder_daemon_diagnostic::collect(&mut self.stderr_reader, true);
     }
 }
 
@@ -646,6 +645,8 @@ impl Drop for RunningDaemon {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
+        windows_qoder_daemon_diagnostic::collect(&mut self.stdout_reader, false);
+        windows_qoder_daemon_diagnostic::collect(&mut self.stderr_reader, true);
     }
 }
 
