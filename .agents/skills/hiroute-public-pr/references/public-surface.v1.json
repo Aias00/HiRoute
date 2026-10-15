@@ -1,0 +1,90 @@
+{
+  "schema": "hiroute.public-surface/v1",
+  "public_repository": "higress-group/HiRoute",
+  "default_branch": "main",
+  "include_files": [
+    ".gitignore",
+    ".gitattributes",
+    "Cargo.lock",
+    "Cargo.toml",
+    "CONTRIBUTING.md",
+    "LICENSE",
+    "README.md",
+    "README.zh-CN.md",
+    "SECURITY.md",
+    "rust-toolchain.toml",
+    "AGENTS.md",
+    "CLAUDE.md",
+    ".agents/README.md",
+    ".issue-spec/config.json",
+    "issue-spec/config.yaml"
+  ],
+  "include_roots": [
+    ".github/",
+    "apps/",
+    "assets/",
+    "contracts/",
+    "crates/",
+    "decision-extensions/",
+    "e2e/",
+    "scripts/",
+    "tools/",
+    "vendor/",
+    "experiments/",
+    "news/",
+    ".agents/skills/",
+    ".claude/skills/",
+    "issue-spec/specs/",
+    "issue-spec/project/"
+  ],
+  "include_docs": [
+    "docs/code-map/README.md",
+    "docs/code-map/architecture.md",
+    "docs/code-map/decision-foundation.md",
+    "docs/code-map/testing.md",
+    "docs/code-map/worker-context.md",
+    "docs/contract-convergence.md",
+    "docs/desktop-tauri-pilot.md",
+    "docs/diagnostic-troubleshooting.md",
+    "docs/github-actions-validation.md",
+    "docs/local-rust-validation.md",
+    "docs/local-user-configuration.md",
+    "docs/macos-installation.md",
+    "docs/macos-installation.zh-CN.md",
+    "docs/release-builds.md",
+    "docs/release-contracts.md",
+    "docs/remote-rust-validation.md",
+    "docs/smart-saving-model-classification.md",
+    "docs/smart-saving-model-classification.zh-CN.md",
+    "docs/standalone-cli.md",
+    "docs/standalone-cli.zh-CN.md",
+    "docs/standalone-windows.md",
+    "docs/test-selection.md",
+    "docs/validation-feedback.md",
+    "docs/validation-routing.md"
+  ],
+  "exclude_files": [
+    ".claude/skills/hiroute-promo-video"
+  ],
+  "exclude_roots": [
+    ".agents/skills/hiroute-promo-video/",
+    "artifacts/",
+    "docs/handoffs/",
+    "docs/drafts/",
+    "docs/reports/"
+  ],
+  "exclude_doc_globs": [
+    "docs/*handoff*.md",
+    "docs/*proposal*.md",
+    "docs/issue-*.md",
+    "docs/issues-*.md"
+  ],
+  "exclude_globs": [
+    ".env*",
+    "*/.env*",
+    "*.log",
+    "*/.DS_Store",
+    ".DS_Store",
+    ".claude/settings.local.json"
+  ]
+}

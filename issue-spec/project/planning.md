@@ -1,0 +1,7 @@
+# HiRoute planning supplement
+
+Use `hiroute-design-author` for authorized Proposal/Design authoring and its scoped product references. The same current session owns eventual authorized implementation. Authoring does not create a coordinator or another writer/reviewer.
+
+Keep investigation in a simple Issue until the problem and intended change are confirmed. Follow the generated [requirement scope and verification ownership](../../.agents/skills/issue-spec-workflow/references/planning-scope.md) guide for the current capability baseline, Proposal SPEC scope and Design TASK verification. Use HiRoute's code map to locate existing production owners and representative scenarios before defining the required increment. Prefer structured choice questions for genuine product or shared-contract tradeoffs, with credible alternatives and a reasoned recommendation. Follow the shared QUESTION guide; do not manufacture options or reopen settled decisions.
+
+Make Design self-contained around a concrete product case, normal/failure paths, interfaces/state, alternatives, compatibility and verification. TASKs express invariants, dependencies, ownership, shared touchpoints and SPEC coverage; a TASK does not imply another agent or worktree. Follow `hiroute-design-author` for implementation handoff, model/effort constraints and remaining uncertainty. Stop at the authorized phase and return artifacts, decisions and blockers for cross-Proposal alignment.

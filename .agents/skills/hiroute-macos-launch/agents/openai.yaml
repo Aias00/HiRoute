@@ -1,0 +1,4 @@
+interface:
+  display_name: "HiRoute macOS Launch"
+  short_description: "Launch local builds at fixed HOME paths and verify processes"
+  default_prompt: "Use $hiroute-macos-launch to deploy the current macOS build at fixed HOME paths and verify the actual processes."
