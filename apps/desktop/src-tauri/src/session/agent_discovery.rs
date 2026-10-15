@@ -76,6 +76,16 @@ pub(super) fn unreadable_hermes(target: AgentNativeTargetV1) -> AgentEntry {
     unavailable_hermes(Some(target), "AGENT_STATUS_UNAVAILABLE")
 }
 
+pub(super) fn merge_entry(agents: &mut Vec<AgentEntry>, entry: AgentEntry) {
+    agents.retain(|existing| {
+        existing.agent_id != entry.agent_id
+            || !(existing.context_id.is_some() && existing.context_id == entry.context_id
+                || existing.native_target.is_some()
+                    && existing.native_target == entry.native_target)
+    });
+    agents.push(entry);
+}
+
 pub(super) fn unavailable_hermes(target: Option<AgentNativeTargetV1>, reason: &str) -> AgentEntry {
     AgentEntry {
         native_target: target,
@@ -94,6 +104,59 @@ pub(super) fn unavailable_hermes(target: Option<AgentNativeTargetV1>, reason: &s
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unavailable_selected_profile_replaces_its_registered_entry_and_recovers_once() {
+        let target = |root: &str| AgentNativeTargetV1::Hermes {
+            config_root: root.into(),
+        };
+        let registered = |root: &str, context: &str| {
+            let mut entry = unavailable_hermes(Some(target(root)), "unused");
+            entry.context_id = Some(context.into());
+            entry.configuration_state = "registered".into();
+            entry.status_error = None;
+            entry
+        };
+        let mut unrelated = unavailable_hermes(None, "unrelated");
+        unrelated.agent_id = "agent_codex_default".into();
+        let mut agents = vec![
+            registered("/profiles/selected", "selected-context"),
+            registered("/profiles/other", "other-context"),
+            unrelated,
+        ];
+
+        merge_entry(&mut agents, unreadable_hermes(target("/profiles/selected")));
+        assert_eq!(agents.len(), 3);
+        let selected = agents.last().unwrap();
+        assert_eq!(selected.configuration_state, "profile_unavailable");
+        assert!(selected.context_id.is_none());
+        assert_eq!(selected.native_target, Some(target("/profiles/selected")));
+        assert_eq!(agents[0].context_id.as_deref(), Some("other-context"));
+        assert_eq!(agents[1].agent_id, "agent_codex_default");
+
+        merge_entry(
+            &mut agents,
+            registered("/profiles/selected", "selected-context"),
+        );
+        assert_eq!(agents.len(), 3);
+        assert_eq!(
+            agents.last().unwrap().context_id.as_deref(),
+            Some("selected-context")
+        );
+        assert!(agents.last().unwrap().status_error.is_none());
+
+        // A successful scan can canonicalize an alias without creating a second context.
+        merge_entry(
+            &mut agents,
+            registered("/profiles/canonical-selected", "selected-context"),
+        );
+        assert_eq!(agents.len(), 3);
+        assert_eq!(
+            agents.last().unwrap().native_target,
+            Some(target("/profiles/canonical-selected"))
+        );
+    }
+
     #[test]
     fn hermes_default_discovery_is_read_only_and_uses_the_callers_root() {
         let home = tempfile::tempdir().unwrap();

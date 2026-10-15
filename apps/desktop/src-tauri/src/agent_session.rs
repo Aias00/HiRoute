@@ -439,8 +439,10 @@ impl Session {
                 super::agent_discovery::ProfileDiscovery::Found(target) => vec![target],
                 super::agent_discovery::ProfileDiscovery::Missing => Vec::new(),
                 super::agent_discovery::ProfileDiscovery::Unavailable { target, reason } => {
-                    scan.agents
-                        .push(super::agent_discovery::unavailable_hermes(target, reason));
+                    super::agent_discovery::merge_entry(
+                        &mut scan.agents,
+                        super::agent_discovery::unavailable_hermes(target, reason),
+                    );
                     Vec::new()
                 }
             }
@@ -459,16 +461,15 @@ impl Session {
             let selected = match selected {
                 Ok(selected) => selected,
                 Err(_) => {
-                    scan.agents
-                        .push(super::agent_discovery::unreadable_hermes(target));
+                    super::agent_discovery::merge_entry(
+                        &mut scan.agents,
+                        super::agent_discovery::unreadable_hermes(target),
+                    );
                     continue;
                 }
             };
             for agent in selected.agents {
-                scan.agents.retain(|existing| {
-                    existing.agent_id != agent.agent_id || existing.context_id != agent.context_id
-                });
-                scan.agents.push(agent);
+                super::agent_discovery::merge_entry(&mut scan.agents, agent);
             }
         }
         for agent in &mut scan.agents {
