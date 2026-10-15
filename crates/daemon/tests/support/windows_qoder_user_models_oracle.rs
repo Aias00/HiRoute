@@ -1,8 +1,10 @@
 //! Independent actual upstream peers for ordinary saved Qoder models. A loopback
 //! source is local-model evidence, never evidence of provider-account inference.
 use super::super::{SECRET, windows_business_http as http, windows_routing_business::MODEL};
-#[cfg(windows)]
-use super::settings::Snapshot;
+#[path = "windows_qoder_native_paths.rs"]
+mod native_paths;
+#[path = "windows_qoder_user_models_skill.rs"]
+mod skill;
 use hiroute_domain::UpstreamProtocol;
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -26,6 +28,12 @@ struct Challenge {
     skill: PathBuf,
     command: String,
     expected_cli: Value,
+    #[cfg(windows)]
+    native_cli: Option<native_paths::BashFile>,
+    #[cfg(windows)]
+    native_skill: Option<skill::Binding>,
+    #[cfg(all(test, windows))]
+    _unit_root: Option<tempfile::TempDir>,
 }
 impl Oracle {
     pub fn start(
@@ -41,14 +49,27 @@ impl Oracle {
         ));
         let ledger = Arc::new(Mutex::new(Ledger::default()));
         let observed = ledger.clone();
-        let challenge = Challenge {
+        #[cfg(windows)]
+        let native_cli = native_paths::BashFile::trusted_cli(&cli)
+            .expect("ordinary Qoder must retain its actual trusted native CLI");
+        #[cfg(windows)]
+        let command = format!("{} schema list --output json", native_cli.quoted());
+        #[cfg(not(windows))]
+        let command = format!(
+            "{} schema list --output json",
+            native_paths::literal(cli.to_str().expect("fixture CLI encoding"))
+        );
+        let mut challenge = Challenge {
             nonce,
             skill,
-            command: format!(
-                "& '{}' schema list --output json",
-                cli.to_string_lossy().replace('\'', "''")
-            ),
+            command,
             expected_cli,
+            #[cfg(windows)]
+            native_cli: Some(native_cli),
+            #[cfg(windows)]
+            native_skill: None,
+            #[cfg(all(test, windows))]
+            _unit_root: None,
         };
         let server = http::Server::start(move |request| {
             assert!(
@@ -75,7 +96,7 @@ impl Oracle {
                 );
             }
             let mut ledger = observed.lock().unwrap();
-            respond(protocol, &request.body, &mut ledger, &challenge)
+            respond(protocol, &request.body, &mut ledger, &mut challenge)
                 .expect("ordinary native request failed a closed protocol/correlation assertion")
         });
         Self { server, ledger }
@@ -86,7 +107,7 @@ fn respond(
     protocol: UpstreamProtocol,
     body: &Value,
     ledger: &mut Ledger,
-    challenge: &Challenge,
+    challenge: &mut Challenge,
 ) -> Result<http::Reply, &'static str> {
     if body["model"] != MODEL {
         return Err("native-model");
@@ -151,9 +172,11 @@ fn respond(
 fn collaboration(
     body: &Value,
     ledger: &mut Ledger,
-    challenge: &Challenge,
+    challenge: &mut Challenge,
 ) -> Result<Value, &'static str> {
     let input = body["input"].as_array().ok_or("skill-input")?;
+    #[cfg(not(windows))]
+    let _ = input;
     let item = match ledger.collaboration_step {
         0 => {
             if tool(body, "Skill").is_none()
@@ -161,6 +184,17 @@ fn collaboration(
                 || !body.to_string().contains("hiroute-collaboration")
             {
                 return Err("skill-discovery");
+            }
+            // The public install occurs after Oracle::start. Retain the real
+            // Skill now, before issuing the native Skill tool, never a future path.
+            #[cfg(windows)]
+            {
+                if challenge.native_skill.is_some() {
+                    return Err("skill-binding-repeated");
+                }
+                challenge.native_skill = Some(
+                    skill::Binding::retain(&challenge.skill).map_err(|_| "skill-native-binding")?,
+                );
             }
             function(
                 body,
@@ -175,29 +209,13 @@ fn collaboration(
             {
                 return Err("skill-call-result");
             }
-            let contents = native_skill_contents(&challenge.skill)?;
-            let skill_body = contents
-                .strip_prefix("---\n")
-                .and_then(|tail| tail.split_once("\n---\n"))
-                .map(|(_, body)| body.trim())
-                .filter(|body| !body.is_empty())
-                .ok_or("skill-front-matter")?;
-            let directory = std::fs::canonicalize(challenge.skill.parent().ok_or("skill-target")?)
-                .map_err(|_| "skill-target")?;
-            let prefix = format!(
-                "Base directory for this skill: {}\n\n",
-                directory.to_str().ok_or("skill-target-encoding")?
-            );
-            let loaded = input
-                .iter()
-                .filter(|item| item["type"] == "message" && item["role"] == "user")
-                .filter_map(|item| item["content"].as_array())
-                .flatten()
-                .filter_map(|part| part["text"].as_str())
-                .any(|text| {
-                    text.strip_prefix(&prefix)
-                        .is_some_and(|body| body.trim() == skill_body)
-                });
+            #[cfg(windows)]
+            let loaded = challenge
+                .native_skill
+                .as_ref()
+                .is_some_and(|binding| binding.matches(input));
+            #[cfg(not(windows))]
+            let loaded = false; // Pure oracles cannot substitute native Skill authority.
             if !loaded {
                 return Err("skill-actual-path-and-body");
             }
@@ -214,6 +232,25 @@ fn collaboration(
             if envelope != challenge.expected_cli || envelope["status"] != "succeeded" {
                 return Err("skill-cli-exact-envelope");
             }
+            #[cfg(windows)]
+            {
+                challenge
+                    .native_cli
+                    .as_ref()
+                    .ok_or("skill-cli-binding")?
+                    .verify()
+                    .map_err(|_| "skill-cli-binding")?;
+                challenge
+                    .native_skill
+                    .as_ref()
+                    .ok_or("skill-native-binding")?
+                    .verify()
+                    .map_err(|_| "skill-native-binding")?;
+                // Release only after the exact correlated result. The original
+                // journey immediately restores/reinstalls this actual Skill.
+                challenge.native_skill.take();
+                challenge.native_cli.take();
+            }
             ledger.cli_proven = true;
             if !ledger.completed.insert("collaboration".into()) {
                 return Err("skill-repeat");
@@ -227,22 +264,6 @@ fn collaboration(
     };
     ledger.collaboration_step += 1;
     Ok(item)
-}
-#[cfg(windows)]
-fn native_skill_contents(
-    path: &std::path::Path,
-) -> Result<zeroize::Zeroizing<String>, &'static str> {
-    let snapshot = Snapshot::read(path);
-    Ok(zeroize::Zeroizing::new(
-        std::str::from_utf8(&snapshot.bytes)
-            .map_err(|_| "skill-encoding")?
-            .to_owned(),
-    ))
-}
-#[cfg(not(windows))]
-fn native_skill_contents(_: &std::path::Path) -> Result<zeroize::Zeroizing<String>, &'static str> {
-    // Cross-platform pure oracle tests never substitute a native Skill read.
-    Err("native-skill-requires-windows")
 }
 fn tool<'a>(body: &'a Value, name: &str) -> Option<&'a Value> {
     body["tools"]
@@ -389,11 +410,39 @@ fn messages(text: &str, pair: (u64, u64)) -> http::Reply {
 mod tests {
     use super::*;
     fn challenge() -> Challenge {
+        #[cfg(windows)]
+        let (unit_root, path, native_cli, native_skill) = {
+            use hiroute_platform::windows::security;
+            let outer = tempfile::tempdir().unwrap();
+            let directory = outer.path().join("oracle-unit");
+            security::create_owner_only_directory(&directory).unwrap();
+            let path = directory.join("SKILL.md");
+            hiroute_platform::durable::write_private_new(
+                &path,
+                b"---\nname: unit\n---\n\nunit body\n",
+            )
+            .unwrap();
+            let cli = directory.join("unit-command-not-executed.bin");
+            hiroute_platform::durable::write_private_new(&cli, b"oracle parser control only")
+                .unwrap();
+            let native_cli = native_paths::BashFile::trusted_cli(&cli).unwrap();
+            let native_skill = skill::Binding::retain(&path).unwrap();
+            (outer, path, native_cli, native_skill)
+        };
         Challenge {
             nonce: "independent".into(),
+            #[cfg(not(windows))]
             skill: "unread-during-negative-oracles".into(),
+            #[cfg(windows)]
+            skill: path,
             command: "trusted-public-command".into(),
             expected_cli: json!({"schema_version":{"major":1,"minor":0},"status":"succeeded","data":{"commands":[]}}),
+            #[cfg(windows)]
+            native_cli: Some(native_cli),
+            #[cfg(windows)]
+            native_skill: Some(native_skill),
+            #[cfg(windows)]
+            _unit_root: Some(unit_root),
         }
     }
     #[test]
@@ -406,7 +455,7 @@ mod tests {
                 body["messages"] = json!([{"role":"user","content":"WINDOWS-QODER-USER-MODEL-independent-configured"}]);
                 body["max_tokens"] = json!(32);
             }
-            let reply = respond(protocol, &body, &mut ledger, &challenge()).unwrap();
+            let reply = respond(protocol, &body, &mut ledger, &mut challenge()).unwrap();
             let encoded = String::from_utf8(reply.body).unwrap();
             assert!(encoded.contains("qoder-user-model-configured-independent"));
             assert!(
@@ -416,40 +465,40 @@ mod tests {
                 ledger.requests == [(100, 3)]
                     && ledger.completed == BTreeSet::from(["configured".into()])
             );
-            assert!(respond(protocol, &body, &mut ledger, &challenge()).is_err());
+            assert!(respond(protocol, &body, &mut ledger, &mut challenge()).is_err());
             let mut wrong = body.clone();
             wrong["model"] = json!("other");
-            assert!(respond(protocol, &wrong, &mut Ledger::default(), &challenge()).is_err());
+            assert!(respond(protocol, &wrong, &mut Ledger::default(), &mut challenge()).is_err());
             wrong["model"] = json!(MODEL);
             wrong["input"] = json!("unarmed");
             wrong["messages"] = json!([]);
-            assert!(respond(protocol, &wrong, &mut Ledger::default(), &challenge()).is_err());
+            assert!(respond(protocol, &wrong, &mut Ledger::default(), &mut challenge()).is_err());
         }
     }
     #[test]
     fn ordinary_qoder_skill_oracle_rejects_uncorrelated_error_and_fake_cli_success() {
-        let proof = challenge();
+        let mut proof = challenge();
         let mut ledger = Ledger {
             collaboration_step: 2,
             ..Ledger::default()
         };
         let body = |call: &str, output: &str, error: bool| json!({"input":[{"type":"function_call_output","call_id":call,"output":output,"is_error":error}]});
         let expected = proof.expected_cli.to_string();
-        assert!(collaboration(&body("other", &expected, false), &mut ledger, &proof).is_err());
+        assert!(collaboration(&body("other", &expected, false), &mut ledger, &mut proof).is_err());
         assert!(
             collaboration(
                 &body("call_qoder_cli", &expected, true),
                 &mut ledger,
-                &proof
+                &mut proof
             )
             .is_err()
         );
-        assert!(collaboration(&body("call_qoder_cli",r#"{"schema_version":{"major":1,"minor":0},"status":"succeeded","data":{"commands":["fabricated"]}}"#,false),&mut ledger,&proof).is_err());
+        assert!(collaboration(&body("call_qoder_cli",r#"{"schema_version":{"major":1,"minor":0},"status":"succeeded","data":{"commands":["fabricated"]}}"#,false),&mut ledger,&mut proof).is_err());
         assert!(
             collaboration(
                 &body("call_qoder_cli", &format!("{expected}\n{expected}"), false),
                 &mut ledger,
-                &proof
+                &mut proof
             )
             .is_err()
         );
@@ -458,7 +507,7 @@ mod tests {
             collaboration(
                 &body("call_qoder_cli", &expected, false),
                 &mut ledger,
-                &proof
+                &mut proof
             )
             .is_ok()
         );
@@ -467,7 +516,7 @@ mod tests {
             collaboration(
                 &body("call_qoder_cli", &expected, false),
                 &mut ledger,
-                &proof
+                &mut proof
             )
             .is_err()
         );

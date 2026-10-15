@@ -19,6 +19,11 @@ const CALL_IDS: [&str; 5] = [
 
 #[path = "native_tools_history_probe.rs"]
 mod history_probe;
+#[path = "../../../tests/support/windows_qoder_native_paths.rs"]
+mod qoder_paths;
+#[cfg(test)]
+#[path = "native_tools_shell_tests.rs"]
+mod shell_tests;
 
 pub(super) fn observe_claude_history(path: &Path) {
     history_probe::observe_transcript(path);
@@ -42,6 +47,8 @@ pub(super) struct ToolsFixture {
     before: String,
     after: String,
     receipt: String,
+    #[cfg(windows)]
+    qoder_bash_inputs: Vec<qoder_paths::BashFile>,
 }
 
 impl ToolsFixture {
@@ -78,22 +85,8 @@ impl ToolsFixture {
             let discovery = format!("discovery-{scope}-{nonce}");
             let contents = format!("contents-{scope}-{nonce}");
             let executed = format!("executed-{scope}-{nonce}");
-            let powershell = matches!(
-                harness,
-                WorkerHarnessV1::CodexCli
-                    | WorkerHarnessV1::QoderCli
-                    | WorkerHarnessV1::DeepseekHarness
-            );
-            let script = directory.join(if powershell {
-                "receipt.ps1"
-            } else {
-                "receipt.sh"
-            });
-            let script_body = if powershell {
-                format!("Write-Output {}\n", ps_literal(&executed))
-            } else {
-                format!("printf '%s\\n' {}\n", bash_literal(&executed))
-            };
+            let (script_name, script_body) = receipt_script(harness, &executed);
+            let script = directory.join(script_name);
             write_new(&script, script_body.as_bytes())?;
             let file = directory.join("SKILL.md");
             let original = format!("---\nname: {name}\ndescription: Native receipt {discovery}\n---\n\nRead this skill and execute its receipt script.\nContent receipt: {contents}\nScript: {}\n", script.display()).into_bytes();
@@ -112,18 +105,37 @@ impl ToolsFixture {
         let after = format!("after-{nonce}");
         let target = workspace.join(TARGET_NAME);
         write_new(&target, format!("{before}\n").as_bytes())?;
+        let shell_receipt = workspace.join("native-shell-receipt.txt");
+        #[cfg(windows)]
+        if harness == WorkerHarnessV1::QoderCli {
+            // Bash truncates this exact new private file. Empty bytes cannot
+            // satisfy the original nonce/effect oracle.
+            write_new(&shell_receipt, b"")?;
+        }
         Ok(Self {
             harness,
             skills,
             target,
-            shell_receipt: workspace.join("native-shell-receipt.txt"),
+            shell_receipt,
             before,
             after,
             receipt: format!("shell-{nonce}"),
+            #[cfg(windows)]
+            qoder_bash_inputs: Vec::new(),
         })
     }
 
     pub(super) fn assert_effects(&self) -> Result<(), DelegationErrorV1> {
+        #[cfg(windows)]
+        if self.harness == WorkerHarnessV1::QoderCli
+            && (self.qoder_bash_inputs.len() != 2 + 2 * self.skills.len()
+                || self
+                    .qoder_bash_inputs
+                    .iter()
+                    .any(|binding| binding.verify().is_err()))
+        {
+            return failed("native-bash-resource-identity");
+        }
         if fs::read_to_string(&self.target).ok().as_deref() != Some(&format!("{}\n", self.after)) {
             return failed("edit-side-effect");
         }
@@ -141,6 +153,33 @@ impl ToolsFixture {
             }
         }
         Ok(())
+    }
+
+    #[cfg(windows)]
+    fn qoder_bash_command(&mut self) -> Result<String, DelegationErrorV1> {
+        let retain = |path: &Path| {
+            qoder_paths::BashFile::retain(path).map_err(|_| failure("native-bash-resource"))
+        };
+        let target = retain(&self.target)?;
+        let mut parts = vec![format!("cat {}", target.quoted())];
+        let output = qoder_paths::BashFile::created_output(&self.shell_receipt, &target)
+            .map_err(|_| failure("native-bash-output"))?;
+        let mut retained = vec![target];
+        for skill in &self.skills {
+            let file = retain(&skill.file)?;
+            let script = retain(&skill.script)?;
+            parts.push(format!("cat {} && bash {}", file.quoted(), script.quoted()));
+            retained.extend([file, script]);
+        }
+        parts.push(format!(
+            "printf '%s\\n' {} > {} && cat {}",
+            bash_literal(&self.receipt),
+            output.quoted(),
+            output.quoted()
+        ));
+        retained.push(output);
+        self.qoder_bash_inputs = retained;
+        Ok(parts.join(" && "))
     }
 }
 
@@ -249,7 +288,7 @@ impl ToolsOracle {
         Ok(())
     }
 
-    fn action(&self, body: &Value) -> Result<Action, DelegationErrorV1> {
+    fn action(&mut self, body: &Value) -> Result<Action, DelegationErrorV1> {
         let harness = self.fixture.harness;
         if self.next < 2 {
             let skill = &self.fixture.skills[self.next];
@@ -310,12 +349,12 @@ impl ToolsOracle {
                 ),
             };
         }
-        let powershell = matches!(
-            harness,
-            WorkerHarnessV1::CodexCli
-                | WorkerHarnessV1::QoderCli
-                | WorkerHarnessV1::DeepseekHarness
-        );
+        #[cfg(windows)]
+        if harness == WorkerHarnessV1::QoderCli {
+            let command = self.fixture.qoder_bash_command()?;
+            return self.shell(body, &command);
+        }
+        let powershell = uses_powershell(harness);
         let command = if powershell {
             let mut parts = vec![format!(
                 "$ErrorActionPreference='Stop'; Get-Content -LiteralPath {}",
@@ -408,7 +447,26 @@ fn ps_path(path: &Path) -> String {
     ps_literal(&path.to_string_lossy())
 }
 fn bash_literal(text: &str) -> String {
-    format!("'{}'", text.replace('\'', "'\\''"))
+    qoder_paths::literal(text)
+}
+fn uses_powershell(harness: WorkerHarnessV1) -> bool {
+    matches!(
+        harness,
+        WorkerHarnessV1::CodexCli | WorkerHarnessV1::DeepseekHarness
+    )
+}
+fn receipt_script(harness: WorkerHarnessV1, receipt: &str) -> (&'static str, String) {
+    if uses_powershell(harness) {
+        (
+            "receipt.ps1",
+            format!("Write-Output {}\n", ps_literal(receipt)),
+        )
+    } else {
+        (
+            "receipt.sh",
+            format!("printf '%s\\n' {}\n", bash_literal(receipt)),
+        )
+    }
 }
 fn bash_path(path: &Path) -> String {
     bash_literal(&path.to_string_lossy().replace('\\', "/"))
