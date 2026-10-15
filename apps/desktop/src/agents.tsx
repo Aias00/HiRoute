@@ -496,13 +496,12 @@ export function Agents({
       <form id="hermes-root-selection" className="agent-form" onSubmit={event => { event.preventDefault(); void discoverHermes(); }}><HermesRootFields value={hermesRoot} onChange={setHermesRoot} disabled={busy} language={language} />{actionError && <p className="oc-inline-error" role="alert">{agentActionErrorMessage(actionError, language)}</p>}</form>
     </Dialog>}
     <div className="agents-workspace">
-      <div className="agent-tabs segmented" role="tablist">
+      <div className="agent-discovery-toolbar"><div className="agent-tabs segmented" role="tablist">
         <button className={`segment${tab === 'configuration' ? ' active' : ''}`} type="button" role="tab" aria-selected={tab === 'configuration'} onClick={() => { setTab('configuration'); setActionError(''); setNotice(''); }}>{text('我的 Agent', 'My Agents')}</button>
         <button className={`segment${tab === 'tasks' ? ' active' : ''}`} type="button" role="tab" aria-selected={tab === 'tasks'} onClick={() => { setTab('tasks'); setActionError(''); setNotice(''); onOpenTasks?.(); }}>{text('任务记录', 'Task history')}</button>
-      </div>
+      </div><button className="btn btn-quiet" type="button" data-agent-rescan disabled={busy || scanning} onClick={() => void refresh()}>{scanning ? text('扫描中…', 'Scanning…') : text('重新扫描', 'Scan again')}</button></div>
       {!snapshot && !loadError && <div className="empty-state" role="status"><div><span className="oc-spinner" /><p>{text('正在读取本地 Agent…', 'Reading local Agents…')}</p></div></div>}
       {!snapshot && loadError && <div className="empty-state" data-error-code={loadError}><div><span className="empty-icon"><UiIcon name="agent" /></span><h2>{text('暂时无法读取 Agent', 'Agents are temporarily unavailable')}</h2><p>{text('请确认本机服务正在运行，然后重试。', 'Make sure the local service is running, then retry.')}</p><button className="btn btn-primary" type="button" onClick={() => void refresh()}>{text('重试', 'Retry')}</button></div></div>}
-      <div className="actions"><button className="btn btn-quiet" type="button" data-agent-rescan disabled={busy || scanning} onClick={() => void refresh()}>{scanning ? text('扫描中…', 'Scanning…') : text('重新扫描', 'Scan again')}</button></div>
       {tab === 'tasks'
         ? <AgentTasks language={language} read={taskRead} initialTaskId={initialTaskId} onCancel={onTaskCancel} onConfirmResidual={onTaskConfirmResidual} onOpenSession={onOpenTaskSession} onBackToAgents={() => setTab('configuration')} onRefresh={onOpenTasks} onLoadMore={onLoadMoreTasks} onReadTask={onReadTask} onLoadTaskResult={onLoadTaskResult} active={active} />
         : snapshot && !agents.length
@@ -542,7 +541,7 @@ export function Agents({
               {selected && snapshot && <div className="detail-inner" data-agent-id={selected.agent_id}>
                 <header className="detail-hero"><div className="detail-identity"><BrandIcon kind={brand(selected)} label={`${agentName(selected)} logo`} /><div><h2>{agentName(selected)}</h2><p>{text('选择你需要的路由能力', 'Choose the routing capabilities you need')}</p></div></div></header>
                 {agentEcosystem(selected.agent_id) === 'hermes' && <section className="detail-section v3-agent-section" data-hermes-profile>
-                  <div className="detail-section-head"><h3>{text('配置目录', 'Configuration directory')}</h3><button type="button" className="btn btn-quiet" data-hermes-select-root disabled={busy} onClick={() => { setHermesRoot(selected.native_target?.config_root ?? ''); setActionError(''); setHermesRootOpen(true); }}>{selected.native_target ? text('更改', 'Change') : text('手动选择目录', 'Select directory manually')}</button></div>
+                  <div className="detail-section-head"><h3>{text('配置目录', 'Configuration directory')}</h3><button type="button" className="btn btn-quiet" data-hermes-select-root disabled={busy || scanning} onClick={() => { setHermesRoot(selected.native_target?.config_root ?? ''); setActionError(''); setHermesRootOpen(true); }}>{selected.native_target ? text('更改', 'Change') : text('手动选择目录', 'Select directory manually')}</button></div>
                   {selected.native_target
                     ? <p className="field-help">{selected.native_target.config_root}</p>
                     : <p>{text('选择本机 Hermes 实际使用的配置目录，即可配置模型路由和 HiRoute 管理 Skill。独立 profile 请选对应目录。', 'Select the configuration directory used by Hermes on this computer to configure model routing and the HiRoute management Skill. For a separate profile, select its directory.')}</p>}

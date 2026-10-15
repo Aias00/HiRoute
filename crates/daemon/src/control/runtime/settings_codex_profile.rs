@@ -108,9 +108,7 @@ impl LocalControlAdapter {
         if !class.is_codex() {
             return Ok(());
         }
-        if class == SettingsAgentClass::CodexProfile
-            && !matches!(spec.collaboration, AgentFacetIntent::Keep)
-        {
+        if class == SettingsAgentClass::CodexProfile && !spec.keeps_skills() {
             return Err(ControlReadError::CollaborationRootRequired);
         }
         if class == SettingsAgentClass::CodexProfile && spec.restore_native_model.is_some() {

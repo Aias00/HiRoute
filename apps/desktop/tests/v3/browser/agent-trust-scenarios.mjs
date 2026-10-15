@@ -117,6 +117,66 @@ const scenarios = [
     assert(configureSpecs().length === 0 && calls('check_agent_live').length === 0 && calls('check_agent_authentication').length === 0,
       'Profile navigation configured settings or called a model');
   }),
+  scenario('agent.discovery.remember-and-revalidate', ['agent-discovery'], 'Remembered targets are reread after remount and an unavailable profile preserves all entries', async () => {
+    c().reset(); await tick();
+    [...document.querySelectorAll('.native-list .list-row')].find(row => row.textContent.includes('Hermes')).click();
+    await until(() => document.querySelector('[data-agent-discovery="not_discovered"]'), 'Honest missing profile');
+    const before = calls('agent_snapshot').length;
+    document.querySelector('[data-agent-rescan]').click();
+    await until(() => calls('agent_snapshot').length === before + 1, 'Common rescan');
+    document.querySelector('[data-hermes-select-root]').click(); await until(() => dialog(), 'Custom profile');
+    const input = dialog().querySelector('input');
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '/tmp/hermes-profile-fixture');
+    input.dispatchEvent(new Event('input', { bubbles: true })); await tick();
+    c().handlers.agent_snapshot = () => c().hermesFresh();
+    submit().click(); await until(() => !dialog() && !facet('model').disabled, 'Custom profile selected');
+    c().handlers.agent_snapshot = payload => {
+      assert(payload.nativeTargets?.[0]?.config_root === '/tmp/hermes-profile-fixture', 'Saved preference was not revalidated');
+      const snapshot = c().hermesFresh(); const agent = snapshot.agents.find(a => a.agent_id === 'agent_hermes_default');
+      agent.context_id = null; agent.settings = null; agent.status_error = 'AGENT_STATUS_UNAVAILABLE'; agent.configuration_state = 'profile_unavailable';
+      return snapshot;
+    };
+    c().remount(); await tick();
+    await until(() => calls('agent_snapshot').at(-1)?.payload.nativeTargets?.length === 1, 'Remembered target reread');
+    [...document.querySelectorAll('.native-list .list-row')].find(row => row.textContent.includes('Hermes')).click();
+    await until(() => document.querySelector('[data-agent-discovery="unavailable"]'), 'Unavailable retained profile');
+    assert(document.querySelectorAll('.native-list .list-row').length === 6, 'One failed target hid another Agent');
+    assert(document.querySelector('[data-hermes-profile]').textContent.includes('/tmp/hermes-profile-fixture'), 'Failed read lost the selected root');
+    assert(facet('model').disabled && facet('management_skill').disabled && facet('collaboration').disabled, 'A preference became settings authority');
+    assert(configureSpecs().length === 0 && calls('check_agent_live').length === 0, 'Discovery wrote settings or called a model');
+  }),
+  scenario('agent.management.all-supported-families', ['agent-management'], 'Each supported family independently prepares management without model routes or Plans', async () => {
+    for (const id of ['agent_codex_default', 'agent_claude_default', 'agent_qoder_default', 'agent_pi_default', 'agent_dsh_default', 'agent_hermes_default']) {
+      c().reset(); c().agents = c().hermesFresh(); c().agents.plans.plans = []; await tick();
+      const agent = c().agents.agents.find(a => a.agent_id === id);
+      assert(agent?.settings, `Missing fixture for ${id}`);
+      agent.settings.management_skill = { state: 'not_configured', schema: 'hiroute.agent-management-skill-status/v1', restore_point_ref: null, operation_id: null, operation_state: null };
+      c().refresh(); await tick();
+      [...document.querySelectorAll('.native-list .list-row')].find(row => row.textContent.includes(id === 'agent_hermes_default' ? 'Hermes' : id === 'agent_claude_default' ? 'Claude' : id === 'agent_dsh_default' ? 'DeepSeek' : id === 'agent_pi_default' ? 'Pi' : id === 'agent_qoder_default' ? 'Qoder' : 'Codex')).click();
+      await until(() => document.querySelector(`[data-agent-id="${id}"] [data-agent-management]`), `${id} management control`);
+      await openEditor('management_skill', false);
+      assert(!dialog().textContent.includes('Hermes 配置目录'), 'Management uses a provider-specific form');
+      assert(!dialog().querySelector('select'), 'Management requires a model or Plan');
+      await save();
+      const spec = configureSpecs().at(-1);
+      assert(spec.management_skill.intent === 'configure' && spec.model.intent === 'keep' && spec.collaboration.intent === 'keep', `${id} changed another facet`);
+      assert(calls('check_agent_live').length === 0, `${id} management called a model`);
+    }
+  }),
+  scenario('hermes.collaboration.native-model-independent', ['hermes', 'agent-collaboration'], 'Hermes chooses either delegation policy independently of model and management preparation', async () => {
+    for (const mode of ['explicit', 'delegate_by_default']) {
+      c().reset(); c().agents = c().hermesFresh(); c().agents.plans.plans = []; await tick();
+      [...document.querySelectorAll('.native-list .list-row')].find(row => row.textContent.includes('Hermes')).click();
+      await until(() => facet('collaboration'), 'Hermes task routing');
+      await openEditor('collaboration', false);
+      const radio = dialog().querySelector(`input[value="${mode}"]`);
+      assert(radio, 'Shared trigger-mode editor is unavailable'); radio.click(); await tick(); await save();
+      const spec = configureSpecs().at(-1);
+      assert(spec.native_target?.config_root === '/tmp/hermes-profile-fixture' && spec.collaboration.settings.trigger_mode === mode, 'Hermes lost scope or trigger mode');
+      assert(spec.model.intent === 'keep' && !spec.management_skill, 'Task routing changed another facet');
+      assert(calls('check_agent_live').length === 0 && calls('check_agent_authentication').length === 0, 'Static Skill preparation ran inference');
+    }
+  }),
   scenario('hermes.routing.root-cancel-and-save', ['hermes', 'agent-model-routing'], 'Hermes keeps its explicit root and one Plan through cancellation and normal save', async () => {
     c().reset(); c().agents = c().hermesFresh();
     c().agents.plans.plans = c().agents.plans.plans.filter(plan => plan.head.status === 'enabled').slice(0, 1);

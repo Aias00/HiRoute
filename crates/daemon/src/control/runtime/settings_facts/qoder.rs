@@ -172,6 +172,7 @@ impl LocalControlAdapter {
                 template,
             },
             facts: AgentSettingsFacts {
+                reference_only_skill_restores: BTreeSet::new(),
                 management_file_conflict: false,
                 native_target: None,
                 context_id: spec.context_id.clone(),

@@ -20,6 +20,8 @@ pub struct AgentSettingsFacts {
     pub model: Option<SettingsModelFacts>,
     pub collaboration_file_conflict: bool,
     pub management_file_conflict: bool,
+    /// Releasing an external reference has no native-file replacement prerequisite.
+    pub reference_only_skill_restores: BTreeSet<AgentSettingsFacet>,
     pub restore_points: BTreeMap<String, AgentSettingsFacet>,
 }
 
@@ -734,7 +736,9 @@ fn restore(
     reference: &str,
     blockers: &mut Vec<AgentSettingsBlock>,
 ) {
-    require(facts, action, facet, blockers);
+    if !facts.reference_only_skill_restores.contains(&facet) {
+        require(facts, action, facet, blockers);
+    }
     if !identity(reference) || facts.restore_points.get(reference) != Some(&facet) {
         blockers.push(AgentSettingsBlock {
             facet,

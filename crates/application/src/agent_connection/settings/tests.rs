@@ -24,6 +24,7 @@ fn facts() -> AgentSettingsFacts {
     )
     .unwrap();
     AgentSettingsFacts {
+        reference_only_skill_restores: BTreeSet::new(),
         management_file_conflict: false,
         native_target: None,
         context_id: "agent-context/test".into(),
@@ -488,6 +489,7 @@ fn codex_plan_selections_preview_only_with_catalog_facts() {
         )
         .unwrap();
         AgentSettingsFacts {
+            reference_only_skill_restores: BTreeSet::new(),
             management_file_conflict: false,
             native_target: None,
             context_id: "agent-context/test".into(),

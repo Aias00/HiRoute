@@ -167,11 +167,17 @@ impl LocalControlAdapter {
                 } else {
                     State::Drift
                 };
-                status.restore_point_ref = Some(super::settings_facts::skills::skill_restore_ref(
-                    &request.context_id,
-                    hiroute_domain::AgentSettingsFacet::ManagementSkill,
-                    &operation.operation_id,
-                ));
+                status.restore_point_ref = Some(if request.include_skills {
+                    super::settings_facts::skills::skill_restore_ref(
+                        &request.context_id,
+                        hiroute_domain::AgentSettingsFacet::ManagementSkill,
+                        &operation.operation_id,
+                    )
+                } else {
+                    hiroute_application::agent_connection::codex_model_restore_point_ref(
+                        &operation.operation_id,
+                    )
+                });
             }
             _ => return Err(ControlReadError::Corrupt),
         }

@@ -435,9 +435,15 @@ impl Session {
         let mut scan: Scan = query(&self.client, "ListAgents", &ClientEmptyRequestV1 {}).await?;
         let automatic = targets.is_empty();
         let targets = if automatic {
-            super::agent_discovery::default_hermes_target()
-                .into_iter()
-                .collect()
+            match super::agent_discovery::default_hermes_profile() {
+                super::agent_discovery::ProfileDiscovery::Found(target) => vec![target],
+                super::agent_discovery::ProfileDiscovery::Missing => Vec::new(),
+                super::agent_discovery::ProfileDiscovery::Unavailable { target, reason } => {
+                    scan.agents
+                        .push(super::agent_discovery::unavailable_hermes(target, reason));
+                    Vec::new()
+                }
+            }
         } else {
             targets
         };

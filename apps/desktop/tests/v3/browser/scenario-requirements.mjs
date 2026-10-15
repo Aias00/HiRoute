@@ -2,6 +2,9 @@
 // Retire a required ID only with an explicit replacement of its unique guarantee.
 export const agentTrustRequired = ['codex.restore.conflict-active',
   'hermes.discovery.parallel-entry',
+  'agent.discovery.remember-and-revalidate',
+  'agent.management.all-supported-families',
+  'hermes.collaboration.native-model-independent',
   'hermes.discovery.brand-and-known-profile',
   'hermes.routing.root-cancel-and-save',
   'hermes.management.independent-without-plan',

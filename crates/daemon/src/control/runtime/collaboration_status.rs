@@ -124,11 +124,17 @@ impl LocalControlAdapter {
                 } else {
                     State::Drift
                 };
-                status.restore_point_ref = Some(super::settings_facts::skills::skill_restore_ref(
-                    &request.context_id,
-                    hiroute_domain::AgentSettingsFacet::Collaboration,
-                    &operation.operation_id,
-                ));
+                status.restore_point_ref = Some(if request.include_skills {
+                    super::settings_facts::skills::skill_restore_ref(
+                        &request.context_id,
+                        hiroute_domain::AgentSettingsFacet::Collaboration,
+                        &operation.operation_id,
+                    )
+                } else {
+                    hiroute_application::agent_connection::codex_model_restore_point_ref(
+                        &operation.operation_id,
+                    )
+                });
                 status.current_selection = configured.then_some(
                     hiroute_application_api::AgentCollaborationCurrentSelectionV2 {
                         trigger_mode: settings.trigger_mode,

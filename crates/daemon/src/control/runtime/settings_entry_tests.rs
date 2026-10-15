@@ -1098,6 +1098,3 @@ mod qoder;
 
 #[path = "settings_profile_fault.rs"]
 mod fault;
-
-#[path = "settings_entry_shared_skills_tests.rs"]
-mod shared_skills;

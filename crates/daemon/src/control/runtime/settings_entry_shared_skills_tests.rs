@@ -14,7 +14,7 @@ fn private_file(path: &Path, bytes: &[u8]) {
 #[test]
 fn shared_management_and_collaboration_coexist_for_all_existing_agent_families() {
     if crate::test_support::isolated_agent_home(
-        "control::runtime::native_model::tests::settings_entry_tests::shared_skills::shared_management_and_collaboration_coexist_for_all_existing_agent_families",
+        "control::runtime::native_model::tests::settings_entry_tests::facets::shared_skills::shared_management_and_collaboration_coexist_for_all_existing_agent_families",
     ) {
         return;
     }
@@ -52,7 +52,7 @@ fn shared_management_and_collaboration_coexist_for_all_existing_agent_families()
         ClaudeRegistrationIndexV1::from_verified_model_data(&registry, &models.data).unwrap(),
     );
     let runtime = ProductionControlRuntime::prepare_for_role_all_with_scanner(
-        root.path(),
+        &root.path().join("storage"),
         crate::release_catalog::fixture_catalog(),
         None,
         scanner,

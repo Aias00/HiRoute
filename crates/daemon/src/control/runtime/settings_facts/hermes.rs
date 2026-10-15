@@ -124,9 +124,19 @@ impl LocalControlAdapter {
                     && matches!(original.skill_intent(), AgentFacetIntent::Configure { .. })
                 {
                     restore_points.insert(
-                        codex_model_restore_point_ref(&operation.operation_id),
+                        super::skills::skill_restore_ref(
+                            &spec.context_id,
+                            AgentSettingsFacet::ManagementSkill,
+                            &operation.operation_id,
+                        ),
                         AgentSettingsFacet::ManagementSkill,
                     );
+                    if matches!(spec.model, AgentFacetIntent::Keep) {
+                        restore_points.insert(
+                            codex_model_restore_point_ref(&operation.operation_id),
+                            AgentSettingsFacet::ManagementSkill,
+                        );
+                    }
                     break;
                 }
             }
@@ -206,6 +216,7 @@ impl LocalControlAdapter {
                 template,
             },
             facts: AgentSettingsFacts {
+                reference_only_skill_restores: BTreeSet::new(),
                 management_file_conflict: collaboration_file_conflict,
                 native_target: Some(target_scope),
                 context_id: spec.context_id.clone(),

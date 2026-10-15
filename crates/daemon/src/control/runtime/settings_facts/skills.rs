@@ -3,21 +3,16 @@ use super::*;
 use hiroute_domain::{AgentConnectionEffectRoleV1, AgentConnectionTransactionSubjectV1};
 
 pub(in crate::control::runtime) fn skill_restore_ref(
-    context: &str,
+    _context: &str,
     facet: AgentSettingsFacet,
     operation: &hiroute_domain::OperationId,
 ) -> String {
-    let legacy = if context.starts_with("agent-context/hermes/") {
-        AgentSettingsFacet::ManagementSkill
-    } else {
-        AgentSettingsFacet::Collaboration
+    let name = match facet {
+        AgentSettingsFacet::ManagementSkill => "management",
+        AgentSettingsFacet::Collaboration => "collaboration",
+        AgentSettingsFacet::Model => "model",
     };
-    let reference = codex_model_restore_point_ref(operation);
-    if facet == legacy {
-        reference
-    } else {
-        format!("{reference}/skill")
-    }
+    format!("{}/{}", codex_model_restore_point_ref(operation), name)
 }
 
 impl LocalControlAdapter {
@@ -87,7 +82,7 @@ impl LocalControlAdapter {
             AgentSettingsFacet::ManagementSkill
         };
         if matches!(spec.skill_intent_for(facet), AgentFacetIntent::Keep) {
-            return Ok(input);
+            return self.finish_skill_snapshot(spec, input);
         }
         let (file, conflict, restores) = self.capture_skill_resource(spec, facet)?;
         let previous = input.facts.dependency_digest.clone();
@@ -109,6 +104,59 @@ impl LocalControlAdapter {
             _ => return Err(ControlReadError::Denied),
         }
         input.additional_skill_file = Some(file);
+        self.finish_skill_snapshot(spec, input)
+    }
+
+    fn finish_skill_snapshot(
+        &self,
+        spec: &AgentSettingsSpecV2,
+        mut input: AgentSettingsPlanningInput,
+    ) -> Result<AgentSettingsPlanningInput, ControlReadError> {
+        let facets = [
+            AgentSettingsFacet::ManagementSkill,
+            AgentSettingsFacet::Collaboration,
+        ];
+        for facet in facets {
+            if !matches!(
+                spec.skill_intent_for(facet),
+                AgentFacetIntent::Restore { .. }
+            ) {
+                continue;
+            }
+            let file = if facet == spec.skill_facet() {
+                Some(&input.skill_file)
+            } else {
+                input.additional_skill_file.as_ref()
+            };
+            if file.and_then(|f| f.before.as_ref()).is_some_and(|r| {
+                r.file_ownership
+                    == hiroute_domain::CollaborationSkillFileOwnership::BorrowedIdentical
+                    && r.contexts.contains(&spec.context_id)
+            }) {
+                input.facts.reference_only_skill_restores.insert(facet);
+            }
+        }
+        let changed: BTreeSet<_> = facets
+            .into_iter()
+            .filter(|facet| !matches!(spec.skill_intent_for(*facet), AgentFacetIntent::Keep))
+            .collect();
+        if matches!(spec.model, AgentFacetIntent::Keep)
+            && !changed.is_empty()
+            && changed == input.facts.reference_only_skill_restores
+        {
+            // External content is not an Apply precondition for releasing only our references.
+            let previous = input.facts.dependency_digest.clone();
+            let digest = CanonicalDigest::of(&serde_json::json!({
+                "schema":"borrowed-skill-reference-release/v1","spec":spec,
+                "revisions":input.expected_revisions,"restores":input.facts.restore_points,
+                "primary":input.skill_file.before,"additional":input.additional_skill_file.as_ref().and_then(|f| f.before.as_ref()),
+            })).map_err(|_| ControlReadError::Corrupt)?;
+            input
+                .facts
+                .capabilities
+                .rebind_dependency(&previous, &digest);
+            input.facts.dependency_digest = digest;
+        }
         Ok(input)
     }
 
@@ -192,6 +240,7 @@ impl LocalControlAdapter {
             expected_revisions: revisions,
             collaboration_state,
             facts: AgentSettingsFacts {
+                reference_only_skill_restores: BTreeSet::new(),
                 native_target: if class == SettingsAgentClass::Hermes {
                     Some(self.hermes_target_for_spec(spec)?)
                 } else {
@@ -226,7 +275,17 @@ impl LocalControlAdapter {
         let (root_ref, target) =
             self.settings_skill_resource(&spec.context_id, spec.native_target.as_ref(), facet)?;
         let intent = spec.skill_intent_for(facet);
-        let (fingerprint, observed) = if matches!(intent, AgentFacetIntent::Keep) {
+        let stores = self.stores_lock().map_err(super::super::map_port)?;
+        let before = stores
+            .control()
+            .skill_installation(&WorkspaceId::default(), &root_ref)
+            .map_err(super::super::map_port)?;
+        let (fingerprint, observed) = if matches!(intent, AgentFacetIntent::Keep)
+            || (matches!(intent, AgentFacetIntent::Restore { .. })
+                && before.as_ref().is_some_and(|r| {
+                    r.file_ownership
+                        == hiroute_domain::CollaborationSkillFileOwnership::BorrowedIdentical
+                })) {
             (None, None)
         } else {
             let fingerprint = self
@@ -247,11 +306,6 @@ impl LocalControlAdapter {
             }
             (fingerprint, bytes.map(|b| CanonicalDigest::of_bytes(&b)))
         };
-        let stores = self.stores_lock().map_err(super::super::map_port)?;
-        let before = stores
-            .control()
-            .skill_installation(&WorkspaceId::default(), &root_ref)
-            .map_err(super::super::map_port)?;
         let mut restores = BTreeMap::new();
         if before
             .as_ref()
@@ -281,6 +335,12 @@ impl LocalControlAdapter {
                         skill_restore_ref(&spec.context_id, facet, &operation.operation_id),
                         facet,
                     );
+                    if facet == spec.skill_facet() && matches!(spec.model, AgentFacetIntent::Keep) {
+                        restores.insert(
+                            codex_model_restore_point_ref(&operation.operation_id),
+                            facet,
+                        );
+                    }
                     break;
                 }
             }
@@ -305,6 +365,16 @@ impl LocalControlAdapter {
                 plan_skill_remove(&spec.context_id, r, observed.as_ref())
                     .map_or(true, |p| p.file_action == SkillFileAction::Conflict)
             }),
+        };
+        let releases_borrowed = matches!(intent, AgentFacetIntent::Restore { .. })
+            && before.as_ref().is_some_and(|r| {
+                r.file_ownership
+                    == hiroute_domain::CollaborationSkillFileOwnership::BorrowedIdentical
+            });
+        let (observed, fingerprint) = if releases_borrowed {
+            (None, None)
+        } else {
+            (observed, fingerprint)
         };
         Ok((
             SettingsSkillFileFacts {
