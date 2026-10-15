@@ -221,7 +221,7 @@ impl LocalControlAdapter {
 
 pub(super) fn management_template() -> Result<CollaborationSkillTemplate, ControlReadError> {
     CollaborationSkillTemplate::bundled(
-        "hermes-management-v1",
+        "shared-management-v2",
         include_str!("../../../../../../assets/skills/hiroute-management/SKILL.md"),
     )
     .map_err(|_| ControlReadError::Corrupt)

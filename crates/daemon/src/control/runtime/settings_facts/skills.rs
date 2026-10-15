@@ -2,7 +2,7 @@
 use super::*;
 use hiroute_domain::{AgentConnectionEffectRoleV1, AgentConnectionTransactionSubjectV1};
 
-pub(super) fn skill_restore_ref(
+pub(in crate::control::runtime) fn skill_restore_ref(
     context: &str,
     facet: AgentSettingsFacet,
     operation: &hiroute_domain::OperationId,

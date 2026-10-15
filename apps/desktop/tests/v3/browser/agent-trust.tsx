@@ -16,7 +16,11 @@ const claudeOf = (snapshot: AgentSnapshot) => modelAgent(snapshot, 'agent_claude
 const codexOf = (snapshot: AgentSnapshot) => modelAgent(snapshot, 'agent_codex_default');
 
 function registered(): AgentSnapshot {
-  return structuredClone(readyAgents);
+  const snapshot = structuredClone(readyAgents);
+  for (const agent of snapshot.agents) if (agent.settings) agent.settings.management_skill = {
+    schema: 'hiroute.agent-management-skill-status/v1', state: 'not_configured', restore_point_ref: null, operation_id: null, operation_state: null,
+  };
+  return snapshot;
 }
 function hermesAgent(configured = false): AgentSnapshot {
   const snapshot = registered();
@@ -28,6 +32,7 @@ function hermesAgent(configured = false): AgentSnapshot {
     settings: { state: configured ? 'configured' : 'not_configured', model_verified: false,
       native_target: target, restore_point_ref: configured ? 'restore/hermes' : null,
       current_selection: configured ? { mode: 'hermes_default', plan_id: snapshot.plans.plans[0].agent_plan_id, protocol: 'responses' } : null,
+      collaboration: { state: 'not_configured', restore_point_ref: null, current_selection: null },
       management_skill: { schema: 'hiroute.agent-management-skill-status/v1', state: 'not_configured', restore_point_ref: null, operation_id: null, operation_state: null },
       native_adapter: configured ? { resources_installed: true, runtime_loading: 'unobserved', next_action: 'reload_plugins_if_running', known_channel_models: ['native-channel-model'] } : undefined,
     },
@@ -163,6 +168,7 @@ const control = {
   operations: [] as { operation: { operation_id: string; state: string }; presentation: { kind: string; target: string } }[],
   refresh: () => {},
   reset: () => {},
+  remount: () => {},
   registered,
   notRunnable,
   notRunnableWithRestore,
@@ -186,6 +192,7 @@ mockIPC(async (command, payload) => {
   control.commands.push({ command, payload: args });
   if (control.handlers[command]) return control.handlers[command](args);
   switch (command) {
+    case 'cli_entry_status': return { state: 'valid', command_resolves_to_app_cli: true, path_contains_entry_directory: true };
     case 'agent_snapshot': return structuredClone(control.agents);
     case 'preview_agent_settings': {
       return { preview: { applicable: true, blockers: [] }, mutation: { state: 'applied', operation: { operation_id: 'operation/agent-settings-fixture', state: 'succeeded', sequence: 1, cancellable: false } } };
@@ -204,7 +211,9 @@ function Harness() {
   const [refresh, setRefresh] = useState(0);
   const [operation, setOperation] = useState<OperationReference | null>(null);
   control.refresh = () => setRefresh(value => value + 1);
+  control.remount = () => setGeneration(value => value + 1);
   control.reset = () => {
+    localStorage.removeItem('hiroute.agent-discovery');
     control.agents = registered();
     control.commands = [];
     control.handlers = {};

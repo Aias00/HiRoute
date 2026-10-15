@@ -808,7 +808,9 @@ fn apply(
         Some("configure" | "restore")
     );
     let model_restore = spec["model"]["intent"] == "restore";
-    let restore = model_restore || spec["collaboration"]["intent"] == "restore";
+    let restore = model_restore
+        || spec["collaboration"]["intent"] == "restore"
+        || spec["management_skill"]["intent"] == "restore";
     let preview_operation = if restore {
         "PreviewAgentConnectionRestore"
     } else {
@@ -1096,3 +1098,6 @@ mod qoder;
 
 #[path = "settings_profile_fault.rs"]
 mod fault;
+
+#[path = "settings_entry_shared_skills_tests.rs"]
+mod shared_skills;

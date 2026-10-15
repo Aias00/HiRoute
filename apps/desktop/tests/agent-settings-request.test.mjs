@@ -223,7 +223,10 @@ test('Hermes binds one main route and selected root while keeping management ind
   assert.deepEqual(spec.model, { intent: 'configure', settings: { mode: 'hermes_default', plan_id: 'route/a', protocol: 'messages' } });
   assert.deepEqual(spec.collaboration, { intent: 'keep' });
   assert.equal(spec.management_skill, undefined);
-  assert.throws(() => agentSettingsSpec(agent, 'collaboration', false, draft), /AGENT_INPUT_INVALID/);
+  const collaboration = agentSettingsSpec(agent, 'collaboration', false, draft);
+  assert.deepEqual(collaboration.native_target, agent.native_target);
+  assert.deepEqual(collaboration.model, { intent: 'keep' });
+  assert.equal(collaboration.collaboration.settings.trigger_mode, 'delegate_by_default');
 });
 
 test('Hermes management can be prepared without a model route and restored separately', () => {
@@ -251,4 +254,18 @@ test('Hermes token replacement retains its saved route, transport and root', () 
   assert.deepEqual(spec.access_token, { intent: 'regenerate' });
   assert.equal(spec.management_skill, undefined);
   assert.throws(() => agentTokenSpec({ ...agent, native_target: undefined }, true), /AGENT_INPUT_INVALID/);
+});
+
+for (const ecosystem of ['codex', 'claude', 'qoder', 'pi', 'dsh', 'hermes']) test(`${ecosystem} prepares and restores management independently`, () => {
+  const agent = { agent_id: `agent_${ecosystem}_default`, context_id: `context/${ecosystem}`, status_error: null,
+    ...(ecosystem === 'hermes' ? { native_target: { kind: 'hermes', config_root: '/selected/profile' } } : {}),
+    settings: { state: 'not_configured', management_skill: { state: 'configured', restore_point_ref: 'restore/management' },
+      collaboration: { state: 'configured', current_selection: { trigger_mode: 'explicit' } } } };
+  const seed = agentEditorSeed(agent, 'management_skill', []);
+  assert.equal(seed.known, true);
+  const spec = wire(agentSettingsSpec(agent, 'management_skill', false, { ...draft, values: seed }));
+  assert.deepEqual(spec.model, { intent: 'keep' }); assert.deepEqual(spec.collaboration, { intent: 'keep' });
+  assert.deepEqual(spec.management_skill, { intent: 'configure', settings: {} });
+  assert.deepEqual(agentSettingsSpec(agent, 'management_skill', true, draft).management_skill,
+    { intent: 'restore', restore_point_ref: 'restore/management' });
 });

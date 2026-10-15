@@ -73,7 +73,7 @@ const scenarios = [
     const agent = c().agents.agents.find(a => a.agent_id === 'agent_hermes_default');
     agent.context_id = null; agent.settings = null; agent.status_error = 'AGENT_STATUS_UNAVAILABLE'; agent.configuration_state = 'profile_unavailable';
     c().refresh(); await tick();
-    await until(() => document.querySelector('[data-error-code="AGENT_STATUS_UNAVAILABLE"]'), 'Unreadable default profile');
+    await until(() => document.querySelector('[data-agent-discovery="unavailable"]'), 'Unreadable default profile');
     assert(rows().length === 1 && document.querySelectorAll('.native-list .list-row').length === c().agents.agents.length, 'An unreadable profile hid or duplicated Agents');
     assert(facet('model').disabled && !document.querySelector('[data-hermes-select-root]').disabled, 'Unreadable profile has settings authority or cannot change directory');
   }),
@@ -86,9 +86,9 @@ const scenarios = [
     assert(![...document.querySelectorAll('button')].some(button => button.textContent === '选择 Hermes 配置目录'), 'Hermes has a page-level directory entry');
     hermesRows()[0].click();
     await until(() => document.querySelector('[data-hermes-profile]'), 'Hermes profile details');
-    assert(hermesRows()[0].textContent.includes('未选择配置目录'), 'Unselected profile is presented as installed or connected');
+    assert(hermesRows()[0].textContent.includes('未发现本机配置'), 'Unselected profile is presented as installed or connected');
     assert(facet('model').disabled && facet('management_skill').disabled, 'Unscoped entry acquired settings authority');
-    assert(!facet('collaboration'), 'Unscoped Hermes exposes collaboration');
+    assert(facet('collaboration').disabled, 'Unscoped Hermes acquired collaboration authority');
     const rootControl = () => document.querySelector('[data-hermes-select-root]');
     rootControl().click(); await until(() => dialog(), 'Profile dialog');
     assert(document.activeElement === dialog().querySelector('input'), 'Profile field did not receive focus');

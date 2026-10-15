@@ -53,6 +53,10 @@ fn isolate(test: &str) -> bool {
         b"def _skills_dir(): return get_hermes_home() / \"skills\"\n# structural fixture, never executed\n",
     );
     private_file(
+        &source.path().join("tools/terminal_tool.py"),
+        b"def terminal_tool(command): pass\n# terminal interface fixture, never executed\n",
+    );
+    private_file(
         &source.path().join("hermes_cli/config.py"),
         b"def load_config_readonly(): pass\n",
     );
@@ -173,6 +177,9 @@ impl Fixture {
         json!({"schema_version":{"major":2,"minor":0},"context_id":self.context,"model":{"intent":"restore","restore_point_ref":self.status()["restore_point_ref"]}})
     }
     fn reopen(self) -> Self {
+        self.reopen_with_publication(true)
+    }
+    fn reopen_with_publication(self, publication: bool) -> Self {
         let Self {
             root,
             profile,
@@ -191,8 +198,11 @@ impl Fixture {
             scanner.clone(),
         )
         .unwrap();
-        let runtime =
-            configure_runtime_with_initial(&storage, runtime, golden_publication_plans_only());
+        let runtime = if publication {
+            configure_runtime_with_initial(&storage, runtime, golden_publication_plans_only())
+        } else {
+            runtime
+        };
         runtime.adapter.reconcile_startup_and_open().unwrap();
         let service = LocalControlDaemon::new(ApplicationService::new(runtime.application_ports()));
         Self {
@@ -563,4 +573,73 @@ fn reconfigure_then_conditional_restore_preserves_foreign_edits_and_rejects_targ
     );
     assert!(restored.contains("user_note: retained"), "{restored}");
     assert!(restored.contains("  discord: unchanged"), "{restored}");
+}
+
+#[test]
+fn independent_skills_without_model_plugin_survive_restart_and_restore_separately() {
+    if isolate(
+        "control::runtime::native_model::tests::settings_entry_tests::hermes::independent_skills_without_model_plugin_survive_restart_and_restore_separately",
+    ) {
+        return;
+    }
+    let fixture = Fixture::new(false);
+    private_file(
+        &fixture.profile.join("config.yaml"),
+        b"model: [unused malformed model]\n",
+    );
+    let mut spec = fixture.base();
+    spec["management_skill"] = json!({"intent":"configure","settings":{}});
+    spec["collaboration"] =
+        json!({"intent":"configure","settings":{"trigger_mode":"delegate_by_default"}});
+    apply(
+        &fixture.service,
+        &fixture.runtime,
+        spec,
+        "hermes-both-skills",
+    );
+    let management = fixture.profile.join("skills/hiroute-management/SKILL.md");
+    let collaboration = fixture
+        .profile
+        .join("skills/hiroute-collaboration/SKILL.md");
+    assert!(management.is_file() && collaboration.is_file());
+    assert!(!fixture.profile.join("plugins").exists());
+    assert!(
+        fs::read_to_string(&collaboration)
+            .unwrap()
+            .contains("answer-only")
+    );
+    let fixture = fixture.reopen_with_publication(false);
+    let response=fixture.service.dispatch_wire(request("GetAgentConnectionStatus",json!({"schema_version":{"major":2,"minor":0},"context_id":fixture.context,"include_skills":true}),None));
+    assert!(response.error.is_none(), "{response:?}");
+    let status = response.data.unwrap();
+    assert_eq!(status["collaboration"]["state"], "configured");
+    assert_eq!(status["management_skill"]["state"], "configured");
+    assert_ne!(
+        status["collaboration"]["restore_point_ref"],
+        status["management_skill"]["restore_point_ref"]
+    );
+    let mut spec = fixture.base();
+    spec["collaboration"] = json!({"intent":"restore","restore_point_ref":status["collaboration"]["restore_point_ref"]});
+    apply(
+        &fixture.service,
+        &fixture.runtime,
+        spec,
+        "hermes-restore-collaboration",
+    );
+    assert!(!collaboration.exists());
+    assert!(management.is_file());
+    let mut spec = fixture.base();
+    spec["management_skill"] = json!({"intent":"restore","restore_point_ref":status["management_skill"]["restore_point_ref"]});
+    apply(
+        &fixture.service,
+        &fixture.runtime,
+        spec,
+        "hermes-restore-management-last",
+    );
+    assert!(!management.exists());
+    assert!(!fixture.profile.join("plugins").exists());
+    assert_eq!(
+        fs::read(fixture.profile.join("config.yaml")).unwrap(),
+        b"model: [unused malformed model]\n"
+    );
 }
