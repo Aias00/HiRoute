@@ -32,6 +32,15 @@ or permissions, reparse/foreign paths, split candidates and altered message
 shapes. Account-free controls do not establish logged-in business acceptance or
 upstream provider-account inference.
 
+Output diagnostics also remain test-only. The live size guard and final bounded
+read are distinct: a final open/read failure can carry the same error caption as
+oversize output. `qoder_probe_output_diagnostic_tests.rs` covers real owned-file
+oversize, missing-path and sampling failures. Closed observations retain the
+phase, held-file length and I/O kind/code; unknown and `other` errors do not prove
+a size violation. Sampling happens only after the native scope stops because a
+cloned handle shares its seek pointer. No output text or path is published, and
+missing observations in older evidence remain unknown.
+
 ## Windows Bash command
 
 Qoder CLI 1.1.65's Bash tool uses Git Bash on Windows; its separate PowerShell

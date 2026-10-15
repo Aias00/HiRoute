@@ -516,6 +516,11 @@ if ($Scope -eq 'components') {
     ($qoderHttp + 'trusted_cli_still_rejects_semantic_only_framed_and_uncorrelated_outputs'))
   $qoderBash = 'agents::qoder_probe::windows_cli::tests::windows_qoder_bash_executes_the_same_cli_with_literal_drive_path'
   Invoke-RequiredTests 'agent-qoder-cli-bash' @('-p','hiroute-integrations','--lib',$qoderBash) @($qoderBash) @('--ignored','--exact','--nocapture')
+  $qoderOutputRead = 'agents::qoder_probe::output_diagnostic_tests::'
+  Invoke-RequiredTests 'agent-qoder-output-read-diagnostic' @('-p','hiroute-integrations','--lib',$qoderOutputRead) @(
+    ($qoderOutputRead + 'qoder_final_read_diagnostic_distinguishes_native_oversize_from_path_open_failure'),
+    ($qoderOutputRead + 'qoder_output_sampling_failure_keeps_retained_length_and_original_io'),
+    ($qoderOutputRead + 'qoder_output_other_io_error_is_not_claimed_as_a_size_limit_and_success_is_unchanged')) @('--nocapture')
   Invoke-RequiredTests 'agent-native-reader' @('-p','hiroute-local-storage','--lib','control::windows_native_reader_tests::') @(Get-WindowsNativeReaderCases)
   $profileIdentity = 'delegation::installation::windows_tests::'
   Invoke-RequiredTests 'agent-worker-profile-identity' @('-p','hiroute-daemon','--lib',$profileIdentity) @(
