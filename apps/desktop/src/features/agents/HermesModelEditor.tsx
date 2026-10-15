@@ -10,8 +10,8 @@ export function HermesModelEditor({ agent, values, plans, language, disabled, in
   const selected = plans.find(plan => plan.agent_plan_id === values.hermesPlanId);
   return <div className="additional-model-editor" data-hermes-main-routing>
     <p>{text('将 Hermes 主对话和工具循环接到一条智能路由。不同任务的模型选择由这条路由管理。', 'Connect the Hermes main conversation and tool loop to one smart route. That route chooses models for different tasks.')}</p>
-    <label className="field-label">{text('Hermes 配置目录', 'Hermes configuration directory')}<input className="input" readOnly value={agent.native_target?.config_root ?? ''} /></label>
-    <label className="field-label">{text('智能路由', 'Smart route')}<select className="input" disabled={disabled} value={values.hermesPlanId} onChange={event => { onChange(current => ({ ...current, hermesPlanId: event.target.value })); onEdited(); }}>
+    <label className="field"><span className="field-label">{text('Hermes 配置目录', 'Hermes configuration directory')}</span><input className="input" readOnly value={agent.native_target?.config_root ?? ''} /></label>
+    <label className="field"><span className="field-label">{text('智能路由', 'Smart route')}</span><select className="input" disabled={disabled} value={values.hermesPlanId} onChange={event => { onChange(current => ({ ...current, hermesPlanId: event.target.value })); onEdited(); }}>
       <option value="">{text('选择已启用的路由', 'Select an enabled route')}</option>
       {enabled.map(plan => <option key={plan.agent_plan_id} value={plan.agent_plan_id}>{plan.desired.display_name}</option>)}
       {values.hermesPlanId && !enabled.some(plan => plan.agent_plan_id === values.hermesPlanId) && <option value={values.hermesPlanId}>{selected?.desired.display_name ?? values.hermesPlanId} · {text('当前不可用', 'Currently unavailable')}</option>}
