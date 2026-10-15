@@ -139,9 +139,22 @@ def run(repository):
             **hermes_config['providers']['team-native'], 'models': {'first': {}, 'second': {}, 'newly-added': {}}}}})
         data(product, 'compute scan', request)
         assert {m['upstream_model_id'] for m in data(product, 'compute list')['sources'][0]['models']} == {'first', 'second'}
+        write(hermes / 'config.yaml', hermes_config)
+        refreshed = data(product, 'compute scan', request)
+        coding_point = next(p for p in refreshed['connections'] if p.get('native_provider_id') == 'china-coding')
+        coding = prepare(product, coding_point, 'prepare/point-product/routable-coding')
+        chosen = [m['model_ref'] for m in coding['models'] if m['selectable']]
+        assert apply(product, preview(product, coding, chosen), 'point-coding-exact-save')[1]['data']['state'] == 'succeeded'
+        saved = next(s for s in data(product, 'compute list')['sources'] if {m['upstream_model_id'] for m in s['models']} == {'glm-5.3', 'glm-5.3-flash'})
+        options = data(product, 'routing options', {})['candidates']
+        for model in saved['models']:
+            option = next(o for o in options if o['binding_id'] == model['binding_id'])
+            assert option['routable'] and 'responses' in option['ingress_protocols'] and 'messages' in option['ingress_protocols']
+            assert option['reasoning']['profiles'] == ['low', 'high', 'max']
         print(json.dumps({'scenario': 'released-cli-connection-points', 'state': 'green',
                           'cases': ['legacy-one-model', 'private-multi-model-prepare', 'hermes-default-chat',
-                                    'unselectable-member', 'equal-secret-selector-drift', 'exact-save-restart', 'no-refresh-expansion']}), flush=True)
+                                    'unselectable-member', 'equal-secret-selector-drift', 'exact-save-restart', 'no-refresh-expansion',
+                                    'qualified-native-and-catalog-models-are-routable']}), flush=True)
     finally:
         product.close()
 
