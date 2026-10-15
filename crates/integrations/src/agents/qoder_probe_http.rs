@@ -1,5 +1,8 @@
 //! A deterministic Responses peer: native Skill discovery, exact user path/body, then one CLI.
 //! Requests stay in memory and are never forwarded or included in diagnostics.
+#[path = "qoder_probe_cli_diagnostic.rs"]
+mod cli_diagnostic;
+
 use serde_json::{Value, json};
 use std::io::{Read, Write};
 use std::net::TcpStream;
@@ -93,6 +96,10 @@ impl Challenge {
             2 => {
                 let output = tool_result("call_hiroute_cli").ok_or("trusted CLI call result")?;
                 if output.trim() != self.expected_cli.trim() {
+                    if let Some(facts) = cli_diagnostic::Facts::observe(output, &self.expected_cli)
+                    {
+                        facts.emit();
+                    }
                     return Err("trusted CLI result mismatch");
                 }
                 json!({"id":"msg_hiroute_probe", "type":"message", "status":"completed", "role":"assistant", "content":[{"type":"output_text", "text":"OK", "annotations":[]}]})
