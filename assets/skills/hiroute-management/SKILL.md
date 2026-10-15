@@ -153,9 +153,12 @@ invent capability, reasoning, price, timeout, or delegation choices.
   Prefer native Chat for a qualified Chat source; it uses OpenAI Chat and preserves the source protocol.
   Native Responses encrypted-state/summary requirements cannot be discarded to make a Chat source work.
   The chosen transport requires its own installed SDK/header capability.
-  Chat also requires Hermes v0.21.7 or newer with native reasoning replay for a local route.
-  HiRoute checks the selected source interfaces before writing; a version label alone is insufficient.
-  An incompatible Hermes must be upgraded separately; do not disable thinking or patch native requests.
+  Recommend Hermes >= v0.21.7 for reasoning replay across tool calls; older versions may
+  omit that content but remain connectable when required integration interfaces work.
+  Explain the recommendation without requiring an upgrade or blocking an otherwise valid save.
+  HiRoute checks actual plugin/configuration and selected SDK/header compatibility before writes;
+  version labels and missing optional reasoning replay are not admission gates.
+  Do not automatically upgrade Hermes, disable thinking or patch native requests.
 - Use only profile-compatible plan protocols. Do not attach a Responses-only plan to a
   Messages-only surface.
 - Save the returned restore point. Restore only through `agents restore preview` and

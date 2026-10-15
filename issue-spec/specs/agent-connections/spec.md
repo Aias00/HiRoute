@@ -92,7 +92,7 @@ Released Worker CLI does not require this token.
 
 Configuration depends on actual writable fields/paths, protocol expressibility,
 required catalog facts, and current authority, not a generic client version allowlist.
-Except for the expressly scoped Hermes new-connection support floor below, unknown/old/new labels or failed diagnostic version reads cannot alone block settings,
+Unknown/old/new labels or failed diagnostic version reads cannot alone block settings,
 preview, restore, or ordinary managed launch. Missing optional usage/refusal/reasoning
 metadata cannot be a blanket save gate; exact client window/protocol/vision declarations
 still require proof. Version labels do not enter settings business identity.
@@ -106,11 +106,11 @@ Preview/Apply does not re-run `claude --version`. An unknown native provider in 
 cannot make a valid executable/resource disappear when switching to an authorized plan.
 Only the action requiring an unproven capability is unavailable.
 
-A documented Hermes minimum supported native version may bound new Hermes model connections when older native interfaces cannot meet the managed-connection contract without disproportionate adaptation. This is a narrow Hermes connection support floor, not an exact-release allowlist for other Agents. Known below-floor or interface-deficient Hermes connections SHALL reject before native writes with actionable upgrade guidance, without automatically upgrading Hermes. Above-floor version labels alone do not prove compatibility. Passive Hermes scan and independent management-Skill preparation check only their own required capabilities; existing owned restore and accepted-operation recovery cannot be stranded solely by the new-connection floor.
+Hermes connection admission SHALL depend on actual plugin/configuration interfaces and required transport/header delivery. Older version labels or missing optional reasoning replay SHALL NOT alone block a connection. CLI/management and Desktop guidance SHALL recommend a release with the upstream reasoning-replay fix and explain that older versions may omit reasoning content on tool continuations. Missing required integration interfaces still reject before native writes with actionable guidance, without automatically upgrading Hermes. Passive scan, independent management-Skill preparation, owned restore and accepted-operation recovery retain their action-specific capability and ownership checks.
 
-#### Scenario: Bound Hermes new-connection support without blocking owned restore
+#### Scenario: Reject incompatible Hermes integration without blocking owned restore
 
-- **WHEN** a Hermes installation is outside the declared new-model-connection support boundary but its owned restore effects remain safely expressible
+- **WHEN** a Hermes installation lacks a required integration interface but its owned restore effects remain safely expressible
 - **THEN** new connection reports incompatibility before native writes, while existing recovery/conditional restore follows its persisted target and ownership rather than a blanket version gate.
 
 Source SPEC comments:
@@ -394,7 +394,7 @@ native saved-route or real main-Agent delegation acceptance.
 
 ### Requirement: Reversible Hermes profile connection and activation guidance
 
-HiRoute SHALL configure the selected effective Hermes profile's default main model to the chosen published Plan alias and automatically install and enable the required HiRoute integration resources when the connection is applied from CLI or Desktop. Native connection fields and resources SHALL follow existing reversible ownership and transaction contracts, preserving unrelated native configuration and user data. Connection status/guidance SHALL identify the configured scope, report statically known selection overrides and applicable reload/model-selection actions, and keep unobserved live selection unknown. Installed/enabled resources SHALL NOT be represented as proof that an already-running Hermes process loaded them. HiRoute SHALL publish its Hermes support boundary and reject an unsupported new model connection before native connection/resource writes with actionable upgrade guidance. A documented minimum supported Hermes version MAY bound that connection support; capability evidence is still required. Independent Skill preparation, passive scan and existing owned recovery/restore SHALL use their own required capabilities rather than a blanket new-connection version gate.
+HiRoute SHALL configure the selected effective Hermes profile's default main model to the chosen published Plan alias and automatically install and enable the required HiRoute integration resources when the connection is applied from CLI or Desktop. Native connection fields and resources SHALL follow existing reversible ownership and transaction contracts, preserving unrelated native configuration and user data. Connection status/guidance SHALL identify the configured scope, report statically known selection overrides and applicable reload/model-selection actions, and keep unobserved live selection unknown. Installed/enabled resources SHALL NOT be represented as proof that an already-running Hermes process loaded them. HiRoute SHALL publish its Hermes integration requirements and reject a new connection before native writes only when required plugin/configuration or transport/header interfaces are incompatible. Older version labels and optional reasoning-replay limitations SHALL produce upgrade guidance rather than block an otherwise compatible connection. Independent Skill preparation, passive scan and existing owned recovery/restore SHALL use their own required capabilities rather than a blanket new-connection version gate.
 
 #### Scenario: Connect and prepare resources in one workflow
 
@@ -413,8 +413,14 @@ HiRoute SHALL configure the selected effective Hermes profile's default main mod
 
 #### Scenario: An installation is outside the supported connection boundary
 
-- **WHEN** a selected installation is below a declared Hermes minimum or lacks a required model-connection interface
+- **WHEN** a selected installation lacks a required plugin/configuration or transport/header interface
 - **THEN** HiRoute reports the missing support/capability and upgrade action before native connection/resource writes, without automatically upgrading Hermes or falsely completing the connection; readable scans and safe owned restore are not rejected solely by that gate.
+
+#### Scenario: Older compatible Hermes remains connectable
+
+- **WHEN** required integration interfaces are available but Hermes lacks optional reasoning replay
+- **THEN** connection Preview/Apply remains available, and guidance recommends an upgraded Hermes version without claiming that reasoning replay is complete.
+
 
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/119#issuecomment-6165296337

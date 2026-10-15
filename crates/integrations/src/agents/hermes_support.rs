@@ -7,7 +7,6 @@ pub struct HermesSupportFacts {
     pub middleware: bool,
     pub skills: bool,
     pub chat_sdk: bool,
-    pub chat_replay: bool,
     pub responses_sdk: bool,
     pub messages_sdk: bool,
     pub dependency_digest: CanonicalDigest,
@@ -119,13 +118,14 @@ pub fn hermes_support_facts() -> HermesSupportFacts {
                 (k.trim() == "version").then(|| v.trim().trim_matches('"').to_owned())
             })
             .unwrap_or_else(|| "unknown".into());
+        // Preserve the existing dependency digest inputs for accepted-operation continuity.
+        // These optional upstream replay sources do not determine plugin admission.
         let replay = [
             "agent/message_sanitization.py",
             "agent/reasoning_params.py",
             "agent/agent_runtime_helpers.py",
         ]
         .map(|path| bounded_text(&root.join(path), 2 * 1024 * 1024).unwrap_or_default());
-        let chat_replay = supports_chat_replay(&replay);
         let dependency_digest = CanonicalDigest::of(&(
             "hermes-native-interfaces/v3",
             &sdk.digest,
@@ -145,7 +145,6 @@ pub fn hermes_support_facts() -> HermesSupportFacts {
             middleware: supported,
             skills,
             chat_sdk: sdk.chat,
-            chat_replay,
             responses_sdk: sdk.responses,
             messages_sdk: sdk.messages,
             dependency_digest,
@@ -156,30 +155,10 @@ pub fn hermes_support_facts() -> HermesSupportFacts {
         middleware: false,
         skills: false,
         chat_sdk: false,
-        chat_replay: false,
         responses_sdk: false,
         messages_sdk: false,
         dependency_digest: CanonicalDigest::of_bytes(b"hermes-native-interfaces/unavailable"),
     }
-}
-
-/// Hermes v0.21.7 provides the verified route-aware replay boundary. Release source
-/// distributions may report 0.0.0, so inspect that boundary rather than trust version text.
-fn supports_chat_replay(sources: &[String; 3]) -> bool {
-    let compact = sources.each_ref().map(|source| {
-        source
-            .chars()
-            .filter(|c| !c.is_whitespace())
-            .collect::<String>()
-    });
-    compact[0].contains("defreasoning_replay_route(")
-        && compact[0].contains("_LOCAL_CARRIERS=frozenset({RC,R})")
-        && compact[0].contains("_LOCAL_CARRIERSifbase_urlandis_local_endpoint(str(base_url))")
-        && compact[0].contains("api_msg[RC]=textiftextisnotNoneelse")
-        && compact[1].contains("def_reasoning_replay_route(self)")
-        && compact[2].contains(
-            "apply_reasoning_content_policy(source_msg,api_msg,*agent._reasoning_replay_route())",
-        )
 }
 
 fn bounded_text(path: &Path, bound: u64) -> Option<String> {

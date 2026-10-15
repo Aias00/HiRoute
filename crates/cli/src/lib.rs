@@ -282,6 +282,11 @@ fn execute_control(
     } else {
         PrincipalKind::InteractiveUser
     };
+    let hermes_chat = matches!(
+        descriptor.command_id.as_str(),
+        "agents.connect.preview" | "agents.connect.apply"
+    ) && payload["spec"]["model"]["settings"]["mode"] == "hermes_default"
+        && payload["spec"]["model"]["settings"]["protocol"] == "chat_completions";
     let request = LocalControlWireRequestV2 {
         schema_version: LOCAL_CONTROL_SCHEMA_V2,
         request_id: request_id.clone(),
@@ -295,7 +300,11 @@ fn execute_control(
     let response = client.call(request).unwrap_or_else(|_| {
         MachineEnvelopeV2::failed(ErrorV1::new(ErrorCode::DaemonUnavailable), Some(request_id))
     });
-    render(response)
+    let mut output = render(response);
+    if hermes_chat && output.exit_code == 0 {
+        output.stderr.push_str("建议使用 Hermes >= v0.21.7，以保留工具续接中的推理内容。旧版本仍可连接；仅在插件或接入接口不兼容时阻断。 / Hermes >= v0.21.7 is recommended for reasoning replay across tool calls. Compatible older versions can connect.\n");
+    }
+    output
 }
 
 fn command_payload(command_id: &str, options: &[String]) -> Result<Value, ErrorCode> {

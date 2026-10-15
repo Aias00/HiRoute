@@ -18,20 +18,17 @@ recovery. Hermes leaves own native configuration and resources:
   plugin/config/context interfaces and protocol SDK. Responses requires OpenAI
   Responses with extra headers; Chat Completions independently requires OpenAI
   Chat Completions with extra headers; Messages requires Anthropic Messages with extra
-  headers. Chat also requires route-aware reasoning replay for the local alias:
-  Hermes v0.21.7 is the minimum verified Chat release. Native 0.19.1 strips that
-  state and cannot configure Chat, while its verified Responses/Messages component
-  support remains separate. Version text alone does
-  not establish support. Missing interfaces block new connection writes; passive
-  source discovery, independent Skill preparation and safe owned restore use their
-  own capabilities.
+  headers. Optional reasoning replay does not gate admission. Hermes v0.21.7 or
+  newer is recommended because 0.19.1 omits reasoning content on the tested local
+  Chat tool continuation; compatible old installations still connect.
 
-The Chat release baseline is v0.21.7 (`71d34bad1045610252eda02ee79549436896e784`);
-v0.22.1 contains the same required replay interfaces. Source distributions may
-report `0.0.0`, so admission inspects the selected launcher's replay interfaces
-and SDK rather than accepting a version label. Missing support blocks new Chat
-connection writes. HiRoute does not upgrade Hermes automatically; safe owned
-restore, passive scan and independent management preparation remain available.
+The upstream replay fix first ships in stable v0.21.7
+(`336b11584ce30ba19610d93c33e460c31356d030`, NousResearch/hermes-agent#136358).
+Source distributions may report `0.0.0`; inspect actual plugin/configuration and
+SDK interfaces, not a numeric minimum. Preserve the existing dependency digest
+inputs for accepted-operation continuity, without requiring replay source markers.
+HiRoute does not upgrade Hermes or alter native reasoning. Scan, management
+preparation and owned restore retain their action-specific capabilities.
 - [Passive sources](../hermes_sources.rs) read the selected profile's static
   providers/default and literal profile environment. Helpers, rotating custom
   credential pools and unresolved composition remain unavailable. Unrelated native

@@ -132,6 +132,13 @@ impl Fixture {
             "native_target":{"kind":"hermes","config_root":self.profile}, "model":{"intent":"keep"}})
     }
     fn model_spec(&self, index: usize) -> serde_json::Value {
+        self.model_spec_protocol(index, AgentIngressProtocolV1::Responses)
+    }
+    fn model_spec_protocol(
+        &self,
+        index: usize,
+        protocol: AgentIngressProtocolV1,
+    ) -> serde_json::Value {
         let publication = self
             .runtime
             .adapter
@@ -147,14 +154,10 @@ impl Fixture {
             .published_agent_plans()
             .unwrap()
             .into_iter()
-            .filter(|p| {
-                p.active
-                    && p.supported_ingress
-                        .contains(&AgentIngressProtocolV1::Responses)
-            })
+            .filter(|p| p.active && p.supported_ingress.contains(&protocol))
             .collect();
         let mut spec = self.base();
-        spec["model"] = json!({"intent":"configure","settings":{"mode":"hermes_default","plan_id":plans[index].agent_plan_id,"protocol":"responses"}});
+        spec["model"] = json!({"intent":"configure","settings":{"mode":"hermes_default","plan_id":plans[index].agent_plan_id,"protocol":protocol}});
         spec
     }
     fn status(&self) -> serde_json::Value {
@@ -270,9 +273,9 @@ fn management_only_is_independent_and_recoverable_without_model_publication() {
 }
 
 #[test]
-fn chat_requires_native_reasoning_replay_before_writes_but_skill_remains_independent() {
+fn old_chat_can_configure_without_reasoning_replay_but_required_interfaces_still_block() {
     if isolate(
-        "control::runtime::native_model::tests::settings_entry_tests::hermes::chat_requires_native_reasoning_replay_before_writes_but_skill_remains_independent",
+        "control::runtime::native_model::tests::settings_entry_tests::hermes::old_chat_can_configure_without_reasoning_replay_but_required_interfaces_still_block",
     ) {
         return;
     }
@@ -280,68 +283,74 @@ fn chat_requires_native_reasoning_replay_before_writes_but_skill_remains_indepen
     let source = std::env::split_paths(&std::env::var_os("PATH").unwrap())
         .next()
         .unwrap();
-    private_file(
-        &source.join(
-            "venv/lib/python3.13/site-packages/openai/resources/chat/completions/completions.py",
+    let sdk = source
+        .join("venv/lib/python3.13/site-packages/openai/resources/chat/completions/completions.py");
+    let middleware = source.join("hermes_cli/middleware.py");
+    let spec = fixture.model_spec_protocol(0, AgentIngressProtocolV1::ChatCompletions);
+    let preview = || {
+        fixture.service.dispatch_wire(request(
+            "PreviewAgentConnectionChange",
+            json!({"spec":spec}),
+            None,
+        ))
+    };
+    // Source declares 0.19.1 and has no replay helpers. SDK/header and plugin
+    // incompatibilities remain genuine pre-write blockers independently of that version.
+    for (sdk_source, middleware_source) in [
+        (
+            "def create(): pass\n",
+            "def apply_llm_request_middleware(): pass\n",
         ),
-        b"def create(*, extra_headers: Headers): pass\n",
+        (
+            "def create(*, extra_headers: Headers): pass\n",
+            "# incompatible middleware\n",
+        ),
+    ] {
+        private_file(&sdk, sdk_source.as_bytes());
+        private_file(&middleware, middleware_source.as_bytes());
+        let result = preview();
+        assert!(result.error.is_none(), "{result:?}");
+        assert_eq!(result.data.unwrap()["applicable"], false);
+        assert_eq!(
+            fs::read(fixture.profile.join("config.yaml")).unwrap(),
+            ORIGINAL
+        );
+        assert!(!fixture.profile.join("plugins/hiroute").exists());
+    }
+    private_file(&sdk, b"def create(*, extra_headers: Headers): pass\n");
+    private_file(&middleware, b"def apply_llm_request_middleware(): pass\n");
+    assert_eq!(preview().data.unwrap()["applicable"], true);
+    apply(
+        &fixture.service,
+        &fixture.runtime,
+        spec,
+        "hermes-old-chat-connect",
     );
-    let target = hiroute_domain::AgentNativeTargetV1::Hermes {
-        config_root: fixture.profile.to_str().unwrap().into(),
-    };
-    let observe = || {
-        hiroute_integrations::hermes_settings_installation_for_protocol(
-            &target,
-            AgentIngressProtocolV1::ChatCompletions,
-        )
-        .unwrap()
-    };
-    let old = observe();
-    let ingress = |facts: &hiroute_domain::SupportedAgentInstallationV1| {
-        facts
-            .capability_evidence
-            .iter()
-            .find(|proof| {
-                proof.capability == hiroute_domain::AgentCapability::IngressAuthentication
-            })
+    let status = fixture.status();
+    assert_eq!(status["state"], "configured");
+    assert_eq!(status["current_selection"]["protocol"], "chat_completions");
+    assert_eq!(status["native_adapter"]["resources_installed"], true);
+    assert!(
+        fs::read_to_string(fixture.profile.join("config.yaml"))
             .unwrap()
-            .state
-    };
-    assert_eq!(ingress(&old), hiroute_domain::CapabilityState::Unavailable);
+            .contains("chat_completions")
+    );
+    let restore = fixture.restore();
+    apply(
+        &fixture.service,
+        &fixture.runtime,
+        restore,
+        "hermes-old-chat-restore",
+    );
     assert_eq!(
         fs::read(fixture.profile.join("config.yaml")).unwrap(),
         ORIGINAL
     );
     assert!(!fixture.profile.join("plugins/hiroute").exists());
-    let mut management = fixture.base();
-    management["management_skill"] = json!({"intent":"configure","settings":{}});
-    apply(
-        &fixture.service,
-        &fixture.runtime,
-        management,
-        "hermes-old-chat-skill",
-    );
-    assert_eq!(fixture.status()["management_skill"]["state"], "configured");
-
-    // Bounded source-interface fixture, never executed. Actual native main-loop replay
-    // is qualified separately against the pinned Hermes release.
-    private_file(&source.join("agent/message_sanitization.py"), b"def reasoning_replay_route():\n    pass\n_LOCAL_CARRIERS = frozenset({RC, R})\ncarriers = _LOCAL_CARRIERS if base_url and is_local_endpoint(str(base_url)) else _DEFAULT_CARRIERS\napi_msg[RC] = text if text is not None else \" \"\n");
-    private_file(
-        &source.join("agent/reasoning_params.py"),
-        b"def _reasoning_replay_route(self):\n    pass\n",
-    );
-    private_file(
-        &source.join("agent/agent_runtime_helpers.py"),
-        b"apply_reasoning_content_policy(source_msg, api_msg, *agent._reasoning_replay_route())\n",
-    );
-    let current = observe();
-    assert_eq!(ingress(&current), hiroute_domain::CapabilityState::Proven);
-    assert_ne!(old.observation_digest, current.observation_digest);
     assert_eq!(
-        fs::read(fixture.profile.join("config.yaml")).unwrap(),
-        ORIGINAL
+        fs::read(fixture.profile.join("sessions/preserved")).unwrap(),
+        b"unrelated native session"
     );
-    assert_eq!(fixture.status()["management_skill"]["state"], "configured");
 }
 
 #[test]
