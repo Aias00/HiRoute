@@ -228,7 +228,10 @@ impl Contexts {
             "public-collaboration-check",
             &product.stable,
             &args,
-            &self.environment(),
+            // The public CLI belongs to the installed user's host context.
+            // Borrowed Qoder USERPROFILE can redirect KnownFolder LocalAppData
+            // in a fresh Windows process and hide the real daemon endpoint.
+            &std::env::vars_os().collect::<Vec<_>>(),
             product.stable.parent().unwrap(),
         );
         let envelope: Value = serde_json::from_slice(&output)
