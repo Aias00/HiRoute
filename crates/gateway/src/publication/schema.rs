@@ -32,6 +32,8 @@ const MAX_PURPOSE_BYTES: usize = 1_024;
 pub struct CandidateBindingV1 {
     pub local_id: u32,
     pub stable_target_key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_binding_id: Option<String>,
     pub adapter_id: String,
     pub credential_refs: Vec<String>,
     pub credential_destination_ref: String,
@@ -144,6 +146,7 @@ pub(crate) fn exact_test_candidate(
     CandidateBindingV1 {
         local_id,
         stable_target_key: format!("target-{local_id}"),
+        source_binding_id: None,
         adapter_id: "builtin".into(),
         credential_refs: vec![format!("credential-{local_id}")],
         credential_destination_ref: "connection-option/fixture.native.v1".into(),
@@ -190,6 +193,7 @@ pub(crate) fn exact_cpa_test_candidate(
     CandidateBindingV1 {
         local_id,
         stable_target_key: format!("target-{local_id}"),
+        source_binding_id: None,
         adapter_id: "adapter.cpa.responses@1".into(),
         credential_refs: vec![format!("credential-{local_id}")],
         credential_destination_ref: "connection-option/fixture.cpa.v1".into(),
@@ -415,6 +419,10 @@ impl GatewayPublicationSnapshotV3 {
                 if candidate.local_id == 0
                     || !binding_ids.insert(candidate.local_id)
                     || candidate.stable_target_key.trim().is_empty()
+                    || candidate
+                        .source_binding_id
+                        .as_ref()
+                        .is_some_and(|binding| !valid_reference(binding))
                     || candidate.adapter_id.trim().is_empty()
                     || candidate.credential_refs.is_empty()
                     || candidate.credential_refs.len() > 64

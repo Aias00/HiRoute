@@ -65,6 +65,10 @@ impl GatewayPublicationRevision {
 pub struct GatewayExecutableCandidateV2 {
     pub local_id: u32,
     pub stable_target_key: String,
+    /// Original source membership, independent of a branch's reasoning-specific execution key.
+    /// Derived from the stored Plan; absent on unchanged legacy/fixed projections.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_binding_id: Option<String>,
     pub adapter_id: String,
     pub credential_refs: Vec<String>,
     /// Exact Secret authority destination derived from the current connection option.

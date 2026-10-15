@@ -31,6 +31,10 @@ module before extending it; a local feature does not require a facade-wide rewri
 
 ## Model sources and native configuration
 
+Branch execution keys distinguish reasoning selections. The derived Gateway candidate
+also retains its original source binding for current credential membership and exact
+leases; routing, retry and context identities continue using the execution key.
+
 CLI secret entry uses the shared local [protected input socket](../../crates/daemon/src/control/standalone.rs)
 in both standalone and Desktop-owned `role=all` processes. The [CLI input owner](../../crates/cli/src/host_commands.rs)
 reads inherited descriptors; ordinary control requests never carry secret bytes.

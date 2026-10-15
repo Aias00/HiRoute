@@ -30,6 +30,8 @@ pub(crate) use schema::{exact_cpa_test_candidate, exact_test_candidate, test_pla
 pub(crate) struct SealedCandidateExecutionV1 {
     pub schema_version: String,
     pub stable_target_key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_binding_id: Option<String>,
     pub credential_destination_ref: String,
     pub logical_endpoint: String,
     pub upstream_model_id: String,
@@ -40,6 +42,14 @@ pub(crate) struct SealedCandidateExecutionV1 {
     pub protocol_set_digest: hiroute_domain::CanonicalDigest,
     pub profile_digest: String,
     pub protocol_profile: crate::server::core_runtime::profiles::CandidateProtocolProfile,
+}
+
+impl SealedCandidateExecutionV1 {
+    pub(crate) fn credential_binding_id(&self) -> &str {
+        self.source_binding_id
+            .as_deref()
+            .unwrap_or(&self.stable_target_key)
+    }
 }
 
 pub(crate) const SEALED_CANDIDATE_EXECUTION_SCHEMA_V1: &str =

@@ -174,6 +174,7 @@ pub(super) fn project_candidate(
     Ok(GatewayExecutableCandidateV2 {
         local_id,
         stable_target_key: candidate.binding_id.clone(),
+        source_binding_id: None,
         adapter_id: format!("{}@{}", candidate.adapter_ref, candidate.adapter_revision),
         credential_refs: candidate.credential_refs.clone(),
         credential_destination_ref: candidate
@@ -215,6 +216,9 @@ pub(super) fn project_pricing_identities(
                 .get(projected.stable_target_key.as_str())
                 .copied()
                 .ok_or(PublicationError::InvalidExecutableProjection)?;
+            if projected.stable_target_key != candidate.binding_id {
+                projected.source_binding_id = Some(candidate.binding_id.clone());
+            }
             projected.pricing_identity = Some(GatewayCandidatePricingIdentityV1 {
                 source_id: candidate.source_id.clone(),
                 source_identity_digest: candidate.source_identity_digest.clone(),

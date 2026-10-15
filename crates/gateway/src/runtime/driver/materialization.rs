@@ -346,7 +346,7 @@ pub(super) async fn materialize_attempt(
             scope
                 .run(provider.credentials.lease_exact(
                     CredentialLeaseRequest {
-                        stable_binding_id: stable_target,
+                        stable_binding_id: execution.credential_binding_id(),
                         credential_ref: context.credential_ref().as_str(),
                         credential_destination_ref,
                         excluded_key_ids: &[],

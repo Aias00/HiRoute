@@ -145,6 +145,23 @@ fn branches_publish_distinct_reasoning_and_freeze_whole_judgment_overrides() {
         ],
     )
     .unwrap();
+    let stored_bytes = publication.canonical_bytes().unwrap();
+    let stored: serde_json::Value = serde_json::from_slice(&stored_bytes).unwrap();
+    assert!(
+        stored["aliases"][0]["candidates"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|candidate| candidate.get("source_binding_id").is_none())
+    );
+    assert_eq!(
+        hiroute_domain::GatewayPublicationV1::decode(&stored_bytes)
+            .unwrap()
+            .canonical_bytes()
+            .unwrap(),
+        stored_bytes,
+        "source provenance is derived for Gateway, never added to stored publication bytes"
+    );
     let snapshot = publication.gateway_snapshot().unwrap();
     let alias = &snapshot.aliases[0];
     assert_eq!(
@@ -156,6 +173,17 @@ fn branches_publish_distinct_reasoning_and_freeze_whole_judgment_overrides() {
         alias.candidates[0].protocol_profile_digest,
         alias.candidates[1].protocol_profile_digest
     );
+    assert_ne!(
+        alias.candidates[0].stable_target_key, alias.candidates[1].stable_target_key,
+        "reasoning variants retain separate routing and retry identities"
+    );
+    for candidate in &alias.candidates {
+        assert_eq!(
+            candidate.source_binding_id.as_deref(),
+            Some("binding/primary-a"),
+            "both reasoning variants retain the exact source membership for credential lookup"
+        );
+    }
     let routing = alias.routing.as_ref().unwrap();
     let groups = &routing.groups;
     assert_ne!(groups[0].candidate_local_ids, groups[1].candidate_local_ids);

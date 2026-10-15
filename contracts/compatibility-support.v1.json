@@ -1151,7 +1151,7 @@
       "field": "context_window_tokens",
       "mode": "recovery_read_only",
       "owner": "agent-connections",
-      "reason": "A descriptor reconstructed from a pre-window immutable settings operation has no managed context policy. It retains that operation’s behavior until settings are saved again.",
+      "reason": "A descriptor reconstructed from a pre-window immutable settings operation has no managed context policy. It retains that operation\u2019s behavior until settings are saved again.",
       "removal_condition": "Retire with the pre-window settings operation recovery reader.",
       "allowed_paths": [
         "crates/domain/src/agents/managed_launch.rs",
@@ -1449,6 +1449,21 @@
         "crates/domain/src/publication/snapshot.rs",
         "crates/gateway/src/publication/schema.rs",
         "crates/gateway/src/dispatch/run.rs"
+      ]
+    },
+    {
+      "contract": "hiroute.gateway.publication-snapshot/v3",
+      "field": "omitted source_binding_id on unchanged executable projections",
+      "mode": "recovery_read_only",
+      "owner": "routing-publication",
+      "reason": "Keep released snapshot decoding and canonical bytes when source_binding_id is absent. Current Product storage still omits this derived field; gateway_snapshot joins the stored branch candidate to its original binding and includes that provenance in the execution snapshot digest. Credential membership and exact leases use the original source binding while branch routing/retry/context keys remain reasoning-specific. Old caches never supply initial Product authority.",
+      "removal_condition": "Retire absent-field support only with an explicit snapshot/cache compatibility decision for supported releases; do not change authenticated stored Plan or publication bytes to repair a derived projection.",
+      "allowed_paths": [
+        "crates/domain/src/publication/mod.rs",
+        "crates/domain/src/publication/snapshot.rs",
+        "crates/application/src/compiler/explicit/tests.rs",
+        "crates/gateway/src/publication/schema.rs",
+        "crates/gateway/src/publication/mod.rs"
       ]
     }
   ]

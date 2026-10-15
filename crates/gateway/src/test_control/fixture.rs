@@ -66,6 +66,7 @@ pub fn sealed_native_candidate(
     let candidate = CandidateBindingV1 {
         local_id,
         stable_target_key: stable_target_key.into(),
+        source_binding_id: None,
         adapter_id: "adapter.native-e2e@1".into(),
         credential_refs: credential_refs.to_vec(),
         credential_destination_ref: format!("connection-option/{stable_target_key}"),

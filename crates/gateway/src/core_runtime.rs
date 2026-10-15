@@ -1065,6 +1065,7 @@ impl ProductionGatewayRuntime {
                 let execution = SealedCandidateExecutionV1 {
                     schema_version: SEALED_CANDIDATE_EXECUTION_SCHEMA_V1.into(),
                     stable_target_key: candidate.stable_target_key,
+                    source_binding_id: candidate.source_binding_id,
                     credential_destination_ref: candidate.credential_destination_ref,
                     logical_endpoint: candidate.endpoint,
                     upstream_model_id: candidate.upstream_model_id,
