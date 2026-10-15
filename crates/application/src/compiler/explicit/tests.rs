@@ -146,7 +146,7 @@ fn branches_publish_distinct_reasoning_and_freeze_whole_judgment_overrides() {
     )
     .unwrap();
     let stored_bytes = publication.canonical_bytes().unwrap();
-    let stored: serde_json::Value = serde_json::from_slice(&stored_bytes).unwrap();
+    let stored = serde_json::to_value(&publication).unwrap();
     assert!(
         stored["aliases"][0]["candidates"]
             .as_array()
