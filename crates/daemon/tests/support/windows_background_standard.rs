@@ -28,13 +28,19 @@ use super::{
 
 /// Invoke the existing owner oracle as ourselves, using normal CreateProcessW.
 /// This deliberately avoids fixture::owner and its alternate-token/staged path.
-fn current_owner(request: fixture::Request, bound: Duration) -> Value {
+pub(super) fn current_owner(request: fixture::Request, bound: Duration) -> Value {
     let stage = match request.action.as_str() {
         "layout" => "layout",
         "command" => "command",
         "inspect" => "inspect",
         "crash" => "crash",
         "forced-stop" => "forced-stop",
+        "transaction-snapshot" | "transaction-verify" => "upgrade-snapshot",
+        "transaction-fail-install" | "transaction-upgrade-install" => "upgrade-install",
+        "upgrade-business-save" | "upgrade-business-verify" | "upgrade-business-cleanup" => {
+            "upgrade-business"
+        }
+        "cleanup-state" => "preserve-state",
         _ => panic!("unsupported standard-owner fixture action"),
     };
     let body = serde_json::to_vec(&request).expect("standard-owner request encoding failed");
@@ -250,7 +256,7 @@ fn no_administrator_group(token: &std::fs::File) {
     }
 }
 
-fn real_standard_session() -> (String, u32) {
+pub(super) fn real_standard_session() -> (String, u32) {
     let token = account::process_token(std::process::id());
     let sid = account::token_sid(&token);
     let sid_text = background::sid_string(&sid).expect("current native SID is invalid");
@@ -329,7 +335,7 @@ fn assert_identity(actual: &Value, sid: &str, session: u32) {
     );
 }
 
-fn require_absent(path: &Path, stage: &'static str) {
+pub(super) fn require_absent(path: &Path, stage: &'static str) {
     match std::fs::symlink_metadata(path) {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
         Err(error) => panic!(
@@ -394,7 +400,7 @@ impl Drop for Cleanup<'_> {
     }
 }
 
-fn task_absent(name: String, stage: &'static str) {
+pub(super) fn task_absent(name: String, stage: &'static str) {
     use windows::Win32::System::Com::{
         CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx,
         CoUninitialize,

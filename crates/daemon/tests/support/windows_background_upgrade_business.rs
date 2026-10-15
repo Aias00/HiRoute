@@ -9,6 +9,7 @@ pub(super) use native_io::assert_no_secret;
 use native_io::{cli, execute, grant, read, register, stage_codex};
 
 use super::fixture;
+use super::windows_background_upgrade::transport::Owner;
 use hiroute_host_runtime::StandaloneLayout;
 use hiroute_platform::windows::security;
 use serde::{Deserialize, Serialize};
@@ -96,6 +97,9 @@ pub struct Business {
 }
 impl Business {
     pub fn save(token: &File, program: &Path) -> Self {
+        Self::save_with(Owner::Token(token), program)
+    }
+    pub(super) fn save_with(owner: Owner<'_>, program: &Path) -> Self {
         let oracle = oracle::Oracle::start();
         let save = Save {
             address: oracle.address(),
@@ -106,18 +110,22 @@ impl Business {
                 .expect("upgrade requires the verified pinned Codex version"),
         };
         let saved: Saved =
-            serde_json::from_value(owner(token, program, "upgrade-business-save", &save)).unwrap();
+            serde_json::from_value(request(owner, program, "upgrade-business-save", &save))
+                .unwrap();
         oracle.assert_counts(&[0], 0);
         Self { oracle, saved }
     }
     pub fn recovered(&mut self, token: &File, program: &Path, rollback: bool) {
+        self.recovered_with(Owner::Token(token), program, rollback);
+    }
+    pub(super) fn recovered_with(&mut self, owner: Owner<'_>, program: &Path, rollback: bool) {
         let phase = if rollback { 1 } else { 2 };
         let payload = Verify {
             saved: serde_json::from_value(serde_json::to_value(&self.saved).unwrap()).unwrap(),
             phase,
         };
         self.saved =
-            serde_json::from_value(owner(token, program, "upgrade-business-verify", &payload))
+            serde_json::from_value(request(owner, program, "upgrade-business-verify", &payload))
                 .unwrap();
         let phases: Vec<_> = self
             .saved
@@ -129,7 +137,10 @@ impl Business {
             .assert_counts(&phases, self.saved.receipts.len() - 1);
     }
     pub fn restore(self, token: &File, program: &Path) {
-        let result = owner(token, program, "upgrade-business-cleanup", &self.saved);
+        self.restore_with(Owner::Token(token), program);
+    }
+    pub(super) fn restore_with(self, owner: Owner<'_>, program: &Path) {
+        let result = request(owner, program, "upgrade-business-cleanup", &self.saved);
         assert_eq!(result["restored"], true);
         assert_eq!(result["original_config_sha256"], digest(ORIGINAL_CONFIG));
         let phases: Vec<_> = self
@@ -142,7 +153,7 @@ impl Business {
             .assert_counts(&phases, self.saved.receipts.len() - 1);
     }
 }
-fn owner(token: &File, program: &Path, action: &str, payload: &impl Serialize) -> Value {
+fn request(owner: Owner<'_>, program: &Path, action: &str, payload: &impl Serialize) -> Value {
     let encoded = serde_json::to_string(payload).unwrap();
     assert_no_secret(encoded.as_bytes());
     // Includes the fixed Request envelope, not just its nested payload.
@@ -155,7 +166,7 @@ fn owner(token: &File, program: &Path, action: &str, payload: &impl Serialize) -
         serde_json::to_vec(&request).unwrap().len() <= 16384,
         "upgrade request exceeds the existing owner boundary"
     );
-    fixture::owner(token, request, Duration::from_secs(180))
+    owner.request(request, Duration::from_secs(180))
 }
 
 /// Narrow dispatch called only after the existing standard-owner token check.
