@@ -23,8 +23,10 @@ export function AgentSettingsFeedback({ preview, agent: selected, facet, default
     <strong>{text('当前无法应用，未修改配置。', 'Cannot apply yet. Configuration was not changed.')}</strong>
     {preview.blockers.map((block, index) => {
       const capabilities = new Set(block.capabilities?.map(capability => capability.capability) ?? []);
-      const message = capabilities.has('ingress_authentication')
-        ? text('本机认证兼容性尚未确认。', 'Local authentication compatibility is unconfirmed.')
+      const message = capabilities.has('ingress_authentication') && selected?.agent_id === 'agent_hermes_default'
+        ? text('所选 Hermes 安装尚未满足此协议的原生接口和 SDK 要求。请检查本机依赖后重新预览。', 'The selected Hermes installation does not yet meet this protocol’s native interface and SDK requirements. Check local dependencies, then preview again.')
+        : capabilities.has('ingress_authentication')
+          ? text('本机认证兼容性尚未确认。', 'Local authentication compatibility is unconfirmed.')
         : block.reason === 'native_model_coverage_unavailable'
           ? `${text('保留原 Codex 模型需要先接入原订阅账号或 API 来源，并证明同账号路由。也可改选“只使用已配置的 HiRoute 模型”。', 'To keep native Codex models, connect the original subscription account or API source and prove same-account routes, or select HiRoute-only.')}${(block.model_ids ?? []).length ? ` ${block.model_ids!.join(', ')}` : ''}`
         : block.reason === 'native_default_invalid'
