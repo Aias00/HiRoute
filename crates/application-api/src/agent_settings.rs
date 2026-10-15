@@ -130,7 +130,7 @@ pub enum AgentModelSettingsStateV2 {
 #[serde(untagged)]
 pub enum AgentSettingsStatusV2 {
     Model(Box<AgentModelSettingsStatusV2>),
-    CollaborationOnly(AgentCollaborationOnlySettingsStatusV2),
+    CollaborationOnly(Box<AgentCollaborationOnlySettingsStatusV2>),
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
