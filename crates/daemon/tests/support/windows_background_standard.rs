@@ -105,8 +105,22 @@ pub(super) fn current_owner(request: fixture::Request, bound: Duration) -> Value
                 (phase < 3 && (100..600).contains(&status)).then_some((phase, status))
             })
             .unwrap_or((0, 0));
+        let public_stage = [
+            "restore-preview",
+            "restore-apply",
+            "connect-status",
+            "connect-change",
+            "operation-read",
+            "compute",
+            "routing",
+            "receipts",
+            "other",
+        ]
+        .into_iter()
+        .find(|stage| error.contains(&format!("upgrade public CLI failure: stage={stage}, ")))
+        .unwrap_or("none");
         eprintln!(
-            "standard-owner frame facts: stage={stage}, failure={failure}, origin={origin}, line={line}, http_phase={http_phase}, http_status={http_status}, stdout_bytes={}, stderr_bytes={}, marker_seen={}, exact_line_count={}",
+            "standard-owner frame facts: stage={stage}, public_stage={public_stage}, failure={failure}, origin={origin}, line={line}, http_phase={http_phase}, http_status={http_status}, stdout_bytes={}, stderr_bytes={}, marker_seen={}, exact_line_count={}",
             output.len(),
             error.len(),
             output.contains(marker),

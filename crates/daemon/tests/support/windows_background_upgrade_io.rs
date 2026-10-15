@@ -230,6 +230,20 @@ pub(super) fn cli(program: &Path, args: &[&str], payload: Option<&Value>) -> Val
     let (exit, output, error) = execute(program, &arguments, input, Duration::from_secs(60));
     assert_no_secret(&output);
     assert_no_secret(&error);
+    if exit != 0 {
+        let stage = match args {
+            ["agents", "restore", "preview"] => "restore-preview",
+            ["agents", "restore", "apply"] => "restore-apply",
+            ["agents", "connect", "status", ..] => "connect-status",
+            ["agents", "connect", ..] => "connect-change",
+            ["operations", "get", ..] => "operation-read",
+            ["compute", ..] => "compute",
+            ["routing", ..] => "routing",
+            ["sessions", ..] => "receipts",
+            _ => "other",
+        };
+        eprintln!("upgrade public CLI failure: stage={stage}, exit={exit}");
+    }
     assert_eq!(exit, 0, "upgrade public CLI failed its real entry");
     assert!(error.is_empty(), "upgrade public CLI emitted diagnostics");
     let value: Value =

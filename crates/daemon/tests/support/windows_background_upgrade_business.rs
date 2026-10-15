@@ -281,7 +281,7 @@ pub(super) fn run_action(request: &fixture::Request) -> Value {
                 program,
                 "restore",
                 &spec,
-                &format!("windows-upgrade-restore-{}", saved.plan),
+                &format!("windows-upgrade-restore-{}", digest(saved.plan.as_bytes())),
             );
             let status = cli(
                 program,
@@ -590,6 +590,7 @@ fn draft(address: SocketAddr, candidate: &str) -> Value {
                 "native_reasoning":declared(json!({"kind":"fixed","profile":"provider-default"}))}}]})
 }
 fn settings(program: &Path, verb: &str, spec: &Value, key: &str) {
+    hiroute_domain::validate_idempotency_key(key).unwrap();
     let preview = cli(
         program,
         &["agents", verb, "preview"],
