@@ -67,6 +67,7 @@ pub fn hermes_support_facts() -> HermesSupportFacts {
     }
     let sdk_paths = python_package_paths(&interpreters);
     roots.extend(sdk_paths.iter().cloned());
+    roots.extend(editable_source_roots(&sdk_paths));
     let sdk = inspect_sdks(&sdk_paths);
     roots.sort();
     roots.dedup();
@@ -185,6 +186,49 @@ fn python_package_paths(interpreters: &[PathBuf]) -> Vec<PathBuf> {
     packages.dedup();
     packages
 }
+
+/// PEP 610 installation metadata locates editable sources without importing their finder.
+fn editable_source_roots(paths: &[PathBuf]) -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    for site in paths.iter().take(32) {
+        let Ok(entries) = std::fs::read_dir(site) else {
+            continue;
+        };
+        for entry in entries.take(4096).flatten() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if !name.starts_with("hermes_agent-") || !name.ends_with(".dist-info") {
+                continue;
+            }
+            let Some(metadata) = bounded_text(&entry.path().join("direct_url.json"), 16 * 1024)
+            else {
+                continue;
+            };
+            let Ok(value) = serde_json::from_str::<serde_json::Value>(&metadata) else {
+                continue;
+            };
+            if value["dir_info"]["editable"] != true {
+                continue;
+            }
+            let Some(url) = value["url"]
+                .as_str()
+                .and_then(|url| reqwest::Url::parse(url).ok())
+            else {
+                continue;
+            };
+            if url.scheme() != "file" || url.query().is_some() || url.fragment().is_some() {
+                continue;
+            }
+            if let Ok(root) = url.to_file_path()
+                && root.is_absolute()
+                && root.is_dir()
+            {
+                roots.push(root);
+            }
+        }
+    }
+    roots
+}
 fn inspect_sdks(paths: &[PathBuf]) -> (bool, bool, CanonicalDigest) {
     let mut responses = false;
     let mut messages = false;
@@ -223,6 +267,35 @@ fn inspect_sdks(paths: &[PathBuf]) -> (bool, bool, CanonicalDigest) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn editable_source_locator_uses_only_selected_local_install_metadata() {
+        let root = tempfile::tempdir().unwrap();
+        let site = root.path().join("site");
+        let info = site.join("hermes_agent-0.19.1.dist-info");
+        std::fs::create_dir_all(&info).unwrap();
+        let source = root.path().join("native source");
+        std::fs::create_dir(&source).unwrap();
+        let metadata = info.join("direct_url.json");
+        let url = reqwest::Url::from_directory_path(&source).unwrap();
+        for (url, editable, expected) in [
+            (url.as_str(), true, vec![source.clone()]),
+            (url.as_str(), false, vec![]),
+            ("https://example.invalid/hermes", true, vec![]),
+            ("file://remote.example.invalid/native", true, vec![]),
+        ] {
+            std::fs::write(
+                &metadata,
+                serde_json::to_vec(&serde_json::json!({
+                "url":url,"dir_info":{"editable":editable}}))
+                .unwrap(),
+            )
+            .unwrap();
+            assert_eq!(editable_source_roots(std::slice::from_ref(&site)), expected);
+        }
+        std::fs::write(&metadata, "import forbidden_native_code").unwrap();
+        assert!(editable_source_roots(&[site]).is_empty());
+    }
 
     #[test]
     fn selected_interpreter_sdks_are_protocol_specific_and_digest_bound() {

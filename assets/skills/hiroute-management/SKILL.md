@@ -1,6 +1,6 @@
 ---
 name: hiroute-management
-description: Inspect and manage a user-owned HiRoute standalone service, model sources, routes, Agent connections, observations, and Worker tasks through the installed hiroute CLI. Do not use for HiRoute Desktop installations.
+description: Inspect and manage user-owned HiRoute model sources, routes, Agent connections, observations, and Worker tasks through the installed hiroute CLI. Also manage the standalone service when installed.
 metadata:
   schema: hiroute.management-skill/v1
   access: local-user
@@ -8,7 +8,7 @@ metadata:
 
 <!-- Managed by HiRoute standalone installer -->
 
-# HiRoute standalone management
+# HiRoute management
 
 Use only the `hiroute` found on `PATH`. Start with:
 
@@ -20,10 +20,13 @@ hiroute system status --output json
 hiroute schema list --output json
 ```
 
-Continue only when the standalone marker is present, Local Control is ready, and system status
-reports `daemon=role_all` and `gateway=ready`. If not, diagnose with `service doctor` and bounded
-`service logs`; do not substitute an App-bundle path, repository binary, remote Gateway, direct
-database access, or a second daemon.
+Continue only when Local Control is ready and system status reports `daemon=role_all` and
+`gateway=ready`. Standalone service commands additionally require the standalone marker;
+diagnose that installation with `service doctor` and bounded `service logs`. For Desktop,
+start or recover the existing application. Use the same public business commands against
+its Local Control; never start a second daemon or substitute repository binaries, remote
+Gateway management or direct database access. If the installed CLI is unavailable, report
+that prerequisite rather than treating Skill installation as working CLI access.
 
 
 For JSON business requests, every `--request-stdin` command also supports
