@@ -6,6 +6,7 @@ pub struct HermesSupportFacts {
     pub version: String,
     pub middleware: bool,
     pub skills: bool,
+    pub chat_sdk: bool,
     pub responses_sdk: bool,
     pub messages_sdk: bool,
     pub dependency_digest: CanonicalDigest,
@@ -119,7 +120,7 @@ pub fn hermes_support_facts() -> HermesSupportFacts {
             .unwrap_or_else(|| "unknown".into());
         let dependency_digest = CanonicalDigest::of(&(
             "hermes-native-interfaces/v2",
-            &sdk.2,
+            &sdk.digest,
             CanonicalDigest::of_bytes(plugins.as_bytes()),
             CanonicalDigest::of_bytes(middleware.as_bytes()),
             calls
@@ -134,8 +135,9 @@ pub fn hermes_support_facts() -> HermesSupportFacts {
             version,
             middleware: supported,
             skills,
-            responses_sdk: sdk.0,
-            messages_sdk: sdk.1,
+            chat_sdk: sdk.chat,
+            responses_sdk: sdk.responses,
+            messages_sdk: sdk.messages,
             dependency_digest,
         };
     }
@@ -143,6 +145,7 @@ pub fn hermes_support_facts() -> HermesSupportFacts {
         version: "unknown".into(),
         middleware: false,
         skills: false,
+        chat_sdk: false,
         responses_sdk: false,
         messages_sdk: false,
         dependency_digest: CanonicalDigest::of_bytes(b"hermes-native-interfaces/unavailable"),
@@ -229,12 +232,25 @@ fn editable_source_roots(paths: &[PathBuf]) -> Vec<PathBuf> {
     }
     roots
 }
-fn inspect_sdks(paths: &[PathBuf]) -> (bool, bool, CanonicalDigest) {
+struct HermesSdkSupport {
+    chat: bool,
+    responses: bool,
+    messages: bool,
+    digest: CanonicalDigest,
+}
+
+fn inspect_sdks(paths: &[PathBuf]) -> HermesSdkSupport {
+    let mut chat = false;
     let mut responses = false;
     let mut messages = false;
     let mut evidence = Vec::new();
     for path in paths {
         for (package, resource, protocol) in [
+            (
+                "openai",
+                "resources/chat/completions/completions.py",
+                "chat",
+            ),
             ("openai", "resources/responses/responses.py", "responses"),
             ("anthropic", "resources/messages/messages.py", "messages"),
         ] {
@@ -249,24 +265,44 @@ fn inspect_sdks(paths: &[PathBuf]) -> (bool, bool, CanonicalDigest) {
                     .as_ref()
                     .map(|source| CanonicalDigest::of_bytes(source.as_bytes())),
             ));
-            if protocol == "responses" {
+            if protocol == "chat" {
+                chat |= supported;
+            } else if protocol == "responses" {
                 responses |= supported;
             } else {
                 messages |= supported;
             }
         }
     }
-    (
+    HermesSdkSupport {
+        chat,
         responses,
         messages,
-        CanonicalDigest::of(&("hermes-selected-sdk-interfaces/v1", evidence))
+        digest: CanonicalDigest::of(&("hermes-selected-sdk-interfaces/v2", evidence))
             .expect("bounded sdk evidence"),
-    )
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn chat_sdk_headers_are_required_independently_of_other_transports() {
+        let prefix = tempfile::tempdir().unwrap();
+        let site = prefix.path();
+        let chat = site.join("openai/resources/chat/completions/completions.py");
+        std::fs::create_dir_all(chat.parent().unwrap()).unwrap();
+        std::fs::write(&chat, "def create(self): pass\n").unwrap();
+        let missing = inspect_sdks(&[site.to_path_buf()]);
+        assert!(!missing.chat && !missing.responses && !missing.messages);
+        std::fs::write(&chat, "def create(self, *, extra_headers: dict): pass\n").unwrap();
+        let supported = inspect_sdks(&[site.to_path_buf()]);
+        assert!(supported.chat && !supported.responses && !supported.messages);
+        assert_ne!(missing.digest, supported.digest);
+        std::fs::remove_file(chat).unwrap();
+        assert!(!inspect_sdks(&[site.to_path_buf()]).chat);
+    }
 
     #[test]
     fn editable_source_locator_uses_only_selected_local_install_metadata() {
@@ -311,25 +347,25 @@ mod tests {
         let paths = python_package_paths(&[prefix.path().join("bin/python")]);
         assert_eq!(paths, vec![site.clone()]);
         let first = inspect_sdks(&paths);
-        assert!(first.0);
-        assert!(!first.1);
+        assert!(first.responses);
+        assert!(!first.messages);
         let messages = site.join("anthropic/resources/messages/messages.py");
         std::fs::create_dir_all(messages.parent().unwrap()).unwrap();
         std::fs::write(&messages, "def create(self):\n    pass\n").unwrap();
         let without_headers = inspect_sdks(&paths);
-        assert!(!without_headers.1);
-        assert_ne!(first.2, without_headers.2);
+        assert!(!without_headers.messages);
+        assert_ne!(first.digest, without_headers.digest);
         std::fs::write(
             &messages,
             "def create(self, *, extra_headers: dict):\n    pass\n",
         )
         .unwrap();
         let both = inspect_sdks(&paths);
-        assert!(both.0 && both.1);
-        assert_ne!(both.2, without_headers.2);
+        assert!(both.responses && both.messages);
+        assert_ne!(both.digest, without_headers.digest);
         std::fs::remove_file(responses).unwrap();
         let messages_only = inspect_sdks(&paths);
-        assert!(!messages_only.0 && messages_only.1);
-        assert_ne!(both.2, messages_only.2);
+        assert!(!messages_only.responses && messages_only.messages);
+        assert_ne!(both.digest, messages_only.digest);
     }
 }

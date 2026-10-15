@@ -245,7 +245,12 @@ impl AgentPlanAuthoringV2 {
         self.limits
             .validate()
             .map_err(|_| PlanAuthoringError::InvalidStrategy)?;
-        if self.delegation_enabled && self.work.is_none() {
+        if self
+            .work
+            .as_ref()
+            .is_some_and(|work| work.protocol == crate::AgentIngressProtocolV1::ChatCompletions)
+            || (self.delegation_enabled && self.work.is_none())
+        {
             return Err(PlanAuthoringError::InvalidStrategy);
         }
         let validate = |items: &[CandidateSelectionV1]| {

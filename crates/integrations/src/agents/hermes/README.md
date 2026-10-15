@@ -16,7 +16,8 @@ recovery. Hermes leaves own native configuration and resources:
   in an already-running Hermes process.
 - [Support inspection](../hermes_support.rs) reads the selected launcher's native
   plugin/config/context interfaces and protocol SDK. Responses requires OpenAI
-  Responses with extra headers; Messages requires Anthropic Messages with extra
+  Responses with extra headers; Chat Completions independently requires OpenAI
+  Chat Completions with extra headers; Messages requires Anthropic Messages with extra
   headers. Hermes 0.19.1 is the verified native baseline. Version text alone does
   not establish support. Missing interfaces block new connection writes; passive
   source discovery, independent Skill preparation and safe owned restore use their
@@ -30,6 +31,8 @@ recovery. Hermes leaves own native configuration and resources:
 The installed management Skill is independent of the model connection. Prepare it
 with `management_skill: configure` and `model: keep`; restore either facet without
 restoring the other. Hermes has no Worker/collaboration setup in this integration.
+
+Select `chat_completions`, `responses` or `messages` explicitly for the managed main model. Native SDK support and upstream request expressibility are separate checks. In particular, native Responses encrypted reasoning/summary controls cannot be dropped when the upstream only accepts Chat Completions; use native Chat for a qualified Chat source. Chat uses the existing OpenAI SDK and does not require the optional Anthropic SDK. Existing saved transports are not changed automatically.
 
 Normal connection Apply prepares the provider and adapter together. Reload native
 plugins or start a new native process when required. A channel/session `/model`

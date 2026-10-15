@@ -96,6 +96,7 @@ pub fn hermes_configure(
     let mode = match model.protocol {
         hiroute_domain::AgentIngressProtocolV1::Responses => "codex_responses",
         hiroute_domain::AgentIngressProtocolV1::Messages => "anthropic_messages",
+        hiroute_domain::AgentIngressProtocolV1::ChatCompletions => "chat_completions",
     };
     let base = if model.protocol == hiroute_domain::AgentIngressProtocolV1::Messages {
         endpoint
@@ -343,6 +344,43 @@ fn refers_to(value: &Value, id: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn selected_transport_uses_native_sdk_base_and_restores_exact_original() {
+        use hiroute_domain::AgentIngressProtocolV1::*;
+        let original = b"user_note: preserve\n";
+        for (protocol, transport, base) in [
+            (Responses, "codex_responses", "http://127.0.0.1:8317/v1"),
+            (Messages, "anthropic_messages", "http://127.0.0.1:8317"),
+            (
+                ChatCompletions,
+                "chat_completions",
+                "http://127.0.0.1:8317/v1",
+            ),
+        ] {
+            let model = AdditionalAgentModelV1 {
+                alias: "hiroute_test".into(),
+                protocol,
+                context_window_tokens: 64000,
+                max_output_tokens: 8192,
+            };
+            let (managed, record) = hermes_configure(
+                original,
+                None,
+                "hiroute-main-test",
+                "http://127.0.0.1:8317/v1",
+                &model,
+                "local-token",
+            )
+            .unwrap();
+            let doc = HermesDocument::parse(&managed).unwrap();
+            let provider = doc.value["model"]["provider"].as_str().unwrap();
+            assert_eq!(doc.value["providers"][provider]["transport"], transport);
+            assert_eq!(doc.value["providers"][provider]["api"], base);
+            assert_eq!(doc.value["user_note"], "preserve");
+            assert_eq!(record.restore(&managed).unwrap(), original);
+        }
+    }
+
     #[test]
     fn conditional_restore_releases_only_introduced_empty_containers() {
         let model = AdditionalAgentModelV1 {

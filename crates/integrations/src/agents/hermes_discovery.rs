@@ -119,6 +119,9 @@ fn hermes_installation(
             AgentCapability::IngressAuthentication => Some(
                 support.middleware
                     && match protocol {
+                        Some(hiroute_domain::AgentIngressProtocolV1::ChatCompletions) => {
+                            support.chat_sdk
+                        }
                         Some(hiroute_domain::AgentIngressProtocolV1::Responses) => {
                             support.responses_sdk
                         }

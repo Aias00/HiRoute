@@ -206,7 +206,11 @@ impl AgentModelSelectionV2 {
             Self::QoderAdditional { plan_protocols, .. }
             | Self::PiAdditional { plan_protocols, .. }
             | Self::DshAdditional { plan_protocols, .. } => {
-                if plan_protocols.keys().any(|id| !plans.contains(id)) {
+                if plan_protocols.keys().any(|id| !plans.contains(id))
+                    || plan_protocols
+                        .values()
+                        .any(|p| *p == crate::AgentIngressProtocolV1::ChatCompletions)
+                {
                     return Err(crate::AgentConnectionError::InvalidGrant);
                 }
             }

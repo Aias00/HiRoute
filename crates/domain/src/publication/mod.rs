@@ -715,6 +715,19 @@ impl GatewayPublicationV1 {
     /// AgentConnection grant. A protocol is advertised only when every ordered candidate has
     /// one exact renderer for that ingress; grant material never participates in this catalog.
     pub fn published_agent_plans(&self) -> Result<Vec<PublishedAgentPlanV1>, PublicationError> {
+        self.project_published_agent_plans(false)
+    }
+
+    pub(crate) fn published_hermes_agent_plans(
+        &self,
+    ) -> Result<Vec<PublishedAgentPlanV1>, PublicationError> {
+        self.project_published_agent_plans(true)
+    }
+
+    fn project_published_agent_plans(
+        &self,
+        include_chat: bool,
+    ) -> Result<Vec<PublishedAgentPlanV1>, PublicationError> {
         self.validate()?;
         self.plans
             .iter()
@@ -729,8 +742,15 @@ impl GatewayPublicationV1 {
                         UpstreamProtocol::Responses,
                     ),
                     (AgentIngressProtocolV1::Messages, UpstreamProtocol::Messages),
+                    (
+                        AgentIngressProtocolV1::ChatCompletions,
+                        UpstreamProtocol::ChatCompletions,
+                    ),
                 ]
                 .into_iter()
+                .filter(|(protocol, _)| {
+                    include_chat || *protocol != AgentIngressProtocolV1::ChatCompletions
+                })
                 .filter(|(_, ingress)| {
                     candidates.iter().all(|candidate| {
                         candidate

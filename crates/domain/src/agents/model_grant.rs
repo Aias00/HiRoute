@@ -157,9 +157,12 @@ impl AgentModelGrantV2 {
         plan_ids: std::collections::BTreeSet<AgentPlanId>,
         publication: &GatewayPublicationV1,
     ) -> Result<BTreeMap<String, AgentModelRouteV2>, AgentConnectionError> {
-        let published = publication
-            .published_agent_plans()
-            .map_err(|_| AgentConnectionError::InvalidPlan)?;
+        let published = if protocol == AgentIngressProtocolV1::ChatCompletions {
+            publication.published_hermes_agent_plans()
+        } else {
+            publication.published_agent_plans()
+        }
+        .map_err(|_| AgentConnectionError::InvalidPlan)?;
         let mut routes = BTreeMap::new();
         for plan_id in plan_ids {
             let plan = published
@@ -271,6 +274,12 @@ impl AgentModelGrantV2 {
 
     pub fn validate(&self) -> Result<(), AgentConnectionError> {
         if self.routes.is_empty()
+            || (self.consumer != Some(AgentModelConsumerV1::Hermes)
+                && (self.protocol == AgentIngressProtocolV1::ChatCompletions
+                    || self
+                        .route_protocols
+                        .values()
+                        .any(|p| *p == AgentIngressProtocolV1::ChatCompletions)))
             || (self.consumer.is_some()
                 && (self.routes.len() != 1
                     || !self.route_protocols.is_empty()
@@ -288,6 +297,7 @@ impl AgentModelGrantV2 {
         let ingress = match self.protocol {
             AgentIngressProtocolV1::Responses => UpstreamProtocol::Responses,
             AgentIngressProtocolV1::Messages => UpstreamProtocol::Messages,
+            AgentIngressProtocolV1::ChatCompletions => UpstreamProtocol::ChatCompletions,
         };
         for (name, route) in &self.routes {
             if !valid_client_model_name(name) {
@@ -509,6 +519,46 @@ mod tests {
         let mut unbound = hermes;
         unbound.consumer = None;
         assert!(unbound.validate().is_err());
+    }
+
+    #[test]
+    fn chat_grants_are_scoped_to_hermes_and_do_not_expand_other_agent_selections() {
+        let old = grant();
+        let protocol = AgentIngressProtocolV1::ChatCompletions;
+        assert!(AgentModelGrantV2::seal(protocol, old.routes.clone()).is_err());
+        let hermes = AgentModelGrantV2::seal_routes_with_consumer(
+            protocol,
+            old.routes,
+            BTreeMap::new(),
+            Some(AgentModelConsumerV1::Hermes),
+        )
+        .unwrap();
+        let plan_id = AgentPlanId::parse("plan/example").unwrap();
+        assert!(
+            hermes
+                .validate_selection(&AgentModelSelectionV2::HermesDefault {
+                    plan_id: plan_id.clone(),
+                    protocol,
+                })
+                .is_ok()
+        );
+        for selection in [
+            AgentModelSelectionV2::PiAdditional {
+                allowed_plan_ids: [plan_id.clone()].into(),
+                plan_protocols: [(plan_id.clone(), protocol)].into(),
+            },
+            AgentModelSelectionV2::DshAdditional {
+                allowed_plan_ids: [plan_id.clone()].into(),
+                plan_protocols: [(plan_id.clone(), protocol)].into(),
+            },
+            AgentModelSelectionV2::QoderAdditional {
+                allowed_plan_ids: [plan_id.clone()].into(),
+                plan_protocols: [(plan_id, protocol)].into(),
+            },
+        ] {
+            assert!(selection.validate().is_err());
+            assert!(hermes.validate_selection(&selection).is_err());
+        }
     }
 
     #[test]

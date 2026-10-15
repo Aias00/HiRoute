@@ -70,6 +70,7 @@ impl AgentKindV1 {
 pub enum AgentIngressProtocolV1 {
     Responses,
     Messages,
+    ChatCompletions,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]

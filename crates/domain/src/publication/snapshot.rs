@@ -147,6 +147,7 @@ pub(super) fn project_candidate(
         let ingress = match protocol {
             AgentIngressProtocolV1::Responses => UpstreamProtocol::Responses,
             AgentIngressProtocolV1::Messages => UpstreamProtocol::Messages,
+            AgentIngressProtocolV1::ChatCompletions => UpstreamProtocol::ChatCompletions,
         };
         if candidate
             .protocol_profiles

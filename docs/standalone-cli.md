@@ -524,7 +524,9 @@ one-model handles.
 
 Set `model.intent` to `configure` with
 `{"mode":"hermes_default","plan_id":"PUBLISHED_PLAN_ID","protocol":"responses"}`
-or the supported Messages transport. Normal Apply installs/enables the bundled
+or choose `chat_completions` / `messages` explicitly when supported. Native Chat
+uses the existing OpenAI Chat SDK and the Gateway Chat path; a Chat upstream must
+not be relabeled Responses to bypass request-fidelity checks. Normal Apply installs/enables the bundled
 adapter together with the default/provider settings. The selected native SDK and
 interfaces must support that transport. Saved state does not prove loading in a
 running Hermes process; follow the reload/selection guidance.

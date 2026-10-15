@@ -39,7 +39,7 @@ def _adapter(config):
             and provider["default_model"] == route[1]
             and provider["api"] == route[2]
             and provider["transport"] == route[3]
-            and route[3] in ("codex_responses", "anthropic_messages")
+            and route[3] in ("chat_completions", "codex_responses", "anthropic_messages")
             and _token(bearer)
         ):
             return None

@@ -18,7 +18,7 @@ export type AgentEditorValues = {
   claudePresets: AgentClaudePresetMappings;
   triggerMode: AgentCollaborationTriggerMode;
   hermesPlanId: string;
-  hermesProtocol: 'responses' | 'messages';
+  hermesProtocol: 'chat_completions' | 'responses' | 'messages';
 };
 
 export const EMPTY_EDITOR_VALUES: AgentEditorValues = {

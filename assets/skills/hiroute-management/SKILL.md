@@ -149,6 +149,10 @@ invent capability, reasoning, price, timeout, or delegation choices.
   The workflow selects Codex's original root context while keeping its model profile unchanged.
   Advanced JSON collaboration requests must use `codex_access.root_context_id`, never the
   top-level model profile context. A root-context diagnostic is not a request for another token.
+- Hermes main-model connections explicitly choose `chat_completions`, `responses` or `messages`.
+  Prefer native Chat for a qualified Chat source; it uses OpenAI Chat and preserves the source protocol.
+  Native Responses encrypted-state/summary requirements cannot be discarded to make a Chat source work.
+  The chosen transport requires its own installed SDK/header capability.
 - Use only profile-compatible plan protocols. Do not attach a Responses-only plan to a
   Messages-only surface.
 - Save the returned restore point. Restore only through `agents restore preview` and

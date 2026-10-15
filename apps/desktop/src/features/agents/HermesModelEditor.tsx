@@ -16,7 +16,7 @@ export function HermesModelEditor({ agent, values, plans, language, disabled, in
       {enabled.map(plan => <option key={plan.agent_plan_id} value={plan.agent_plan_id}>{plan.desired.display_name}</option>)}
       {values.hermesPlanId && !enabled.some(plan => plan.agent_plan_id === values.hermesPlanId) && <option value={values.hermesPlanId}>{selected?.desired.display_name ?? values.hermesPlanId} · {text('当前不可用', 'Currently unavailable')}</option>}
     </select></label>
-    {selected && <AgentProtocolChoice name={selected.desired.display_name} language={language} value={values.hermesProtocol} advice={selected.protocol_advice} onChange={protocol => { onChange(current => ({ ...current, hermesProtocol: protocol })); onEdited(); }} />}
+    {selected && <AgentProtocolChoice allowChatCompletions name={selected.desired.display_name} language={language} value={values.hermesProtocol} advice={selected.protocol_advice} onChange={protocol => { onChange(current => ({ ...current, hermesProtocol: protocol })); onEdited(); }} />}
     <p className="field-help">{text('保存时会自动安装并启用 HiRoute 适配插件。正在运行的 Hermes 需要重新加载插件或开启新会话；文件已安装不代表当前进程已加载。', 'Saving automatically installs and enables the HiRoute adapter. A running Hermes needs a plugin reload or a new session; installed files do not prove the current process has loaded them.')}</p>
     <p className="field-help">{text('压缩、标题、视觉和其他辅助模型仍由 Hermes 管理。HiRoute 管理 Skill 可独立启用与恢复。', 'Hermes retains compression, title, vision and other auxiliary models. The HiRoute management Skill can be prepared and restored independently.')}</p>
     {invalid && <span className="oc-inline-error">{text('请选择一条当前已启用的智能路由。', 'Select one currently enabled smart route.')}</span>}

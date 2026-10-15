@@ -27,8 +27,8 @@ def configuration(mode="codex_responses"):
 
 
 class HermesAdapterTests(unittest.TestCase):
-    def test_native_envelope_preserves_stream_tools_and_existing_headers_for_both_modes(self):
-        for mode in ("codex_responses", "anthropic_messages"):
+    def test_native_envelope_preserves_stream_tools_and_existing_headers_for_all_modes(self):
+        for mode in ("chat_completions", "codex_responses", "anthropic_messages"):
             with self.subTest(mode=mode):
                 adapter = plugin._adapter(configuration(mode))
                 request = {"stream": True, "model": "plan-alias", "tools": [{"type": "function"}],
