@@ -164,6 +164,10 @@ the registered arguments and persisted definition unchanged while owning a
 same-user business child and its complete Job. The real crash case must observe
 a new authenticated business process, and a requested stop must cancel recovery;
 Scheduler action completion or restart settings alone do not prove that behavior.
+The forced-stop case stalls the real protected-input reader and checks the held
+daemon's native exit time. The lifecycle client must retain its kernel peer proof
+when the stop acknowledgement times out, then mark manager stop intent before
+terminating that held process; malformed replies still fail closed.
 The
 [shared authorization checks](../../crates/daemon/tests/support/windows_subscription_authorization.rs)
 cover public missing/wrong-kind/stale Result/Release rejection; they do not prove

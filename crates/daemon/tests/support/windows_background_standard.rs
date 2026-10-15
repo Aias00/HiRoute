@@ -62,8 +62,17 @@ pub(super) fn current_owner(request: fixture::Request, bound: Duration) -> Value
         let output = result["stdout"].as_str().unwrap_or_default();
         let error = result["stderr"].as_str().unwrap_or_default();
         let marker = "HIROUTE_NATIVE_BACKGROUND_RESULT=";
+        let failure = if error.contains("native exit timestamp must precede") {
+            "forced-stop-missed-native-exit-bound"
+        } else if error.contains("forced user stop must terminate") {
+            "forced-stop-runtime-remained"
+        } else if error.contains("forced stop returned an unexpected public exit") {
+            "forced-stop-unexpected-public-exit"
+        } else {
+            "unclassified"
+        };
         eprintln!(
-            "standard-owner frame facts: stage={stage}, stdout_bytes={}, stderr_bytes={}, marker_seen={}, exact_line_count={}",
+            "standard-owner frame facts: stage={stage}, failure={failure}, stdout_bytes={}, stderr_bytes={}, marker_seen={}, exact_line_count={}",
             output.len(),
             error.len(),
             output.contains(marker),

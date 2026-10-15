@@ -133,24 +133,28 @@ fn exchange(
     let mut stream = pipe::Stream::connect_timeout(endpoint, timeout)?;
     stream.set_deadline(Some(deadline))?;
     let process = DaemonProcess::from_pipe(&stream, image, allow_terminate)?;
+    exchange_on_stream(&mut stream, &process, action)?;
+    Ok(process)
+}
+
+fn exchange_on_stream(
+    stream: &mut pipe::Stream,
+    process: &DaemonProcess,
+    action: &str,
+) -> io::Result<()> {
     let request = serde_json::to_vec(&Request {
         schema: SCHEMA.into(),
         action: action.into(),
     })
     .map_err(io::Error::other)?;
     local_record::write(
-        &mut stream,
+        stream,
         Channel::Lifecycle,
         Direction::Request,
         &request,
         MAXIMUM,
     )?;
-    let bytes = local_record::read(
-        &mut stream,
-        Channel::Lifecycle,
-        Direction::Response,
-        MAXIMUM,
-    )?;
+    let bytes = local_record::read(stream, Channel::Lifecycle, Direction::Response, MAXIMUM)?;
     let response: Response = serde_json::from_slice(&bytes).map_err(io::Error::other)?;
     if response.schema != SCHEMA
         || response.action != action
@@ -162,8 +166,7 @@ fn exchange(
             "invalid lifecycle response",
         ));
     }
-    local_record::acknowledge(&mut stream)?;
-    Ok(process)
+    local_record::acknowledge(stream)
 }
 
 pub fn query(endpoint: &Path, image: &Path, timeout: Duration) -> io::Result<DaemonProcess> {
@@ -181,7 +184,7 @@ pub fn retain_for_stop(
 }
 
 /// One deadline covers graceful acknowledgement and actual daemon exit. An
-/// unresponsive accepted daemon is terminated through its retained handle.
+/// unresponsive kernel-verified daemon is terminated through its retained handle.
 pub fn stop(endpoint: &Path, image: &Path, timeout: Duration) -> io::Result<()> {
     stop_with_fallback(endpoint, image, timeout, || Ok(()))
 }
@@ -196,13 +199,25 @@ pub fn stop_with_fallback(
     fallback: impl FnOnce() -> io::Result<()>,
 ) -> io::Result<()> {
     let deadline = Instant::now() + timeout;
-    let process = exchange(
-        endpoint,
-        image,
-        "stop",
-        timeout.min(Duration::from_secs(2)),
-        true,
-    )?;
+    let mut stream = pipe::Stream::connect_timeout(endpoint, timeout)?;
+    stream.set_deadline(Some(deadline.min(Instant::now() + Duration::from_secs(2))))?;
+    // Keep the actual kernel peer, owner and image proof even when a busy
+    // daemon cannot acknowledge. No numeric PID from a response is authority.
+    let process = DaemonProcess::from_pipe(&stream, image, true)?;
+    match exchange_on_stream(&mut stream, &process, "stop") {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::TimedOut => {
+            fallback()?;
+            if !process.exited()? {
+                process.terminate()?;
+            }
+            if !process.wait(deadline.saturating_duration_since(Instant::now()))? {
+                return Err(io::ErrorKind::TimedOut.into());
+            }
+            return Ok(());
+        }
+        Err(error) => return Err(error),
+    }
     let graceful_deadline = deadline
         .checked_sub(Duration::from_secs(2))
         .unwrap_or(deadline);
