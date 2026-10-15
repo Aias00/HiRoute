@@ -42,7 +42,7 @@ struct Route {
     retained: BTreeSet<String>,
 }
 impl UserModels {
-    pub fn run(product: &InstalledProduct, contexts: &Contexts, gateway: SocketAddr) -> Self {
+    pub fn run(product: &mut InstalledProduct, contexts: &Contexts, gateway: SocketAddr) -> Self {
         contexts.verify();
         let file = contexts.config.join("settings.json");
         let skill = contexts
@@ -113,6 +113,7 @@ impl UserModels {
                 retained: BTreeSet::new(),
             });
         }
+        product.preserve_on_failure = true;
         let preview = apply(
             product,
             "connect",

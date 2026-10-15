@@ -18,6 +18,8 @@ pub(super) struct Challenge {
     pub step: usize,
     #[cfg(windows)]
     pub expected_skill: Option<super::skill_diagnostic::NativeSkill>,
+    #[cfg(windows)]
+    pub expected_workspace: Option<super::workspace::Receipt>,
 }
 
 impl Challenge {
@@ -95,7 +97,14 @@ impl Challenge {
             }
             2 => {
                 let output = tool_result("call_hiroute_cli").ok_or("trusted CLI call result")?;
-                if output.trim() != self.expected_cli.trim() {
+                let exact = output.trim() == self.expected_cli.trim();
+                #[cfg(windows)]
+                let exact = exact
+                    || self
+                        .expected_workspace
+                        .as_ref()
+                        .is_some_and(|workspace| workspace.matches(output, &self.expected_cli));
+                if !exact {
                     if let Some(facts) = cli_diagnostic::Facts::observe(output, &self.expected_cli)
                     {
                         facts.emit();
@@ -288,6 +297,8 @@ mod tests {
             step: 1,
             #[cfg(windows)]
             expected_skill,
+            #[cfg(windows)]
+            expected_workspace: None,
         }
     }
 
@@ -317,6 +328,25 @@ mod tests {
         let mut check = challenge();
         check.step = 2;
         assert!(check.reply(&json!({"input":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"trusted result"}]}]})).is_err());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn native_cwd_envelope_keeps_the_correlated_exact_cli_proof() {
+        let root = super::super::super::probe_files::temporary("hiroute-qoder-envelope-").unwrap();
+        let (path, _held) = super::super::workspace::retain(root.path()).unwrap();
+        let mut check = challenge();
+        check.step = 2;
+        check.expected_workspace = Some(super::super::workspace::Receipt::retain(&path).unwrap());
+        let output = format!(
+            "{}\n\nShell cwd was reset to {}",
+            check.expected_cli,
+            path.display()
+        );
+        assert!(check.reply(&json!({"input":[{"type":"function_call_output","call_id":"unrelated","output":output}]})).is_err());
+        assert_eq!(check.step, 2);
+        assert!(check.reply(&json!({"input":[{"type":"function_call_output","call_id":"call_hiroute_cli","output":output}]})).is_ok());
+        assert!(check.complete());
     }
 
     #[test]

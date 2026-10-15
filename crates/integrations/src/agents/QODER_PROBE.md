@@ -57,16 +57,22 @@ Its original owner-only directory is opened before canonicalization, and the
 ordinary spelling must round-trip to the same canonical path and native identity.
 The held directory remains alive through the probe. Passing Rust's verbatim
 spelling across Qoder and Git Bash can make their workspace comparisons disagree
-and add a shell-cwd-reset notice to the tool result. That notice is not accepted
-as a substitute for the exact CLI baseline.
+and add a shell-cwd-reset notice to the tool result. The notice may also occur
+with ordinary paths. Windows accepts only the complete exact CLI baseline followed
+by two LF bytes and `Shell cwd was reset to ` plus this held private workspace's
+ordinary path. The directory must retain its native identity and private ownership.
+Another path, error prefix, changed JSON, extra output or repeated notice fails.
+This proves the absolute-path, read-only `schema list` command's result; it does
+not claim that Qoder's shell remained inside the workspace throughout execution.
 
 Qoder CLI 1.1.65's Bash tool uses Git Bash on Windows; its separate PowerShell
 tool does not change Bash syntax. The command producer reuses native executable
 admission, verifies that the ordinary drive/forward-slash spelling opens that
 same file, and uses POSIX single-quote escaping. Unix keeps its released escaping.
 The HTTP matcher still requires the complete original CLI baseline after its
-existing edge trim; equivalent JSON, internal newline conversion or SDK framing
-remain mismatches.
+existing edge trim. Only the identity-bound cwd notice described above is handled
+as a native tool envelope; equivalent JSON, internal newline conversion and other
+SDK framing remain mismatches.
 
 `qoder_probe_windows_cli.rs` is an explicit account-free native control. Its
 `HIROUTE_VALIDATION_GIT_BASH_BINARY` is only a validation selector, not a product

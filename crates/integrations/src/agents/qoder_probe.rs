@@ -253,6 +253,11 @@ impl QoderCollaborationProbe {
             step: 0,
             #[cfg(windows)]
             expected_skill: Some(expected_skill),
+            #[cfg(windows)]
+            expected_workspace: Some(
+                workspace::Receipt::retain(&workspace)
+                    .map_err(|_| qoder_error("private workspace"))?,
+            ),
         };
         let listener =
             std::net::TcpListener::bind("127.0.0.1:0").map_err(|_| qoder_error("loopback bind"))?;

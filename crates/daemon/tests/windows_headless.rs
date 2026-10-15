@@ -955,11 +955,11 @@ fn actual_windows_pi_and_dsh_persisted_user_models() {
 #[ignore = "requires the fixed real Qoder image and official private account login"]
 fn actual_windows_qoder_persisted_user_models_with_official_account() {
     let mut product = InstalledProduct::create();
-    product.preserve_on_failure = true;
     let contexts = windows_qoder_user_models::Contexts::borrow(&product);
     let mut first = product.start_with_environment(false, contexts.variables());
     gateway_ready(first.listen);
-    let mut models = windows_qoder_user_models::UserModels::run(&product, &contexts, first.listen);
+    let mut models =
+        windows_qoder_user_models::UserModels::run(&mut product, &contexts, first.listen);
     lifecycle::stop(
         &product.layout.lifecycle_endpoint(),
         &product.daemon,
