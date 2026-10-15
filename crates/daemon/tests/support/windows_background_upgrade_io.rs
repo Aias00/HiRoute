@@ -17,7 +17,6 @@ use std::thread;
 use std::time::{Duration, Instant};
 use zeroize::Zeroizing;
 const BOUND: u64 = 1024 * 1024;
-const CANDIDATE: &str = super::CANDIDATE;
 static PRIVATE_TOKENS: Mutex<Vec<Zeroizing<Vec<u8>>>> = Mutex::new(Vec::new());
 
 pub(in super::super) fn assert_no_secret(bytes: &[u8]) {
@@ -91,10 +90,25 @@ pub(super) fn stage_codex(layout: &StandaloneLayout, source: &Path, expected: &s
     use std::io::{Seek, SeekFrom};
     file.seek(SeekFrom::Start(0)).unwrap();
     let destination = layout.home.join(".local/bin/codex.exe");
-    assert!(
-        !destination.exists(),
-        "upgrade fixture cannot replace an existing external native engine"
-    );
+    if destination.exists() {
+        let mut existing = security::open_identity(&destination, false).unwrap();
+        security::verify_owner_only_handle(&existing, false).unwrap();
+        let mut hash = Sha256::new();
+        loop {
+            let count = existing.read(&mut buffer).unwrap();
+            if count == 0 {
+                break;
+            }
+            hash.update(&buffer[..count]);
+        }
+        assert_eq!(
+            format!("{:x}", hash.finalize()),
+            expected,
+            "upgrade replay cannot replace a different external engine"
+        );
+        super::super::windows_execution_host::image(&destination);
+        return;
+    }
     let mut stage = security::create_owner_only_file(&destination).unwrap();
     let mut copied = 0;
     loop {
@@ -226,14 +240,14 @@ pub(super) fn cli(program: &Path, args: &[&str], payload: Option<&Value>) -> Val
     );
     value
 }
-pub(super) fn register(program: &Path) {
+pub(super) fn register(program: &Path, candidate: &str) {
     let (read, mut write) = job::credential_pipe_pair().unwrap();
     let carrier = job::duplicate_inheritable_pipe(&read).unwrap();
     let args = [
         "protected-input".into(),
         "register".into(),
         "--candidate".into(),
-        CANDIDATE.into(),
+        candidate.into(),
         "--secret-handle".into(),
         (carrier.as_raw_handle() as usize as u64).to_string().into(),
         "--output".into(),

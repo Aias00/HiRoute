@@ -63,7 +63,6 @@ fn standard_upgrade_admission(candidate: &Inputs, observed: &Value) -> String {
             layout.data_root.join("service/install-journal.json"),
             "upgrade-initial-journal",
         ),
-        (layout.home.join(".codex"), "upgrade-initial-external-codex"),
         (
             layout.home.join(".local/bin/hiroute.exe"),
             "upgrade-initial-cli",
@@ -75,6 +74,7 @@ fn standard_upgrade_admission(candidate: &Inputs, observed: &Value) -> String {
     ] {
         require_absent(&path, stage);
     }
+    super::windows_background_upgrade_business::admit_original_config(&layout.home);
     let definition = background::Definition::new(
         background::Manager::Task,
         candidate.admin_cli.with_file_name("hirouted.exe"),

@@ -184,7 +184,11 @@ shares its original recovery, rollback and business-state assertions between the
 alternate-token gate and a separate actual-standard-owner gate. Its
 [process and cleanup boundary](../../crates/daemon/tests/support/windows_background_upgrade_transport.rs)
 uses ordinary process creation for the latter and refuses cleanup without the
-exact installation record. Same-OS package qualification does not establish the
+exact installation record. Replays retain prior saved Sources and use fresh
+intent identities; native fixture reuse requires the exact restored settings and
+pinned executable, with no authenticated Codex profile. The untouched settings
+leave the native default model to Codex so Restore needs no account catalog.
+Same-OS package qualification does not establish the
 original full Windows 11 baseline or execution of either upgrade case.
 The [console owner](../../crates/platform/src/windows/console.rs) keeps the GUI
 daemon detached for background launch and preserves inherited pipes when explicit

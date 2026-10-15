@@ -37,9 +37,9 @@ pub(super) fn current_owner(request: fixture::Request, bound: Duration) -> Value
         "forced-stop" => "forced-stop",
         "transaction-snapshot" | "transaction-verify" => "upgrade-snapshot",
         "transaction-fail-install" | "transaction-upgrade-install" => "upgrade-install",
-        "upgrade-business-save" | "upgrade-business-verify" | "upgrade-business-cleanup" => {
-            "upgrade-business"
-        }
+        "upgrade-business-save" => "upgrade-business-save",
+        "upgrade-business-verify" => "upgrade-business-verify",
+        "upgrade-business-cleanup" => "upgrade-business-cleanup",
         "cleanup-state" => "preserve-state",
         _ => panic!("unsupported standard-owner fixture action"),
     };
@@ -71,8 +71,30 @@ pub(super) fn current_owner(request: fixture::Request, bound: Duration) -> Value
         } else {
             "unclassified"
         };
+        // Keep the panic location useful without forwarding native settings,
+        // provider text or a private grant from the nested process's stderr.
+        let (origin, line) = [
+            ("windows_background_upgrade_business.rs", "upgrade-business"),
+            ("windows_background_upgrade_io.rs", "upgrade-io"),
+            ("windows_background_upgrade_oracle.rs", "upgrade-oracle"),
+            ("windows_business_http.rs", "business-http"),
+        ]
+        .into_iter()
+        .find_map(|(file, label)| {
+            error.lines().find_map(|text| {
+                let (_, location) = text.split_once(file)?;
+                let line = location
+                    .strip_prefix(':')?
+                    .split(':')
+                    .next()?
+                    .parse::<u32>()
+                    .ok()?;
+                Some((label, line))
+            })
+        })
+        .unwrap_or(("unknown", 0));
         eprintln!(
-            "standard-owner frame facts: stage={stage}, failure={failure}, stdout_bytes={}, stderr_bytes={}, marker_seen={}, exact_line_count={}",
+            "standard-owner frame facts: stage={stage}, failure={failure}, origin={origin}, line={line}, stdout_bytes={}, stderr_bytes={}, marker_seen={}, exact_line_count={}",
             output.len(),
             error.len(),
             output.contains(marker),

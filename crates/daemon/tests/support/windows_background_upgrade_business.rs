@@ -15,6 +15,7 @@ use hiroute_platform::windows::security;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::Read;
 use std::net::SocketAddr;
@@ -23,16 +24,14 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use zeroize::Zeroizing;
 
-const CANDIDATE: &str = "candidate/native/windows-upgrade";
-const KEY: &str = "windows-upgrade-native-save";
-const ORIGINAL_CONFIG: &[u8] = b"# untouched external Codex settings\nmodel = \"gpt-5.3-codex\"\nsandbox_mode = \"read-only\"\n[features]\nmulti_agent = false\n";
+const ORIGINAL_CONFIG: &[u8] = b"# untouched external Codex settings\nsandbox_mode = \"read-only\"\n[features]\nmulti_agent = false\n";
 fn digest(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 fn value_digest(value: &Value) -> String {
     digest(&serde_json::to_vec(value).unwrap())
 }
-fn source_digest(value: &Value) -> String {
+fn source_digest(value: &Value, available: bool) -> String {
     // Native availability is a fresh query projection; its evaluation clock is
     // not persisted source identity. Keep every typed field and availability
     // assertion while excluding only this explicitly volatile timestamp.
@@ -41,10 +40,51 @@ fn source_digest(value: &Value) -> String {
             .expect("saved Source must match its current public type");
     let mut projected = serde_json::to_value(typed).unwrap();
     for model in projected["models"].as_array_mut().unwrap() {
-        assert_eq!(model["presentation"]["availability"], "available");
+        if available {
+            assert_eq!(model["presentation"]["availability"], "available");
+        }
         model["presentation"]["evaluated_at_ms"] = json!(0);
     }
     value_digest(&projected)
+}
+
+fn source_identities(snapshot: &Value) -> BTreeMap<String, String> {
+    snapshot["data"]["sources"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|source| {
+            (
+                source["source_id"].as_str().unwrap().to_owned(),
+                source_digest(source, false),
+            )
+        })
+        .collect()
+}
+
+/// A replay may reuse only this exact restored fixture, never arbitrary native
+/// settings or an authenticated Codex profile. Temporary files belong to Codex.
+pub(super) fn admit_original_config(home: &Path) {
+    let directory = home.join(".codex");
+    if !directory.exists() {
+        return;
+    }
+    security::verify_owner_only_handle(&security::open_identity(&directory, true).unwrap(), true)
+        .unwrap();
+    for entry in std::fs::read_dir(&directory).unwrap() {
+        let entry = entry.unwrap();
+        assert!(
+            entry.file_name() == "config.toml"
+                || (entry.file_name() == "tmp" && entry.file_type().unwrap().is_dir()),
+            "upgrade replay requires the known unauthenticated Codex fixture"
+        );
+    }
+    let file = security::open_identity(&directory.join("config.toml"), false).unwrap();
+    security::verify_owner_only_handle(&file, false).unwrap();
+    assert!(
+        read(file).as_slice() == ORIGINAL_CONFIG,
+        "upgrade replay requires exact restored fixture settings"
+    );
 }
 
 #[derive(Serialize, Deserialize)]
@@ -66,6 +106,8 @@ struct Receipt {
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Saved {
+    candidate: String,
+    prior_sources: BTreeMap<String, String>,
     source: String,
     source_revision: Value,
     source_sha256: String,
@@ -211,7 +253,7 @@ pub(super) fn run_action(request: &fixture::Request) -> Value {
                 &["compute", "connection", "test"],
                 Some(&json!({"kind":"saved","request":{
                 "source_id":saved.source,"expected_source_revision":saved.source_revision,
-                "candidate_ref":CANDIDATE,"edit_revision":phase+1,"check_id":format!("check/windows/upgrade-{phase}")}})),
+                "candidate_ref":saved.candidate,"edit_revision":phase+1,"check_id":format!("check/windows/upgrade-{phase}")}})),
             );
             assert_eq!(checked["data"]["directory"], "available");
             assert_eq!(checked["data"]["authentication"], "verified");
@@ -235,7 +277,12 @@ pub(super) fn run_action(request: &fixture::Request) -> Value {
             verify_state(program, &layout, &saved);
             let spec = json!({"schema_version":{"major":2,"minor":0},"context_id":saved.context,
                 "model":{"intent":"restore","restore_point_ref":saved.restore}});
-            settings(program, "restore", &spec, "windows-upgrade-native-restore");
+            settings(
+                program,
+                "restore",
+                &spec,
+                &format!("windows-upgrade-restore-{}", saved.plan),
+            );
             let status = cli(
                 program,
                 &["agents", "connect", "status", &saved.context],
@@ -266,27 +313,32 @@ fn save(program: &Path, layout: &StandaloneLayout, input: Save) -> Saved {
     assert!(input.address.ip().is_loopback() && input.address.port() != 0);
     stage_codex(layout, &input.codex, &input.codex_sha256);
     let codex_home = layout.home.join(".codex");
-    assert!(
-        !codex_home.exists(),
-        "upgrade gate requires a disposable owner without preexisting Codex settings"
-    );
-    security::create_owner_only_directory(&codex_home).unwrap();
     let config = codex_home.join("config.toml");
-    hiroute_platform::durable::write_private_new(&config, ORIGINAL_CONFIG).unwrap();
+    admit_original_config(&layout.home);
+    if !codex_home.exists() {
+        security::create_owner_only_directory(&codex_home).unwrap();
+        hiroute_platform::durable::write_private_new(&config, ORIGINAL_CONFIG).unwrap();
+    }
     let original_permissions =
         hiroute_platform::file_security::capture(&security::open_identity(&config, false).unwrap())
             .unwrap();
-    register(program);
-    let before = cli(program, &["compute", "list"], None);
-    assert!(
-        before["data"]["sources"].as_array().unwrap().is_empty(),
-        "disposable upgrade gate must begin without saved sources"
+    let nonce = format!(
+        "{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
     );
+    let candidate_ref = format!("candidate/native/windows-upgrade-{nonce}");
+    register(program, &candidate_ref);
+    let before = cli(program, &["compute", "list"], None);
+    let prior_sources = source_identities(&before);
     let checked = cli(
         program,
         &["compute", "connection", "test"],
         Some(&json!({"kind":"native","request":{
-        "draft":draft(input.address),"input_candidate":{"candidate_ref":CANDIDATE,"candidate_revision":1}}})),
+        "draft":draft(input.address, &candidate_ref),"input_candidate":{"candidate_ref":candidate_ref,"candidate_revision":1}}})),
     );
     assert_eq!(checked["data"]["authentication"], "verified");
     assert_eq!(checked["data"]["inference"], "verified");
@@ -307,11 +359,24 @@ fn save(program: &Path, layout: &StandaloneLayout, input: Save) -> Saved {
         "expected_revisions":snapshot["data"]["revisions"],"selected_model_refs":[model["model_ref"]],"intent":"save_ready","key_edits":[]}})),
     );
     let preview = &preview["data"];
-    let save_request = json!({"spec":preview["spec"],"accept_digest":preview["accept_digest"],"expected_revisions":preview["expected_revisions"],"idempotency_key":KEY});
+    let save_request = json!({"spec":preview["spec"],"accept_digest":preview["accept_digest"],"expected_revisions":preview["expected_revisions"],"idempotency_key":format!("windows-upgrade-save-{nonce}")});
     let save_operation = apply(program, &["compute", "connection", "apply"], &save_request);
     let snapshot = cli(program, &["compute", "list"], None);
-    assert_eq!(snapshot["data"]["sources"].as_array().unwrap().len(), 1);
-    let source = &snapshot["data"]["sources"][0];
+    let mut identities = source_identities(&snapshot);
+    assert_eq!(identities.len(), prior_sources.len() + 1);
+    let sources: Vec<_> = snapshot["data"]["sources"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|source| !prior_sources.contains_key(source["source_id"].as_str().unwrap()))
+        .collect();
+    assert_eq!(sources.len(), 1);
+    let source = sources[0];
+    identities.remove(source["source_id"].as_str().unwrap());
+    assert_eq!(
+        identities, prior_sources,
+        "saving the new fixture changed a prior Source"
+    );
     assert_eq!(source["display_name"], "Windows upgrade saved API");
     assert_eq!(source["state"], "ready");
     assert_eq!(source["keys"].as_array().unwrap().len(), 1);
@@ -331,7 +396,7 @@ fn save(program: &Path, layout: &StandaloneLayout, input: Save) -> Saved {
     assert_eq!(
         cli(
             program,
-            &["protected-input", "release", "--candidate", CANDIDATE],
+            &["protected-input", "release", "--candidate", &candidate_ref],
             None
         )["data"]["registered"],
         true
@@ -343,7 +408,8 @@ fn save(program: &Path, layout: &StandaloneLayout, input: Save) -> Saved {
             "reselect_on_user_message":false,"classifier":{"kind":"local_rules"},"complex_keywords":[]},
         "free":{"candidates":[],"primary":[],"primary_fallback":false},"delegation_enabled":false,"requirements":{},
         "limits":{"maximum_attempts":1,"request_timeout_ms":30000,"attempt_timeout_ms":30000}});
-    let change = json!({"schema":"hiroute.plan-content-change/v2","target":{"intent":"create","creation_key":"windows-upgrade-fixed-route"},"editor":editor,"consumed_draft":null});
+    let route_key = format!("windows-upgrade-route-{nonce}");
+    let change = json!({"schema":"hiroute.plan-content-change/v2","target":{"intent":"create","creation_key":route_key},"editor":editor,"consumed_draft":null});
     let preview = cli(
         program,
         &["routing", "preview"],
@@ -358,7 +424,7 @@ fn save(program: &Path, layout: &StandaloneLayout, input: Save) -> Saved {
         .as_str()
         .unwrap()
         .to_owned();
-    let route_request = json!({"change":change,"accept_digest":preview["change_digest"],"expected_revisions":preview["expected_revisions"],"idempotency_key":"windows-upgrade-fixed-route"});
+    let route_request = json!({"change":change,"accept_digest":preview["change_digest"],"expected_revisions":preview["expected_revisions"],"idempotency_key":route_key});
     let route_operation = apply(program, &["routing", "apply"], &route_request);
     let head = cli(program, &["routing", "show", &plan], None)["data"]["head"].clone();
     assert_eq!(head["model_alias"], alias);
@@ -405,7 +471,12 @@ fn save(program: &Path, layout: &StandaloneLayout, input: Save) -> Saved {
     );
     let spec = json!({"schema_version":{"major":2,"minor":0},"context_id":context,"model":{"intent":"configure","settings":{
         "mode":"codex_default","native_model_mode":"hiroute_only","fixed_models":[],"allowed_plan_ids":[plan],"default_selection":{"kind":"plan","plan_id":plan}}}});
-    settings(program, "connect", &spec, "windows-upgrade-agent-connect");
+    settings(
+        program,
+        "connect",
+        &spec,
+        &format!("windows-upgrade-connect-{nonce}"),
+    );
     let status = cli(program, &["agents", "connect", "status", &context], None);
     assert_eq!(status["data"]["state"], "configured");
     let restore = status["data"]["restore_point_ref"]
@@ -413,9 +484,11 @@ fn save(program: &Path, layout: &StandaloneLayout, input: Save) -> Saved {
         .unwrap()
         .to_owned();
     let mut saved = Saved {
+        candidate: candidate_ref,
+        prior_sources,
         source: source["source_id"].as_str().unwrap().to_owned(),
         source_revision: source["revision"].clone(),
-        source_sha256: source_digest(source),
+        source_sha256: source_digest(source, true),
         binding,
         save_request,
         save_operation,
@@ -436,11 +509,17 @@ fn save(program: &Path, layout: &StandaloneLayout, input: Save) -> Saved {
 }
 
 fn verify_state(program: &Path, layout: &StandaloneLayout, saved: &Saved) {
+    let mut identities = source_identities(&cli(program, &["compute", "list"], None));
+    assert!(identities.remove(&saved.source).is_some());
+    assert_eq!(
+        identities, saved.prior_sources,
+        "package maintenance changed a prior Source"
+    );
     let shown = cli(program, &["compute", "show", &saved.source], None);
     assert_eq!(shown["data"]["sources"].as_array().unwrap().len(), 1);
     let source = &shown["data"]["sources"][0];
     assert_eq!(
-        source_digest(source),
+        source_digest(source, true),
         saved.source_sha256,
         "saved Source/Key/model identity or configuration changed across package replacement"
     );
@@ -498,9 +577,9 @@ fn verify_state(program: &Path, layout: &StandaloneLayout, saved: &Saved) {
         "package maintenance replaced an unrelated external engine"
     );
 }
-fn draft(address: SocketAddr) -> Value {
+fn draft(address: SocketAddr, candidate: &str) -> Value {
     let declared = |value: Value| json!({"value":value,"basis":"user_declared"});
-    json!({"inference_model_id":oracle::MODEL,"candidate_ref":CANDIDATE,"lineage_ref":format!("lineage/{CANDIDATE}"),
+    json!({"inference_model_id":oracle::MODEL,"candidate_ref":candidate,"lineage_ref":format!("lineage/{candidate}"),
         "display_name":"Windows upgrade saved API","existing_source_id":null,"edit_revision":1,"check_id":"check/windows/upgrade-native",
         "base_url":format!("http://{address}/v1"),"base_kind":"api_root","request_path_override":null,"inventory_path_override":"/v1/models",
         "protocol":"responses","protocol_profile_id":"profile/custom/responses","protocol_profile_revision":1,
