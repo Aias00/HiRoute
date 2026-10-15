@@ -51,6 +51,24 @@ function Get-WindowsNativeReaderCases {
     ($prefix + 'windows_native_reader_reopen_binds_identity_without_changing_fingerprint_contract'),
     ($prefix + 'windows_native_reader_private_restore_and_native_cipher_reopen_preserve_authority'))
 }
+# Test-only input for the real Qoder Bash-command regression. The SDK's Bash
+# tool uses Git for Windows, independently of PowerShell and the WSL launcher.
+# The native test retains and verifies this explicit binary before using it.
+function Initialize-WindowsQoderBashFixture {
+  param([Parameter(Mandatory)][string]$Name)
+  if ($Name -cne 'agent-qoder-cli-bash') { return }
+  if ([Environment]::GetEnvironmentVariable('HIROUTE_VALIDATION_GIT_BASH_BINARY','Process') -ne $null) {
+    throw 'Unexpected Qoder Bash validation override'
+  }
+  $programFiles = [Environment]::GetFolderPath([Environment+SpecialFolder]::ProgramFiles)
+  if (-not $programFiles -or -not [IO.Path]::IsPathFullyQualified($programFiles)) {
+    throw 'Native ProgramFiles required for the Git Bash fixture'
+  }
+  $binary = [IO.Path]::Combine($programFiles,'Git','bin','bash.exe')
+  if (-not [IO.File]::Exists($binary)) { throw 'Required native Git for Windows Bash is absent' }
+  $env:HIROUTE_VALIDATION_GIT_BASH_BINARY = $binary
+}
+
 function Get-WindowsRequiredRecipes {
   param([Parameter(Mandatory)][string]$Scope)
   switch ($Scope) {
@@ -63,7 +81,7 @@ function Get-WindowsRequiredRecipes {
     'accounts' { return @(Get-WindowsQoderAccountRecipes | ForEach-Object { $_.name }) }
     'agents' {
       return @('agent-private-root','agent-private-node','agent-path-identity','agent-managed-path','agent-account-fixture','agent-pi-sdk',
-        'agent-acp-notifications','agent-cancel-oracle','agent-main-oracle','agent-launch-oracle','agent-launch-cause','agent-codex-readonly-control','agent-codex-tool-diagnostic','agent-qoder-skill-load-diagnostic','agent-qoder-skill-http-diagnostic','agent-cli-selection','agent-npm-inspection','agent-pi-locator','agent-native-reader','agent-worker-profile-identity','agent-worker-directory-identity','agent-worker-failure-oracle','agent-history-oracle',
+        'agent-acp-notifications','agent-cancel-oracle','agent-main-oracle','agent-launch-oracle','agent-launch-cause','agent-codex-readonly-control','agent-codex-tool-diagnostic','agent-qoder-skill-load-diagnostic','agent-qoder-skill-http-diagnostic','agent-qoder-cli-bash','agent-cli-selection','agent-npm-inspection','agent-pi-locator','agent-native-reader','agent-worker-profile-identity','agent-worker-directory-identity','agent-worker-failure-oracle','agent-history-oracle',
         'agent-native-codex-ingress','agent-native-source-oracle','agent-worker-dependency-oracle','agent-worker-cancel-publication','agent-worker-residual-binding','agent-worker-residual-oracle','agent-business-oracle','agent-http','agent-public-business','agent-user-models','agent-user-model-oracle','agent-qoder-user-model-oracle','agent-management','agent-management-oracle','agent-live-history','agent-legacy-history') +
         @(Get-WindowsDaemonAgentCases | ForEach-Object { 'agent-' + (($_ -split 'actual_')[1] -replace '_','-') }) +
         @(Get-WindowsMainAgentCases | ForEach-Object { 'main-' + (($_ -split 'actual_windows_')[1] -replace '_','-') })

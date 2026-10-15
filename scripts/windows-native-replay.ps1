@@ -148,6 +148,7 @@ try {
     $result.inventory_exit=$null
     $started = Get-Date
     try {
+      Initialize-WindowsQoderBashFixture -Name $name
       & $executable @arguments --list @harness 2>&1 | Tee-Object "$evidence/$name-inventory.log"
       $result.inventory_exit=$LASTEXITCODE
       if ($LASTEXITCODE -ne 0) { throw "$name native executable inventory failed" }

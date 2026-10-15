@@ -230,6 +230,11 @@ held native directory/file identity, captured permissions and content checks bef
 after a same-candidate user-array receipt with exact body. Linux retains the literal
 path rule. Test-only closed observations distinguish these dimensions without
 publishing paths or bodies; diagnostic facts alone cannot authorize a match.
+The [actual Git Bash control](../../crates/integrations/src/agents/qoder_probe_windows_cli.rs)
+executes the selected candidate CLI, including literal special-character drive paths,
+and retains exact output equality. Its required native recipe selects an explicit
+Git for Windows image through a validation-only input; WSL or an absent shell cannot
+supply a passing result.
 
 The same native entry's `-InventoryOnly` exports static scope recipes through its
 actual required-test producer without Cargo, package preparation or client launch.

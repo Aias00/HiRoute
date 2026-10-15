@@ -112,6 +112,7 @@ function Invoke-RequiredTests {
   $result.inventory_exit=$null
   $started = Get-Date
   try {
+    Initialize-WindowsQoderBashFixture -Name $Name
     cargo test --locked @CargoArguments -- --list 2>&1 | Tee-Object "$evidence/$Name-inventory.log"
     $result.inventory_exit=$LASTEXITCODE
     if ($LASTEXITCODE -ne 0) { throw "$Name inventory failed to build" }
@@ -498,7 +499,10 @@ if ($Scope -eq 'components') {
     ($qoderHttp + 'installed_skill_requires_correlated_call_and_actual_user_source'),
     ($qoderHttp + 'model_claim_cannot_replace_cli_tool_evidence'),
     ($qoderHttp + 'skill_receipt_diagnostics_do_not_admit_alternate_path_shape_or_newlines'),
-    ($qoderHttp + 'windows_skill_receipt_requires_held_binding_and_same_candidate_exact_body'))
+    ($qoderHttp + 'windows_skill_receipt_requires_held_binding_and_same_candidate_exact_body'),
+    ($qoderHttp + 'trusted_cli_still_rejects_semantic_only_framed_and_uncorrelated_outputs'))
+  $qoderBash = 'agents::qoder_probe::windows_cli::tests::windows_qoder_bash_executes_the_same_cli_with_literal_drive_path'
+  Invoke-RequiredTests 'agent-qoder-cli-bash' @('-p','hiroute-integrations','--lib',$qoderBash) @($qoderBash) @('--ignored','--exact','--nocapture')
   Invoke-RequiredTests 'agent-native-reader' @('-p','hiroute-local-storage','--lib','control::windows_native_reader_tests::') @(Get-WindowsNativeReaderCases)
   $profileIdentity = 'delegation::installation::windows_tests::'
   Invoke-RequiredTests 'agent-worker-profile-identity' @('-p','hiroute-daemon','--lib',$profileIdentity) @(

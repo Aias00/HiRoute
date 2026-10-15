@@ -76,6 +76,9 @@ accepts equivalent disk spellings only after native identity, captured permissio
 content checks; it rejects foreign/reparse paths, changed files and split messages.
 The [HTTP peer](../../crates/integrations/src/agents/qoder_probe_http.rs) still requires
 correlated native Skill and CLI results. No credential contents enter these checks.
+Its `Bash` call uses Git Bash syntax on Windows: the selected CLI's native DOS
+path is quoted for Bash. The separate PowerShell tool is not that execution boundary;
+see the [probe ownership guide](../../crates/integrations/src/agents/QODER_PROBE.md).
 
 The [Codex collaboration check](../../crates/integrations/src/agents/collaboration_probe.rs)
 selects the native restricted-token sandbox for its Windows read-only process.
