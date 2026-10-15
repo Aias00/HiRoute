@@ -32,10 +32,19 @@ or permissions, reparse/foreign paths, split candidates and altered message
 shapes. Account-free controls do not establish logged-in business acceptance or
 upstream provider-account inference.
 
+The final native output uses `native_probe_process::read_bounded_file` after the
+owned process scope stops. It duplicates the retained capture, seeks to its start
+and rechecks the original byte limit. Windows captures keep exclusive sharing;
+reopening their pathname while the original handle is live fails. Borrowed Skill
+files continue to use the separate path reader. No writer may remain active while
+a duplicate changes the shared seek pointer.
+
 Output diagnostics also remain test-only. The live size guard and final bounded
-read are distinct: a final open/read failure can carry the same error caption as
-oversize output. `qoder_probe_output_diagnostic_tests.rs` covers real owned-file
-oversize, missing-path and sampling failures. Closed observations retain the
+read are distinct: a final duplicate/seek/read failure can carry the same error
+caption as oversize output. `qoder_probe_output_diagnostic_tests.rs` covers real
+owned-file oversize, unavailable pathnames, sampling failures and the actual
+exclusive Windows capture's failed reopen followed by successful retained read.
+Closed observations retain the
 phase, held-file length and I/O kind/code; unknown and `other` errors do not prove
 a size violation. Sampling happens only after the native scope stops because a
 cloned handle shares its seek pointer. No output text or path is published, and

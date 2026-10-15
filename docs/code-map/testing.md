@@ -242,6 +242,10 @@ distinguish the live file-size guard from a failed final read after the native
 scope stops. Their closed observations retain actual file length, I/O kind and
 sampling failure without exposing output. A size-related error caption alone
 does not prove that the file exceeded its limit or that account execution passed.
+The [owned capture reader](../../crates/integrations/src/agents/native_probe_process.rs)
+reads the retained file only after its native process scope stops, preserving
+exclusive Windows sharing and the exact byte limit. Its native causal control
+uses the production private-file creator; borrowed files keep their path reader.
 The [actual Git Bash control](../../crates/integrations/src/agents/qoder_probe_windows_cli.rs)
 executes the selected candidate CLI, including literal special-character drive paths,
 and retains exact output equality. Its required native recipe selects an explicit

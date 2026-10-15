@@ -520,7 +520,12 @@ if ($Scope -eq 'components') {
   Invoke-RequiredTests 'agent-qoder-output-read-diagnostic' @('-p','hiroute-integrations','--lib',$qoderOutputRead) @(
     ($qoderOutputRead + 'qoder_final_read_diagnostic_distinguishes_native_oversize_from_path_open_failure'),
     ($qoderOutputRead + 'qoder_output_sampling_failure_keeps_retained_length_and_original_io'),
-    ($qoderOutputRead + 'qoder_output_other_io_error_is_not_claimed_as_a_size_limit_and_success_is_unchanged')) @('--nocapture')
+    ($qoderOutputRead + 'qoder_output_other_io_error_is_not_claimed_as_a_size_limit_and_success_is_unchanged'),
+    ($qoderOutputRead + 'qoder_retained_private_output_rejects_reopen_without_losing_final_read_authority')) @('--nocapture')
+  $retainedCapture = 'agents::native_probe_process::output_tests::'
+  Invoke-RequiredTests 'agent-retained-capture' @('-p','hiroute-integrations','--lib',$retainedCapture) @(
+    ($retainedCapture + 'retained_capture_starts_at_zero_and_rechecks_the_exact_final_bound'),
+    ($retainedCapture + 'retained_capture_preserves_actual_non_limit_read_errors'))
   Invoke-RequiredTests 'agent-native-reader' @('-p','hiroute-local-storage','--lib','control::windows_native_reader_tests::') @(Get-WindowsNativeReaderCases)
   $profileIdentity = 'delegation::installation::windows_tests::'
   Invoke-RequiredTests 'agent-worker-profile-identity' @('-p','hiroute-daemon','--lib',$profileIdentity) @(
