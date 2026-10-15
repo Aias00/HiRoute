@@ -81,12 +81,13 @@ struct UnpublishedStage<'a> {
 impl Drop for UnpublishedStage<'_> {
     fn drop(&mut self) {
         use std::os::unix::fs::MetadataExt;
-        if let Ok(named) = fs::symlink_metadata(self.path) {
-            if named.dev() == self.device && named.ino() == self.inode {
-                // A completed rename removes this name. On failure, remove only
-                // this writer's unpublished stage, never a replacement entry.
-                let _ = fs::remove_file(self.path);
-            }
+        if let Ok(named) = fs::symlink_metadata(self.path)
+            && named.dev() == self.device
+            && named.ino() == self.inode
+        {
+            // A completed rename removes this name. On failure, remove only
+            // this writer's unpublished stage, never a replacement entry.
+            let _ = fs::remove_file(self.path);
         }
     }
 }

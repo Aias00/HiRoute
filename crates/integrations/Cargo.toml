@@ -11,6 +11,7 @@ hiroute-domain = { path = "../domain" }
 hiroute-application = { path = "../application" }
 hiroute-application-api = { path = "../application-api" }
 hiroute-gateway = { path = "../gateway" }
+hiroute-platform = { path = "../platform" }
 http.workspace = true
 reqwest = { version = "=0.13.4", features = ["blocking"] }
 serde.workspace = true
@@ -28,9 +29,6 @@ rustix.workspace = true
 [target.'cfg(target_os = "macos")'.dependencies]
 sha2.workspace = true
 unicode-normalization.workspace = true
-
-[target.'cfg(windows)'.dependencies]
-hiroute-platform = { path = "../platform" }
 
 [target.'cfg(windows)'.dev-dependencies]
 hiroute-platform-test-support = { path = "../platform/test-support" }
