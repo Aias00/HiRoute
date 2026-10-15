@@ -249,6 +249,10 @@ use the same Bash execution contract with separate causal controls. Their
 retains ordinary and proven canonical spellings, permits the stable CLI's
 existing hardlink, and releases Skill leases before production restoration.
 These fixtures do not substitute for actual account-backed tool execution.
+The [native tool caller](../../crates/daemon/src/delegation/installation/windows_tools.rs)
+also rechecks the same file effects after each New/Continue execution has stopped
+its owned process scope. A correlated receipt observed before exit cannot replace
+that final-state check; the shell fixture includes a same-identity late-write control.
 
 The same native entry's `-InventoryOnly` exports static scope recipes through its
 actual required-test producer without Cargo, package preparation or client launch.

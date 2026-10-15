@@ -436,7 +436,8 @@ if ($Scope -eq 'components') {
   $qoderToolsShell = 'delegation::installation::installation_probe::native_tools_probe::shell_tests::'
   Invoke-RequiredTests 'agent-qoder-tools-shell' @('-p','hiroute-daemon','--lib',$qoderToolsShell) @(
     ($qoderToolsShell + 'qoder_tool_receipt_uses_bash_without_changing_other_native_shell_contracts'),
-    ($qoderToolsShell + 'qoder_tool_bash_resources_bind_native_spellings_and_keep_empty_output_unproven'))
+    ($qoderToolsShell + 'qoder_tool_bash_resources_bind_native_spellings_and_keep_empty_output_unproven'),
+    ($qoderToolsShell + 'qoder_tool_final_effects_reject_late_same_identity_output_truncation'))
   $cancelOracle = 'delegation::installation::probe_server::tests::only_deliberately_cancelled_peer_disconnect_is_not_a_probe_response_failure'
   Invoke-RequiredTests 'agent-cancel-oracle' @('-p','hiroute-daemon','--lib',$cancelOracle) @($cancelOracle) @('--exact')
   $mainOracle = 'agents::collaboration_probe::tests::codex_collaboration_accepts_correlated_native_text_content_items_only'
