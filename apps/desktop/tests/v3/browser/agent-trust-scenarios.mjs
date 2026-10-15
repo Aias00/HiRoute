@@ -443,10 +443,12 @@ const scenarios = [
     assert(spec.default_selection.kind === 'preserve_native', 'Covered native default was not preserved');
   }),
   scenario('agent.configuration.shared-interactions', ['agent-configuration', 'qoder'], 'Codex, Claude and Qoder share configuration actions without model verification steps', async () => {
-    const snapshots = [c().splitCodexStatus(), c().registered(), c().qoderRouted()];
-    for (const snapshot of snapshots) {
-      const id = snapshot.agents.some(agent => agent.agent_id === 'agent_qoder_default')
-        ? 'agent_qoder_default' : snapshot === snapshots[0] ? 'agent_codex_default' : 'agent_claude_default';
+    const snapshots = [
+      ['agent_codex_default', c().splitCodexStatus()],
+      ['agent_claude_default', c().registered()],
+      ['agent_qoder_default', c().qoderRouted()],
+    ];
+    for (const [id, snapshot] of snapshots) {
       for (const state of ['not_verified', 'passed', 'failed']) {
         c().reset();
         c().agents = structuredClone(snapshot);
