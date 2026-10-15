@@ -169,6 +169,13 @@ pub fn process(
     let (stdin, stdout_file, stderr_file) = child.pipes();
     let mut stdout = launcher::Capture::new(stdout_file);
     let mut stderr = launcher::Capture::new(stderr_file);
+    // Public CLI catalog envelopes use the same response bound as Control.
+    // Owner fixture frames and arbitrary stderr keep their smaller test bound.
+    let stdout_bound = if fixture {
+        BOUND
+    } else {
+        hiroute_application_api::LOCAL_CONTROL_MAX_FRAME_BYTES
+    };
     if let Some(input) = input {
         stdin
             .unwrap()
@@ -180,7 +187,7 @@ pub fn process(
     let deadline = Instant::now() + timeout;
     let code = loop {
         stdout
-            .poll(BOUND)
+            .poll(stdout_bound)
             .expect("bounded native stdout capture failed");
         stderr
             .poll(BOUND)
@@ -228,7 +235,7 @@ pub fn process(
     let capture_deadline = Instant::now() + Duration::from_secs(2);
     while (!stdout.eof() || !stderr.eof()) && Instant::now() < capture_deadline {
         stdout
-            .poll(BOUND)
+            .poll(stdout_bound)
             .expect("bounded native stdout capture failed");
         stderr
             .poll(BOUND)

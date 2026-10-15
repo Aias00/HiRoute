@@ -46,7 +46,10 @@ pub fn exercise(call: &mut PublicCall<'_>) {
     // failures without writing a database or manufacturing an account/check.
     let endpoint = TcpListener::bind("127.0.0.1:0").unwrap();
     endpoint.set_nonblocking(true).unwrap();
-    let id = "windows-foreground-authorization-boundary";
+    // A real standard-owner installation preserves business state on uninstall.
+    // Each run needs its own operation identity rather than colliding with a
+    // retained declaration from an earlier interrupted acceptance attempt.
+    let id = format!("windows-authorization-boundary-{}", uuid::Uuid::new_v4().simple());
     let service = json!({"id":id,"revision":1,"name":"Foreground authorization boundary",
         "connection":{"kind":"custom","endpoint":format!("http://{}/decision",endpoint.local_addr().unwrap()),
             "timeout_ms":1000,"auth_header":null}});
@@ -62,7 +65,7 @@ pub fn exercise(call: &mut PublicCall<'_>) {
         .clone();
     let request = json!({"schema_version":version,"spec":preview["normalized_spec"],
         "accept_digest":preview["change_digest"],"expected_revisions":preview["expected_revisions"],
-        "idempotency_key":"windows-foreground-authorization-boundary"});
+        "idempotency_key":id});
     let applied = accepted(call, &["decision", "services", "apply"], &request);
     let operation = applied["operation"].clone();
     assert!(operation["operation_id"].is_string());

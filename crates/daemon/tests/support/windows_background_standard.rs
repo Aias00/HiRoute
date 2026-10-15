@@ -182,6 +182,12 @@ fn public_call(program: &Path, arguments: &[&str], request: Option<&Value>) -> (
     let exit = result["code"]
         .as_i64()
         .expect("public CLI returned no process exit");
+    if stage == "connection-options" {
+        eprintln!(
+            "standard background catalog response: stdout_bytes={}",
+            result["stdout"].as_str().unwrap_or_default().len()
+        );
+    }
     assert!(
         result["result"].is_object(),
         "public CLI returned no parsed envelope"
