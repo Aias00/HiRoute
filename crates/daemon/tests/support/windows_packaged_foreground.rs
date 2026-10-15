@@ -252,6 +252,7 @@ impl Packaged {
             .join(format!("Packaged foreground {}", std::process::id()));
         security::create_owner_only_directory(&root).unwrap();
         let product = InstalledProduct {
+            preserve_on_failure: false,
             layout,
             cli: root.join("hiroute.exe"),
             daemon: root.join("hirouted.exe"),
