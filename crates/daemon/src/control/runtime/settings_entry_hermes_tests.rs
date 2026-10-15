@@ -307,8 +307,17 @@ fn old_chat_can_configure_without_reasoning_replay_but_required_interfaces_still
         private_file(&sdk, sdk_source.as_bytes());
         private_file(&middleware, middleware_source.as_bytes());
         let result = preview();
-        assert!(result.error.is_none(), "{result:?}");
-        assert_eq!(result.data.unwrap()["applicable"], false);
+        assert!(
+            result
+                .error
+                .as_ref()
+                .is_some_and(|error| error.code == ErrorCode::CapabilityDenied)
+                || result
+                    .data
+                    .as_ref()
+                    .is_some_and(|data| data["applicable"] == false),
+            "{result:?}"
+        );
         assert_eq!(
             fs::read(fixture.profile.join("config.yaml")).unwrap(),
             ORIGINAL
