@@ -262,7 +262,9 @@ const scenarios = [
     await until(() => text().includes('Discovered component'), 'unselectable point prepared');
     assert(!button('保存接入') || button('保存接入').disabled, 'No-selectable point permitted Save');
     assert(calls('preview_compute_save').length === 0 && calls('apply_compute_save').length === 0, 'Blocked point changed a saved source');
-    await click('关闭');
+    const close = document.querySelector('[role="dialog"] button[aria-label="关闭扫描"]');
+    assert(close && !close.disabled, 'Scan can be closed with no selectable models');
+    close.click(); await tick();
   }],
   ['stale discovery Preview requires a new scan and Prepare', async () => {
     for (const [stage, code] of [
