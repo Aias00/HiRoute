@@ -149,6 +149,33 @@ fn shared_management_and_collaboration_coexist_for_all_existing_agent_families()
             &format!("shared-skills-restore-collaboration-{}", class.agent_id()),
         );
         assert!(!collaboration.exists());
+        // Either resource can be prepared first; a joint restore retains distinct references.
+        for facet in ["collaboration", "management_skill"] {
+            let value = if facet == "collaboration" {
+                json!({"trigger_mode":"explicit"})
+            } else {
+                json!({})
+            };
+            let mut spec = json!({"schema_version":{"major":2,"minor":0},"context_id":context});
+            spec[facet] = json!({"intent":"configure","settings":value});
+            apply(
+                &service,
+                &runtime,
+                spec,
+                &format!("ordered-{}-{facet}", class.agent_id()),
+            );
+        }
+        let status = read();
+        let restore = json!({"schema_version":{"major":2,"minor":0},"context_id":context,
+            "management_skill":{"intent":"restore","restore_point_ref":status["management_skill"]["restore_point_ref"]},
+            "collaboration":{"intent":"restore","restore_point_ref":status["collaboration"]["restore_point_ref"]}});
+        apply(
+            &service,
+            &runtime,
+            restore,
+            &format!("restore-both-{}", class.agent_id()),
+        );
+        assert!(!management.exists() && !collaboration.exists());
         assert_eq!(fs::read(&model).unwrap(), original);
         assert!(
             runtime

@@ -29,9 +29,15 @@ Hermes uses an [explicit effective profile](../../crates/integrations/src/agents
 and one default main-model Plan. Desktop keeps Hermes in the common Agent list;
 its native host resolves the caller's existing default profile and its details can
 select another through the same target-read flow before settings become available.
+The common [discovery preference](../../apps/desktop/src/features/agents/discovery.ts)
+remembers explicit targets as hints, with backend revalidation and per-profile failure isolation.
 Its bundled native middleware carries the real
-session into trusted Gateway correlation. Its management Skill is independent;
-Hermes has no Worker/collaboration transport.
+session into trusted Gateway correlation. All six supported Agents have independent management and collaboration Skills;
+[shared Skill facts](../../crates/daemon/src/control/runtime/settings_facts/skills.rs)
+resolve their native roots through the existing ownership/Operation engine. Legacy
+primary roles retain their original resource meanings; the second Skill has a separate
+registered effect and per-facet restore reference. Hermes initiates delegation through
+the existing local Worker CLI and does not become a Worker executor.
 
 ## Follow a task through its owners
 

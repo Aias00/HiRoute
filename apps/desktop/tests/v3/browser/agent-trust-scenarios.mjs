@@ -163,6 +163,25 @@ const scenarios = [
       assert(calls('check_agent_live').length === 0, `${id} management called a model`);
     }
   }),
+  scenario('agent.management.owned-restore', ['agent-management'], 'Disabling management restores only its reference and reports retained shared or external files', async () => {
+    c().reset(); c().agents = c().hermesFresh();
+    const agent = c().agents.agents.find(a => a.agent_id === 'agent_qoder_default');
+    agent.settings.management_skill = { schema: 'hiroute.agent-management-skill-status/v1', state: 'configured', restore_point_ref: 'restore/management-only', operation_id: null, operation_state: null,
+      resource: { directory: '/selected/skills/hiroute-management', native_available: true, runtime_loading: 'unobserved', shared_context_count: 2, file_ownership: 'borrowed_identical' } };
+    await tick();
+    [...document.querySelectorAll('.native-list .list-row')].find(row => row.textContent.includes('Qoder')).click();
+    await until(() => facet('management_skill')?.getAttribute('aria-checked') === 'true', 'Enabled management switch');
+    c().handlers.preview_agent_settings = payload => {
+      const spec = payload.input.spec;
+      assert(spec.management_skill.intent === 'restore' && spec.management_skill.restore_point_ref === 'restore/management-only', 'Management switch did not restore its own reference');
+      assert(spec.model.intent === 'keep' && spec.collaboration.intent === 'keep', 'Management switch disabled another facet');
+      agent.settings.management_skill.state = 'restored'; agent.settings.management_skill.restore_point_ref = null;
+      agent.settings.management_skill.resource.shared_context_count = 1;
+      return { preview: { applicable: true, blockers: [] }, mutation: { state: 'applied', operation: { operation_id: 'operation/agent-settings-fixture', state: 'succeeded', sequence: 1, cancellable: false } } };
+    };
+    facet('management_skill').click(); await until(() => configureSpecs().length === 1 && facet('management_skill')?.getAttribute('aria-checked') === 'false', 'Management restore observed');
+    assert(document.querySelector('[data-agent-management]').textContent.includes('外部') && document.querySelector('[data-agent-management]').textContent.includes('可能仍然可用'), 'Restore claimed global removal of external files');
+  }),
   scenario('hermes.collaboration.native-model-independent', ['hermes', 'agent-collaboration'], 'Hermes chooses either delegation policy independently of model and management preparation', async () => {
     for (const mode of ['explicit', 'delegate_by_default']) {
       c().reset(); c().agents = c().hermesFresh(); c().agents.plans.plans = []; await tick();
@@ -184,7 +203,7 @@ const scenarios = [
     await until(() => [...document.querySelectorAll('.native-list .list-row')].some(row => row.textContent.includes('Hermes')), 'Hermes list row');
     [...document.querySelectorAll('.native-list .list-row')].find(row => row.textContent.includes('Hermes')).click();
     await until(() => document.querySelector('[data-agent-id="agent_hermes_default"] .detail-hero'), 'Hermes details');
-    assert(!facet('collaboration'), 'Hermes exposes unsupported collaboration controls');
+    assert(facet('collaboration') && !facet('collaboration').disabled, 'Hermes task routing is missing or coupled to a managed model');
     await openEditor('model', false);
     assert(dialog().querySelector('input[readonly]')?.value === '/tmp/hermes-profile-fixture', 'Hermes root is missing');
     const routeLabel = dialog().querySelector('[data-hermes-main-routing] label:nth-of-type(2)');

@@ -43,7 +43,13 @@ interpreter/package paths.
 
 The installed management Skill is independent of the model connection. Prepare it
 with `management_skill: configure` and `model: keep`; restore either facet without
-restoring the other. Hermes has no Worker/collaboration setup in this integration.
+restoring the other. Collaboration is a separate profile-local `hiroute-collaboration`
+Skill using the existing explicit/default trigger modes and public Worker CLI.
+Both Skills can be prepared in one settings request or either order, with independent
+restore references and shared/borrowed ownership. Skill-only operations do not
+inspect unused model configuration, require a Plan/Worker or prepare the model
+plugin. Native Skill and shell interfaces are checked independently of middleware
+and protocol SDKs. Hermes initiates tasks but is not a Worker executor.
 
 Select `chat_completions`, `responses` or `messages` explicitly for the managed main model. Native SDK support and upstream request expressibility are separate checks. In particular, native Responses encrypted reasoning/summary controls cannot be dropped when the upstream only accepts Chat Completions; use native Chat for a qualified Chat source. Chat uses the existing OpenAI SDK and does not require the optional Anthropic SDK. Existing saved transports are not changed automatically.
 

@@ -582,6 +582,15 @@ fn independent_skills_without_model_plugin_survive_restart_and_restore_separatel
     ) {
         return;
     }
+    let source = std::env::split_paths(&std::env::var_os("PATH").unwrap())
+        .next()
+        .unwrap();
+    fs::remove_file(source.join("hermes_cli/plugins.py")).unwrap();
+    fs::remove_file(source.join("hermes_cli/middleware.py")).unwrap();
+    fs::remove_dir_all(source.join("venv/lib")).unwrap();
+    let support = hiroute_integrations::hermes_support_facts();
+    assert!(support.skills && support.shell);
+    assert!(!support.middleware && !support.responses_sdk && !support.messages_sdk);
     let fixture = Fixture::new(false);
     private_file(
         &fixture.profile.join("config.yaml"),

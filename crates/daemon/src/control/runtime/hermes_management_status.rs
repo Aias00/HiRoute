@@ -29,25 +29,23 @@ impl LocalControlAdapter {
             .control()
             .skill_installation(&WorkspaceId::default(), &root_ref)
             .map_err(super::map_port)?;
-        let bytes = self
+        let native_available = self
             .artifacts
             .read_native_target(&target)
-            .map_err(super::map_port)?;
-        let native_available = bytes.as_ref().is_some_and(|bytes| {
-            let digest = CanonicalDigest::of_bytes(bytes);
-            if let Some(record) = &record {
-                return digest == record.content_digest;
-            }
-            if facet == hiroute_domain::AgentSettingsFacet::ManagementSkill {
-                digest
-                    == CanonicalDigest::of_bytes(include_bytes!(
-                        "../../../../../assets/skills/hiroute-management/SKILL.md"
-                    ))
-            } else {
-                // External content has no managed reference; discovery alone does not enable it.
-                false
-            }
-        });
+            .ok()
+            .map(|bytes| {
+                bytes.as_ref().is_some_and(|bytes| {
+                    let digest = CanonicalDigest::of_bytes(bytes);
+                    if let Some(record) = &record {
+                        return digest == record.content_digest;
+                    }
+                    facet == hiroute_domain::AgentSettingsFacet::ManagementSkill
+                        && digest
+                            == CanonicalDigest::of_bytes(include_bytes!(
+                                "../../../../../assets/skills/hiroute-management/SKILL.md"
+                            ))
+                })
+            });
         Ok(hiroute_application_api::AgentSkillResourceStatusV1 {
             directory: path
                 .parent()
@@ -155,7 +153,8 @@ impl LocalControlAdapter {
                 let bytes = self
                     .artifacts
                     .read_native_target(&file_target)
-                    .map_err(super::map_port)?;
+                    .ok()
+                    .flatten();
                 let current = record.is_some_and(|r| {
                     r.contexts.contains(&request.context_id)
                         && bytes

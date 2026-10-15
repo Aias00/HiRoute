@@ -474,7 +474,7 @@ export function Agents({
     ? selected?.agent_id === 'agent_codex_default' && activeCodexMode === 'profile'
       ? text('启用并复制启动命令', 'Enable and copy launch command')
       : text('启用模型路由', 'Enable model routing')
-    : editor?.facet === 'management_skill' ? text('准备 HiRoute 管理', 'Prepare HiRoute management') : editor?.facet === 'collaboration' && !taskSelection
+    : editor?.facet === 'management_skill' ? text('启用 HiRoute 管理', 'Enable HiRoute management') : editor?.facet === 'collaboration' && !taskSelection
       ? text('启用任务路由', 'Enable task routing') : text('保存配置', 'Save settings');
 
   const brand = (agent: Agent) => agentBrand(agent.agent_id);
@@ -584,9 +584,11 @@ export function Agents({
                   <p className="field-help">{text('启用后，可在对话中说：“使用 HiRoute，将当前任务委派给【路由名称】执行。”路由名称见“智能路由”，也可让 Agent 选择合适的路由。', 'After enabling, ask in conversation: “Use HiRoute to delegate this task to [route name].” Find route names under Smart routing, or ask the Agent to choose a suitable route.')}</p>
                 </section>}
                 {agentSupportsManagement(selected.agent_id) && <section className="detail-section v3-agent-section" data-agent-management data-hermes-management={agentEcosystem(selected.agent_id) === 'hermes' ? true : undefined}>
-                  <div className="detail-section-head"><h3>{text('HiRoute 管理', 'HiRoute management')}</h3><button className="btn btn-quiet" data-agent-facet="management_skill" disabled={busy || !selected.context_id || !mutable} onClick={event => open(selected, 'management_skill', event.currentTarget)}>{selectedManagement?.state === 'configured' ? text('调整', 'Edit') : text('准备', 'Prepare')}</button></div>
+                  <div className="detail-section-head"><h3>{text('HiRoute 管理', 'HiRoute management')}</h3><button className="btn btn-quiet" role="switch" aria-checked={selectedManagement?.state === 'configured'} data-agent-facet="management_skill" disabled={busy || !selected.context_id || !mutable || selectedManagement?.state === 'pending'} onClick={event => { if (selectedManagement?.state === 'configured' && selectedManagement.restore_point_ref) void change(selected, 'management_skill', true, event.currentTarget); else open(selected, 'management_skill', event.currentTarget); }}>{selectedManagement?.state === 'configured' ? text('停用', 'Disable') : text('启用', 'Enable')}</button></div>
                   <p>{text('准备管理 Skill，让此 Agent 通过本机 CLI 管理模型来源和智能路由。可独立启用或恢复，无需先连接模型。', 'Prepare the management Skill so this Agent can manage model sources and smart routes through the local CLI. Enable or restore it independently, without model routing.')}</p>
-                  {selectedManagement?.restore_point_ref && <button className="btn" disabled={busy || !mutable} onClick={event => void change(selected, 'management_skill', true, event.currentTarget)}>{text('恢复管理 Skill', 'Restore management Skill')}</button>}
+                  {selectedManagement?.restore_point_ref && selectedManagement.state !== 'configured' && <button className="btn" disabled={busy || !mutable} onClick={event => void change(selected, 'management_skill', true, event.currentTarget)}>{text('恢复管理 Skill', 'Restore management Skill')}</button>}
+                  <p>{selectedManagement?.state === 'configured' ? text('当前配置已启用。', 'Enabled for this configuration.') : selectedManagement?.state === 'restored' ? text('当前配置已停用；共享或外部安装的 Skill 文件可能仍然可用。', 'Disabled for this configuration; a shared or externally installed Skill may remain available.') : text('当前配置未启用。', 'Not enabled for this configuration.')}</p>
+                  {selectedManagement?.state === 'configured' && <button className="btn btn-quiet" type="button" disabled={busy || !mutable} onClick={event => open(selected, 'management_skill', event.currentTarget)}>{text('重新准备 Skill', 'Prepare Skill again')}</button>}
                   <AgentSkillDetails resource={selectedManagement?.resource} language={language} management />
                 </section>}
                 {selectedModel?.native_adapter && <p className="field-help" data-hermes-resource-state>{selectedModel.native_adapter.resources_installed

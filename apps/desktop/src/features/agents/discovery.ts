@@ -13,7 +13,7 @@ function validTarget(value: unknown): value is AgentNativeTarget {
   const target = value as Partial<AgentNativeTarget>;
   return target.kind === 'hermes' && typeof target.config_root === 'string'
     && target.config_root.startsWith('/') && target.config_root.length <= 4096
-    && !/[\0\r\n]/.test(target.config_root) && !target.config_root.split('/').includes('..');
+    && !/[\x00-\x1f\x7f-\x9f]/u.test(target.config_root) && !target.config_root.split('/').includes('..');
 }
 
 /** Preferences are discovery hints. The native scanner must validate them on every read. */

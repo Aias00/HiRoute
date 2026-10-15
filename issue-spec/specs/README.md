@@ -25,7 +25,7 @@ and performance evidence belongs to revision-bound validation records.
 | Use economy or primary models for one task scope | [Smart saving](smart-saving-routing/spec.md) | Two-group threshold policy and per-turn recovery |
 | Connect a decision model or define categories | [Decision services](decision-services/spec.md) | Saved revisions, System One/custom v1, category/degree/competence policy |
 | Execute a model request with bounded relay | [Request routing](request-routing/spec.md) | Grant/Fixed scope, native controls, expressibility, continuity, pre-body relay |
-| Configure native coding Agents reversibly | [Agent connections](agent-connections/spec.md) | Independent model/Skill facets, provider differences, grant/restore ownership |
+| Configure native coding Agents reversibly | [Agent connections](agent-connections/spec.md) | Local discovery, independent model/management/collaboration facets, grant/restore ownership |
 | Discover authorized models or delegate by purpose | [Agent plan discovery](agent-plan-discovery/spec.md) | Model directory versus instance Worker directory and collaboration guidance |
 | Start, inspect, cancel, or continue delegated work | [Worker delegation](agent-delegation/spec.md) | Admission, frozen execution, Harness differences, capacity, progress, exact session |
 | Read conversations and execution evidence | [Session history](session-history/spec.md) | Native correlation, live search, content visibility, receipts, quality stages |

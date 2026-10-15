@@ -736,7 +736,7 @@ fn restore(
     reference: &str,
     blockers: &mut Vec<AgentSettingsBlock>,
 ) {
-    if !facts.reference_only_skill_restores.contains(&facet) {
+    if facet == AgentSettingsFacet::Model || !facts.reference_only_skill_restores.contains(&facet) {
         require(facts, action, facet, blockers);
     }
     if !identity(reference) || facts.restore_points.get(reference) != Some(&facet) {

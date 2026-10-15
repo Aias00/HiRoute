@@ -68,6 +68,13 @@ impl SettingsAgentClass {
     pub(in crate::control::runtime) fn skill_target(
         self,
     ) -> Result<String, hiroute_domain::OperationValidationError> {
+        self.skill_target_for(AgentSettingsFacet::Collaboration)
+    }
+
+    pub(in crate::control::runtime) fn skill_target_for(
+        self,
+        facet: AgentSettingsFacet,
+    ) -> Result<String, hiroute_domain::OperationValidationError> {
         if self == Self::Hermes {
             return Err(hiroute_domain::OperationValidationError::UnregisteredEffectPlan);
         }
@@ -101,6 +108,13 @@ impl SettingsAgentClass {
             profile_id,
             integration_profile_ref,
         )?;
-        AgentConnectionEffectRoleV1::RoutingSkill.target_for(&subject)
+        let role = match facet {
+            AgentSettingsFacet::Collaboration => AgentConnectionEffectRoleV1::RoutingSkill,
+            AgentSettingsFacet::ManagementSkill => AgentConnectionEffectRoleV1::ManagementSkill,
+            AgentSettingsFacet::Model => {
+                return Err(hiroute_domain::OperationValidationError::UnregisteredEffectPlan);
+            }
+        };
+        role.settings_target_for(&subject)
     }
 }

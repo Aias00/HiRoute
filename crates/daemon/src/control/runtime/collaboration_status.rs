@@ -110,7 +110,8 @@ impl LocalControlAdapter {
                             && self
                                 .artifacts
                                 .read_native_target(&target)
-                                .map_err(super::map_port)?
+                                .ok()
+                                .flatten()
                                 .is_some_and(|bytes| {
                                     CanonicalDigest::of_bytes(bytes.as_slice())
                                         == record.content_digest

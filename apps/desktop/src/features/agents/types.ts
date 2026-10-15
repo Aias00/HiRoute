@@ -95,7 +95,7 @@ export type AgentNativeTarget = { kind: 'hermes'; config_root: string };
 export type HermesModelSelection = { mode: 'hermes_default'; plan_id: string; protocol: 'chat_completions' | 'responses' | 'messages' };
 export type SkillResourceStatus = {
   directory: string; file_ownership: 'managed' | 'borrowed_identical' | null;
-  shared_context_count: number; native_available: boolean; runtime_loading: 'unobserved';
+  shared_context_count: number; native_available: boolean | null; runtime_loading: 'unobserved';
 };
 export type ManagementSkillStatus = { resource?: SkillResourceStatus; schema: string; state: string; restore_point_ref: string | null; operation_id: string | null; operation_state: string | null };
 export type AgentModelSelection = HermesModelSelection | CodexModelSelection | ClaudeModelSelection | QoderModelSelection | PiModelSelection | DshModelSelection;

@@ -17,6 +17,12 @@ const codexOf = (snapshot: AgentSnapshot) => modelAgent(snapshot, 'agent_codex_d
 
 function registered(): AgentSnapshot {
   const snapshot = structuredClone(readyAgents);
+  for (const ecosystem of ['qoder', 'pi', 'dsh'] as const) snapshot.agents.push({
+    agent_id: `agent_${ecosystem}_default`, context_id: `agent-context/${ecosystem}/fixture`, version: 'fixture',
+    configuration_state: 'registered', status_error: null, available_surfaces: [`${ecosystem}_cli`],
+    settings: { state: 'not_configured', model_verified: false, restore_point_ref: null,
+      collaboration: { state: 'not_configured', restore_point_ref: null, current_selection: null } },
+  });
   for (const agent of snapshot.agents) if (agent.settings) agent.settings.management_skill = {
     schema: 'hiroute.agent-management-skill-status/v1', state: 'not_configured', restore_point_ref: null, operation_id: null, operation_state: null,
   };

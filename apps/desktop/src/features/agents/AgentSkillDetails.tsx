@@ -36,6 +36,7 @@ export function AgentSkillDetails({ resource, language, management = false }: {
       <p className="agent-resource-path">{text('Skill 目录：', 'Skill directory: ')}{resource.directory}</p>
       {resource.file_ownership === 'borrowed_identical' && <p>{text('使用已有的相同 Skill；恢复配置后会保留外部文件。', 'Uses an existing identical Skill; restoring settings retains the external file.')}</p>}
       {resource.shared_context_count > 1 && <p>{text('此 Skill 由多个配置共享，恢复只释放当前配置的引用。', 'Several configurations share this Skill. Restore releases only the current reference.')}</p>}
+      {resource.native_available === null && <p>{text('暂时无法读取此 Skill 文件。请检查目录访问情况后重新扫描。', 'This Skill file cannot currently be read. Check directory access and scan again.')}</p>}
       {resource.native_available && <p>{text('Skill 文件可用；当前会话是否已加载尚未确认，必要时重新加载 Skill 或开启新会话。', 'Skill files are available. Loading in the current session is unconfirmed; reload Skills or start a new session if needed.')}</p>}
     </>}
     {management && cli && cli.state !== 'valid' && <p>

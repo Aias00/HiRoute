@@ -206,6 +206,28 @@ HiRoute SHALL add the selected effective Hermes profile as a managed target in t
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/119#issuecomment-6165289916
 
+### Requirement: Management Skill is available to supported local Agents
+
+HiRoute SHALL provide independent management-Skill preparation, status and owned restoration through Desktop Agent settings and the public CLI for Codex, Claude Code, Qoder, Pi, DeepSeek Harness and Hermes, using each selected effective native Skill root and the same canonical management instructions. Preparation SHALL NOT require a managed model connection, a published Plan or an available Worker, and SHALL NOT enable automatic delegation, change model configuration or add CLI authority. Both clients SHALL reflect the same saved state and distinguish installed preparation, prerequisites and unverified runtime loading. Unknown or incompatible Skill roots SHALL produce an actionable result without writing another root.
+
+#### Scenario: Prepare without model routing
+
+- **WHEN** a supported Agent has a valid Skill root but no HiRoute model connection or published Plan, and the owner enables management instructions
+- **THEN** only the selected management resource is prepared; the model and task-delegation settings remain unchanged.
+
+#### Scenario: Cross-client control
+
+- **WHEN** management preparation is applied from Desktop or CLI and the other client reads the same context
+- **THEN** both report the same management state and expose owned restoration without requiring unrelated configuration.
+
+#### Scenario: Unavailable prerequisite
+
+- **WHEN** the selected root or native Skill loading interface is unavailable
+- **THEN** the affected action identifies the prerequisite, writes no alternate root and does not claim runtime loading.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/125#issuecomment-6186243593
+
 ## Implementation references
 
 - [Client Core](../../../crates/client-core/src) and

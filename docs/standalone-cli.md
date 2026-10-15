@@ -543,7 +543,11 @@ restore retain their own capability checks.
 Prepare the management Skill independently with
 `"management_skill":{"intent":"configure","settings":{}}` and `model: keep`.
 Use the shared restore workflow for either facet; model restore keeps an
-independent Skill. Hermes Worker/collaboration configuration is unsupported.
+independent Skill. Hermes can also independently configure the shared collaboration
+facet with `{"trigger_mode":"explicit"}` or `{"trigger_mode":"delegate_by_default"}`,
+keeping `model` unchanged. It uses public Worker commands with its existing native
+model; no HiRoute model plugin is required. Hermes remains unavailable as a Worker
+executor.
 The [native guide](../crates/integrations/src/agents/hermes/README.md) explains
 ownership, support and native channel/session selection.
 
@@ -816,6 +820,17 @@ IPv6, multiple listeners, and firewall management are not supported.
   usage. `null` without price evidence is correct and does not mean free.
 
 ## Management Skill
+
+Desktop provides an independent HiRoute management control for Codex, Claude Code,
+Qoder, Pi, DeepSeek Harness and Hermes. Public CLI uses the same settings interface:
+set `management_skill` to `{"intent":"configure","settings":{}}` with `model` and
+`collaboration` kept, or configure both Skills in the same request. Preview/Apply
+retains its normal exact revisions, digests and idempotency key. Use the returned
+effective context; Hermes also retains its explicit `native_target`. Current CLI
+status reads include Skill scope, shared/external ownership and unconfirmed loading;
+raw status requests can opt in with `include_skills: true`. Restore only the selected
+facet's returned reference. A retained external/shared file may remain available
+natively after this context releases its reference.
 
 The package installs the same `hiroute-management` Skill in the generic Agent and Claude Code
 Skill directories. It organizes only the public commands on this page: service checks,

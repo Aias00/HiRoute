@@ -48,17 +48,8 @@ impl LocalControlAdapter {
                 &hiroute_integrations::hermes_subject(target.config_root())
                     .map_err(|_| ControlReadError::Corrupt)?,
             )
-        } else if facet == legacy {
-            class.skill_target()
         } else {
-            let primary = class
-                .skill_target()
-                .map_err(|_| ControlReadError::Corrupt)?;
-            Ok(primary
-                .strip_suffix("routing-skill")
-                .ok_or(ControlReadError::Corrupt)?
-                .to_owned()
-                + "management-skill")
+            class.skill_target_for(facet)
         }
         .map_err(|_| ControlReadError::Corrupt)?;
         Ok((root, target))

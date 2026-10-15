@@ -136,6 +136,8 @@ pub enum AgentSettingsStatusV2 {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AgentCollaborationOnlySettingsStatusV2 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub management_skill: Option<AgentManagementSkillStatusV1>,
     pub schema: String,
     pub context_id: String,
     pub collaboration: AgentCollaborationSettingsStatusV2,
@@ -527,6 +529,6 @@ pub struct AgentSkillResourceStatusV1 {
     pub directory: String,
     pub file_ownership: Option<hiroute_domain::CollaborationSkillFileOwnership>,
     pub shared_context_count: usize,
-    pub native_available: bool,
+    pub native_available: Option<bool>,
     pub runtime_loading: AgentNativeRuntimeLoadingV1,
 }

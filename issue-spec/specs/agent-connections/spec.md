@@ -28,20 +28,42 @@ The current native model surfaces are:
 | Qoder | Explicit supplementary Plan providers; native default remains independent | Selected normally logged-in native context |
 | Pi | Per-Plan owned members in user models.json | Selected native Skills/resources |
 | DSH | Public standard Web/home composition and per-Plan provider rows | Public native Skills/CLI capabilities |
-| Hermes | One selected effective profile default main model using a published Plan alias | Collaboration unsupported; independent profile-local management Skill |
+| Hermes | One selected effective profile default main model using a published Plan alias | Profile-local collaboration and independent management Skills |
 
 A Fixed route always retains exact source/account/physical model. Selecting a plan
 never implies a Worker process or shared main-Agent ownership of that plan.
 
-Hermes management-Skill intent is independent of its model facet and uses keep, configure or restore, with omission meaning keep. Management-only preparation requires neither a Plan nor a model grant. Restoring the model facet preserves an independently prepared management Skill unless its own restore is selected. A non-keep Hermes collaboration intent is unsupported; neither model routing nor management-Skill preparation grants Worker authority.
+HiRoute SHALL manage management and collaboration Skills as distinct resources alongside the model facet. Each uses keep, configure and restore, with omission meaning keep. Either Skill can be enabled first or both requested together. Changing or restoring one SHALL preserve the other and model settings. Restoring model settings SHALL preserve both Skills unless their own restore intents are selected. Ownership SHALL distinguish the effective file target and Skill identity, preserve shared references and identically borrowed files, and reject foreign content conflicts. Existing accepted operations and recovery references SHALL retain their original meanings. Collaboration owns delegation-trigger policy when both Skills are loaded. Disabling a Skill SHALL report externally retained content and required native reload rather than claim revocation of same-user CLI access.
+
+Management preparation is available for all listed Agent families and requires neither a Plan nor a model grant. Hermes collaboration follows the same independent intent and trigger policy as other supported initiators, without adding a Hermes Worker executor. Neither Skill preparation nor model routing creates a new CLI authority.
 
 #### Scenario: Prepare Hermes management without model connection
 
 - **WHEN** a Hermes profile requests management-Skill preparation with its model facet kept
 - **THEN** only the independent management resource is prepared; no Plan, model grant or collaboration setup is required.
 
+#### Scenario: Both Skills in one context
+
+- **WHEN** the owner enables management and collaboration in either order or in one settings request
+- **THEN** both resources and their statuses coexist independently without replacing one another or changing model settings.
+
+#### Scenario: Independent restore across restart
+
+- **WHEN** both Skills are prepared and one is restored before or after service restart
+- **THEN** only that owned resource/reference is removed, the other remains usable, and pending retry retains its original accepted operation.
+
+#### Scenario: Installer and shared-root coexistence
+
+- **WHEN** identical Skill content already exists from the installer or another context references the same target
+- **THEN** HiRoute preserves borrowed ownership and shared references; restoring one context does not delete external content or another context reference, and retained native availability is reported.
+
+#### Scenario: Foreign edit and interrupted apply
+
+- **WHEN** a resource changes after Preview or a multi-resource operation is interrupted
+- **THEN** the existing stale/ownership and recovery rules apply to exact targets; no successful state hides unfinished effects or removes unrelated content.
+
 Source SPEC comments:
-- https://github.com/higress-group/HiRoute/issues/119#issuecomment-6165296337
+- https://github.com/higress-group/HiRoute/issues/125#issuecomment-6186244519
 
 ### Requirement: Settings bind current facts once through one transaction
 
@@ -444,6 +466,55 @@ HiRoute SHALL configure the selected effective Hermes profile's default main mod
 
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/119#issuecomment-6165296337
+
+### Requirement: Hermes can initiate task delegation through existing Workers
+
+HiRoute SHALL let the owner independently configure, inspect and restore task delegation for the selected Hermes profile through Desktop and the public CLI. Hermes SHALL use the existing collaboration Skill, explicit-only (default) or delegate-by-default policy, and public Worker commands to select a published delegation-enabled Plan, submit work to its supported executor such as Qoder, observe completion and retrieve the actual result. Preparation requires neither a Plan nor a configured Worker; those are execution prerequisites. This capability SHALL work with Hermes native model configuration and without the HiRoute model-session plugin. Hermes SHALL NOT become a selectable Worker executor. Missing prerequisites, pending work and failed execution SHALL remain explicit rather than claimed success or implicit alternate execution.
+
+#### Scenario: Hermes delegates to Qoder
+
+- **WHEN** Hermes uses its native model, collaboration is prepared and an authorized task matches a published delegation-enabled Qoder Plan
+- **THEN** Hermes can submit through HiRoute and retrieve the actual Qoder result; the Worker uses the selected Plan and Hermes model configuration remains unchanged.
+
+#### Scenario: Trigger policy and answer-only intent
+
+- **WHEN** Hermes has explicit-only delegation configured, or default delegation is configured but the owner requests an answer only
+- **THEN** the instructions preserve that policy; enabling management does not override it.
+
+#### Scenario: Unavailable executor or uncertain submission
+
+- **WHEN** no eligible Plan or executor is available, or an accepted run is pending or failed
+- **THEN** the actual condition is reported; uncertain submission is recovered using its original identity without duplicate submission or fabricated completion.
+
+#### Scenario: Initiator is not executor
+
+- **WHEN** Hermes task delegation is enabled
+- **THEN** existing Worker executor choices remain unchanged and do not include Hermes.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/125#issuecomment-6186244084
+
+### Requirement: Supported Agent discovery preserves scope and remains actionable
+
+Desktop SHALL retain the supported local Agent catalog when an installation or effective configuration has not been discovered. Discovery SHALL distinguish an undiscovered configuration, an unavailable selected configuration and a discovered usable context without treating absence as proof of uninstallation. Users SHALL be able to rescan through the existing scanner. Where an integration supports explicit configuration directories, selection SHALL live in that Agent's details and be remembered as a non-secret discovery preference; every read and settings action SHALL revalidate it through the existing backend. An unavailable explicit directory SHALL remain selected and SHALL NOT silently fall back to another profile. One failed profile read SHALL preserve unrelated Agent entries. Discovery, preference persistence and cancellation SHALL NOT install an Agent or Skill, change native model configuration, invoke a model or restart a native process. Settings require the backend-validated effective context.
+
+#### Scenario: Undiscovered configuration remains visible
+
+- **WHEN** a supported Agent has no discovered effective configuration
+- **THEN** its catalog entry remains visible with an honest discovery state and a rescan action; settings cannot be applied without a validated context.
+
+#### Scenario: Remember and revalidate a custom directory
+
+- **WHEN** the owner selects a valid custom configuration directory and later reopens Desktop
+- **THEN** Desktop rereads the remembered directory through the backend before presenting settings authority; it does not require the owner to reselect it.
+
+#### Scenario: Unavailable explicit scope remains selected
+
+- **WHEN** a remembered or explicitly selected configuration becomes unavailable or unreadable
+- **THEN** Desktop retains the selected scope and unrelated Agent entries, explains the known condition and permits rescan or directory replacement without selecting another profile or overwriting files.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/125#issuecomment-6193859603
 
 ## Implementation references
 

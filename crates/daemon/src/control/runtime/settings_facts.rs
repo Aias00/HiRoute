@@ -258,26 +258,28 @@ impl LocalControlAdapter {
         let skill_target = class
             .skill_target()
             .map_err(|_| ControlReadError::Corrupt)?;
-        let skill_before_fingerprint = self
-            .artifacts
-            .current_external_fingerprint(&skill_target)
-            .map_err(super::map_port)?;
-        let skill_bytes = self
-            .artifacts
-            .read_native_target(&skill_target)
-            .map_err(super::map_port)?;
-        let observed_skill_file = skill_bytes
-            .as_deref()
-            .map(|bytes| CanonicalDigest::of_bytes(bytes.as_slice()));
-        if skill_before_fingerprint
-            != self
-                .artifacts
-                .current_external_fingerprint(&skill_target)
-                .map_err(super::map_port)?
-        {
-            return Err(ControlReadError::SnapshotChanged);
-        }
-        drop(skill_bytes);
+        let (skill_before_fingerprint, observed_skill_file) =
+            if matches!(spec.collaboration, AgentFacetIntent::Keep) {
+                (None, None)
+            } else {
+                let fingerprint = self
+                    .artifacts
+                    .current_external_fingerprint(&skill_target)
+                    .map_err(super::map_port)?;
+                let bytes = self
+                    .artifacts
+                    .read_native_target(&skill_target)
+                    .map_err(super::map_port)?;
+                if fingerprint
+                    != self
+                        .artifacts
+                        .current_external_fingerprint(&skill_target)
+                        .map_err(super::map_port)?
+                {
+                    return Err(ControlReadError::SnapshotChanged);
+                }
+                (fingerprint, bytes.map(|b| CanonicalDigest::of_bytes(&b)))
+            };
 
         let runtime = self
             .managed_agent_runtime
