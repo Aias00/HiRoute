@@ -1,5 +1,5 @@
 {
-  "descriptor_digest": "sha256:3ae32fc9b7da19b9d8b23ffefd8a25bc221dc86adc3bdbaca761f176928508b9",
+  "descriptor_digest": "sha256:85d828bd2b5ee7cb64bec70fc3f5c11e5619965c5694133019dd79283e72facd",
   "expected_red_reasons": [],
   "planned_commands": [
     "schema.list",
@@ -28,6 +28,7 @@
     "compute.list",
     "compute.show",
     "compute.refresh",
+    "compute.connection.prepare",
     "compute.connection.options",
     "compute.connection.preview",
     "compute.connection.apply",
@@ -117,6 +118,7 @@
     "compute.scan",
     "compute.list",
     "compute.show",
+    "compute.connection.prepare",
     "compute.connection.options",
     "compute.connection.preview",
     "compute.connection.apply",
