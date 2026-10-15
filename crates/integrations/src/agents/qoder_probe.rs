@@ -12,7 +12,7 @@ use std::process::Command;
 use std::process::Stdio;
 use std::time::{Duration, Instant};
 
-use super::native_probe_process::{NativeProbeProcess, read_bounded};
+use super::native_probe_process::{NativeProbeProcess, read_bounded, read_bounded_file};
 use super::qoder::{
     QoderNativeContext, QoderNativeError, QoderTransientRouteInput, qoder_error,
     render_qoder_transient_route,
@@ -382,7 +382,6 @@ impl QoderCollaborationProbe {
         let status = result?;
         #[cfg(test)]
         let final_read = observed_final_output(
-            &root_path.join("output.private"),
             &observer,
             challenge.step,
             requests,
@@ -390,7 +389,7 @@ impl QoderCollaborationProbe {
             |diagnostic| diagnostic.emit(),
         );
         #[cfg(not(test))]
-        let final_read = read_bounded(&root_path.join("output.private"), 512 * 1024);
+        let final_read = read_bounded_file(&observer, 512 * 1024);
         let output = final_read.map_err(|_| qoder_error("native output bound"))?;
         let result = output
             .split(|byte| *byte == b'\n')
@@ -726,14 +725,13 @@ fn cli_baseline(cli: &Path, root: &Path) -> Result<String, QoderNativeError> {
 
 #[cfg(test)]
 fn observed_final_output(
-    path: &Path,
     observer: &File,
     step: usize,
     requests: usize,
     started: &Instant,
     observe: impl FnOnce(OutputReadDiagnostic),
 ) -> std::io::Result<zeroize::Zeroizing<Vec<u8>>> {
-    read_bounded(path, 512 * 1024).inspect_err(|error| {
+    read_bounded_file(observer, 512 * 1024).inspect_err(|error| {
         observe(output_read_diagnostic(
             observer,
             "final_read",
