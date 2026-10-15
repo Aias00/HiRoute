@@ -245,8 +245,9 @@ does not prove that the file exceeded its limit or that account execution passed
 The [actual Git Bash control](../../crates/integrations/src/agents/qoder_probe_windows_cli.rs)
 executes the selected candidate CLI, including literal special-character drive paths,
 and retains exact output equality. Its required native recipe selects an explicit
-Git for Windows image through a validation-only input; WSL or an absent shell cannot
-supply a passing result.
+Git for Windows image through a validation-only input. The held installation and
+MSYS runtime imports determine its distribution; a compiler triplet alone cannot
+admit another shell. WSL or an absent shell cannot supply a passing result.
 The [Qoder tool fixture](../../crates/daemon/src/delegation/installation/native_tools_probe.rs)
 and [saved-model Skill oracle](../../crates/daemon/tests/support/windows_qoder_user_models_skill.rs)
 use the same Bash execution contract with separate causal controls. Their

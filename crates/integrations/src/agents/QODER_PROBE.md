@@ -53,8 +53,14 @@ remain mismatches.
 
 `qoder_probe_windows_cli.rs` is an explicit account-free native control. Its
 `HIROUTE_VALIDATION_GIT_BASH_BINARY` is only a validation selector, not a product
-or Worker dependency. Held PE/identity/permissions/image digests and real MSYS
-Bash version bind the images. Old PowerShell syntax must fail actual Bash parsing;
+or Worker dependency. The native ProgramFiles Git installation binds the held
+wrapper, actual Bash, Windows Git and MSYS DLL through file identity, permissions,
+image bytes and ancestor leases. Bash must import MSYS and must not import Cygwin
+in either ordinary or delayed imports. Its GNU compiler triplet may be `msys` or
+`cygwin`; the triplet alone cannot admit another distribution. Wrapper and actual
+shell version output must agree, and the same installation's Git must identify its
+Windows release. This does not prove general dynamic DLL search behavior.
+Old PowerShell syntax must fail actual Bash parsing;
 the new literal special-character path must execute this candidate's CLI and
 return its exact baseline. Ordinary/verbatim identity, reparse rejection and
 natural Job emptiness stay required. Missing images fail the explicit case;
