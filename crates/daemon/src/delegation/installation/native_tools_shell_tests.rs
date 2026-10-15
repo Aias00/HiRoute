@@ -2,6 +2,56 @@
 use super::*;
 
 #[test]
+fn qoder_tools_repeat_with_borrowed_account_preserves_existing_skills_and_cleans_own() {
+    let root = ProbeRoot::new().unwrap();
+    let home = root.runs.join("home");
+    let config = root.runs.join("config");
+    make_directories(&home).unwrap();
+    make_directories(&config).unwrap();
+    let existing = config.join("skills/native-tools-user/SKILL.md");
+    make_directories(existing.parent().unwrap()).unwrap();
+    write_new(&existing, b"existing user skill").unwrap();
+    let mut previous = None;
+    for index in 0..2 {
+        let workspace = root.workspace.join(index.to_string());
+        create_private(&workspace).unwrap();
+        let mut fixture =
+            ToolsFixture::prepare(WorkerHarnessV1::QoderCli, &home, &config, &workspace).unwrap();
+        let owned = fixture
+            .skills
+            .iter()
+            .map(|s| s._directory.0.clone())
+            .collect::<Vec<_>>();
+        assert_ne!(previous.as_ref(), Some(&owned));
+        for skill in &fixture.skills {
+            assert!(fixture.prompt().contains(&skill.name));
+            assert!(skill.file.is_file());
+        }
+        #[cfg(windows)]
+        fixture.qoder_bash_command().unwrap();
+        #[cfg(not(windows))]
+        let _ = &mut fixture;
+        drop(fixture);
+        assert!(owned.iter().all(|path| !path.exists()));
+        assert_eq!(fs::read(&existing).unwrap(), b"existing user skill");
+        previous = Some(owned);
+    }
+    // A later preparation error must also release the newly created Skills.
+    let workspace = root.workspace.join("failed");
+    create_private(&workspace).unwrap();
+    write_new(&workspace.join(TARGET_NAME), b"existing target").unwrap();
+    assert!(ToolsFixture::prepare(WorkerHarnessV1::QoderCli, &home, &config, &workspace).is_err());
+    assert_eq!(fs::read_dir(config.join("skills")).unwrap().count(), 1);
+    assert_eq!(
+        fs::read_dir(workspace.join(".qoder/skills"))
+            .unwrap()
+            .count(),
+        0
+    );
+    assert_eq!(fs::read(&existing).unwrap(), b"existing user skill");
+}
+
+#[test]
 fn qoder_tool_receipt_uses_bash_without_changing_other_native_shell_contracts() {
     let (name, script) = receipt_script(WorkerHarnessV1::QoderCli, "literal ' $ & 中文");
     assert_eq!(name, "receipt.sh");

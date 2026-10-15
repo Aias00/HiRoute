@@ -34,6 +34,7 @@ fn native_tools(config: WorkerInstallationConfig) -> Result<(), DelegationErrorV
         context.config_root(),
         &root.workspace,
     )?;
+    let prompt = fixture.prompt();
     let oracle = Arc::new(Mutex::new(ToolsOracle::new(fixture)));
     let responder = Arc::clone(&oracle);
     let challenge = fresh_challenge()?;
@@ -74,7 +75,7 @@ fn native_tools(config: WorkerInstallationConfig) -> Result<(), DelegationErrorV
         AcpSessionStart::New,
         "native-tools-new",
         None,
-        "Use native-tools-user and native-tools-project. Read the probe file, edit it, execute the skill receipts, and finish with OK.",
+        &prompt,
     )?;
     oracle
         .lock()

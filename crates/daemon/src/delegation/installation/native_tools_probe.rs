@@ -37,6 +37,17 @@ struct Skill {
     file: PathBuf,
     script: PathBuf,
     original: Vec<u8>,
+    _directory: OwnedSkillDirectory,
+}
+
+// These are fresh, exclusively created fixture directories inside a borrowed
+// account. Never reuse or clean another run's or the user's existing Skills.
+struct OwnedSkillDirectory(PathBuf);
+
+impl Drop for OwnedSkillDirectory {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
 }
 
 pub(super) struct ToolsFixture {
@@ -49,6 +60,15 @@ pub(super) struct ToolsFixture {
     receipt: String,
     #[cfg(windows)]
     qoder_bash_inputs: Vec<qoder_paths::BashFile>,
+}
+
+impl Drop for ToolsFixture {
+    fn drop(&mut self) {
+        // Windows resource leases deny deletion, including their ancestors.
+        // Release them before the owned Skill directories are dropped.
+        #[cfg(windows)]
+        self.qoder_bash_inputs.clear();
+    }
 }
 
 impl ToolsFixture {
@@ -79,9 +99,11 @@ impl ToolsFixture {
             ("user", user_root),
             ("project", workspace.join(project).join("skills")),
         ] {
-            let name = format!("native-tools-{scope}");
+            let name = format!("native-tools-{scope}-{}", &nonce[nonce.len() - 24..]);
             let directory = root.join(&name);
-            make_directories(&directory)?;
+            make_directories(&root)?;
+            create_private(&directory)?;
+            let owned_directory = OwnedSkillDirectory(directory.clone());
             let discovery = format!("discovery-{scope}-{nonce}");
             let contents = format!("contents-{scope}-{nonce}");
             let executed = format!("executed-{scope}-{nonce}");
@@ -99,6 +121,7 @@ impl ToolsFixture {
                 file,
                 script,
                 original,
+                _directory: owned_directory,
             });
         }
         let before = format!("before-{nonce}");
@@ -123,6 +146,13 @@ impl ToolsFixture {
             #[cfg(windows)]
             qoder_bash_inputs: Vec::new(),
         })
+    }
+
+    pub(super) fn prompt(&self) -> String {
+        format!(
+            "Use {} and {}. Read the probe file, edit it, execute the skill receipts, and finish with OK.",
+            self.skills[0].name, self.skills[1].name
+        )
     }
 
     pub(super) fn assert_effects(&self) -> Result<(), DelegationErrorV1> {
