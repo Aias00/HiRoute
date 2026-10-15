@@ -31,3 +31,22 @@ Native controls prove ordinary/verbatim equivalence and reject changed content
 or permissions, reparse/foreign paths, split candidates and altered message
 shapes. Account-free controls do not establish logged-in business acceptance or
 upstream provider-account inference.
+
+## Windows Bash command
+
+Qoder CLI 1.1.65's Bash tool uses Git Bash on Windows; its separate PowerShell
+tool does not change Bash syntax. The command producer reuses native executable
+admission, verifies that the ordinary drive/forward-slash spelling opens that
+same file, and uses POSIX single-quote escaping. Unix keeps its released escaping.
+The HTTP matcher still requires the complete original CLI baseline after its
+existing edge trim; equivalent JSON, internal newline conversion or SDK framing
+remain mismatches.
+
+`qoder_probe_windows_cli.rs` is an explicit account-free native control. Its
+`HIROUTE_VALIDATION_GIT_BASH_BINARY` is only a validation selector, not a product
+or Worker dependency. Held PE/identity/permissions/image digests and real MSYS
+Bash version bind the images. Old PowerShell syntax must fail actual Bash parsing;
+the new literal special-character path must execute this candidate's CLI and
+return its exact baseline. Ordinary/verbatim identity, reparse rejection and
+natural Job emptiness stay required. Missing images fail the explicit case;
+this does not replace the normally logged-in Qoder Main business case.

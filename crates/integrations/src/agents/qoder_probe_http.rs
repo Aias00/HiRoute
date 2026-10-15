@@ -313,6 +313,36 @@ mod tests {
     }
 
     #[test]
+    fn trusted_cli_still_rejects_semantic_only_framed_and_uncorrelated_outputs() {
+        let mut check = challenge();
+        check.step = 2;
+        check.expected_cli = "{\n\"status\":\"succeeded\"\n}".into();
+        for output in [
+            "{\"status\":\"succeeded\"}".to_owned(),
+            check.expected_cli.replace('\n', "\r\n"),
+            format!("stdout:\n{}\nstderr:\n(empty)", check.expected_cli),
+            format!("Exit code 2\n{}", check.expected_cli),
+        ] {
+            assert_eq!(
+                check.reply(&json!({"input":[{"type":"function_call_output","call_id":"call_hiroute_cli","output":output}]})).unwrap_err(),
+                "trusted CLI result mismatch"
+            );
+            assert_eq!(check.step, 2);
+        }
+        let exact = check.expected_cli.clone();
+        assert_eq!(
+            check.reply(&json!({"input":[{"type":"function_call_output","call_id":"unrelated","output":exact}]})).unwrap_err(),
+            "trusted CLI call result"
+        );
+        assert!(
+            check
+                .reply(&json!({"input":[{"type":"function_call_output","call_id":"call_hiroute_cli","output":exact}]}))
+                .is_ok()
+        );
+        assert!(check.complete());
+    }
+
+    #[test]
     fn skill_receipt_diagnostics_do_not_admit_alternate_path_shape_or_newlines() {
         let request = |content| {
             json!({"input":[

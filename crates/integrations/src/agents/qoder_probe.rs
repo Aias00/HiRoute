@@ -27,6 +27,9 @@ mod http;
 #[cfg(any(test, windows))]
 #[path = "qoder_probe_skill_diagnostic.rs"]
 mod skill_diagnostic;
+#[cfg(all(test, windows))]
+#[path = "qoder_probe_windows_cli.rs"]
+mod windows_cli;
 
 const CONTRACT: &str = "hiroute.qoder-borrowed-context-collaboration/v1";
 const MARKER: &str = "hiroute-local-challenge-no-authority";
@@ -223,11 +226,7 @@ impl QoderCollaborationProbe {
             .to_owned();
         let body = skill_body(&content)?;
         let expected_cli = cli_baseline(&cli, &root_path)?;
-        let command = format!(
-            "{}{} schema list --output json",
-            if cfg!(windows) { "& " } else { "" },
-            shell_quote(&cli)?
-        );
+        let command = cli_command(&cli)?;
         let mut challenge = http::Challenge {
             skill_name,
             #[cfg(any(test, not(windows)))]
@@ -579,8 +578,40 @@ fn shell_quote(path: &Path) -> Result<String, QoderNativeError> {
         "'{}'",
         path.to_str()
             .ok_or_else(|| qoder_error("trusted CLI path"))?
-            .replace('\'', if cfg!(windows) { "''" } else { "'\\''" })
+            .replace('\'', "'\\''")
     ))
+}
+
+fn cli_command(cli: &Path) -> Result<String, QoderNativeError> {
+    // Qoder 1.1.65's Bash tool uses Git Bash on Windows, independently of its
+    // separate PowerShell tool. The resolved native image already passed the
+    // shared ordinary-drive projection; retain that same identity when making
+    // its separators suitable for Bash. Never send PowerShell's '&' or quoting.
+    #[cfg(windows)]
+    let quoted = {
+        use hiroute_platform::windows::security;
+        let ordinary = super::managed_launch::windows_executable_path(cli)
+            .map_err(|_| qoder_error("trusted CLI path"))?;
+        let original = security::open_identity(&ordinary, false)
+            .map_err(|_| qoder_error("trusted CLI path"))?;
+        let spelling = PathBuf::from(
+            ordinary
+                .to_str()
+                .ok_or_else(|| qoder_error("trusted CLI path"))?
+                .replace('\\', "/"),
+        );
+        let projected = security::open_identity(&spelling, false)
+            .map_err(|_| qoder_error("trusted CLI path"))?;
+        if security::file_identity(&original).map_err(|_| qoder_error("trusted CLI path"))?
+            != security::file_identity(&projected).map_err(|_| qoder_error("trusted CLI path"))?
+        {
+            return Err(qoder_error("trusted CLI path"));
+        }
+        shell_quote(&spelling)?
+    };
+    #[cfg(not(windows))]
+    let quoted = shell_quote(cli)?;
+    Ok(format!("{quoted} schema list --output json"))
 }
 
 #[cfg(unix)]
@@ -717,6 +748,50 @@ fn safe_output_bound(file: &File, step: usize, requests: usize, elapsed: Duratio
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn qoder_bash_command_rejects_the_old_windows_powershell_prefix() {
+        let path = Path::new("C:/literal space ' ; $probe & 中文/hiroute.exe");
+        let old = format!(
+            "& '{}' schema list --output json",
+            path.to_str().unwrap().replace('\'', "''")
+        );
+        let new = cli_command(path).unwrap();
+        let parse = |command: &str| {
+            Command::new("/bin/bash")
+                .args(["-n", "-c", command])
+                .env_clear()
+                .output()
+                .unwrap()
+        };
+        assert_eq!(parse(&old).status.code(), Some(2));
+        let parsed = parse(&new);
+        assert!(parsed.status.success() && parsed.stdout.is_empty() && parsed.stderr.is_empty());
+    }
+
+    #[test]
+    fn qoder_bash_quote_preserves_literal_apostrophe_and_shell_characters() {
+        let path = Path::new("C:/literal space ' ; $probe & 中文/hiroute.exe");
+        let arguments = format!("printf '%s' {}", shell_quote(path).unwrap());
+        let output = Command::new("/bin/bash")
+            .args(["-c", &arguments])
+            .env_clear()
+            .output()
+            .unwrap();
+        assert!(output.status.success() && output.stderr.is_empty());
+        assert!(output.stdout == path.as_os_str().as_encoded_bytes());
+        let old = format!(
+            "printf '%s' '{}'",
+            path.to_str().unwrap().replace('\'', "''")
+        );
+        let output = Command::new("/bin/bash")
+            .args(["-c", &old])
+            .env_clear()
+            .output()
+            .unwrap();
+        assert!(output.status.success() && output.stderr.is_empty());
+        assert!(output.stdout != path.as_os_str().as_encoded_bytes());
+    }
 
     #[test]
     fn older_completion_cannot_replace_a_newer_explicit_check() {
