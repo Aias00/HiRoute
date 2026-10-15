@@ -452,12 +452,11 @@ impl Session {
             .await;
             let selected = match selected {
                 Ok(selected) => selected,
-                Err(_) if automatic => {
+                Err(_) => {
                     scan.agents
                         .push(super::agent_discovery::unreadable_hermes(target));
                     continue;
                 }
-                Err(error) => return Err(error),
             };
             for agent in selected.agents {
                 scan.agents.retain(|existing| {

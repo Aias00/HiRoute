@@ -18,13 +18,11 @@ export function agentSettingsSpec(agent: Agent, facet: AgentFacet, restore: bool
   if (ecosystem === 'hermes' && !agent.native_target) throw new Error('AGENT_INPUT_INVALID');
   const keep = { intent: 'keep' as const };
   if (facet === 'management_skill') {
-    if (ecosystem !== 'hermes') throw new Error('AGENT_INPUT_INVALID');
-    return { schema_version: { major: 2, minor: 0 }, context_id: agent.context_id, ...target,
+    return { schema_version: { major: 2, minor: 0 }, context_id: agent.codex_access?.root_context_id ?? agent.context_id, ...target,
       model: keep, collaboration: keep, management_skill: restore
-        ? { intent: 'restore', restore_point_ref: agentModelStatus(agent)?.management_skill?.restore_point_ref }
+        ? { intent: 'restore', restore_point_ref: agent.settings?.management_skill?.restore_point_ref }
         : { intent: 'configure', settings: {} } };
   }
-  if (facet === 'collaboration' && ecosystem === 'hermes') throw new Error('AGENT_INPUT_INVALID');
   if (facet === 'model') {
     if (!agentSupportsModelRouting(agent.agent_id) || agentHasNoModelConnection(agent)) throw new Error('AGENT_INPUT_INVALID');
     const current = agentModelStatus(agent)?.current_selection;
@@ -79,6 +77,7 @@ export function agentSettingsSpec(agent: Agent, facet: AgentFacet, restore: bool
   return {
     schema_version: { major: 2, minor: 0 },
     context_id: agent.codex_access?.root_context_id ?? agent.context_id,
+    ...target,
     model: keep,
     collaboration: restore
       ? { intent: 'restore', restore_point_ref: agent.settings?.collaboration?.restore_point_ref }
@@ -111,6 +110,6 @@ export function prerequisiteCheck(preview: Preview, facet: AgentFacet): AgentChe
   // task. Treat the capability as the authority instead of inferring the check
   // from whichever settings form happened to expose the blocker.
   if (missing.has('ingress_authentication')) return 'native_authentication';
-  if (facet === 'collaboration' && (missing.has('skill_loading') || missing.has('trusted_cli_execution'))) return 'collaboration';
+  if (facet !== 'model' && (missing.has('skill_loading') || missing.has('trusted_cli_execution'))) return 'collaboration';
   return null;
 }

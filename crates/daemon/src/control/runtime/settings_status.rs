@@ -94,7 +94,8 @@ impl LocalControlAdapter {
         let hermes = self.settings_agent_for_context(&request.context_id)
             == Some(SettingsAgentClass::Hermes);
         if hermes || request.include_skills {
-            status.management_skill = Some(self.management_settings_status(request)?);
+            status.management_skill =
+                Some(self.management_settings_status(&collaboration_request)?);
         }
         if !hermes || request.include_skills {
             status.collaboration =

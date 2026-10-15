@@ -32,6 +32,9 @@ export type CodexAccess = {
 };
 
 export type CollaborationStatus = {
+  operation_id?: string | null;
+  operation_state?: string | null;
+  resource?: SkillResourceStatus;
   state: string;
   restore_point_ref: string | null;
   current_selection?: { trigger_mode: AgentCollaborationTriggerMode } | null;
@@ -90,7 +93,11 @@ export type PiModelSelection = { mode: 'pi_additional'; plan_protocols?: Record<
 export type DshModelSelection = { mode: 'dsh_additional'; plan_protocols?: Record<string, 'responses' | 'messages'>; allowed_plan_ids: string[] };
 export type AgentNativeTarget = { kind: 'hermes'; config_root: string };
 export type HermesModelSelection = { mode: 'hermes_default'; plan_id: string; protocol: 'chat_completions' | 'responses' | 'messages' };
-export type ManagementSkillStatus = { schema: string; state: string; restore_point_ref: string | null; operation_id: string | null; operation_state: string | null };
+export type SkillResourceStatus = {
+  directory: string; file_ownership: 'managed' | 'borrowed_identical' | null;
+  shared_context_count: number; native_available: boolean; runtime_loading: 'unobserved';
+};
+export type ManagementSkillStatus = { resource?: SkillResourceStatus; schema: string; state: string; restore_point_ref: string | null; operation_id: string | null; operation_state: string | null };
 export type AgentModelSelection = HermesModelSelection | CodexModelSelection | ClaudeModelSelection | QoderModelSelection | PiModelSelection | DshModelSelection;
 export type AgentSurfaceResult = {
   surface: AgentModelSurface;
@@ -129,6 +136,7 @@ export type ModelStatus = {
   collaboration?: CollaborationStatus | null;
 };
 export type CollaborationOnlyStatus = {
+  management_skill?: ManagementSkillStatus;
   schema: 'hiroute.agent-collaboration-only-settings-status/v2';
   context_id: string;
   collaboration: CollaborationStatus;

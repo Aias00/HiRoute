@@ -70,8 +70,8 @@ export function agentEditorSeed(
 ): AgentEditorValues & { known: boolean } {
   const ecosystem = agentEcosystem(agent.agent_id);
   if (facet === 'management_skill') {
-    const management = agentModelStatus(agent)?.management_skill;
-    return { ...EMPTY_EDITOR_VALUES, known: ecosystem === 'hermes' && !!agent.native_target
+    const management = agent.settings?.management_skill;
+    return { ...EMPTY_EDITOR_VALUES, known: ecosystem !== null && (ecosystem !== 'hermes' || !!agent.native_target)
       && !agent.status_error && !!management && ['not_configured', 'restored', 'configured'].includes(management.state) };
   }
   const status = facet === 'model' ? agentModelStatus(agent) : agent.settings?.collaboration;

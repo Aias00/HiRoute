@@ -4,11 +4,13 @@ import type { Agent, AgentModelSelection, AgentModelSurface } from './types';
  * This entry is presentation only: no context or settings authority is invented.
  */
 export function agentPageEntries(agents: Agent[]): Agent[] {
-  if (agents.some(agent => agent.agent_id === 'agent_hermes_default')) return agents;
-  return [...agents, {
-    agent_id: 'agent_hermes_default', version: '', context_id: null,
-    configuration_state: 'profile_not_selected', settings: null, status_error: null,
-  }];
+  const supported = ['agent_claude_default', 'agent_codex_default', 'agent_dsh_default', 'agent_pi_default', 'agent_qoder_default', 'agent_hermes_default'];
+  const missing: Agent[] = supported.filter(id => !agents.some(agent => agent.agent_id === id)).map(agent_id => ({
+    agent_id, version: '', context_id: null,
+    configuration_state: agent_id === 'agent_hermes_default' ? 'profile_not_selected' : 'not_discovered',
+    settings: null, status_error: null,
+  }));
+  return missing.length ? [...agents, ...missing] : agents;
 }
 
 export type AgentEcosystem = 'codex' | 'claude' | 'qoder' | 'pi' | 'dsh' | 'hermes';
@@ -83,5 +85,9 @@ export function surfaceName(surface: AgentModelSurface): string {
 
 export function agentSupportsCollaboration(agentId: string): boolean {
   const ecosystem = agentEcosystem(agentId);
-  return ecosystem !== null && ecosystem !== 'hermes';
+  return ecosystem !== null;
+}
+
+export function agentSupportsManagement(agentId: string): boolean {
+  return agentEcosystem(agentId) !== null;
 }

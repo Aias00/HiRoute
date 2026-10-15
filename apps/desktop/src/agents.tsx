@@ -1,3 +1,6 @@
+import { AgentDiscoveryFeedback } from './features/agents/AgentDiscoveryFeedback';
+import { AgentSkillDetails } from './features/agents/AgentSkillDetails';
+import { loadAgentDiscoveryTargets, saveAgentDiscoveryTargets } from './features/agents/discovery';
 import { CodexAccessPanel } from './features/agents/CodexAccessPanel';
 import { confirmedCodexLaunchCommand, type PendingCodexLaunchCopy } from './features/agents/codex-launch';
 import { BrandIcon, Dialog, Disclosure, ProductPage, UiIcon, copyText } from './ui';
@@ -8,7 +11,7 @@ import { agentEditorSeed, agentModelFormInvalid, editorFingerprint, EMPTY_EDITOR
 import { AgentSettingsFeedback } from './features/agents/AgentSettingsFeedback';
 import { AgentModelEditor, modelSelectionSummary } from './features/agents/AgentModelEditor';
 import { HermesRootFields } from './features/agents/HermesRootFields';
-import { agentBrand, agentDisplayName, agentEcosystem, agentPageEntries, agentSupportsCollaboration, agentSupportsModelRouting } from './features/agents/ecosystems';
+import { agentBrand, agentDisplayName, agentEcosystem, agentPageEntries, agentSupportsCollaboration, agentSupportsManagement, agentSupportsModelRouting } from './features/agents/ecosystems';
 import { agentHasNoModelConnection, agentModelStatus } from './features/agents/status';
 import { collaborationCheckFailureMessage } from './features/agents/collaboration-check-feedback';
 import { agentSettingsSpec, agentTokenSpec, prerequisiteCheck } from './features/agents/settings-request';
@@ -86,11 +89,12 @@ export function Agents({
   const [snapshot, setSnapshot] = useState<AgentSnapshot | null>(null);
   const [busy, setBusy] = useState(false);
   const [busyText, setBusyText] = useState('');
-  const hermesTargets = useRef<AgentNativeTarget[]>([]);
+  const hermesTargets = useRef<AgentNativeTarget[]>(loadAgentDiscoveryTargets());
+  const [scanning, setScanning] = useState(false);
   const [hermesRootOpen, setHermesRootOpen] = useState(false);
   const [hermesRoot, setHermesRoot] = useState('');
   const agentKey = (agent: Agent) => agent.agent_id === 'agent_hermes_default'
-    ? `${agent.agent_id}:${agent.context_id ?? ''}` : agent.agent_id;
+    ? `${agent.agent_id}:${agent.native_target?.config_root ?? agent.context_id ?? ''}` : agent.agent_id;
   const [loadError, setLoadError] = useState('');
   const [actionError, setActionErrorCode] = useState('');
   const [actionErrorHint, setActionErrorHint] = useState<string | null>(null);
@@ -129,6 +133,7 @@ export function Agents({
 
   async function refresh() {
     const epoch = ++queryGeneration.current;
+    setScanning(true);
     try {
       const result = await invoke<AgentSnapshot>('agent_snapshot', { nativeTargets: hermesTargets.current });
       if (epoch === queryGeneration.current) {
@@ -137,18 +142,19 @@ export function Agents({
       }
     } catch (caught) {
       if (epoch === queryGeneration.current) setLoadError(desktopErrorCode(caught));
-    }
+    } finally { if (epoch === queryGeneration.current) setScanning(false); }
   }
   async function discoverHermes() {
     if (busy || !hermesRoot.trim().startsWith('/')) return;
     setBusy(true); setActionError('');
     try {
       const target: AgentNativeTarget = { kind: 'hermes', config_root: hermesRoot.trim() };
-      const targets = [...hermesTargets.current.filter(existing => existing.config_root !== target.config_root), target];
+      const targets = [...hermesTargets.current.filter(existing => existing.kind !== target.kind), target];
       const result = await invoke<AgentSnapshot>('agent_snapshot', { nativeTargets: targets });
       const candidate = [...result.agents].reverse().find(agent => agent.agent_id === 'agent_hermes_default' && agent.native_target);
-      if (!candidate?.context_id) throw new Error('AGENT_INPUT_INVALID');
-      hermesTargets.current = targets;
+      if (!candidate?.context_id || !candidate.native_target) throw new Error(candidate?.status_error ?? 'AGENT_INPUT_INVALID');
+      hermesTargets.current = [...targets.filter(existing => existing.kind !== candidate.native_target!.kind), candidate.native_target];
+      if (!saveAgentDiscoveryTargets(hermesTargets.current)) setNotice(text('目录已选择，但无法记住此选择；下次启动可能需要重新选择。', 'Directory selected, but this preference could not be saved. Select it again after restarting.'));
       setSnapshot(result); setSelectedAgent(agentKey(candidate)); setHermesRootOpen(false);
     } catch (error) { setActionFailure(error); }
     finally { setBusy(false); }
@@ -400,7 +406,7 @@ export function Agents({
     ?? (selectedAgent?.startsWith('agent_hermes_default:')
       ? agents.find(agent => agent.agent_id === 'agent_hermes_default' && !agent.context_id) : undefined)
     ?? (selectedAgent === null ? agents[0] : undefined);
-  const selectedManagement = agentModelStatus(selected)?.management_skill;
+  const selectedManagement = selected?.settings?.management_skill;
   const selectedCollaboration = selected?.settings?.collaboration;
   const selectedModel = agentModelStatus(selected);
   const modelSelection = selectedModel?.current_selection;
@@ -415,7 +421,9 @@ export function Agents({
   const hermesRecoveryOperation = selected?.agent_id === 'agent_hermes_default' && !selected.status_error
     ? [selectedModel, selectedManagement].find(facet => ['pending', 'needs_attention'].includes(facet?.state ?? ''))?.operation_id
     : undefined;
-  const settingsRecoveryOperation = qoderRecoveryOperation ?? hermesRecoveryOperation;
+  const settingsRecoveryOperation = qoderRecoveryOperation ?? hermesRecoveryOperation
+    ?? (!selected?.status_error ? [selectedModel, selectedManagement, selectedCollaboration]
+      .find(facet => ['pending', 'needs_attention'].includes(facet?.state ?? ''))?.operation_id : undefined);
   async function retrySettingsOperation(operationId: string) {
     if (!selected?.context_id || busy || !snapshot?.trusted_authority) return;
     setBusy(true); setActionError('');
@@ -430,7 +438,7 @@ export function Agents({
     switch (state) {
       case 'not_found_in_scope':
         return {
-          label: text('未发现安装', 'Not installed'),
+          label: text('未发现入口', 'Entry not found'),
           title: text('当前配置范围内未找到 Agent 入口', 'No Agent entry was found in this configuration scope'),
           detail: text('请确认 Agent 已安装，或重新扫描当前环境。', 'Confirm that the Agent is installed, or scan the current environment again.'),
         };
@@ -494,6 +502,7 @@ export function Agents({
       </div>
       {!snapshot && !loadError && <div className="empty-state" role="status"><div><span className="oc-spinner" /><p>{text('正在读取本地 Agent…', 'Reading local Agents…')}</p></div></div>}
       {!snapshot && loadError && <div className="empty-state" data-error-code={loadError}><div><span className="empty-icon"><UiIcon name="agent" /></span><h2>{text('暂时无法读取 Agent', 'Agents are temporarily unavailable')}</h2><p>{text('请确认本机服务正在运行，然后重试。', 'Make sure the local service is running, then retry.')}</p><button className="btn btn-primary" type="button" onClick={() => void refresh()}>{text('重试', 'Retry')}</button></div></div>}
+      <div className="actions"><button className="btn btn-quiet" type="button" data-agent-rescan disabled={busy || scanning} onClick={() => void refresh()}>{scanning ? text('扫描中…', 'Scanning…') : text('重新扫描', 'Scan again')}</button></div>
       {tab === 'tasks'
         ? <AgentTasks language={language} read={taskRead} initialTaskId={initialTaskId} onCancel={onTaskCancel} onConfirmResidual={onTaskConfirmResidual} onOpenSession={onOpenTaskSession} onBackToAgents={() => setTab('configuration')} onRefresh={onOpenTasks} onLoadMore={onLoadMoreTasks} onReadTask={onReadTask} onLoadTaskResult={onLoadTaskResult} active={active} />
         : snapshot && !agents.length
@@ -507,7 +516,7 @@ export function Agents({
                   const statePending = agentModelStatus(agent)?.state === 'pending' || agent.settings?.collaboration?.state === 'pending';
                   const executableState = executableDiagnostic(agent.configuration_state);
                   const stateLabel = agent.configuration_state === 'profile_not_selected'
-                    ? text('未选择配置目录', 'Configuration directory not selected')
+                    ? text('未发现本机配置', 'No local configuration found')
                     : agent.status_error
                     ? text('状态待确认', 'Status unverified')
                     : executableState
@@ -533,7 +542,7 @@ export function Agents({
               {selected && snapshot && <div className="detail-inner" data-agent-id={selected.agent_id}>
                 <header className="detail-hero"><div className="detail-identity"><BrandIcon kind={brand(selected)} label={`${agentName(selected)} logo`} /><div><h2>{agentName(selected)}</h2><p>{text('选择你需要的路由能力', 'Choose the routing capabilities you need')}</p></div></div></header>
                 {agentEcosystem(selected.agent_id) === 'hermes' && <section className="detail-section v3-agent-section" data-hermes-profile>
-                  <div className="detail-section-head"><h3>{text('配置目录', 'Configuration directory')}</h3><button type="button" className="btn btn-quiet" data-hermes-select-root disabled={busy} onClick={() => { setHermesRoot(selected.native_target?.config_root ?? ''); setActionError(''); setHermesRootOpen(true); }}>{selected.native_target ? text('更改', 'Change') : text('选择目录', 'Select directory')}</button></div>
+                  <div className="detail-section-head"><h3>{text('配置目录', 'Configuration directory')}</h3><button type="button" className="btn btn-quiet" data-hermes-select-root disabled={busy} onClick={() => { setHermesRoot(selected.native_target?.config_root ?? ''); setActionError(''); setHermesRootOpen(true); }}>{selected.native_target ? text('更改', 'Change') : text('手动选择目录', 'Select directory manually')}</button></div>
                   {selected.native_target
                     ? <p className="field-help">{selected.native_target.config_root}</p>
                     : <p>{text('选择本机 Hermes 实际使用的配置目录，即可配置模型路由和 HiRoute 管理 Skill。独立 profile 请选对应目录。', 'Select the configuration directory used by Hermes on this computer to configure model routing and the HiRoute management Skill. For a separate profile, select its directory.')}</p>}
@@ -543,7 +552,7 @@ export function Agents({
                   const access = selected.codex_access;
                   if (access?.pending_operation) await retrySettingsOperation(access.pending_operation);
                 }} />}
-                {selected.status_error && <div className="callout warn" data-error-code={selected.status_error}><UiIcon name="warning" /><div><strong>{text('暂时无法核实 Agent 状态', 'Agent status is temporarily unavailable')}</strong><p>{text('当前仍显示已发现的 Agent；重新读取成功前不会把未知状态当作已接入。', 'The detected Agent remains visible. Unknown status is not treated as connected until it can be read again.')}</p><button className="btn" type="button" onClick={() => void refresh()}>{text('重新读取', 'Try again')}</button></div></div>}
+                <AgentDiscoveryFeedback agent={selected} language={language} scanning={scanning} onScan={() => void refresh()} />
                 {executableStatus}
                 {selectedHasDrift && <div className="callout warn"><UiIcon name="warning" /><div><strong>{text('接入配置已变化', 'Connection settings changed')}</strong><p>{text('HiRoute 不会覆盖已变化的设置。请在“连接详情与恢复”中恢复需要的路由配置。', 'HiRoute will not overwrite changed settings. Restore the required routing configuration under Connection details and recovery.')}</p></div></div>}
                 {settingsRecoveryOperation && <div className="callout warn" role="alert" data-qoder-model-recovery={qoderRecoveryOperation ? true : undefined} data-hermes-settings-recovery={hermesRecoveryOperation ? true : undefined}>
@@ -572,13 +581,14 @@ export function Agents({
                     : taskSelection
                       ? text('仅在你明确要求执行或委派任务时，将任务交给执行 Agent。', 'Delegate work to an execution Agent only when you explicitly ask for execution or delegation.')
                       : text('让此 Agent 将任务交给合适的执行 Agent，并获取结果。', 'Let this Agent delegate work to a suitable execution Agent and retrieve the results.')}</p>
+                  <AgentSkillDetails resource={selectedCollaboration?.resource} language={language} />
                   <p className="field-help">{text('启用后，可在对话中说：“使用 HiRoute，将当前任务委派给【路由名称】执行。”路由名称见“智能路由”，也可让 Agent 选择合适的路由。', 'After enabling, ask in conversation: “Use HiRoute to delegate this task to [route name].” Find route names under Smart routing, or ask the Agent to choose a suitable route.')}</p>
                 </section>}
-                {agentEcosystem(selected.agent_id) === 'hermes' && <section className="detail-section v3-agent-section" data-hermes-management>
+                {agentSupportsManagement(selected.agent_id) && <section className="detail-section v3-agent-section" data-agent-management data-hermes-management={agentEcosystem(selected.agent_id) === 'hermes' ? true : undefined}>
                   <div className="detail-section-head"><h3>{text('HiRoute 管理', 'HiRoute management')}</h3><button className="btn btn-quiet" data-agent-facet="management_skill" disabled={busy || !selected.context_id || !mutable} onClick={event => open(selected, 'management_skill', event.currentTarget)}>{selectedManagement?.state === 'configured' ? text('调整', 'Edit') : text('准备', 'Prepare')}</button></div>
-                  <p>{text('安装管理 Skill，让 Hermes 通过 CLI 管理模型来源和智能路由。无需先连接模型，可独立恢复。', 'Install the management Skill so Hermes can manage model sources and smart routes through the CLI. It works independently of model routing and can be restored separately.')}</p>
+                  <p>{text('准备管理 Skill，让此 Agent 通过本机 CLI 管理模型来源和智能路由。可独立启用或恢复，无需先连接模型。', 'Prepare the management Skill so this Agent can manage model sources and smart routes through the local CLI. Enable or restore it independently, without model routing.')}</p>
                   {selectedManagement?.restore_point_ref && <button className="btn" disabled={busy || !mutable} onClick={event => void change(selected, 'management_skill', true, event.currentTarget)}>{text('恢复管理 Skill', 'Restore management Skill')}</button>}
-                  <p className="field-help">{text('Hermes 的 Worker 和任务协作配置不在此接入中。', 'This integration does not configure Hermes as a Worker or enable task collaboration.')}</p>
+                  <AgentSkillDetails resource={selectedManagement?.resource} language={language} management />
                 </section>}
                 {selectedModel?.native_adapter && <p className="field-help" data-hermes-resource-state>{selectedModel.native_adapter.resources_installed
                   ? text('适配插件已准备；当前 Hermes 进程的加载状态尚未确认。请重新加载插件或开启新会话。', 'Adapter files are prepared; loading in the current Hermes process is unobserved. Reload plugins or start a new session.')
@@ -599,7 +609,7 @@ export function Agents({
                         onChange={setEditorValues}
                         onEdited={(clearNotice = true) => { setPreview(null); setActionError(''); if (clearNotice) setNotice(''); }}
                         onCreatePlan={onCreatePlan ? createPlanFromEditor : undefined} />}
-                      {editor.facet === 'management_skill' && <div className="additional-model-editor"><label className="field-label">{text('Hermes 配置目录', 'Hermes configuration directory')}<input className="input" readOnly value={selected.native_target?.config_root ?? ''} /></label><p>{text('准备后，Hermes 可读取 HiRoute 管理 Skill 并通过本机 CLI 配置 HiRoute。模型路由保留当前状态；此操作不调用模型。', 'Hermes can read the management Skill and configure HiRoute through the local CLI. Current model routing is retained; this operation does not call a model.')}</p></div>}
+                      {editor.facet === 'management_skill' && <div className="additional-model-editor"><p>{text('准备后，此 Agent 可读取 HiRoute 管理 Skill 并通过本机 CLI 配置 HiRoute。模型路由和任务路由保持当前设置；此操作不调用模型。', 'This Agent can read the management Skill and configure HiRoute through the local CLI. Model and task routing keep their current settings; this operation does not call a model.')}</p><AgentSkillDetails resource={selectedManagement?.resource} language={language} management /></div>}
                       {editor.facet === 'collaboration' && <fieldset className="worker-choices"><legend className="field-label">{text('委派时机', 'When to delegate')}</legend><label className="check-row"><input type="radio" name="agent-collaboration-trigger" value="explicit" checked={editorValues.triggerMode === 'explicit'} onChange={() => setTriggerMode('explicit')} /><div><strong>{text('仅在明确要求时', 'Only when explicitly requested')}</strong><span>{text('只有当你要求执行、委派或交给 Worker 时，Agent 才会启动任务。', 'The Agent starts a task only when you ask it to execute, delegate, or hand work to a Worker.')}</span></div></label><label className="check-row"><input type="radio" name="agent-collaboration-trigger" value="delegate_by_default" checked={editorValues.triggerMode === 'delegate_by_default'} onChange={() => setTriggerMode('delegate_by_default')} /><div><strong>{text('默认由 Agent 判断', 'Let the Agent decide by default')}</strong><span>{text('Agent 可以主动委派适合执行的任务；明确要求只回答时不会启动任务。', 'The Agent may proactively delegate suitable work, but will not start a task when you explicitly ask for an answer only.')}</span></div></label><p className="field-help">{text('可委派的任务路由在“智能路由”中管理。', 'Manage routes available for task delegation under Smart routing.')}</p></fieldset>}
                       {!selectionKnown && <div className="callout warn" role="alert"><UiIcon name="warning" /><span>{text('当前配置状态无法核实，不能覆盖保存。请刷新或处理配置变化。', 'The current setting cannot be verified. Refresh or resolve configuration changes before saving.')}</span></div>}
                     </fieldset>

@@ -71,7 +71,7 @@ export function AgentSettingsFeedback({ preview, agent: selected, facet, default
           ? text('当前配置的恢复记录不可用。请刷新连接详情并核对原来的操作记录，再重试恢复。', 'The restore record for this configuration is unavailable. Refresh connection details and check the original operation before retrying restore.')
         : capabilities.has('skill_loading') || capabilities.has('trusted_cli_execution')
           ? management
-            ? text('尚未确认 Hermes 能加载管理 Skill。请检查所选 Hermes 安装及本机 CLI。', 'Hermes management Skill loading is unconfirmed. Check the selected Hermes installation and local CLI.')
+            ? text('尚未确认此 Agent 能加载管理 Skill。请检查所选安装及本机 CLI。', 'Management Skill loading is unconfirmed. Check the selected Agent installation and local CLI.')
             : text('任务委派技能尚未确认。', 'Task delegation skill capability is unconfirmed.')
           : text('有前置条件尚未满足，请检查当前 Agent 状态。', 'A prerequisite is unmet. Check the current Agent state.');
       return <p key={index}>{message}</p>;

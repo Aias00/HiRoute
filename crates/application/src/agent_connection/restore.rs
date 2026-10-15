@@ -367,7 +367,9 @@ fn fingerprint_for(
         // connect/restore plan, so no V1 fingerprint slot exists for it.
         AgentConnectionEffectRoleV1::LoginItem
         | AgentConnectionEffectRoleV1::HermesPluginModule
-        | AgentConnectionEffectRoleV1::HermesPluginManifest => None,
+        | AgentConnectionEffectRoleV1::HermesPluginManifest
+        | AgentConnectionEffectRoleV1::ManagementSkill
+        | AgentConnectionEffectRoleV1::CollaborationSkill => None,
     }
 }
 
