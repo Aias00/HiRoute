@@ -397,6 +397,8 @@ export function Agents({
   const enabledPlans = plans.filter(plan => plan.head.status === 'enabled');
   const agents = snapshot ? agentPageEntries(snapshot.agents) : [];
   const selected = agents.find(agent => agentKey(agent) === selectedAgent || agent.agent_id === selectedAgent)
+    ?? (selectedAgent?.startsWith('agent_hermes_default:')
+      ? agents.find(agent => agent.agent_id === 'agent_hermes_default' && !agent.context_id) : undefined)
     ?? (selectedAgent === null ? agents[0] : undefined);
   const selectedManagement = agentModelStatus(selected)?.management_skill;
   const selectedCollaboration = selected?.settings?.collaboration;
