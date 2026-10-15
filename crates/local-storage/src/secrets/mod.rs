@@ -1,8 +1,6 @@
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::fs;
-#[cfg(not(windows))]
-use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 #[cfg(test)]
@@ -1752,10 +1750,7 @@ fn load_key_material(path: &Path) -> Result<Option<KeyMaterial>, LocalStorageErr
     match fs::symlink_metadata(path) {
         Ok(metadata) => {
             validate_owner_file(&metadata)?;
-            #[cfg(windows)]
-            let mut file = hiroute_platform::windows::security::open_owner_only(path, false)?;
-            #[cfg(not(windows))]
-            let mut file = File::open(path)?;
+            let mut file = hiroute_platform::private_fs::open_private_file(path)?;
             let mut header = [0_u8; 8];
             file.read_exact(&mut header)?;
             if &header != MASTER_KEY_HEADER {
@@ -1801,7 +1796,7 @@ fn load_key_material(path: &Path) -> Result<Option<KeyMaterial>, LocalStorageErr
 
 fn create_key_material(path: &Path) -> Result<KeyMaterial, LocalStorageError> {
     let parent = path.parent().ok_or(LocalStorageError::InvalidData)?;
-    prepare_owner_directory(parent)?;
+    crate::prepare_owner_directory(parent)?;
     let mut bytes = Zeroizing::new(vec![0_u8; MASTER_KEY_BYTES]);
     let mut uuid = [0_u8; STORE_UUID_BYTES];
     getrandom::fill(&mut bytes).map_err(|_| LocalStorageError::Crypto)?;
@@ -1835,31 +1830,6 @@ fn key_verifier_for(bytes: &[u8]) -> CanonicalDigest {
     let mut material = b"hiroute-secret-key-verifier-v1\0".to_vec();
     material.extend_from_slice(bytes);
     CanonicalDigest::of_bytes(&material)
-}
-
-fn prepare_owner_directory(path: &Path) -> Result<(), LocalStorageError> {
-    #[cfg(windows)]
-    {
-        let _held = hiroute_platform::windows::security::ensure_private_directory(path)?;
-        return Ok(());
-    }
-    #[cfg(not(windows))]
-    {
-        if path.exists() {
-            let metadata = fs::symlink_metadata(path)?;
-            if metadata.file_type().is_symlink() || !metadata.file_type().is_dir() {
-                return Err(LocalStorageError::Permission);
-            }
-        } else {
-            fs::create_dir_all(path)?;
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
-            }
-        }
-        Ok(())
-    }
 }
 
 fn validate_owner_file(metadata: &fs::Metadata) -> Result<(), LocalStorageError> {

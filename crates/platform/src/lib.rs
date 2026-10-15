@@ -6,6 +6,7 @@
 pub mod durable;
 pub mod file_security;
 pub mod local_record;
+pub mod private_fs;
 
 #[cfg(windows)]
 pub mod windows;

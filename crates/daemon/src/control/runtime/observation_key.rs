@@ -56,21 +56,8 @@ pub(super) fn observation_workspace_key(
     Err(INVALID.into())
 }
 
-#[cfg(windows)]
 fn open_key(path: &Path) -> std::io::Result<File> {
-    hiroute_platform::windows::security::open_owner_only(path, false)
-}
-
-#[cfg(not(windows))]
-fn open_key(path: &Path) -> std::io::Result<File> {
-    let mut options = std::fs::OpenOptions::new();
-    options.read(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.custom_flags(nix::libc::O_NOFOLLOW | nix::libc::O_NONBLOCK);
-    }
-    options.open(path)
+    hiroute_platform::private_fs::open_private_file(path)
 }
 
 #[cfg(test)]

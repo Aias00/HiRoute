@@ -46,38 +46,11 @@ pub(super) fn temporary(prefix: &str) -> io::Result<PrivateProbeRoot> {
 }
 
 pub(super) fn directory(path: &Path) -> io::Result<()> {
-    #[cfg(windows)]
-    {
-        hiroute_platform::windows::security::create_owner_only_directory(path).map(drop)
-    }
-    #[cfg(not(windows))]
-    {
-        let mut builder = fs::DirBuilder::new();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::DirBuilderExt;
-            builder.mode(0o700);
-        }
-        builder.create(path)
-    }
+    hiroute_platform::private_fs::create_directory(path)
 }
 
 pub(super) fn file(path: &Path) -> io::Result<File> {
-    #[cfg(windows)]
-    {
-        hiroute_platform::windows::security::create_owner_only_file(path)
-    }
-    #[cfg(not(windows))]
-    {
-        let mut options = fs::OpenOptions::new();
-        options.create_new(true).read(true).write(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        options.open(path)
-    }
+    hiroute_platform::private_fs::create_file(path, hiroute_platform::private_fs::FileMode::Data)
 }
 
 pub(super) fn executable(path: &Path) -> io::Result<()> {

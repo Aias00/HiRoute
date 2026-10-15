@@ -1,10 +1,28 @@
 # Operating-system primitives
 
-This crate owns Windows kernel handles and FFI used by headless hosts. It does
+This crate owns shared filesystem primitives and Windows kernel handles/FFI. It does
 not select an Agent, authorize a business command, or own business state.
 `windows::background` owns the native Task Scheduler and Service Control Manager
 adapters, fixed Known Folder resolution, and their closed installation definitions.
 The CLI and host runtime select lifecycle policy and maintain installation journals.
+
+`private_fs` is the cross-platform entry for new private directories/files, storage
+directory preparation, regular/private handle reads, single-link checks and owned
+temporary directory removal. Unix and Windows implementations stay in separate
+leaves. Storage preparation preserves existing Unix directory modes; it does not
+adopt borrowed Agent directories. New objects receive 0700/0600 modes or the current
+Windows user's private descriptor at creation. Executable run materials retain their
+explicit Unix 0700 intent. Reads reject linked/special leaf entries without changing
+permissions; Windows private reads also validate the owner/DACL. Payload limits,
+format checks, storage error mapping and borrowed configuration restoration remain
+with their existing owners.
+
+`private_fs::OwnedDirectory` admits only a newly created root and retains its
+identity. Its explicit removal preserves Unix identity-checked recursive deletion
+and Windows bounded handle-relative deletion. It has no automatic Drop cleanup:
+the Worker owner decides when processes are stopped and materials can be removed.
+The shared [private material cases](src/private_fs/tests.rs) cover non-adoption,
+exclusive creation, executable intent, protected reads and cleanup boundaries.
 
 `windows::security` is the shared implementation of the Gateway's existing
 owner-only ACL creation, verification, and held volume/file-index identity.

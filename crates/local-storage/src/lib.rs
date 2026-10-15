@@ -581,6 +581,14 @@ pub enum LocalStorageError {
     Locked,
 }
 
+fn prepare_owner_directory(path: &Path) -> Result<(), LocalStorageError> {
+    use hiroute_platform::private_fs::{self, DirectoryError};
+    private_fs::prepare_storage_directory(path).map_err(|error| match error {
+        DirectoryError::NotDirectory => LocalStorageError::Permission,
+        DirectoryError::Io(error) => LocalStorageError::Io(error),
+    })
+}
+
 impl LocalStorageError {
     pub(crate) fn at_upgrade_stage(self, stage: &'static str) -> Self {
         Self::UpgradeStage {

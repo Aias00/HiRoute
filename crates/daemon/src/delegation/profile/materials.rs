@@ -75,20 +75,8 @@ impl TaskSessionRoot {
         let newly_created = matches!(usage, SessionRootUse::New);
         match usage {
             SessionRootUse::New => {
-                #[cfg(not(windows))]
-                let mut builder = fs::DirBuilder::new();
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::DirBuilderExt;
-                    builder.mode(0o700);
-                }
-                // No create_dir_all/reuse/chmod/remove of an unknown existing task directory.
-                #[cfg(not(windows))]
-                builder
-                    .create(&path)
-                    .map_err(|_| DelegationErrorV1::Conflict)?;
-                #[cfg(windows)]
-                hiroute_platform::windows::security::create_owner_only_directory(&path)
+                // Never reuse or change permissions on an unknown task directory.
+                hiroute_platform::private_fs::create_directory(&path)
                     .map_err(|_| DelegationErrorV1::Conflict)?;
             }
             SessionRootUse::Continue { required_history } => {
@@ -553,29 +541,8 @@ fn linked(metadata: &fs::Metadata) -> bool {
 }
 
 fn open_marker(path: &Path) -> Result<fs::File, DelegationErrorV1> {
-    #[cfg(windows)]
-    return hiroute_platform::windows::security::open_identity(path, false)
-        .map_err(|_| DelegationErrorV1::ResumeUnavailable);
-    #[cfg(not(windows))]
-    {
-        let mut options = fs::OpenOptions::new();
-        options.read(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.custom_flags(nix::libc::O_NOFOLLOW | nix::libc::O_NONBLOCK);
-        }
-        #[cfg(windows)]
-        {
-            use std::os::windows::fs::OpenOptionsExt;
-            // No reparse traversal and no delete sharing while marker bytes and
-            // file identity are verified through this same handle.
-            options.custom_flags(0x00200000).share_mode(1);
-        }
-        options
-            .open(path)
-            .map_err(|_| DelegationErrorV1::ResumeUnavailable)
-    }
+    hiroute_platform::private_fs::open_regular_file(path)
+        .map_err(|_| DelegationErrorV1::ResumeUnavailable)
 }
 
 fn filesystem_identity(

@@ -1,8 +1,6 @@
 //! Private handoff from the standalone CLI to its independently launched service.
 use std::collections::BTreeMap;
 use std::ffi::OsString;
-#[cfg(not(windows))]
-use std::fs::OpenOptions;
 use std::fs::{self, File};
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -153,19 +151,8 @@ fn validate_directories(home: &Path, create: bool) -> Result<bool, ServiceProxyE
                     .map_err(|_| ServiceProxyError)?;
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound && create => {
-                #[cfg(windows)]
-                hiroute_platform::windows::security::create_owner_only_directory(&path)
+                hiroute_platform::private_fs::create_directory(&path)
                     .map_err(|_| ServiceProxyError)?;
-                #[cfg(not(windows))]
-                {
-                    let mut builder = fs::DirBuilder::new();
-                    #[cfg(unix)]
-                    {
-                        use std::os::unix::fs::DirBuilderExt;
-                        builder.mode(0o700);
-                    }
-                    builder.create(&path).map_err(|_| ServiceProxyError)?;
-                }
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
             Err(_) => return Err(ServiceProxyError),
@@ -175,19 +162,7 @@ fn validate_directories(home: &Path, create: bool) -> Result<bool, ServiceProxyE
 }
 
 fn open_private(path: &Path) -> Result<Option<File>, ServiceProxyError> {
-    #[cfg(windows)]
-    let opened = hiroute_platform::windows::security::open_identity(path, false);
-    #[cfg(not(windows))]
-    let opened = {
-        let mut options = OpenOptions::new();
-        options.read(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.custom_flags(nix::libc::O_NOFOLLOW | nix::libc::O_NONBLOCK);
-        }
-        options.open(path)
-    };
+    let opened = hiroute_platform::private_fs::open_regular_file(path);
     let file = match opened {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),

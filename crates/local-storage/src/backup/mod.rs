@@ -59,7 +59,7 @@ impl SqliteBackup {
         key_id: Option<&CanonicalDigest>,
     ) -> Result<Self, LocalStorageError> {
         let parent = path.parent().ok_or(LocalStorageError::InvalidData)?;
-        prepare_owner_directory(parent)?;
+        crate::prepare_owner_directory(parent)?;
         let attempt_id = random_attempt_id()?;
         let file_name = path
             .file_name()
@@ -209,7 +209,7 @@ impl SqliteBackup {
             return Err(LocalStorageError::InvalidData);
         }
         let parent = destination.parent().ok_or(LocalStorageError::InvalidData)?;
-        prepare_owner_directory(parent)?;
+        crate::prepare_owner_directory(parent)?;
         let attempt = random_attempt_id()?;
         let temporary = parent.join(format!(".restore-{attempt}.stage.db"));
         #[cfg(windows)]
@@ -391,7 +391,7 @@ impl BackupSet {
         target_schema_version: u32,
         startup_migration: bool,
     ) -> Result<Self, LocalStorageError> {
-        prepare_owner_directory(backup_root)?;
+        crate::prepare_owner_directory(backup_root)?;
         if reconcile_set_manifest_publication(backup_root)? {
             let existing = Self::open_inner(backup_root)?;
             if existing.target_schema_version != target_schema_version
@@ -467,7 +467,7 @@ impl BackupSet {
     }
 
     pub(crate) fn open_inner(backup_root: &Path) -> Result<Self, LocalStorageError> {
-        prepare_owner_directory(backup_root)?;
+        crate::prepare_owner_directory(backup_root)?;
         if !reconcile_set_manifest_publication(backup_root)? {
             return Err(LocalStorageError::InvalidData);
         }
@@ -482,7 +482,7 @@ impl BackupSet {
         if !backup_root.exists() {
             return Ok(false);
         }
-        prepare_owner_directory(backup_root)?;
+        crate::prepare_owner_directory(backup_root)?;
         reconcile_set_manifest_publication(backup_root)
     }
 
@@ -555,7 +555,7 @@ impl BackupSet {
             return validate_restored_set(destination, &expected);
         }
         let parent = destination.parent().ok_or(LocalStorageError::InvalidData)?;
-        prepare_owner_directory(parent)?;
+        crate::prepare_owner_directory(parent)?;
         let name = destination
             .file_name()
             .and_then(|name| name.to_str())
@@ -599,7 +599,7 @@ impl BackupSet {
             self.persist_phase(barrier, BackupSetPhase::Restoring)?;
         }
         let parent = live_root.parent().ok_or(LocalStorageError::InvalidData)?;
-        prepare_owner_directory(parent)?;
+        crate::prepare_owner_directory(parent)?;
         let live_name = live_root
             .file_name()
             .and_then(|name| name.to_str())
@@ -1214,41 +1214,6 @@ fn validate_database(path: &Path) -> Result<(), LocalStorageError> {
     }
 }
 
-fn prepare_owner_directory(path: &Path) -> Result<(), LocalStorageError> {
-    #[cfg(windows)]
-    {
-        let _held = hiroute_platform::windows::security::ensure_private_directory(path)?;
-        return Ok(());
-    }
-    #[cfg(not(windows))]
-    {
-        if path.exists() {
-            let metadata = fs::symlink_metadata(path)?;
-            if metadata.file_type().is_symlink() || !metadata.file_type().is_dir() {
-                return Err(LocalStorageError::Permission);
-            }
-        } else {
-            fs::create_dir_all(path)?;
-            set_owner_directory_permissions(path)?;
-        }
-        Ok(())
-    }
-}
-
-#[cfg(not(windows))]
-fn set_owner_directory_permissions(path: &Path) -> Result<(), LocalStorageError> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
-    }
-    let metadata = fs::symlink_metadata(path)?;
-    if metadata.file_type().is_symlink() || !metadata.file_type().is_dir() {
-        return Err(LocalStorageError::Permission);
-    }
-    Ok(())
-}
-
 fn set_owner_file_permissions(path: &Path) -> Result<(), LocalStorageError> {
     #[cfg(windows)]
     hiroute_platform::windows::security::verify_owner_only(path, false)?;
@@ -1377,7 +1342,7 @@ mod tests {
         });
         let backup_path = root.join("backups/control.db");
         let parent = backup_path.parent().unwrap();
-        prepare_owner_directory(parent).unwrap();
+        crate::prepare_owner_directory(parent).unwrap();
 
         for crash_id in ["after-vacuum-one", "after-vacuum-two"] {
             let orphan = parent.join(format!(".control.db.{crash_id}.stage.db"));
@@ -1435,7 +1400,7 @@ mod tests {
         .unwrap();
         let backup_path = root.join("backups/control.db");
         let parent = backup_path.parent().unwrap();
-        prepare_owner_directory(parent).unwrap();
+        crate::prepare_owner_directory(parent).unwrap();
         let target = root.join("must-not-change");
         fs::write(&target, b"owner-data").unwrap();
         set_owner_file_permissions(&target).unwrap();

@@ -6,7 +6,7 @@
 #[cfg(any(not(windows), test))]
 use std::fs;
 #[cfg(not(windows))]
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::io::{self, Write};
 use std::path::Path;
 
@@ -67,14 +67,7 @@ pub fn write_private_new(path: &Path, bytes: &[u8]) -> io::Result<()> {
 
 #[cfg(not(windows))]
 fn create_private_new(path: &Path) -> io::Result<File> {
-    let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    options.open(path)
+    crate::private_fs::create_file(path, crate::private_fs::FileMode::Data)
 }
 
 #[cfg(unix)]

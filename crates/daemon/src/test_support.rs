@@ -95,7 +95,13 @@ fn isolated_agent_home_inner(
         "CLAUDE_CODE_USE_BEDROCK",
         "CLAUDE_CODE_USE_FOUNDRY",
         "CLAUDE_CODE_USE_VERTEX",
-    ] {
+    ]
+    .into_iter()
+    .chain(
+        hiroute_domain::CLAUDE_CONTEXT_CONFLICT_ENVIRONMENT
+            .iter()
+            .copied(),
+    ) {
         command.env_remove(name);
     }
     let status = command.status().unwrap();

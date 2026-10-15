@@ -137,7 +137,7 @@ fn open_database_internal(
     durable_set_target: Option<u32>,
 ) -> Result<Connection, LocalStorageError> {
     let parent = path.parent().ok_or(LocalStorageError::InvalidData)?;
-    prepare_owner_directory(parent)?;
+    crate::prepare_owner_directory(parent)?;
     #[cfg(windows)]
     let _database_identity = prepare_sqlite_file(path)?;
     #[cfg(windows)]
@@ -243,33 +243,8 @@ fn initialize_storage_meta(
     Ok(())
 }
 
-fn prepare_owner_directory(path: &Path) -> Result<(), LocalStorageError> {
-    #[cfg(windows)]
-    {
-        let _held = hiroute_platform::windows::security::ensure_private_directory(path)?;
-        return Ok(());
-    }
-    #[cfg(not(windows))]
-    {
-        if path.exists() {
-            let metadata = fs::symlink_metadata(path)?;
-            if metadata.file_type().is_symlink() || !metadata.file_type().is_dir() {
-                return Err(LocalStorageError::Permission);
-            }
-        } else {
-            fs::create_dir_all(path)?;
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
-            }
-        }
-        Ok(())
-    }
-}
-
 pub(crate) fn prepare_storage_root(path: &Path) -> Result<(), LocalStorageError> {
-    prepare_owner_directory(path)
+    crate::prepare_owner_directory(path)
 }
 
 pub(crate) fn validate_owner_file(path: &Path) -> Result<(), LocalStorageError> {
@@ -431,7 +406,7 @@ impl MigrationSetCoordinator {
         if !live_root.exists() && durable_present {
             return Err(LocalStorageError::InvalidData);
         }
-        prepare_owner_directory(live_root)?;
+        crate::prepare_owner_directory(live_root)?;
         let paths = live_database_paths(live_root);
         let versions = [
             database_version(&paths[0])?,

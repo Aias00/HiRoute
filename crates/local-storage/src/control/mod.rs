@@ -2000,8 +2000,8 @@ impl ManagedArtifactStore {
         root: impl AsRef<Path>,
         restore_root: impl AsRef<Path>,
     ) -> Result<Self, LocalStorageError> {
-        prepare_owner_directory(root.as_ref())?;
-        prepare_owner_directory(restore_root.as_ref())?;
+        crate::prepare_owner_directory(root.as_ref())?;
+        crate::prepare_owner_directory(restore_root.as_ref())?;
         let restore = load_or_create_restore_key(
             &restore_root.as_ref().join(".restore-key"),
             restore_root.as_ref(),
@@ -2053,8 +2053,8 @@ impl ManagedArtifactStore {
             }
             external_targets.insert(target, path);
         }
-        prepare_owner_directory(root.as_ref())?;
-        prepare_owner_directory(restore_root.as_ref())?;
+        crate::prepare_owner_directory(root.as_ref())?;
+        crate::prepare_owner_directory(restore_root.as_ref())?;
         let restore = load_or_create_restore_key(
             &restore_root.as_ref().join(".restore-key"),
             restore_root.as_ref(),
@@ -3077,31 +3077,6 @@ impl ManagedArtifactStore {
     }
 }
 
-fn prepare_owner_directory(path: &Path) -> Result<(), LocalStorageError> {
-    #[cfg(windows)]
-    {
-        let _held = hiroute_platform::windows::security::ensure_private_directory(path)?;
-        return Ok(());
-    }
-    #[cfg(not(windows))]
-    {
-        if path.exists() {
-            let metadata = fs::symlink_metadata(path)?;
-            if metadata.file_type().is_symlink() || !metadata.file_type().is_dir() {
-                return Err(LocalStorageError::Permission);
-            }
-        } else {
-            fs::create_dir_all(path)?;
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
-            }
-        }
-        Ok(())
-    }
-}
-
 fn validate_external_target_location(path: &Path) -> Result<(), LocalStorageError> {
     if !path.is_absolute()
         || path.parent().is_none()
@@ -3275,10 +3250,7 @@ fn load_or_create_restore_key(
     match fs::symlink_metadata(path) {
         Ok(metadata) => {
             validate_owner_regular_file(&metadata).map_err(|_| LocalStorageError::Locked)?;
-            #[cfg(windows)]
-            let mut file = hiroute_platform::windows::security::open_owner_only(path, false)?;
-            #[cfg(not(windows))]
-            let mut file = File::open(path)?;
+            let mut file = hiroute_platform::private_fs::open_private_file(path)?;
             let mut header = [0_u8; 8];
             file.read_exact(&mut header)?;
             if &header != RESTORE_KEY_HEADER {
