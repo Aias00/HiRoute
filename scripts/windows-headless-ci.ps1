@@ -193,6 +193,7 @@ function Invoke-LibraryTests {
       $optIn = @(
         'agents::native_ingress_probe::ephemeral::tests::real_codex_ephemeral_authentication_without_managed_configuration',
         'agents::qoder_probe::tests::real_qoder_discovers_skill_and_runs_read_only_cli_in_selected_context',
+        'agents::qoder_probe::windows_cli::tests::windows_qoder_bash_executes_the_same_cli_with_literal_drive_path',
         'agents::windows_runtime::tests::windows_native_environment_fixture',
         'agents::windows_runtime::tests::windows_selected_node_version_uses_the_private_capture_and_held_job',
         'agents::windows_runtime::tests::windows_selected_pi_sdk_capabilities_load_the_actual_package',
@@ -441,6 +442,7 @@ if ($Scope -eq 'components') {
   Invoke-RequiredTests 'agent-qoder-tools-shell' @('-p','hiroute-daemon','--lib',$qoderToolsShell) @(
     ($qoderToolsShell + 'qoder_tool_receipt_uses_bash_without_changing_other_native_shell_contracts'),
     ($qoderToolsShell + 'qoder_tool_bash_resources_bind_native_spellings_and_keep_empty_output_unproven'),
+    ($qoderToolsShell + 'qoder_tools_repeat_with_borrowed_account_preserves_existing_skills_and_cleans_own'),
     ($qoderToolsShell + 'qoder_tool_final_effects_reject_late_same_identity_output_truncation'))
   $cancelOracle = 'delegation::installation::probe_server::tests::only_deliberately_cancelled_peer_disconnect_is_not_a_probe_response_failure'
   Invoke-RequiredTests 'agent-cancel-oracle' @('-p','hiroute-daemon','--lib',$cancelOracle) @($cancelOracle) @('--exact')
@@ -515,11 +517,10 @@ if ($Scope -eq 'components') {
   Invoke-RequiredTests 'agent-qoder-skill-http-diagnostic' @('-p','hiroute-integrations','--lib',$qoderHttp) @(
     ($qoderHttp + 'installed_skill_requires_correlated_call_and_actual_user_source'),
     ($qoderHttp + 'model_claim_cannot_replace_cli_tool_evidence'),
+    ($qoderHttp + 'native_cwd_envelope_keeps_the_correlated_exact_cli_proof'),
     ($qoderHttp + 'skill_receipt_diagnostics_do_not_admit_alternate_path_shape_or_newlines'),
     ($qoderHttp + 'windows_skill_receipt_requires_held_binding_and_same_candidate_exact_body'),
     ($qoderHttp + 'trusted_cli_still_rejects_semantic_only_framed_and_uncorrelated_outputs'))
-  $qoderBash = 'agents::qoder_probe::windows_cli::tests::windows_qoder_bash_executes_the_same_cli_with_literal_drive_path'
-  Invoke-RequiredTests 'agent-qoder-cli-bash' @('-p','hiroute-integrations','--lib',$qoderBash) @($qoderBash) @('--ignored','--exact','--nocapture')
   $qoderOutputRead = 'agents::qoder_probe::output_diagnostic_tests::'
   Invoke-RequiredTests 'agent-qoder-output-read-diagnostic' @('-p','hiroute-integrations','--lib',$qoderOutputRead) @(
     ($qoderOutputRead + 'qoder_final_read_diagnostic_distinguishes_native_oversize_from_path_open_failure'),
@@ -559,6 +560,8 @@ if ($Scope -eq 'components') {
   $privateRoot = 'delegation::installation::installation_probe::windows_probe_root_creates_strict_private_directories_before_native_launch'
   Invoke-RequiredTests 'agent-private-root' @('-p','hiroute-daemon','--lib',$privateRoot) @($privateRoot) @('--exact','--nocapture')
   Initialize-WindowsAgentInputs
+  $qoderBash = 'agents::qoder_probe::windows_cli::tests::windows_qoder_bash_executes_the_same_cli_with_literal_drive_path'
+  Invoke-RequiredTests 'agent-qoder-cli-bash' @('-p','hiroute-integrations','--lib',$qoderBash) @($qoderBash) @('--ignored','--exact','--nocapture')
   $privateNode = 'agents::windows_runtime::tests::windows_selected_node_version_uses_the_private_capture_and_held_job'
   Invoke-RequiredTests 'agent-private-node' @('-p','hiroute-integrations','--lib',$privateNode) @($privateNode) @('--ignored','--exact','--nocapture')
   $pathIdentity = 'delegation::installation::installation_probe::windows_isolated_profile_uses_one_native_path_identity'

@@ -28,6 +28,10 @@ The reusable release entry accepts no scope input and always runs all five scope
 Neither manual mode publishes packages or establishes the separately required
 user/account acceptance.
 
+Native Windows jobs enable sccache's GitHub Actions backend so compiler objects
+can be reused across runs. Cargo targets remain local to each checkout; artifact
+source, executable-byte and runtime-import verification still run for every candidate.
+
 Normal Rust checks select the organization `Default` runner group with the
 `cncf-ubuntu-16-64-x86` label. The organization must permit this public repository
 to use that group. Dedicated stability continues to use `Default Larger Runners`

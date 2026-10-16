@@ -390,57 +390,78 @@ impl InstalledProduct {
         journal.sync().unwrap();
         service.sync().unwrap();
         drop(journal);
-        let child = Command::new(&self.daemon)
-            .args(["--role", "all", "--standalone"])
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .unwrap();
-        let mut rejected = RunningDaemon {
-            child,
-            stdout_reader: None,
-            stderr_reader: None,
-            listen: "127.0.0.1:1".parse().unwrap(),
-        };
-        let deadline = Instant::now() + IO_BOUND;
-        loop {
-            if let Some(status) = rejected.child.try_wait().unwrap() {
-                assert!(!status.success());
-                break;
+        // Remove only this fixture's held-identity journal on assertion failure,
+        // so a failed admission assertion cannot poison later foreground cases.
+        struct JournalCleanup<'a>(&'a PrivateDir, hiroute_diagnostics::files::FileIdentity);
+        impl Drop for JournalCleanup<'_> {
+            fn drop(&mut self) {
+                let _ = self.0.remove_verified(JOURNAL, self.1);
             }
-            assert!(
-                Instant::now() < deadline,
-                "prepared maintenance must reject before starting the business runtime"
-            );
-            thread::sleep(Duration::from_millis(10));
         }
-        let mut stdout = Vec::new();
-        let mut stderr = Vec::new();
-        rejected
-            .child
-            .stdout
-            .take()
-            .unwrap()
-            .take(4096)
-            .read_to_end(&mut stdout)
-            .unwrap();
-        rejected
-            .child
-            .stderr
-            .take()
-            .unwrap()
-            .take(4096)
-            .read_to_end(&mut stderr)
-            .unwrap();
-        assert!(
-            stdout.is_empty(),
-            "rejected admission cannot publish daemon readiness"
-        );
-        assert!(
-            String::from_utf8_lossy(&stderr)
-                .contains("standalone installation maintenance is incomplete")
-        );
+        let _journal_cleanup = JournalCleanup(&service, journal_identity);
+        // The bare entry first checks the Task dispatcher; the explicit business
+        // child checks standalone admission. Both must reject before state creation.
+        for (task_runtime, expected) in [
+            (false, "Task installation maintenance pending"),
+            (true, "standalone installation maintenance is incomplete"),
+        ] {
+            let mut command = Command::new(&self.daemon);
+            command.args(["--role", "all", "--standalone"]);
+            if task_runtime {
+                command.arg("--windows-task-runtime");
+            }
+            let child = command
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .unwrap();
+            let mut rejected = RunningDaemon {
+                child,
+                stdout_reader: None,
+                stderr_reader: None,
+                listen: "127.0.0.1:1".parse().unwrap(),
+            };
+            let deadline = Instant::now() + IO_BOUND;
+            loop {
+                if let Some(status) = rejected.child.try_wait().unwrap() {
+                    assert!(!status.success());
+                    break;
+                }
+                assert!(
+                    Instant::now() < deadline,
+                    "prepared maintenance must reject before starting the business runtime"
+                );
+                thread::sleep(Duration::from_millis(10));
+            }
+            let mut stdout = Vec::new();
+            let mut stderr = Vec::new();
+            rejected
+                .child
+                .stdout
+                .take()
+                .unwrap()
+                .take(4096)
+                .read_to_end(&mut stdout)
+                .unwrap();
+            rejected
+                .child
+                .stderr
+                .take()
+                .unwrap()
+                .take(4096)
+                .read_to_end(&mut stderr)
+                .unwrap();
+            assert!(
+                stdout.is_empty(),
+                "rejected admission cannot publish daemon readiness"
+            );
+            assert_no_secret(&stderr);
+            assert!(
+                String::from_utf8_lossy(&stderr).contains(expected),
+                "actual maintenance denial must identify its rejecting entry: {expected}"
+            );
+        }
         assert!(!self.layout.state_root.exists());
         assert!(
             lifecycle::query(&self.layout.lifecycle_endpoint(), &self.daemon, IO_BOUND).is_err()

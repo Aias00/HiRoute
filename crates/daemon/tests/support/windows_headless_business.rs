@@ -511,6 +511,25 @@ fn checkpoint(args: &[&str], payload: Option<&Value>) -> (&'static str, &'static
             &["decision", "services", "test"][..],
         ),
         ("models.show", &["models", "show"][..]),
+        ("agents.scan", &["agents", "scan"][..]),
+        (
+            "agents.connect.preview",
+            &["agents", "connect", "preview"][..],
+        ),
+        ("agents.connect.apply", &["agents", "connect", "apply"][..]),
+        (
+            "agents.connect.status",
+            &["agents", "connect", "status"][..],
+        ),
+        (
+            "agents.restore.preview",
+            &["agents", "restore", "preview"][..],
+        ),
+        ("agents.restore.apply", &["agents", "restore", "apply"][..]),
+        (
+            "agents.access-token.show",
+            &["agents", "access-token", "show"][..],
+        ),
         ("sessions.list", &["sessions", "list"][..]),
         ("sessions.show", &["sessions", "show"][..]),
         ("sessions.receipt", &["sessions", "receipt"][..]),
@@ -569,6 +588,7 @@ pub(crate) fn command(
     }
     args.extend(["--output", "json", "--timeout", "10s"].map(OsString::from));
     let environment: Vec<_> = std::env::vars_os().collect();
+    let started = Instant::now();
     let mut child = Child::spawn(Launch {
         program: &product.stable,
         args: &args,
@@ -623,6 +643,27 @@ pub(crate) fn command(
     }
     let output = stdout.join().unwrap();
     let error = stderr.join().unwrap();
+    if !error.is_empty() {
+        let value = serde_json::from_slice::<Value>(&output).ok();
+        let status = value.as_ref().and_then(|value| {
+            serde_json::from_value::<hiroute_application_api::MachineStatus>(
+                value["status"].clone(),
+            )
+            .ok()
+        });
+        let code = value.as_ref().and_then(|value| {
+            serde_json::from_value::<hiroute_application_api::ErrorCode>(
+                value["error"]["code"].clone(),
+            )
+            .ok()
+        });
+        // Preserve only closed production enums and numeric process facts.
+        eprintln!(
+            "Windows public business failure: exit={exit}, elapsed-ms={}, stderr-bytes={}, status={status:?}, code={code:?}",
+            started.elapsed().as_millis(),
+            error.len()
+        );
+    }
     assert!(
         error.is_empty(),
         "public business CLI emitted unexpected diagnostics"

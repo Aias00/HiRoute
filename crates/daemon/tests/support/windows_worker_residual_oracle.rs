@@ -8,12 +8,16 @@ const OUTPUT_BOUND: usize = 1024 * 1024;
 
 pub(super) fn script(binding: &Path, late: &Path, nonce: &str) -> String {
     let literal = |text: &str| format!("'{}'", text.replace('\'', "''"));
+    // Keep this cancellation oracle independent of PowerShell module discovery.
+    // The minimal native tool environment need not initialize cmdlet modules;
+    // CLR calls still observe the real PID/TEMP and the unchanged delayed write.
     format!(
         "$ErrorActionPreference='Stop'; $hirouteResidualStage='encoding'; try {{ \
          $encoding=[Text.UTF8Encoding]::new($false); $hirouteResidualStage='binding-json'; \
-         $binding=@{{pid=$PID;temp=$env:TEMP;receipt={}}}|ConvertTo-Json -Compress; \
+         $temp=[regex]::Replace($env:TEMP,'[\\x00-\\x1f\"\\\\]',{{param($m) '\\u{{0:x4}}' -f [int][char]$m.Value}}); \
+         $binding='{{\"pid\":'+$PID+',\"temp\":\"'+$temp+'\",\"receipt\":'+{}+'}}'; \
          $hirouteResidualStage='binding-write'; [IO.File]::WriteAllText({},$binding,$encoding); \
-         $hirouteResidualStage='waiting'; Start-Sleep -Seconds 60; \
+         $hirouteResidualStage='waiting'; [Threading.Thread]::Sleep(60000); \
          $hirouteResidualStage='late-write'; [IO.File]::WriteAllText({},{},$encoding) \
          }} catch {{ $native=$_.Exception; for($i=0;$i-lt 8 -and $null-ne $native.InnerException;$i++) \
          {{$native=$native.InnerException}}; $kind='unknown'; \
@@ -21,7 +25,7 @@ pub(super) fn script(binding: &Path, late: &Path, nonce: &str) -> String {
          elseif($native-is [IO.IOException]){{$kind='io'}} \
          elseif($native-is [ArgumentException]){{$kind='argument'}}; \
          [Console]::WriteLine('{PREFIX}stage='+$hirouteResidualStage+' kind='+$kind+' hresult='+([int]$native.HResult)); exit 1 }}",
-        literal(&format!("started-{nonce}")),
+        literal(&serde_json::to_string(&format!("started-{nonce}")).unwrap()),
         literal(binding.to_str().unwrap()),
         literal(late.to_str().unwrap()),
         literal(&format!("late-{nonce}")),
@@ -159,9 +163,11 @@ mod tests {
             "fixture-nonce",
         );
         assert!(script.contains("'C:/private % ! '' &/binding.json'"));
-        assert!(script.contains("pid=$PID;temp=$env:TEMP;receipt='started-fixture-nonce'"));
+        assert!(script.contains("$env:TEMP") && script.contains("+$PID+"));
+        assert!(script.contains("'\"started-fixture-nonce\"'"));
+        assert!(!script.contains("ConvertTo-Json") && !script.contains("Start-Sleep"));
         assert!(
-            script.find("Start-Sleep -Seconds 60").unwrap()
+            script.find("[Threading.Thread]::Sleep(60000)").unwrap()
                 < script.find("$hirouteResidualStage='late-write'").unwrap()
         );
         assert!(!script.contains("WriteLine($native"));
