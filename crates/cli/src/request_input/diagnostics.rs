@@ -140,7 +140,7 @@ pub(crate) fn failure(code: ErrorCode, request_id: Option<String>) -> crate::Cli
     CURRENT.with(|current| {
         let current = current.borrow();
         let Some(state) = current.as_ref() else { return crate::failure(code, request_id); };
-        let diagnostic = state.diagnostic.clone().unwrap_or(InputDiagnostic { category: "invalid_request".into(), path: "$".into(), expected: "the command's declared options and request wrapper" });
+        let diagnostic = state.diagnostic.clone().unwrap_or(InputDiagnostic { category: "invalid_request".into(), path: "$".into(), expected: "the command's declared options and request wrapper".into() });
         let envelope = if state.rich { MachineEnvelopeV2::failed_with_data(ErrorV1::new(code), json!({
             "schema":"hiroute.cli-input-diagnostic/v1", "command_id":state.command, "diagnostic":diagnostic,
         }), request_id) } else { MachineEnvelopeV2::failed(ErrorV1::new(code), request_id) };
