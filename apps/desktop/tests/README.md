@@ -110,3 +110,12 @@ Remaining work outside this batch: Observation contract constants that compare t
 themselves need a producer/consumer oracle; duplicated Rust process harnesses need
 an ownership review before extraction. Those changes must preserve their unique
 cancellation, identity and cleanup assertions and do not belong in these UI fixtures.
+# Console host coverage
+
+The V3 browser runner accepts `HIROUTE_BROWSER_TRANSPORT=console` to execute the
+same required product scenarios through the browser host seam. `--console-only`
+checks the production login/session pages with synthetic HTTP, Bearer/context
+headers, plaintext warnings and host capabilities, and captures zh/en light/dark
+at 1200×813 and 755×600. These component scenarios do not establish real daemon,
+native authorization or installation acceptance.
+

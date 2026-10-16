@@ -76,6 +76,13 @@ class CandidateTests(unittest.TestCase):
             return json.dumps({"target_directory": str(self.root / "target")})
         if args[0] in ("cargo", "rustc") and args[1] == "--version":
             return "fixture toolchain"
+        if args[0] in ("npm", "npm.cmd"):
+            if args[1:3] == ("run", "build"):
+                assets = self.root / "apps/desktop/dist"
+                (assets / "assets").mkdir(parents=True)
+                (assets / "index.html").write_text('<script src="/assets/app.js"></script>')
+                (assets / "assets/app.js").write_text('console.info("fixture")')
+            return ""
         if args[:2] == ("cargo", "build"):
             self.assertIn("--locked", args)
             self.assertEqual(args[args.index("--target") + 1], self.target)
@@ -125,6 +132,9 @@ class CandidateTests(unittest.TestCase):
         self.assertEqual(result["status"], "awaiting_runtime")
         self.assertEqual(set(result["linux_abi"]["files"]), {"bin/hiroute", "bin/hirouted", "libexec/cliproxyapi"})
         self.assertEqual(result["website_artifact"]["architecture"], "aarch64")
+        self.assertEqual(sum(args[:3] == ("npm", "run", "build") for args in self.commands), 1)
+        manifest = next(Path(result["assets"]).glob("*.json"))
+        self.assertIn("console/index.html", json.loads(manifest.read_text())["files"])
         artifacts = list(Path(result["assets"]).iterdir())
         self.assertEqual(len(artifacts), 2)
         catalog = self.root / "releases.json"

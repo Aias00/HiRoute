@@ -1,7 +1,8 @@
+import { SecretTransportWarning } from '../../host/ConsoleUi';
 import { ProviderIcon } from '../../ui/ProviderIcon';
 import { connectionName } from '../../ui/provider-identity';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '../../host/index.ts';
 import type { Plan } from '../../plan-editor';
 import { branchSelections } from '../decision-services/types';
 import { Dialog, UiIcon } from '../../ui';
@@ -632,7 +633,7 @@ function CredentialEditor({ language, source, model, draft, errorCode, onChange,
     </div>}
     {editing ? <div className="field">
       <label className="field-label" htmlFor="credential-secret">{editing.kind === 'replace' ? text('替换 API Key', 'Replace API key') : 'API Key'}</label>
-      <input id="credential-secret" data-autofocus className="input" type={showSecret ? 'text' : 'password'} autoComplete="new-password" aria-invalid={Boolean(secretError)} aria-describedby={secretError ? 'credential-secret-error' : undefined} value={editing.kind === 'add' ? draft.addedSecret : draft.keys.find(key => key.draftId === editing.draftId)?.replacement ?? ''} onChange={event => { setSecretError(''); if (editing.kind === 'add') onChange({ ...draft, addedSecret: event.target.value }); else updateKey(editing.draftId, key => ({ ...key, replacement: event.target.value })); }} />
+      <SecretTransportWarning language={language} /><input id="credential-secret" data-autofocus className="input" type={showSecret ? 'text' : 'password'} autoComplete="new-password" aria-invalid={Boolean(secretError)} aria-describedby={secretError ? 'credential-secret-error' : undefined} value={editing.kind === 'add' ? draft.addedSecret : draft.keys.find(key => key.draftId === editing.draftId)?.replacement ?? ''} onChange={event => { setSecretError(''); if (editing.kind === 'add') onChange({ ...draft, addedSecret: event.target.value }); else updateKey(editing.draftId, key => ({ ...key, replacement: event.target.value })); }} />
       <button className="btn btn-quiet" type="button" aria-pressed={showSecret} onClick={() => setShowSecret(value => !value)}>{showSecret ? text('隐藏', 'Hide') : text('显示', 'Show')}</button>
       {secretError && <p id="credential-secret-error" className="oc-inline-error" role="alert">{secretError}</p>}
       <div className="task-actions"><button className="btn" type="button" onClick={stopEditing}>{text('取消', 'Cancel')}</button><button className="btn btn-primary" type="button" onClick={acceptSecret}>{text('加入待保存修改', 'Add to changes')}</button></div>

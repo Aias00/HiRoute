@@ -165,6 +165,10 @@ class Candidate:
 
     def standalone(self):
         windows = self.target.endswith("-pc-windows-msvc")
+        frontend = REPO / "apps/desktop"
+        npm = "npm.cmd" if windows else "npm"
+        self.run(npm, "ci", "--prefix", frontend)
+        self.run(npm, "run", "build", "--prefix", frontend)
         cpa = self.output / ("cliproxyapi.exe" if windows else "cliproxyapi")
         provenance = json.loads(self.script("build-cpa", "--source-repo", self.source_repo,
                                            "--target", self.target, "--output", cpa))
@@ -206,7 +210,7 @@ class Candidate:
             "package-standalone", "build", "--version", self.version, "--revision", self.revision,
             "--target", self.target, "--hiroute", binaries / ("hiroute" + suffix), "--hirouted", binaries / ("hirouted" + suffix),
             "--cpa-binary", cpa, "--cpa-version", pin["version"], "--cpa-license", cpa.with_suffix(".LICENSE"),
-            "--notices", notices, "--output", self.output))
+            "--notices", notices, "--console-assets", frontend / "dist", "--output", self.output))
         archive, manifest = Path(packaged["archive"]), Path(packaged["manifest"])
         packager = module("package-standalone")
         verified = packager.verify(manifest, archive)

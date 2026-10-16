@@ -157,3 +157,13 @@ and unique failure assertions. Keep recovery, cancellation, authorization and
 foreign-file preservation tests. Assign shared contracts and generated registries
 to one convergence owner. Use the [test map](testing.md) to select evidence; neither
 file size nor test churn alone justifies another abstraction or a broad rewrite.
+# Web console host
+
+`crates/daemon/src/console` owns the separate HTTP listener, origin/asset admission,
+credential stores and per-client product contexts. Its private in-process Client
+Core transport shares Local Control budgets, operation admission and upgrade
+drain; external Local Control retains its released-command gate. The frontend
+`apps/desktop/src/host` selects the Tauri, browser or Windows-shell transport and
+host capabilities. Browser product requests use explicit Bearer/context headers;
+native host actions stay in their host adapter.
+

@@ -110,7 +110,7 @@ async fn checked(
         if method == Method::GET {
             return Ok(json_reply(
                 StatusCode::OK,
-                json!({"session":identity,"transport":if peer.ip().is_loopback(){"loopback"}else{"network_plaintext"},"assets_available":server.assets.is_some(),"capabilities":{"host":"console","platform":std::env::consts::OS,"updates":false,"cli_entry":false,"quit":false,"titlebar":false,"directory_reveal":"path","clipboard":"browser","save_file":true,"open_external_url":true}}),
+                json!({"session":identity,"transport":if peer.ip().is_loopback(){"loopback"}else{"network_plaintext"},"assets_available":server.assets.is_some(),"capabilities":{"host":"console","platform":std::env::consts::OS,"updates":false,"cli_entry":false,"quit":false,"titlebar":false,"directory_reveal":"path","diagnostic_directory":server.layout.diagnostics_root(),"recovery_directory":server.layout.state_root,"clipboard":"browser","save_file":true,"open_external_url":true}}),
             ));
         }
         if method == Method::DELETE {

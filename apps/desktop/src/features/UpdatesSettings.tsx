@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '../host/index.ts';
 import { useEffect, useState } from 'react';
 import { safeDiagnosticCode } from '../error-code';
 import type { Language } from '../ui/preferences';
