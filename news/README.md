@@ -2,7 +2,7 @@
 
 | Date | English | 简体中文 |
 | --- | --- | --- |
-| 2026-10-14 | [Model switching, caching, and costs](2026-10-14-routing-cache-cost.en.md) | [模型切换的缓存影响与成本分析](2026-10-14-routing-cache-cost.zh-CN.md) |
+| 2026-10-14 | [Switching models loses cache, not the savings](2026-10-14-routing-cache-cost.en.md) | [切换模型会丢缓存，但省下的钱丢不掉](2026-10-14-routing-cache-cost.zh-CN.md) |
 | 2026-10-04 | [Smart routing: Astra × Qwen](2026-10-04-astra-qwen.en.md) | [智能路由省钱实战](2026-10-04-astra-qwen.zh-CN.md) |
 | — | [HiRoute is open source](hiroute-open-source.en.md) | [HiRoute 正式开源](hiroute-open-source.zh-CN.md) |
 
