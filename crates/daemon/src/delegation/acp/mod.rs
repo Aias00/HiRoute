@@ -11,6 +11,7 @@ use hiroute_domain::delegation::DelegationErrorV1;
 use serde_json::{Map, Value, json};
 use std::future::Future;
 use std::path::PathBuf;
+use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -35,6 +36,21 @@ pub enum AcpSessionStart {
     Resume(AcpSessionBinding),
 }
 
+impl AcpSessionStart {
+    /// DSH advertises the ACP resume extension instead of session/load. Both keep the
+    /// exact existing binding; run_session still validates its native identity and capability.
+    pub(crate) fn native_continuation(
+        harness: hiroute_domain::delegation::WorkerHarnessV1,
+        binding: AcpSessionBinding,
+    ) -> Self {
+        if harness == hiroute_domain::delegation::WorkerHarnessV1::DeepseekHarness {
+            Self::Resume(binding)
+        } else {
+            Self::Load(binding)
+        }
+    }
+}
+
 /// Internal profile output, never a raw Local Control payload. Authentication can contain
 /// a run secret: deliberately no Debug/Serialize implementation and no protocol logging.
 pub struct AcpRunInput {
@@ -44,7 +60,8 @@ pub struct AcpRunInput {
     pub identity_contract: AcpNativeIdentityContract,
     pub session_meta: Map<String, Value>,
     /// Exact adapter-owned native mode selected after new/load and before the first prompt.
-    /// Production profiles always set this; `None` exists for protocol-only test fixtures.
+    /// Profiles with a native mode set this. DSH has no mode mutation; protocol fixtures
+    /// may also omit it.
     pub native_session_mode: Option<String>,
     /// Profile's exact native model selector ID, confirmed before prompting. The frozen
     /// Plan/Gateway alias remains separate when the native client adds a provider prefix.
@@ -68,11 +85,22 @@ pub trait AcpRunJournal: Send + Sync {
     fn allow_permission_once(&self, request: &Value) -> bool;
 }
 
+#[derive(Clone)]
 pub struct AcpRunOutcome {
     pub session: AcpSessionBinding,
     pub stop_reason: String,
     pub text: String,
     pub content_incomplete: bool,
+}
+
+/// Lifecycle-only terminal work that must finish before dropping the live ACP transport.
+/// No protocol or persisted field is added. The lifecycle keeps terminal publication,
+/// credential revocation and exact native history observation in their original order.
+pub(crate) trait AcpTerminalCheckpoint: Send + Sync {
+    fn before_transport_close<'a>(
+        &'a self,
+        outcome: &'a AcpRunOutcome,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
 }
 
 #[derive(Default)]
@@ -107,6 +135,21 @@ where
     R: AsyncRead + Unpin + Send + 'static,
     W: AsyncWrite + Unpin + Send + 'static,
 {
+    run_acp_with_terminal_checkpoint(reader, writer, input, journal, progress, None).await
+}
+
+pub(crate) async fn run_acp_with_terminal_checkpoint<R, W>(
+    reader: R,
+    writer: W,
+    input: AcpRunInput,
+    journal: Arc<dyn AcpRunJournal>,
+    progress: Option<ProgressSink>,
+    terminal_checkpoint: Option<Arc<dyn AcpTerminalCheckpoint>>,
+) -> Result<AcpRunOutcome, DelegationErrorV1>
+where
+    R: AsyncRead + Unpin + Send + 'static,
+    W: AsyncWrite + Unpin + Send + 'static,
+{
     if !input.cwd.is_absolute() || input.prompt.is_empty() || input.prompt.len() > 256 * 1024 {
         return Err(DelegationErrorV1::InvalidArguments);
     }
@@ -125,15 +168,17 @@ where
         .on_receive_notification(
             async move |notification: SessionNotification, _cx| {
                 let mut state = notifications.lock().unwrap_or_else(|e| e.into_inner());
+                // Native adapters may announce configuration during session/new, before its
+                // response binds the session. Load also replays history. Neither belongs to
+                // this run's output, and an unbound startup notification is not lost output.
+                if !state.prompt_started {
+                    return Ok(());
+                }
                 let session_matches =
                     state.session.as_deref() == Some(notification.session_id.to_string().as_str());
                 let update = serde_json::to_value(notification.update).unwrap_or(Value::Null);
                 if !session_matches {
                     state.incomplete = true;
-                    return Ok(());
-                }
-                // session/load may replay old history: never append it as this run's output.
-                if !state.prompt_started {
                     return Ok(());
                 }
                 if update["sessionUpdate"] == "agent_message_chunk"
@@ -189,7 +234,20 @@ where
         .connect_with(
             transport::bounded_transport(reader, writer),
             async move |connection: ConnectionTo<Agent>| {
-                Ok(run_session(connection, input, journal, updates, progress).await)
+                let outcome =
+                    run_session(connection, input, journal, updates.clone(), progress).await;
+                // A terminal response ends tool permission and text admission even while
+                // a native transcript is draining on this still-live connection.
+                updates
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .prompt_started = false;
+                if let (Ok(outcome), Some(checkpoint)) = (&outcome, terminal_checkpoint)
+                    && outcome.stop_reason != "cancelled"
+                {
+                    checkpoint.before_transport_close(outcome).await;
+                }
+                Ok(outcome)
             },
         );
     tokio::pin!(connected);
@@ -220,6 +278,7 @@ async fn run_session(
     progress: Option<ProgressSink>,
 ) -> Result<AcpRunOutcome, DelegationErrorV1> {
     let initialized = phase(
+        "initialize",
         &input.cancellation,
         input.deadline,
         connection.send_request(initialize_request()?).block_task(),
@@ -243,6 +302,7 @@ async fn run_session(
         let request: AuthenticateRequest = serde_json::from_value(authentication)
             .map_err(|_| DelegationErrorV1::InvalidArguments)?;
         phase(
+            "authenticate",
             &input.cancellation,
             input.deadline,
             connection.send_request(request).block_task(),
@@ -256,6 +316,7 @@ async fn run_session(
             }))
             .map_err(|_| DelegationErrorV1::InvalidArguments)?;
             let response = phase(
+                "new-session",
                 &input.cancellation,
                 input.deadline,
                 connection.send_request(request).block_task(),
@@ -293,6 +354,7 @@ async fn run_session(
             }))
             .map_err(|_| DelegationErrorV1::InvalidArguments)?;
             let response = phase(
+                "resume-session",
                 &input.cancellation,
                 input.deadline,
                 connection.send_request(request).block_task(),
@@ -321,6 +383,7 @@ async fn run_session(
                 "sessionId":expected.acp_session_id,"cwd":input.cwd,"mcpServers":[],"_meta":input.session_meta,
             })).map_err(|_| DelegationErrorV1::InvalidArguments)?;
             let response = phase(
+                "load-session",
                 &input.cancellation,
                 input.deadline,
                 connection.send_request(request).block_task(),
@@ -370,6 +433,7 @@ async fn run_session(
             return Err(DelegationErrorV1::CapabilityUnavailable);
         }
         phase(
+            "set-mode",
             &input.cancellation,
             input.deadline,
             connection
@@ -558,15 +622,22 @@ fn prompt_session_failure(meta: Option<&Map<String, Value>>) -> Result<bool, Del
 }
 
 async fn phase<T>(
+    stage: &'static str,
     cancellation: &CancellationToken,
     deadline: Instant,
     future: impl Future<Output = Result<T, agent_client_protocol::Error>>,
 ) -> Result<T, DelegationErrorV1> {
+    #[cfg(not(test))]
+    let _ = stage;
     tokio::select! {
         biased;
         _ = cancellation.cancelled() => Err(DelegationErrorV1::Cancelled),
         _ = tokio::time::sleep_until(deadline) => Err(DelegationErrorV1::DeadlineExceeded),
-        result = future => result.map_err(pi_failure::map_error),
+        result = future => result.map_err(|error| {
+            #[cfg(test)]
+            eprintln!("native acceptance ACP stage={} request-error-code={}", stage, i32::from(error.code));
+            pi_failure::map_error(error)
+        }),
     }
 }
 
@@ -574,6 +645,8 @@ async fn phase<T>(
 mod identity_tests;
 #[cfg(test)]
 mod model_tests;
+#[cfg(test)]
+mod notification_tests;
 #[cfg(test)]
 mod security_tests;
 #[cfg(test)]

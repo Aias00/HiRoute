@@ -1,8 +1,9 @@
 # Release candidate builds
 
-The release scope is two macOS Desktop DMGs (`arm64`, `x86_64`) and two Linux
-headless archives (`x86_64`, `aarch64`). Windows and Linux Desktop are outside this
-build entry. All components of one release must come from the same clean,
+The candidate entry builds macOS Desktop DMGs (`arm64`, `x86_64`) and Linux or Windows
+headless archives (`x86_64`, `aarch64`). Desktop for Windows/Linux is outside this
+build entry. A target's package integrity is separate from its required native runtime
+acceptance and does not by itself authorize publishing that target. All components of one release must come from the same clean,
 committed source revision, with CPA built from `vendor/cpa/source.json` and its
 checked patch.
 
@@ -32,7 +33,21 @@ python3 scripts/build-release.py \
   --target aarch64-unknown-linux-gnu --cpa-source-repo /path/to/CLIProxyAPI
 ```
 
-The same entry accepts `aarch64-apple-darwin` and `x86_64-unknown-linux-gnu`.
+The same entry accepts `aarch64-apple-darwin`, `x86_64-unknown-linux-gnu`,
+`x86_64-pc-windows-msvc` and `aarch64-pc-windows-msvc`. Windows builds require the
+matching native MSVC host, Python, Go and sccache; PE machine identity is checked for
+CLI, daemon and CPA. Its builder uses a checkout-local native file lock; it does not
+import the Unix workbench lock implementation. The CPA probe retains the actual native
+SystemRoot and uses isolated profile/temp paths. Windows candidates remain
+`awaiting_runtime` until the installed foreground/background and feature gates pass;
+see [Windows operating and evidence boundaries](standalone-windows.md).
+The native x64 Windows Release invocation selects static CRT for Rust and its
+CMake dependencies and rejects ambient compiler overrides. The complete archive's
+three EXEs are checked for both ordinary and delay imports of Debug CRT or VC
+runtime before candidate assets are accepted. Build evidence records the toolchain
+digest, compiler context and exact image hashes. This dependency gate does not
+replace installed runtime acceptance; Debug development builds and native ARM64
+retain their separate build contexts and require their own evidence.
 macOS candidates keep the existing macOS 15 minimum and self-signed trial
 distribution. Developer ID signing and cross-building on a Mac remain available
 through [package-desktop.py](../scripts/package-desktop.py) as documented in the
@@ -50,7 +65,16 @@ container; the HOME is removed afterwards. Logs and package evidence are retaine
 ## Hosted build and publication
 
 Run the **build-release-candidates** workflow on the public candidate branch.
-Every matrix job checks out the dispatch's exact `github.sha`, uses a native
+Unix candidate builds start independently of the reusable **windows-headless**
+workflow at the same source commit. All five native scopes and their Windows 11
+x64-artifact replay must succeed before Windows package-build jobs can start.
+Both groups use **build-release-platform** for the same per-target build steps. This expensive Windows matrix
+does not run automatically on PR or main pushes; ordinary iteration uses the
+[cross-compilation and development-machine path](validation-routing.md#windows-iteration-and-release-validation).
+Hosted background compile-only cases and real accounts retain their separate
+runtime gates; the CI dependency does not establish those results.
+
+Every package matrix job checks out the dispatch's exact `github.sha`, uses a native
 runner and uploads its own assets and evidence. Ubuntu runner labels select only
 the native Docker host. Both Linux architectures build against Debian 11 / glibc
 2.31 using the digest-pinned images and dated Debian and Debian-security package
@@ -133,7 +157,8 @@ API-key model call on the intended deployment host, using the same frozen archiv
 that live result is separate from the offline build gate. Rebuild after integrating
 product fixes and retain each result at its actual source revision.
 
-1. Require all four matrix jobs to succeed for the same SHA. Keep the exact source
+1. Require the Windows validation gate and all six package matrix jobs to succeed
+   for the same SHA. Keep the exact source
    commit available; internal master and an exported public commit may differ.
 2. Download each job's `assets/` and `result.json`. Use the measured
    `website_artifact` rows in a new release record in

@@ -436,6 +436,32 @@ impl GatewayLauncher {
         self,
         run_style: ListenerRunStyle,
     ) -> Result<pingora_core::server::Server, GatewayLauncherError> {
+        let mut server = match run_style {
+            ListenerRunStyle::Standalone => pingora_core::server::Server::new(None)
+                .map_err(|error| GatewayLauncherError::Listener(error.to_string()))?,
+            #[cfg(unix)]
+            ListenerRunStyle::Managed => {
+                let mut configuration = pingora_core::server::configuration::ServerConf::new()
+                    .ok_or_else(|| {
+                        GatewayLauncherError::Listener(
+                            "cannot construct managed listener configuration".to_owned(),
+                        )
+                    })?;
+                configuration.grace_period_seconds = Some(0);
+                configuration.graceful_shutdown_timeout_seconds = Some(1);
+                pingora_core::server::Server::new_with_opt_and_conf(None, configuration)
+            }
+        };
+        server.bootstrap();
+        server.add_services(self.into_services());
+        Ok(server)
+    }
+
+    /// Both operating-system lifecycle adapters execute these exact production services.
+    /// Windows owns the shutdown watch because Pingora's Windows Server loop owns Ctrl-C.
+    pub(super) fn into_services(
+        self,
+    ) -> Vec<Box<dyn pingora_core::services::ServiceWithDependents>> {
         let Self {
             listen,
             mode,
@@ -467,29 +493,14 @@ impl GatewayLauncher {
             }),
             GatewayMode::Production { runtime } => ListenerLifecycle::Production(runtime),
         };
-        let mut server = match run_style {
-            ListenerRunStyle::Standalone => pingora_core::server::Server::new(None)
-                .map_err(|error| GatewayLauncherError::Listener(error.to_string()))?,
-            #[cfg(unix)]
-            ListenerRunStyle::Managed => {
-                let mut configuration = pingora_core::server::configuration::ServerConf::new()
-                    .ok_or_else(|| {
-                        GatewayLauncherError::Listener(
-                            "cannot construct managed listener configuration".to_owned(),
-                        )
-                    })?;
-                configuration.grace_period_seconds = Some(0);
-                configuration.graceful_shutdown_timeout_seconds = Some(1);
-                pingora_core::server::Server::new_with_opt_and_conf(None, configuration)
-            }
-        };
-        server.bootstrap();
         let app = GatewayHttpApp::new(Arc::new(lifecycle));
         let mut service =
             pingora_core::services::listening::Service::new("hirouted".to_owned(), app);
         service.threads = Some(LISTENER_WORKER_THREADS);
         service.add_tcp(&listen.to_string());
-        server.add_service(service);
+        #[allow(unused_mut)] // Additional test-control service exists only with its feature.
+        let mut services: Vec<Box<dyn pingora_core::services::ServiceWithDependents>> =
+            vec![Box::new(service)];
         #[cfg(feature = "e2e-test-control")]
         if let Some(test_control) = test_control {
             let app = GatewayHttpApp::new(test_control.listener());
@@ -499,9 +510,9 @@ impl GatewayLauncher {
             );
             service.threads = Some(1);
             service.add_tcp(&test_control.listen().to_string());
-            server.add_service(service);
+            services.push(Box::new(service));
         }
-        Ok(server)
+        services
     }
 }
 

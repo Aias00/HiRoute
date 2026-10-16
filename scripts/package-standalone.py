@@ -10,6 +10,7 @@ from pathlib import Path
 import platform
 import re
 import tarfile
+import struct
 
 REPO = Path(__file__).resolve().parent.parent
 SCHEMA = "hiroute.standalone-package/v1"
@@ -18,6 +19,8 @@ TARGETS = {
     "aarch64-unknown-linux-gnu",
     "x86_64-apple-darwin",
     "aarch64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+    "aarch64-pc-windows-msvc",
 }
 PORTABLE = re.compile(r"^[A-Za-z0-9._-]+$")
 HEX_SHA256 = re.compile(r"^[a-fA-F0-9]{64}$")
@@ -37,6 +40,37 @@ EXPECTED_FILES = {
     "skills/hiroute-management/SKILL.md",
     "docs/standalone-cli.md",
 }
+
+
+def executable_names(target):
+    suffix = ".exe" if target.endswith("-pc-windows-msvc") else ""
+    return {"hiroute": "bin/hiroute" + suffix,
+            "hirouted": "bin/hirouted" + suffix,
+            "cpa": "libexec/cliproxyapi" + suffix}
+
+
+def expected_files(target):
+    names = executable_names(target)
+    return (EXPECTED_FILES - {"bin/hiroute", "bin/hirouted", "libexec/cliproxyapi"}) | set(names.values())
+
+
+def verify_windows_image(path, target):
+    with Path(path).open("rb") as stream:
+        verify_windows_stream(stream, target)
+
+
+def verify_windows_stream(stream, target):
+    header = stream.read(64)
+    if len(header) != 64 or header[:2] != b"MZ":
+        raise ValueError("Windows executable is not a PE image")
+    offset = struct.unpack_from("<I", header, 0x3C)[0]
+    if not 64 <= offset <= 16 * 1024 * 1024:
+        raise ValueError("Windows PE header offset is invalid")
+    stream.seek(offset)
+    pe = stream.read(6)
+    machine = {"x86_64-pc-windows-msvc": 0x8664, "aarch64-pc-windows-msvc": 0xAA64}[target]
+    if len(pe) != 6 or pe[:4] != b"PE\0\0" or struct.unpack_from("<H", pe, 4)[0] != machine:
+        raise ValueError("Windows PE image architecture differs from package target")
 
 
 def load_json_bytes(value):
@@ -63,11 +97,11 @@ def host_target():
     machine = {"AMD64": "x86_64", "arm64": "aarch64"}.get(
         platform.machine(), platform.machine()
     )
-    system = {"Linux": "unknown-linux-gnu", "Darwin": "apple-darwin"}.get(
+    system = {"Linux": "unknown-linux-gnu", "Darwin": "apple-darwin", "Windows": "pc-windows-msvc"}.get(
         platform.system()
     )
     if not system:
-        raise ValueError("standalone packaging supports only Linux and macOS")
+        raise ValueError("unsupported standalone packaging platform")
     return f"{machine}-{system}"
 
 
@@ -78,9 +112,9 @@ def checked_source(path, executable=False):
     if not path.is_file():
         raise ValueError(f"package source is not a regular file: {path}")
     mode = path.stat().st_mode
-    if mode & 0o022:
+    if platform.system() != "Windows" and mode & 0o022:
         raise ValueError(f"package source is group/world writable: {path}")
-    if executable and not mode & 0o111:
+    if executable and platform.system() != "Windows" and not mode & 0o111:
         raise ValueError(f"package source is not executable: {path}")
     return path
 
@@ -104,7 +138,7 @@ def validate_notices(directory):
         or not manifest["packages"]
         or not isinstance(manifest.get("documents"), list)
         or not manifest["documents"]
-        or not (directory / "THIRD-PARTY-LICENSES.txt").read_text().strip()
+        or not (directory / "THIRD-PARTY-LICENSES.txt").read_text(encoding="utf-8").strip()
     ):
         raise ValueError("third-party notice manifest is invalid")
     return directory
@@ -112,17 +146,22 @@ def validate_notices(directory):
 
 def payload(args, notices):
     skill = checked_source(REPO / "assets/skills/hiroute-management/SKILL.md")
+    names = executable_names(args.target)
+    guide = "standalone-windows.md" if args.target.endswith("-pc-windows-msvc") else "standalone-cli.md"
     files = {
-        "bin/hiroute": checked_source(args.hiroute, True),
-        "bin/hirouted": checked_source(args.hirouted, True),
-        "libexec/cliproxyapi": checked_source(args.cpa_binary, True),
+        names["hiroute"]: checked_source(args.hiroute, not args.target.endswith("-pc-windows-msvc")),
+        names["hirouted"]: checked_source(args.hirouted, not args.target.endswith("-pc-windows-msvc")),
+        names["cpa"]: checked_source(args.cpa_binary, not args.target.endswith("-pc-windows-msvc")),
         "licenses/CLIProxyAPI-LICENSE": checked_source(args.cpa_license),
         "licenses/HiRoute-LICENSE": checked_source(REPO / "LICENSE"),
         "skills/hiroute-management/SKILL.md": skill,
-        "docs/standalone-cli.md": checked_source(REPO / "docs/standalone-cli.md"),
+        "docs/standalone-cli.md": checked_source(REPO / "docs" / guide),
     }
     for name in sorted(NOTICE_FILES):
         files[f"licenses/{name}"] = checked_source(notices / name)
+    if args.target.endswith("-pc-windows-msvc"):
+        for key in names.values():
+            verify_windows_image(files[key], args.target)
     return files
 
 
@@ -183,7 +222,7 @@ def build(args):
         },
         "cpa": {
             "version": args.cpa_version,
-            "sha256": digest(files["libexec/cliproxyapi"]),
+            "sha256": digest(files[executable_names(args.target)["cpa"]]),
         },
         "distribution": "integration-candidate",
     }
@@ -222,7 +261,7 @@ def safe_members(archive, expected):
 def verify(manifest_path, archive_path):
     manifest = load_json_bytes(Path(manifest_path).read_bytes())
     archive = Path(archive_path)
-    expected_files = EXPECTED_FILES
+    inventory = expected_files(manifest.get("target", ""))
     if (
         not isinstance(manifest, dict)
         or set(manifest)
@@ -237,7 +276,7 @@ def verify(manifest_path, archive_path):
         or len(manifest["revision"]) > 128
         or manifest.get("distribution") != "integration-candidate"
         or not isinstance(manifest.get("files"), dict)
-        or set(manifest["files"]) != expected_files
+        or set(manifest["files"]) != inventory
         or not isinstance(manifest.get("archive"), dict)
         or set(manifest["archive"]) != {"filename", "sha256", "size"}
         or not isinstance(manifest.get("cpa"), dict)
@@ -289,6 +328,8 @@ def verify(manifest_path, archive_path):
             or mode != (0o755 if expected_mode == "executable" else 0o644)
         ):
             raise ValueError(f"standalone archive entry differs from manifest: {name}")
+        if manifest["target"].endswith("-pc-windows-msvc") and name in executable_names(manifest["target"]).values():
+            verify_windows_stream(io.BytesIO(data), manifest["target"])
     if (
         not isinstance(manifest["cpa"].get("version"), str)
         or not manifest["cpa"]["version"]
@@ -296,7 +337,7 @@ def verify(manifest_path, archive_path):
         or any(ord(value) < 0x20 for value in manifest["cpa"]["version"])
         or not isinstance(manifest["cpa"].get("sha256"), str)
         or not HEX_SHA256.fullmatch(manifest["cpa"]["sha256"])
-        or manifest["cpa"]["sha256"] != manifest["files"]["libexec/cliproxyapi"]["sha256"]
+        or manifest["cpa"]["sha256"] != manifest["files"][executable_names(manifest["target"])["cpa"]]["sha256"]
     ):
         raise ValueError("CPA identity differs from archive inventory")
     return manifest

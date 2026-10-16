@@ -8,6 +8,7 @@ rust-version.workspace = true
 [dependencies]
 hiroute-diagnostics = { path = "../diagnostics" }
 hiroute-host-runtime = { path = "../host-runtime" }
+hiroute-platform = { path = "../platform" }
 aes-gcm.workspace = true
 getrandom.workspace = true
 fs2.workspace = true
@@ -27,3 +28,6 @@ hiroute-application = { path = "../application" }
 hiroute-application-api = { path = "../application-api" }
 hiroute-integrations = { path = "../integrations" }
 tempfile.workspace = true
+
+[target.'cfg(windows)'.dev-dependencies]
+hiroute-platform-test-support = { path = "../platform/test-support" }

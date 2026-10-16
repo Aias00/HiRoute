@@ -10,7 +10,14 @@ fn checkpointed_wal_preflight_keeps_the_database_read_only() {
         .execute_batch("PRAGMA journal_mode=WAL; PRAGMA user_version=23; CREATE TABLE facts(value); INSERT INTO facts VALUES('retained');")
         .unwrap();
     drop(connection);
-    let path = root.path().join("checkpointed ? % 数据.db");
+    // Windows forbids `?` in a native filename; retain Unicode, spaces and `%`
+    // in the actual SQLite path on both platforms. Unix retains its URI sentinel.
+    let filename = if cfg!(windows) {
+        "checkpointed % 数据.db"
+    } else {
+        "checkpointed ? % 数据.db"
+    };
+    let path = root.path().join(filename);
     fs::copy(source, &path).unwrap();
     let before = fs::read(&path).unwrap();
     let connection = Connection::open_with_flags(

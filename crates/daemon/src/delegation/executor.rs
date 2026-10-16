@@ -325,12 +325,7 @@ impl DelegationRunExecutor {
             (Some(previous), Some(binding))
                 if previous != &run.run_id && binding.native_session_id.is_some() =>
             {
-                if task.plan.harness == hiroute_domain::delegation::WorkerHarnessV1::DeepseekHarness
-                {
-                    AcpSessionStart::Resume(binding.clone())
-                } else {
-                    AcpSessionStart::Load(binding.clone())
-                }
+                AcpSessionStart::native_continuation(task.plan.harness, binding.clone())
             }
             _ => return Err(DelegationErrorV1::ResumeUnavailable),
         };
@@ -758,7 +753,16 @@ fn checked_workspace_path(
         }
         Ok(canonical)
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        let path = path.to_str().ok_or(DelegationErrorV1::InvalidArguments)?;
+        let (actual, canonical) = super::profile::windows_workspace(path)?;
+        if &actual != expected {
+            return Err(DelegationErrorV1::PermissionDenied);
+        }
+        Ok(PathBuf::from(canonical))
+    }
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (path, expected);
         Err(DelegationErrorV1::CapabilityUnavailable)

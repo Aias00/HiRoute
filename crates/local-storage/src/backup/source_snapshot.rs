@@ -3,7 +3,8 @@ use super::*;
 use crate::migrations::{prepare_storage_root as prepare_owner_directory, validate_owner_file};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
-use std::io::Write;
+#[cfg(windows)]
+use std::io::{Read, Write};
 
 const MANIFEST: &str = "source-backup.json";
 
@@ -45,11 +46,57 @@ fn copy_tree(source: &Path, target: &Path) -> Result<(), LocalStorageError> {
             let entry = entry?;
             copy_tree(&entry.path(), &target.join(entry.file_name()))?;
         }
-        std::fs::File::open(target)?.sync_all()?;
+        hiroute_platform::durable::directory_barrier(target)?;
     } else if metadata.is_file() {
-        fs::copy(source, target)?;
-        fs::set_permissions(target, metadata.permissions())?;
-        std::fs::File::open(target)?.sync_all()?;
+        #[cfg(windows)]
+        {
+            // std::fs::copy/Permissions preserve only the readonly attribute on
+            // Windows. Manual recovery must retain the real source owner/DACL.
+            // Hold the admitted source through the read and bind all bytes to
+            // its exact native permissions; never follow a replaced pathname.
+            let mut file = hiroute_platform::windows::security::open_identity(source, false)?;
+            if hiroute_platform::windows::security::file_link_count(&file)? != 1 {
+                return Err(LocalStorageError::Permission);
+            }
+            let before = file.metadata()?;
+            let permissions = hiroute_platform::file_security::capture(&file)?;
+            hiroute_platform::durable::write_windows_atomic_with(target, &permissions, |stage| {
+                // A complete database or observation body can be large. Retain
+                // one fixed buffer, and never copy beyond the admitted length.
+                let mut buffer = zeroize::Zeroizing::new(vec![0_u8; 64 * 1024]);
+                let mut copied = 0_u64;
+                while copied < before.len() {
+                    let count = (before.len() - copied).min(buffer.len() as u64) as usize;
+                    file.read_exact(&mut buffer[..count])?;
+                    stage.write_all(&buffer[..count])?;
+                    copied += count as u64;
+                }
+                let mut trailing = zeroize::Zeroizing::new([0_u8; 1]);
+                let grew = file.read(&mut trailing[..])? != 0;
+                let after = file.metadata()?;
+                if copied != before.len()
+                    || grew
+                    || before.len() != after.len()
+                    || before.modified()? != after.modified()?
+                    || hiroute_platform::windows::security::file_link_count(&file)? != 1
+                    || hiroute_platform::file_security::capture(&file)? != permissions
+                {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "stopped snapshot source changed during copying",
+                    ));
+                }
+                // Only success allows the platform to flush, verify the exact
+                // native descriptor/readonly attribute and publish this stage.
+                Ok(())
+            })?;
+        }
+        #[cfg(not(windows))]
+        {
+            fs::copy(source, target)?;
+            fs::set_permissions(target, metadata.permissions())?;
+            hiroute_platform::durable::sync_file(target)?;
+        }
     } else {
         return Err(LocalStorageError::InvalidData);
     }
@@ -63,16 +110,7 @@ fn excluded(name: &str) -> bool {
         || name.ends_with(".sock")
 }
 fn write_private(path: &Path, bytes: &[u8]) -> Result<(), LocalStorageError> {
-    let mut options = fs::OpenOptions::new();
-    options.create_new(true).write(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    let mut file = options.open(path)?;
-    file.write_all(bytes)?;
-    file.sync_all()?;
+    hiroute_platform::durable::write_private_new(path, bytes)?;
     Ok(())
 }
 pub(super) fn publish(
@@ -91,7 +129,7 @@ pub(super) fn publish(
         let mut id = [0u8; 8];
         getrandom::fill(&mut id).map_err(|_| LocalStorageError::Crypto)?;
         let id = CanonicalDigest::of_bytes(&id);
-        fs::rename(
+        hiroute_platform::durable::rename(
             &stage,
             backup.join(format!("source-incomplete.{}", &id.as_str()[7..23])),
         )?;
@@ -171,9 +209,9 @@ pub(super) fn publish(
         &stage.join(MANIFEST),
         &serde_json::to_vec_pretty(&manifest).map_err(|_| LocalStorageError::InvalidData)?,
     )?;
-    std::fs::File::open(&stage)?.sync_all()?;
-    fs::rename(stage, &source)?;
-    std::fs::File::open(backup)?.sync_all()?;
+    hiroute_platform::durable::directory_barrier(&stage)?;
+    hiroute_platform::durable::rename(stage, &source)?;
+    hiroute_platform::durable::directory_barrier(backup)?;
     verify(backup)
 }
 fn collect(
@@ -195,10 +233,14 @@ fn collect(
         }
     } else if metadata.is_file() {
         files.insert(
+            // The manifest is portable JSON; native Windows separators must
+            // not defeat the existing `storage/` and `live/` recovery filters.
             path.strip_prefix(root)
                 .map_err(|_| LocalStorageError::InvalidData)?
-                .to_string_lossy()
-                .into_owned(),
+                .components()
+                .map(|component| component.as_os_str().to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+                .join("/"),
             CanonicalDigest::of_bytes(&fs::read(path)?).to_string(),
         );
     } else {
@@ -276,8 +318,22 @@ mod tests {
         let root = temporary.path().join("storage");
         let stores = crate::LocalStorageSet::open_for_daemon_startup(&root).unwrap();
         prepare_owner_directory(&root.join("observation")).unwrap();
-        fs::write(root.join("observation/body"), b"preserved observation").unwrap();
+        hiroute_platform::durable::write_private_new(
+            &root.join("observation/body"),
+            b"preserved observation",
+        )
+        .unwrap();
         set_owner_file_permissions(&root.join("observation/body")).unwrap();
+        // Cross three complete 64KiB chunks plus a partial tail. Readonly
+        // content must retain both bytes and real native security in the copy.
+        let chunked = (0..(3 * 64 * 1024 + 17))
+            .map(|index| ((index * 37 + 11) & 0xff) as u8)
+            .collect::<Vec<_>>();
+        let chunked_path = root.join("observation/chunked-readonly");
+        hiroute_platform::durable::write_private_new(&chunked_path, &chunked).unwrap();
+        let mut readonly = fs::metadata(&chunked_path).unwrap().permissions();
+        readonly.set_readonly(true);
+        fs::set_permissions(&chunked_path, readonly).unwrap();
         let backup = temporary.path().join("backup");
         let barrier = test_writer_barrier();
         let set = BackupSet::create(
@@ -291,12 +347,43 @@ mod tests {
         set.publish_stopped_source(&barrier, &root, &crate::StorageStartupOptions::default())
             .unwrap();
         verify(&backup).unwrap();
-        for name in ["master-key", "observation/body"] {
+        verify_unchanged(&root, &backup).unwrap();
+        for name in [
+            "master-key",
+            "observation/body",
+            "observation/chunked-readonly",
+        ] {
             assert_eq!(
                 fs::read(root.join(name)).unwrap(),
                 fs::read(backup.join("source/storage").join(name)).unwrap()
             );
+            #[cfg(windows)]
+            {
+                let original =
+                    hiroute_platform::windows::security::open_identity(&root.join(name), false)
+                        .unwrap();
+                let copy = hiroute_platform::windows::security::open_identity(
+                    &backup.join("source/storage").join(name),
+                    false,
+                )
+                .unwrap();
+                assert_eq!(
+                    hiroute_platform::file_security::capture(&original).unwrap(),
+                    hiroute_platform::file_security::capture(&copy).unwrap(),
+                    "the complete source snapshot must retain native recovery permissions",
+                );
+            }
         }
+        assert_eq!(
+            fs::read(backup.join("source/storage/observation/chunked-readonly")).unwrap(),
+            chunked
+        );
+        assert!(
+            fs::metadata(backup.join("source/storage/observation/chunked-readonly"))
+                .unwrap()
+                .permissions()
+                .readonly()
+        );
         let manifest = fs::read(backup.join("source/source-backup.json")).unwrap();
         set.publish_stopped_source(&barrier, &root, &crate::StorageStartupOptions::default())
             .unwrap();
@@ -306,5 +393,14 @@ mod tests {
         );
         fs::write(root.join("observation/body"), b"changed").unwrap();
         assert!(verify_unchanged(&root, &backup).is_err());
+        #[cfg(windows)]
+        for path in [
+            chunked_path,
+            backup.join("source/storage/observation/chunked-readonly"),
+        ] {
+            let mut writable = fs::metadata(&path).unwrap().permissions();
+            writable.set_readonly(false);
+            fs::set_permissions(path, writable).unwrap();
+        }
     }
 }

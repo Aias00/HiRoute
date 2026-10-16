@@ -1,6 +1,13 @@
+#[cfg(windows)]
+use hiroute_platform::windows::pipe::{Listener as LocalListener, Stream as LocalStream};
+#[cfg(unix)]
 use std::io::{Read, Write};
+#[cfg(all(test, unix))]
 use std::os::unix::net::{UnixListener, UnixStream};
+#[cfg(unix)]
+use std::os::unix::net::{UnixListener as LocalListener, UnixStream as LocalStream};
 use std::path::{Path, PathBuf};
+#[cfg(unix)]
 use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
@@ -15,15 +22,35 @@ use zeroize::{Zeroize, Zeroizing};
 
 const IO_TIMEOUT: Duration = Duration::from_secs(2);
 
+mod bootstrap;
+pub(super) use bootstrap::{apply_standalone_defaults, run_all_standalone};
+
+#[cfg(windows)]
+mod windows;
+
 /// Local credential input shared by standalone and Desktop-owned role-all processes.
 pub(super) struct ProtectedInputServer {
-    listener: UnixListener,
+    listener: LocalListener,
+    #[cfg(unix)]
     path: PathBuf,
+    #[cfg(windows)]
+    lifecycle: Option<windows::LifecycleServer>,
+    #[cfg(windows)]
+    shutdown: Option<std::sync::mpsc::Receiver<()>>,
 }
 
 impl ProtectedInputServer {
     pub(super) fn bind(layout: &StandaloneLayout) -> Result<Self, String> {
-        Self::bind_path(layout.protected_input_socket())
+        let server = Self::bind_path(layout.protected_input_socket())?;
+        #[cfg(windows)]
+        let server = {
+            let mut server = server;
+            server.lifecycle = Some(windows::LifecycleServer::bind(layout)?);
+            // Register console shutdown before publishing the daemon readiness frame.
+            server.shutdown = Some(windows::shutdown_signal()?);
+            server
+        };
+        Ok(server)
     }
 
     pub(super) fn bind_path(path: PathBuf) -> Result<Self, String> {
@@ -33,14 +60,25 @@ impl ProtectedInputServer {
         validate_private_directory(parent)?;
         remove_stale_socket(&path)?;
         let listener =
-            UnixListener::bind(&path).map_err(|_| "protected input socket bind failed")?;
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
-            .map_err(|_| "protected input socket permissions failed")?;
+            LocalListener::bind(&path).map_err(|_| "protected input socket bind failed")?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
+                .map_err(|_| "protected input socket permissions failed")?;
+        }
         listener
             .set_nonblocking(true)
             .map_err(|_| "protected input socket setup failed")?;
-        Ok(Self { listener, path })
+        Ok(Self {
+            listener,
+            #[cfg(unix)]
+            path,
+            #[cfg(windows)]
+            lifecycle: None,
+            #[cfg(windows)]
+            shutdown: None,
+        })
     }
 
     pub(super) fn poll(&self, role: &hiroute_daemon::RoleAllHandle) -> Result<(), String> {
@@ -62,11 +100,42 @@ impl ProtectedInputServer {
         }
     }
 
-    pub(super) fn run(self, mut role: hiroute_daemon::RoleAllHandle) -> Result<(), String> {
+    pub(super) fn run(
+        #[allow(unused_mut)] mut self,
+        mut role: hiroute_daemon::RoleAllHandle,
+        #[cfg(windows)] service: Option<hiroute_platform::windows::service::ServiceShutdown>,
+    ) -> Result<(), String> {
         let result = (|| {
-            let shutdown = shutdown_signal()?;
+            #[cfg(unix)]
+            let shutdown = Some(shutdown_signal()?);
+            #[cfg(windows)]
+            let shutdown = if service.is_some() {
+                None
+            } else {
+                Some(
+                    self.shutdown
+                        .take()
+                        .ok_or("standalone signal handler unavailable")?,
+                )
+            };
             loop {
-                if shutdown.try_recv().is_ok() {
+                #[cfg(windows)]
+                if service
+                    .as_ref()
+                    .is_some_and(|service| service.is_requested())
+                {
+                    break Ok(());
+                }
+                #[cfg(windows)]
+                if let Some(server) = self.lifecycle.as_ref()
+                    && server.poll_stop()?
+                {
+                    break Ok(());
+                }
+                if shutdown
+                    .as_ref()
+                    .is_some_and(|shutdown| shutdown.try_recv().is_ok())
+                {
                     break Ok(());
                 }
                 self.poll(&role)?;
@@ -77,20 +146,20 @@ impl ProtectedInputServer {
         let joined = role
             .join(Duration::from_secs(30))
             .map_err(|error| error.to_string());
-        let _ = std::fs::remove_file(&self.path);
         result.and(joined)
     }
 }
 
 impl Drop for ProtectedInputServer {
     fn drop(&mut self) {
+        #[cfg(unix)]
         let _ = std::fs::remove_file(&self.path);
     }
 }
 
 fn handle_connection(
     role: &hiroute_daemon::RoleAllHandle,
-    mut stream: UnixStream,
+    mut stream: LocalStream,
 ) -> Result<(), String> {
     stream
         .set_read_timeout(Some(IO_TIMEOUT))
@@ -98,11 +167,25 @@ fn handle_connection(
     stream
         .set_write_timeout(Some(IO_TIMEOUT))
         .map_err(|_| "protected input write timeout setup failed")?;
+    #[cfg(windows)]
+    stream
+        .set_deadline(Some(std::time::Instant::now() + IO_TIMEOUT))
+        .map_err(|_| "protected input deadline setup failed")?;
+    #[cfg(unix)]
     let mut bytes = Zeroizing::new(Vec::new());
+    #[cfg(unix)]
     Read::by_ref(&mut stream)
         .take(STANDALONE_PROTECTED_INPUT_MAX_FRAME_BYTES_V1 + 1)
         .read_to_end(&mut bytes)
         .map_err(|_| "protected input request read failed")?;
+    #[cfg(windows)]
+    let bytes = hiroute_platform::local_record::read(
+        &mut stream,
+        hiroute_platform::local_record::Channel::ProtectedInput,
+        hiroute_platform::local_record::Direction::Request,
+        STANDALONE_PROTECTED_INPUT_MAX_FRAME_BYTES_V1 as usize,
+    )
+    .map_err(|_| "protected input request read failed")?;
     if bytes.is_empty() || bytes.len() as u64 > STANDALONE_PROTECTED_INPUT_MAX_FRAME_BYTES_V1 {
         return Err("protected input request size is invalid".into());
     }
@@ -147,7 +230,8 @@ fn handle_connection(
             if response.is_err() {
                 let _ = role.release_manual_protected_input(&candidate_ref);
             }
-            response
+            response?;
+            response_acknowledgement(&mut stream)
         }
         "release" => {
             if request.candidate_revision.is_some() || request.secret.is_some() {
@@ -166,24 +250,49 @@ fn handle_connection(
                     action: "release".into(),
                     registered: true,
                 },
-            )
+            )?;
+            response_acknowledgement(&mut stream)
         }
         _ => Err("protected input action is invalid".into()),
     }
 }
 
 fn write_response(
-    stream: &mut UnixStream,
+    stream: &mut LocalStream,
     response: &StandaloneProtectedInputResponseV1,
 ) -> Result<(), String> {
-    let mut bytes = Zeroizing::new(
+    let bytes = Zeroizing::new(
         serde_json::to_vec(response).map_err(|_| "protected input response is invalid")?,
     );
-    bytes.push(b'\n');
-    stream
-        .write_all(&bytes)
-        .and_then(|_| stream.flush())
-        .map_err(|_| "protected input response write failed".into())
+    #[cfg(unix)]
+    {
+        let mut bytes = bytes;
+        bytes.push(b'\n');
+        stream
+            .write_all(&bytes)
+            .and_then(|_| stream.flush())
+            .map_err(|_| "protected input response write failed".into())
+    }
+    #[cfg(windows)]
+    hiroute_platform::local_record::write(
+        stream,
+        hiroute_platform::local_record::Channel::ProtectedInput,
+        hiroute_platform::local_record::Direction::Response,
+        &bytes,
+        STANDALONE_PROTECTED_INPUT_MAX_FRAME_BYTES_V1 as usize,
+    )
+    .map_err(|_| "protected input response write failed".into())
+}
+
+fn response_acknowledgement(stream: &mut LocalStream) -> Result<(), String> {
+    #[cfg(unix)]
+    let _ = stream;
+    #[cfg(windows)]
+    hiroute_platform::local_record::await_acknowledgement(stream)
+        .map_err(|_| "protected input response acknowledgement failed")?;
+    // An absent ACK cannot revoke a registration whose successful response
+    // may already have been read. The caller can release it explicitly.
+    Ok(())
 }
 
 fn valid_candidate_ref(value: &str) -> bool {
@@ -195,14 +304,22 @@ fn valid_candidate_ref(value: &str) -> bool {
 }
 
 fn validate_private_directory(path: &Path) -> Result<(), String> {
-    let metadata = std::fs::symlink_metadata(path)
-        .map_err(|_| "protected input socket directory is unavailable")?;
-    if !metadata.is_dir() || metadata.file_type().is_symlink() {
-        return Err("protected input socket directory is unsafe".into());
+    #[cfg(windows)]
+    return hiroute_platform::windows::security::open_owner_only(path, true)
+        .map(|_| ())
+        .map_err(|_| "protected input socket directory is unsafe".into());
+    #[cfg(unix)]
+    {
+        let metadata = std::fs::symlink_metadata(path)
+            .map_err(|_| "protected input socket directory is unavailable")?;
+        if !metadata.is_dir() || metadata.file_type().is_symlink() {
+            return Err("protected input socket directory is unsafe".into());
+        }
+        Ok(())
     }
-    Ok(())
 }
 
+#[cfg(unix)]
 fn remove_stale_socket(path: &Path) -> Result<(), String> {
     use std::os::unix::fs::FileTypeExt;
     match std::fs::symlink_metadata(path) {
@@ -214,6 +331,16 @@ fn remove_stale_socket(path: &Path) -> Result<(), String> {
     }
 }
 
+#[cfg(windows)]
+fn remove_stale_socket(path: &Path) -> Result<(), String> {
+    // The logical locator never becomes a filesystem socket on Windows.
+    if std::fs::symlink_metadata(path).is_ok() {
+        return Err("protected input socket path conflicts with another entry".into());
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
 fn shutdown_signal() -> Result<Receiver<()>, String> {
     let (sender, receiver) = mpsc::sync_channel(1);
     std::thread::Builder::new()
@@ -268,6 +395,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn protected_input_fits_a_runtime_root_that_supports_local_control() {
         use std::os::unix::fs::PermissionsExt;
 

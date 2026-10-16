@@ -170,6 +170,7 @@ pub(super) fn project_candidate(
     Ok(GatewayExecutableCandidateV2 {
         local_id,
         stable_target_key: candidate.binding_id.clone(),
+        source_binding_id: None,
         adapter_id: format!("{}@{}", candidate.adapter_ref, candidate.adapter_revision),
         credential_refs: candidate.credential_refs.clone(),
         credential_destination_ref: candidate

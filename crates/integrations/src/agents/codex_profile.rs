@@ -15,12 +15,12 @@ pub fn codex_profile_dependency_digest(
 ) -> Result<CanonicalDigest, AgentFilesystemScanError> {
     let profile = root.with_file_name("hiroute.config.toml");
     let mut sampled = Vec::new();
-    for (path, system) in [
-        (PathBuf::from("/etc/codex/config.toml"), true),
-        (PathBuf::from("/etc/codex/managed_config.toml"), true),
-        (root.to_owned(), false),
-        (profile.clone(), false),
-    ] {
+    let mut paths = codex_system_paths()?
+        .into_iter()
+        .map(|path| (path, true))
+        .collect::<Vec<_>>();
+    paths.extend([(root.to_owned(), false), (profile.clone(), false)]);
+    for (path, system) in paths {
         let content = if system {
             read_system_config_bytes(&path)?
         } else {
@@ -55,6 +55,40 @@ pub fn codex_profile_dependency_digest(
         }
     }
     CanonicalDigest::of(&sampled).map_err(|_| AgentFilesystemScanError::InvalidConfig)
+}
+
+/// Native loader namespace for the frozen Codex 0.158.0/0.160.1 contracts.
+/// Windows resolves ProgramData from the OS rather than a process-controlled variable.
+pub(super) fn codex_system_paths() -> Result<Vec<PathBuf>, AgentFilesystemScanError> {
+    #[cfg(windows)]
+    {
+        let base = hiroute_platform::windows::background::program_data()
+            .map_err(|_| AgentFilesystemScanError::SourceUnavailable)?
+            .join("OpenAI/Codex");
+        Ok(vec![
+            base.join("config.toml"),
+            base.join("requirements.toml"),
+        ])
+    }
+    #[cfg(not(windows))]
+    {
+        Ok(vec![
+            "/etc/codex/config.toml".into(),
+            "/etc/codex/managed_config.toml".into(),
+        ])
+    }
+}
+
+#[cfg(any(unix, windows))]
+pub(super) fn codex_has_system_configuration() -> Result<bool, AgentFilesystemScanError> {
+    for path in codex_system_paths()? {
+        match std::fs::symlink_metadata(path) {
+            Ok(_) => return Ok(true),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(false)
 }
 
 /// Explicit HOME binding is intentional: the terminal environment is not known to the UI.
@@ -117,22 +151,54 @@ mod tests {
 
     #[test]
     fn launch_command_binds_original_home_without_shell_interpolation() {
-        let home = Path::new("/tmp/a b'\"$HOME`false`\\codex");
-        let commands = codex_profile_commands(home).unwrap();
-        let script = format!(
-            "codex() {{ printf '%s\\n' \"$CODEX_HOME\" \"$@\"; }}\n{}",
-            commands["bash/zsh"]
-        );
-        let output = std::process::Command::new("bash")
-            .args(["--noprofile", "--norc", "-c", &script])
-            .output()
+        #[cfg(unix)]
+        {
+            let home = Path::new("/tmp/a b'\"$HOME`false`\\codex");
+            let commands = codex_profile_commands(home).unwrap();
+            let script = format!(
+                "codex() {{ printf '%s\\n' \"$CODEX_HOME\" \"$@\"; }}\n{}",
+                commands["bash/zsh"]
+            );
+            let output = std::process::Command::new("bash")
+                .args(["--noprofile", "--norc", "-c", &script])
+                .output()
+                .unwrap();
+            assert!(output.status.success());
+            assert_eq!(
+                String::from_utf8(output.stdout).unwrap(),
+                format!("{}\n--profile\nhiroute\n", home.display())
+            );
+            assert!(commands["PowerShell"].contains("finally"));
+        }
+        #[cfg(windows)]
+        {
+            let home = Path::new(r"C:\a b' % ! &\codex");
+            let commands = codex_profile_commands(home).unwrap();
+            let script = format!(
+                "function codex {{ [Console]::WriteLine($env:CODEX_HOME); foreach ($argument in $args) {{ [Console]::WriteLine($argument) }} }}; $env:CODEX_HOME = 'previous'; {}; if ($env:CODEX_HOME -ne 'previous') {{ throw 'context was not restored' }}",
+                commands["PowerShell"]
+            );
+            let powershell = hiroute_platform::windows::launcher::system_executable(Path::new(
+                r"WindowsPowerShell\v1.0\powershell.exe",
+            ))
             .unwrap();
-        assert!(output.status.success());
-        assert_eq!(
-            String::from_utf8(output.stdout).unwrap(),
-            format!("{}\n--profile\nhiroute\n", home.display())
-        );
-        assert!(commands["PowerShell"].contains("finally"));
+            let mut command = std::process::Command::new(powershell);
+            command.args(["-NoProfile", "-NonInteractive", "-Command", &script]);
+            let output = super::super::windows_runtime::bounded(
+                &command,
+                true,
+                std::time::Duration::from_secs(10),
+                4096,
+            )
+            .unwrap();
+            assert_eq!(
+                std::str::from_utf8(&output)
+                    .unwrap()
+                    .lines()
+                    .collect::<Vec<_>>(),
+                [home.to_str().unwrap(), "--profile", "hiroute"]
+            );
+        }
         assert!(codex_profile_commands(Path::new("/tmp/line\nbreak")).is_err());
     }
 

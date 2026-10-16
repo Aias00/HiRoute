@@ -75,6 +75,10 @@ mod tests {
         prepare_storage_root(&root.join("diagnostics")).unwrap();
         prepare_storage_root(&root.join("diagnostics/daemon")).unwrap();
         let log = root.join("diagnostics/daemon/current.jsonl");
+        #[cfg(windows)]
+        hiroute_platform::durable::write_private_new(&log, b"retained startup diagnostic\n")
+            .unwrap();
+        #[cfg(not(windows))]
         fs::write(&log, b"retained startup diagnostic\n").unwrap();
         set_owner_file_permissions(&log).unwrap();
         drop(crate::LocalStorageSet::open_for_daemon_startup(&root).unwrap());

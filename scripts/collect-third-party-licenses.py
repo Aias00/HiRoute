@@ -93,6 +93,7 @@ def run(*args: str, cwd: Path = REPO, env: dict[str, str] | None = None) -> str:
         env=env,
         check=True,
         text=True,
+        encoding="utf-8",
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     ).stdout
@@ -213,7 +214,7 @@ def collect_cargo(apache_text: bytes, target: str | None) -> tuple[list[dict[str
 
 def collect_npm(root: Path, apache_text: bytes) -> tuple[list[dict[str, object]], str]:
     lock_path = root / "package-lock.json"
-    lock = json.loads(lock_path.read_text())
+    lock = json.loads(lock_path.read_text(encoding="utf-8"))
     if lock.get("lockfileVersion") != 3 or not isinstance(lock.get("packages"), dict):
         raise ValueError("npm license collection requires a package-lock v3 package map")
     packages = []
@@ -224,7 +225,7 @@ def collect_npm(root: Path, apache_text: bytes) -> tuple[list[dict[str, object]]
         manifest_path = directory / "package.json"
         if not manifest_path.is_file():
             raise ValueError(f"npm dependency is not installed: {relative}; run npm ci first")
-        manifest = json.loads(manifest_path.read_text())
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         name = manifest.get("name")
         version = locked.get("version") or manifest.get("version")
         expression = locked.get("license") or manifest.get("license") or ""
@@ -286,7 +287,7 @@ def extract_regular_tree(bundle: tarfile.TarFile, destination: Path) -> None:
 
 def extract_cpa(source_repo: Path, destination: Path) -> tuple[dict[str, object], Path]:
     pin_path = REPO / "vendor/cpa/source.json"
-    pin = json.loads(pin_path.read_text())
+    pin = json.loads(pin_path.read_text(encoding="utf-8"))
     patch = pin_path.parent / pin["patch"]
     if sha256_file(patch) != pin["patch_sha256"]:
         raise ValueError("CPA source patch checksum mismatch")
@@ -306,7 +307,7 @@ def collect_go(source_repo: Path) -> tuple[list[dict[str, object]], dict[str, st
         root_license = source / "LICENSE"
         if not root_license.is_file():
             raise ValueError("pinned CPA source has no LICENSE")
-        module_line = (source / "go.mod").read_text().splitlines()[0]
+        module_line = (source / "go.mod").read_text(encoding="utf-8").splitlines()[0]
         if not module_line.startswith("module ") or not module_line.removeprefix("module ").strip():
             raise ValueError("pinned CPA source has an invalid module path")
         module_name = module_line.removeprefix("module ").strip()
@@ -404,11 +405,9 @@ def render(packages: list[dict[str, object]], inputs: dict[str, object], output:
     else:
         output.mkdir(parents=True)
     manifest_path = output / "third-party-licenses.json"
-    manifest_path.write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n"
-    )
+    manifest_path.write_bytes((json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode("utf-8"))
     text_path = output / "THIRD-PARTY-LICENSES.txt"
-    text_path.write_text("".join(sections))
+    text_path.write_bytes("".join(sections).encode("utf-8"))
     manifest_path.chmod(0o644)
     text_path.chmod(0o644)
 
@@ -439,7 +438,7 @@ def collect(args: argparse.Namespace) -> dict[str, object]:
     return {
         "output": str(output),
         "packages": len(packages),
-        "documents": len(json.loads((output / "third-party-licenses.json").read_text())["documents"]),
+        "documents": len(json.loads((output / "third-party-licenses.json").read_text(encoding="utf-8"))["documents"]),
     }
 
 

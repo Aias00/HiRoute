@@ -87,7 +87,7 @@ retry cannot expand into later requests, other sessions, or model/plan/Agent set
 
 ### Requirement: Accessible local objects are governed by OS operations
 
-HiRoute MUST NOT reject existing local files/directories/sockets solely for owner
+On Unix, HiRoute MUST NOT reject existing local files/directories/sockets solely for owner
 UID, group/other access bits, or not being 0600/0700. This includes native auth and
 Agent configuration, product data/recovery, diagnostics/private samples, CPA-owned
 login directories, and local control/protected-input transport. Actual open/read/
@@ -100,6 +100,27 @@ Metadata drift may require re-read, but permission differences alone cannot impo
 permanent rejection. Explicit write modes/user-requested permission changes remain
 output intent. Gateway/upstream auth, protected capabilities, OAuth state/session/
 provider binding, and WebView ACL are independent and remain enforced.
+
+### Requirement: Windows private state and configuration recovery retain native identity
+
+New HiRoute-owned private objects MUST receive their user owner and private ACL at
+creation, including child-created secret files and database sidecars. Parent shell
+token defaults and unrelated existing user objects remain unchanged. Protected
+runtime files and pipe endpoints retain their explicit SID/DACL admission; borrowed
+native configuration follows its own access contract without automatic ACL repair.
+
+Identity-sensitive operations MUST hold the actual file/directory objects and reject
+reparse or replacement drift before privileged reads, publication or cleanup. A path
+string, metadata snapshot or old PID is not authority over a replacement object.
+Configuration fingerprints and authenticated recovery records include the relevant
+Windows owner, DACL and read-only facts. Restore is conditional on the expected
+current object and restores the captured bytes and native permissions together.
+
+Windows-native fingerprint and recovery extensions cannot change supported Unix
+fingerprint bytes or retire registered historical readers. Supported store conversion
+continues through the existing three-store coordinator with platform-derived source
+fixtures; parser acceptance or a development-package upgrade is not proof of a
+released Windows-to-Windows upgrade.
 
 ## Implementation references
 

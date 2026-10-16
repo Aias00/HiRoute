@@ -42,7 +42,7 @@ mod discovery_tests;
 struct Fixture {
     runtime: ProductionControlRuntime,
     runtimes: Arc<ManagedCpaRuntimeSet>,
-    root: tempfile::TempDir,
+    root: crate::test_support::PrivateTempDir,
 }
 
 impl Fixture {

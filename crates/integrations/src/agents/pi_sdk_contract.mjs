@@ -95,9 +95,15 @@ export async function probePiCapabilities(sdk, scope) {
 
 if (process.argv[2] === '--check' && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
   process.umask(0o077);
+  // Closed native exit stages distinguish SDK import, interface and executable capability
+  // failures. Never expose exception messages, paths, credentials or native stderr.
+  let failure = 21;
   try {
     const {sdk} = await loadPiSdk(process.argv[3]);
+    failure = 22;
+    assertPiCapabilities(sdk, process.argv[4]);
+    failure = 23;
     await probePiCapabilities(sdk, process.argv[4]);
     process.stdout.write('hiroute.pi-sdk-capability/v1:ok\n');
-  } catch {process.exitCode = 1;}
+  } catch {process.exitCode = failure;}
 }

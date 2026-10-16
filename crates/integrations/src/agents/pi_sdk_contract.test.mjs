@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
+import {spawnSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {loadPiSdk, assertPiCapabilities, probePiCapabilities} from './pi_sdk_contract.mjs';
 
 function sdk() {
@@ -48,6 +50,33 @@ test('the selected CLI owns its SDK after a version or npm entry-layout change',
       await assert.rejects(loadPiSdk(cli));
     } finally {rmSync(root, {recursive:true, force:true});}
   }
+});
+
+test('a CLI bundle cannot admit a broken SDK dependency or expose its import exception', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'hiroute-pi-sdk-import-test-'));
+  try {
+    mkdirSync(join(root, 'bin')); mkdirSync(join(root, 'sdk'));
+    const cli = join(root, 'bin/pi.mjs');
+    // The bundled CLI can work while the separately exported SDK has an incompatible
+    // dependency, as pi-coding-agent 1.0.2 did with pi-codemode 1.2.0.
+    writeFileSync(cli, 'process.stdout.write("CLI bundle available");');
+    writeFileSync(join(root, 'sdk/declarations.mjs'), 'export const replacement = 1;');
+    writeFileSync(join(root, 'sdk/index.mjs'),
+      'import {MCP_TYPESCRIPT_PREAMBLE} from "./declarations.mjs"; export {MCP_TYPESCRIPT_PREAMBLE};');
+    writeFileSync(join(root, 'package.json'), JSON.stringify({
+      name:'@earendil-works/pi-coding-agent', version:'1.0.2', bin:{pi:'bin/pi.mjs'},
+      exports:{'.':{import:'./sdk/index.mjs'}}
+    }));
+    await assert.rejects(loadPiSdk(cli), {name:'SyntaxError'});
+    const contract = fileURLToPath(new URL('./pi_sdk_contract.mjs', import.meta.url));
+    const checked = spawnSync(process.execPath, [contract, '--check', cli, 'worker'], {
+      encoding:'utf8', timeout:10_000
+    });
+    assert.equal(checked.error, undefined);
+    assert.equal(checked.status, 21);
+    assert.equal(checked.stdout, '');
+    assert.equal(checked.stderr, '');
+  } finally {rmSync(root, {recursive:true, force:true});}
 });
 
 test('model routing checks native declarations without requiring Worker or history interfaces', async () => {

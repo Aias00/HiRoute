@@ -1,8 +1,8 @@
 //! Private handoff from the standalone CLI to its independently launched service.
 use std::collections::BTreeMap;
 use std::ffi::OsString;
-use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Write};
+use std::fs::{self, File};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -42,11 +42,17 @@ impl ServiceProxyEnvironment {
     ) -> Result<Self, ServiceProxyError> {
         let mut variables = BTreeMap::new();
         for (key, value) in values {
-            if let Some(key) = key.to_str().filter(|key| KEYS.contains(key)) {
-                variables.insert(
-                    key.to_owned(),
-                    value.into_string().map_err(|_| ServiceProxyError)?,
-                );
+            #[cfg(windows)]
+            let key = key.to_str().map(str::to_ascii_uppercase);
+            #[cfg(not(windows))]
+            let key = key.to_str().map(str::to_owned);
+            if let Some(key) = key.filter(|key| KEYS.contains(&key.as_str())) {
+                let value = value.into_string().map_err(|_| ServiceProxyError)?;
+                #[cfg(windows)]
+                if variables.get(&key).is_some_and(|old| old != &value) {
+                    return Err(ServiceProxyError);
+                }
+                variables.insert(key.to_owned(), value);
             }
         }
         let result = Self {
@@ -58,9 +64,11 @@ impl ServiceProxyEnvironment {
     }
 
     pub fn variables(&self) -> impl Iterator<Item = (OsString, OsString)> + '_ {
-        self.variables
-            .iter()
-            .map(|(key, value)| (key.into(), value.into()))
+        self.variables.iter().map(|(key, value)| {
+            #[cfg(windows)]
+            let key = key.to_ascii_uppercase();
+            (key.into(), value.into())
+        })
     }
 
     fn validate(&self) -> Result<(), ServiceProxyError> {
@@ -74,6 +82,15 @@ impl ServiceProxyEnvironment {
                 > MAX_BYTES
         {
             return Err(ServiceProxyError);
+        }
+        #[cfg(windows)]
+        {
+            let mut logical = BTreeMap::new();
+            for (key, value) in &self.variables {
+                if logical.insert(key.to_ascii_uppercase(), value).is_some() {
+                    return Err(ServiceProxyError);
+                }
+            }
         }
         Ok(())
     }
@@ -90,26 +107,11 @@ impl ServiceProxyEnvironment {
         if let Some(file) = open_private(&path)? {
             drop(file);
         }
-        let mut random = [0u8; 16];
-        getrandom::fill(&mut random).map_err(|_| ServiceProxyError)?;
-        let suffix: String = random.iter().map(|byte| format!("{byte:02x}")).collect();
-        let temporary = path.with_file_name(format!(".proxy-{suffix}.tmp"));
-        let result = (|| {
-            let mut options = OpenOptions::new();
-            options.write(true).create_new(true);
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::OpenOptionsExt;
-                options.mode(0o600).custom_flags(nix::libc::O_NOFOLLOW);
-            }
-            let mut file = options.open(&temporary).map_err(|_| ServiceProxyError)?;
-            file.write_all(&serde_json::to_vec(self).map_err(|_| ServiceProxyError)?)
-                .and_then(|()| file.sync_all())
-                .map_err(|_| ServiceProxyError)?;
-            fs::rename(&temporary, &path).map_err(|_| ServiceProxyError)
-        })();
-        let _ = fs::remove_file(&temporary);
-        result
+        hiroute_platform::durable::write_private_atomic(
+            &path,
+            &serde_json::to_vec(self).map_err(|_| ServiceProxyError)?,
+        )
+        .map_err(|_| ServiceProxyError)
     }
 
     pub fn load(home: &Path) -> Result<Option<Self>, ServiceProxyError> {
@@ -144,15 +146,13 @@ fn validate_directories(home: &Path, create: bool) -> Result<bool, ServiceProxyE
                 if !metadata.is_dir() {
                     return Err(ServiceProxyError);
                 }
+                #[cfg(windows)]
+                hiroute_platform::windows::security::open_identity(&path, true)
+                    .map_err(|_| ServiceProxyError)?;
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound && create => {
-                let mut builder = fs::DirBuilder::new();
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::DirBuilderExt;
-                    builder.mode(0o700);
-                }
-                builder.create(&path).map_err(|_| ServiceProxyError)?;
+                hiroute_platform::private_fs::create_directory(&path)
+                    .map_err(|_| ServiceProxyError)?;
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
             Err(_) => return Err(ServiceProxyError),
@@ -162,20 +162,20 @@ fn validate_directories(home: &Path, create: bool) -> Result<bool, ServiceProxyE
 }
 
 fn open_private(path: &Path) -> Result<Option<File>, ServiceProxyError> {
-    let mut options = OpenOptions::new();
-    options.read(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.custom_flags(nix::libc::O_NOFOLLOW | nix::libc::O_NONBLOCK);
-    }
-    let file = match options.open(path) {
+    let opened = hiroute_platform::private_fs::open_regular_file(path);
+    let file = match opened {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(_) => return Err(ServiceProxyError),
     };
     let metadata = file.metadata().map_err(|_| ServiceProxyError)?;
     if !metadata.is_file() {
+        return Err(ServiceProxyError);
+    }
+    #[cfg(windows)]
+    if hiroute_platform::windows::security::file_link_count(&file).map_err(|_| ServiceProxyError)?
+        != 1
+    {
         return Err(ServiceProxyError);
     }
     Ok(Some(file))

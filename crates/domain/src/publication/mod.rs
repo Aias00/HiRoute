@@ -65,6 +65,9 @@ impl GatewayPublicationRevision {
 pub struct GatewayExecutableCandidateV2 {
     pub local_id: u32,
     pub stable_target_key: String,
+    /// Source membership remains independent of branch/reasoning execution identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_binding_id: Option<String>,
     pub adapter_id: String,
     pub credential_refs: Vec<String>,
     /// Exact Secret authority destination derived from the current connection option.
@@ -427,7 +430,22 @@ impl GatewayPublicationV1 {
         // Independent Plans may be saved before an Agent grants them. Only aliases reached by at
         // least one grant are executable; the Gateway projection remains closed over that subset.
         let enabled_grants = self.enabled_grants()?;
-        let expected_aliases = materialize_aliases(&self.plans, &enabled_grants)?;
+        let mut expected_aliases = materialize_aliases(&self.plans, &enabled_grants)?;
+        // Older aggregates omit source membership on every execution projection.
+        // Authenticate their complete old projection before rebuilding from Plans.
+        if self.aliases.iter().all(|alias| {
+            alias
+                .candidates
+                .iter()
+                .all(|candidate| candidate.source_binding_id.is_none())
+        }) {
+            for candidate in expected_aliases
+                .iter_mut()
+                .flat_map(|alias| &mut alias.candidates)
+            {
+                candidate.source_binding_id = None;
+            }
+        }
         if expected_aliases != self.aliases {
             // Publications written after request-owned routing but before the safe Plan display
             // name was frozen remain exact legacy records. The next Application-owned publish

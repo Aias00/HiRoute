@@ -1,4 +1,6 @@
-use std::fs::{self, OpenOptions};
+use std::fs;
+#[cfg(not(windows))]
+use std::fs::OpenOptions;
 use std::io::Read;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -113,7 +115,7 @@ impl OwnerLease {
             return Err(OwnerError::NonceMismatch);
         }
         let _reclaim_guard = lock_reclaim(parent)?;
-        match fs::create_dir(lock_dir) {
+        match create_lock_directory(lock_dir) {
             Ok(()) => {
                 ensure_private_dir(lock_dir)?;
                 if let Err(error) = write_record(lock_dir, initial) {
@@ -128,7 +130,7 @@ impl OwnerLease {
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
                 if !lock_dir.join("owner.json").exists() {
                     recover_incomplete_lock_dir(lock_dir)?;
-                    fs::create_dir(lock_dir).map_err(OwnerError::Io)?;
+                    create_lock_directory(lock_dir).map_err(OwnerError::Io)?;
                     ensure_private_dir(lock_dir)?;
                     write_record(lock_dir, initial)?;
                     return Ok(OwnerClaim::Acquired(Self {
@@ -205,34 +207,74 @@ impl OwnerLease {
             if record.owner_nonce != self.nonce {
                 return Err(OwnerError::NonceMismatch);
             }
-            fs::remove_file(record_path).map_err(OwnerError::Io)?;
+            remove_private_file(&record_path).map_err(OwnerError::Io)?;
         }
-        fs::remove_dir(&self.lock_dir).map_err(OwnerError::Io)
+        remove_lock_directory(&self.lock_dir).map_err(OwnerError::Io)
+    }
+}
+
+fn create_lock_directory(path: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        crate::windows_private::new_directory(path)
+    }
+    #[cfg(not(windows))]
+    {
+        fs::create_dir(path)
+    }
+}
+
+fn remove_lock_directory(path: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        crate::windows_private::remove_empty_directory(path)
+    }
+    #[cfg(not(windows))]
+    {
+        fs::remove_dir(path)
+    }
+}
+
+fn remove_private_file(path: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        crate::windows_private::remove_file(path)
+    }
+    #[cfg(not(windows))]
+    {
+        fs::remove_file(path)
     }
 }
 
 fn recover_incomplete_lock_dir(lock_dir: &Path) -> Result<(), OwnerError> {
     ensure_private_dir(lock_dir)?;
+    #[cfg(windows)]
+    let entries = crate::windows_private::names(lock_dir).map_err(OwnerError::Io)?;
+    #[cfg(not(windows))]
     let entries = fs::read_dir(lock_dir)
         .map_err(OwnerError::Io)?
+        .map(|entry| {
+            entry.and_then(|entry| {
+                entry
+                    .file_name()
+                    .into_string()
+                    .map_err(|_| std::io::ErrorKind::InvalidData.into())
+            })
+        })
         .collect::<Result<Vec<_>, _>>()
         .map_err(OwnerError::Io)?;
     if entries.len() > 4 {
         return Err(OwnerError::InvalidRecord);
     }
-    for entry in entries {
-        let name = entry
-            .file_name()
-            .into_string()
-            .map_err(|_| OwnerError::InvalidRecord)?;
-        let file_type = entry.file_type().map_err(OwnerError::Io)?;
-        if !file_type.is_file() || !name.starts_with(".write-") || !name.ends_with(".tmp") {
+    for name in entries {
+        if !name.starts_with(".write-") || !name.ends_with(".tmp") {
             return Err(OwnerError::InvalidRecord);
         }
-        validate_private_file(&entry.path())?;
-        fs::remove_file(entry.path()).map_err(OwnerError::Io)?;
+        let path = lock_dir.join(name);
+        validate_private_file(&path)?;
+        remove_private_file(&path).map_err(OwnerError::Io)?;
     }
-    fs::remove_dir(lock_dir).map_err(OwnerError::Io)
+    remove_lock_directory(lock_dir).map_err(OwnerError::Io)
 }
 
 fn write_record(lock_dir: &Path, record: &OwnerRecord) -> Result<(), OwnerError> {
@@ -244,20 +286,27 @@ fn write_record(lock_dir: &Path, record: &OwnerRecord) -> Result<(), OwnerError>
 
 fn open_reclaim_file(parent: &Path) -> Result<fs::File, OwnerError> {
     let path = parent.join(".owner-reclaim.lock");
-    let mut create = OpenOptions::new();
-    create.read(true).write(true).create_new(true);
-    set_private_create_mode(&mut create);
-    let file = match create.open(&path) {
-        Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(&path)
-            .map_err(OwnerError::Io)?,
-        Err(error) => return Err(OwnerError::Io(error)),
-    };
-    validate_private_file(&path)?;
-    Ok(file)
+    #[cfg(windows)]
+    {
+        return crate::windows_private::lock(&path).map_err(OwnerError::Io);
+    }
+    #[cfg(not(windows))]
+    {
+        let mut create = OpenOptions::new();
+        create.read(true).write(true).create_new(true);
+        set_private_create_mode(&mut create);
+        let file = match create.open(&path) {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&path)
+                .map_err(OwnerError::Io)?,
+            Err(error) => return Err(OwnerError::Io(error)),
+        };
+        validate_private_file(&path)?;
+        Ok(file)
+    }
 }
 
 #[derive(Debug)]
@@ -274,11 +323,15 @@ impl Drop for ReclaimGuard {
 
 fn lock_reclaim(parent: &Path) -> Result<ReclaimGuard, OwnerError> {
     let file = open_reclaim_file(parent)?;
-    file.try_lock_exclusive()
-        .map_err(|error| match error.kind() {
-            std::io::ErrorKind::WouldBlock => OwnerError::ReclaimContended,
-            _ => OwnerError::Io(error),
-        })?;
+    file.try_lock_exclusive().map_err(|error| {
+        // Only the lock API's native conflict code authorizes the typed busy
+        // result. Windows ERROR_LOCK_VIOLATION is not ErrorKind::WouldBlock.
+        if error.raw_os_error() == fs2::lock_contended_error().raw_os_error() {
+            OwnerError::ReclaimContended
+        } else {
+            OwnerError::Io(error)
+        }
+    })?;
     Ok(ReclaimGuard(file))
 }
 
@@ -289,12 +342,15 @@ fn set_private_create_mode(options: &mut OpenOptions) {
     options.mode(0o600);
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 fn set_private_create_mode(_options: &mut OpenOptions) {}
 
 pub(crate) fn read_record(lock_dir: &Path) -> Result<OwnerRecord, OwnerError> {
     let path = lock_dir.join("owner.json");
     validate_private_file(&path)?;
+    #[cfg(windows)]
+    let file = crate::windows_private::file(&path).map_err(OwnerError::Io)?;
+    #[cfg(not(windows))]
     let file = fs::File::open(path).map_err(OwnerError::Io)?;
     let mut bytes = Vec::new();
     file.take(MAX_OWNER_BYTES + 1)
@@ -331,10 +387,21 @@ pub(crate) enum OwnerError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    struct TestRoot(PathBuf);
+    impl TestRoot {
+        fn path(&self) -> &Path {
+            &self.0
+        }
+    }
 
     #[test]
     fn reclaim_critical_section_ends_before_an_unrelated_inherited_descriptor_closes() {
-        let root = tempfile::tempdir().unwrap();
+        let outer = tempfile::tempdir().unwrap();
+        #[cfg(windows)]
+        let root =
+            TestRoot(crate::config::ensure_private_dir(&outer.path().join("private")).unwrap());
+        #[cfg(not(windows))]
+        let root = TestRoot(outer.path().to_owned());
         let guard = lock_reclaim(root.path()).unwrap();
         let inherited = guard.0.try_clone().unwrap();
         assert!(matches!(
@@ -378,7 +445,12 @@ mod tests {
             );
             return;
         }
-        let root = tempfile::tempdir().unwrap();
+        let outer = tempfile::tempdir().unwrap();
+        #[cfg(windows)]
+        let root =
+            TestRoot(crate::config::ensure_private_dir(&outer.path().join("private")).unwrap());
+        #[cfg(not(windows))]
+        let root = TestRoot(outer.path().to_owned());
         let lock_dir = root.path().join("owner.lock");
         let old_nonce = "a".repeat(43);
         let OwnerClaim::Acquired(old_lease) = OwnerLease::acquire(

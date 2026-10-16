@@ -30,6 +30,8 @@ pub(crate) use schema::{exact_cpa_test_candidate, exact_test_candidate, test_pla
 pub(crate) struct SealedCandidateExecutionV1 {
     pub schema_version: String,
     pub stable_target_key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_binding_id: Option<String>,
     pub credential_destination_ref: String,
     pub logical_endpoint: String,
     pub upstream_model_id: String,

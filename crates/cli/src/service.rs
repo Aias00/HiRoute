@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::Command;
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
+use std::process::Output;
 use std::time::{Duration, Instant};
 
 use hiroute_application_api::{LOCAL_CONTROL_SCHEMA_V2, LocalControlWireRequestV2, MachineStatus};
@@ -9,8 +11,12 @@ use serde_json::json;
 
 use crate::LocalControlClient;
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 const SERVICE_LABEL: &str = "ai.hiroute.cli";
 const MAX_LOG_BYTES: usize = 256 * 1024;
+
+#[cfg(windows)]
+mod windows;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ServiceFailure {
@@ -40,26 +46,46 @@ pub(crate) fn status() -> Result<ServiceStatus, ServiceFailure> {
 }
 
 pub(crate) fn start(timeout: Duration) -> Result<ServiceStatus, ServiceFailure> {
+    #[cfg(windows)]
+    let deadline = Instant::now() + timeout;
     let (layout, _) = installed()?;
+    ensure_not_maintaining(&layout)?;
     if !manager_active(&layout) {
         capture_proxy_environment(&layout)?;
     }
     manager_start(&layout)?;
+    #[cfg(windows)]
+    wait_ready(deadline.saturating_duration_since(Instant::now()))?;
+    #[cfg(not(windows))]
     wait_ready(timeout)?;
     status()
 }
 
 pub(crate) fn stop(timeout: Duration) -> Result<ServiceStatus, ServiceFailure> {
     let (layout, _) = installed()?;
-    manager_stop(&layout)?;
-    wait_stopped(&layout, timeout)?;
+    #[cfg(windows)]
+    windows::stop(&layout, timeout)?;
+    #[cfg(not(windows))]
+    {
+        manager_stop(&layout)?;
+        wait_stopped(&layout, timeout)?;
+    }
     status()
 }
 
 pub(crate) fn restart(timeout: Duration) -> Result<ServiceStatus, ServiceFailure> {
+    #[cfg(windows)]
+    let deadline = Instant::now() + timeout;
     let (layout, _) = installed()?;
+    ensure_not_maintaining(&layout)?;
     capture_proxy_environment(&layout)?;
+    #[cfg(windows)]
+    windows::restart(&layout, timeout)?;
+    #[cfg(not(windows))]
     manager_restart(&layout)?;
+    #[cfg(windows)]
+    wait_ready(deadline.saturating_duration_since(Instant::now()))?;
+    #[cfg(not(windows))]
     wait_ready(timeout)?;
     status()
 }
@@ -114,7 +140,9 @@ pub(crate) fn set_autostart(enable: bool) -> Result<ServiceStatus, ServiceFailur
             }
         }
     }
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    #[cfg(windows)]
+    windows::set_autostart(&_layout, enable)?;
+    #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
     {
         let _ = (enable, _layout);
         return Err(ServiceFailure::Unavailable);
@@ -136,7 +164,7 @@ pub(crate) fn logs() -> Result<serde_json::Value, ServiceFailure> {
         "short-iso",
     ]))?;
     #[cfg(target_os = "macos")]
-    let output = {
+    {
         let stdout = bounded_file(&layout.state_root.join("logs/hirouted.log"));
         let stderr = bounded_file(&layout.state_root.join("logs/hirouted-error.log"));
         return Ok(json!({
@@ -146,7 +174,9 @@ pub(crate) fn logs() -> Result<serde_json::Value, ServiceFailure> {
             "stderr": stderr,
         }));
     };
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    #[cfg(windows)]
+    return windows::logs(&layout);
+    #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
     return Err(ServiceFailure::Unavailable);
     #[cfg(target_os = "linux")]
     Ok(json!({
@@ -170,13 +200,17 @@ pub(crate) fn doctor() -> serde_json::Value {
                     &mut checks,
                     &mut healthy,
                     "hiroute_binary",
-                    executable(&record.install_root.join("hiroute")),
+                    executable(&hiroute_host_runtime::standalone_cli_binary(
+                        &record.install_root,
+                    )),
                 );
                 check(
                     &mut checks,
                     &mut healthy,
                     "hirouted_binary",
-                    executable(&record.install_root.join("hirouted")),
+                    executable(&hiroute_host_runtime::standalone_daemon_binary(
+                        &record.install_root,
+                    )),
                 );
             }
             check(
@@ -237,7 +271,49 @@ pub(crate) fn foreground_run() -> u8 {
         eprintln!("standalone daemon exec failed: {error}");
         6
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        let Ok((layout, record)) = installed() else {
+            return 6;
+        };
+        if ensure_not_maintaining(&layout).is_err() {
+            return 6;
+        }
+        if capture_proxy_environment(&layout).is_err() {
+            return 6;
+        }
+        let daemon = hiroute_host_runtime::standalone_daemon_binary(&record.install_root);
+        let Ok(wait) = hiroute_platform::windows::console::ForegroundWaitGuard::install() else {
+            eprintln!("standalone foreground console wait unavailable");
+            return 6;
+        };
+        let result = Command::new(daemon)
+            .args([
+                "--role",
+                "all",
+                "--standalone",
+                "--foreground-parent-console",
+            ])
+            .stdin(std::process::Stdio::inherit())
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
+            .status();
+        if wait.finish().is_err() {
+            eprintln!("standalone foreground console wait unavailable");
+            return 6;
+        }
+        match result {
+            Ok(status) => status
+                .code()
+                .and_then(|code| u8::try_from(code).ok())
+                .unwrap_or(6),
+            Err(error) => {
+                eprintln!("standalone daemon launch failed: {error}");
+                6
+            }
+        }
+    }
+    #[cfg(not(any(unix, windows)))]
     {
         eprintln!("standalone mode is unsupported on this platform");
         6
@@ -251,10 +327,23 @@ fn installed() -> Result<(StandaloneLayout, StandaloneInstallRecordV1), ServiceF
     Ok((layout, record))
 }
 
+fn ensure_not_maintaining(layout: &StandaloneLayout) -> Result<(), ServiceFailure> {
+    if hiroute_host_runtime::standalone_maintenance_pending(layout)
+        .map_err(|_| ServiceFailure::Unavailable)?
+    {
+        return Err(ServiceFailure::Unavailable);
+    }
+    Ok(())
+}
+
 fn wait_ready(timeout: Duration) -> Result<(), ServiceFailure> {
     let deadline = Instant::now() + timeout;
     while Instant::now() < deadline {
-        if control_ready(Duration::from_millis(750)) {
+        if control_ready(
+            deadline
+                .saturating_duration_since(Instant::now())
+                .min(Duration::from_millis(750)),
+        ) {
             return Ok(());
         }
         std::thread::sleep(Duration::from_millis(100));
@@ -262,6 +351,7 @@ fn wait_ready(timeout: Duration) -> Result<(), ServiceFailure> {
     Err(ServiceFailure::Unavailable)
 }
 
+#[cfg(not(windows))]
 fn wait_stopped(layout: &StandaloneLayout, timeout: Duration) -> Result<(), ServiceFailure> {
     let endpoint = hiroute_client_core::LocalEndpoint::from_runtime_root(&layout.runtime_root);
     let deadline = Instant::now() + timeout;
@@ -427,35 +517,57 @@ fn service_definition(layout: &StandaloneLayout) -> PathBuf {
     launchd_template(layout)
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+#[cfg(windows)]
+fn manager_start(layout: &StandaloneLayout) -> Result<(), ServiceFailure> {
+    windows::start(layout)
+}
+#[cfg(windows)]
+fn manager_active(layout: &StandaloneLayout) -> bool {
+    windows::active(layout).unwrap_or(false)
+}
+#[cfg(windows)]
+fn autostart_status(layout: &StandaloneLayout) -> Result<bool, ServiceFailure> {
+    windows::autostart(layout)
+}
+#[cfg(windows)]
+fn manager_name() -> Result<&'static str, ServiceFailure> {
+    windows::manager_name(&installed()?.0)
+}
+#[cfg(windows)]
+fn service_definition(layout: &StandaloneLayout) -> PathBuf {
+    windows::definition_path(layout)
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
 fn manager_start(_layout: &StandaloneLayout) -> Result<(), ServiceFailure> {
     Err(ServiceFailure::Unavailable)
 }
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
 fn manager_stop(_layout: &StandaloneLayout) -> Result<(), ServiceFailure> {
     Err(ServiceFailure::Unavailable)
 }
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
 fn manager_restart(_layout: &StandaloneLayout) -> Result<(), ServiceFailure> {
     Err(ServiceFailure::Unavailable)
 }
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
 fn manager_active(_layout: &StandaloneLayout) -> bool {
     false
 }
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
 fn autostart_status(_layout: &StandaloneLayout) -> Result<bool, ServiceFailure> {
     Err(ServiceFailure::Unavailable)
 }
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
 fn manager_name() -> Result<&'static str, ServiceFailure> {
     Err(ServiceFailure::Unavailable)
 }
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
 fn service_definition(_layout: &StandaloneLayout) -> PathBuf {
     PathBuf::new()
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn run_checked(command: &mut Command) -> Result<(), ServiceFailure> {
     command
         .status()
@@ -465,10 +577,12 @@ fn run_checked(command: &mut Command) -> Result<(), ServiceFailure> {
         .ok_or(ServiceFailure::Unavailable)
 }
 
+#[cfg(target_os = "linux")]
 fn run_capture(command: &mut Command) -> Result<Output, ServiceFailure> {
     command.output().map_err(|_| ServiceFailure::Unavailable)
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn bounded_output(output: &Output) -> String {
     let bytes = if output.stdout.is_empty() {
         &output.stderr
@@ -480,12 +594,170 @@ fn bounded_output(output: &Output) -> String {
 
 #[cfg(target_os = "macos")]
 fn bounded_file(path: &Path) -> String {
-    std::fs::read(path)
-        .map(|bytes| {
-            String::from_utf8_lossy(&bytes[bytes.len().saturating_sub(MAX_LOG_BYTES)..])
-                .into_owned()
-        })
-        .unwrap_or_default()
+    use std::io::{Read, Seek, SeekFrom};
+    let read = || -> std::io::Result<String> {
+        let mut file = std::fs::File::open(path)?;
+        let length = file.metadata()?.len();
+        file.seek(SeekFrom::Start(length.saturating_sub(MAX_LOG_BYTES as u64)))?;
+        let mut bytes = Vec::new();
+        file.take(MAX_LOG_BYTES as u64).read_to_end(&mut bytes)?;
+        Ok(String::from_utf8_lossy(&bytes).into_owned())
+    };
+    read().unwrap_or_default()
+}
+
+pub(crate) fn install_manager(
+    manager: &str,
+    password_stdin: bool,
+) -> Result<serde_json::Value, ServiceFailure> {
+    #[cfg(windows)]
+    {
+        return windows::install(manager, password_stdin);
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (manager, password_stdin);
+        Err(ServiceFailure::Unavailable)
+    }
+}
+
+#[cfg(windows)]
+pub(crate) fn windows_scm_owner_helper_verb() -> &'static str {
+    windows::scm_owner_helper_verb()
+}
+#[cfg(windows)]
+pub(crate) fn windows_scm_owner_helper(args: &[std::ffi::OsString]) -> u8 {
+    windows::scm_owner_helper(args)
+}
+
+#[cfg(windows)]
+pub(crate) fn windows_background_finalize_verb() -> &'static str {
+    windows::FINALIZE_VERB
+}
+#[cfg(windows)]
+pub(crate) fn windows_background_finalize(args: &[std::ffi::OsString]) -> u8 {
+    windows::finalize_hidden(args)
+}
+
+pub(crate) fn uninstall_manager(timeout: Duration) -> Result<serde_json::Value, ServiceFailure> {
+    #[cfg(windows)]
+    {
+        return windows::uninstall(timeout);
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = timeout;
+        Err(ServiceFailure::Unavailable)
+    }
+}
+
+pub(crate) fn windows_layout() -> Result<serde_json::Value, ServiceFailure> {
+    #[cfg(windows)]
+    {
+        let layout =
+            StandaloneLayout::from_environment().map_err(|_| ServiceFailure::Unavailable)?;
+        return Ok(
+            json!({"schema":"hiroute.windows-install-layout/v1", "home":layout.home,
+            "state_root":layout.state_root, "data_root":layout.data_root,"runtime_root":layout.runtime_root,
+            "marker_path":layout.marker_path, "target":hiroute_host_runtime::standalone_host_target(),
+            "service_definition":windows::definition_path(&layout)}),
+        );
+    }
+    #[cfg(not(windows))]
+    Err(ServiceFailure::Unavailable)
+}
+
+pub(crate) fn prepare_windows_install() -> Result<serde_json::Value, ServiceFailure> {
+    #[cfg(windows)]
+    {
+        let layout =
+            StandaloneLayout::from_environment().map_err(|_| ServiceFailure::Unavailable)?;
+        for path in [
+            layout.data_root.clone(),
+            layout.data_root.join("service"),
+            layout.home.join(".local/lib/hiroute"),
+            layout.home.join(".local/bin"),
+            layout.home.join(".agents/skills/hiroute-management"),
+            layout.home.join(".claude/skills/hiroute-management"),
+        ] {
+            hiroute_platform::windows::security::ensure_private_directory(&path)
+                .map_err(|_| ServiceFailure::Unavailable)?;
+        }
+        return windows_layout();
+    }
+    #[cfg(not(windows))]
+    Err(ServiceFailure::Unavailable)
+}
+
+pub(crate) fn describe_windows_manager(
+    manager: &str,
+    daemon: &Path,
+) -> Result<serde_json::Value, ServiceFailure> {
+    #[cfg(windows)]
+    {
+        use hiroute_platform::windows::background::{Definition, Manager};
+        let layout =
+            StandaloneLayout::from_environment().map_err(|_| ServiceFailure::Unavailable)?;
+        if !daemon.starts_with(layout.home.join(".local/lib/hiroute")) {
+            return Err(ServiceFailure::Unavailable);
+        }
+        let manager = match manager {
+            "task" => Manager::Task,
+            "scm" => Manager::Scm,
+            _ => return Err(ServiceFailure::Unavailable),
+        };
+        return serde_json::to_value(
+            Definition::new(manager, daemon.to_owned()).map_err(|_| ServiceFailure::Unavailable)?,
+        )
+        .map_err(|_| ServiceFailure::Unavailable);
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (manager, daemon);
+        Err(ServiceFailure::Unavailable)
+    }
+}
+
+pub(crate) fn publish_install_record() -> Result<serde_json::Value, ServiceFailure> {
+    #[cfg(windows)]
+    {
+        let bytes = bounded_install_stdin()?;
+        return windows::publish_record(&bytes);
+    }
+    #[cfg(not(windows))]
+    Err(ServiceFailure::Unavailable)
+}
+
+pub(crate) fn write_private_record(path: &Path) -> Result<serde_json::Value, ServiceFailure> {
+    #[cfg(windows)]
+    {
+        let bytes = bounded_install_stdin()?;
+        windows::private_record(path, &bytes)?;
+        return Ok(json!({"schema":"hiroute.windows-background-install/v1","written":true}));
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = path;
+        Err(ServiceFailure::Unavailable)
+    }
+}
+
+#[cfg(windows)]
+fn bounded_install_stdin() -> Result<Vec<u8>, ServiceFailure> {
+    use std::io::Read;
+    let mut bytes = Vec::new();
+    std::io::stdin()
+        .lock()
+        .take(64 * 1024 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| ServiceFailure::Unavailable)?;
+    if bytes.is_empty()
+        || bytes.len() > 64 * 1024
+        || serde_json::from_slice::<serde_json::Value>(&bytes).is_err()
+    {
+        return Err(ServiceFailure::Unavailable);
+    }
+    Ok(bytes)
 }
 
 fn executable(path: &Path) -> bool {
@@ -543,6 +815,12 @@ mod tests {
     #[cfg(unix)]
     fn success_status() -> std::process::ExitStatus {
         use std::os::unix::process::ExitStatusExt;
+        std::process::ExitStatus::from_raw(0)
+    }
+
+    #[cfg(windows)]
+    fn success_status() -> std::process::ExitStatus {
+        use std::os::windows::process::ExitStatusExt;
         std::process::ExitStatus::from_raw(0)
     }
 }

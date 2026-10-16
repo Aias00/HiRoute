@@ -1,6 +1,7 @@
 # GitHub Actions validation
 
-GitHub Actions runs on the checked-out commit through `scripts/ci-run.py`.
+GitHub Actions runs on the checked-out commit. Linux checks use `scripts/ci-run.py`;
+native Windows acceptance uses `scripts/windows-headless-ci.ps1`.
 
 ## Workflows
 
@@ -10,7 +11,29 @@ GitHub Actions runs on the checked-out commit through `scripts/ci-run.py`.
 | `p0-gateway-gates.yml` | Manual, reusable | Linux listener build, neutral loopback, H1/H2 lifecycle, replay/privacy tests, contract checks, benchmark harness smoke |
 | `gateway-core-dedicated.yml` | Manual or reusable | Hosted Linux production stability and socket churn |
 | `p0-gateway-final-gates.yml` | Manual | Aggregate the three current hosted workflows |
-| `build-release.yml` | Manual, exact dispatch SHA | Native macOS ARM64/Intel DMGs and Linux x86_64/ARM64 archives; uploads candidate assets and integrity evidence for the existing release publisher |
+| `build-release.yml` | Manual, exact dispatch SHA | Builds macOS/Linux candidates independently; only Windows archives require the reusable Windows validation gate; uploads candidate assets and integrity evidence for the existing release publisher |
+| `build-release-platform.yml` | Reusable, exact caller SHA | Shared per-target candidate build and evidence upload |
+| `windows-compile.yml` | Path-filtered PR | One cached x64 MSVC check of CLI, daemon, platform and local-storage, including their test targets and transitive production libraries; no runtime tests |
+| `windows-headless.yml` | Release-candidate call, explicit manual diagnosis | Native MSVC primitives, shared business libraries, foreground control/Gateway and fixed upstream clients; complete background artifacts with explicit deferred Task acceptance; x64 artifact replay on Windows 11 ARM64 |
+
+PR and main pushes do not automatically run the Windows matrix. During normal
+development, use [managed cross-compilation and affected execution on the Windows
+development machine](validation-routing.md#windows-iteration-and-release-validation).
+The release-candidate workflow calls the local reusable Windows workflow at the
+same commit, and only Windows package builds require its success. Unix builds have
+no dependency on that gate and can complete if Windows fails or is cancelled. Both native producer
+and Windows 11 replay bind `github.sha` and record the `final` phase. This gate
+runs before Windows candidate assets are created, not after a GitHub Release is published.
+Manual Windows dispatch defaults to `all`, using the same final matrix. Select a
+single `scope` for CI-specific diagnosis: it builds and replays only that scope,
+records the `focused` phase and cannot establish complete Windows acceptance.
+The reusable release entry accepts no scope input and always runs all five scopes.
+Neither manual mode publishes packages or establishes the separately required
+user/account acceptance.
+
+Native Windows jobs enable sccache's GitHub Actions backend so compiler objects
+can be reused across runs. Cargo targets remain local to each checkout; artifact
+source, executable-byte and runtime-import verification still run for every candidate.
 
 Normal Rust checks select the organization `Default` runner group with the
 `cncf-ubuntu-16-64-x86` label. The organization must permit this public repository
@@ -39,9 +62,102 @@ The website release catalog (`apps/website/data/releases.json`) also selects the
 upgrade reader consumes this data, so website validation alone cannot cover a new
 release. Other website-only edits retain their dedicated workflow.
 
+Most Windows jobs use the standard hosted `windows-2025` image. Native inventories must contain every
+required case; zero, ignored or missing required cases fail. The shared library
+scope executes the complete ordinary native test inventory. Explicitly registered
+installation-input gates and child fixtures have their own execution entries;
+unregistered ignored cases fail the ordinary inventory. Fixed Agent gates
+explicitly select their opt-in real client tests. Their npm versions and all
+transitive package integrities come from `tools/windows-agent-fixtures/package-lock.json`.
+Qoder's fixed official archive has an independent SHA-256 check. The ordinary
+Agent scope uses the shared required recipe inventory without provider accounts, including
+rejection of missing or ambiguous account profiles. Qoder's four
+official-account recipes are a separately selected `accounts` scope, requiring
+an officially prepared private profile; missing credentials fail that scope.
+Public Windows jobs receive no provider credentials. Passing ordinary CI does not
+establish official-account acceptance, which remains a separate release gate.
+
+Native x64 Debug checks reuse the Windows Release static CRT configuration from
+`build-release.py`, including its CMake toolchain and compiler-override rejection.
+Both configuration sources are bound in the captured artifact provenance.
+Producer and replay import audits reject ordinary and delayed redistributable VC
+runtime DLL dependencies; the hosted image's installed runtime must not conceal
+a missing dependency on a clean workstation. Native OS `msvcrt.dll` and UCRT
+imports remain allowed. Static imports alone do not prove process launch or
+release acceptance; those require their actual runtime gates.
+
+Background jobs build the unchanged pinned CPA with its two native bootstrap
+security cases and use the production package generator twice. The administrator
+receives a separate verified complete package. Task acceptance exercises the
+actual logged-on owner, least-privilege launch and stop/recovery. The
+`background-standard-owner` recipe uses the controller's own standard token and
+ordinary process creation; it rejects every Administrators group SID, including
+deny-only membership. It does not require an administrator controller, alternate
+logon, linked token or impersonation. Initial markers, stable entries, definitions
+and the SID-derived native Task must be absent before installation. Autostart
+policy changes, real login-trigger execution and externally closing a console or
+disconnecting/reconnecting RDP require distinct evidence.
+The current hosted images execute as the built-in administrator without a linked
+limited token. Native inspection found `EnableLUA=1` and administrator consent
+prompts disabled; that policy does not give this account a split token. Creating
+a standard account with `LogonUser` also does not create an existing interactive
+desktop login. These defaults cannot establish the required standard-owner Task
+result. The standard-owner gate requires an actual logged-in standard token; the
+separate administrator-controlled Task gate also requires its linked limited token.
+With the default `-Assessment full`, each selected gate
+remains failed when those prerequisites are absent. Read-only RDP service and
+port facts alone do not establish such a login or a passing background task.
+SCM and logout continuity are optional, outside the required background scope.
+
+The public hosted workflow selects `-Assessment hosted` for the `background`
+scope on both machines. This mode requires `-CaptureArtifacts` on the producer
+and preserves the complete six-recipe inventory, actual compiler records, PE
+verification and full package. Its single source disposition table is in
+`windows-native-scopes.ps1`. It executes `background-capture`,
+`packaged-proxy-oracle` and `packaged-foreground` (eight current cases). It compiles,
+captures and lists `background`, `background-standard-owner` and
+`background-standard-upgrade` without running their bodies. The last recipe
+requires separately admitted genuine baseline and candidate packages and the
+actual standard owner's session; hosted compilation cannot establish upgrade
+or rollback. A missing or additional case, compile/capture/PE failure, unknown
+recipe or failed executed case fails the hosted assessment.
+
+Deferred results have `scenario=not_assessed`, `executed=0`,
+`runtime_executed=false`, `process_exit=null`, and verified compilation, inventory
+and capture facts. They do not represent a failed Task prerequisite being turned
+into a pass. `validation-feedback.json` records the complete runtime/deferred
+partition; even a successful hosted assessment has `scenario=not_assessed`,
+`full_scope=false`, `candidate_complete=false` and
+`background_acceptance=not_assessed`. Real logged-owner execution and upgrade
+remain distinct acceptance gates. A workstation caller selects `full` (the
+default) and runs every original gate. Existing focused drivers without an
+assessment field retain their selected-case verdicts without a full-scope claim.
+The separate candidate upgrade gate uses two distinct, fully verified source revisions
+and independently restages the original baseline with fresh administrator trust.
+It preserves actual public Source/Key/Plan, Agent restoration, Gateway traffic and
+usage receipts across prepared-fault rollback and candidate replacement. A new
+Windows platform has no released Windows baseline to invent.
+
+For a separately selected Windows 11 workstation run, `-CaptureArtifacts` records
+the exact Cargo `compiler-artifact` executable for every required test recipe,
+the product binaries, locked source inputs and complete package bytes. The
+`windows-native-replay.ps1` consumer rejects a partial scope, verifies every hash
+and source SHA, and uses the same assessment partition without rebuilding Rust.
+In `full` mode it runs every captured recipe. It restages
+the whole verified package with fresh administrator ACLs before Task/SCM tests.
+Static PE import auditing rejects Debug CRT dependencies; actual process launch
+still owns DLL resolution and runtime acceptance. The `windows-11-arm` hosted
+consumer explicitly records x64 emulation on ARM64, which does not establish
+native ARM64 product support. An explicitly selected `windows11-x64` replay also
+accepts a real x64 Windows 11 workstation; it checks the actual OS and process
+machine and records native x64 separately. This option does not provision a runner
+or supply an interactive login. Consumer results retain the producer revision and
+have their own runtime scenario evidence.
+
 The toolchain comes from `rust-toolchain.toml`. Cargo sources are cached, not
-`target/`; shards do not exchange compiled binaries or claim another runner's build
-evidence. The shared Rust setup exports `CARGO_NET_GIT_FETCH_WITH_CLI=true` for
+`target/`; Linux shards do not exchange compiled binaries. Windows replay retains
+the original producer build evidence and assesses the consumer separately.
+The shared Rust setup exports `CARGO_NET_GIT_FETCH_WITH_CLI=true` for
 subsequent job steps, so pinned Git dependencies use the installed Git client
 instead of Cargo's embedded libgit2 transport. This avoids the libgit2 SSL failure
 observed when fetching Pingora on a cold hosted runner; TLS verification and locked
@@ -75,6 +191,7 @@ The adapter can be tested without Rust compilation or remote access:
 python3 scripts/test-ci-run.py
 python3 scripts/test-ci-shards.py
 python3 scripts/ci-shards.py check
+python3 scripts/test-windows-ci-report.py
 ```
 
 ## Coverage boundaries
@@ -85,8 +202,9 @@ maintainer validation; hosted benchmark smoke is not fixed-machine performance e
 The hosted Rust checks exclude `hiroute-desktop`. Frontend build/tests do not
 prove native Tauri interaction. macOS Desktop remains on the existing local
 validation path. The separate [release candidate workflow](release-builds.md)
-builds native macOS and Linux packages on both architectures; it does not change
-the backend test matrix. Windows is outside that release matrix.
+builds native macOS, Linux and Windows packages on both architectures. Building
+an archive records package integrity and an awaiting-runtime state; it does not
+replace that architecture's native business acceptance or Desktop validation.
 Real-provider credentials and separately provisioned production E2E fixtures are
 not supplied by this CI setup. Existing failing checks remain failures, not
 expected-red success or waived gates.

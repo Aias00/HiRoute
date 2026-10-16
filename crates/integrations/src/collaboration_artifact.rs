@@ -21,20 +21,47 @@ pub fn read_sealed_collaboration(
         {
             return Err("invalid collaboration installation");
         }
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        hiroute_platform::windows::security::open_identity(path, is_dir)
+            .map_err(|_| "invalid collaboration installation")?;
+        #[cfg(not(any(unix, windows)))]
         return Err("owner-validated collaboration installation unavailable");
     }
-    let mut options = fs::OpenOptions::new();
-    options.read(true);
-    #[cfg(unix)]
+    #[cfg(windows)]
+    let file = {
+        let file = hiroute_platform::windows::security::open_identity(&path, false)
+            .map_err(|_| "invalid collaboration installation")?;
+        if hiroute_platform::windows::security::file_link_count(&file)
+            .map_err(|_| "invalid collaboration installation")?
+            != 1
+        {
+            return Err("invalid collaboration installation");
+        }
+        file
+    };
+    #[cfg(not(windows))]
+    let file = {
+        let mut options = fs::OpenOptions::new();
+        options.read(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.custom_flags(nix::libc::O_NOFOLLOW | nix::libc::O_NONBLOCK);
+        }
+        options
+            .open(path)
+            .map_err(|_| "invalid collaboration installation")?
+    };
+    if !file
+        .metadata()
+        .map_err(|_| "invalid collaboration installation")?
+        .is_file()
     {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.custom_flags(nix::libc::O_NOFOLLOW | nix::libc::O_NONBLOCK);
+        return Err("invalid collaboration installation");
     }
     let mut bytes = Zeroizing::new(String::new());
-    options
-        .open(path)
-        .and_then(|file| file.take(4097).read_to_string(&mut bytes))
+    file.take(4097)
+        .read_to_string(&mut bytes)
         .map_err(|_| "invalid collaboration installation")?;
     if bytes.is_empty() || bytes.len() > 4096 {
         return Err("invalid collaboration installation");
@@ -82,5 +109,32 @@ mod tests {
         fs::set_permissions(&other, fs::Permissions::from_mode(0o600)).unwrap();
         symlink(&other, &file).unwrap();
         assert!(read_sealed_collaboration(home.path(), "codex").is_err());
+    }
+}
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    use super::*;
+    #[test]
+    fn sealed_delivery_reads_accessible_native_acl_without_changing_it_and_rejects_aliases() {
+        let home = tempfile::tempdir().unwrap();
+        let directory = home.path().join(".hiroute/credential-artifacts");
+        fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("codex.sealed");
+        fs::write(&path, "opaque-public-test-delivery").unwrap();
+        let file = hiroute_platform::windows::security::open_identity(&path, false).unwrap();
+        let before = hiroute_platform::file_security::capture(&file).unwrap();
+        assert_eq!(
+            &*read_sealed_collaboration(home.path(), "codex").unwrap(),
+            "opaque-public-test-delivery"
+        );
+        assert_eq!(
+            hiroute_platform::file_security::capture(&file).unwrap(),
+            before
+        );
+        drop(file);
+        fs::hard_link(&path, directory.join("alias")).unwrap();
+        assert!(read_sealed_collaboration(home.path(), "codex").is_err());
+        assert!(read_sealed_collaboration(home.path(), "../codex").is_err());
     }
 }

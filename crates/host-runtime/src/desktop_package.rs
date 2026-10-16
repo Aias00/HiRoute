@@ -104,10 +104,12 @@ fn inventory(
         {
             return Ok(());
         }
+        // Package inventories use POSIX separators on every verifier host.
         let name = relative
-            .to_str()
-            .ok_or("PACKAGE_INVENTORY_INVALID")?
-            .to_owned();
+            .components()
+            .map(|part| part.as_os_str().to_str().ok_or("PACKAGE_INVENTORY_INVALID"))
+            .collect::<Result<Vec<_>, _>>()?
+            .join("/");
         files.insert(name, file_sha256(path)?);
     } else {
         return Err("PACKAGE_FILE_INVALID");

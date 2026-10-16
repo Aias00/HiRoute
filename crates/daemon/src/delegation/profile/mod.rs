@@ -22,6 +22,10 @@ mod native_context;
 mod pi;
 mod qoder;
 pub use native_context::NativeWorkerContext;
+#[cfg(test)]
+pub(crate) use native_context::native_path as native_context_path;
+#[cfg(windows)]
+pub(crate) use native_context::{same_windows_directory, windows_workspace};
 
 mod materials;
 pub(crate) use materials::native_history;
@@ -188,6 +192,44 @@ impl CandidateWorkerProfile {
             "TMPDIR".into(),
             Zeroizing::new(path_string(&private_root.join("tmp"))?),
         );
+        #[cfg(windows)]
+        {
+            // Windows tools require these OS selectors, without borrowing model credentials.
+            for (name, value) in hiroute_integrations::agents::windows_native_system_environment()
+                .map_err(|_| DelegationErrorV1::CapabilityUnavailable)?
+            {
+                let value = value
+                    .into_string()
+                    .map_err(|_| DelegationErrorV1::CapabilityUnavailable)?;
+                env.insert(name.into(), Zeroizing::new(value));
+            }
+            env.insert(
+                "USERPROFILE".into(),
+                Zeroizing::new(path_string(input.native_context.home())?),
+            );
+            for (name, relative) in [
+                ("APPDATA", "AppData/Roaming"),
+                ("LOCALAPPDATA", "AppData/Local"),
+            ] {
+                env.insert(
+                    name.into(),
+                    Zeroizing::new(path_string(&input.native_context.home().join(relative))?),
+                );
+            }
+            env.insert(
+                "ProgramFiles".into(),
+                Zeroizing::new(path_string(
+                    &hiroute_platform::windows::background::program_files()
+                        .map_err(|_| DelegationErrorV1::CapabilityUnavailable)?,
+                )?),
+            );
+            for name in ["TEMP", "TMP"] {
+                env.insert(
+                    name.into(),
+                    Zeroizing::new(path_string(&private_root.join("tmp"))?),
+                );
+            }
+        }
         if input.harness == WorkerHarnessV1::ClaudeCode && input.native_context.is_borrowed() {
             // Only the explicitly selected Node can establish the adapter environment guard.
             // An executable adapter discovered without a runtime remains discoverable, but
@@ -233,6 +275,13 @@ impl CandidateWorkerProfile {
                 }
             }
         };
+        #[cfg(windows)]
+        let (executable, args) = hiroute_integrations::agents::windows_agent_command(
+            &executable,
+            &args,
+            env["PATH"].as_str(),
+        )
+        .map_err(|_| DelegationErrorV1::CapabilityUnavailable)?;
         Ok(Self {
             executable,
             args,
@@ -361,7 +410,8 @@ fn secret_string(secret: &ProtectedSecret) -> Result<String, DelegationErrorV1> 
 }
 
 fn path_string(path: &Path) -> Result<String, DelegationErrorV1> {
-    path.to_str()
+    native_context::native_path(path)
+        .to_str()
         .filter(|s| !s.contains(['\n', '\r', '\0']))
         .map(str::to_owned)
         .ok_or(DelegationErrorV1::InvalidArguments)

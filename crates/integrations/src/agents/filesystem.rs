@@ -225,11 +225,11 @@ pub struct FilesystemAgentScannerV1 {
     registry: ClaudeRegistrationIndexV1,
     legacy_recovery_version: Option<String>,
     legacy_process_format: bool,
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     codex_ingress: std::sync::Arc<std::sync::Mutex<Option<super::CodexIngressEvidence>>>,
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     claude_ingress: std::sync::Arc<std::sync::Mutex<Option<super::ClaudeIngressEvidence>>>,
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     qoder_collaboration: std::sync::Arc<std::sync::Mutex<super::qoder_probe::QoderProofCache>>,
 }
 
@@ -282,11 +282,11 @@ impl FilesystemAgentScannerV1 {
             registry,
             legacy_recovery_version: None,
             legacy_process_format: false,
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             codex_ingress: Default::default(),
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             claude_ingress: Default::default(),
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             qoder_collaboration: Default::default(),
             pi_collaboration_cli: Default::default(),
             dsh_collaboration_cli: Default::default(),
@@ -295,14 +295,14 @@ impl FilesystemAgentScannerV1 {
 
     /// Attach backend evidence from an explicit native check whose file effect was restored.
     /// Scanning remains read-only; an expired/changed binary automatically loses this evidence.
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub fn with_codex_ingress_evidence(mut self, evidence: super::CodexIngressEvidence) -> Self {
         self.codex_ingress = std::sync::Arc::new(std::sync::Mutex::new(Some(evidence)));
         self
     }
 
     /// Only an explicitly admitted check calls this; discovery never performs the challenge.
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub fn check_codex_native_authentication(&self) -> Result<(), super::NativeIngressProbeError> {
         let engine = self
             .located_codex_engine()
@@ -318,7 +318,7 @@ impl FilesystemAgentScannerV1 {
     }
 
     /// Only an explicitly admitted check calls this; discovery never launches Claude.
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub fn check_claude_native_authentication(&self) -> Result<(), super::NativeIngressProbeError> {
         let evidence = super::ClaudeNativeIngressProbe::run(&self.layout.claude_executable)?;
         let mut cache = self
@@ -329,7 +329,7 @@ impl FilesystemAgentScannerV1 {
         Ok(())
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub fn check_codex_collaboration(
         &self,
         cli: &std::path::Path,
@@ -343,7 +343,7 @@ impl FilesystemAgentScannerV1 {
         Ok(())
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub fn check_claude_collaboration(
         &self,
         cli: &std::path::Path,
@@ -359,7 +359,7 @@ impl FilesystemAgentScannerV1 {
         Ok(())
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub fn attach_claude_collaboration_evidence(
         &self,
         executable: &std::path::Path,
@@ -434,14 +434,14 @@ impl FilesystemAgentScannerV1 {
                     }
                     AgentKindV1::Qoder | AgentKindV1::Pi | AgentKindV1::DeepseekHarness => continue,
                 };
-                #[cfg(unix)]
+                #[cfg(any(unix, windows))]
                 if installation.profile.kind == AgentKindV1::Codex
                     && let Ok(cache) = self.codex_ingress.lock()
                     && let Some(evidence) = cache.as_ref()
                 {
                     evidence.attach(installation);
                 }
-                #[cfg(unix)]
+                #[cfg(any(unix, windows))]
                 if installation.profile.kind == AgentKindV1::ClaudeCode
                     && let Ok(cache) = self.claude_ingress.lock()
                     && let Some(evidence) = cache.as_ref()

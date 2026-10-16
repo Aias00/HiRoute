@@ -42,7 +42,12 @@ struct ProbeEndpoint {
     stop: Arc<AtomicBool>,
     release_stall: Arc<AtomicBool>,
     stall_next: Arc<AtomicBool>,
+    response: Option<TestResponse>,
+    max_requests: usize,
 }
+
+pub(super) type TestResponse =
+    Arc<dyn Fn(&Value) -> Result<String, DelegationErrorV1> + Send + Sync>;
 
 pub(super) struct ProbeServer {
     address: std::net::SocketAddr,
@@ -59,6 +64,26 @@ impl ProbeServer {
         model: &'static str,
         harness: WorkerHarnessV1,
     ) -> Result<Self, DelegationErrorV1> {
+        Self::bind_inner(token, model, harness, None)
+    }
+
+    /// Actual-client tools acceptance keeps the authenticated native HTTP boundary and supplies
+    /// only its bounded deterministic model response, never a replacement ACP client.
+    pub(super) fn bind_with_response(
+        token: Vec<u8>,
+        model: &'static str,
+        harness: WorkerHarnessV1,
+        response: TestResponse,
+    ) -> Result<Self, DelegationErrorV1> {
+        Self::bind_inner(token, model, harness, Some(response))
+    }
+
+    fn bind_inner(
+        token: Vec<u8>,
+        model: &'static str,
+        harness: WorkerHarnessV1,
+        response: Option<TestResponse>,
+    ) -> Result<Self, DelegationErrorV1> {
         let listener = TcpListener::bind("127.0.0.1:0")
             .map_err(|_| DelegationErrorV1::CapabilityUnavailable)?;
         let address = listener
@@ -73,6 +98,12 @@ impl ProbeServer {
         let release_stall = Arc::new(AtomicBool::new(false));
         let stall_next = Arc::new(AtomicBool::new(false));
         let endpoint = ProbeEndpoint {
+            max_requests: if response.is_some() {
+                16
+            } else {
+                MAX_MODEL_REQUESTS
+            },
+            response,
             token,
             model,
             harness,
@@ -90,7 +121,9 @@ impl ProbeServer {
                 {
                     match listener.accept() {
                         Ok((mut stream, _)) => {
-                            serve_probe_request(&mut stream, &endpoint)?;
+                            serve_probe_request(&mut stream, &endpoint).inspect_err(|error| {
+                                eprintln!("native acceptance loopback stage=request-rejected code={error:?} model-requests={}", endpoint.requests.load(Ordering::Acquire));
+                            })?;
                         }
                         Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                             thread::sleep(Duration::from_millis(5));
@@ -269,10 +302,19 @@ fn serve_probe_request(
             );
         }
         let mut chunk = [0_u8; 4096];
-        let read = stream
-            .read(&mut chunk)
-            .map_err(|_| DelegationErrorV1::ProtocolFailed)?;
+        let read = stream.read(&mut chunk).map_err(|error| {
+            eprintln!(
+                "native acceptance loopback failure: stage=head-read kind={:?} os-error={:?}",
+                error.kind(),
+                error.raw_os_error()
+            );
+            DelegationErrorV1::ProtocolFailed
+        })?;
         if read == 0 {
+            eprintln!(
+                "native acceptance loopback failure: stage=head-eof buffered-bytes={}",
+                request.len()
+            );
             return Err(DelegationErrorV1::ProtocolFailed);
         }
         request.extend_from_slice(&chunk[..read]);
@@ -282,20 +324,26 @@ fn serve_probe_request(
             return Err(DelegationErrorV1::ProtocolFailed);
         }
         let mut chunk = [0_u8; 4096];
-        let read = stream
-            .read(&mut chunk)
-            .map_err(|_| DelegationErrorV1::ProtocolFailed)?;
+        let read = stream.read(&mut chunk).map_err(|error| {
+            eprintln!(
+                "native acceptance loopback failure: stage=body-read kind={:?} os-error={:?}",
+                error.kind(),
+                error.raw_os_error()
+            );
+            DelegationErrorV1::ProtocolFailed
+        })?;
         if read == 0 {
+            eprintln!(
+                "native acceptance loopback failure: stage=body-eof buffered-bytes={}",
+                request.len()
+            );
             return Err(DelegationErrorV1::ProtocolFailed);
         }
         request.extend_from_slice(&chunk[..read]);
     }
-    if serde_json::from_slice::<Value>(&request[header_end..header_end + length])
-        .ok()
-        .and_then(|body| body.get("model").and_then(Value::as_str).map(str::to_owned))
-        .as_deref()
-        != Some(endpoint.model)
-    {
+    let body: Value = serde_json::from_slice(&request[header_end..header_end + length])
+        .map_err(|_| DelegationErrorV1::ProtocolFailed)?;
+    if body.get("model").and_then(Value::as_str) != Some(endpoint.model) {
         return Err(DelegationErrorV1::ProtocolFailed);
     }
     if route == ProbeRoute::CountTokens {
@@ -309,7 +357,7 @@ fn serve_probe_request(
         return Ok(());
     }
     let index = endpoint.requests.fetch_add(1, Ordering::AcqRel) + 1;
-    if index > MAX_MODEL_REQUESTS {
+    if index > endpoint.max_requests {
         return Err(DelegationErrorV1::ProtocolFailed);
     }
     let stall = endpoint.stall_next.swap(false, Ordering::AcqRel);
@@ -324,19 +372,58 @@ fn serve_probe_request(
             return Err(DelegationErrorV1::DeadlineExceeded);
         }
     }
-    let response = match endpoint.harness {
-        WorkerHarnessV1::CodexCli => responses_stream(endpoint.model),
-        WorkerHarnessV1::ClaudeCode => messages_stream(endpoint.model),
-        WorkerHarnessV1::QoderCli | WorkerHarnessV1::Pi | WorkerHarnessV1::DeepseekHarness => {
-            return Err(DelegationErrorV1::CapabilityUnavailable);
+    let response = if let Some(response) = &endpoint.response {
+        response(&body)?
+    } else {
+        match endpoint.harness {
+            WorkerHarnessV1::CodexCli
+            | WorkerHarnessV1::QoderCli
+            | WorkerHarnessV1::Pi
+            | WorkerHarnessV1::DeepseekHarness => responses_stream(endpoint.model),
+            WorkerHarnessV1::ClaudeCode => messages_stream(endpoint.model),
         }
     };
-    write!(
+    let written = write!(
         stream,
         "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response}",
         response.len()
+    );
+    finish_response_write(
+        written,
+        stall && endpoint.release_stall.load(Ordering::Acquire),
     )
-    .map_err(|_| DelegationErrorV1::ProtocolFailed)
+}
+
+fn finish_response_write(
+    result: std::io::Result<()>,
+    deliberate_cancel: bool,
+) -> Result<(), DelegationErrorV1> {
+    match result {
+        Ok(()) => Ok(()),
+        Err(error)
+            if deliberate_cancel
+                && matches!(
+                    error.kind(),
+                    std::io::ErrorKind::BrokenPipe
+                        | std::io::ErrorKind::ConnectionReset
+                        | std::io::ErrorKind::ConnectionAborted
+                ) =>
+        {
+            // The cancel probe has already validated bearer/model/body and observed this
+            // in-flight request before cancelling the real native client. That client may
+            // close its HTTP request immediately. Delivery to an aborted peer is not part
+            // of cancellation; ACP completion and stopped process scope remain required.
+            eprintln!("native acceptance loopback stage=cancelled-peer-disconnected");
+            Ok(())
+        }
+        Err(error) => {
+            eprintln!(
+                "native acceptance loopback stage=response-write-failed kind={:?} deliberate-cancel={deliberate_cancel}",
+                error.kind()
+            );
+            Err(DelegationErrorV1::ProtocolFailed)
+        }
+    }
 }
 
 fn probe_route(harness: WorkerHarnessV1, method: &str, target: &str) -> Option<ProbeRoute> {
@@ -346,6 +433,9 @@ fn probe_route(harness: WorkerHarnessV1, method: &str, target: &str) -> Option<P
     let target = target.split('?').next()?;
     match (harness, method, target) {
         (WorkerHarnessV1::CodexCli, "POST", "/v1/responses")
+        | (WorkerHarnessV1::QoderCli, "POST", "/v1/responses")
+        | (WorkerHarnessV1::Pi, "POST", "/v1/responses")
+        | (WorkerHarnessV1::DeepseekHarness, "POST", "/v1/responses")
         | (WorkerHarnessV1::ClaudeCode, "POST", "/v1/messages") => Some(ProbeRoute::Model),
         (WorkerHarnessV1::ClaudeCode, "POST", "/v1/messages/count_tokens") => {
             Some(ProbeRoute::CountTokens)
@@ -426,7 +516,77 @@ mod tests {
     use super::*;
 
     #[test]
+    fn only_deliberately_cancelled_peer_disconnect_is_not_a_probe_response_failure() {
+        for kind in [
+            std::io::ErrorKind::BrokenPipe,
+            std::io::ErrorKind::ConnectionReset,
+            std::io::ErrorKind::ConnectionAborted,
+        ] {
+            assert!(finish_response_write(Err(std::io::Error::from(kind)), true).is_ok());
+            assert_eq!(
+                finish_response_write(Err(std::io::Error::from(kind)), false),
+                Err(DelegationErrorV1::ProtocolFailed)
+            );
+        }
+        for kind in [
+            std::io::ErrorKind::TimedOut,
+            std::io::ErrorKind::PermissionDenied,
+            std::io::ErrorKind::InvalidData,
+        ] {
+            assert_eq!(
+                finish_response_write(Err(std::io::Error::from(kind)), true),
+                Err(DelegationErrorV1::ProtocolFailed)
+            );
+        }
+    }
+
+    #[test]
+    fn tool_responder_keeps_the_authenticated_native_http_boundary() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = Arc::clone(&calls);
+        let token = b"hiroute-http-boundary-only".to_vec();
+        let server = ProbeServer::bind_with_response(
+            token.clone(),
+            "boundary-model",
+            WorkerHarnessV1::Pi,
+            Arc::new(move |body| {
+                if body["input"][0]["content"][0]["text"] != "declared native input" {
+                    return Err(DelegationErrorV1::ProtocolFailed);
+                }
+                seen.fetch_add(1, Ordering::AcqRel);
+                Ok(responses_stream("boundary-model"))
+            }),
+        )
+        .unwrap();
+        let body = json!({"model":"boundary-model","input":[{"role":"user","content":[{"type":"input_text","text":"declared native input"}]}]}).to_string();
+        let mut stream = TcpStream::connect(server.address()).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        write!(stream, "POST /v1/responses HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", String::from_utf8(token).unwrap(), body.len()).unwrap();
+        let mut response = String::new();
+        stream.read_to_string(&mut response).unwrap();
+        assert!(response.starts_with("HTTP/1.1 200 OK\r\n"));
+        assert!(response.contains("response.completed"));
+        assert_eq!(server.request_count(), 1);
+        assert_eq!(calls.load(Ordering::Acquire), 1);
+        server.finish().unwrap();
+    }
+
+    #[test]
     fn probe_protocols_have_distinct_bounded_native_routes_and_valid_events() {
+        for harness in [
+            WorkerHarnessV1::Pi,
+            WorkerHarnessV1::DeepseekHarness,
+            WorkerHarnessV1::QoderCli,
+        ] {
+            assert_eq!(
+                probe_route(harness, "POST", "/v1/responses"),
+                Some(ProbeRoute::Model)
+            );
+            assert_eq!(probe_route(harness, "POST", "/v1/messages"), None);
+            assert_eq!(probe_route(harness, "GET", "/v1/responses"), None);
+        }
         assert_eq!(
             probe_route(WorkerHarnessV1::CodexCli, "POST", "/v1/responses"),
             Some(ProbeRoute::Model)

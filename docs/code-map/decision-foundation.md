@@ -23,6 +23,11 @@ with no current runtime or product entry.
 
 ## Frozen configuration
 
+The [publication projection](../../crates/domain/src/publication/projection.rs)
+keeps branch/reasoning execution keys distinct from source binding identities.
+[Credential admission](../../crates/gateway/src/core_runtime/credentials.rs) and
+attempt leases use the frozen source binding to check current Native membership.
+
 [Decision domain types](../../crates/domain/src/routing/decision.rs) own immutable
 saved connection revisions and judgment settings; [definition types](../../crates/domain/src/routing/decision_definition.rs)
 own categorical/ordinal questions. Plans freeze the selected connection, prompts,

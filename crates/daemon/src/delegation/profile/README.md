@@ -4,9 +4,12 @@
 
 The [installation source](../installation.rs) resolves the selected executable and
 builds a profile for an admitted run. [NativeWorkerContext](native_context.rs)
-reads only the effective instance `HOME` and the selected Harness's config-root
-variable. It respects isolated Pilot/test instances and never searches for another
-user's home from an executable path. The child receives a fresh explicit
+reads only the effective Unix instance `HOME`, or the native Windows Known Folder
+Profile, and the selected Harness's config-root variable. Windows ignores ambient
+HOME/USERPROFILE for account discovery; explicit native config-root selectors still
+apply. Libtest's identified isolated child and explicit probe contexts use their
+private test-owned homes. It never searches for another user's home from an executable
+path. The child receives a fresh explicit
 environment; preserving command search paths does not import upstream credentials.
 
 ## State and ownership
@@ -42,8 +45,13 @@ discovered CLI or replaces a missing explicit selection with another candidate.
   starts. This covers the adapter's early `account/read` and model-catalog lookup.
   Only the environment contains the run token; startup arguments and files refer
   to its variable name. Continue reuses the task's provider key/catalog and obtains
-  a fresh launcher/token. The current launcher supports Unix; other platforms fail
-  explicitly rather than executing a POSIX script as a native program.
+  a fresh launcher/token. Unix uses a private executable script. Windows uses the
+  daemon's internal `app-server` entry and a token-free descriptor binding the selected
+  native executable and any npm script prefix to held file identities. The native argv
+  contains every exact `-c` override before `app-server`, without a shell. The private
+  Windows adapter bootstrap admits frozen npm bundle hashes for codex-acp 2.1.1 and
+  2.2.2; it only rewrites 2.1.1's known shell launch into native argv. Unknown producers
+  fail explicitly and require a new audited compatibility gate.
 - [Claude](claude.rs) loads user/project/local setting sources and exposes `Skill`
   in the default approve-all tool set. Its selected Node runs a private
   [adapter bootstrap](claude_adapter_bootstrap.mjs) before importing the selected
@@ -123,7 +131,7 @@ adapter launch behavior.
 At a borrowed Claude launch, the [runtime capability check](claude_runtime.rs)
 executes only the selected CLI's bounded `--version` with the selected command
 search path and disposable HOME/native/XDG roots and cwd, without inherited run
-credentials or user configuration. The owned process group is stopped before
+credentials or user configuration. The owned Unix process group or Windows Job is stopped before
 those temporary roots are removed. This narrowly requires
 the known Claude 2.x host-managed-provider capability (2.1.231 or later); it is not
 an installation readiness probe or a compatibility guarantee. An unsupported,
@@ -216,3 +224,38 @@ frozen routing, exact Continue and hidden-content rejection. Native history may
 remain physically present after HiRoute hides its own content. A real Claude run
 with conflicting user proxy settings must also complete with no proxy-trap
 requests; bootstrap fixtures alone do not establish native flag-layer precedence.
+
+Windows Worker processes enter their unnamed Job as part of native process creation,
+with only the selected stdio handles inherited. A daemon resident Job also contains
+all ordinary descendants across a forced daemon stop. Native npm `.cmd` shims are
+resolved through the known package's declared bin entry and launched with selected
+Node, without evaluating the shim's command text. DSH's Windows shell tool is
+`tool-pwsh`; background promotion stays disabled in the managed profile.
+
+Windows workspace identity uses volume/file-index ancestry, while native cwd and
+history keys use ordinary Win32 path spelling. Rust's verbatim I/O prefix is not
+persisted as part of the native Claude/Pi history key. Native existing configuration
+and history retain accessible ACLs; only HiRoute-owned metadata and private profiles
+require the owner-only descriptor. Windows native runtime and real ACP/model journeys
+need their own CI evidence; metadata checks and Job fixture tests do not establish
+Agent feature parity.
+
+The opt-in Windows [native-client gates](../installation/windows_acceptance.rs)
+execute selected Pi, DSH and Qoder artifacts through these production profiles with a
+fresh authenticated loopback endpoint. Each must initialize, create a session,
+reload its exact native history and cancel an in-flight request with complete Job
+cleanup. The existing Codex/Claude installation gates use their selected real
+adapters and clients. CI must select each ignored case explicitly and require a
+nonzero pass count; missing artifacts or Qoder login prerequisites fail the gate.
+These lifecycle checks cover the native protocol and profile tool configuration.
+The separate [Windows tools gates](../installation/windows_tools.rs) require actual
+user/project Skill discovery, correlated native Read/Edit/Shell results, edited file
+and shell receipt side effects, exact loaded tool history and complete Job cleanup.
+Codex reads Skills through its shell and edits through its declared patch tool when
+available, or a native shell when the current Plan catalog has no patch tool;
+Claude/Qoder invoke their native Skill tool, and Pi/DSH use their native resource
+loader and read/edit tools. CI selects all five exact ignored cases using the same
+fixed upstream clients, selected Node and real daemon launcher. These gates use a
+fresh private context and controlled model endpoint. Main-Agent collaboration via
+the installed public CLI, compaction and account/OAuth behavior retain their separate
+product journeys; successful Worker tool effects do not prove those other paths.

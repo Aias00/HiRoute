@@ -1,24 +1,31 @@
 //! Narrow ownership for a synchronous native check and its read-only CLI baseline.
 //! Exit observation retains the group leader until all mutating group signals are finished.
+#[cfg(windows)]
+use hiroute_platform::windows::job::Child;
+#[cfg(unix)]
 use rustix::process::{
     Pid, Signal, WaitId, WaitIdOptions, kill_process_group, test_kill_process_group, waitid,
 };
-use std::io::{self, Read};
+use std::fs::File;
+use std::io::{self, Read, Seek, SeekFrom};
 use std::path::Path;
+#[cfg(unix)]
 use std::process::Child;
 use std::time::{Duration, Instant};
 
 pub struct NativeProbeProcess {
     child: Child,
+    #[cfg(unix)]
     group: Pid,
     signals_closed: bool,
     stopped: bool,
 }
 
 impl NativeProbeProcess {
-    /// The caller must spawn this child with process_group(0).
+    /// Unix callers spawn with process_group(0); Windows callers retain an atomic Job child.
     pub fn new(child: Child) -> Self {
         Self {
+            #[cfg(unix)]
             group: Pid::from_child(&child),
             child,
             signals_closed: false,
@@ -30,6 +37,12 @@ impl NativeProbeProcess {
         if self.signals_closed {
             return Err(io::Error::other("native process ownership closed"));
         }
+        #[cfg(windows)]
+        return self
+            .child
+            .exit_code()
+            .map(|code| code.map(|code| code == 0));
+        #[cfg(unix)]
         waitid(
             WaitId::Pid(self.group),
             WaitIdOptions::EXITED | WaitIdOptions::NOHANG | WaitIdOptions::NOWAIT,
@@ -38,6 +51,7 @@ impl NativeProbeProcess {
         .map_err(Into::into)
     }
 
+    #[cfg(unix)]
     fn signal(&self, signal: Signal) -> io::Result<()> {
         self.observe()?;
         match kill_process_group(self.group, signal) {
@@ -49,6 +63,7 @@ impl NativeProbeProcess {
         }
     }
 
+    #[cfg(unix)]
     pub fn stop(&mut self) -> io::Result<()> {
         if self.stopped {
             return Ok(());
@@ -86,6 +101,24 @@ impl NativeProbeProcess {
             std::thread::sleep(Duration::from_millis(5));
         }
     }
+
+    #[cfg(windows)]
+    pub fn stop(&mut self) -> io::Result<()> {
+        if self.stopped {
+            return Ok(());
+        }
+        self.child.terminate()?;
+        let start = Instant::now();
+        while !self.child.empty()? || self.child.exit_code()?.is_none() {
+            if start.elapsed() >= Duration::from_secs(1) {
+                return Err(io::Error::other("native process scope remains"));
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        self.signals_closed = true;
+        self.stopped = true;
+        Ok(())
+    }
 }
 
 impl Drop for NativeProbeProcess {
@@ -106,7 +139,85 @@ pub(super) fn read_bounded(path: &Path, limit: usize) -> io::Result<zeroize::Zer
     Ok(bytes)
 }
 
+/// Read an owned capture only after every writer in its process scope has stopped.
+/// The duplicate retains the original file object, including exclusive Windows
+/// sharing. Its seek pointer is shared, so this must never inspect a live writer.
+pub(super) fn read_bounded_file(
+    file: &File,
+    limit: usize,
+) -> io::Result<zeroize::Zeroizing<Vec<u8>>> {
+    let cap = u64::try_from(limit)
+        .ok()
+        .and_then(|limit| limit.checked_add(1))
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "native output limit"))?;
+    let mut file = file.try_clone()?;
+    file.seek(SeekFrom::Start(0))?;
+    let mut bytes = zeroize::Zeroizing::new(Vec::new());
+    file.take(cap).read_to_end(&mut bytes)?;
+    if bytes.len() > limit {
+        return Err(io::Error::other("native output bound"));
+    }
+    Ok(bytes)
+}
+
 #[cfg(test)]
+mod output_tests {
+    use super::*;
+    use std::io::Write;
+
+    #[test]
+    fn retained_capture_starts_at_zero_and_rechecks_the_exact_final_bound() {
+        let root = super::super::probe_files::temporary("hiroute-held-output-").unwrap();
+        let mut capture = super::super::probe_files::file(&root.path().join("capture")).unwrap();
+        assert!(read_bounded_file(&capture, 0).unwrap().is_empty());
+        capture.write_all(b"fixed capture").unwrap();
+        capture.flush().unwrap();
+        let length = b"fixed capture".len();
+        assert_eq!(
+            read_bounded_file(&capture, length).unwrap().as_slice(),
+            b"fixed capture"
+        );
+        assert_eq!(
+            read_bounded_file(&capture, length - 1).unwrap_err().kind(),
+            io::ErrorKind::Other
+        );
+        assert_eq!(
+            read_bounded_file(&capture, 0).unwrap_err().kind(),
+            io::ErrorKind::Other
+        );
+        assert_eq!(
+            read_bounded_file(&capture, length).unwrap().as_slice(),
+            b"fixed capture"
+        );
+        if usize::BITS == 64 {
+            assert_eq!(
+                read_bounded_file(&capture, usize::MAX).unwrap_err().kind(),
+                io::ErrorKind::InvalidInput
+            );
+        }
+    }
+
+    #[test]
+    fn retained_capture_preserves_actual_non_limit_read_errors() {
+        let root = super::super::probe_files::temporary("hiroute-write-only-output-").unwrap();
+        let path = root.path().join("write-only");
+        let mut capture = File::options()
+            .create_new(true)
+            .write(true)
+            .open(path)
+            .unwrap();
+        capture.write_all(b"fixed").unwrap();
+        capture.flush().unwrap();
+        let mut direct = capture.try_clone().unwrap();
+        direct.seek(SeekFrom::Start(0)).unwrap();
+        let expected = direct.read(&mut [0; 1]).unwrap_err();
+        let error = read_bounded_file(&capture, 128).unwrap_err();
+        assert_eq!(error.kind(), expected.kind());
+        assert_eq!(error.raw_os_error(), expected.raw_os_error());
+    }
+}
+
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use std::os::unix::process::CommandExt;

@@ -98,11 +98,11 @@ fn descriptor(source_ref: &str) -> ProtectedInputSourceDescriptorV1 {
 fn source_evidence(
     account: &str,
 ) -> (
-    tempfile::TempDir,
+    crate::private_test_support::TempDir,
     std::path::PathBuf,
     BorrowedSubscriptionEvidence,
 ) {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = crate::private_test_support::tempdir().unwrap();
     ensure_private_dir(temp.path()).unwrap();
     let path = temp.path().join("auth.json");
     let bytes = serde_json::to_vec(&serde_json::json!({

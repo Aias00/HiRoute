@@ -1,5 +1,6 @@
 use crate::client::LocalControlClientError;
 use hiroute_application_api::{ErrorCode, WorkPlanListRequestV1};
+#[cfg(unix)]
 use std::io::Read;
 
 pub(crate) fn payload(options: &[String]) -> Result<serde_json::Value, ErrorCode> {
@@ -54,6 +55,11 @@ pub(crate) fn credential(fd: u32) -> Result<String, LocalControlClientError> {
 #[cfg(not(unix))]
 pub(crate) fn credential(_: u32) -> Result<String, LocalControlClientError> {
     Err(LocalControlClientError::ProtectedInput)
+}
+
+#[cfg(windows)]
+pub(crate) fn credential_handle(handle: u64) -> Result<String, LocalControlClientError> {
+    crate::client::read_protected_handle(handle, 256)
 }
 
 #[cfg(all(test, unix))]

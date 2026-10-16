@@ -1,5 +1,3 @@
-use std::os::unix::fs::PermissionsExt;
-
 use crate::test_tempdir as tempdir;
 use hiroute_domain::{
     AuthenticationKind, CanonicalDigest, ComputeControlProjectionV1, ComputeInventorySnapshotV1,
@@ -12,6 +10,7 @@ use rusqlite::{Connection, params};
 use super::tests::{prepared, projection_mutation, registry, v7_operation_json};
 use super::*;
 use crate::control::ControlStore;
+use crate::control::test_native_permissions::private_fixture_permissions;
 
 #[test]
 fn migrated_projection_matches_exact_v7_source_and_binding_cas_digests() {
@@ -51,9 +50,12 @@ fn real_v7_staged_and_activated_effects_reconcile_after_v8_upgrade() {
         let root = directory
             .path()
             .join(if activated { "activated" } else { "staged" });
+        #[cfg(unix)]
         std::fs::create_dir(&root).unwrap();
-        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
+        private_fixture_permissions(&root, true);
         let database = root.join("control.db");
+        #[cfg(windows)]
+        private_fixture_permissions(&database, false);
         let connection = Connection::open(&database).unwrap();
         crate::migrations::initialize_control_v7_fixture(&connection).unwrap();
         let (encoded, operation_id, workspace, request_digest, accepted_digest) =
@@ -118,7 +120,7 @@ fn real_v7_staged_and_activated_effects_reconcile_after_v8_upgrade() {
                 .unwrap();
         }
         drop(connection);
-        std::fs::set_permissions(&database, std::fs::Permissions::from_mode(0o600)).unwrap();
+        private_fixture_permissions(&database, false);
 
         let store = ControlStore::open(
             &crate::test_storage_authority(),

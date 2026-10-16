@@ -16,6 +16,7 @@ use rusqlite::params;
 
 use super::*;
 use crate::control::ControlStore;
+use crate::control::test_native_permissions::private_fixture_permissions;
 
 pub(super) fn registry() -> ConnectorRegistryBundleV1 {
     ConnectorRegistryBundleV1 {
@@ -494,11 +495,11 @@ fn projection_refresh_rebinds_pool_and_model_change_tombstones_old_binding() {
 }
 #[test]
 fn legacy_v7_graph_continues_through_canonical_alias_without_losing_pool_credentials() {
-    use std::os::unix::fs::PermissionsExt;
     let directory = tempdir().unwrap();
     let root = directory.path().join("data");
+    #[cfg(unix)]
     std::fs::create_dir(&root).unwrap();
-    std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
+    private_fixture_permissions(&root, true);
     let database = root.join("control.db");
     let registry = registry();
     let mut current_projection = prepared(&registry).desired;
@@ -604,6 +605,8 @@ fn legacy_v7_graph_continues_through_canonical_alias_without_losing_pool_credent
         observed_models,
         captured_at: 1,
     };
+    #[cfg(windows)]
+    private_fixture_permissions(&database, false);
     let connection = rusqlite::Connection::open(&database).unwrap();
     crate::migrations::initialize_control_v7_fixture(&connection).unwrap();
     {
@@ -671,7 +674,7 @@ fn legacy_v7_graph_continues_through_canonical_alias_without_losing_pool_credent
             .unwrap();
     }
     drop(connection);
-    std::fs::set_permissions(&database, std::fs::Permissions::from_mode(0o600)).unwrap();
+    private_fixture_permissions(&database, false);
     let store = ControlStore::open(
         &crate::test_storage_authority(),
         &database,
@@ -990,14 +993,15 @@ fn rewrite_projection_as_v7(projection: &mut serde_json::Value) {
 
 #[test]
 fn real_v7_operation_fixture_decodes_stages_and_activates_after_v8_upgrade() {
-    use std::os::unix::fs::PermissionsExt;
-
     let directory = tempdir().unwrap();
     let root = directory.path().join("data");
+    #[cfg(unix)]
     std::fs::create_dir(&root).unwrap();
-    std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
+    private_fixture_permissions(&root, true);
     let database = root.join("control.db");
     let (encoded, operation_id, workspace, request_digest, accepted_digest) = v7_operation_json();
+    #[cfg(windows)]
+    private_fixture_permissions(&database, false);
     let connection = rusqlite::Connection::open(&database).unwrap();
     crate::migrations::initialize_control_v7_fixture(&connection).unwrap();
     let operation: serde_json::Value = serde_json::from_str(&encoded).unwrap();
@@ -1043,7 +1047,7 @@ fn real_v7_operation_fixture_decodes_stages_and_activates_after_v8_upgrade() {
             .unwrap();
     }
     drop(connection);
-    std::fs::set_permissions(&database, std::fs::Permissions::from_mode(0o600)).unwrap();
+    private_fixture_permissions(&database, false);
 
     let store = ControlStore::open(
         &crate::test_storage_authority(),

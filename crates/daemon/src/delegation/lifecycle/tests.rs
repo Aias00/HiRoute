@@ -12,6 +12,7 @@ use tokio_util::sync::CancellationToken;
 #[cfg(unix)]
 mod codex_capability;
 mod startup;
+mod terminal;
 
 #[derive(Default)]
 struct Journal(
@@ -184,14 +185,33 @@ impl WorkerPlatformPort for Fixture {
     }
 }
 
-fn inputs() -> (WorkerLaunchRequest, AcpRunInput, tempfile::TempDir) {
+fn inputs() -> (
+    WorkerLaunchRequest,
+    AcpRunInput,
+    crate::test_support::PrivateTempDir,
+) {
     inputs_in_context(None)
 }
 
 fn inputs_in_context(
     borrowed_root: Option<&std::path::Path>,
-) -> (WorkerLaunchRequest, AcpRunInput, tempfile::TempDir) {
-    let fixture = tempfile::tempdir().unwrap();
+) -> (
+    WorkerLaunchRequest,
+    AcpRunInput,
+    crate::test_support::PrivateTempDir,
+) {
+    inputs_for_harness(borrowed_root, WorkerHarnessV1::CodexCli)
+}
+
+fn inputs_for_harness(
+    borrowed_root: Option<&std::path::Path>,
+    worker_harness: WorkerHarnessV1,
+) -> (
+    WorkerLaunchRequest,
+    AcpRunInput,
+    crate::test_support::PrivateTempDir,
+) {
+    let fixture = crate::test_support::private_tempdir();
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -202,14 +222,16 @@ fn inputs_in_context(
         &hiroute_domain::WorkspaceId::parse("workspace").unwrap(),
         "root",
         "task-a",
-        WorkerHarnessV1::CodexCli,
+        worker_harness,
         SessionRootUse::New,
     )
     .unwrap();
     let cwd = std::env::temp_dir();
     let adapter = cwd.join("adapter");
     let harness = cwd.join("codex");
-    let private = fixture.path().join("run");
+    let private =
+        crate::delegation::profile::native_context_path(&fixture.path().canonicalize().unwrap())
+            .join("run");
     let permit = WorkspaceExecutionPermitV1 {
         permit_id: "permit".into(),
         generation: 1,
@@ -243,7 +265,7 @@ fn inputs_in_context(
         protocol: hiroute_domain::AgentIngressProtocolV1::Responses,
         context_window_tokens: None,
         max_output_tokens: None,
-        harness: WorkerHarnessV1::CodexCli,
+        harness: worker_harness,
         adapter: Some(&adapter),
         harness_binary: &harness,
         node_binary: None,
@@ -455,22 +477,19 @@ async fn terminal_publication_lease_survives_until_the_executor_receives_the_res
 #[tokio::test]
 async fn claude_history_checkpoint_observes_new_and_appended_stable_transcripts() {
     for existing in [false, true] {
-        let root = tempfile::tempdir().unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
-        }
+        let root = crate::test_support::private_tempdir();
         let session_id = format!("native-{existing}");
         let history = root
             .path()
             .join("projects/workspace")
             .join(format!("{session_id}.jsonl"));
-        std::fs::create_dir_all(history.parent().unwrap()).unwrap();
+        fixture_private_directory(&root.path().join("projects"));
+        fixture_private_directory(history.parent().unwrap());
         let baseline = if existing {
-            std::fs::write(&history, b"old\n").unwrap();
+            hiroute_platform::durable::write_private_new(&history, b"old\n").unwrap();
             HistoryBaseline::Existing(4)
         } else {
+            hiroute_platform::durable::write_private_new(&history, b"").unwrap();
             HistoryBaseline::New
         };
         let checkpoint = ClaudeHistoryCheckpoint {
@@ -482,7 +501,6 @@ async fn claude_history_checkpoint_observes_new_and_appended_stable_transcripts(
             tokio::time::sleep(Duration::from_millis(40)).await;
             use std::io::Write;
             let mut file = std::fs::OpenOptions::new()
-                .create(true)
                 .append(true)
                 .open(history_for_write)
                 .unwrap();
@@ -500,17 +518,13 @@ async fn claude_history_checkpoint_observes_new_and_appended_stable_transcripts(
 
 #[tokio::test]
 async fn borrowed_claude_checkpoint_observes_native_file_instead_of_owned_binding() {
-    let storage = tempfile::tempdir().unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(storage.path(), fs::Permissions::from_mode(0o700)).unwrap();
-    }
+    let storage = crate::test_support::private_tempdir();
     let workspace = storage.path().join("workspace");
     let home = storage.path().join("daily-home");
     let config = home.join("native-config");
-    fs::create_dir_all(&config).unwrap();
-    fs::create_dir(&workspace).unwrap();
+    fixture_private_directory(&home);
+    fixture_private_directory(&config);
+    fixture_private_directory(&workspace);
     let session = TaskSessionRoot::prepare(
         storage.path(),
         &hiroute_domain::WorkspaceId::parse("workspace").unwrap(),
@@ -523,18 +537,19 @@ async fn borrowed_claude_checkpoint_observes_native_file_instead_of_owned_bindin
     session
         .bind_borrowed_context(&home, &config, &workspace)
         .unwrap();
-    let project = fs::canonicalize(workspace)
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .replace(|ch: char| !ch.is_ascii_alphanumeric(), "-");
+    let project =
+        crate::delegation::profile::native_context_path(&fs::canonicalize(workspace).unwrap())
+            .to_str()
+            .unwrap()
+            .replace(|ch: char| !ch.is_ascii_alphanumeric(), "-");
     let id = "71a2b020-312e-49cd-b084-924cbb3642ad";
     let history = config
         .join("projects")
         .join(project)
         .join(format!("{id}.jsonl"));
-    fs::create_dir_all(history.parent().unwrap()).unwrap();
-    fs::write(&history, b"old\n").unwrap();
+    fixture_private_directory(&config.join("projects"));
+    fixture_private_directory(history.parent().unwrap());
+    hiroute_platform::durable::write_private_new(&history, b"old\n").unwrap();
     crate::delegation::profile::native_history(session.path(), WorkerHarnessV1::ClaudeCode, id)
         .unwrap();
     assert_eq!(claude_history_len(session.path(), id), Some(4));
@@ -552,6 +567,21 @@ async fn borrowed_claude_checkpoint_observes_native_file_instead_of_owned_bindin
     assert!(checkpoint.wait_until_settled(Some(id)).await);
     writer.await.unwrap();
     assert_eq!(claude_history_len(session.path(), id), Some(8));
+}
+
+fn fixture_private_directory(path: &std::path::Path) {
+    #[cfg(windows)]
+    drop(hiroute_platform::windows::security::create_owner_only_directory(path).unwrap());
+    #[cfg(not(windows))]
+    {
+        let mut builder = fs::DirBuilder::new();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        builder.create(path).unwrap();
+    }
 }
 
 #[tokio::test]

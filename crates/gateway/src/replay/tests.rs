@@ -548,8 +548,10 @@ fn windows_root_and_replay_file_have_protected_owner_only_dacls() {
     let mut writer = store.begin_raw().expect("writer");
     writer.append(&[9_u8; 256]).expect("append");
     let reference = writer.seal().expect("seal");
-    let path = store.stream_path(&reference).expect("disk path");
-    super::windows_acl::verify_owner_only(&path, false).expect("file owner-only DACL");
+    let streams = super::lock(&store.inner.streams);
+    streams[&reference.stream_ordinal()]
+        .validate_backing_handle()
+        .expect("held file owner-only DACL");
 }
 
 #[test]
@@ -569,14 +571,14 @@ fn cleanup_waits_for_last_reader_and_restart_removes_orphans() {
     drop(manager);
 
     let orphan = root.0.join("req-stale-restart");
-    fs::create_dir(&orphan).expect("orphan directory");
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
+        fs::create_dir(&orphan).expect("orphan directory");
         fs::set_permissions(&orphan, fs::Permissions::from_mode(0o700)).expect("orphan mode");
     }
     #[cfg(windows)]
-    super::windows_acl::set_owner_only(&orphan, true).expect("orphan DACL");
+    drop(super::windows_acl::create_owner_only_directory(&orphan).expect("orphan owner and DACL"));
     std::thread::sleep(Duration::from_millis(3));
     let mut restart = config(&root.0, 64, 16);
     restart.orphan_ttl = Duration::from_millis(1);

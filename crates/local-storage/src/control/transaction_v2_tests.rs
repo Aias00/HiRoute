@@ -11,7 +11,24 @@ use hiroute_domain::{
 use serde_json::json;
 
 use super::{ControlStore, ManagedArtifactStore};
+use crate::control::test_native_permissions::private_fixture_permissions;
 use crate::{LocalSecretStore, LocalStorageError, SqliteBackup};
+
+#[cfg(windows)]
+fn windows_permissions(
+    path: &std::path::Path,
+) -> hiroute_platform::file_security::WindowsPermissions {
+    let held = hiroute_platform::windows::security::open_identity(path, false).unwrap();
+    hiroute_platform::file_security::capture(&held).unwrap()
+}
+
+#[cfg(windows)]
+fn set_read_only(path: &std::path::Path, read_only: bool) {
+    let mut permissions = fs::metadata(path).unwrap().permissions();
+    permissions.set_readonly(read_only);
+    fs::set_permissions(path, permissions).unwrap();
+    assert_eq!(windows_permissions(path).read_only, read_only);
+}
 
 fn operation(workspace: &WorkspaceId, key: &str, target: u64) -> OperationV1 {
     let request_digest = CanonicalDigest::of_bytes(format!("request-{key}").as_bytes());
@@ -410,18 +427,32 @@ fn artifact_intent(before: Option<CanonicalDigest>) -> ExternalEffectIntentV1 {
 
 #[test]
 fn artifact_stage_is_invisible_and_mode_is_owned_and_conditionally_restored() {
+    #[cfg(unix)]
     use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
-    for before_mode in [0o644, 0o640, 0o666, 0o1666] {
+    #[cfg(unix)]
+    let cases = [0o644, 0o640, 0o666, 0o1666];
+    #[cfg(windows)]
+    let cases = [false, true];
+    for before_permission in cases {
         let directory = tempdir().unwrap();
         let root = directory.path().join("artifacts");
         let restore = directory.path().join("restore");
+        #[cfg(unix)]
         crate::test_create_dir_all(root.join("agents")).unwrap();
-        fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
-        fs::set_permissions(root.join("agents"), fs::Permissions::from_mode(0o700)).unwrap();
+        private_fixture_permissions(&root, true);
+        private_fixture_permissions(&root.join("agents"), true);
         let target = root.join("agents/codex");
+        #[cfg(windows)]
+        private_fixture_permissions(&target, false);
         fs::write(&target, b"before").unwrap();
-        fs::set_permissions(&target, fs::Permissions::from_mode(before_mode)).unwrap();
+        #[cfg(unix)]
+        fs::set_permissions(&target, fs::Permissions::from_mode(before_permission)).unwrap();
+        #[cfg(windows)]
+        let original_permissions = {
+            set_read_only(&target, before_permission);
+            windows_permissions(&target)
+        };
         let store =
             ManagedArtifactStore::open(&crate::test_storage_authority(), &root, &restore).unwrap();
         let before = store.current_external_fingerprint("agents/codex").unwrap();
@@ -429,38 +460,69 @@ fn artifact_stage_is_invisible_and_mode_is_owned_and_conditionally_restored() {
         let operation = OperationId::parse("op_11111111111111111111111111111111").unwrap();
         let effect = store.apply_artifact(&operation, &intent).unwrap();
         assert_eq!(fs::read(&target).unwrap(), b"before");
-        assert_eq!(fs::metadata(&target).unwrap().mode() & 0o7777, before_mode);
+        #[cfg(unix)]
+        assert_eq!(
+            fs::metadata(&target).unwrap().mode() & 0o7777,
+            before_permission
+        );
+        #[cfg(windows)]
+        assert_eq!(windows_permissions(&target), original_permissions);
         assert!(matches!(
             store.observe_artifact(&operation, &intent).unwrap(),
             EffectReconciliation::Staged(_)
         ));
         store.activate_artifact(&effect).unwrap();
-        assert_eq!(fs::metadata(&target).unwrap().mode() & 0o7777, 0o640);
-        fs::set_permissions(&target, fs::Permissions::from_mode(0o644)).unwrap();
+        #[cfg(unix)]
+        {
+            assert_eq!(fs::metadata(&target).unwrap().mode() & 0o7777, 0o640);
+            fs::set_permissions(&target, fs::Permissions::from_mode(0o644)).unwrap();
+        }
+        #[cfg(windows)]
+        {
+            assert_eq!(
+                windows_permissions(&target),
+                hiroute_platform::file_security::private_defaults(false).unwrap()
+            );
+            let held = hiroute_platform::windows::security::open_identity(&target, false).unwrap();
+            hiroute_platform::windows::security::verify_owner_only_handle(&held, false).unwrap();
+            drop(held);
+            set_read_only(&target, true);
+        }
         assert!(matches!(
             store.observe_artifact(&operation, &intent).unwrap(),
             EffectReconciliation::OwnershipLost(_)
         ));
+        #[cfg(unix)]
         fs::set_permissions(&target, fs::Permissions::from_mode(0o640)).unwrap();
+        #[cfg(windows)]
+        set_read_only(&target, false);
         assert_eq!(
             store.compensate_artifact(&effect).unwrap(),
             CompensationOutcome::Compensated
         );
         assert_eq!(fs::read(&target).unwrap(), b"before");
-        assert_eq!(fs::metadata(&target).unwrap().mode() & 0o7777, before_mode);
+        #[cfg(unix)]
+        assert_eq!(
+            fs::metadata(&target).unwrap().mode() & 0o7777,
+            before_permission
+        );
+        #[cfg(windows)]
+        {
+            assert_eq!(windows_permissions(&target), original_permissions);
+            set_read_only(&target, false);
+        }
     }
 }
 
 #[test]
 fn restore_markers_with_missing_key_are_locked_without_reinitialization() {
-    use std::os::unix::fs::PermissionsExt;
-
     let directory = tempdir().unwrap();
     let root = directory.path().join("artifacts");
     let restore = directory.path().join("restore");
+    #[cfg(unix)]
     crate::test_create_dir_all(root.join("agents")).unwrap();
-    fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
-    fs::set_permissions(root.join("agents"), fs::Permissions::from_mode(0o700)).unwrap();
+    private_fixture_permissions(&root, true);
+    private_fixture_permissions(&root.join("agents"), true);
     let store =
         ManagedArtifactStore::open(&crate::test_storage_authority(), &root, &restore).unwrap();
     let intent = artifact_intent(None);
@@ -485,6 +547,8 @@ fn restore_markers_with_missing_key_are_locked_without_reinitialization() {
     )
     .unwrap();
     drop(other);
+    #[cfg(windows)]
+    private_fixture_permissions(&restore.join(".restore-key"), false);
     fs::copy(
         other_restore.join(".restore-key"),
         restore.join(".restore-key"),
@@ -512,8 +576,6 @@ fn sensitive_artifacts_require_owner_only_mode() {
 
 #[test]
 fn one_random_secret_sentinel_never_reaches_journal_databases_backup_or_artifacts() {
-    use std::os::unix::fs::PermissionsExt;
-
     let sentinel = (0_u16..97)
         .map(|index| ((index * 73 + 19) % 251) as u8)
         .collect::<Vec<_>>();
@@ -609,13 +671,10 @@ fn one_random_secret_sentinel_never_reaches_journal_databases_backup_or_artifact
     assert!(backup.manifest().key_id.is_some());
 
     let artifact_root = root.join("artifacts");
+    #[cfg(unix)]
     crate::test_create_dir_all(artifact_root.join("agents")).unwrap();
-    fs::set_permissions(&artifact_root, fs::Permissions::from_mode(0o700)).unwrap();
-    fs::set_permissions(
-        artifact_root.join("agents"),
-        fs::Permissions::from_mode(0o700),
-    )
-    .unwrap();
+    private_fixture_permissions(&artifact_root, true);
+    private_fixture_permissions(&artifact_root.join("agents"), true);
     let artifacts = ManagedArtifactStore::open(
         &crate::test_storage_authority(),
         &artifact_root,

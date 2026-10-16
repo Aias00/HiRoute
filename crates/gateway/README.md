@@ -9,6 +9,12 @@ branch decision, plan and freeze candidates, then admit execution into
 `hiroute-gateway-core`. The core owns attempts, response commit, cancellation and
 resource cleanup; the Gateway does not run a second execution loop.
 
+Branch candidates may use distinct execution keys for different reasoning settings
+on the same model. Publication freezes `source_binding_id` for their current Native
+credential membership checks; execution keys continue to own selection and runtime
+state. Ordinary candidates retain their existing stable key. Older aggregate
+projections are authenticated before Application rebuilds this binding from Plans.
+
 The standalone `hirouted` entry can attach the same typed diagnostics using
 `--diagnostics-root <private-root>` and an optional temporary
 `--diagnostic-level-override`. These diagnostics do not enable session content

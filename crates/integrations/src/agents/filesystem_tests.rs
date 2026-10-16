@@ -847,7 +847,7 @@ fn claude_native_renderer_preserves_unowned_settings_and_replaces_auth_atomicall
         (
             "apiKeyHelper".to_owned(),
             Some(json!({
-                "executable": "/opt/hiroute/bin/hiroute",
+                "executable": crate::agents::test_absolute_path("/opt/hiroute/bin/hiroute"),
                 "argv": [
                     hiroute_domain::HIDDEN_AGENT_GRANT_HELPER_VERB_V1,
                     "agent-connection/agent_claude_default/claude-messages-v1"
@@ -1022,7 +1022,10 @@ fn codex_subscription_override_does_not_rebind_native_configuration_or_fall_back
         source.source_path(),
         fs::canonicalize(&borrowed_auth).unwrap()
     );
-    assert_eq!(scanner.layout.codex_user_config, native_config);
+    assert_eq!(
+        scanner.layout.codex_user_config,
+        crate::agents::canonical_codex_config_path(&native_config)
+    );
     let public = serde_json::to_string(source.descriptor()).unwrap();
     assert!(!public.contains(borrowed_auth.to_str().unwrap()));
     assert!(!public.contains("not-read"));

@@ -254,7 +254,24 @@ fn stop_version_child(child: &mut VersionChild) -> Result<(), DelegationErrorV1>
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn bounded_version(
+    binary: &Path,
+    search_path: &str,
+    timeout: Duration,
+) -> Result<Vec<u8>, DelegationErrorV1> {
+    hiroute_integrations::agents::windows_claude_version(binary, search_path, timeout).map_err(
+        |error| {
+            failure(match error.kind() {
+                std::io::ErrorKind::TimedOut => Reason::Timeout,
+                std::io::ErrorKind::InvalidData => Reason::InvalidOutput,
+                _ => Reason::Unavailable,
+            })
+        },
+    )
+}
+
+#[cfg(not(any(unix, windows)))]
 fn bounded_version(
     _binary: &Path,
     _search_path: &str,

@@ -1,3 +1,4 @@
+use hiroute_diagnostics::event::NativeCredentialLookupStage as Stage;
 use std::collections::BTreeSet;
 use std::sync::Mutex;
 
@@ -29,9 +30,13 @@ impl crate::LocalStorageSet {
                     return Ok(true);
                 }
                 let Some(source_id) = reference.owner_scope().strip_prefix("source/") else {
+                    self.control()
+                        .native_credential_unavailable(Stage::LeaseOwnerInvalid);
                     return Ok(false);
                 };
                 let Some(source) = self.control().compute_management_source(source_id)? else {
+                    self.control()
+                        .native_credential_unavailable(Stage::LeaseSourceMissing);
                     return Ok(false);
                 };
                 if source.state == MaterializationState::Disabled {
@@ -40,6 +45,8 @@ impl crate::LocalStorageSet {
                     ));
                 }
                 if source.state != MaterializationState::Ready {
+                    self.control()
+                        .native_credential_unavailable(Stage::LeaseSourceNotReady);
                     return Ok(false);
                 }
                 let Some(credential) = source
@@ -47,6 +54,8 @@ impl crate::LocalStorageSet {
                     .iter()
                     .find(|credential| credential.credential == *reference)
                 else {
+                    self.control()
+                        .native_credential_unavailable(Stage::LeaseReferenceMissing);
                     return Ok(false);
                 };
                 if !credential.enabled {

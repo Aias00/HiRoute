@@ -22,7 +22,7 @@ use hiroute_integrations::AgentDiscoveryOutcomeV1;
 
 use super::LocalControlAdapter;
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 #[path = "agent_connection_collaboration_check.rs"]
 mod collaboration_check;
 #[path = "agent_connection_discovery.rs"]
@@ -324,12 +324,16 @@ impl LocalControlAdapter {
 
 impl AgentConnectionControlPort for LocalControlAdapter {
     fn check_collaboration(&self, agent_id: &str) -> Result<(), CollaborationCheckError> {
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         {
             // A sibling from the running installation, never a PATH-selected replacement.
             let cli = std::env::current_exe()
                 .map_err(|_| ControlReadError::Unavailable)?
-                .with_file_name("hiroute");
+                .with_file_name(if cfg!(windows) {
+                    "hiroute.exe"
+                } else {
+                    "hiroute"
+                });
             if agent_id == "agent_dsh_default" {
                 return self
                     .scanner
@@ -358,14 +362,14 @@ impl AgentConnectionControlPort for LocalControlAdapter {
                 ControlReadError::Unavailable.into()
             })
         }
-        #[cfg(not(unix))]
+        #[cfg(not(any(unix, windows)))]
         {
             let _ = agent_id;
             Err(ControlReadError::Unavailable.into())
         }
     }
     fn check_native_authentication(&self, agent_id: &str) -> Result<(), ControlReadError> {
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         {
             let result = match agent_id {
                 "agent_codex_default" => self.scanner.check_codex_native_authentication(),
@@ -377,7 +381,7 @@ impl AgentConnectionControlPort for LocalControlAdapter {
                 ControlReadError::Unavailable
             })
         }
-        #[cfg(not(unix))]
+        #[cfg(not(any(unix, windows)))]
         {
             let _ = agent_id;
             Err(ControlReadError::NotFound)
@@ -560,7 +564,7 @@ impl AgentConnectionControlPort for LocalControlAdapter {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 impl crate::control::AgentGrantResolverPort for LocalControlAdapter {
     fn resolve_agent_grant(&self, connection_id: &str) -> Result<AgentAccessGrantMaterial, ()> {
         self.resolve_active_agent_grant(connection_id)
@@ -607,7 +611,7 @@ mod tests {
 
     #[test]
     fn planning_facts_rescan_the_exact_managed_executable_on_every_request() {
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         if crate::test_support::isolated_agent_home(
             "control::runtime::agent_connection::tests::planning_facts_rescan_the_exact_managed_executable_on_every_request",
         ) {

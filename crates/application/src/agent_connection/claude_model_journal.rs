@@ -239,6 +239,14 @@ fn invalid() -> PortError {
 mod tests {
     use super::*;
 
+    fn fixture_path(value: &str) -> String {
+        if cfg!(windows) {
+            format!("C:{value}")
+        } else {
+            value.to_owned()
+        }
+    }
+
     fn payload() -> ClaudeModelFilePayload {
         ClaudeModelFilePayload {
             schema: SCHEMA.into(),
@@ -263,11 +271,11 @@ mod tests {
                         sonnet: None,
                         haiku: None,
                     },
-                    executable: "/opt/claude/bin/claude".into(),
+                    executable: fixture_path("/opt/claude/bin/claude"),
                     installation_digest: CanonicalDigest::of_bytes(b"installation"),
                 }),
                 gateway_base_url: "http://127.0.0.1:8080/v1".into(),
-                trusted_hiroute_executable: "/opt/hiroute/bin/hiroute".into(),
+                trusted_hiroute_executable: fixture_path("/opt/hiroute/bin/hiroute"),
             },
         }
     }
@@ -304,7 +312,10 @@ mod tests {
         let snapshot = &value["change"]["snapshot"];
         assert_eq!(snapshot["native_presets"]["opus"], "Vendor/Opus[1m]");
         assert_eq!(snapshot["presets"]["opus"], "hr-plan-opus");
-        assert_eq!(snapshot["executable"], "/opt/claude/bin/claude");
+        assert_eq!(
+            snapshot["executable"],
+            fixture_path("/opt/claude/bin/claude")
+        );
         assert!(snapshot["native_presets"]["sonnet"].is_null());
         assert_eq!(
             value["change"]["change"]["fields"][0]["path"],

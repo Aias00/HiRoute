@@ -215,6 +215,7 @@
     "hiroute.header-secret-lease-request/v1",
     "hiroute.launcher-upgrade-status/v1",
     "hiroute.launcher-upgrade/v1",
+    "hiroute.local-pipe/v1",
     "hiroute.machine-envelope/v2",
     "hiroute.managed-artifact-backup/v2",
     "hiroute.managed-artifact-compensation/v1",
@@ -237,6 +238,7 @@
     "hiroute.native-credential-lease-request/v1",
     "hiroute.native-field-restore/v1",
     "hiroute.native-files/v1",
+    "hiroute.native-launch/v1",
     "hiroute.native-observation/v2",
     "hiroute.native-restoration-ack/v1",
     "hiroute.observation-retention/v1",
@@ -373,6 +375,17 @@
     "hiroute.value-view/v1",
     "hiroute.web-confirmation/v1",
     "hiroute.website.releases/v2",
+    "hiroute.windows-artifact-fingerprint/v1",
+    "hiroute.windows-background-install/v1",
+    "hiroute.windows-background/v1",
+    "hiroute.windows-install-journal/v1",
+    "hiroute.windows-install-layout/v1",
+    "hiroute.windows-lifecycle/v1",
+    "hiroute.windows-managed-artifact-marker/v5",
+    "hiroute.windows-owner-finalize-request/v1",
+    "hiroute.windows-owner-finalize-result/v1",
+    "hiroute.windows-scm-owner-request/v1",
+    "hiroute.windows-scm-owner-result/v1",
     "hiroute.work-plan-list-request/v1",
     "hiroute.work-plan-list/v1",
     "hiroute.worker-cancel-request/v1",
@@ -1044,6 +1057,16 @@
         "hiroute.compute-management-snapshot/v3"
       ],
       "legacy_support": []
+    },
+    {
+      "subject": "windows_managed_artifact_marker",
+      "audited_prefixes": [
+        "hiroute.windows-managed-artifact-marker"
+      ],
+      "current_contracts": [
+        "hiroute.windows-managed-artifact-marker/v5"
+      ],
+      "legacy_support": []
     }
   ],
   "forbidden_contracts": [
@@ -1081,7 +1104,7 @@
       "field": "task-owned native home without borrowed-native-context.json",
       "mode": "recovery_read_only",
       "owner": "worker-native-context",
-      "reason": "Continue existing private-root Worker tasks with their original native history and owned cleanup. New tasks bind borrowed native context explicitly; a damaged or partially missing binding must never fall back to the legacy scanner.",
+      "reason": "Continue existing private-root Worker tasks with their original native history and owned cleanup. The existing scanner encodes native path components as portable slash-separated relative paths without changing retained file identity. New tasks bind borrowed native context explicitly; a damaged or partially missing binding must never fall back to the legacy scanner.",
       "removal_condition": "Retire only after all retained tasks and supported backups no longer contain private-root native sessions, together with the frozen recovery fixtures.",
       "allowed_paths": [
         "crates/daemon/src/delegation/profile/materials.rs",
@@ -1188,6 +1211,21 @@
       "removal_condition": "Retire only with declared schema23 recovery support and its replacement upgrade evidence.",
       "allowed_paths": [
         "crates/local-storage/src/migrations/fixtures/schema23-worker-operations.json",
+        "crates/local-storage/src/migrations/fixtures/README.md",
+        "crates/local-storage/src/migrations/worker_dependencies_v24_tests.rs",
+        "crates/local-storage/src/migrations/upgrade_batch_recovery_tests.rs"
+      ]
+    },
+    {
+      "contract": "hiroute.worker-dependency-selection-confirmation/v1",
+      "field": "test-only Windows path projection of frozen schema23 Worker journals",
+      "mode": "frozen_fixture",
+      "owner": "local-storage",
+      "reason": "Exercise original schema23 SQL migration and recovery with valid Windows absolute paths. An independent derivation first authenticates the unchanged original fixture and its digest formulas, then changes only installation paths and dependent proofs. This fixture is synthetic and does not establish a historical Windows release or cross-platform backup migration.",
+      "removal_condition": "Retire together with the schema23 native-path recovery matrix and its replacement evidence; preserve the original historical producer fixture independently.",
+      "allowed_paths": [
+        "crates/local-storage/src/migrations/fixtures/schema23-worker-operations-windows.json",
+        "crates/local-storage/src/migrations/fixtures/derive-windows-schema23.py",
         "crates/local-storage/src/migrations/fixtures/README.md",
         "crates/local-storage/src/migrations/worker_dependencies_v24_tests.rs",
         "crates/local-storage/src/migrations/upgrade_batch_recovery_tests.rs"
@@ -1403,6 +1441,22 @@
         "crates/daemon/tests/fixtures/collaboration-skill-v0.3.1/README.md",
         "crates/daemon/src/control/runtime/settings_entry_tests.rs",
         "crates/daemon/src/control/runtime/settings_entry_collaboration_tests.rs"
+      ]
+    },
+    {
+      "contract": "hiroute.gateway-publication/v3",
+      "field": "source_binding_id absent from all executable candidates",
+      "mode": "recovery_read_only",
+      "owner": "routing-publication",
+      "reason": "Released v0.3.1 branch projections use distinct branch/reasoning execution keys without a separate source binding. Authenticate the complete original alias projection, including old routing/display-name variants, then rebuild source membership from the sealed Plans before current publication. Explicit mismatches and partially stripped bindings are rejected; credential or target checks are not relaxed.",
+      "removal_condition": "Retire only after all supported active, prepared, last-known-good and backup publications have explicit branch source bindings and the corresponding old-projection recovery assertions are retired.",
+      "allowed_paths": [
+        "crates/domain/src/publication/mod.rs",
+        "crates/domain/src/publication/projection.rs",
+        "crates/domain/src/publication/snapshot.rs",
+        "crates/gateway/src/publication/schema.rs",
+        "crates/gateway/src/publication/mod.rs",
+        "crates/application/src/compiler/explicit/tests.rs"
       ]
     }
   ]

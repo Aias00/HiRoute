@@ -1,7 +1,7 @@
 use super::*;
 
 fn runtime(
-    root: &tempfile::TempDir,
+    root: &crate::private_test_support::TempDir,
     backend: Arc<FakeBackend>,
     control: Arc<FakeControl>,
 ) -> ManagedCpaRuntime {
@@ -44,7 +44,7 @@ fn leave_orphan(runtime: ManagedCpaRuntime) -> PathBuf {
 
 #[test]
 fn stopped_or_never_started_managed_recovery_has_zero_spawn_or_control_contact() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(FakeBackend::default());
     let control = Arc::new(FakeControl::default());
     let managed = runtime(&root, backend.clone(), control.clone());
@@ -70,7 +70,7 @@ fn managed_orphan_stop_authenticates_but_never_replaces_for_proxy_change() {
     ) {
         return;
     }
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(FakeBackend::default());
     let control = Arc::new(FakeControl::default());
     let first = runtime(&root, backend.clone(), control.clone())
@@ -104,7 +104,7 @@ fn managed_stop_preserves_unauthenticated_or_owned_process_and_files() {
     ) {
         return;
     }
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(FakeBackend::default());
     let control = Arc::new(FakeControl::default());
     let first = runtime(&root, backend.clone(), control.clone());
@@ -142,7 +142,7 @@ fn dead_managed_child_cleanup_does_not_restart_or_probe() {
     ) {
         return;
     }
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(FakeBackend::default());
     let control = Arc::new(FakeControl::default());
     let first = runtime(&root, backend.clone(), control.clone());
@@ -161,7 +161,7 @@ fn dead_managed_child_cleanup_does_not_restart_or_probe() {
 #[test]
 fn oauth_control_and_authentication_inspection_never_restart_crashed_writer() {
     for operation in ["status", "callback", "cancel", "inspect"] {
-        let root = tempfile::tempdir().unwrap();
+        let root = crate::private_test_support::tempdir().unwrap();
         let backend = Arc::new(FakeBackend::default());
         let control = Arc::new(FakeControl::default());
         let managed = runtime(&root, backend.clone(), control.clone());
@@ -222,10 +222,14 @@ fn write_managed_identity(runtime: &ManagedCpaRuntime, account: &str) -> String 
 
 #[test]
 fn saved_enabled_managed_recovery_preserves_bounded_restart_policy() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(FakeBackend::default());
     let control = Arc::new(FakeControl::default());
-    let managed = runtime(&root, backend.clone(), control.clone());
+    let mut managed = runtime(&root, backend.clone(), control.clone());
+    // This case checks the production crash window, not whether real private
+    // file/owner transactions finish within the fixture's one-second window.
+    // Explicit event ages below cover slow validation without sleeping.
+    managed.spec.restart_policy.window = RestartPolicy::default().window;
     let account = write_managed_identity(&managed, "saved-account");
     assert!(matches!(
         managed.ensure_saved_runtime_ready(&account, 1),
@@ -247,12 +251,19 @@ fn saved_enabled_managed_recovery_preserves_bounded_restart_policy() {
         assert!(
             matches!(managed.ensure_saved_runtime_ready(&account, 1).unwrap(), CpaHealth::Ready { restart_count: actual, .. } if actual == restart_count)
         );
+        let mut inner = managed.inner.lock();
+        assert_eq!(inner.crashes.len(), usize::try_from(restart_count).unwrap());
+        let recorded = std::time::Instant::now() - Duration::from_secs(2);
+        for crash in &mut inner.crashes {
+            *crash = recorded;
+        }
     }
     backend.crash_latest(2);
-    assert!(matches!(
-        managed.ensure_saved_runtime_ready(&account, 1),
-        Err(CpaLifecycleError::CrashLoop(_))
-    ));
+    let outcome = managed.ensure_saved_runtime_ready(&account, 1);
+    assert!(
+        matches!(&outcome, Err(CpaLifecycleError::CrashLoop(_))),
+        "third managed crash must exhaust the two-restart production budget: {outcome:?}"
+    );
     assert_eq!(backend.spawn_count(), 3);
     assert!(
         managed
@@ -267,7 +278,7 @@ fn saved_enabled_managed_recovery_preserves_bounded_restart_policy() {
 
 #[test]
 fn managed_recovery_rejects_pending_disabled_stale_or_changed_account() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(FakeBackend::default());
     let control = Arc::new(FakeControl::default());
     let managed = runtime(&root, backend.clone(), control);
@@ -328,7 +339,7 @@ fn native_saved_recovery_rejects_revoked_or_replaced_authority_before_restart() 
         "suspended",
         "changed-account",
     ] {
-        let root = tempfile::tempdir().unwrap();
+        let root = crate::private_test_support::tempdir().unwrap();
         let backend = Arc::new(FakeBackend::default());
         let control = Arc::new(FakeControl::default());
         let native = fixture_runtime(&root, backend.clone(), control.clone(), 2);
@@ -436,7 +447,7 @@ fn saved_subscription_recovery_restores_exact_routing_after_transient_failure(is
         "attempt-credential-read",
         "startup-catalog",
     ] {
-        let root = tempfile::tempdir().unwrap();
+        let root = crate::private_test_support::tempdir().unwrap();
         let backend = Arc::new(FakeBackend::default());
         let control = Arc::new(FakeControl::default());
         control.set_accounts(vec![snapshot(CpaAccountKind::Codex, 'a', "gpt-5.5")]);
@@ -559,7 +570,7 @@ fn saved_subscription_recovery_restores_exact_routing_after_transient_failure(is
 
 #[test]
 fn saved_managed_recovery_revalidates_disappeared_account_and_model() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(FakeBackend::default());
     let control = Arc::new(FakeControl::default());
     control.set_accounts(vec![snapshot(CpaAccountKind::Codex, 'a', "gpt-5.5")]);
@@ -608,7 +619,7 @@ fn saved_managed_recovery_revalidates_disappeared_account_and_model() {
 #[test]
 fn revoked_requests_and_passive_discovery_never_restart_a_managed_writer() {
     for revocation in ["suspended", "disabled", "removed", "pending"] {
-        let root = tempfile::tempdir().unwrap();
+        let root = crate::private_test_support::tempdir().unwrap();
         let backend = Arc::new(FakeBackend::default());
         let control = Arc::new(FakeControl::default());
         control.set_accounts(vec![snapshot(CpaAccountKind::Codex, 'a', "gpt-5.5")]);
@@ -664,7 +675,7 @@ fn revoked_requests_and_passive_discovery_never_restart_a_managed_writer() {
 
 #[test]
 fn admitted_request_and_explicit_disabled_check_keep_bounded_recovery() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(FakeBackend::default());
     let control = Arc::new(FakeControl::default());
     control.set_accounts(vec![snapshot(CpaAccountKind::Codex, 'a', "gpt-5.5")]);
@@ -710,7 +721,7 @@ fn retained_targets_validate_each_process_catalog_in_both_subscription_modes() {
     }
     for managed in [false, true] {
         for recovery in ["fresh", "adopt", "crash"] {
-            let root = tempfile::tempdir().unwrap();
+            let root = crate::private_test_support::tempdir().unwrap();
             let backend = Arc::new(FakeBackend::default());
             let control = Arc::new(FakeControl::default());
             control.set_accounts(vec![snapshot(CpaAccountKind::Codex, 'a', "gpt-5.5")]);

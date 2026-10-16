@@ -255,6 +255,10 @@ impl Drop for RoleAllHandle {
 }
 
 pub fn start_role_all(config: RoleAllConfig) -> Result<RoleAllHandle, RoleAllError> {
+    #[cfg(windows)]
+    hiroute_platform::windows::job::initialize_resident().map_err(|_| {
+        RoleAllError::Component("Process lifetime", "resident Job unavailable".into())
+    })?;
     if validate_gateway_listen(config.gateway_listen).is_err() {
         return Err(RoleAllError::InvalidConfiguration);
     }
@@ -450,7 +454,7 @@ fn start_role_all_with_runtime(
         };
     let bundled_hiroute = std::env::current_exe()
         .map_err(|error| RoleAllError::Component("Local Control", error.to_string()))?
-        .with_file_name("hiroute");
+        .with_file_name(hiroute_executable_name());
     let standalone_home = if config.released_commands_only {
         Some(
             hiroute_host_runtime::StandaloneLayout::from_environment()
@@ -579,9 +583,8 @@ fn start_cpa(
         shutdown_timeout: Duration::from_secs(5),
         restart_policy: RestartPolicy::default(),
     };
-    let home = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .ok_or(RoleAllError::InvalidConfiguration)?;
+    let home =
+        crate::control::native_agent_home().map_err(|_| RoleAllError::InvalidConfiguration)?;
     let mut claude_spec = codex_spec.clone();
     claude_spec.instance_id = "hiroute-claude".into();
     claude_spec.state_root = config.storage_root.join("cpa-claude/state");
@@ -651,10 +654,11 @@ fn start_cpa(
 }
 
 fn selected_codex_auth() -> Result<PathBuf, RoleAllError> {
-    let home = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .filter(|path| path.is_absolute())
-        .ok_or(RoleAllError::InvalidConfiguration)?;
+    let home =
+        crate::control::native_agent_home().map_err(|_| RoleAllError::InvalidConfiguration)?;
+    if !home.is_absolute() {
+        return Err(RoleAllError::InvalidConfiguration);
+    }
     hiroute_integrations::agents::codex_subscription_auth_from_environment(&home)
         .map_err(|_| RoleAllError::InvalidConfiguration)
 }
@@ -668,14 +672,40 @@ fn managed_cli_entry(
     };
     // Persist the installer-owned entry, whose target changes on upgrade, only
     // after proving it identifies the CLI shipped with this running daemon.
-    let stable = home.join(".local/bin/hiroute");
-    let target = std::fs::canonicalize(&stable).map_err(|_| RoleAllError::InvalidConfiguration)?;
-    let expected =
-        std::fs::canonicalize(bundled).map_err(|_| RoleAllError::InvalidConfiguration)?;
-    if target != expected {
-        return Err(RoleAllError::InvalidConfiguration);
+    let stable = hiroute_host_runtime::standalone_cli_binary(&home.join(".local/bin"));
+    #[cfg(windows)]
+    {
+        let stable_file = hiroute_platform::windows::security::open_identity(&stable, false)
+            .map_err(|_| RoleAllError::InvalidConfiguration)?;
+        let bundled_file = hiroute_platform::windows::security::open_identity(bundled, false)
+            .map_err(|_| RoleAllError::InvalidConfiguration)?;
+        if hiroute_platform::windows::security::file_identity(&stable_file)
+            .map_err(|_| RoleAllError::InvalidConfiguration)?
+            != hiroute_platform::windows::security::file_identity(&bundled_file)
+                .map_err(|_| RoleAllError::InvalidConfiguration)?
+        {
+            return Err(RoleAllError::InvalidConfiguration);
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let target =
+            std::fs::canonicalize(&stable).map_err(|_| RoleAllError::InvalidConfiguration)?;
+        let expected =
+            std::fs::canonicalize(bundled).map_err(|_| RoleAllError::InvalidConfiguration)?;
+        if target != expected {
+            return Err(RoleAllError::InvalidConfiguration);
+        }
     }
     Ok(stable)
+}
+
+fn hiroute_executable_name() -> &'static str {
+    if cfg!(windows) {
+        "hiroute.exe"
+    } else {
+        "hiroute"
+    }
 }
 
 fn remaining(deadline: Instant, component: &'static str) -> Result<Duration, RoleAllError> {
@@ -712,7 +742,7 @@ pub enum RoleAllError {
     JoinTimeout(&'static str),
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use std::io::{BufRead, BufReader, Write};
     use std::net::TcpListener;

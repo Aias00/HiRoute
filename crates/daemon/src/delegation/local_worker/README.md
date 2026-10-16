@@ -36,14 +36,20 @@ After reaping, group identifiers are used only for read-only absence checks, nev
 another destructive signal. Neither the KILL fallback nor a stopped original group
 proves arbitrary detached processes are gone. Real native cancellation scenarios
 must verify actual tool side effects stop while a neighboring run continues. Windows
-uses a held child only: root scope remains insufficient proof of ordinary child
-chain cancellation until native Windows validation and any required mechanism.
+uses an unnamed held Job, assigned by `PROC_THREAD_ATTRIBUTE_JOB_LIST` during native
+process creation. No breakaway is enabled. Stop terminates that exact Job and checks
+both held-root exit and zero active Job processes; an exited adapter therefore cannot
+hide a surviving ordinary tool. A daemon resident Job remains kernel-owned until real
+process exit. Real native tool behavior still requires the Windows acceptance gate.
 
 Tests execute this production module with a no-model OS probe. They do not prove
 real Harness/ACP or CLI/Desktop wiring; those remain consumer/integration checks.
 
 Cleanup keeps an open directory identity handle, verifies the current root is the
 same object, and rejects symlink/reparse replacement before deleting its own root.
+Windows retains the owner-created DELETE-capable root and resolves every recursive
+mutation with a held parent handle. It bounds descent and entries and retains an
+unsafe or unavailable root; an ancestor rename cannot redirect deletion.
 This avoids authorizing deletion solely from a stale path/inode number.
 
 ## Representative checks

@@ -267,7 +267,12 @@ pub(super) fn read_native_file(
     path: &Path,
     limit: usize,
 ) -> Result<Option<Zeroizing<Vec<u8>>>, LocalStorageError> {
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        native_permissions::read_windows_artifact_bounded(path, limit)
+            .map(|snapshot| snapshot.map(|snapshot| snapshot.bytes))
+    }
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (path, limit);
         Err(LocalStorageError::Permission)

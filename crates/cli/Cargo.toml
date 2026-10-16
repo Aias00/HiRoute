@@ -17,12 +17,19 @@ serde.workspace = true
 serde_json.workspace = true
 zeroize.workspace = true
 
+[target.'cfg(windows)'.dependencies]
+hiroute-diagnostics = { path = "../diagnostics" }
+hiroute-platform = { path = "../platform" }
+
 [dev-dependencies]
 hiroute-application = { path = "../application" }
 hiroute-daemon = { path = "../daemon" }
 hiroute-domain = { path = "../domain" }
 hiroute-local-storage = { path = "../local-storage" }
 tempfile.workspace = true
+
+[target.'cfg(windows)'.dev-dependencies]
+hiroute-platform-test-support = { path = "../platform/test-support" }
 
 [[bin]]
 name = "hiroute"

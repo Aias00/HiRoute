@@ -13,7 +13,12 @@ pub(super) fn validate_parent(parent: &Path) -> Result<(), LocalStorageError> {
     let mut current = parent;
     for _ in 0..32 {
         match fs::symlink_metadata(current) {
-            Ok(metadata) => return validate_owner_directory_metadata(&metadata),
+            Ok(metadata) => {
+                validate_owner_directory_metadata(&metadata)?;
+                #[cfg(windows)]
+                let _held = hiroute_platform::windows::security::open_identity(current, true)?;
+                return Ok(());
+            }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 current = current.parent().ok_or(LocalStorageError::InvalidData)?;
             }
@@ -32,6 +37,8 @@ pub(super) fn prepare_parent(
         match fs::symlink_metadata(current) {
             Ok(metadata) => {
                 validate_owner_directory_metadata(&metadata)?;
+                #[cfg(windows)]
+                let _held = hiroute_platform::windows::security::open_identity(current, true)?;
                 break;
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -60,7 +67,18 @@ pub(super) fn prepare_parent(
             });
             sync_parent(&path)?;
         }
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        {
+            let file = hiroute_platform::windows::security::create_owner_only_directory(&path)?;
+            let (volume, index) = hiroute_platform::windows::security::file_identity(&file)?;
+            created.push(CreatedNativeDirectory {
+                path,
+                device: u64::from(volume),
+                inode: index,
+                created_at_nanos: creation_time(&file.metadata()?),
+            });
+        }
+        #[cfg(not(any(unix, windows)))]
         {
             let _ = path;
             return Err(LocalStorageError::Permission);
@@ -113,14 +131,37 @@ pub(super) fn cleanup(
                 return Ok(false);
             }
         }
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        {
+            // DELETE is held on the exact reparse-free object. Deletion itself
+            // rejects nonempty directories, including a concurrent user addition.
+            let file = hiroute_platform::windows::security::open_delete(&directory.path, true)?;
+            let (volume, index) = hiroute_platform::windows::security::file_identity(&file)?;
+            if u64::from(volume) != directory.device
+                || index != directory.inode
+                || directory.created_at_nanos.is_none()
+                || creation_time(&file.metadata()?) != directory.created_at_nanos
+            {
+                return Ok(false);
+            }
+            match hiroute_platform::windows::security::delete_by_handle(&file) {
+                Ok(()) => continue,
+                Err(error) if error.kind() == std::io::ErrorKind::DirectoryNotEmpty => {
+                    return Ok(false);
+                }
+                Err(error) => return Err(error.into()),
+            }
+        }
+        #[cfg(not(any(unix, windows)))]
         {
             return Err(LocalStorageError::Permission);
         }
+        #[cfg(not(windows))]
         if fs::read_dir(&directory.path)?.next().is_some() {
             return Ok(false);
         }
         // remove_dir never recursively deletes newly added user content.
+        #[cfg(not(windows))]
         match fs::remove_dir(&directory.path) {
             Ok(()) => sync_parent(&directory.path)?,
             Err(error) if error.kind() == std::io::ErrorKind::DirectoryNotEmpty => {

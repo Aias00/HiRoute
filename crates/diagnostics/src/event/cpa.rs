@@ -27,6 +27,21 @@ pub enum CpaPhase {
 #[serde(deny_unknown_fields)]
 pub struct CredentialLease {
     pub result: LeaseResultCode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stage: Option<NativeCredentialLookupStage>,
+}
+
+/// Closed failure boundaries; never includes source/Key identities or secret material.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NativeCredentialLookupStage {
+    PoolBindingMissing,
+    PoolSourceNotReady,
+    PoolEmpty,
+    LeaseOwnerInvalid,
+    LeaseSourceMissing,
+    LeaseSourceNotReady,
+    LeaseReferenceMissing,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -115,4 +130,31 @@ pub enum CpaFailureCode {
     ControlRejected,
     /// The cause is not part of this vocabulary.
     Unknown,
+}
+
+#[cfg(test)]
+mod credential_lookup_tests {
+    use super::*;
+
+    #[test]
+    fn credential_lookup_stage_is_closed_and_legacy_records_remain_readable() {
+        let old: CredentialLease = serde_json::from_str(r#"{"result":"unavailable"}"#).unwrap();
+        assert_eq!(old.stage, None);
+        let event = CredentialLease {
+            result: LeaseResultCode::Unavailable,
+            stage: Some(NativeCredentialLookupStage::LeaseReferenceMissing),
+        };
+        assert_eq!(
+            serde_json::to_value(event).unwrap(),
+            serde_json::json!({
+                "result":"unavailable", "stage":"lease_reference_missing"
+            })
+        );
+        assert!(
+            serde_json::from_str::<CredentialLease>(
+                r#"{"result":"unavailable","stage":"private path or credential"}"#
+            )
+            .is_err()
+        );
+    }
 }

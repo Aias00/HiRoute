@@ -1,3 +1,4 @@
+#[cfg(unix)]
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -20,17 +21,23 @@ use hiroute_diagnostics::event::{
     SubmissionState as DiagnosticSubmissionState,
 };
 
+#[cfg(windows)]
+use hiroute_platform::windows::pipe::{Listener as LocalListener, Stream as LocalStream};
 #[cfg(unix)]
+use std::os::unix::net::{UnixListener as LocalListener, UnixStream as LocalStream};
+
+#[cfg(any(unix, windows))]
 mod managed;
 mod runtime;
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub(crate) use managed::start_control_with_agent_grants;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub use managed::{ManagedControlError, ManagedControlHandle, ManagedControlPhase, start_control};
 pub use runtime::ProductionControlRuntime;
+pub(crate) use runtime::native_agent_home;
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub(crate) trait AgentGrantResolverPort: Send + Sync {
     fn resolve_agent_grant(
         &self,
@@ -43,14 +50,14 @@ const MAX_CONCURRENT_CONNECTIONS: usize = 128;
 const MAX_CONCURRENT_WAIT_CONNECTIONS: usize = 64;
 const MAX_UNCLASSIFIED_CONNECTIONS: usize = 16;
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 #[derive(Clone)]
 struct CapacityCounter {
     active: Arc<AtomicUsize>,
     maximum: usize,
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 impl CapacityCounter {
     fn new(maximum: usize) -> Self {
         Self {
@@ -75,19 +82,19 @@ impl CapacityCounter {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 struct CapacityPermit {
     active: Arc<AtomicUsize>,
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 impl Drop for CapacityPermit {
     fn drop(&mut self) {
         self.active.fetch_sub(1, Ordering::AcqRel);
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 #[derive(Clone)]
 struct ControlConnectionBudgets {
     total: CapacityCounter,
@@ -95,7 +102,7 @@ struct ControlConnectionBudgets {
     unclassified: CapacityCounter,
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 impl ControlConnectionBudgets {
     fn new(total: usize, waits: usize, unclassified: usize) -> Self {
         debug_assert!(waits <= total);
@@ -122,7 +129,7 @@ impl ControlConnectionBudgets {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 impl Default for ControlConnectionBudgets {
     fn default() -> Self {
         Self::new(
@@ -133,14 +140,14 @@ impl Default for ControlConnectionBudgets {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 struct ControlConnectionAdmission {
     _total: CapacityPermit,
     unclassified: Option<CapacityPermit>,
     budgets: ControlConnectionBudgets,
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 impl ControlConnectionAdmission {
     fn classify(&mut self, operation_id: &str) -> Result<Option<CapacityPermit>, ErrorCode> {
         let wait = if is_wait_operation(operation_id) {
@@ -161,7 +168,7 @@ impl ControlConnectionAdmission {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn is_wait_operation(operation_id: &str) -> bool {
     matches!(operation_id, "WorkerWait" | "WaitDelegation")
 }
@@ -347,7 +354,7 @@ impl LocalControlDaemon {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub fn serve_production_control(
     storage_root: impl AsRef<Path>,
     runtime_root: impl AsRef<Path>,
@@ -370,18 +377,11 @@ pub fn serve_production_control(
 /// Bind the control endpoint inside its own startup stage. The stage completes only when a
 /// listener exists; a refused or failed bind reports `failed` and never reports that the
 /// process started to serve.
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn bind_control_endpoint(
     runtime_root: impl AsRef<Path>,
     diagnostics: &hiroute_diagnostics::runtime::DiagnosticRuntime,
-) -> Result<
-    (
-        std::os::unix::net::UnixListener,
-        EndpointGuard,
-        ControlEndpoint,
-    ),
-    String,
-> {
+) -> Result<(LocalListener, EndpointGuard, ControlEndpoint), String> {
     use hiroute_diagnostics::event::{StartupFailureCode, StartupStage};
 
     diagnostics.stage_begin(StartupStage::ControlBind);
@@ -405,14 +405,7 @@ fn bind_control_endpoint(
 #[cfg(unix)]
 fn bind_listener(
     runtime_root: impl AsRef<Path>,
-) -> Result<
-    (
-        std::os::unix::net::UnixListener,
-        EndpointGuard,
-        ControlEndpoint,
-    ),
-    String,
-> {
+) -> Result<(LocalListener, EndpointGuard, ControlEndpoint), String> {
     use std::os::unix::fs::{FileTypeExt, PermissionsExt};
     use std::os::unix::net::{UnixListener, UnixStream};
 
@@ -453,7 +446,22 @@ fn bind_listener(
     Ok((listener, guard, endpoint))
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn bind_listener(
+    runtime_root: impl AsRef<Path>,
+) -> Result<(LocalListener, EndpointGuard, ControlEndpoint), String> {
+    let endpoint = ControlEndpoint::from_runtime_root(runtime_root);
+    let parent = endpoint
+        .path()
+        .parent()
+        .ok_or("Local Control endpoint has no parent")?;
+    let _held = hiroute_platform::windows::security::ensure_private_directory(parent)
+        .map_err(|error| error.to_string())?;
+    let listener = LocalListener::bind(endpoint.path()).map_err(|error| error.to_string())?;
+    Ok((listener, EndpointGuard, endpoint))
+}
+
+#[cfg(not(any(unix, windows)))]
 pub fn serve_production_control(
     _storage_root: impl AsRef<Path>,
     _runtime_root: impl AsRef<Path>,
@@ -462,10 +470,10 @@ pub fn serve_production_control(
     Err("owner-only Windows Named Pipe transport is not available in this control slice".to_owned())
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn serve_connection(
     daemon: &LocalControlDaemon,
-    mut stream: std::os::unix::net::UnixStream,
+    mut stream: LocalStream,
     mut admission: ControlConnectionAdmission,
 ) -> Result<(), String> {
     stream
@@ -479,7 +487,7 @@ fn serve_connection(
     let server_hello = match negotiate_hello(&hello) {
         Ok(hello) => hello,
         Err(error) => {
-            write_negotiated_error(&mut stream, error, None)?;
+            write_negotiated_error(&mut stream, &mut reader, error, None)?;
             return Ok(());
         }
     };
@@ -488,13 +496,19 @@ fn serve_connection(
     let request = match serde_json::from_str::<LocalControlWireRequestV2>(&request_line) {
         Ok(request) if request.schema_version == LOCAL_CONTROL_SCHEMA_V2 => request,
         _ => {
-            write_negotiated_error(&mut stream, ErrorV1::new(ErrorCode::InvalidArguments), None)?;
+            write_negotiated_error(
+                &mut stream,
+                &mut reader,
+                ErrorV1::new(ErrorCode::InvalidArguments),
+                None,
+            )?;
             return Ok(());
         }
     };
     let Some(_upgrade_call) = daemon.upgrade.enter(false) else {
         write_negotiated_error(
             &mut stream,
+            &mut reader,
             ErrorV1::new(ErrorCode::DaemonUnavailable),
             Some(request.request_id),
         )?;
@@ -503,17 +517,22 @@ fn serve_connection(
     let _wait_permit = match admission.classify(&request.operation_id) {
         Ok(permit) => permit,
         Err(error) => {
-            write_negotiated_error(&mut stream, ErrorV1::new(error), Some(request.request_id))?;
+            write_negotiated_error(
+                &mut stream,
+                &mut reader,
+                ErrorV1::new(error),
+                Some(request.request_id),
+            )?;
             return Ok(());
         }
     };
-    write_frame(&mut stream, &daemon.dispatch_wire(request))
+    write_final_frame(&mut stream, &mut reader, &daemon.dispatch_wire(request))
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn spawn_control_connection(
     daemon: LocalControlDaemon,
-    stream: std::os::unix::net::UnixStream,
+    stream: LocalStream,
     admission: ControlConnectionAdmission,
 ) -> Result<(), String> {
     std::thread::Builder::new()
@@ -525,9 +544,9 @@ fn spawn_control_connection(
         .map_err(|error| format!("Local Control connection thread cannot start: {error}"))
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn serve_listener(
-    listener: std::os::unix::net::UnixListener,
+    listener: LocalListener,
     daemon: LocalControlDaemon,
     max_accepts: Option<usize>,
 ) -> Result<(), String> {
@@ -539,9 +558,9 @@ fn serve_listener(
     )
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn serve_listener_with_budgets(
-    listener: std::os::unix::net::UnixListener,
+    listener: LocalListener,
     daemon: LocalControlDaemon,
     max_accepts: Option<usize>,
     budgets: ControlConnectionBudgets,
@@ -562,18 +581,15 @@ fn serve_listener_with_budgets(
     Ok(())
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn frame_deadline() -> Result<Instant, String> {
     Instant::now()
         .checked_add(FRAME_TIMEOUT)
         .ok_or_else(|| "Local Control frame deadline overflow".to_owned())
 }
 
-#[cfg(unix)]
-fn read_frame(
-    reader: &mut BufReader<std::os::unix::net::UnixStream>,
-    deadline: Instant,
-) -> Result<String, String> {
+#[cfg(any(unix, windows))]
+fn read_frame(reader: &mut BufReader<LocalStream>, deadline: Instant) -> Result<String, String> {
     let mut bytes = Vec::new();
     loop {
         let remaining = deadline
@@ -613,13 +629,31 @@ fn read_frame(
     Ok(line)
 }
 
+#[cfg(any(unix, windows))]
 fn write_negotiated_error(
-    stream: &mut impl Write,
+    stream: &mut LocalStream,
+    reader: &mut BufReader<LocalStream>,
     error: ErrorV1,
     request_id: Option<String>,
 ) -> Result<(), String> {
     let envelope = MachineEnvelopeV2::<serde_json::Value>::failed(error, request_id);
-    write_frame(stream, &envelope)
+    write_final_frame(stream, reader, &envelope)
+}
+
+#[cfg(any(unix, windows))]
+fn write_final_frame(
+    stream: &mut LocalStream,
+    _reader: &mut BufReader<LocalStream>,
+    value: &impl serde::Serialize,
+) -> Result<(), String> {
+    write_frame(stream, value)?;
+    #[cfg(windows)]
+    {
+        if read_frame(_reader, frame_deadline()?)? != "HRACK1" {
+            return Err("invalid Local Control receipt acknowledgement".into());
+        }
+    }
+    Ok(())
 }
 
 struct BoundedFrame(Vec<u8>);
@@ -651,6 +685,9 @@ fn write_frame(writer: &mut impl Write, value: &impl serde::Serialize) -> Result
 #[cfg(unix)]
 struct EndpointGuard(PathBuf);
 
+#[cfg(windows)]
+struct EndpointGuard;
+
 #[cfg(unix)]
 impl Drop for EndpointGuard {
     fn drop(&mut self) {
@@ -658,11 +695,11 @@ impl Drop for EndpointGuard {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "control_capacity_tests.rs"]
 mod control_capacity_tests;
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use std::io::{BufReader, Write};
     use std::os::unix::fs::PermissionsExt;

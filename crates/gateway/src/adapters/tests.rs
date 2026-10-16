@@ -2038,11 +2038,12 @@ fn replay_ten_thousand_small_fields_use_one_stream_and_linear_template_scan() {
     let references = model_content_refs(&request);
     assert!(references.len() > 1_000);
     let template = project_candidate_request_template(&request, &profile).expect("linear template");
+    let reference_set = references.iter().collect::<std::collections::BTreeSet<_>>();
     assert!(
         template
             .replacements
             .iter()
-            .all(|replacement| references.contains(&replacement.content))
+            .all(|replacement| reference_set.contains(&replacement.content))
     );
     assert!(started.elapsed() < std::time::Duration::from_secs(10));
     // Both canonical history and the preserved native envelope are retained.

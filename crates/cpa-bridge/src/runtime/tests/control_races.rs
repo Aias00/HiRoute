@@ -25,6 +25,10 @@ fn accept_status(listener: &TcpListener) -> TcpStream {
             Err(error) => panic!("controlled loopback accept failed: {error}"),
         }
     };
+    // Winsock accepts inherit the listener's nonblocking property. A read
+    // timeout alone does not switch them to bounded blocking IO; otherwise the
+    // first fragmented request byte can fail immediately with WSAEWOULDBLOCK.
+    stream.set_nonblocking(false).unwrap();
     stream
         .set_read_timeout(Some(Duration::from_millis(200)))
         .unwrap();
@@ -121,10 +125,21 @@ fn older_success_cannot_clear_a_new_auth_required_result() {
     if let Err(error) = reply_status(old_response, false) {
         // A newer rejection revokes the old HTTP scope immediately. Its caller
         // must fail even if the obsolete response has already lost its socket.
-        assert!(matches!(
+        let disconnected = matches!(
             error.kind(),
             std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::BrokenPipe
-        ));
+        );
+        // Winsock can report its local abort (WSAECONNABORTED) when the newer
+        // rejection closes this obsolete request. The admission/revocation
+        // assertions below remain the business oracle, not socket timing.
+        #[cfg(windows)]
+        let disconnected = disconnected || error.raw_os_error() == Some(10053);
+        assert!(
+            disconnected,
+            "obsolete response write failed outside the closed socket errors: kind={:?} native={:?}",
+            error.kind(),
+            error.raw_os_error()
+        );
     }
     assert!(old.join().unwrap().is_err());
     assert!(

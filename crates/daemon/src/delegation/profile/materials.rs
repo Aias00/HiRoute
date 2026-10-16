@@ -75,15 +75,8 @@ impl TaskSessionRoot {
         let newly_created = matches!(usage, SessionRootUse::New);
         match usage {
             SessionRootUse::New => {
-                let mut builder = fs::DirBuilder::new();
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::DirBuilderExt;
-                    builder.mode(0o700);
-                }
-                // No create_dir_all/reuse/chmod/remove of an unknown existing task directory.
-                builder
-                    .create(&path)
+                // Never reuse or change permissions on an unknown task directory.
+                hiroute_platform::private_fs::create_directory(&path)
                     .map_err(|_| DelegationErrorV1::Conflict)?;
             }
             SessionRootUse::Continue { required_history } => {
@@ -136,27 +129,13 @@ impl TaskSessionRoot {
         let marker = serde_json::to_vec(&root.ownership_marker())
             .map_err(|_| DelegationErrorV1::StorageUnavailable)?;
         let path = self.path.join(DELEGATION_NATIVE_ROOT_MARKER_FILE_V1);
-        let mut options = fs::OpenOptions::new();
-        options.write(true).create_new(true);
+        hiroute_platform::durable::write_private_new(&path, &marker)
+            .map_err(|_| DelegationErrorV1::StorageUnavailable)?;
         #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        let mut file = options
-            .open(&path)
+        hiroute_platform::durable::directory_barrier(&self.path)
             .map_err(|_| DelegationErrorV1::StorageUnavailable)?;
-        use std::io::Write;
-        file.write_all(&marker)
-            .and_then(|()| file.sync_all())
-            .map_err(|_| DelegationErrorV1::StorageUnavailable)?;
-        let marker_metadata = file
-            .metadata()
-            .map_err(|_| DelegationErrorV1::StorageUnavailable)?;
-        fs::File::open(&self.path)
-            .and_then(|directory| directory.sync_all())
-            .map_err(|_| DelegationErrorV1::StorageUnavailable)?;
-        filesystem_identity(session_base, &self.path, &marker_metadata)
+        let file = open_marker(&path)?;
+        filesystem_identity(session_base, &self.path, &file)
     }
 
     pub(crate) fn verify_ownership(
@@ -172,6 +151,15 @@ impl TaskSessionRoot {
             return Err(DelegationErrorV1::ResumeUnavailable);
         }
         let file = open_marker(&marker_path)?;
+        #[cfg(windows)]
+        {
+            use hiroute_platform::windows::security::{file_link_count, verify_owner_only_handle};
+            verify_owner_only_handle(&file, false)
+                .map_err(|_| DelegationErrorV1::ResumeUnavailable)?;
+            if file_link_count(&file).map_err(|_| DelegationErrorV1::ResumeUnavailable)? != 1 {
+                return Err(DelegationErrorV1::ResumeUnavailable);
+            }
+        }
         let metadata = file
             .metadata()
             .map_err(|_| DelegationErrorV1::ResumeUnavailable)?;
@@ -180,7 +168,8 @@ impl TaskSessionRoot {
         }
         use std::io::Read;
         let mut bytes = Vec::with_capacity(metadata.len() as usize);
-        file.take(4097)
+        (&file)
+            .take(4097)
             .read_to_end(&mut bytes)
             .map_err(|_| DelegationErrorV1::ResumeUnavailable)?;
         if bytes.len() > 4096 {
@@ -191,7 +180,7 @@ impl TaskSessionRoot {
         if actual != root.ownership_marker() {
             return Err(DelegationErrorV1::ResumeUnavailable);
         }
-        filesystem_identity(session_base, &self.path, &metadata)
+        filesystem_identity(session_base, &self.path, &file)
             .map_err(|_| DelegationErrorV1::ResumeUnavailable)
     }
 
@@ -204,11 +193,25 @@ impl TaskSessionRoot {
         root.validate()?;
         self.check_binding(root.harness, &root.workspace_root_identity)?;
         let base = checked_directory(session_base)?;
+        let same_managed_base = if continuing {
+            #[cfg(windows)]
+            {
+                root.managed_base_path.as_deref().is_some_and(|recorded| {
+                    super::native_context::same_windows_directory(Path::new(recorded), &base)
+                        .unwrap_or(false)
+                })
+            }
+            #[cfg(not(windows))]
+            {
+                root.managed_base_path.as_deref() == Some(base.to_string_lossy().as_ref())
+            }
+        } else {
+            true
+        };
         if self.path.parent() != Some(base.as_path())
             || self.path.file_name().and_then(|name| name.to_str())
                 != Some(root.relative_root.as_str())
-            || (continuing
-                && root.managed_base_path.as_deref() != Some(base.to_string_lossy().as_ref()))
+            || !same_managed_base
         {
             return Err(if continuing {
                 DelegationErrorV1::ResumeUnavailable
@@ -226,7 +229,7 @@ impl TaskSessionRoot {
         gateway: std::net::SocketAddr,
         catalog_path: Option<&Path>,
     ) -> Result<(), DelegationErrorV1> {
-        use std::io::{Read, Write};
+        use std::io::Read;
         checked_directory(&self.path)?;
         let catalog_setting = catalog_path.map_or(Ok(String::new()), |path| {
             let path = path
@@ -242,17 +245,8 @@ impl TaskSessionRoot {
             "model_provider = \"hiroute\"\n{catalog_setting}[model_providers.hiroute]\nname = \"HiRoute managed run\"\nbase_url = \"http://{gateway}/v1\"\nwire_api = \"responses\"\nsupports_websockets = false\nenv_key = \"HIROUTE_RUN_TOKEN\"\nrequires_openai_auth = false\n"
         );
         let path = self.path.join("config.toml");
-        let mut options = fs::OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        match options.open(&path) {
-            Ok(mut file) => file
-                .write_all(contents.as_bytes())
-                .map_err(|_| DelegationErrorV1::StorageUnavailable),
+        match hiroute_platform::durable::write_private_new(&path, contents.as_bytes()) {
+            Ok(()) => Ok(()),
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
                 let metadata = fs::symlink_metadata(&path)
                     .map_err(|_| DelegationErrorV1::StorageUnavailable)?;
@@ -280,7 +274,7 @@ impl TaskSessionRoot {
         alias: &str,
         contents: &[u8],
     ) -> Result<PathBuf, DelegationErrorV1> {
-        use std::io::{Read, Write};
+        use std::io::Read;
         checked_directory(&self.path)?;
         if contents.is_empty() || contents.len() > 1024 * 1024 {
             return Err(DelegationErrorV1::CapabilityUnavailable);
@@ -296,20 +290,10 @@ impl TaskSessionRoot {
             return Err(DelegationErrorV1::Conflict);
         }
         let path = self.path.join("worker-model-catalog.json");
-        let mut options = fs::OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        match options.open(&path) {
-            Ok(mut file) => {
-                file.write_all(contents)
-                    .and_then(|()| file.sync_all())
-                    .map_err(|_| DelegationErrorV1::StorageUnavailable)?;
-                fs::File::open(&self.path)
-                    .and_then(|directory| directory.sync_all())
+        match hiroute_platform::durable::write_private_new(&path, contents) {
+            Ok(()) => {
+                #[cfg(unix)]
+                hiroute_platform::durable::directory_barrier(&self.path)
                     .map_err(|_| DelegationErrorV1::StorageUnavailable)?;
             }
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
@@ -326,8 +310,20 @@ impl TaskSessionRoot {
                     }
                 }
                 let mut actual = Vec::new();
-                open_marker(&path)?
-                    .take(1024 * 1024 + 1)
+                let file = open_marker(&path)?;
+                #[cfg(windows)]
+                {
+                    use hiroute_platform::windows::security::{
+                        file_link_count, verify_owner_only_handle,
+                    };
+                    verify_owner_only_handle(&file, false)
+                        .map_err(|_| DelegationErrorV1::PermissionDenied)?;
+                    if file_link_count(&file).map_err(|_| DelegationErrorV1::PermissionDenied)? != 1
+                    {
+                        return Err(DelegationErrorV1::PermissionDenied);
+                    }
+                }
+                file.take(1024 * 1024 + 1)
                     .read_to_end(&mut actual)
                     .map_err(|_| DelegationErrorV1::StorageUnavailable)?;
                 if actual != contents {
@@ -438,10 +434,21 @@ fn legacy_native_history(
             let relative = path
                 .strip_prefix(&root)
                 .ok()
-                .and_then(Path::to_str)
+                .and_then(|relative| {
+                    relative
+                        .components()
+                        .map(|component| match component {
+                            Component::Normal(value) => value.to_str(),
+                            _ => None,
+                        })
+                        .collect::<Option<Vec<_>>>()
+                        .map(|components| components.join("/"))
+                })
                 .filter(|value| valid_native_history_path(value))
                 .ok_or(DelegationErrorV1::ResumeUnavailable)?;
-            paths.push(relative.to_owned());
+            // Native separators are an OS detail; retained history uses the existing
+            // portable relative-path contract, including on Windows.
+            paths.push(relative);
         }
     }
     paths.sort();
@@ -521,9 +528,12 @@ fn checked_directory(path: &Path) -> Result<PathBuf, DelegationErrorV1> {
     if linked(&metadata) || !metadata.is_dir() {
         return Err(DelegationErrorV1::PermissionDenied);
     }
-    // As with the existing non-Unix managed directory checks, Windows roots must be supplied
-    // from the already owner-controlled daemon store. This helper is not a new ACL provider.
-    fs::canonicalize(path).map_err(|_| DelegationErrorV1::CapabilityUnavailable)
+    #[cfg(windows)]
+    hiroute_platform::windows::security::verify_owner_only(path, true)
+        .map_err(|_| DelegationErrorV1::PermissionDenied)?;
+    fs::canonicalize(path)
+        .map(|path| super::native_context::native_path(&path))
+        .map_err(|_| DelegationErrorV1::CapabilityUnavailable)
 }
 
 fn linked(metadata: &fs::Metadata) -> bool {
@@ -538,28 +548,23 @@ fn linked(metadata: &fs::Metadata) -> bool {
 }
 
 fn open_marker(path: &Path) -> Result<fs::File, DelegationErrorV1> {
-    let mut options = fs::OpenOptions::new();
-    options.read(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.custom_flags(nix::libc::O_NOFOLLOW | nix::libc::O_NONBLOCK);
-    }
-    options
-        .open(path)
+    hiroute_platform::private_fs::open_regular_file(path)
         .map_err(|_| DelegationErrorV1::ResumeUnavailable)
 }
 
 fn filesystem_identity(
     base: &Path,
     root: &Path,
-    marker: &fs::Metadata,
+    marker: &fs::File,
 ) -> Result<DelegationNativeFilesystemIdentityV1, DelegationErrorV1> {
-    let base = fs::metadata(base).map_err(|_| DelegationErrorV1::StorageUnavailable)?;
-    let root = fs::metadata(root).map_err(|_| DelegationErrorV1::StorageUnavailable)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
+        let base = fs::metadata(base).map_err(|_| DelegationErrorV1::StorageUnavailable)?;
+        let root = fs::metadata(root).map_err(|_| DelegationErrorV1::StorageUnavailable)?;
+        let marker = marker
+            .metadata()
+            .map_err(|_| DelegationErrorV1::StorageUnavailable)?;
         return Ok(DelegationNativeFilesystemIdentityV1 {
             scheme: "unix-dev-inode-v1".into(),
             base_device: base.dev(),
@@ -572,15 +577,24 @@ fn filesystem_identity(
     }
     #[cfg(windows)]
     {
-        use std::os::windows::fs::MetadataExt;
+        use hiroute_platform::windows::security::{file_identity, open_identity};
+        let identity = |path| {
+            open_identity(path, true)
+                .and_then(|file| file_identity(&file))
+                .map_err(|_| DelegationErrorV1::StorageUnavailable)
+        };
+        let (base_device, base_inode) = identity(base)?;
+        let (root_device, root_inode) = identity(root)?;
+        let (marker_device, marker_inode) =
+            file_identity(marker).map_err(|_| DelegationErrorV1::StorageUnavailable)?;
         return Ok(DelegationNativeFilesystemIdentityV1 {
             scheme: "windows-volume-file-index-v1".into(),
-            base_device: u64::from(base.volume_serial_number().unwrap_or(0)),
-            base_inode: base.file_index().unwrap_or(0),
-            root_device: u64::from(root.volume_serial_number().unwrap_or(0)),
-            root_inode: root.file_index().unwrap_or(0),
-            marker_device: u64::from(marker.volume_serial_number().unwrap_or(0)),
-            marker_inode: marker.file_index().unwrap_or(0),
+            base_device: u64::from(base_device),
+            base_inode,
+            root_device: u64::from(root_device),
+            root_inode,
+            marker_device: u64::from(marker_device),
+            marker_inode,
         });
     }
     #[allow(unreachable_code)]

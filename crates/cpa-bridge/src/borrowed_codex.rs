@@ -1,6 +1,8 @@
-#[cfg(not(unix))]
+#[cfg(any(not(windows), test))]
+use std::fs;
+#[cfg(not(any(unix, windows)))]
 use std::fs::OpenOptions;
-use std::fs::{self, File};
+use std::fs::{File, Metadata};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
@@ -23,9 +25,16 @@ const MAX_AUTH_BYTES: u64 = 128 * 1024;
 const MAX_TOKEN_BYTES: usize = 64 * 1024;
 const MAX_ACCOUNT_ID_BYTES: usize = 4 * 1024;
 const MAX_LAST_REFRESH_BYTES: usize = 256;
+#[cfg(not(windows))]
 const SOURCE_READ_ATTEMPTS: usize = 3;
 
 mod evidence;
+#[cfg(windows)]
+#[path = "borrowed_native_windows.rs"]
+pub(crate) mod native_windows;
+#[cfg(all(test, windows))]
+#[path = "borrowed_native_windows_tests.rs"]
+mod windows_tests;
 
 pub use evidence::BorrowedCodexEvidence;
 
@@ -73,9 +82,19 @@ impl BorrowedCodexAuthSpec {
     /// Reads stable, non-secret evidence without creating a lease, directory, or managed file.
     pub fn inspect(&self) -> Result<BorrowedCodexEvidence, CpaLifecycleError> {
         validate_store(self.store_config.as_deref())?;
+        #[cfg(windows)]
+        let source = read_nested_source(self.source_path())?;
+        #[cfg(windows)]
+        let canonical_source = source
+            .native
+            .canonical_path()
+            .map_err(map_native_source_io)?;
+        #[cfg(not(windows))]
         let canonical_source = canonical_private_source(self.source_path())?;
+        #[cfg(not(windows))]
         let source = read_nested_source(&canonical_source)?;
         validate_store(self.store_config.as_deref())?;
+        source.verify_native_admission()?;
         BorrowedCodexEvidence::from_source(&canonical_source, &source)
     }
 }
@@ -213,6 +232,8 @@ impl ManagedAuthLease {
 
 struct BorrowedCodexLease {
     canonical_source: PathBuf,
+    #[cfg(windows)]
+    native_source: PathBuf,
     store_config: Option<PathBuf>,
     executable: PathBuf,
     client_version: Option<String>,
@@ -235,11 +256,18 @@ impl BorrowedCodexLease {
         if expected.is_some_and(|value| value.source_path_digest() != source_path_digest) {
             return Err(CpaLifecycleError::BorrowedCodexAuthSourceChanged);
         }
-        let lease_root = ensure_private_dir(&source_lease_root())
+        #[cfg(windows)]
+        let source_lease_root = crate::windows_private::lease_root("codex")
+            .map_err(|_| CpaLifecycleError::BorrowedCodexAuthIo)?;
+        #[cfg(not(windows))]
+        let source_lease_root = source_lease_root();
+        let lease_root = ensure_private_dir(&source_lease_root)
             .map_err(|_| CpaLifecycleError::BorrowedCodexAuthIo)?;
         let source_lock = acquire_lock(&lease_root.join(format!("{source_path_digest}.lock")))?;
         let mut lease = Self {
             canonical_source,
+            #[cfg(windows)]
+            native_source: source.source_path().to_owned(),
             store_config: source.store_config.clone(),
             executable: source.executable.clone(),
             client_version: if expected.is_none() {
@@ -262,7 +290,28 @@ impl BorrowedCodexLease {
         expected: Option<&BorrowedCodexEvidence>,
         expected_account_digest: Option<&str>,
     ) -> Result<ManagedAccountIdentity, CpaLifecycleError> {
+        self.refresh_after_writes(expected, expected_account_digest, || {})
+    }
+
+    fn refresh_after_writes(
+        &mut self,
+        expected: Option<&BorrowedCodexEvidence>,
+        expected_account_digest: Option<&str>,
+        after_writes: impl FnOnce(),
+    ) -> Result<ManagedAccountIdentity, CpaLifecycleError> {
         validate_store(self.store_config.as_deref())?;
+        #[cfg(windows)]
+        let source = read_nested_source(&self.native_source)?;
+        #[cfg(windows)]
+        if source
+            .native
+            .canonical_path()
+            .map_err(map_native_source_io)?
+            != self.canonical_source
+        {
+            return Err(CpaLifecycleError::BorrowedCodexAuthSourceChanged);
+        }
+        #[cfg(not(windows))]
         let source = read_nested_source(&self.canonical_source)?;
         let observed = BorrowedCodexEvidence::from_source(&self.canonical_source, &source)?;
         if expected.is_some_and(|value| !value.matches(&observed)) {
@@ -325,6 +374,7 @@ impl BorrowedCodexLease {
                 &prefix,
                 self.client_version.as_deref(),
             )?;
+        source.verify_native_admission()?;
         if previous.is_none() && flat_exists && !flat_matches {
             return Err(CpaLifecycleError::InvalidBorrowedCodexAuth);
         }
@@ -349,6 +399,11 @@ impl BorrowedCodexLease {
             refresh_token_present: false,
         };
         save_state(&self.state_path, &state)?;
+        after_writes();
+        // Private bytes are a recoverable cache, not execution authority. Native
+        // refresh may run during their writes; return no admitted identity until
+        // this retained source again matches its decoded bytes and native facts.
+        source.verify_native_admission()?;
         self.observed_generation = Some(generation);
         Ok(ManagedAccountIdentity {
             account_kind: CpaAccountKind::Codex,
@@ -475,40 +530,64 @@ fn read_nested_source_after_read(
     path: &Path,
     mut after_read: impl FnMut(),
 ) -> Result<OwnedNestedSource, CpaLifecycleError> {
-    for _ in 0..SOURCE_READ_ATTEMPTS {
-        let mut file = open_source_nofollow(path)?;
-        let before = file.metadata().map_err(map_source_io)?;
-        validate_source_metadata(&before)?;
-        let mut bytes = Zeroizing::new(Vec::new());
-        file.by_ref()
-            .take(MAX_AUTH_BYTES + 1)
-            .read_to_end(bytes.as_mut())
-            .map_err(map_source_io)?;
-        if bytes.len() as u64 > MAX_AUTH_BYTES {
-            return Err(CpaLifecycleError::InvalidBorrowedCodexAuth);
-        }
+    #[cfg(windows)]
+    {
+        let mut native = native_windows::ReadGuard::open(path).map_err(map_native_source_io)?;
+        let bytes = native.read(MAX_AUTH_BYTES).map_err(map_native_source_io)?;
         after_read();
-        let after = file.metadata().map_err(map_source_io)?;
-        let path_after = fs::symlink_metadata(path).map_err(map_source_io)?;
-        if !same_file(&before, &after) || !same_file(&after, &path_after) {
-            continue;
-        }
-        let stamp = source_stamp(&after)?;
+        native
+            .verify()
+            .map_err(|_| CpaLifecycleError::BorrowedCodexAuthSourceChanged)?;
+        let stamp = source_stamp(&native.metadata().map_err(map_source_io)?)?;
         let parsed: NestedAuth<'_> = serde_json::from_slice(bytes.as_slice())
             .map_err(|_| CpaLifecycleError::InvalidBorrowedCodexAuth)?;
         let account_id = validate_nested(&parsed)?;
-
-        // The returned references must not outlive the zeroized input. Consume the parsed fields
-        // immediately into a second zeroizing buffer in the caller-facing representation.
-        return Ok(OwnedNestedSource {
+        Ok(OwnedNestedSource {
             access_token: Zeroizing::new(parsed.tokens.access_token.to_owned()),
             id_token: Zeroizing::new(parsed.tokens.id_token.unwrap_or_default().to_owned()),
             account_id: Zeroizing::new(account_id),
             last_refresh: Zeroizing::new(parsed.last_refresh.unwrap_or_default().to_owned()),
             stamp,
-        });
+            native,
+        })
     }
-    Err(CpaLifecycleError::BorrowedCodexAuthSourceChanged)
+    #[cfg(not(windows))]
+    {
+        for _ in 0..SOURCE_READ_ATTEMPTS {
+            let mut file = open_source_nofollow(path)?;
+            let before = file.metadata().map_err(map_source_io)?;
+            validate_source_metadata(&before)?;
+            let mut bytes = Zeroizing::new(Vec::new());
+            file.by_ref()
+                .take(MAX_AUTH_BYTES + 1)
+                .read_to_end(bytes.as_mut())
+                .map_err(map_source_io)?;
+            if bytes.len() as u64 > MAX_AUTH_BYTES {
+                return Err(CpaLifecycleError::InvalidBorrowedCodexAuth);
+            }
+            after_read();
+            let after = file.metadata().map_err(map_source_io)?;
+            let path_after = fs::symlink_metadata(path).map_err(map_source_io)?;
+            if !same_file(&before, &after) || !same_file(&after, &path_after) {
+                continue;
+            }
+            let stamp = source_stamp(&after)?;
+            let parsed: NestedAuth<'_> = serde_json::from_slice(bytes.as_slice())
+                .map_err(|_| CpaLifecycleError::InvalidBorrowedCodexAuth)?;
+            let account_id = validate_nested(&parsed)?;
+
+            // The returned references must not outlive the zeroized input. Consume the parsed fields
+            // immediately into a second zeroizing buffer in the caller-facing representation.
+            return Ok(OwnedNestedSource {
+                access_token: Zeroizing::new(parsed.tokens.access_token.to_owned()),
+                id_token: Zeroizing::new(parsed.tokens.id_token.unwrap_or_default().to_owned()),
+                account_id: Zeroizing::new(account_id),
+                last_refresh: Zeroizing::new(parsed.last_refresh.unwrap_or_default().to_owned()),
+                stamp,
+            });
+        }
+        Err(CpaLifecycleError::BorrowedCodexAuthSourceChanged)
+    }
 }
 
 struct OwnedNestedSource {
@@ -517,6 +596,18 @@ struct OwnedNestedSource {
     account_id: Zeroizing<String>,
     last_refresh: Zeroizing<String>,
     stamp: SourceStamp,
+    #[cfg(windows)]
+    native: native_windows::ReadGuard,
+}
+
+impl OwnedNestedSource {
+    fn verify_native_admission(&self) -> Result<(), CpaLifecycleError> {
+        #[cfg(windows)]
+        self.native
+            .verify()
+            .map_err(|_| CpaLifecycleError::BorrowedCodexAuthSourceChanged)?;
+        Ok(())
+    }
 }
 
 fn validate_nested(value: &NestedAuth<'_>) -> Result<String, CpaLifecycleError> {
@@ -672,6 +763,14 @@ fn update_path_digest(hasher: &mut Sha256, path: &Path) {
     hasher.update(path.to_string_lossy().as_bytes());
 }
 
+#[cfg(windows)]
+fn canonical_private_source(path: &Path) -> Result<PathBuf, CpaLifecycleError> {
+    native_windows::ReadGuard::open(path)
+        .and_then(|guard| guard.canonical_path())
+        .map_err(map_native_source_io)
+}
+
+#[cfg(not(windows))]
 fn canonical_private_source(path: &Path) -> Result<PathBuf, CpaLifecycleError> {
     if !path.is_absolute() {
         return Err(CpaLifecycleError::InvalidBorrowedCodexAuth);
@@ -696,7 +795,7 @@ pub(super) fn validate_source_metadata(metadata: &fs::Metadata) -> Result<(), Cp
     Ok(())
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 pub(super) fn validate_source_metadata(metadata: &fs::Metadata) -> Result<(), CpaLifecycleError> {
     if !metadata.is_file() || metadata.file_type().is_symlink() {
         return Err(CpaLifecycleError::InvalidBorrowedCodexAuth);
@@ -714,12 +813,12 @@ pub(super) fn same_file(left: &fs::Metadata, right: &fs::Metadata) -> bool {
         && left.mtime_nsec() == right.mtime_nsec()
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 pub(super) fn same_file(left: &fs::Metadata, right: &fs::Metadata) -> bool {
     left.len() == right.len() && left.modified().ok() == right.modified().ok()
 }
 
-fn source_stamp(metadata: &fs::Metadata) -> Result<SourceStamp, CpaLifecycleError> {
+fn source_stamp(metadata: &Metadata) -> Result<SourceStamp, CpaLifecycleError> {
     let modified = metadata
         .modified()
         .map_err(|_| CpaLifecycleError::InvalidBorrowedCodexAuth)?
@@ -744,11 +843,29 @@ pub(super) fn open_source_nofollow(path: &Path) -> Result<File, CpaLifecycleErro
     .map_err(|error| map_source_io(std::io::Error::from(error)))
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 pub(super) fn open_source_nofollow(path: &Path) -> Result<File, CpaLifecycleError> {
     let metadata = fs::symlink_metadata(path).map_err(map_source_io)?;
     validate_source_metadata(&metadata)?;
     File::open(path).map_err(map_source_io)
+}
+
+#[cfg(windows)]
+fn map_native_source_io(error: std::io::Error) -> CpaLifecycleError {
+    const ERROR_REPARSE_POINT_ENCOUNTERED: i32 = 4395;
+    // Structural refusals are invalid authentication; ordinary OS access failures
+    // retain the published unavailable/read-failed mapping. No error carries a
+    // native pathname or credential bytes into the public subscription reply.
+    if matches!(
+        error.kind(),
+        std::io::ErrorKind::InvalidInput | std::io::ErrorKind::InvalidData
+    ) || (error.kind() == std::io::ErrorKind::PermissionDenied && error.raw_os_error().is_none())
+        || error.raw_os_error() == Some(ERROR_REPARSE_POINT_ENCOUNTERED)
+    {
+        CpaLifecycleError::InvalidBorrowedCodexAuth
+    } else {
+        map_source_io(error)
+    }
 }
 
 fn map_source_io(error: std::io::Error) -> CpaLifecycleError {
@@ -759,6 +876,7 @@ fn map_source_io(error: std::io::Error) -> CpaLifecycleError {
     }
 }
 
+#[cfg(not(windows))]
 fn source_lease_root() -> PathBuf {
     std::env::temp_dir().join(source_lease_root_name())
 }
@@ -771,7 +889,7 @@ fn source_lease_root_name() -> String {
     )
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 fn source_lease_root_name() -> String {
     "hiroute-cpa-borrowed-leases-v1".to_owned()
 }
@@ -785,7 +903,10 @@ pub(super) fn acquire_lock(path: &Path) -> Result<File, CpaLifecycleError> {
     validate_private_file(path).map_err(|_| CpaLifecycleError::InvalidBorrowedCodexAuth)?;
     match file.try_lock_exclusive() {
         Ok(()) => Ok(file),
-        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+        // fs2 returns the native lock-conflict code. On Windows this is
+        // ERROR_LOCK_VIOLATION, whose ErrorKind is not WouldBlock. Do not map
+        // arbitrary permission/share failures to an existing authorized lease.
+        Err(error) if error.raw_os_error() == fs2::lock_contended_error().raw_os_error() => {
             Err(CpaLifecycleError::BorrowedCodexAuthAlreadyLeased)
         }
         Err(_) => Err(CpaLifecycleError::BorrowedCodexAuthIo),
@@ -804,7 +925,12 @@ fn open_lock_nofollow(path: &Path) -> Result<File, CpaLifecycleError> {
     .map_err(|_| CpaLifecycleError::BorrowedCodexAuthIo)
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn open_lock_nofollow(path: &Path) -> Result<File, CpaLifecycleError> {
+    crate::windows_private::lock(path).map_err(|_| CpaLifecycleError::BorrowedCodexAuthIo)
+}
+
+#[cfg(not(any(unix, windows)))]
 fn open_lock_nofollow(path: &Path) -> Result<File, CpaLifecycleError> {
     if path
         .symlink_metadata()
@@ -826,6 +952,10 @@ fn private_file_matches(
     prefix: &str,
     client_version: Option<&str>,
 ) -> Result<bool, CpaLifecycleError> {
+    #[cfg(windows)]
+    let file =
+        crate::windows_private::file(path).map_err(|_| CpaLifecycleError::BorrowedCodexAuthIo)?;
+    #[cfg(not(windows))]
     let file = File::open(path).map_err(|_| CpaLifecycleError::BorrowedCodexAuthIo)?;
     let mut bytes = Zeroizing::new(Vec::new());
     file.take(MAX_AUTH_BYTES + 1)
@@ -858,6 +988,10 @@ fn load_state(path: &Path) -> Result<Option<BorrowedState>, CpaLifecycleError> {
         return Ok(None);
     }
     validate_private_file(path).map_err(|_| CpaLifecycleError::InvalidBorrowedCodexAuth)?;
+    #[cfg(windows)]
+    let bytes = crate::windows_private::read(path, MAX_AUTH_BYTES)
+        .map_err(|_| CpaLifecycleError::BorrowedCodexAuthIo)?;
+    #[cfg(not(windows))]
     let bytes = fs::read(path).map_err(|_| CpaLifecycleError::BorrowedCodexAuthIo)?;
     if bytes.len() as u64 > MAX_AUTH_BYTES {
         return Err(CpaLifecycleError::InvalidBorrowedCodexAuth);

@@ -26,6 +26,7 @@
 /docs/poc/artifacts/*/complete-model-star-ratings.csv
 /e2e/profiles/real-local.json
 /e2e/results/
+/tools/windows-agent-fixtures/node_modules/
 *.profraw
 __pycache__/
 *.pyc

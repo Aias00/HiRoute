@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+#[cfg(not(windows))]
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -481,62 +482,100 @@ fn read_config_with_policy(
     path: &Path,
     system: bool,
 ) -> Result<Option<ValidatedConfigBytes>, AgentFilesystemScanError> {
-    let expected = if system {
-        match std::fs::symlink_metadata(path) {
-            Ok(metadata) => {
-                validate_system_config_metadata(&metadata)?;
-                Some(metadata)
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+    #[cfg(windows)]
+    {
+        // Existing native configuration is accessible user data, not a HiRoute-owned root.
+        // The handle-relative opener rejects reparse traversal and pins the exact object;
+        // its original ACL is neither rewritten nor required to match our private profile.
+        let mut file = match hiroute_platform::windows::security::open_identity(path, false) {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(error) => return Err(error.into()),
+        };
+        if hiroute_platform::windows::security::file_link_count(&file)? != 1 {
+            return Err(AgentFilesystemScanError::InvalidConfig);
         }
-    } else {
-        validate_config_file(path)?
-    };
-    let Some(expected) = expected else {
-        return Ok(None);
-    };
-    if expected.len() > MAX_CONFIG_BYTES {
-        return Err(AgentFilesystemScanError::ConfigTooLarge);
+        let opened = file.metadata()?;
+        if system {
+            validate_system_config_metadata(&opened)?;
+        } else {
+            validate_file_kind_and_owner(&opened)?;
+        }
+        if opened.len() > MAX_CONFIG_BYTES {
+            return Err(AgentFilesystemScanError::ConfigTooLarge);
+        }
+        let mut bytes = Zeroizing::new(Vec::with_capacity(opened.len() as usize));
+        file.by_ref()
+            .take(MAX_CONFIG_BYTES + 1)
+            .read_to_end(&mut bytes)?;
+        if bytes.len() as u64 > MAX_CONFIG_BYTES {
+            return Err(AgentFilesystemScanError::ConfigTooLarge);
+        }
+        let after = file.metadata()?;
+        if !same_file_identity(&opened, &after) || after.len() != bytes.len() as u64 {
+            return Err(AgentFilesystemScanError::SourceChanged);
+        }
+        return Ok(Some((bytes, after)));
     }
+    #[cfg(not(windows))]
+    {
+        let expected = if system {
+            match std::fs::symlink_metadata(path) {
+                Ok(metadata) => {
+                    validate_system_config_metadata(&metadata)?;
+                    Some(metadata)
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+                Err(error) => return Err(error.into()),
+            }
+        } else {
+            validate_config_file(path)?
+        };
+        let Some(expected) = expected else {
+            return Ok(None);
+        };
+        if expected.len() > MAX_CONFIG_BYTES {
+            return Err(AgentFilesystemScanError::ConfigTooLarge);
+        }
 
-    #[cfg(unix)]
-    let mut file = {
-        use nix::fcntl::{OFlag, open};
-        use nix::sys::stat::Mode;
+        #[cfg(unix)]
+        let mut file = {
+            use nix::fcntl::{OFlag, open};
+            use nix::sys::stat::Mode;
 
-        let descriptor = open(
-            path,
-            OFlag::O_RDONLY | OFlag::O_CLOEXEC | OFlag::O_NOFOLLOW | OFlag::O_NONBLOCK,
-            Mode::empty(),
-        )
-        .map_err(|_| AgentFilesystemScanError::SourceChanged)?;
-        File::from(descriptor)
-    };
-    #[cfg(not(unix))]
-    let mut file = File::open(path)?;
+            let descriptor = open(
+                path,
+                OFlag::O_RDONLY | OFlag::O_CLOEXEC | OFlag::O_NOFOLLOW | OFlag::O_NONBLOCK,
+                Mode::empty(),
+            )
+            .map_err(|_| AgentFilesystemScanError::SourceChanged)?;
+            File::from(descriptor)
+        };
+        #[cfg(not(unix))]
+        let mut file = File::open(path)?;
 
-    let opened = file.metadata()?;
-    if system {
-        validate_system_config_metadata(&opened)?;
-    } else {
-        validate_file_kind_and_owner(&opened)?;
+        let opened = file.metadata()?;
+        if system {
+            validate_system_config_metadata(&opened)?;
+        } else {
+            validate_file_kind_and_owner(&opened)?;
+        }
+        if !same_file_identity(&expected, &opened) {
+            return Err(AgentFilesystemScanError::SourceChanged);
+        }
+        let mut bytes = Zeroizing::new(Vec::with_capacity(opened.len() as usize));
+        file.by_ref()
+            .take(MAX_CONFIG_BYTES + 1)
+            .read_to_end(&mut bytes)?;
+        if bytes.len() as u64 > MAX_CONFIG_BYTES {
+            return Err(AgentFilesystemScanError::ConfigTooLarge);
+        }
+        let after = file.metadata()?;
+        if !same_file_identity(&opened, &after) || after.len() != bytes.len() as u64 {
+            return Err(AgentFilesystemScanError::SourceChanged);
+        }
+        Ok(Some((bytes, after)))
     }
-    if !same_file_identity(&expected, &opened) {
-        return Err(AgentFilesystemScanError::SourceChanged);
-    }
-    let mut bytes = Zeroizing::new(Vec::with_capacity(opened.len() as usize));
-    file.by_ref()
-        .take(MAX_CONFIG_BYTES + 1)
-        .read_to_end(&mut bytes)?;
-    if bytes.len() as u64 > MAX_CONFIG_BYTES {
-        return Err(AgentFilesystemScanError::ConfigTooLarge);
-    }
-    let after = file.metadata()?;
-    if !same_file_identity(&opened, &after) || after.len() != bytes.len() as u64 {
-        return Err(AgentFilesystemScanError::SourceChanged);
-    }
-    Ok(Some((bytes, after)))
 }
 
 fn validate_system_config_metadata(
@@ -553,7 +592,11 @@ fn validate_system_config_metadata(
         }
         Ok(())
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        Ok(())
+    }
+    #[cfg(not(any(unix, windows)))]
     {
         Err(AgentFilesystemScanError::SourceUnavailable)
     }
@@ -575,12 +618,21 @@ pub(super) fn same_file_identity(left: &std::fs::Metadata, right: &std::fs::Meta
             && left.ctime_nsec() == right.ctime_nsec()
             && left.permissions().mode() & 0o777 == right.permissions().mode() & 0o777
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        left.file_size() == right.file_size()
+            && left.creation_time() == right.creation_time()
+            && left.last_write_time() == right.last_write_time()
+            && left.file_attributes() == right.file_attributes()
+    }
+    #[cfg(not(any(unix, windows)))]
     {
         left.len() == right.len() && left.permissions().readonly() == right.permissions().readonly()
     }
 }
 
+#[cfg(not(windows))]
 fn validate_config_file(
     path: &Path,
 ) -> Result<Option<std::fs::Metadata>, AgentFilesystemScanError> {
@@ -640,6 +692,11 @@ fn explicit_environment_name(value: &str) -> Option<&str> {
 }
 
 fn source_ref(path: &Path, layer: ConfigLayerV1) -> String {
+    // Windows accepts both separators. Joining a sibling normalizes its final
+    // separator, so hashing the raw spelling would lose project/local precedence.
+    // Normalize components without opening/following the selected object.
+    #[cfg(windows)]
+    let path = path.components().collect::<std::path::PathBuf>();
     let digest = CanonicalDigest::of_bytes(
         format!("claude-settings\0{layer:?}\0{}", path.to_string_lossy()).as_bytes(),
     );
@@ -716,7 +773,10 @@ fn metadata_revision(metadata: &std::fs::Metadata, digest: &CanonicalDigest) -> 
         revision_from_digest(&revision)
     }
     #[cfg(not(unix))]
-    revision_from_digest(digest)
+    {
+        let _ = metadata;
+        revision_from_digest(digest)
+    }
 }
 
 #[cfg(unix)]
@@ -740,6 +800,7 @@ fn stable_identity_from_metadata(metadata: &std::fs::Metadata) -> CanonicalDiges
     )
 }
 
+#[cfg(unix)]
 fn permission_revision(identity: &CanonicalDigest, mode: u32) -> u64 {
     let digest = CanonicalDigest::of_bytes(
         format!("agent-config-permission/v1\0{identity}\0{}", mode & 0o777).as_bytes(),
@@ -774,6 +835,12 @@ pub(super) fn managed_settings_paths() -> Vec<PathBuf> {
     return vec![PathBuf::from(
         "/Library/Application Support/ClaudeCode/managed-settings.json",
     )];
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
+    // The frozen Claude ACP settings producer selects this exact native path;
+    // an ambient ProgramFiles value must not hide enterprise-managed policy.
+    return vec![PathBuf::from(
+        r"C:\Program Files\ClaudeCode\managed-settings.json",
+    )];
+    #[cfg(not(any(target_os = "macos", windows)))]
     return vec![PathBuf::from("/etc/claude-code/managed-settings.json")];
 }

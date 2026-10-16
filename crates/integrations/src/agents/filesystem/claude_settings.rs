@@ -166,7 +166,7 @@ impl FilesystemAgentScannerV1 {
             &mut installation,
             &self.layout.claude_user_settings,
         );
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         if let Ok(cache) = self.claude_ingress.lock()
             && let Some(evidence) = cache.as_ref()
         {

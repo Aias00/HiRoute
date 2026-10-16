@@ -16,7 +16,7 @@ impl WorkerInstallationSelectionSource for StaticSelection {
     }
 }
 
-fn make_file(path: &Path, mode: u32) {
+fn make_file(path: &Path, #[cfg_attr(not(unix), allow(unused_variables))] mode: u32) {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).unwrap();
     }
@@ -70,11 +70,12 @@ fn pi_discovers_path_node_without_an_adapter() {
 #[cfg(unix)]
 fn pi_resume_checks_its_own_capability_instead_of_new_session_admission() {
     let root = tempfile::tempdir().unwrap();
-    let cli = root.path().join("bin/pi.js");
-    let node = root.path().join("bin/node");
+    let root_path = fs::canonicalize(root.path()).unwrap();
+    let cli = root_path.join("bin/pi.js");
+    let node = root_path.join("bin/node");
     make_file(&cli, 0o700);
     make_file(&node, 0o700);
-    fs::write(root.path().join("package.json"), br#"{"name":"@earendil-works/pi-coding-agent","version":"9.0.0-fixture","bin":{"pi":"bin/pi.js"}}"#).unwrap();
+    fs::write(root_path.join("package.json"), br#"{"name":"@earendil-works/pi-coding-agent","version":"9.0.0-fixture","bin":{"pi":"bin/pi.js"}}"#).unwrap();
     // Emulates only the offline runner receipt. The JS contract tests check the SDK itself.
     fs::write(&node, b"#!/bin/sh\nif [ \"$1\" = --version ]; then echo v22.19.0; elif [ \"$2\" = --check ] && [ \"$4\" = continue ]; then echo hiroute.pi-sdk-capability/v1:ok; else exit 97; fi\n").unwrap();
     let config = WorkerInstallationConfig {
@@ -83,7 +84,11 @@ fn pi_resume_checks_its_own_capability_instead_of_new_session_admission() {
         adapter: None,
         node_binary: Some(node),
     };
-    assert!(validate_persisted_installation_for_run(&config, true).is_ok());
+    let continued = validate_persisted_installation_for_run(&config, true);
+    assert!(
+        continued.is_ok(),
+        "Pi continuation receipt failed: {continued:?}"
+    );
     assert!(matches!(
         validate_persisted_installation_for_run(&config, false),
         Err(DelegationErrorV1::DependencyCheckFailed(
@@ -114,11 +119,14 @@ fn pi_resume_checks_its_own_capability_instead_of_new_session_admission() {
 fn qoder_discovers_native_aliases_and_official_root_without_inventing_dependencies_or_replacing_selection()
  {
     let root = tempfile::tempdir().unwrap();
-    let home = root.path().join("home");
-    let bin = root.path().join("bin");
+    // Discovery returns canonical identities; /var and /private/var are the
+    // same temp directory on macOS but are not equal path strings.
+    let root_path = fs::canonicalize(root.path()).unwrap();
+    let home = root_path.join("home");
+    let bin = root_path.join("bin");
     let cli = bin.join("qodercli");
     make_file(&cli, 0o700);
-    let invoked = root.path().join("invoked");
+    let invoked = root_path.join("invoked");
     fs::write(
         &cli,
         format!("#!/bin/sh\nprintf invoked > '{}'\n", invoked.display()),
@@ -129,7 +137,7 @@ fn qoder_discovers_native_aliases_and_official_root_without_inventing_dependenci
     make_file(&bin.join("codex-acp"), 0o700);
     let official = home.join(".qoder/bin/qodercli/qodercli-1.2.3");
     make_file(&official, 0o700);
-    let missing = root.path().join("explicitly-selected-but-missing");
+    let missing = root_path.join("explicitly-selected-but-missing");
     let config = WorkerInstallationConfig::qoder_native(&missing);
     let source = StaticSelection(Some(WorkerInstallationSelection {
         config: config.clone(),

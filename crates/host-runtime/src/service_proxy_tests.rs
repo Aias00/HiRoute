@@ -1,13 +1,33 @@
 use super::*;
 
 fn private_home() -> tempfile::TempDir {
-    let mut builder = tempfile::Builder::new();
+    let builder = tempfile::Builder::new();
     #[cfg(unix)]
-    {
+    let builder = {
+        let mut builder = builder;
         use std::os::unix::fs::PermissionsExt;
         builder.permissions(fs::Permissions::from_mode(0o700));
-    }
+        builder
+    };
     builder.tempdir().unwrap()
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_proxy_handoff_preserves_one_logical_key_and_rejects_ambiguous_values() {
+    let equal = snapshot(&[
+        ("HTTP_PROXY", "http://proxy:9"),
+        ("http_proxy", "http://proxy:9"),
+    ]);
+    assert_eq!(equal.variables().count(), 1);
+    assert_eq!(equal.variables().next().unwrap().0, "HTTP_PROXY");
+    assert!(
+        ServiceProxyEnvironment::capture([
+            ("HTTP_PROXY".into(), "http://first:9".into()),
+            ("http_proxy".into(), "http://other:9".into()),
+        ])
+        .is_err()
+    );
 }
 
 fn snapshot(values: &[(&str, &str)]) -> ServiceProxyEnvironment {
@@ -39,6 +59,8 @@ fn handoff_is_private_bounded_redacted_and_replaces_the_whole_environment() {
     let path = ServiceProxyEnvironment::path(home.path());
     let bytes = fs::read(&path).unwrap();
     assert!(!String::from_utf8(bytes).unwrap().contains("must-not"));
+    #[cfg(windows)]
+    hiroute_platform::windows::security::verify_owner_only(&path, false).unwrap();
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;

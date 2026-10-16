@@ -15,6 +15,8 @@ pub(crate) struct Globals {
     pub(crate) request_id: Option<String>,
     pub(crate) help: bool,
     pub(crate) capability_fd: Option<u32>,
+    #[cfg(windows)]
+    pub(crate) capability_handle: Option<u64>,
     pub(crate) timeout: Option<Duration>,
     pub(crate) agent: Option<String>,
     pub(crate) output: OutputMode,
@@ -26,6 +28,16 @@ pub(crate) struct GlobalSplitError {
     pub(crate) code: ErrorCode,
     pub(crate) globals: Globals,
     pub(crate) worker: bool,
+}
+
+impl Globals {
+    pub(crate) fn has_capability(&self) -> bool {
+        #[cfg(windows)]
+        if self.capability_handle.is_some() {
+            return true;
+        }
+        self.capability_fd.is_some()
+    }
 }
 
 pub(crate) fn split_globals(
@@ -141,6 +153,24 @@ pub(crate) fn split_globals(
                 globals.capability_fd = Some(fd);
                 index += 2;
             }
+            #[cfg(windows)]
+            "--capability-handle" => {
+                let Some(handle) = arguments
+                    .get(index + 1)
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .filter(|value| {
+                        *value != 0
+                            && *value != usize::MAX as u64
+                            && usize::try_from(*value).is_ok()
+                    })
+                else {
+                    return Err(split_error(globals, worker));
+                };
+                if globals.capability_handle.replace(handle).is_some() {
+                    return Err(split_error(globals, worker));
+                }
+                index += 2;
+            }
             value if worker && value.starts_with('-') => {
                 // An unknown Worker option has unknown arity. Preserve the rest for the typed
                 // parser and do not reinterpret any later token as a global flag.
@@ -153,7 +183,11 @@ pub(crate) fn split_globals(
             }
         }
     }
-    if globals.agent.is_some() && globals.capability_fd.is_some() {
+    #[cfg(windows)]
+    if globals.capability_fd.is_some() && globals.capability_handle.is_some() {
+        return Err(split_error(globals, worker));
+    }
+    if globals.agent.is_some() && globals.has_capability() {
         return Err(split_error(globals, worker));
     }
     if worker && !globals.output_explicit {
@@ -241,6 +275,72 @@ fn parse_duration(value: &str) -> Result<Duration, ErrorCode> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_handle_carrier_rejects_missing_invalid_and_conflicting_authority() {
+        for arguments in [
+            vec!["system", "status", "--capability-handle"],
+            vec!["system", "status", "--capability-handle", "0"],
+            vec!["system", "status", "--capability-handle", "-1"],
+            vec![
+                "system",
+                "status",
+                "--capability-handle",
+                "18446744073709551615",
+            ],
+            vec![
+                "system",
+                "status",
+                "--capability-handle",
+                "256",
+                "--capability-handle",
+                "256",
+            ],
+            vec![
+                "tasks",
+                "list",
+                "--capability-handle",
+                "256",
+                "--capability-fd",
+                "3",
+            ],
+            vec![
+                "tasks",
+                "list",
+                "--capability-handle",
+                "256",
+                "--agent",
+                "codex",
+            ],
+        ] {
+            assert!(split_globals(arguments.into_iter().map(str::to_owned).collect()).is_err());
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_handle_carrier_is_separate_from_a_typed_request_source() {
+        let (remaining, globals) = split_globals(
+            [
+                "tasks",
+                "list",
+                "--request-stdin",
+                "--capability-handle",
+                "4294967297",
+                "--json",
+            ]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+        )
+        .unwrap();
+        assert_eq!(remaining, ["tasks", "list", "--request-stdin"]);
+        assert_eq!(globals.capability_handle, Some(4294967297));
+        assert!(globals.has_capability());
+        assert!(globals.capability_fd.is_none());
+        assert_eq!(globals.output, OutputMode::Json);
+    }
 
     #[test]
     fn timeout_is_bounded_and_typed() {

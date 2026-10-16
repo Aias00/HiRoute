@@ -1,0 +1,52 @@
+name: windows-headless-compile
+
+on:
+  pull_request:
+    paths:
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - '.cargo/**'
+      - 'assets/**'
+      - 'vendor/**'
+      - 'tools/**'
+      - 'scripts/**'
+      - '.github/workflows/windows-compile.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-compile-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    env:
+      CARGO_NET_GIT_FETCH_WITH_CLI: 'true'
+      CARGO_INCREMENTAL: '0'
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Repository Rust toolchain
+        shell: pwsh
+        run: rustup show active-toolchain
+      - uses: mozilla-actions/sccache-action@v0.0.11
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: windows-check-sources-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: windows-check-sources-${{ runner.arch }}-
+      - name: Check headless binaries and their test targets
+        shell: pwsh
+        run: |
+          cargo check --locked --target x86_64-pc-windows-msvc -p hiroute-cli -p hiroute-daemon -p hiroute-platform -p hiroute-local-storage --all-targets
+          if ($LASTEXITCODE -ne 0) { throw 'Windows headless compilation failed' }

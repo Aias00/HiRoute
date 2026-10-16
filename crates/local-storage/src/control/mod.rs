@@ -1,8 +1,12 @@
 use hiroute_diagnostics::publication::{PublicationStage, measure};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
-use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Write};
+use std::fs;
+#[cfg(not(windows))]
+use std::fs::OpenOptions;
+use std::io::Read;
+#[cfg(not(windows))]
+use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 
 use aes_gcm::aead::{Aead, Payload};
@@ -29,7 +33,13 @@ mod agent_transaction_tests;
 #[cfg(test)]
 mod surface_check_tests;
 #[cfg(test)]
+mod test_native_permissions;
+#[cfg(test)]
 mod transaction_v2_tests;
+#[cfg(all(test, windows))]
+mod windows_artifacts_tests;
+#[cfg(all(test, windows))]
+mod windows_native_reader_tests;
 
 mod agent_check;
 mod agent_read;
@@ -43,6 +53,12 @@ mod journal;
 mod native_artifacts;
 #[path = "../agents/native_directories.rs"]
 mod native_directories;
+mod native_permissions;
+use native_permissions::{
+    current_artifact_aad, current_artifact_schema, desired_windows_permissions,
+};
+#[cfg(windows)]
+use native_permissions::{read_private_restore_file, windows_artifact_fingerprint};
 #[path = "../agents/native_restoration_ack.rs"]
 mod native_restoration_ack;
 mod operation_status;
@@ -206,6 +222,20 @@ impl ApplyCapabilityRegistrar<'_> {
 }
 
 impl ControlStore {
+    pub(crate) fn native_credential_unavailable(
+        &self,
+        stage: hiroute_diagnostics::event::NativeCredentialLookupStage,
+    ) {
+        use hiroute_diagnostics::event::{CredentialLease, LeaseResultCode};
+        self.diagnostics
+            .borrow()
+            .emit(hiroute_diagnostics::DiagnosticEvent::CredentialLease(
+                CredentialLease {
+                    result: LeaseResultCode::Unavailable,
+                    stage: Some(stage),
+                },
+            ));
+    }
     pub fn set_diagnostics(&self, port: hiroute_diagnostics::DiagnosticsPort) {
         *self.diagnostics.borrow_mut() = port;
     }
@@ -1911,10 +1941,14 @@ struct ArtifactMarker {
     before_exists: bool,
     before_digest: Option<CanonicalDigest>,
     before_mode: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    before_windows_permissions: Option<hiroute_platform::file_security::WindowsPermissions>,
     after_digest: CanonicalDigest,
     #[serde(default = "artifact_present")]
     after_exists: bool,
     after_mode: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    after_windows_permissions: Option<hiroute_platform::file_security::WindowsPermissions>,
     sensitive: bool,
     #[serde(default)]
     rendered: bool,
@@ -1942,6 +1976,7 @@ enum ArtifactBackupAad {
     /// Decodes an authenticated backup created by marker v3 during one-time migration.
     LegacyV3,
     CurrentV4,
+    CurrentWindowsV5,
 }
 
 /// Writes only adapter-owned publication/config artifacts. Restore bytes are independently
@@ -1979,8 +2014,8 @@ impl ManagedArtifactStore {
         root: impl AsRef<Path>,
         restore_root: impl AsRef<Path>,
     ) -> Result<Self, LocalStorageError> {
-        prepare_owner_directory(root.as_ref())?;
-        prepare_owner_directory(restore_root.as_ref())?;
+        crate::prepare_owner_directory(root.as_ref())?;
+        crate::prepare_owner_directory(restore_root.as_ref())?;
         let restore = load_or_create_restore_key(
             &restore_root.as_ref().join(".restore-key"),
             restore_root.as_ref(),
@@ -2032,8 +2067,8 @@ impl ManagedArtifactStore {
             }
             external_targets.insert(target, path);
         }
-        prepare_owner_directory(root.as_ref())?;
-        prepare_owner_directory(restore_root.as_ref())?;
+        crate::prepare_owner_directory(root.as_ref())?;
+        crate::prepare_owner_directory(restore_root.as_ref())?;
         let restore = load_or_create_restore_key(
             &restore_root.as_ref().join(".restore-key"),
             restore_root.as_ref(),
@@ -2204,6 +2239,9 @@ impl ManagedArtifactStore {
         match fs::symlink_metadata(&path) {
             Ok(metadata) => {
                 validate_owner_regular_file(&metadata)?;
+                #[cfg(windows)]
+                let bytes = read_private_restore_file(&path)?;
+                #[cfg(not(windows))]
                 let bytes = fs::read(path)?;
                 let encoded: Value =
                     serde_json::from_slice(&bytes).map_err(|_| LocalStorageError::InvalidData)?;
@@ -2212,7 +2250,7 @@ impl ManagedArtifactStore {
                 }
                 let marker: ArtifactMarker =
                     serde_json::from_value(encoded).map_err(|_| LocalStorageError::InvalidData)?;
-                if marker.schema != "hiroute.managed-artifact-marker/v4"
+                if marker.schema != current_artifact_schema()
                     || marker.operation_id != operation_id.as_str()
                     || marker.effect_id != effect_id
                     || marker.restore_store_uuid != self.restore_store_uuid
@@ -2240,8 +2278,12 @@ impl ManagedArtifactStore {
             }
             let metadata = fs::symlink_metadata(&path)?;
             validate_owner_regular_file(&metadata).map_err(|_| LocalStorageError::Locked)?;
+            #[cfg(windows)]
+            let bytes = read_private_restore_file(&path)?;
+            #[cfg(not(windows))]
+            let bytes = fs::read(&path)?;
             let encoded: Value =
-                serde_json::from_slice(&fs::read(&path)?).map_err(|_| LocalStorageError::Locked)?;
+                serde_json::from_slice(&bytes).map_err(|_| LocalStorageError::Locked)?;
             let has_backup_aad = encoded.get("backup_aad").is_some();
             let mut marker: ArtifactMarker =
                 serde_json::from_value(encoded).map_err(|_| LocalStorageError::Locked)?;
@@ -2276,11 +2318,15 @@ impl ManagedArtifactStore {
                     };
                     true
                 }
+                #[cfg(windows)]
+                "hiroute.windows-managed-artifact-marker/v5" if has_backup_aad => false,
                 "hiroute.managed-artifact-marker/v4" if has_backup_aad => false,
                 "hiroute.managed-artifact-marker/v4" => return Err(LocalStorageError::Locked),
                 _ => return Err(LocalStorageError::Locked),
             };
-            marker.schema = "hiroute.managed-artifact-marker/v4".to_owned();
+            if changed {
+                marker.schema = "hiroute.managed-artifact-marker/v4".to_owned();
+            }
             self.validate_marker_shape(&marker)
                 .map_err(|_| LocalStorageError::Locked)?;
             self.validated_backup(&marker)
@@ -2302,9 +2348,13 @@ impl ManagedArtifactStore {
             }
             let metadata = fs::symlink_metadata(&path)?;
             validate_owner_regular_file(&metadata)?;
+            #[cfg(windows)]
+            let bytes = read_private_restore_file(&path)?;
+            #[cfg(not(windows))]
+            let bytes = fs::read(path)?;
             let marker: ArtifactMarker =
-                serde_json::from_slice(&fs::read(path)?).map_err(|_| LocalStorageError::Locked)?;
-            if marker.schema != "hiroute.managed-artifact-marker/v4"
+                serde_json::from_slice(&bytes).map_err(|_| LocalStorageError::Locked)?;
+            if marker.schema != current_artifact_schema()
                 || marker.restore_store_uuid != self.restore_store_uuid
                 || marker.restore_key_id != self.restore_key_id
                 || marker.external_path_digest != self.external_path_digest(&marker.target)?
@@ -2347,7 +2397,7 @@ impl ManagedArtifactStore {
             (false, None, None, None) => Ok(()),
             _ => Err(LocalStorageError::InvalidData),
         }?;
-        if marker.schema != "hiroute.managed-artifact-marker/v4"
+        if marker.schema != current_artifact_schema()
             || (!marker.after_exists
                 && (!marker.rendered || marker.kind != OwnedEffectKind::AgentArtifact))
             || !supported_artifact_mode(marker.after_mode)
@@ -2359,7 +2409,19 @@ impl ManagedArtifactStore {
                     || marker.compensated
                     || marker.kind != OwnedEffectKind::AgentArtifact)
             || marker.rendered != marker.intent_digest.is_some()
-            || (marker.backup_name.is_none() && marker.backup_aad != ArtifactBackupAad::CurrentV4)
+            || (marker.backup_name.is_none() && marker.backup_aad != current_artifact_aad())
+        {
+            return Err(LocalStorageError::InvalidData);
+        }
+        #[cfg(windows)]
+        if marker.before_windows_permissions.is_some() != marker.before_exists
+            || marker.after_windows_permissions.is_none()
+            || marker.backup_aad != ArtifactBackupAad::CurrentWindowsV5
+        {
+            return Err(LocalStorageError::InvalidData);
+        }
+        #[cfg(not(windows))]
+        if marker.before_windows_permissions.is_some() || marker.after_windows_permissions.is_some()
         {
             return Err(LocalStorageError::InvalidData);
         }
@@ -2391,6 +2453,9 @@ impl ManagedArtifactStore {
         let path = self.restore_root.join(name);
         let metadata = fs::symlink_metadata(&path)?;
         validate_owner_regular_file(&metadata)?;
+        #[cfg(windows)]
+        let sealed = read_private_restore_file(&path)?;
+        #[cfg(not(windows))]
         let sealed = fs::read(path)?;
         if sealed.len() <= RESTORE_BACKUP_HEADER.len() + RESTORE_NONCE_BYTES
             || &sealed[..RESTORE_BACKUP_HEADER.len()] != RESTORE_BACKUP_HEADER
@@ -2412,11 +2477,17 @@ impl ManagedArtifactStore {
                 )
                 .map_err(|_| LocalStorageError::Crypto)?,
         );
-        if Some(artifact_fingerprint(
+        #[cfg(not(windows))]
+        let backup_fingerprint = artifact_fingerprint(&bytes, marker.before_mode.unwrap_or(0o600))?;
+        #[cfg(windows)]
+        let backup_fingerprint = windows_artifact_fingerprint(
             &bytes,
-            marker.before_mode.unwrap_or(0o600),
-        )?) != marker.before_digest
-        {
+            marker
+                .before_windows_permissions
+                .as_ref()
+                .ok_or(LocalStorageError::InvalidData)?,
+        )?;
+        if Some(backup_fingerprint) != marker.before_digest {
             return Err(LocalStorageError::InvalidData);
         }
         Ok(Some(bytes))
@@ -2569,7 +2640,7 @@ impl ManagedArtifactStore {
         let key = Self::marker_key(operation_id, intent.effect_id());
         let backup_name = before.as_ref().map(|_| format!("{key}.before"));
         let marker = ArtifactMarker {
-            schema: "hiroute.managed-artifact-marker/v4".to_owned(),
+            schema: current_artifact_schema().to_owned(),
             restore_store_uuid: self.restore_store_uuid.clone(),
             restore_key_id: self.restore_key_id.clone(),
             operation_id: operation_id.to_string(),
@@ -2579,9 +2650,20 @@ impl ManagedArtifactStore {
             before_exists: before.is_some(),
             before_digest,
             before_mode: before.as_ref().map(|snapshot| snapshot.mode),
+            before_windows_permissions: before
+                .as_ref()
+                .and_then(|snapshot| snapshot.windows_permissions.clone()),
             after_digest: desired_digest,
             after_exists,
             after_mode: intent.desired_mode(),
+            after_windows_permissions: desired_windows_permissions(intent.desired_mode()).map_err(
+                |_| {
+                    port(
+                        PortErrorCode::PermissionDenied,
+                        "artifact.native_permissions",
+                    )
+                },
+            )?,
             sensitive,
             rendered,
             intent_digest: rendered
@@ -2592,7 +2674,7 @@ impl ManagedArtifactStore {
                 .external_path_digest(intent.target())
                 .map_err(|_| port(PortErrorCode::InvalidData, "artifact.external_binding"))?,
             backup_name,
-            backup_aad: ArtifactBackupAad::CurrentV4,
+            backup_aad: current_artifact_aad(),
             activated: false,
             compensated: false,
             native_restoration: None,
@@ -2812,6 +2894,10 @@ impl ManagedArtifactStore {
             // Clear before the first target mutation, including uncertain I/O failures.
             untouched.remove(&(marker.operation_id.clone(), marker.effect_id.clone()));
             if marker.after_exists {
+                #[cfg(windows)]
+                hiroute_platform::durable::rename_windows_sealed_file(&stage, &target)
+                    .map_err(|_| port(PortErrorCode::Unavailable, "artifact.activate.rename"))?;
+                #[cfg(not(windows))]
                 fs::rename(&stage, &target)
                     .map_err(|_| port(PortErrorCode::Unavailable, "artifact.activate.rename"))?;
             } else {
@@ -2963,6 +3049,17 @@ impl ManagedArtifactStore {
                 .validated_backup(&marker)
                 .map_err(|_| port(PortErrorCode::Corrupt, "artifact.compensate.backup"))?
                 .ok_or_else(|| port(PortErrorCode::Corrupt, "artifact.compensate.backup"))?;
+            #[cfg(windows)]
+            hiroute_platform::durable::write_windows_atomic(
+                &target,
+                &before,
+                marker
+                    .before_windows_permissions
+                    .as_ref()
+                    .ok_or_else(|| port(PortErrorCode::Corrupt, "artifact.native_permissions"))?,
+            )
+            .map_err(|_| port(PortErrorCode::Unavailable, "artifact.compensate.write"))?;
+            #[cfg(not(windows))]
             atomic_write(
                 &target,
                 &before,
@@ -2994,23 +3091,6 @@ impl ManagedArtifactStore {
     }
 }
 
-fn prepare_owner_directory(path: &Path) -> Result<(), LocalStorageError> {
-    if path.exists() {
-        let metadata = fs::symlink_metadata(path)?;
-        if metadata.file_type().is_symlink() || !metadata.file_type().is_dir() {
-            return Err(LocalStorageError::Permission);
-        }
-    } else {
-        fs::create_dir_all(path)?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
-        }
-    }
-    Ok(())
-}
-
 fn validate_external_target_location(path: &Path) -> Result<(), LocalStorageError> {
     if !path.is_absolute()
         || path.parent().is_none()
@@ -3027,6 +3107,12 @@ fn validate_external_target_path(path: &Path) -> Result<(), LocalStorageError> {
     validate_external_target_location(path)?;
     let parent = path.parent().ok_or(LocalStorageError::InvalidData)?;
     native_directories::validate_parent(parent)?;
+    #[cfg(windows)]
+    match hiroute_platform::windows::security::open_identity(path, false) {
+        Ok(_held) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
     match fs::symlink_metadata(path) {
         Ok(metadata) => {
             if metadata.file_type().is_symlink() || !metadata.file_type().is_file() {
@@ -3056,6 +3142,18 @@ fn validate_owner_directory_metadata(metadata: &fs::Metadata) -> Result<(), Loca
 fn read_optional_regular_file(
     path: &Path,
 ) -> Result<Option<Zeroizing<Vec<u8>>>, LocalStorageError> {
+    #[cfg(windows)]
+    {
+        let mut file = match hiroute_platform::windows::security::open_identity(path, false) {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(error.into()),
+        };
+        let mut bytes = Zeroizing::new(Vec::new());
+        file.read_to_end(&mut bytes)?;
+        return Ok(Some(bytes));
+    }
+    #[cfg(not(windows))]
     match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_file() => Ok(Some(Zeroizing::new(fs::read(path)?))),
         Ok(_) => Err(LocalStorageError::InvalidData),
@@ -3068,34 +3166,52 @@ struct ArtifactSnapshot {
     bytes: Zeroizing<Vec<u8>>,
     mode: u32,
     fingerprint: CanonicalDigest,
+    windows_permissions: Option<hiroute_platform::file_security::WindowsPermissions>,
 }
 
 fn read_artifact(path: &Path) -> Result<Option<ArtifactSnapshot>, LocalStorageError> {
-    let Some(bytes) = read_optional_regular_file(path)? else {
-        return Ok(None);
-    };
-    #[cfg(unix)]
-    let mode = {
-        use std::os::unix::fs::MetadataExt;
-        fs::metadata(path)?.mode() & 0o7777
-    };
-    #[cfg(not(unix))]
-    return Err(LocalStorageError::InvalidData);
-    if !supported_artifact_mode(mode) {
-        return Err(LocalStorageError::Permission);
+    #[cfg(windows)]
+    {
+        return native_permissions::read_windows_artifact(path);
     }
-    let fingerprint = artifact_fingerprint(&bytes, mode)?;
-    Ok(Some(ArtifactSnapshot {
-        bytes,
-        mode,
-        fingerprint,
-    }))
+    #[cfg(not(windows))]
+    {
+        let Some(bytes) = read_optional_regular_file(path)? else {
+            return Ok(None);
+        };
+        #[cfg(unix)]
+        let mode = {
+            use std::os::unix::fs::MetadataExt;
+            fs::metadata(path)?.mode() & 0o7777
+        };
+        #[cfg(not(unix))]
+        return Err(LocalStorageError::InvalidData);
+        if !supported_artifact_mode(mode) {
+            return Err(LocalStorageError::Permission);
+        }
+        let windows_permissions = None;
+        let fingerprint = artifact_fingerprint(&bytes, mode)?;
+        Ok(Some(ArtifactSnapshot {
+            bytes,
+            mode,
+            fingerprint,
+            windows_permissions,
+        }))
+    }
 }
 
 fn artifact_fingerprint(bytes: &[u8], mode: u32) -> Result<CanonicalDigest, LocalStorageError> {
     if !supported_artifact_mode(mode) {
         return Err(LocalStorageError::Permission);
     }
+    #[cfg(windows)]
+    {
+        return windows_artifact_fingerprint(
+            bytes,
+            &hiroute_platform::file_security::private_defaults(mode & 0o200 == 0)?,
+        );
+    }
+    #[cfg(not(windows))]
     CanonicalDigest::of(&json!({
         "schema": "hiroute.posix-artifact-fingerprint/v1",
         "content": CanonicalDigest::of_bytes(bytes),
@@ -3130,6 +3246,14 @@ fn artifact_backup_aad(marker: &ArtifactMarker) -> String {
         ArtifactBackupAad::LegacyV2 => base,
         ArtifactBackupAad::LegacyV3 => format!("{base}\0v3\0{}", marker.after_exists),
         ArtifactBackupAad::CurrentV4 => format!("{base}\0v4\0{}", marker.after_exists),
+        ArtifactBackupAad::CurrentWindowsV5 => format!(
+            "{base}\0windows-v5\0{}\0{}\0{}",
+            marker.after_exists,
+            marker.after_digest,
+            CanonicalDigest::of(&json!({"before": marker.before_windows_permissions,
+                "after": marker.after_windows_permissions}))
+            .expect("permission facts are serializable")
+        ),
     }
 }
 
@@ -3140,7 +3264,7 @@ fn load_or_create_restore_key(
     match fs::symlink_metadata(path) {
         Ok(metadata) => {
             validate_owner_regular_file(&metadata).map_err(|_| LocalStorageError::Locked)?;
-            let mut file = File::open(path)?;
+            let mut file = hiroute_platform::private_fs::open_private_file(path)?;
             let mut header = [0_u8; 8];
             file.read_exact(&mut header)?;
             if &header != RESTORE_KEY_HEADER {
@@ -3181,20 +3305,12 @@ fn load_or_create_restore_key(
             getrandom::fill(&mut uuid).map_err(|_| LocalStorageError::Crypto)?;
             let store_uuid = hex_restore(&uuid);
             let key_id = restore_key_id(&bytes);
-            let mut options = OpenOptions::new();
-            options.write(true).create_new(true);
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::OpenOptionsExt;
-                options.mode(0o600);
-            }
-            let mut file = options.open(path)?;
-            file.write_all(RESTORE_KEY_HEADER)?;
-            file.write_all(store_uuid.as_bytes())?;
-            file.write_all(key_id.as_str().as_bytes())?;
-            file.write_all(&bytes)?;
-            file.sync_all()?;
-            sync_parent(path)?;
+            let mut complete = Zeroizing::new(Vec::new());
+            complete.extend_from_slice(RESTORE_KEY_HEADER);
+            complete.extend_from_slice(store_uuid.as_bytes());
+            complete.extend_from_slice(key_id.as_str().as_bytes());
+            complete.extend_from_slice(&bytes);
+            hiroute_platform::durable::write_private_new(path, &complete)?;
             validate_owner_regular_file(&fs::metadata(path)?)?;
             Ok(RestoreKeyMaterial {
                 bytes,
@@ -3237,46 +3353,58 @@ fn atomic_write(
     if !supported_artifact_mode(mode) || (sensitive && mode != 0o600) {
         return Err(LocalStorageError::Permission);
     }
-    let parent = path.parent().ok_or(LocalStorageError::InvalidData)?;
-    let parent_metadata = fs::symlink_metadata(parent)?;
-    if parent_metadata.file_type().is_symlink() || !parent_metadata.file_type().is_dir() {
-        return Err(LocalStorageError::Permission);
-    }
-    let temporary = path.with_extension("hiroute-tmp");
-    if temporary.exists() {
-        fs::remove_file(&temporary)?;
-    }
-    let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
+    #[cfg(windows)]
     {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
+        hiroute_platform::durable::write_windows_atomic(
+            path,
+            bytes,
+            &hiroute_platform::file_security::private_defaults(mode & 0o200 == 0)?,
+        )?;
+        return Ok(());
     }
-    let mut file = options.open(&temporary)?;
-    file.write_all(bytes)?;
-    file.sync_all()?;
-    drop(file);
-    #[cfg(unix)]
+    #[cfg(not(windows))]
     {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&temporary, fs::Permissions::from_mode(mode))?;
-    }
-    fs::rename(&temporary, path)?;
-    sync_parent(path)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-        if fs::metadata(path)?.mode() & 0o7777 != mode {
+        let parent = path.parent().ok_or(LocalStorageError::InvalidData)?;
+        let parent_metadata = fs::symlink_metadata(parent)?;
+        if parent_metadata.file_type().is_symlink() || !parent_metadata.file_type().is_dir() {
             return Err(LocalStorageError::Permission);
         }
+        let temporary = path.with_extension("hiroute-tmp");
+        if temporary.exists() {
+            fs::remove_file(&temporary)?;
+        }
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = options.open(&temporary)?;
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        drop(file);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&temporary, fs::Permissions::from_mode(mode))?;
+        }
+        fs::rename(&temporary, path)?;
+        sync_parent(path)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            if fs::metadata(path)?.mode() & 0o7777 != mode {
+                return Err(LocalStorageError::Permission);
+            }
+        }
+        Ok(())
     }
-    Ok(())
 }
 
 fn sync_parent(path: &Path) -> Result<(), LocalStorageError> {
     let parent = path.parent().ok_or(LocalStorageError::InvalidData)?;
-    File::open(parent)?.sync_all()?;
+    hiroute_platform::durable::directory_barrier(parent)?;
     Ok(())
 }
 

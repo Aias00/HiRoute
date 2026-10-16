@@ -2,8 +2,13 @@ use super::*;
 
 const SESSION: &str = "71a2b020-312e-49cd-b084-924cbb3642ad";
 
+fn canonical(path: &Path) -> PathBuf {
+    super::super::super::native_context::native_path(&fs::canonicalize(path).unwrap())
+}
+
 struct Fixture {
     _storage: tempfile::TempDir,
+    base: PathBuf,
     home: PathBuf,
     config: PathBuf,
     workspace: PathBuf,
@@ -18,16 +23,24 @@ impl Fixture {
             use std::os::unix::fs::PermissionsExt;
             fs::set_permissions(storage.path(), fs::Permissions::from_mode(0o700)).unwrap();
         }
-        let home = storage.path().join("daily-home");
+        #[cfg(windows)]
+        let base = {
+            let base = storage.path().join("private");
+            hiroute_platform::windows::security::create_owner_only_directory(&base).unwrap();
+            base
+        };
+        #[cfg(not(windows))]
+        let base = storage.path().to_owned();
+        let home = base.join("daily-home");
         let config = home.join("native-config");
-        let workspace = storage.path().join("workspace");
+        let workspace = base.join("workspace");
         fs::create_dir_all(&config).unwrap();
         fs::create_dir(&workspace).unwrap();
-        let home = fs::canonicalize(home).unwrap();
-        let config = fs::canonicalize(config).unwrap();
-        let workspace = fs::canonicalize(workspace).unwrap();
+        let home = canonical(&home);
+        let config = canonical(&config);
+        let workspace = canonical(&workspace);
         let session = TaskSessionRoot::prepare(
-            storage.path(),
+            &base,
             &WorkspaceId::parse("workspace").unwrap(),
             "workspace-root",
             "task",
@@ -40,6 +53,7 @@ impl Fixture {
             .unwrap();
         Self {
             _storage: storage,
+            base,
             home,
             config,
             workspace,
@@ -49,7 +63,7 @@ impl Fixture {
 
     fn reopen(&self, required: &[PathBuf]) -> Result<TaskSessionRoot, DelegationErrorV1> {
         TaskSessionRoot::prepare(
-            self._storage.path(),
+            &self.base,
             &WorkspaceId::parse("workspace").unwrap(),
             "workspace-root",
             "task",
@@ -63,7 +77,7 @@ impl Fixture {
     fn claude_history(&self) -> PathBuf {
         // Filesystem fixtures use the short-path native spelling. Unicode and long-path
         // contract cases below use literal expected values captured from the native algorithm.
-        let cwd = fs::canonicalize(&self.workspace).unwrap();
+        let cwd = canonical(&self.workspace);
         let project = cwd
             .to_str()
             .unwrap()
@@ -105,15 +119,9 @@ fn borrowed_codex_and_qoder_retain_exact_binding_without_claiming_native_history
 fn borrowed_context_survives_restart_and_cannot_be_rebound_by_continue() {
     let fixture = Fixture::new(WorkerHarnessV1::CodexCli);
     let context = fixture.session.borrowed_context().unwrap().unwrap();
-    assert_eq!(context.home, fs::canonicalize(&fixture.home).unwrap());
-    assert_eq!(
-        context.config_root,
-        fs::canonicalize(&fixture.config).unwrap()
-    );
-    assert_eq!(
-        context.workspace,
-        fs::canonicalize(&fixture.workspace).unwrap()
-    );
+    assert_eq!(context.home, canonical(&fixture.home));
+    assert_eq!(context.config_root, canonical(&fixture.config));
+    assert_eq!(context.workspace, canonical(&fixture.workspace));
     fixture
         .session
         .bind_borrowed_context(&fixture.home, &fixture.config, &fixture.workspace)
@@ -267,7 +275,7 @@ fn creating_the_descriptor_does_not_create_a_missing_native_config_root() {
     let fixture = Fixture::new(WorkerHarnessV1::CodexCli);
     // Use a distinct new task: published descriptors are never overwritten.
     let session = TaskSessionRoot::prepare(
-        fixture._storage.path(),
+        &fixture.base,
         &WorkspaceId::parse("workspace").unwrap(),
         "workspace-root",
         "another-task",

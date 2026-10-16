@@ -4,6 +4,22 @@ These are release facts, not an automatic promise to migrate every recorded rele
 The first supported upgrade baseline is 0.2.0 once it is published and its snapshot is
 merged. Historical 0.1.0 remains recorded but is outside the supported migration scope.
 
+## Upgrade and manual recovery
+
+Supported upgrade readers accept the released sources declared by the support policy.
+This does not promise that an older binary can read data written by a newer release.
+Do not downgrade an initialized data directory in place. Manual recovery requires a
+complete pre-upgrade backup and the corresponding binary verified to read it; restore
+the whole store group, not selected tables or files.
+
+Branch-route publications may contain `source_binding_id` in the persisted active,
+prepared or last-known-good Gateway aggregate. Version 0.3.1 and earlier strict readers
+reject this field, even though the enclosing contract remains
+`hiroute.gateway-publication/v3`. After such a publication, using an old binary against
+the updated directory is unsupported. The current reader authenticates and rebuilds
+older aggregates from their sealed Plans; the reverse path is not supported. Keep the
+pre-upgrade backup if reverting to an earlier release may be necessary.
+
 ## Read the recorded release
 
 The version is data, not a skill constant. From the repository root run:

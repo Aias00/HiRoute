@@ -313,7 +313,7 @@ fn task_lifecycles(log: &str) -> Vec<serde_json::Value> {
 }
 
 fn fixture(
-    temporary: &tempfile::TempDir,
+    temporary: &crate::test_support::PrivateTempDir,
     seed: u8,
 ) -> (DiagnosticRuntime, Arc<MemoryRuntime>, DelegationRunExecutor) {
     let report = diagnostic_report(temporary.path());

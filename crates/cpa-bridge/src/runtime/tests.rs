@@ -461,7 +461,7 @@ fn offer_json(marker: &str, profile: &str, model: &str, evidence: String) -> ser
 }
 
 fn fixture_runtime(
-    root: &tempfile::TempDir,
+    root: &crate::private_test_support::TempDir,
     backend: Arc<FakeBackend>,
     control: Arc<FakeControl>,
     max_restarts: u8,
@@ -502,10 +502,10 @@ fn fixture_runtime(
 
 #[test]
 fn managed_runtime_reports_lifecycle_without_cpa_output() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(FakeBackend::default());
     let control = Arc::new(FakeControl::default());
-    let logs = tempfile::tempdir().unwrap();
+    let logs = crate::private_test_support::tempdir().unwrap();
     ensure_private_dir(logs.path()).unwrap();
     let diagnostics_root = logs.path().join("d");
     let report = DiagnosticRuntime::start(RuntimeConfig {
@@ -543,7 +543,7 @@ fn managed_runtime_reports_lifecycle_without_cpa_output() {
     assert!(!log.contains("cliproxyapi"), "artifact path leaked");
 }
 
-fn fixture_codex_auth_source(root: &tempfile::TempDir) -> PathBuf {
+fn fixture_codex_auth_source(root: &crate::private_test_support::TempDir) -> PathBuf {
     ensure_private_dir(root.path()).unwrap();
     let path = root.path().join("codex-auth.json");
     if !path.exists() {
@@ -582,7 +582,7 @@ fn write_fixture_codex_source(
 
 #[test]
 fn lifecycle_materializes_codex_and_claude_without_transport_identity() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(FakeBackend::default());
     let control = Arc::new(FakeControl::default());
     control.set_accounts(vec![
@@ -777,7 +777,7 @@ fn lifecycle_materializes_codex_and_claude_without_transport_identity() {
 
 #[test]
 fn crash_restart_is_bounded_and_reports_child_exit_separately() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(FakeBackend::default());
     let control = Arc::new(FakeControl::default());
     control.set_accounts(vec![snapshot(CpaAccountKind::Codex, 'a', "gpt-5.5")]);
@@ -879,13 +879,26 @@ fn isolated_owner_recovery_case(case: &str) -> bool {
         .output()
         .unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
+    let code = output.status.code();
+    #[cfg(windows)]
+    let native_code = code.map(|value| format!("0x{:08x}", value as u32));
+    #[cfg(not(windows))]
+    let native_code: Option<String> = None;
+    const TAIL_BOUND: usize = 4096;
+    let stdout_tail =
+        String::from_utf8_lossy(&output.stdout[output.stdout.len().saturating_sub(TAIL_BOUND)..]);
+    let stderr_tail =
+        String::from_utf8_lossy(&output.stderr[output.stderr.len().saturating_sub(TAIL_BOUND)..]);
     assert!(
         output.status.success()
             && stdout
                 .lines()
                 .any(|line| line == format!("test {case} ... ok")),
-        "isolated owner recovery must execute its exact case: {stdout} {}",
-        String::from_utf8_lossy(&output.stderr)
+        "isolated owner recovery must execute its exact case: code={code:?} \
+         windows_native_code={native_code:?} stdout_bytes={} stderr_bytes={} \
+         stdout_tail={stdout_tail:?} stderr_tail={stderr_tail:?}",
+        output.stdout.len(),
+        output.stderr.len(),
     );
     true
 }
@@ -897,7 +910,7 @@ fn stale_live_child_is_authenticated_and_adopted_without_duplicate_spawn() {
     ) {
         return;
     }
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(FakeBackend::default());
     let control = Arc::new(FakeControl::default());
     let first = fixture_runtime(&root, Arc::clone(&backend), Arc::clone(&control), 2);
@@ -948,7 +961,7 @@ fn failed_orphan_authentication_restores_stale_owner_for_bounded_retry() {
     ) {
         return;
     }
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(FakeBackend::default());
     let control = Arc::new(FakeControl::default());
     let first = fixture_runtime(&root, Arc::clone(&backend), Arc::clone(&control), 2);
@@ -994,7 +1007,7 @@ fn failed_orphan_authentication_restores_stale_owner_for_bounded_retry() {
 
 #[test]
 fn removed_account_revokes_old_reference_and_readdition_rotates_generation() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(FakeBackend::default());
     let control = Arc::new(FakeControl::default());
     control.set_accounts(vec![
@@ -1063,7 +1076,7 @@ fn removed_account_revokes_old_reference_and_readdition_rotates_generation() {
 
 #[test]
 fn unsupported_stock_version_fails_before_state_or_process_creation() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(FakeBackend::default());
     let control = Arc::new(FakeControl::default());
     let mut runtime = fixture_runtime(&root, Arc::clone(&backend), control, 2);
@@ -1125,9 +1138,9 @@ fn process_spawn_entry_is_visible_while_the_spawn_is_still_blocked() {
         }
     }
 
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(BlockingBackend::default());
-    let logs = tempfile::tempdir().unwrap();
+    let logs = crate::private_test_support::tempdir().unwrap();
     ensure_private_dir(logs.path()).unwrap();
     let diagnostics_root = logs.path().join("d");
     let report = DiagnosticRuntime::start(RuntimeConfig {
@@ -1269,8 +1282,8 @@ fn cpa_stage_terminals_are_unique_ordered_and_never_fabricated() {
         return;
     }
     // A spawn that completes, then a bounded ready wait that fails.
-    let root = tempfile::tempdir().unwrap();
-    let logs = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
+    let logs = crate::private_test_support::tempdir().unwrap();
     ensure_private_dir(logs.path()).unwrap();
     let diagnostics_root = logs.path().join("d");
     let report = DiagnosticRuntime::start(RuntimeConfig {
@@ -1335,7 +1348,7 @@ fn cpa_stage_terminals_are_unique_ordered_and_never_fabricated() {
 
     // Adoption: the process already exists, so no spawn step is reported and the failure
     // belongs to the ready wait that really ran.
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let backend = Arc::new(FakeBackend::default());
     let control = Arc::new(FakeControl::default());
     let first = fixture_runtime(&root, Arc::clone(&backend), Arc::clone(&control), 2);
@@ -1348,7 +1361,7 @@ fn cpa_stage_terminals_are_unique_ordered_and_never_fabricated() {
     drop(first.inner.lock().live.as_mut().unwrap().auth_lease.take());
     std::mem::forget(first);
 
-    let logs = tempfile::tempdir().unwrap();
+    let logs = crate::private_test_support::tempdir().unwrap();
     ensure_private_dir(logs.path()).unwrap();
     let diagnostics_root = logs.path().join("d");
     let report = DiagnosticRuntime::start(RuntimeConfig {
@@ -1413,8 +1426,8 @@ fn cpa_start_failures_report_their_stage_code_and_business_error() {
     }
 
     // The trusted artifact cannot be located.
-    let root = tempfile::tempdir().unwrap();
-    let logs = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
+    let logs = crate::private_test_support::tempdir().unwrap();
     ensure_private_dir(logs.path()).unwrap();
     let diagnostics_root = logs.path().join("d");
     let report = DiagnosticRuntime::start(RuntimeConfig {
@@ -1447,8 +1460,8 @@ fn cpa_start_failures_report_their_stage_code_and_business_error() {
     assert!(!log.contains("\"phase\":\"ready\""), "{log}");
 
     // The process cannot be started.
-    let root = tempfile::tempdir().unwrap();
-    let logs = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
+    let logs = crate::private_test_support::tempdir().unwrap();
     ensure_private_dir(logs.path()).unwrap();
     let diagnostics_root = logs.path().join("d");
     let report = DiagnosticRuntime::start(RuntimeConfig {
@@ -1481,8 +1494,8 @@ fn cpa_start_failures_report_their_stage_code_and_business_error() {
     assert!(!log.contains("\"phase\":\"ready\""), "{log}");
 
     // The process starts but never becomes ready inside its bounded wait.
-    let root = tempfile::tempdir().unwrap();
-    let logs = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
+    let logs = crate::private_test_support::tempdir().unwrap();
     ensure_private_dir(logs.path()).unwrap();
     let diagnostics_root = logs.path().join("d");
     let report = DiagnosticRuntime::start(RuntimeConfig {

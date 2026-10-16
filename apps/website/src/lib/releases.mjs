@@ -7,8 +7,8 @@ const VERSION = /^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$/;
 const REVISION = /^[0-9a-f]{40}$/;
 const FILENAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,239}$/;
 const STANDALONE_TARGETS = {
-  x86_64: 'x86_64-unknown-linux-gnu',
-  aarch64: 'aarch64-unknown-linux-gnu',
+  Linux: { x86_64: 'x86_64-unknown-linux-gnu', aarch64: 'aarch64-unknown-linux-gnu' },
+  Windows: { x86_64: 'x86_64-pc-windows-msvc', aarch64: 'aarch64-pc-windows-msvc' },
 };
 
 function requiredText(value, field) {
@@ -49,7 +49,9 @@ export function validateReleaseManifest(value) {
         && artifact.minimum_os === '15.0';
       const standaloneValid = commonValid && artifact.kind === 'standalone'
         && !Object.keys(artifact).some(key => !['kind', 'platform', 'architecture', 'target', 'format', 'distribution', 'filename', 'sha256', 'size', 'manifest_filename', 'manifest_sha256', 'manifest_size'].includes(key))
-        && artifact.platform === 'Linux' && artifact.target === STANDALONE_TARGETS[artifact.architecture]
+        && Object.hasOwn(STANDALONE_TARGETS, artifact.platform)
+        && Object.hasOwn(STANDALONE_TARGETS[artifact.platform], artifact.architecture)
+        && artifact.target === STANDALONE_TARGETS[artifact.platform][artifact.architecture]
         && artifact.format === 'tar.gz' && artifact.distribution === 'unsigned'
         && artifact.manifest_filename === `${artifact.filename}.json`
         && FILENAME.test(artifact.manifest_filename ?? '') && SHA256.test(artifact.manifest_sha256 ?? '')

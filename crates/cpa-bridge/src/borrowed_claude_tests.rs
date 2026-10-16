@@ -1,4 +1,6 @@
 use super::*;
+#[cfg(windows)]
+use crate::config::ensure_private_dir;
 
 #[cfg(target_os = "macos")]
 fn assert_keychain_waiter_budget(test_name: &str, cancel_waiter: bool) {
@@ -179,8 +181,8 @@ fn write_native(path: &Path, token: &str, expiry: u64) {
 
 #[test]
 fn native_refresh_stays_untouched_and_rotation_preserves_account_binding() {
-    let root = tempfile::tempdir().unwrap();
-    let auth = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
+    let auth = crate::private_test_support::tempdir().unwrap();
     ensure_private_dir(auth.path()).unwrap();
     let spec = source(root.path(), "access-first", "account-one");
     let original = fs::read(spec.source_path()).unwrap();
@@ -210,8 +212,8 @@ fn native_refresh_stays_untouched_and_rotation_preserves_account_binding() {
 
 #[test]
 fn switched_account_is_rejected_before_replacing_cpa_credentials() {
-    let root = tempfile::tempdir().unwrap();
-    let auth = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
+    let auth = crate::private_test_support::tempdir().unwrap();
     ensure_private_dir(auth.path()).unwrap();
     let spec = source(root.path(), "access-first", "account-one");
     let evidence = spec.inspect().unwrap();
@@ -242,8 +244,8 @@ fn reacquired_lease_keeps_persisted_account_until_explicit_recheck() {
         return;
     }
 
-    let root = tempfile::tempdir().unwrap();
-    let auth = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
+    let auth = crate::private_test_support::tempdir().unwrap();
     ensure_private_dir(auth.path()).unwrap();
     let spec = source(root.path(), "access-first", "account-one");
     let original = spec.inspect().unwrap();
@@ -274,7 +276,7 @@ fn reacquired_lease_keeps_persisted_account_until_explicit_recheck() {
 
 #[test]
 fn expired_or_deleted_native_auth_does_not_reuse_cached_access() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let spec = source(root.path(), "access-first", "account-one");
     assert!(spec.inspect().is_ok());
     write_native(spec.source_path(), "access-first", 1);
@@ -293,7 +295,7 @@ fn expired_or_deleted_native_auth_does_not_reuse_cached_access() {
 #[test]
 fn shared_read_permissions_are_preserved_and_symlinks_are_rejected() {
     use std::os::unix::fs::{PermissionsExt, symlink};
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let spec = source(root.path(), "access-first", "account-one");
     fs::set_permissions(spec.source_path(), fs::Permissions::from_mode(0o644)).unwrap();
     assert!(spec.inspect().is_ok());
@@ -312,8 +314,8 @@ fn shared_read_permissions_are_preserved_and_symlinks_are_rejected() {
 
 #[test]
 fn refresh_material_in_managed_file_is_rejected() {
-    let root = tempfile::tempdir().unwrap();
-    let auth = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
+    let auth = crate::private_test_support::tempdir().unwrap();
     ensure_private_dir(auth.path()).unwrap();
     let spec = source(root.path(), "access-first", "account-one");
     let mut lease = BorrowedClaudeLease::acquire(auth.path(), &spec, None).unwrap();

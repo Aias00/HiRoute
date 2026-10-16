@@ -54,3 +54,14 @@ or extended payloads remain protocol failures; raw adapter messages are not copi
 [Protocol tests](tests.rs) verify startup/load errors precede prompt intent and
 model errors fail the accepted run without replay. The bridge's process tests live
 beside its producer under `profile/pi_worker_bridge.test.mjs`.
+
+A successful Claude terminal response can precede the exact native transcript's
+last append. The [lifecycle terminal checkpoint](../lifecycle/terminal.rs) publishes
+the result, retains its finalization lease and revokes the run credential before
+observing that transcript on the still-live ACP transport. Terminal permission
+and text admission are already closed. The original bounded history deadline
+controls Continue eligibility; interruption cannot replace a published result or
+claim that history settled. Only the outer lifecycle stops the owned process.
+[Causal regressions](../lifecycle/tests/terminal.rs) cover EOF, cancellation,
+disconnect and publication failure. Real installed Claude tool and Continue
+acceptance remains a separate required native gate.

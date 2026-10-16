@@ -1,6 +1,10 @@
 use std::collections::BTreeSet;
-use std::ffi::{OsStr, OsString};
-use std::fs::{File, OpenOptions};
+#[cfg(any(not(windows), test))]
+use std::ffi::OsStr;
+use std::ffi::OsString;
+use std::fs::File;
+#[cfg(not(windows))]
+use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -10,6 +14,12 @@ use hiroute_domain::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
+
+#[cfg(windows)]
+#[path = "managed_launch/windows.rs"]
+mod windows;
+#[cfg(windows)]
+pub(super) use windows::executable_path as windows_executable_path;
 
 pub const MANAGED_LAUNCH_ENV_SANITIZED_V1: &str = "MANAGED_LAUNCH_ENV_SANITIZED";
 pub const AGENT_AUTH_PRECEDENCE_CONFLICT_V1: &str = "AGENT_AUTH_PRECEDENCE_CONFLICT";
@@ -147,6 +157,8 @@ impl ManagedClaudeLaunchPreflightV1 {
 pub struct ManagedClaudeProcessV1 {
     command: Command,
     _overlay: TemporaryLaunchOverlay,
+    #[cfg(windows)]
+    _native_files: Vec<File>,
 }
 
 impl ManagedClaudeProcessV1 {
@@ -162,34 +174,59 @@ impl ManagedClaudeProcessV1 {
         if !Path::new(trusted_hiroute_executable).is_absolute() {
             return Err(ManagedClaudeProcessError::Unavailable);
         }
-        let trusted = std::fs::canonicalize(trusted_hiroute_executable)
-            .map_err(|_| ManagedClaudeProcessError::Unavailable)?;
-        let helper = std::fs::canonicalize(&descriptor.helper_executable)
-            .map_err(|_| ManagedClaudeProcessError::Unavailable)?;
-        if !helper.is_file() {
-            return Err(ManagedClaudeProcessError::Unavailable);
-        }
-        // The persisted descriptor may name the installer-owned stable symlink.
-        // Validate its target and pin this launch's overlay to that resolved file.
-        let mut descriptor = descriptor.clone();
-        descriptor.helper_executable = helper
-            .to_str()
-            .ok_or(ManagedClaudeProcessError::Unavailable)?
-            .to_owned();
-        descriptor
-            .validate_trusted_helper(
-                trusted
-                    .to_str()
-                    .ok_or(ManagedClaudeProcessError::Unavailable)?,
+        #[cfg(not(windows))]
+        let descriptor = {
+            let trusted = std::fs::canonicalize(trusted_hiroute_executable)
+                .map_err(|_| ManagedClaudeProcessError::Unavailable)?;
+            let helper = std::fs::canonicalize(&descriptor.helper_executable)
+                .map_err(|_| ManagedClaudeProcessError::Unavailable)?;
+            if !helper.is_file() {
+                return Err(ManagedClaudeProcessError::Unavailable);
+            }
+            // Unix installer-owned stable symlinks retain their existing meaning.
+            let mut descriptor = descriptor.clone();
+            descriptor.helper_executable = helper
+                .to_str()
+                .ok_or(ManagedClaudeProcessError::Unavailable)?
+                .to_owned();
+            descriptor
+                .validate_trusted_helper(
+                    trusted
+                        .to_str()
+                        .ok_or(ManagedClaudeProcessError::Unavailable)?,
+                )
+                .map_err(|_| ManagedClaudeProcessError::Unavailable)?;
+            verify_claude_executable(&descriptor)?;
+            descriptor
+        };
+        #[cfg(windows)]
+        let (descriptor, native_files) =
+            windows::prepare_paths(descriptor, Path::new(trusted_hiroute_executable))?;
+        let overlay = TemporaryLaunchOverlay::create(&descriptor, user_settings)?;
+        #[cfg(not(windows))]
+        let mut command = Command::new(&descriptor.executable);
+        #[cfg(windows)]
+        let mut command = {
+            let search = std::env::var_os("PATH")
+                .unwrap_or_default()
+                .into_string()
+                .map_err(|_| ManagedClaudeProcessError::Unavailable)?;
+            let (binary, prefix) = super::windows_runtime::windows_agent_command(
+                Path::new(&descriptor.executable),
+                &[],
+                &search,
             )
             .map_err(|_| ManagedClaudeProcessError::Unavailable)?;
-        verify_claude_executable(&descriptor)?;
-        let overlay = TemporaryLaunchOverlay::create(&descriptor, user_settings)?;
-        let mut command = Command::new(&descriptor.executable);
+            let mut command = Command::new(binary);
+            command.args(prefix);
+            command
+        };
         configure_command(&mut command, &descriptor, overlay.path(), child_arguments);
         Ok(Self {
             command,
             _overlay: overlay,
+            #[cfg(windows)]
+            _native_files: native_files,
         })
     }
 
@@ -244,6 +281,7 @@ fn configure_command(
         .args(child_arguments);
 }
 
+#[cfg(not(windows))]
 fn verify_claude_executable(
     descriptor: &ManagedClaudeLaunchDescriptorV2,
 ) -> Result<(), ManagedClaudeProcessError> {
@@ -271,6 +309,8 @@ fn verify_claude_executable(
 struct TemporaryLaunchOverlay {
     directory: PathBuf,
     path: PathBuf,
+    #[cfg(windows)]
+    _root: super::probe_files::PrivateProbeRoot,
 }
 
 impl TemporaryLaunchOverlay {
@@ -278,7 +318,25 @@ impl TemporaryLaunchOverlay {
         descriptor: &ManagedClaudeLaunchDescriptorV2,
         user_settings: &Value,
     ) -> Result<Self, ManagedClaudeProcessError> {
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        {
+            let root = super::probe_files::temporary("hiroute-claude-launch-")
+                .map_err(|_| ManagedClaudeProcessError::Unavailable)?;
+            let directory = root.path().to_owned();
+            let path = directory.join("settings.json");
+            let mut file = super::probe_files::file(&path)
+                .map_err(|_| ManagedClaudeProcessError::Unavailable)?;
+            write_overlay(&mut file, descriptor, user_settings)?;
+            file.sync_all()
+                .map_err(|_| ManagedClaudeProcessError::Unavailable)?;
+            drop(file);
+            Ok(Self {
+                directory,
+                path,
+                _root: root,
+            })
+        }
+        #[cfg(not(any(unix, windows)))]
         {
             let _ = (descriptor, user_settings);
             return Err(ManagedClaudeProcessError::Unavailable);
@@ -344,14 +402,23 @@ fn write_overlay(
     descriptor: &ManagedClaudeLaunchDescriptorV2,
     user_settings: &Value,
 ) -> Result<(), ManagedClaudeProcessError> {
-    let mut components = Vec::with_capacity(1 + descriptor.helper_argv.len());
-    components.push(descriptor.helper_executable.as_str());
-    components.extend(descriptor.helper_argv.iter().map(String::as_str));
-    let helper_command = components
-        .into_iter()
-        .map(shell_quote)
-        .collect::<Vec<_>>()
-        .join(" ");
+    #[cfg(not(windows))]
+    let helper_command = {
+        let mut components = Vec::with_capacity(1 + descriptor.helper_argv.len());
+        components.push(descriptor.helper_executable.as_str());
+        components.extend(descriptor.helper_argv.iter().map(String::as_str));
+        components
+            .into_iter()
+            .map(shell_quote)
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    #[cfg(windows)]
+    let helper_command = hiroute_platform::windows::launcher::managed_helper_command(
+        Path::new(&descriptor.helper_executable),
+        &descriptor.helper_argv,
+    )
+    .map_err(|_| ManagedClaudeProcessError::Unavailable)?;
     let mut overlay = match user_settings {
         Value::Object(fields) => fields.clone(),
         _ => Map::new(),
@@ -362,6 +429,9 @@ fn write_overlay(
         .and_then(|value| value.as_object().cloned())
         .unwrap_or_default();
     for name in MANAGED_CLAUDE_ENVIRONMENT {
+        #[cfg(windows)]
+        env.retain(|key, _| !key.eq_ignore_ascii_case(name));
+        #[cfg(not(windows))]
         env.remove(name);
     }
     let mut managed_env = Map::new();
@@ -400,6 +470,7 @@ fn write_overlay(
         .map_err(|_| ManagedClaudeProcessError::Unavailable)
 }
 
+#[cfg(not(windows))]
 fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
 }
@@ -427,7 +498,9 @@ mod context_window_tests {
         let mut descriptor = ManagedClaudeLaunchDescriptorV2::trusted(
             "agent-connection/context-test",
             "claude-messages-v1",
-            "/trusted/claude",
+            crate::agents::test_absolute_path("/trusted/claude")
+                .to_str()
+                .unwrap(),
             hiroute_domain::CanonicalDigest::of_bytes(b"snapshot"),
             1,
             hiroute_domain::CanonicalDigest::of_bytes(b"publication"),
@@ -437,7 +510,9 @@ mod context_window_tests {
                 sonnet: None,
                 haiku: None,
             },
-            "/trusted/hiroute",
+            crate::agents::test_absolute_path("/trusted/hiroute")
+                .to_str()
+                .unwrap(),
         )
         .unwrap();
         descriptor.context_window_tokens = Some(272_000);
@@ -450,7 +525,7 @@ mod context_window_tests {
         assert_eq!(overlay["env"]["CLAUDE_CODE_AUTO_COMPACT_WINDOW"], "272000");
         assert_eq!(overlay["env"]["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "272000");
         assert!(overlay["env"].get("DISABLE_COMPACT").is_none());
-        let mut command = Command::new("/trusted/claude");
+        let mut command = Command::new(crate::agents::test_absolute_path("/trusted/claude"));
         configure_command(&mut command, &descriptor, file.path(), &[]);
         let environment: std::collections::BTreeMap<_, _> = command.get_envs().collect();
         assert_eq!(

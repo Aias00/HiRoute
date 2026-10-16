@@ -4,6 +4,7 @@
 //! admission protocol to the one Control/Runtime storage set, persists the bounded task body in
 //! the managed-text store, and retains the exact Plan version before runtime acceptance.
 
+#[cfg(unix)]
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -734,14 +735,26 @@ pub(super) fn canonical_workspace_with_path(
     Ok((workspace, canonical_path))
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+pub(super) fn canonical_workspace(path: &str) -> Result<DelegationWorkspaceV1, DelegationErrorV1> {
+    canonical_workspace_with_path(path).map(|(workspace, _)| workspace)
+}
+
+#[cfg(windows)]
+pub(super) fn canonical_workspace_with_path(
+    path: &str,
+) -> Result<(DelegationWorkspaceV1, String), DelegationErrorV1> {
+    crate::delegation::profile::windows_workspace(path)
+}
+
+#[cfg(not(any(unix, windows)))]
 pub(super) fn canonical_workspace(_path: &str) -> Result<DelegationWorkspaceV1, DelegationErrorV1> {
     // Windows needs an owner-validated reparse-point/volume resolver; do not substitute a raw
     // string path while that capability is absent.
     Err(DelegationErrorV1::CapabilityUnavailable)
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 pub(super) fn canonical_workspace_with_path(
     _path: &str,
 ) -> Result<(DelegationWorkspaceV1, String), DelegationErrorV1> {

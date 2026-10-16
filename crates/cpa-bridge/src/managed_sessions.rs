@@ -95,11 +95,16 @@ impl ManagedLoginRegistry {
         }
         private_session_dir(&registry.root)?;
         let mut sessions = registry.sessions.lock();
-        for entry in std::fs::read_dir(&registry.root).map_err(|_| CpaLifecycleError::OwnerState)? {
-            let entry = entry.map_err(|_| CpaLifecycleError::OwnerState)?;
-            let Some(id) = entry.file_name().to_str().map(str::to_owned) else {
-                continue;
-            };
+        #[cfg(windows)]
+        let entries = crate::windows_private::names(&registry.root)
+            .map_err(|_| CpaLifecycleError::OwnerState)?;
+        #[cfg(not(windows))]
+        let entries = std::fs::read_dir(&registry.root)
+            .map_err(|_| CpaLifecycleError::OwnerState)?
+            .map(|entry| entry.map(|entry| entry.file_name().to_string_lossy().into_owned()))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| CpaLifecycleError::OwnerState)?;
+        for id in entries {
             if !valid_login_ref(&id) || sessions.len() >= MAX_SESSIONS {
                 continue;
             }
@@ -124,17 +129,22 @@ impl ManagedLoginRegistry {
             return Ok(None);
         }
         validate_private_file(&path)?;
-        if std::fs::metadata(&path)
-            .map_err(|_| CpaLifecycleError::OwnerState)?
-            .len()
-            > 16384
-        {
-            return Err(CpaLifecycleError::OwnerState);
-        }
-        let record: LoginRecord = serde_json::from_slice(
-            &std::fs::read(path).map_err(|_| CpaLifecycleError::OwnerState)?,
-        )
-        .map_err(|_| CpaLifecycleError::OwnerState)?;
+        #[cfg(windows)]
+        let bytes = crate::windows_private::read(&path, 16384)
+            .map_err(|_| CpaLifecycleError::OwnerState)?;
+        #[cfg(not(windows))]
+        let bytes = {
+            if std::fs::metadata(&path)
+                .map_err(|_| CpaLifecycleError::OwnerState)?
+                .len()
+                > 16384
+            {
+                return Err(CpaLifecycleError::OwnerState);
+            }
+            std::fs::read(&path).map_err(|_| CpaLifecycleError::OwnerState)?
+        };
+        let record: LoginRecord =
+            serde_json::from_slice(&bytes).map_err(|_| CpaLifecycleError::OwnerState)?;
         if record.schema != SCHEMA
             || record.login_ref != id
             || record.expires_at < record.created_at
@@ -200,6 +210,10 @@ impl ManagedLoginRegistry {
             if let Some(id) = removable {
                 let path = self.session_dir(&id);
                 private_session_dir(&path)?;
+                #[cfg(windows)]
+                crate::windows_private::remove_session_tree(&path, false)
+                    .map_err(|_| CpaLifecycleError::OwnerState)?;
+                #[cfg(not(windows))]
                 std::fs::remove_dir_all(path).map_err(|_| CpaLifecycleError::OwnerState)?;
                 sessions.remove(&id);
             }
@@ -449,7 +463,15 @@ fn clear_auth(path: &Path) -> Result<(), CpaLifecycleError> {
     }
     private_session_dir(path)?;
     // Stop was confirmed before this exact owner-only directory is removed. Never follow links.
-    std::fs::remove_dir_all(path).map_err(|_| CpaLifecycleError::OwnerState)
+    #[cfg(windows)]
+    {
+        crate::windows_private::remove_session_tree(path, true)
+            .map_err(|_| CpaLifecycleError::OwnerState)
+    }
+    #[cfg(not(windows))]
+    {
+        std::fs::remove_dir_all(path).map_err(|_| CpaLifecycleError::OwnerState)
+    }
 }
 
 fn private_session_dir(path: &Path) -> Result<(), CpaLifecycleError> {

@@ -176,6 +176,9 @@ pub(super) fn materialize_aliases(
                         }
                         let mut projected =
                             snapshot::project_candidate(candidate, local_id, &protocols)?;
+                        if key != candidate.binding_id {
+                            projected.source_binding_id = Some(candidate.binding_id.clone());
+                        }
                         projected.stable_target_key = key;
                         Ok(projected)
                     })

@@ -1,6 +1,8 @@
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
-use std::process::{Command, ExitStatus};
+use std::process::Command;
+#[cfg(not(windows))]
+use std::process::ExitStatus;
 use std::time::Duration;
 
 use hiroute_application_api::{
@@ -289,7 +291,77 @@ fn spawn_and_wait(command: &mut Command) -> Result<u8, ManagedLaunchFailure> {
     })
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn spawn_and_wait(command: &mut Command) -> Result<u8, ManagedLaunchFailure> {
+    use hiroute_platform::windows::job::{Child, Launch, Stream};
+    use std::time::Instant;
+
+    // Apply Command's explicit removals with Windows' case-insensitive environment names.
+    let mut environment: Vec<_> = std::env::vars_os().collect();
+    for (key, value) in command.get_envs() {
+        environment.retain(|(existing, _)| {
+            !existing
+                .as_encoded_bytes()
+                .eq_ignore_ascii_case(key.as_encoded_bytes())
+        });
+        if let Some(value) = value {
+            environment.push((key.to_owned(), value.to_owned()));
+        }
+    }
+    let arguments: Vec<_> = command.get_args().map(OsStr::to_owned).collect();
+    let child = Child::spawn(Launch {
+        program: Path::new(command.get_program()),
+        args: &arguments,
+        env: &environment,
+        cwd: command.get_current_dir(),
+        stdin: Stream::Inherit,
+        stdout: Stream::Inherit,
+        stderr: Stream::Inherit,
+    })
+    .map_err(|_| ManagedLaunchFailure::Unavailable)?;
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_io()
+        .enable_time()
+        .build()
+        .map_err(|_| ManagedLaunchFailure::Unavailable)?;
+    let result = runtime.block_on(async {
+        let interrupt = tokio::signal::ctrl_c();
+        tokio::pin!(interrupt);
+        let mut signal_observed = false;
+        loop {
+            if let Some(code) = child
+                .exit_code()
+                .map_err(|_| ManagedLaunchFailure::Unavailable)?
+            {
+                break Ok(u8::try_from(code).unwrap_or(1));
+            }
+            tokio::select! {
+                _ = tokio::time::sleep(Duration::from_millis(25)) => {}
+                result = &mut interrupt, if !signal_observed => {
+                    result.map_err(|_| ManagedLaunchFailure::Unavailable)?;
+                    // The console broadcasts Ctrl-C to this foreground child's shared group.
+                    signal_observed = true;
+                }
+            }
+        }
+    });
+    child
+        .terminate()
+        .map_err(|_| ManagedLaunchFailure::Unavailable)?;
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while !child
+        .empty()
+        .map_err(|_| ManagedLaunchFailure::Unavailable)?
+    {
+        if Instant::now() >= deadline {
+            return Err(ManagedLaunchFailure::Unavailable);
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    result
+}
+
+#[cfg(not(any(unix, windows)))]
 fn spawn_and_wait(command: &mut Command) -> Result<u8, ManagedLaunchFailure> {
     command
         .status()
@@ -297,6 +369,7 @@ fn spawn_and_wait(command: &mut Command) -> Result<u8, ManagedLaunchFailure> {
         .map_err(|_| ManagedLaunchFailure::Unavailable)
 }
 
+#[cfg(not(windows))]
 fn exit_code(status: ExitStatus) -> u8 {
     if let Some(code) = status.code() {
         return u8::try_from(code).unwrap_or(1);
@@ -321,6 +394,7 @@ pub(crate) enum ManagedLaunchFailure {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
+    #[cfg(unix)]
     use std::path::PathBuf;
 
     use hiroute_application_api::{
@@ -339,16 +413,20 @@ mod tests {
         parse_invocation(&arguments)
     }
 
+    #[cfg(unix)]
     fn shell_quote(value: &str) -> String {
         format!("'{}'", value.replace('\'', "'\\''"))
     }
 
     fn trusted_helper() -> String {
-        std::fs::canonicalize(std::env::current_exe().unwrap())
-            .unwrap()
-            .into_os_string()
-            .into_string()
-            .unwrap()
+        let canonical = std::fs::canonicalize(std::env::current_exe().unwrap()).unwrap();
+        let text = canonical.to_str().unwrap();
+        // The frozen descriptor carries native drive paths. Canonicalization's
+        // Rust verbatim spelling must not alter this fixture's native path contract.
+        #[cfg(windows)]
+        let text = text.strip_prefix(r"\\?\").unwrap_or(text);
+        assert_eq!(std::fs::canonicalize(text).unwrap(), canonical);
+        text.to_owned()
     }
 
     #[test]
@@ -589,7 +667,8 @@ mod tests {
 
     #[test]
     fn configured_child_carries_routing_environment_without_empty_setting_sources() {
-        let executable = std::env::current_exe().unwrap();
+        let executable = std::path::PathBuf::from(trusted_helper());
+        let trusted = std::fs::canonicalize(std::env::current_exe().unwrap()).unwrap();
         let descriptor = descriptor(executable.to_str().unwrap(), &trusted_helper());
         let invocation = ManagedLaunchInvocation {
             connection_id: descriptor.connection_id.clone(),
@@ -600,7 +679,7 @@ mod tests {
             &descriptor,
             &invocation.user_settings,
             &invocation.child_arguments,
-            &trusted_helper(),
+            trusted.to_str().unwrap(),
         )
         .unwrap();
         let command = process.command_mut();
@@ -650,6 +729,73 @@ mod tests {
         assert_eq!(command.get_args().next(), Some(OsStr::new("--settings")));
         assert_eq!(command.get_args().nth(2), Some(OsStr::new("--model")));
         assert_eq!(command.get_args().nth(3), Some(OsStr::new("opus")));
+        assert_eq!(command.get_args().count(), 4);
+        assert_eq!(command.get_program(), executable.as_os_str());
+        let settings = std::path::Path::new(command.get_args().nth(1).unwrap());
+        #[cfg(windows)]
+        let file = hiroute_platform::windows::security::open_owner_only(settings, false).unwrap();
+        #[cfg(not(windows))]
+        let file = std::fs::File::open(settings).unwrap();
+        let overlay: Value = serde_json::from_reader(file).unwrap();
+        assert_eq!(overlay["env"]["UNRELATED"], "keep");
+        assert_eq!(
+            overlay["env"]["ANTHROPIC_BASE_URL"],
+            "http://127.0.0.1:5837"
+        );
+        assert!(!overlay["apiKeyHelper"].as_str().unwrap().is_empty());
+
+        #[cfg(windows)]
+        {
+            let foreign =
+                hiroute_platform::windows::launcher::system_executable(Path::new("cmd.exe"))
+                    .unwrap();
+            assert!(
+                ManagedClaudeProcessV1::prepare(
+                    &descriptor,
+                    &invocation.user_settings,
+                    &invocation.child_arguments,
+                    foreign.to_str().unwrap(),
+                )
+                .is_err()
+            );
+            for alias in [
+                r"\\server\share\hiroute.exe",
+                r"\\?\UNC\server\share\hiroute.exe",
+                r"\\.\C:\hiroute.exe",
+                r"\\?\GLOBALROOT\Device\HarddiskVolume1\hiroute.exe",
+            ] {
+                assert!(
+                    ManagedClaudeProcessV1::prepare(
+                        &descriptor,
+                        &invocation.user_settings,
+                        &invocation.child_arguments,
+                        alias,
+                    )
+                    .is_err()
+                );
+            }
+            let directory = tempfile::tempdir().unwrap();
+            let junction = directory.path().join("native-alias");
+            hiroute_platform_test_support::junction::create(
+                &junction,
+                executable.parent().unwrap(),
+            )
+            .unwrap();
+            let alias = junction.join(executable.file_name().unwrap());
+            let reparse_descriptor = self::descriptor(alias.to_str().unwrap(), &trusted_helper());
+            let rejected = ManagedClaudeProcessV1::prepare(
+                &reparse_descriptor,
+                &invocation.user_settings,
+                &invocation.child_arguments,
+                trusted.to_str().unwrap(),
+            )
+            .is_err();
+            std::fs::remove_dir(&junction).unwrap();
+            assert!(
+                rejected,
+                "managed executable must reject a junction ancestor"
+            );
+        }
     }
 
     #[cfg(unix)]
@@ -658,7 +804,7 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
 
         let root = tempfile::tempdir().unwrap();
-        let home = root.path().join("Users/test user");
+        let home = root.path().canonicalize().unwrap().join("Users/test user");
         let target = home.join("Applications/HiRoute.app/Contents/MacOS/hiroute");
         let bin = home.join(".local/bin");
         std::fs::create_dir_all(target.parent().unwrap()).unwrap();
@@ -690,7 +836,7 @@ mod tests {
     fn temporary_overlay_is_owner_only_secret_free_and_removed_on_drop() {
         use std::os::unix::fs::PermissionsExt;
 
-        let executable = std::env::current_exe().unwrap();
+        let executable = std::env::current_exe().unwrap().canonicalize().unwrap();
         let descriptor = descriptor(executable.to_str().unwrap(), &trusted_helper());
         let user_settings = serde_json::json!({
             "permissions": {"allow": ["Bash(ls)"]},
@@ -821,6 +967,7 @@ mod tests {
 
     /// Signal handling is process-global, so the tests that install forwarding handlers or
     /// raise process-level signals must never run concurrently with each other.
+    #[cfg(unix)]
     static SIGNAL_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[cfg(unix)]

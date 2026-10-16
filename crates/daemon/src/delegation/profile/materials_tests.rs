@@ -37,6 +37,64 @@ fn profile(
 }
 
 #[test]
+fn legacy_private_history_retains_portable_paths_and_reopens_exact_session() {
+    for harness in [WorkerHarnessV1::CodexCli, WorkerHarnessV1::ClaudeCode] {
+        let fixture = private_fixture();
+        let session = root(fixture.path(), "legacy-task", harness, SessionRootUse::New).unwrap();
+        let relative = if harness == WorkerHarnessV1::CodexCli {
+            "sessions/2026/10/14/rollout-exact-session.jsonl"
+        } else {
+            "projects/legacy-workspace/exact-session.jsonl"
+        };
+        let transcript = session.path().join(relative);
+        #[cfg(windows)]
+        hiroute_platform::windows::security::ensure_private_directory(transcript.parent().unwrap())
+            .unwrap();
+        #[cfg(not(windows))]
+        fs::create_dir_all(transcript.parent().unwrap()).unwrap();
+        hiroute_platform::durable::write_private_new(
+            &transcript,
+            b"opaque original native history\n",
+        )
+        .unwrap();
+        let before = fs::read(&transcript).unwrap();
+        let retained = native_history(session.path(), harness, "exact-session").unwrap();
+        assert_eq!(retained, [relative]);
+        assert!(
+            retained
+                .iter()
+                .all(|value| hiroute_domain::delegation::valid_native_history_path(value))
+        );
+        assert_eq!(
+            TaskSessionRoot::native_transcript_path(session.path(), harness, "exact-session")
+                .unwrap(),
+            transcript
+        );
+        let required = retained.iter().map(PathBuf::from).collect::<Vec<_>>();
+        let resumed = root(
+            fixture.path(),
+            "legacy-task",
+            harness,
+            SessionRootUse::Continue {
+                required_history: &required,
+            },
+        )
+        .unwrap();
+        resumed.verify_native_session("exact-session").unwrap();
+        assert_eq!(
+            resumed.verify_native_session("another-session"),
+            Err(DelegationErrorV1::ResumeUnavailable)
+        );
+        assert_eq!(fs::read(&transcript).unwrap(), before);
+        fs::remove_file(&transcript).unwrap();
+        assert_eq!(
+            resumed.verify_native_session("exact-session"),
+            Err(DelegationErrorV1::ResumeUnavailable)
+        );
+    }
+}
+
+#[test]
 fn codex_startup_provider_is_private_token_free_and_never_overwritten() {
     let fixture = private_fixture();
     let session = root(
