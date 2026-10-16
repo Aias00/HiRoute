@@ -290,7 +290,7 @@ impl CollaborationChallenge {
             let diagnostic = ToolResultDiagnostic::capture(
                 self.selected_tool,
                 result,
-                complete.as_deref(),
+                output.as_deref(),
                 &self.contents,
                 &self.expected_cli,
                 self.readonly
@@ -298,6 +298,10 @@ impl CollaborationChallenge {
                     .map(|control| control.receipt_facts(complete.as_deref().unwrap_or_default())),
             );
             observe(&diagnostic);
+        }
+        #[cfg(any(windows, test))]
+        if self.readonly.is_some() && output.is_none() {
+            return Err("native read-only correlated result");
         }
         let output = output
             .as_deref()
