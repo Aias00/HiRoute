@@ -157,7 +157,7 @@ def run(repository):
         assert 'effective' not in status
 
         stage = 'decision-onboarding-and-routed-groups'
-        decision_onboarding(product, plan, binding, submit)
+        decision_onboarding(product, plan, submit)
 
         stage = 'terminal-output-and-exit'
         capture = product.project / 'capture'

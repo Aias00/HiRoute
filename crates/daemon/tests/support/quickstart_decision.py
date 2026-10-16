@@ -4,7 +4,6 @@ The external decider chooses controlled probabilities, not semantic quality. No 
 """
 import json
 import os
-from pathlib import Path
 import pty
 import select
 import signal
@@ -88,9 +87,12 @@ class Decisions(BaseHTTPRequestHandler):
         body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
         assert self.headers.get('Authorization') == self.credential, 'protected header not resolved'
         self.requests.append(body)
-        result = ({'answers': {key: {'type': 'score', 'probabilities': {
-            '0': .1 if self.complex else .9, '1': .9 if self.complex else .1}}
-            for key in body['questions']}} if 'questions' in body else
+        result = ({'answers': {key: (
+            {'type': 'choice', 'choice': next(iter(question['criteria']))}
+            if question['type'] == 'choice' else
+            {'type': 'score', 'probabilities': {
+                '0': .1 if self.complex else .9, '1': .9 if self.complex else .1}})
+            for key, question in body['questions'].items()}} if 'questions' in body else
             {'decision': {'kind':'ordinal', 'probabilities':{'simple':.9, 'complex':.1}}})
         raw = json.dumps(result).encode()
         self.send_response(200)
@@ -100,7 +102,7 @@ class Decisions(BaseHTTPRequestHandler):
         self.wfile.write(raw)
 
 
-def run(product, plan, binding, submit):
+def run(product, plan, submit):
     options = product.cli('decision', 'services', 'options')['data']
     assert options['saved_services_state'] == 'known' and options['saved_services'] == []
     assert not Decisions.requests, 'options made an implicit probe'
