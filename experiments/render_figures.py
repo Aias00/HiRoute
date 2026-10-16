@@ -76,8 +76,10 @@ def render_cache_cost(out):
     strong_lower = float(next(r for r in deliveries if r['id'] == 'formal-draft98-v1-p03-strong')['usd']['lower'])
     ideal, mixed = float(pair['astra_all_input_cached_hypothetical_usd']), float(pair['mixed_usd_upper'])
     mixed_astra = float(pair['mixed_astra_usd_upper'])
+    mixed_cached, mixed_output = float(pair['mixed_all_input_cached_hypothetical_usd']), float(pair['mixed_output_usd'])
+    saved = float(pair['observed_savings_percent_floor'])
+    saved_cached = float(pair['mixed_all_input_cached_savings_percent_floor'])
     break_even = float(pair['astra_price_break_even_percent_of_frozen']) / 100
-    losses = {(e['model'], e['lost_reusable_prefix_tokens']): float(e['cache_write_premium_usd']) for e in data['prefix_examples']}
     for lang in ['zh', 'en']:
         zh = lang == 'zh'
         # 1. One cold switch spread across the turn.
@@ -117,39 +119,27 @@ def render_cache_cost(out):
                                'Turn hit rate = cached input ÷ all input. Rule: with n calls, one switch lowers it by at most 1/n.', 13, fill='#536079'))
         _write_svg(out / f'cache-amortization-{lang}.svg', parts)
 
-        # 2. Per-task cost, headroom and cache losses on one dollar scale.
-        parts = _svg_frame('一次缓存损失，远小于混合路由省下的钱' if zh else 'A cache loss is small next to the routing savings',
-                           'Astra × Qwen 实验第 3 组（两组达标运行中余量较小的一组），美元/单' if zh else
-                           'Astra × Qwen experiment, pair 3 (the accepted pair with the smaller margin), USD per task', 490)
-        x0, x1, scale = 330, 860, 2.2
+        # 2. The same mixed run with and without a perfect cache, next to all-Astra.
+        points = round(saved_cached - saved)
+        parts = _svg_frame(f'缓存全命中，也只多省约 {points} 个百分点' if zh else f'A perfect cache would add only about {points} points of savings',
+                           'Astra × Qwen 实验第 3 组（两组达标运行中缓存影响较大的一组），美元/单' if zh else
+                           'Astra × Qwen experiment, pair 3 (the accepted pair where caching matters more), USD per task', 330)
+        x0, x1, scale = 380, 860, 2.2
         bx = lambda v: x0 + v / scale * (x1 - x0)
-        bars = [('整单成本' if zh else 'Whole-task cost', None, None),
-                ('全用 Astra（实际）' if zh else 'All Astra (recorded)', strong_lower, '#5564bd'),
-                ('全用 Astra（假设输入全命中缓存）' if zh else 'All Astra, every input cached', ideal, '#8592d6'),
-                ('HiRoute 混合（Qwen 零缓存命中）' if zh else 'HiRoute mixed, Qwen with no cache hits', mixed, '#078677'),
-                ('一次缓存损失（按缓存写入价）' if zh else 'One cache loss (cache-write price)', None, None),
-                ('Astra 丢 10 万 token' if zh else 'Astra loses 100,000 tokens', losses[('gpt-6-astra', 100_000)], '#d0652a'),
-                ('Astra 丢 1 万 token' if zh else 'Astra loses 10,000 tokens', losses[('gpt-6-astra', 10_000)], '#d0652a'),
-                ('Qwen 丢 10 万 token' if zh else 'Qwen loses 100,000 tokens', losses[('qwen3.8-flash', 100_000)], '#d0652a')]
-        y = 104
-        positions = {}
-        for label, value, color in bars:
-            if value is None:
-                y += 14
-                parts.append(_svg_text(32, y + 12, label, 15, weight=700, fill='#536079'))
-                y += 26
-                continue
+        bars = [('全用 Astra（实际记录）' if zh else 'All Astra (recorded)', strong_lower, '#5564bd', None),
+                ('HiRoute 混合（实际记录，Qwen 零缓存命中）' if zh else 'HiRoute mixed (recorded, no Qwen cache hits)', mixed, '#078677', saved),
+                ('HiRoute 混合（假设输入全部命中缓存）' if zh else 'HiRoute mixed, if every input hit the cache', mixed_cached, '#5fb8a9', saved_cached)]
+        y = 110
+        for label, value, color, percent in bars:
             parts.append(_svg_text(x0 - 12, y + 21, label, 14, 'end'))
-            parts.append(f'<rect x="{x0}" y="{y + 4}" width="{max(bx(value) - x0, 2):.1f}" height="26" rx="4" fill="{color}"/>')
-            parts.append(_svg_text(max(bx(value), x0 + 2) + 8, y + 22, f'${value:.3f}' if value >= .01 else f'${value:.4f}', 14, weight=700))
-            positions[label] = y
-            y += 40
-        ideal_y, mixed_y = positions[bars[2][0]], positions[bars[3][0]]
-        parts.append(f'<path d="M {bx(mixed) + 76:.1f} {mixed_y + 17} H {bx(ideal):.1f} V {ideal_y + 30}" fill="none" stroke="#078677" stroke-width="2" stroke-dasharray="6 4"/>')
-        parts.append(_svg_text(bx(ideal) + 12, mixed_y + 22, (f'余量 ${ideal - mixed:.2f}' if zh else f'Headroom ${ideal - mixed:.2f}'), 15, weight=700, fill='#056356'))
-        parts.append(_svg_text(32, y + 24, '余量 = 全用 Astra（输入全命中缓存）− 混合路由上限。混合方案在不亏的前提下，还能额外承受这么多开销。' if zh else
-                               'Headroom = all-Astra with every input cached − mixed upper bound: the extra overhead mixed routing can absorb.', 13, fill='#536079'))
-        _write_svg(out / f'cache-headroom-{lang}.svg', parts)
+            parts.append(f'<rect x="{x0}" y="{y + 4}" width="{bx(value) - x0:.1f}" height="26" rx="4" fill="{color}"/>')
+            parts.append(_svg_text(bx(value) + 8, y + 22, f'${value:.3f}', 14, weight=700))
+            if percent is not None:
+                parts.append(_svg_text(bx(max(mixed, mixed_cached)) + 84, y + 22, (f'省 {percent:.0f}%' if zh else f'{percent:.0f}% saved'), 15, weight=700, fill='#056356'))
+            y += 52
+        parts.append(_svg_text(32, y + 30, f'缓存只给输入打折。即使输入全部命中，混合路由剩下的 ${mixed_cached:.3f} 里仍有 ${mixed_output:.3f} 是输出费用。' if zh else
+                               f'Caching only discounts input. Even fully cached, ${mixed_output:.3f} of the remaining ${mixed_cached:.3f} is output.', 13, fill='#536079'))
+        _write_svg(out / f'cache-impact-{lang}.svg', parts)
 
         # 3. Hypothetical Astra price cuts: all-Astra cost as a multiple of mixed routing.
         parts = _svg_frame('Astra 要降价约 95%，两种方案才打平' if zh else 'Astra would need a ~95% price cut to break even',

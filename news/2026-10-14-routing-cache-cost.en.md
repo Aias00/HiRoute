@@ -1,15 +1,15 @@
-# Switching Models Loses Cache. Does Smart Routing Still Save Money?
+# Switching Models Loses Cache, Not the Savings
 
 Smart routing gives different work to different models. A natural question follows: once the model changes, the cache built up so far is no longer usable. Could that loss eat the money routing saves?
 
 **Short answer: some cache is lost, but nowhere near enough to cancel the savings.**
 
-- **Switches are rare to begin with.** HiRoute keeps the same model through consecutive tool calls within a turn, and only reconsiders at points such as a new user message or context compaction.
+- **Switches are rare to begin with.** HiRoute keeps the same model through consecutive tool calls within a turn, and only reconsiders at points such as a new user message or context compaction. In one 40-request coding run, 35 requests simply kept the existing choice.
 - **The loss happens once and gets spread out.** Only the first request after a switch misses the cache; later calls use the cache again.
 - **Switching to a cheaper model can even lower the cost of old context.** A cheap model processing it from scratch often costs less than an expensive model reading its cache.
-- **The whole-task margin is large.** In the Astra × Qwen experiment, even if every all-Astra input token hit the cache, mixed routing was still about 90% cheaper per task; Astra would need a price cut of about 95% for the two to break even.
+- **Caching moves the saving by only a few points.** In the Astra × Qwen experiment, mixed routing saved about 91% even though its Qwen calls hit no cache at all. Had every input hit the cache, the saving would have been about 94%.
 
-HiRoute manages these costs at its switching points, so you do not need to work out the math before using Smart Saving. The sections below explain each point.
+HiRoute decides when switches happen, so you do not need to work out the math before turning on Smart saving. The sections below explain each point.
 
 ## First: what does caching save?
 
@@ -52,28 +52,9 @@ When context grows too long, the agent compresses early history into a summary. 
 
 Switching at that point therefore loses only this remaining prefix, not the whole history. **Continuous execution reduces how often you switch, and switching at compaction reduces how much each switch loses.**
 
-## In dollars: what one loss costs
+## Switching to the cheaper model improves the bill
 
-The figures below use the frozen prices from the Astra × Qwen experiment, in USD per million tokens. Qwen's CNY prices are converted at a fixed exchange rate:
-
-| Per million tokens | Astra | Qwen 3.8 Flash |
-| --- | ---: | ---: |
-| Ordinary input | 10 | About 0.12 |
-| Cache read | 1 | About 0.015 |
-| Cache write | 12.5 | About 0.19 |
-| Output | 50 | About 0.40 |
-
-Estimated on the expensive side, one cache loss adds:
-
-- **Astra loses 100,000 tokens:** about **$1.15**.
-- **Astra loses 10,000 tokens** (for example, only system instructions and tools left after compaction): about **$0.115**.
-- **Qwen loses 100,000 tokens:** under **2 cents**.
-
-The cost is paid once. A long cached prefix is genuinely worth money, which is why HiRoute works to keep execution continuous.
-
-### Switching to the cheaper model improves the bill
-
-A real switch also involves the price difference between models. For the same 100,000-token old prefix:
+A real switch also involves the price difference between models. In the Astra × Qwen experiment's frozen prices, Qwen 3.8 Flash costs roughly 1% of Astra per token. For the same 100,000-token old prefix:
 
 | Direction | No switch: original model reads cache | Switch: new model processes again | Result |
 | --- | ---: | ---: | --- |
@@ -82,7 +63,7 @@ A real switch also involves the price difference between models. For the same 10
 
 **Smart routing saves money mainly by moving work to the cheaper model, and in that direction the cache loss is close to negligible; moving up to Astra pays for stronger capability.**
 
-## Back to the whole task: savings far exceed cache overhead
+## Back to the whole task: caching changes the savings by a few points
 
 What ultimately matters is the bill for the whole task. In the [Astra × Qwen experiment](https://hiroute.ai/en/news/astra-qwen-smart-routing/), Qwen handled six source-verification components and Astra handled the critical decision, compared against using only Astra. In two of three paired runs, both approaches met the acceptance standard; the remaining pair's results are kept in full in the [experiment record](../experiments/cases/research-cost-quality/README.md).
 
@@ -91,19 +72,17 @@ What ultimately matters is the bill for the whole task. In the [Astra × Qwen ex
 | Pair 2 | About $0.147 | About $1.84 | 92% |
 | Pair 3 | About $0.178 | About $2.07 | 91% |
 
-Now give all-Astra the most favorable case: every input hits the cache, while Qwen in mixed routing never hits it at all. Mixed routing is still about 90% cheaper per task, with about $1.65 of headroom left. However good the cache, it only lowers input charges, not output.
+These mixed-routing bills include no Qwen cache discount at all: every Qwen call recorded zero cache hits. What if mixed routing had never lost a single cache hit?
 
-[![Per-task cost compared with one cache loss: all Astra costs about $1.83–$2.07, mixed routing about $0.178, leaving about $1.65 of headroom; losing 10,000 tokens of Astra cache adds only $0.115](assets/cache-headroom-en.svg)](assets/cache-headroom-en.svg)
+[![The same mixed run with and without a perfect cache: all Astra $2.067, mixed routing $0.178 (91% saved), mixed routing with every input cached $0.124 (94% saved)](assets/cache-impact-en.svg)](assets/cache-impact-en.svg)
 
-Losing 10,000 tokens of Astra cache once uses about 7% of that headroom; the full headroom equals roughly another 140,000 tokens of Astra cache rebuilding.
+Pair 3 would fall from $0.178 to $0.124, and the saving would rise from 91% to 94%; pair 2 would go from 92% to 93%. **In this experiment, however much cache mixed routing keeps or loses, the saving stays above 90%.** The reason is simple: caching only discounts input, and most of a cheap model's bill is output.
 
 ## What if the primary model gets cheaper?
 
-Primary models often get cheaper. Suppose every Astra price falls by the same proportion and everything else stays the same:
-
 [![All-Astra cost as a multiple of mixed routing as Astra's price falls: about 10.3× today, about 3.4× at 20%, and break-even at about 5.1%](assets/cache-price-break-even-en.svg)](assets/cache-price-break-even-en.svg)
 
-Halve Astra's price and all-Astra still costs about 6.8 times as much as mixed routing; cut it by 80% and it is still about 3.4 times. **Only a price cut of about 95% brings the two to break-even** — and that is with the calculation most favorable to all-Astra.
+Suppose every Astra price falls by the same proportion. Even calculated in the way most favorable to all-Astra, with every one of its inputs hitting the cache, **Astra would need a price cut of about 95% before the two cost the same.**
 
 ## Bottom line: keep the economy model working, upgrade when needed
 
@@ -114,3 +93,7 @@ HiRoute aims to let an economy model keep handling the work it suits, and bring 
 - **Upgrade when needed** to protect the delivery standard.
 
 Cache losses are one-time, bounded costs, and HiRoute controls when switches happen. **Moving suitable work to a clearly cheaper model saves far more than cache rebuilding, routing decisions, and rework cost.** In the experiment above, the gap is about an order of magnitude.
+
+## Try it
+
+Choose **Smart saving** on the Smart routing page, then add your **Economy models** and **Primary models**. After a task runs, open **Run record** from its session to see each request's cache hits, actual model and estimated cost. See the [model-routing guide](https://hiroute.ai/en/docs/model-routing/) for details.

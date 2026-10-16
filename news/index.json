@@ -3,16 +3,16 @@
     "slug": "routing-cache-cost",
     "date": "2026-10-14",
     "title": {
-      "zh": "切换模型会丢缓存，智能路由还省钱吗？",
-      "en": "Switching Models Loses Cache. Does Smart Routing Still Save Money?"
+      "zh": "切换模型会丢缓存，但省下的钱丢不掉",
+      "en": "Switching Models Loses Cache, Not the Savings"
     },
     "shortTitle": {
       "zh": "模型切换、缓存与整单成本",
       "en": "Model switching, caching, and task cost"
     },
     "description": {
-      "zh": "切换模型损失的缓存有多少、值多少钱，为什么抵不掉智能路由省下的费用：用 Astra 与 Qwen 3.8 Flash 的实验数据把账算清楚。",
-      "en": "How much cache a model switch loses, what it costs, and why it does not cancel smart-routing savings, worked through with the Astra and Qwen 3.8 Flash experiment."
+      "zh": "为什么切换模型丢掉的缓存抵不掉智能路由省下的钱：在 Astra 与 Qwen 3.8 Flash 实验中，就算缓存全部命中，省钱比例也只变化几个百分点。",
+      "en": "Why the cache lost in a model switch does not cancel smart-routing savings: in the Astra and Qwen 3.8 Flash experiment, even a perfect cache changes the saving by only a few points."
     },
     "files": {
       "zh": "2026-10-14-routing-cache-cost.zh-CN.md",
