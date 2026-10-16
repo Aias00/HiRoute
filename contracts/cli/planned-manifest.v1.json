@@ -5,7 +5,7 @@
   },
   "product_contract_revision": "487a807c8dc25cfb24e8b097882cd3bb9716a009",
   "proposal_map_revision": "ab4da93cc49c6ec56a01e046230411ff1ca82300",
-  "descriptor_digest": "sha256:281d84bd93419c1b816e585a05b1f91393c44aeb361238a56763efb5e1f18939",
+  "descriptor_digest": "sha256:84f34e9e1d06a2fa871d75d64591f2409ca9813cc820b925359f7222ce1b09c3",
   "visibility": "planned",
   "commands": [
     {
@@ -1317,17 +1317,20 @@
       "scope": "p0",
       "lifecycle": "released",
       "kind": "query",
-      "request_schema": "hiroute.empty-request/v1",
+      "request_schema": "hiroute.compute-connection-options-request/v1",
       "response_schema": "hiroute.compute-connection-options/v1",
       "effect": "none",
       "network": "local_control_only",
       "model_call": "never",
-      "stdin_channels": [],
+      "stdin_channels": [
+        "request_stdin",
+        "request_file"
+      ],
       "idempotency": "not_applicable",
       "help": {
         "purpose": "List trusted Release Connector Registry connection options.",
-        "usage": "hiroute compute connection options [typed options] --non-interactive --output json",
-        "arguments_and_options": "Only the typed options declared by the generated request schema are accepted; arbitrary patches, URLs, shell, or plaintext Secret argv are forbidden.",
+        "usage": "hiroute compute connection options [--request-file <PATH> | (--request-stdin | --request-file <PATH>)] --output json",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. Only the typed options declared by the generated request schema are accepted; arbitrary patches, URLs, shell, or plaintext Secret argv are forbidden.",
         "effects": "Read-only; no product side effect.",
         "network_and_model_use": "No model use; any external dependency is declared by the typed Application operation.",
         "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
