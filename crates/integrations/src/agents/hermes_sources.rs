@@ -153,17 +153,33 @@ fn snapshot(
             reason: "invalid_custom_provider_list",
         });
     }
+    // Hermes also accepts a bare custom endpoint in the main model block. Keep its
+    // selector distinct from named providers, whose native precedence is unchanged.
+    if main_provider == Some("custom")
+        && text(&main["base_url"]).is_some()
+        && !providers
+            .iter()
+            .any(|(id, _, _)| normalized_name(id) == "custom")
+    {
+        providers.push(("custom".into(), "model".into(), main));
+    }
     if providers.len() > 128 {
         return Err(hermes_error("provider bound"));
     }
     for (id, definition, entry) in providers {
+        let bare_custom = definition == "model";
         if id.starts_with("hiroute-") {
             continue;
         }
         if !enabled(entry) {
             continue;
         }
-        let Some((endpoint_field, endpoint)) = selected(entry, &["api", "url", "base_url"]) else {
+        let endpoint_fields: &[&str] = if bare_custom {
+            &["base_url"]
+        } else {
+            &["api", "url", "base_url"]
+        };
+        let Some((endpoint_field, endpoint)) = selected(entry, endpoint_fields) else {
             facts.diagnostics.push(HermesSourceDiagnosticV1 {
                 provider_id: Some(id),
                 model_id: None,
@@ -171,7 +187,10 @@ fn snapshot(
             });
             continue;
         };
-        let native_protocol = protocol(entry);
+        // Bare custom Responses has native URL-dependent fallbacks; only the explicit
+        // Chat path is qualified here. Do not infer a protocol from its endpoint.
+        let native_protocol = protocol(entry)
+            .filter(|value| !bare_custom || *value == UpstreamProtocol::ChatCompletions);
         let configured_main = main_provider.is_some_and(|value| {
             value == id
                 || value
@@ -261,7 +280,7 @@ fn snapshot(
             ]
             .iter()
             .any(|field| declaration.get(*field).is_some());
-            let main_override = configured_main
+            let main_override = !bare_custom && configured_main
                 && main_model == Some(model_id.as_str())
                 // Named providers resolve their transport from the provider definition.
                 // A stale model.api_mode does not override that native path.
@@ -270,6 +289,13 @@ fn snapshot(
                     .any(|field| main.get(*field).is_some_and(|v| text(v).is_some()));
             let unsupported = pool_present
                 || secret_sources
+                || (bare_custom
+                    && environment
+                        .get("CUSTOM_BASE_URL")
+                        .is_some_and(|v| !v.is_empty()))
+                || (bare_custom
+                    && text(&entry["api_key"]).is_none()
+                    && text(&entry["api"]).is_some())
                 || model_override
                 || main_override
                 || entry.get("oauth").is_some()
@@ -385,7 +411,11 @@ fn credential(
     DiscoveredAuthSource,
     &'static str,
 ) {
-    if let Some(name) = text(&entry["key_env"]) {
+    // The native bare-custom resolver prefers model.api_key to model.key_env.
+    // Named provider precedence remains owned by the existing provider reader.
+    if let Some(name) = text(&entry["key_env"])
+        .filter(|_| definition != "model" || text(&entry["api_key"]).is_none())
+    {
         if let Some(value) = environment.get(name).filter(|value| !value.is_empty()) {
             return (
                 Some(Zeroizing::new(value.to_string())),

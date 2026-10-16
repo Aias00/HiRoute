@@ -35,6 +35,86 @@ providers:
 "#;
 
 #[test]
+fn bare_custom_main_chat_is_discovered_with_native_inline_key_precedence() {
+    let root = tempfile::tempdir().unwrap();
+    let config = "model:\n  provider: custom\n  default: declared-first\n  base_url: https://example.invalid/v1\n  api_mode: chat_completions\n  api_key: inline-fixture-key\n  key_env: OTHER_KEY\n  context_length: 64000\n";
+    write(root.path(), "config.yaml", config);
+    write(root.path(), ".env", "OTHER_KEY=env-fixture-key\n");
+    let selected_target = target(root.path());
+    let discovery = hermes_api_sources(&selected_target).unwrap();
+    assert!(discovery.diagnostics.is_empty());
+    let point = crate::native_api_connection_points(discovery.sources).remove(0);
+    assert_eq!(point.sources.len(), 1);
+    let source = &point.sources[0];
+    assert_eq!(source.protocol, Some(UpstreamProtocol::ChatCompletions));
+    let binding = source.point_binding.as_ref().unwrap();
+    assert_eq!(binding.endpoint_selector, "model/base_url");
+    assert_eq!(
+        binding.configured_default_model_id.as_deref(),
+        Some("declared-first")
+    );
+    let (_, secret) = read_hermes_api_source(&selected_target, source).unwrap();
+    assert_eq!(secret.expose(), b"inline-fixture-key");
+    assert!(
+        !serde_json::to_string(source)
+            .unwrap()
+            .contains("fixture-key")
+    );
+    assert_eq!(
+        fs::read_to_string(root.path().join("config.yaml")).unwrap(),
+        config
+    );
+    write(
+        root.path(),
+        "config.yaml",
+        &config.replace("inline-fixture-key", "changed-fixture-key"),
+    );
+    assert!(read_hermes_api_source(&selected_target, source).is_err());
+}
+
+#[test]
+fn bare_custom_main_keeps_unresolved_protocol_and_endpoint_overrides_unavailable() {
+    let root = tempfile::tempdir().unwrap();
+    let config = "model: {provider: custom, default: declared, base_url: 'https://example.invalid/v1', api_mode: chat_completions, key_env: MAIN_KEY}\n";
+    write(root.path(), "config.yaml", config);
+    write(root.path(), ".env", "MAIN_KEY=profile-fixture-key\n");
+    let selected_target = target(root.path());
+    let source = hermes_api_sources(&selected_target)
+        .unwrap()
+        .sources
+        .remove(0);
+    let (_, secret) = read_hermes_api_source(&selected_target, &source).unwrap();
+    assert_eq!(secret.expose(), b"profile-fixture-key");
+    write(
+        root.path(),
+        ".env",
+        "MAIN_KEY=profile-fixture-key\nCUSTOM_BASE_URL=https://other.invalid\n",
+    );
+    let overridden = hermes_api_sources(&selected_target).unwrap();
+    assert!(
+        overridden
+            .diagnostics
+            .iter()
+            .any(|d| d.reason == "unsupported_native_composition")
+    );
+    assert!(read_hermes_api_source(&selected_target, &overridden.sources[0]).is_err());
+    write(root.path(), ".env", "MAIN_KEY=profile-fixture-key\n");
+    write(
+        root.path(),
+        "config.yaml",
+        &config.replace("chat_completions", "responses"),
+    );
+    let unresolved = hermes_api_sources(&selected_target).unwrap();
+    assert!(
+        unresolved
+            .diagnostics
+            .iter()
+            .any(|d| d.reason == "native_protocol_unresolved")
+    );
+    assert!(read_hermes_api_source(&selected_target, &unresolved.sources[0]).is_err());
+}
+
+#[test]
 fn known_channel_models_follow_native_yaml_precedence_without_exposing_channels_or_secrets() {
     let root = tempfile::tempdir().unwrap();
     let config = "model: {default: managed-alias}\nplatforms:\n  discord:\n    channel_overrides: {}\n  telegram:\n    enabled: true\n  slack:\n    channel_overrides:\n      private-channel-id: {model: native-selection, api_key: private-fixture-key}\n";

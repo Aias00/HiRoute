@@ -45,6 +45,10 @@ interpreter/package paths.
   credential pools and unresolved composition remain unavailable. Unrelated native
   pools do not replace a selected custom provider's key. Managed HiRoute providers
   cannot become recursive upstream sources.
+  The bare `model.provider: custom` form also supports an explicit Chat protocol,
+  `model.base_url`, and a static inline key or profile `key_env`. Its native inline
+  key precedence is preserved. URL-dependent protocol fallbacks and a profile
+  `CUSTOM_BASE_URL` override remain unresolved rather than guessing a connection.
 
 The installed management Skill is independent of the model connection. Prepare it
 with `management_skill: configure` and `model: keep`; restore either facet without
