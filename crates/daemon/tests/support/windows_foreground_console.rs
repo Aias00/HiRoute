@@ -165,10 +165,15 @@ fn natural_case(event: &str) {
                 break;
             }
         }
-        assert!(
-            Instant::now() < deadline,
-            "the exact held foreground Job must stop naturally"
-        );
+        if Instant::now() >= deadline {
+            eprintln!(
+                "actual foreground console facts: event={event} ready=true last_phase={} root_exit={:?} job_empty={:?}",
+                phase.load(Ordering::Acquire),
+                child.exit_code().ok().flatten(),
+                child.empty().ok()
+            );
+            panic!("the exact held foreground Job must stop naturally");
+        }
         thread::sleep(Duration::from_millis(10));
     }
     let output = output.join().unwrap();
