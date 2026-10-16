@@ -11,6 +11,10 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 pub(super) fn assert_committed(product: &InstalledProduct, plan: &str, count: usize, smart: bool) {
     let deadline = Instant::now() + Duration::from_secs(40);
+    // The scored first stage can appear before the last request is ingested.
+    // Keep the same receipt/value assertions and shared deadline, but await
+    // every actual request before checking the complete quality projection.
+    assert_usage_committed(product, plan, count, smart, deadline);
     let quality = loop {
         let page = quality_page(
             product,
@@ -28,6 +32,12 @@ pub(super) fn assert_committed(product: &InstalledProduct, plan: &str, count: us
         );
         thread::sleep(Duration::from_millis(100));
     };
+    eprintln!(
+        "Windows route quality checkpoint: smart={smart}, requests={count}, samples={}, scored={}, unrated={}",
+        quality.samples.len(),
+        quality.summary.scored_stage_count,
+        quality.summary.unrated_stage_count
+    );
     assert!(
         quality.summary.unrated_stage_count > 0,
         "missing later assessments must remain unrated"
@@ -129,7 +139,15 @@ pub(super) fn assert_committed(product: &InstalledProduct, plan: &str, count: us
             .as_ref()
             .is_some_and(|assessment| assessment.score < 0.5 && !assessment.partial)
     }));
+}
 
+fn assert_usage_committed(
+    product: &InstalledProduct,
+    plan: &str,
+    count: usize,
+    smart: bool,
+    deadline: Instant,
+) {
     let mut observed = BTreeSet::new();
     let mut observed_usage = (0, 0);
     while observed.len() < count {
