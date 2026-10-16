@@ -90,7 +90,7 @@ fn rebase(value: &mut Value, prefix: &str) {
 }
 
 macro_rules! request { ($($ty:ty),+ $(,)?) => { alternatives(vec![$(schema::<$ty>(false)),+]) }; }
-macro_rules! response { ($($ty:ty),+ $(,)?) => { alternatives(vec![$(schema::<MachineEnvelopeV2<$ty>>(true)),+, schema::<MachineEnvelopeV2<CliInputDiagnosticDataV1>>(true)]) }; }
+macro_rules! response { ($($ty:ty),+ $(,)?) => { alternatives(vec![$(schema::<MachineEnvelopeV2<$ty>>(true)),+, schema::<MachineEnvelopeV2<CliInputDiagnosticDataV1>>(true), schema::<MachineEnvelopeV2<CliRequiredChoicesV1>>(true)]) }; }
 
 pub fn command_schemas(command_id: &str) -> Option<CommandSchemasV1> {
     let (mut request, mut response) = match command_id {
@@ -180,7 +180,9 @@ pub fn command_schemas(command_id: &str) -> Option<CommandSchemasV1> {
             response!(
                 ComputeConnectionPreviewResultV1,
                 ComputeSavePreviewV2,
-                ComputeSubscriptionCheckPreviewV2
+                ComputeSubscriptionCheckPreviewV2,
+                CliPreparedPreviewV1<ComputeConnectionPreviewResultV1>,
+                CliPreparedPreviewV1<ComputeSavePreviewV2>
             ),
         ),
         "compute.connection.apply" => (
@@ -215,7 +217,8 @@ pub fn command_schemas(command_id: &str) -> Option<CommandSchemasV1> {
                 PlanContentPreviewV2,
                 PlanDraftPreviewV1,
                 PlanLifecyclePreviewV1,
-                PublicationCheckpointPreviewV1
+                PublicationCheckpointPreviewV1,
+                CliPreparedPreviewV1<PlanContentPreviewV2>
             ),
         ),
         "routing.apply" => (
@@ -232,11 +235,18 @@ pub fn command_schemas(command_id: &str) -> Option<CommandSchemasV1> {
                 AgentConnectionPreviewRequestV1,
                 AgentSettingsPreviewRequestV2
             ),
-            response!(AgentConnectionPreviewResultV1, AgentSettingsPreviewV2),
+            response!(
+                AgentConnectionPreviewResultV1,
+                AgentSettingsPreviewV2,
+                CliPreparedPreviewV1<AgentSettingsPreviewV2>
+            ),
         ),
         "agents.restore.preview" => (
             request!(AgentSettingsPreviewRequestV2),
-            response!(AgentSettingsPreviewV2),
+            response!(
+                AgentSettingsPreviewV2,
+                CliPreparedPreviewV1<AgentSettingsPreviewV2>
+            ),
         ),
         "agents.connect.apply" => (
             request!(

@@ -4,6 +4,27 @@ use hiroute_domain::{AgentSurfaceCheckStateV1, DecisionServiceV1, GatewayPublica
 use serde::Serialize;
 
 #[derive(schemars::JsonSchema, Serialize)]
+pub struct CliPreparedPreviewV1<T> {
+    pub schema: String,
+    pub preview: T,
+    pub submission: CliPreparedSubmissionV1,
+}
+#[derive(schemars::JsonSchema, Serialize)]
+pub struct CliPreparedSubmissionV1 {
+    pub apply_file: String,
+    pub command_id: String,
+    pub arguments: Vec<String>,
+    pub operation_lookup: OperationIdempotencyLookupV1,
+    pub state: String,
+}
+#[derive(schemars::JsonSchema, Serialize)]
+pub struct CliRequiredChoicesV1 {
+    pub schema: String,
+    pub required_choices: Vec<String>,
+    pub available: serde_json::Value,
+}
+
+#[derive(schemars::JsonSchema, Serialize)]
 pub struct DecisionServicesListV1 {
     pub services: Vec<DecisionServiceV1>,
 }

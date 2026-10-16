@@ -1,10 +1,10 @@
 //! Non-secret settings Preview projections; planning stays in Application.
 use crate::*;
 use hiroute_domain::AgentModelGrantV2;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-#[derive(schemars::JsonSchema, Clone, Debug, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Serialize, Deserialize)]
 pub struct AgentSettingsPreview {
     pub context_windows: BTreeMap<String, u64>,
     pub claude_context_window: Option<u64>,
@@ -19,7 +19,7 @@ pub struct AgentSettingsPreview {
     pub unproven_native_model_ids: Vec<String>,
 }
 
-#[derive(schemars::JsonSchema, Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct AgentSettingsBlock {
     pub facet: AgentSettingsFacet,
     pub reason: SettingsBlockReason,
@@ -28,7 +28,7 @@ pub struct AgentSettingsBlock {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub model_ids: Vec<String>,
 }
-#[derive(schemars::JsonSchema, Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SettingsBlockReason {
     QoderDefaultInUse,
@@ -48,7 +48,7 @@ pub enum SettingsBlockReason {
     SkillFileConflict,
 }
 
-#[derive(schemars::JsonSchema, Serialize)]
+#[derive(schemars::JsonSchema, Serialize, Deserialize)]
 pub struct AgentSettingsPreviewV2 {
     #[serde(flatten)]
     pub preview: AgentSettingsPreview,
@@ -60,12 +60,12 @@ pub struct AgentSettingsPreviewV2 {
     pub collaboration_effect: Option<AgentCollaborationEffectV2>,
     pub model_effect: AgentModelEffectPreviewV2,
 }
-#[derive(schemars::JsonSchema, Serialize)]
+#[derive(schemars::JsonSchema, Serialize, Deserialize)]
 pub struct AgentResidentServicePreviewV2 {
     pub login_item_required: bool,
     pub login_item_removal_required: bool,
 }
-#[derive(schemars::JsonSchema, Serialize)]
+#[derive(schemars::JsonSchema, Serialize, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum AgentModelEffectPreviewV2 {
     Keep,
@@ -88,7 +88,7 @@ pub enum AgentModelEffectPreviewV2 {
     },
 }
 
-#[derive(schemars::JsonSchema, Serialize)]
+#[derive(schemars::JsonSchema, Serialize, Deserialize)]
 pub struct AgentNativeAdapterPreviewV1 {
     pub resources: String,
     pub runtime_loading: AgentNativeRuntimeLoadingV1,

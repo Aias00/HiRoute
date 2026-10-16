@@ -14,6 +14,7 @@ mod help;
 mod host_commands;
 mod managed_launch;
 mod observation;
+mod quickstart;
 mod request_input;
 mod service;
 mod worker;
@@ -111,6 +112,9 @@ where
     if let Some(execution) = collaboration::execute(&path_and_options, &globals) {
         return execution;
     }
+    if let Some(execution) = quickstart::execute(&path_and_options, &globals) {
+        return execution;
+    }
     if globals.help {
         if let Some(document) = help::family(&path_and_options) {
             return CliExecution {
@@ -136,6 +140,10 @@ where
     }
     if globals.output != args::OutputMode::Json {
         return failure(ErrorCode::InvalidArguments, globals.request_id);
+    }
+    if let Some(execution) = quickstart::preview_command(&descriptor.command_id, options, &globals)
+    {
+        return execution;
     }
     match descriptor.command_id.as_str() {
         "schema.list" => execute_schema_list(options, globals.request_id),
@@ -692,6 +700,7 @@ pub fn root_help() -> String {
         "protected-input".into(),
         "service".into(),
         "subscription-proxy".into(),
+        "quickstart".into(),
     ]);
     families.sort();
     families.dedup();

@@ -34,6 +34,16 @@ pub(super) fn command_network(command_id: &str, kind: CommandKind) -> &'static s
     }
 }
 pub(super) fn automation(command_id: &str) -> &'static str {
+    if matches!(
+        command_id,
+        "routing.preview"
+            | "compute.connection.preview"
+            | "agents.connect.preview"
+            | "agents.restore.preview"
+    ) {
+        return "Convenience flags and JSON input are alternatives. --apply-file creates a new private exact Apply request, never overwrites, and performs no Apply. Review effects, then submit that file with the matching Apply command. After uncertain submission, use submission.operation_lookup with operations find or resend the identical file. Core supported variants are compute save, Plan content v2 and Agent settings v2. Routing: repeat economy/primary flags to preserve order; select --decision local_rules or --decision-service ID@REVISION explicitly for a new smart Plan. Native choices: Hermes requires --protocol; Codex requires --native-models preserve_available|hiroute_only and --native-default preserve_native|plan; Claude requires explicit --preset opus|sonnet|haiku; Qoder/Pi/DSH require --protocol and add entries without claiming a native default. Missing choices remain unresolved. --facet may repeat to restore selected facets; other facets stay untouched. Desktop resident-service evidence must come from Desktop, never a fabricated CLI declaration.";
+    }
+
     if command_id == "agents.connect.status" {
         return "Use --effective --context ID --plan ID for separate saved, native-loading, selection and exact request evidence. Unknown loading stays unknown. This read-only query never restarts an Agent or calls a model; recorded outcomes apply only to the identified request/session.";
     }
