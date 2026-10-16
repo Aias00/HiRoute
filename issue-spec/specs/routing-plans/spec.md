@@ -157,7 +157,7 @@ this setting changes neither client timeout nor model output limits.
 
 ### Requirement: Delegation configuration remains independently usable
 
-Delegation starts off. Enabling reveals the [supported Harnesses](../agent-delegation/spec.md)
+Delegation MUST start off. Enabling reveals the [supported Harnesses](../agent-delegation/spec.md)
 with readable names/logos and required installation components. Selection is single;
 Qoder/DSH need their native CLI, Pi needs selected CLI/Node, and adapter Harnesses
 retain their own rules. Disabling hides but retains selection and must not start
@@ -165,10 +165,13 @@ new discovery from stale UI callbacks. Missing Worker dependencies do not preven
 saving/publishing an otherwise valid model route. Installation guidance is explicit,
 copyable, platform-specific, and never auto-runs.
 
-Smart-saving/custom follow-up preference defaults to allowing model changes on a
-new draft. Turning it off prioritizes the current candidate only within the newly
-selected group; it does not stop fresh user-turn judgment or availability relay.
-Saved explicit values remain unchanged. Custom default category is a separate setting.
+#### Scenario: Worker configuration is independent of follow-up continuity
+
+- **WHEN** delegation is disabled or Worker dependencies are missing
+- **THEN** the user MUST still be able to save or publish an otherwise valid model route without a follow-up preference.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/133#issuecomment-6220134774
 
 ### Requirement: Installed consumer budgets are protected at publication
 
@@ -195,6 +198,35 @@ arrays remain compatible and this flag enters no confirmation digest or authorit
   guidance to remove the model route, update the plan, and reconnect. Once the last
   effective consumer is restored/removed, stale historical configuration cannot
   continue blocking publication.
+
+### Requirement: Follow-up continuity is automatic within the selected group
+
+Desktop and CLI authoring MUST NOT offer a follow-up model-switching preference for
+smart-saving or custom-branch Plans. Each new user message still rejudges the group;
+a valid held candidate is always preferred only inside that selected group. The
+custom default category remains a separate setting. Existing hold invalidation,
+authorization, eligibility and availability relay follow request-routing.
+
+Current editor and authoring contracts MUST accept an omitted
+`reselect_on_user_message`. Supported released Plans, drafts, materialized
+publications and CLI requests containing either boolean value MUST continue to
+load, preview, save and publish. The legacy value has no routing effect and MUST
+remain round-trippable where sealed digests or version consistency depend on it;
+stores are not rewritten solely to drop it. The field is optional and deprecated
+in current CLI schemas. Fixed-model, ordered and free-first behavior is unchanged.
+
+#### Scenario: A route is edited without a follow-up control
+
+- **WHEN** a user creates or edits smart saving or custom branches
+- **THEN** Desktop MUST show no follow-up switching control or empty follow-up section, and new input can omit the legacy field.
+
+#### Scenario: A supported old Plan is published again
+
+- **WHEN** a supported released editor or draft containing the legacy field as true or false is reopened and published
+- **THEN** the operation MUST succeed, preserve required sealed-data consistency and apply unconditional within-group continuity.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/133#issuecomment-6220134774
 
 ## Implementation references
 

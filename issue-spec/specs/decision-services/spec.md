@@ -78,13 +78,22 @@ Single-group categories record assessment without upgrading, and primary low sco
 cannot create a third tier or change category.
 
 Each new user turn rejudges category/degree; same-turn tool continuation/replay
-inherits a frozen decision while history/authority remain continuous. ContextHold
-preferences are constrained to the newly selected group. Regular exhaustion may
+inherits a frozen decision while history/authority remain continuous. A valid ContextHold
+MUST always prefer its candidate within the newly selected group, independently
+of any saved follow-up field; it cannot override a new category or group. Regular exhaustion may
 relay into the same category's primary group; direct primary selection stays there.
 No cross-category relay or separate failure list is added. Exact candidates already
 failed in the same relay are not attempted twice. Model/provider failures do not
 become competence scores. Actual category/group/index/Binding/profile identity is
 recorded directly, including a model configured in both groups.
+
+#### Scenario: A new user turn keeps the selected group
+
+- **WHEN** a custom-branch follow-up selects the same group and its held candidate remains valid
+- **THEN** the Gateway MUST prefer that candidate while retaining the fresh category/degree decision.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/133#issuecomment-6220133330
 
 ### Requirement: System One compiles independent typed questions in one call
 
