@@ -7,7 +7,18 @@ use crate::WorkspaceId;
 
 macro_rules! observation_id {
     ($name:ident) => {
-        #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+        #[derive(
+            schemars::JsonSchema,
+            Clone,
+            Debug,
+            Deserialize,
+            Eq,
+            Hash,
+            Ord,
+            PartialEq,
+            PartialOrd,
+            Serialize,
+        )]
         #[serde(transparent)]
         pub struct $name(String);
 
@@ -48,7 +59,18 @@ observation_id!(ContentId);
 
 macro_rules! hmac_identity {
     ($name:ident) => {
-        #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+        #[derive(
+            schemars::JsonSchema,
+            Clone,
+            Debug,
+            Deserialize,
+            Eq,
+            Hash,
+            Ord,
+            PartialEq,
+            PartialOrd,
+            Serialize,
+        )]
         #[serde(transparent)]
         pub struct $name(String);
 
@@ -80,7 +102,18 @@ hmac_identity!(CacheAffinityKey);
 
 macro_rules! gateway_digest_identity {
     ($name:ident, $prefix:literal) => {
-        #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+        #[derive(
+            schemars::JsonSchema,
+            Clone,
+            Debug,
+            Deserialize,
+            Eq,
+            Hash,
+            Ord,
+            PartialEq,
+            PartialOrd,
+            Serialize,
+        )]
         #[serde(transparent)]
         pub struct $name(String);
 
