@@ -100,6 +100,7 @@ HOSTED_BACKEND_EXECUTION = {
     "scripts/ci-shards.py",
 }
 VALIDATION_TOOLING = {"scripts/validation.py", "scripts/validation-host.py", "scripts/test-validation.py",
+                      "scripts/windows-dev.py", "scripts/windows-dev-host.py", "scripts/test-windows-dev.py",
                       "scripts/validation-report.py", "scripts/test-validation-report.py",
                       "scripts/ci-run.py", "scripts/test-ci-run.py",
                       "scripts/ci-shards.py", "scripts/test-ci-shards.py",
@@ -532,7 +533,7 @@ def select(paths, full=False):
                          ["python3", "scripts/release-contracts.py", "check"]])
     if validation_tooling:
         commands.extend([["python3", "scripts/" + name] for name in
-                         ("test-validation.py", "test-validation-report.py", "test-local-rust.py", "test-remote-rust.py", "test-validation-schedule.py",
+                         ("test-validation.py", "test-windows-dev.py", "test-validation-report.py", "test-local-rust.py", "test-remote-rust.py", "test-validation-schedule.py",
                           "test-ci-run.py", "test-ci-shards.py", "test-desktop-pilot.py", "test-pilot-builds.py")])
     if full or validation_tooling or local_gc_tooling:
         if ["python3", "scripts/test-local-rust.py"] not in commands:

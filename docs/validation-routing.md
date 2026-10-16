@@ -49,7 +49,8 @@ driver repair can validate an unchanged candidate without treating new source as
 runtime evidence. Related runs remain in their selected workbench; another origin
 or workbench does not import their results.
 
-Native Windows and hosted CI use their [own execution entry](github-actions-validation.md).
+Windows development execution uses `validation.py windows` below; hosted CI retains
+its [own execution entry](github-actions-validation.md).
 Linux backend success does not establish Windows runtime, real account, or logged-on
 Task acceptance. Use the corresponding native environment and record the actual OS
 and executed cases.
@@ -92,6 +93,83 @@ host's run record before retrying. This wrapper adds no queue for Mac builds.
 Existing direct runner commands remain available.
 
 ### Windows iteration and release validation
+
+#### Development-machine execution
+
+The unified entry is `python3 scripts/validation.py windows`. It reads
+`~/.config/hiroute/windows-validation.json` (mode `0600`, outside the checkout).
+The configuration contains machine locations, never provider tokens. Use an existing
+SSH key and a dedicated already logged-on Windows acceptance account. The runner
+neither creates accounts nor logs users in, restarts Windows or changes RDP.
+
+```json
+{
+  "version": 1,
+  "host": "windows-dev",
+  "identity_file": "~/.ssh/id_ed25519",
+  "python": "C:/Validation/python/python.exe",
+  "root": "C:/Validation/hiroute-runs",
+  "user": "acceptance",
+  "session_id": 2,
+  "environment": {
+    "HIROUTE_WINDOWS_SOURCE_ROOT": "C:/Validation/source",
+    "HIROUTE_WORKER_NODE": "C:/Validation/node/node.exe",
+    "HIROUTE_WORKER_CODEX_BINARY": "C:/Validation/clients/codex.exe",
+    "HIROUTE_WORKER_CLAUDE_BINARY": "C:/Validation/clients/claude.exe",
+    "HIROUTE_WORKER_PI_BINARY": "C:/Validation/clients/pi/dist/bundle/cli.js",
+    "HIROUTE_WORKER_DSH_BINARY": "C:/Validation/clients/dsh/lib/bin.js",
+    "HIROUTE_WORKER_CODEX_ACP_ADAPTER": "C:/Validation/clients/codex-acp/dist/index.js",
+    "HIROUTE_WORKER_CLAUDE_ACP_ADAPTER": "C:/Validation/clients/claude-agent-acp/dist/index.js"
+  },
+  "path": ["C:/Validation/node", "C:/Validation/clients", "C:/Validation/git/bin", "C:/Validation/pwsh"]
+}
+```
+
+Replace example locations with installed, pinned clients. The source root contains
+matching `tools/windows-agent-fixtures` declarations, lockfile and installed npm
+modules. `doctor` reports the actual OS and existing sessions; select the intended
+session in HOME rather than silently falling back to SSH service context. An
+administrator session is not standard-user evidence. The configured account must
+be able to read the bundles and register a task for its existing login session.
+
+```sh
+python3 scripts/validation.py windows doctor
+# Export on the cross-build host before continuing the managed checkout.
+python3 scripts/validation.py windows bundle --result /path/to/run/result.json \
+  --log /path/to/run/command.log --output /path/to/development-bundle.zip
+python3 scripts/validation.py windows stage /path/to/development-bundle.zip
+python3 scripts/validation.py windows run --harness HARNESS_BUNDLE_ID \
+  --product PRODUCT_BUNDLE_ID --binary windows_headless.exe \
+  --case actual_windows_complete_public_headless_business --ignored
+python3 scripts/validation.py windows wait RUN_ID --timeout 50
+python3 scripts/validation.py windows logs RUN_ID --tail 60
+python3 scripts/validation.py windows collect RUN_ID --output artifacts/windows-dev/RUN_ID
+python3 scripts/validation.py windows finish RUN_ID
+```
+
+Stage separate product and harness bundles when reusing an unchanged product for
+a test-only repair. Results record both full revisions, binary hashes, driver hash,
+client hashes, actual OS/session/elevation and exactly one test outcome. Zero exit
+without the selected passing case is failure. Archive entries must be flat,
+manifested x64 executables with matching size/hash; partial stages cannot be reused.
+Cross-built artifacts never become native CI producers.
+
+Execution uses a one-off `Interactive`/`Limited` Task, with no startup trigger or
+saved password. One workbench lock prevents overlapping product mutation. Product
+profile and request deadlines remain intact; `run --timeout` is only a whole-test
+watchdog. Existing installations cause prerequisite failure, not automatic deletion.
+After failure, inspect logs/diagnostics and apply the product recovery procedure
+to only test-owned configuration before retrying. `finish` verifies the stopped
+task action and removes only that task and owner lock; it keeps evidence, bundles
+and native configuration. Collected output is private raw evidence and must stay
+ignored, not be attached to public records unreviewed.
+
+Transport uses SSH host-key verification, hashed uploaded scripts/JSON and encoded
+PowerShell invocation. Interrupted submission is an unknown outcome: inspect its
+run/task/lock before retrying. Missing Python, clients, login session or account
+access is a prerequisite gap, not permission to substitute a different identity.
+
+#### Compilation and release boundary
 
 Ordinary development uses the configured Linux workbench for Windows MSVC
 cross-compilation and the configured Windows development machine for affected

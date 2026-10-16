@@ -6,6 +6,10 @@
 [Execution locations](../validation-routing.md) owns caller HOME routing,
 per-origin SSH workbenches, shared compiler capacity and separate candidate/driver
 revision identities. A runner setup failure is not a product test result.
+Windows development execution is owned by [windows-dev.py](../../scripts/windows-dev.py)
+and its [native executor](../../scripts/windows-dev-host.py), reached through
+`validation.py windows`. HOME configuration owns machine/session/client locations;
+the project owns artifact admission, exact-case execution and revision-bound evidence.
 
 Choose a user promise, then the layer that can observe its failure. Keep tests
 beside that owner and preserve independent assertions. A focused filesystem

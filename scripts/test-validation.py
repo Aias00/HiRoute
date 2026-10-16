@@ -27,6 +27,14 @@ host = load('validation-host')
 
 
 class Routing(unittest.TestCase):
+    def test_windows_entry_routes_without_loading_unrelated_host_configuration(self):
+        with patch.object(sys, 'argv', ['validation.py', 'windows', 'wait', 'a' * 32, '--timeout', '50']), \
+                patch.object(m, 'configuration', side_effect=AssertionError('unrelated configuration')), \
+                patch.object(m.subprocess, 'call', return_value=0) as call:
+            self.assertEqual(m.main(), 0)
+        self.assertEqual(call.call_args.args[0][1:],
+                         [str(m.REPO / 'scripts/windows-dev.py'), 'wait', 'a' * 32, '--timeout', '50'])
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

@@ -305,6 +305,14 @@ class SelectionTests(unittest.TestCase):
         self.assertTrue(mixed['rust'])
         self.assertIn('daemon', mixed['groups'])
 
+    def test_windows_development_runner_does_not_select_product_or_hosted_matrix(self):
+        result = plan.select(['scripts/windows-dev.py', 'scripts/windows-dev-host.py',
+                              'scripts/test-windows-dev.py'])
+        self.assertFalse(result['rust'])
+        self.assertFalse(result['frontend'])
+        self.assertEqual(result['product_checks'], [])
+        self.assertIn(['python3', 'scripts/test-windows-dev.py'], result['commands'])
+
     def test_hosted_backend_execution_contract_runs_full_matrix(self):
         for path in sorted(plan.HOSTED_BACKEND_EXECUTION):
             with self.subTest(path=path):

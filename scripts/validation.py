@@ -122,9 +122,13 @@ def main():
     parser.add_argument("--config", type=Path, default=CONFIG)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--frontend-dist", help="Frontend path on the Desktop execution host")
-    parser.add_argument("action", choices=("show", "doctor", *TARGETS, "pilot", "pilot-cli", "pilot-build"))
+    parser.add_argument("action", choices=("show", "doctor", *TARGETS, "pilot", "pilot-cli", "pilot-build", "windows"))
     parser.add_argument("arguments", nargs=argparse.REMAINDER)
     args = parser.parse_args()
+    if args.action == "windows":
+        if args.config != CONFIG or args.dry_run or args.frontend_dist:
+            parser.error("Pass Windows-specific options after windows")
+        return subprocess.call([sys.executable, str(REPO / "scripts/windows-dev.py"), *args.arguments])
     if args.config != CONFIG and not args.config.is_file():
         parser.error("Explicit --config does not exist")
     targets = configuration(args.config)

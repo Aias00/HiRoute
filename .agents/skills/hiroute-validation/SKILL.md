@@ -19,7 +19,7 @@ loading every execution, diagnosis and retention guide.
 | --- | --- |
 | Select checks and consumers | [Test selection](../../../docs/test-selection.md), using the [test map](../../../docs/code-map/testing.md) to find the owning assertion. |
 | Execute backend, Desktop or Pilot checks | [Validation routing](../../../docs/validation-routing.md#commands); follow only the selected local/SSH runner or [Desktop Pilot](../../../docs/desktop-tauri-pilot.md) guide. Hosted CI has its [own entry](../../../docs/github-actions-validation.md). |
-| Iterate on Windows behavior | [Cross-compilation and development-machine execution](../../../docs/validation-routing.md#windows-iteration-and-release-validation); reserve the hosted Windows matrix for release candidates or an explicitly needed manual diagnosis. |
+| Iterate on Windows behavior | [Cross-compilation and development-machine execution](../../../docs/validation-routing.md#windows-iteration-and-release-validation), including `validation.py windows` and HOME machine configuration. Reserve the hosted matrix for release candidates or an explicitly needed manual diagnosis. |
 | Diagnose a failure | The run's result, report and relevant logs, then [failure repair](../../../docs/validation-feedback.md#required-agent-feedback-loop). For product-path failures, also use [diagnostic troubleshooting](../../../docs/diagnostic-troubleshooting.md#diagnose-failures-before-rerunning). |
 | Retire build outputs | [Owner cleanup](../../../docs/local-rust-validation.md#owner-cleanup-during-buildfixretest) or the selected remote runner's cleanup flow. |
 | Prepare evidence and timing feedback | [Report interpretation](../../../docs/validation-feedback.md#read-the-report) and its required feedback loop. |
@@ -48,6 +48,13 @@ loading every execution, diagnosis and retention guide.
   `python3 scripts/validation.py backend wait RUN_ID --timeout 50` instead of frequent status snapshots. Resume the same live shell
   session when available; on timeout, give a progress update and wait again.
   On failure, inspect its report and relevant logs. A wait summary is not a scenario verdict.
+- For Windows development execution, use `validation.py windows` for verified artifact
+  staging, exact-case execution in the configured existing login session, bounded waits,
+  evidence collection and owned-task retirement. Keep host/account/session/client paths
+  in HOME. Do not recreate one-off SSH or scheduled-task scripts, manufacture a login,
+  override product request deadlines, or expand a selected case to the hosted matrix.
+  A failed test may leave native configuration requiring its established recovery path;
+  runner `finish` removes only its stopped task and lock, never user configuration.
 
 ## Repair and finish
 
