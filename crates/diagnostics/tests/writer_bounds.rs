@@ -540,10 +540,10 @@ fn losing_role_runtime_never_publishes_over_the_owner() {
     // Creation precedes the writer thread's first append. Snapshot a complete
     // record, not merely an existing (possibly still empty) log file.
     let before_log = loop {
-        if let Ok(bytes) = std::fs::read(dir.path().join(CURRENT_LOG_FILE)) {
-            if bytes.ends_with(b"\n") {
-                break bytes;
-            }
+        if let Ok(bytes) = std::fs::read(dir.path().join(CURRENT_LOG_FILE))
+            && bytes.ends_with(b"\n")
+        {
+            break bytes;
         }
         assert!(Instant::now() < deadline, "owner log record was not written");
         std::thread::sleep(Duration::from_millis(25));
