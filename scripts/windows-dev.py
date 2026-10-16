@@ -39,6 +39,12 @@ def windows_path(value):
     return value
 
 
+def remote_evidence_path(directory, name):
+    # OpenSSH's SFTP path grammar requires forward slashes, including when
+    # pathlib on the Windows executor returned a native backslash path.
+    return PureWindowsPath(windows_path(directory)).as_posix() + '/' + name
+
+
 def configuration(path):
     path = path.expanduser().resolve(strict=True)
     path.relative_to(Path.home().resolve())
@@ -238,7 +244,7 @@ def main():
                     raise ValueError('Invalid evidence filename')
                 destination = args.output / name
                 subprocess.run(['scp', '-q', *remote.options, remote.config['host'] + ':' +
-                                value['directory'] + '/' + name, str(destination)], check=True, timeout=180)
+                                remote_evidence_path(value['directory'], name), str(destination)], check=True, timeout=180)
                 destination.chmod(0o600)
     print(json.dumps(value, indent=2))
     if args.action in ('status', 'wait') and value.get('state') == 'failed':

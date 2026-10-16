@@ -149,6 +149,11 @@ class Runner(unittest.TestCase):
         with patch.object(host, 'task_state', return_value=dict(state='Ready', result=0)):
             self.assertEqual(host.status(self.root, 'a' * 32)['state'], 'failed')
 
+    def test_evidence_download_uses_sftp_path_syntax(self):
+        self.assertEqual(controller.remote_evidence_path(
+            r'C:\Validation\runs\sample', 'result.json'),
+            'C:/Validation/runs/sample/result.json')
+
 
 if __name__ == '__main__':
     unittest.main()
