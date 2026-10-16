@@ -1,6 +1,5 @@
 //! Price-only native entry. WebView supplies intent; native owns confirmation and authority.
 use super::*;
-use crate::authority::HostAuthority;
 use hiroute_domain::{PriceUnknownReasonV1, SourcePriceSettingV1, TokenRateV1, TokenRatesV1};
 
 #[derive(Deserialize)]

@@ -103,6 +103,7 @@ impl ProtectedInputServer {
     pub(super) fn run(
         #[allow(unused_mut)] mut self,
         mut role: hiroute_daemon::RoleAllHandle,
+        mut console: Option<hiroute_daemon::console::ConsoleService>,
         #[cfg(windows)] service: Option<hiroute_platform::windows::service::ServiceShutdown>,
     ) -> Result<(), String> {
         let result = (|| {
@@ -142,6 +143,9 @@ impl ProtectedInputServer {
                 std::thread::sleep(Duration::from_millis(20));
             }
         })();
+        if let Some(console) = console.as_mut() {
+            console.shutdown();
+        }
         role.shutdown();
         let joined = role
             .join(Duration::from_secs(30))

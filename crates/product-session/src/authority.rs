@@ -262,11 +262,17 @@ impl HostAuthority for SessionAuthority {
         Ok(())
     }
     fn release_model_input(&self, candidate: &ComputeCandidateRefV2) -> Result<(), String> {
+        candidate
+            .validate_shape()
+            .map_err(|_| "PROTECTED_INPUT_INVALID")?;
         let mut inputs = self
             .inputs
             .lock()
             .map_err(|_| "PROTECTED_INPUT_UNAVAILABLE")?;
-        if inputs.contains_key(&candidate.candidate_ref) {
+        if let Some(owned) = inputs.get(&candidate.candidate_ref) {
+            if owned.candidate_revision != candidate.candidate_revision {
+                return Err("PROTECTED_INPUT_INVALID".into());
+            }
             self.host.release_model_input(candidate)?;
             inputs.remove(&candidate.candidate_ref);
         }

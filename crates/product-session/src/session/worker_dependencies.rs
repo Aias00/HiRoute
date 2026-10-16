@@ -1,5 +1,4 @@
 //! Confirmed, recoverable selection of one instance-level Worker installation.
-use crate::authority::HostAuthority;
 
 use super::*;
 

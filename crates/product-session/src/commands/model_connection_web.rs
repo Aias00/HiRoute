@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 /// JavaScript cannot round a server-issued `u64` before returning it to the native bridge.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct WebComputeDiscoveryRefV1 {
+pub struct WebComputeDiscoveryRefV1 {
     discovery_ref: String,
     discovery_revision: String,
 }
@@ -51,7 +51,7 @@ impl TryFrom<WebComputeDiscoveryRefV1> for ComputeDiscoveryRefV1 {
 /// locators, filesystem paths, endpoint details, and catalog digests deliberately remain in Rust.
 #[derive(Serialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct WebComputeScanItemV1 {
+pub struct WebComputeScanItemV1 {
     agent_id: String,
     supported: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -70,7 +70,7 @@ pub(super) struct WebComputeScanItemV1 {
 
 #[derive(Serialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct WebComputeScanResultV1 {
+pub struct WebComputeScanResultV1 {
     items: Vec<WebComputeScanItemV1>,
 }
 
@@ -98,7 +98,7 @@ impl From<ComputeScanResultV1> for WebComputeScanResultV1 {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct WebValidationRefV2 {
+pub struct WebValidationRefV2 {
     approval_operation: OperationReferenceV1,
     validation_ref: String,
     validation_revision: String,
@@ -135,7 +135,7 @@ impl TryFrom<WebValidationRefV2> for ComputeValidationRefV2 {
 
 #[derive(Serialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct WebComputeCandidateViewV2 {
+pub struct WebComputeCandidateViewV2 {
     candidate: ComputeCandidateRefV2,
     correlation: ComputeCheckCorrelationV2,
     producer: ComputeCandidateProducerV2,
@@ -172,7 +172,7 @@ impl From<ComputeCandidateViewV2> for WebComputeCandidateViewV2 {
 
 #[derive(Serialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct WebComputeSubscriptionCandidatesV2 {
+pub struct WebComputeSubscriptionCandidatesV2 {
     candidates: Vec<WebComputeCandidateViewV2>,
     discovery_state: ComputeSubscriptionDiscoveryStateV2,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -191,7 +191,7 @@ impl From<ComputeSubscriptionCandidatesV2> for WebComputeSubscriptionCandidatesV
 
 #[derive(Serialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct WebComputeSubscriptionCheckResultV2 {
+pub struct WebComputeSubscriptionCheckResultV2 {
     candidate: ComputeCandidateRefV2,
     approval_operation: OperationReferenceV1,
     status: ComputeSubscriptionCheckStatusV2,
@@ -221,7 +221,7 @@ impl From<ComputeSubscriptionCheckResultV2> for WebComputeSubscriptionCheckResul
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct WebComputeManagementChangeV2 {
+pub struct WebComputeManagementChangeV2 {
     schema: String,
     subject: ComputeManagementSubjectV2,
     expected_revisions: RevisionSetV1,
@@ -269,7 +269,7 @@ impl TryFrom<WebComputeManagementChangeV2> for ComputeManagementChangeV2 {
 
 #[derive(Serialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct WebComputeSavePreviewV2 {
+pub struct WebComputeSavePreviewV2 {
     #[serde(skip_serializing_if = "Option::is_none")]
     candidate: Option<ComputeCandidateRefV2>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -305,7 +305,7 @@ impl TryFrom<ComputeSavePreviewV2> for WebComputeSavePreviewV2 {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct WebComputeConnectionApplyRequestV1 {
+pub struct WebComputeConnectionApplyRequestV1 {
     spec: ChangeSpecV1,
     accept_digest: CanonicalDigest,
     expected_revisions: RevisionSetV1,
@@ -332,7 +332,7 @@ impl TryFrom<WebComputeConnectionApplyRequestV1> for ComputeConnectionApplyReque
 
 #[derive(Serialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct WebComputeSaveResultV2 {
+pub struct WebComputeSaveResultV2 {
     #[serde(skip_serializing_if = "Option::is_none")]
     candidate: Option<ComputeCandidateRefV2>,
     #[serde(skip_serializing_if = "Option::is_none")]

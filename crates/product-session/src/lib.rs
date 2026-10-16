@@ -18,3 +18,5 @@ pub fn random_id() -> Result<String, String> {
 
 #[cfg(test)]
 mod authority_tests;
+
+pub mod commands;
