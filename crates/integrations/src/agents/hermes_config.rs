@@ -92,10 +92,10 @@ pub fn hermes_configure(
         return Err(hermes_error("native plugin explicitly disabled"));
     }
     let concrete_provider = native_provider_id(&model.alias);
-    if let Some(previous) = previous {
-        if previous.provider_id != provider_id || !previous.applied(current)? {
-            return Err(hermes_error("owned configuration changed"));
-        }
+    if let Some(previous) = previous
+        && (previous.provider_id != provider_id || !previous.applied(current)?)
+    {
+        return Err(hermes_error("owned configuration changed"));
     }
     if doc
         .value
