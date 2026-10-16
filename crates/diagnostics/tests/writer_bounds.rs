@@ -545,7 +545,10 @@ fn losing_role_runtime_never_publishes_over_the_owner() {
         {
             break bytes;
         }
-        assert!(Instant::now() < deadline, "owner log record was not written");
+        assert!(
+            Instant::now() < deadline,
+            "owner log record was not written"
+        );
         std::thread::sleep(Duration::from_millis(25));
     };
     let before_names = dir.list_names().expect("names");

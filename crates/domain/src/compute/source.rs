@@ -429,8 +429,7 @@ impl CredentialPoolIdentityV1 {
     }
 }
 
-#[derive(schemars::JsonSchema)]
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PoolCredentialV1 {
     pub credential: CredentialRefV1,
@@ -439,8 +438,7 @@ pub struct PoolCredentialV1 {
     pub enabled: bool,
 }
 
-#[derive(schemars::JsonSchema)]
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CredentialPoolV1 {
     pub pool_id: String,
