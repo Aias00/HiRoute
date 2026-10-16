@@ -55,6 +55,7 @@ use crate::delegation::run_authority::DelegationRunAuthority;
 
 mod additional_model_budget;
 mod agent_connection;
+mod agent_effective_state;
 mod agent_live_check;
 mod candidate_execution;
 mod client_access;

@@ -8,6 +8,8 @@
 
 mod agent_connection;
 mod agent_discovery;
+mod agent_effective_state;
+pub use agent_effective_state::*;
 mod agent_grant_raw;
 mod agent_settings;
 mod agent_settings_preview;

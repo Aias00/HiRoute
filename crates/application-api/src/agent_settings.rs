@@ -107,6 +107,8 @@ pub struct AgentSettingsStatusRequestV2 {
     pub native_target: Option<AgentNativeTargetV1>,
     pub schema_version: hiroute_domain::SchemaVersion,
     pub context_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effective: Option<crate::AgentEffectiveStateRequestV1>,
 }
 
 fn is_false(value: &bool) -> bool {
@@ -216,6 +218,8 @@ pub struct AgentModelSettingsStatusV2 {
     pub management_skill: Option<AgentManagementSkillStatusV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native_adapter: Option<AgentNativeAdapterStatusV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effective: Option<crate::AgentEffectiveStateV1>,
 }
 
 #[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -372,6 +376,7 @@ mod tests {
     fn status() -> AgentModelSettingsStatusV2 {
         let revision = GatewayPublicationRevision::new(7).unwrap();
         AgentModelSettingsStatusV2 {
+            effective: None,
             native_target: None,
             management_skill: None,
             native_adapter: None,

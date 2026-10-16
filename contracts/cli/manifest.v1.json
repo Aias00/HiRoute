@@ -5,7 +5,7 @@
   },
   "product_contract_revision": "487a807c8dc25cfb24e8b097882cd3bb9716a009",
   "proposal_map_revision": "ab4da93cc49c6ec56a01e046230411ff1ca82300",
-  "descriptor_digest": "sha256:996682021246389900207e43450b74d3750d063f9477bcfaaee46906dee92784",
+  "descriptor_digest": "sha256:3251596d5f2258dc7278ebda1a0cb7f36b04f31391a6277e1b21832a1e85396e",
   "visibility": "release",
   "commands": [
     {
@@ -73,8 +73,8 @@
       "idempotency": "not_applicable",
       "help": {
         "purpose": "Show one exact released command descriptor and its machine contract.",
-        "usage": "hiroute schema show --command-id <stable-command-id> --non-interactive --output json",
-        "arguments_and_options": "Required: --command-id <stable-command-id>. Global --output json and --request-id options are supported.",
+        "usage": "hiroute schema show --command-id <stable-command-id> [--include-schema] --non-interactive --output json",
+        "arguments_and_options": "Required: --command-id <stable-command-id>. --include-schema returns complete bundled request/response definitions and examples for management commands; omission retains the descriptor. Global --output json and --request-id options are supported.",
         "effects": "Read-only; no product side effect.",
         "network_and_model_use": "No model use; any external dependency is declared by the typed Application operation.",
         "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
@@ -225,7 +225,7 @@
         "output": "One hiroute.machine-envelope/v2 JSON object on stdout; diagnostics belong on stderr.",
         "exit_status": "0 success/accepted; 2 usage; 3 conflict/blocker; 4 capability denied; 5 not found; 6 unavailable; 7 action required; 8 needs attention.",
         "examples": [
-          "hiroute agents scan [--request-stdin | --request-file <PATH>] --non-interactive --output json"
+          "hiroute agents scan --non-interactive --output json"
         ],
         "see_also": [
           "hiroute schema show --command-id agents.scan"
@@ -323,7 +323,7 @@
         "output": "One hiroute.machine-envelope/v2 JSON object on stdout; diagnostics belong on stderr.",
         "exit_status": "0 success/accepted; 2 usage; 3 conflict/blocker; 4 capability denied; 5 not found; 6 unavailable; 7 action required; 8 needs attention.",
         "examples": [
-          "hiroute agents connect preview --non-interactive --output json"
+          "hiroute agents connect preview --request-file preview-request.json --output json"
         ],
         "see_also": [
           "hiroute schema show --command-id agents.connect.preview"
@@ -376,7 +376,7 @@
         "output": "One hiroute.machine-envelope/v2 JSON object on stdout; diagnostics belong on stderr.",
         "exit_status": "0 success/accepted; 2 usage; 3 conflict/blocker; 4 capability denied; 5 not found; 6 unavailable; 7 action required; 8 needs attention.",
         "examples": [
-          "hiroute agents connect apply --non-interactive --output json"
+          "hiroute agents connect apply --request-file apply-request.json --output json"
         ],
         "see_also": [
           "hiroute schema show --command-id agents.connect.apply"
@@ -478,7 +478,7 @@
         "output": "One hiroute.machine-envelope/v2 JSON object on stdout; diagnostics belong on stderr.",
         "exit_status": "0 success/accepted; 2 usage; 3 conflict/blocker; 4 capability denied; 5 not found; 6 unavailable; 7 action required; 8 needs attention.",
         "examples": [
-          "hiroute agents restore preview --non-interactive --output json"
+          "hiroute agents restore preview --request-file preview-request.json --output json"
         ],
         "see_also": [
           "hiroute schema show --command-id agents.restore.preview"
@@ -531,7 +531,7 @@
         "output": "One hiroute.machine-envelope/v2 JSON object on stdout; diagnostics belong on stderr.",
         "exit_status": "0 success/accepted; 2 usage; 3 conflict/blocker; 4 capability denied; 5 not found; 6 unavailable; 7 action required; 8 needs attention.",
         "examples": [
-          "hiroute agents restore apply --non-interactive --output json"
+          "hiroute agents restore apply --request-file apply-request.json --output json"
         ],
         "see_also": [
           "hiroute schema show --command-id agents.restore.apply"
@@ -965,7 +965,7 @@
         "output": "One hiroute.machine-envelope/v2 JSON object on stdout; diagnostics belong on stderr.",
         "exit_status": "0 success/accepted; 2 usage; 3 conflict/blocker; 4 capability denied; 5 not found; 6 unavailable; 7 action required; 8 needs attention.",
         "examples": [
-          "hiroute compute connection apply --non-interactive --output json"
+          "hiroute compute connection apply --request-file apply-request.json --output json"
         ],
         "see_also": [
           "hiroute schema show --command-id compute.connection.apply"
@@ -1163,7 +1163,7 @@
         "output": "One hiroute.machine-envelope/v2 JSON object on stdout; diagnostics belong on stderr.",
         "exit_status": "0 success/accepted; 2 usage; 3 conflict/blocker; 4 capability denied; 5 not found; 6 unavailable; 7 action required; 8 needs attention.",
         "examples": [
-          "hiroute routing options --non-interactive --output json"
+          "printf '%s' '{}' | hiroute routing options --request-stdin --output json"
         ],
         "see_also": [
           "hiroute schema show --command-id routing.options"
@@ -1911,7 +1911,7 @@
         "output": "One hiroute.machine-envelope/v2 JSON object on stdout; diagnostics belong on stderr.",
         "exit_status": "0 success/accepted; 2 usage; 3 conflict/blocker; 4 capability denied; 5 not found; 6 unavailable; 7 action required; 8 needs attention.",
         "examples": [
-          "hiroute routing preview --non-interactive --output json"
+          "hiroute routing preview --request-file preview-request.json --output json"
         ],
         "see_also": [
           "hiroute schema show --command-id routing.preview"
@@ -1963,7 +1963,7 @@
         "output": "One hiroute.machine-envelope/v2 JSON object on stdout; diagnostics belong on stderr.",
         "exit_status": "0 success/accepted; 2 usage; 3 conflict/blocker; 4 capability denied; 5 not found; 6 unavailable; 7 action required; 8 needs attention.",
         "examples": [
-          "hiroute routing apply --non-interactive --output json"
+          "hiroute routing apply --request-file apply-request.json --output json"
         ],
         "see_also": [
           "hiroute schema show --command-id routing.apply"
@@ -2058,7 +2058,9 @@
         "output": "One hiroute.machine-envelope/v2 JSON object on stdout; diagnostics belong on stderr.",
         "exit_status": "0 success/accepted; 2 usage; 3 conflict/blocker; 4 capability denied; 5 not found; 6 unavailable; 7 action required; 8 needs attention.",
         "examples": [
-          "hiroute decision services apply --request-stdin --output json < request.json"
+          "hiroute decision services apply --request-file preview-request.json --output json  # Preview: schema_version and spec",
+          "hiroute decision services apply --request-file apply-request.json --output json  # Apply: add exact accept_digest, expected_revisions and a stable idempotency_key",
+          "hiroute schema show --command-id decision.services.apply --include-schema  # Complete wrappers; substitute current IDs and exact Preview values"
         ],
         "see_also": [
           "hiroute schema show --command-id decision.services.apply"

@@ -324,7 +324,11 @@ pub(crate) fn status(
             request.payload,
         ) {
             Ok(payload)
-                if payload.schema_version == hiroute_application_api::AGENT_SETTINGS_SCHEMA_V2 =>
+                if payload.schema_version == hiroute_application_api::AGENT_SETTINGS_SCHEMA_V2
+                    && payload
+                        .effective
+                        .as_ref()
+                        .is_none_or(|effective| effective.valid()) =>
             {
                 payload
             }

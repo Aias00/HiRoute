@@ -53,6 +53,7 @@ impl LocalControlAdapter {
             return Err(ControlReadError::Denied);
         }
         let (status, grant, _) = self.evaluate_model_settings(&AgentSettingsStatusRequestV2 {
+            effective: None,
             include_skills: false,
             native_target: None,
             schema_version: hiroute_application_api::AGENT_SETTINGS_SCHEMA_V2,
@@ -78,11 +79,12 @@ impl LocalControlAdapter {
         &self,
         request: &AgentSettingsStatusRequestV2,
     ) -> Result<AgentModelSettingsStatusV2, ControlReadError> {
-        let (mut status, _, _) = self.evaluate_model_settings(request)?;
+        let (mut status, _, join) = self.evaluate_model_settings(request)?;
         let collaboration_request = if self.settings_agent_for_context(&request.context_id)
             == Some(SettingsAgentClass::CodexProfile)
         {
             AgentSettingsStatusRequestV2 {
+                effective: None,
                 include_skills: false,
                 native_target: None,
                 schema_version: request.schema_version,
@@ -101,6 +103,10 @@ impl LocalControlAdapter {
             status.collaboration =
                 Some(self.collaboration_settings_status(&collaboration_request)?);
         }
+        if let Some(effective) = &request.effective {
+            status.effective =
+                Some(self.agent_effective_state(&status, join.as_ref(), effective)?);
+        }
         Ok(status)
     }
 
@@ -111,6 +117,7 @@ impl LocalControlAdapter {
         context_id: &str,
     ) -> Result<Option<ConfiguredModelSettings>, ControlReadError> {
         let (_, _, join) = self.evaluate_model_settings(&AgentSettingsStatusRequestV2 {
+            effective: None,
             include_skills: false,
             native_target: None,
             schema_version: hiroute_application_api::AGENT_SETTINGS_SCHEMA_V2,
@@ -132,6 +139,7 @@ impl LocalControlAdapter {
             .filter(|context| format!("agent-connection/{context}") == connection_id)
             .ok_or(ControlReadError::NotFound)?;
         let request = AgentSettingsStatusRequestV2 {
+            effective: None,
             include_skills: false,
             native_target: None,
             schema_version: hiroute_application_api::AGENT_SETTINGS_SCHEMA_V2,
@@ -185,6 +193,7 @@ impl LocalControlAdapter {
             None
         };
         let mut status = AgentModelSettingsStatusV2 {
+            effective: None,
             native_target,
             native_adapter: None,
             schema: "hiroute.agent-model-settings-status/v2".into(),

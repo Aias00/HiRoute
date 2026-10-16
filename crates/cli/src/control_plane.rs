@@ -7,13 +7,12 @@
 use std::io::Read;
 
 use hiroute_application_api::{
-    AgentConnectionApplyRequestV1, AgentConnectionPreviewRequestV1, AgentConnectionStatusRequestV1,
-    ApplyPriceOverrideChangeV2, ApplyRequestV1, COMPUTE_MANAGEMENT_CHANGE_SCHEMA_V2,
-    ComputeConnectionApplyRequestV1, ComputeConnectionAuthorizationRequestV1,
-    ComputeConnectionOptionsRequestV1, ComputeConnectionPreviewRequestV1,
-    ComputeConnectionTestRequestV1, ComputeManagementQueryV2, ComputeSavePreviewRequestV2,
-    ComputeScanRequestV1, ComputeSubscriptionCheckPreviewRequestV2, ErrorCode,
-    GetEffectivePricesV2, PreviewPriceOverrideChangeV2, PreviewRequestV1,
+    AgentConnectionApplyRequestV1, AgentConnectionPreviewRequestV1, ApplyPriceOverrideChangeV2,
+    ApplyRequestV1, COMPUTE_MANAGEMENT_CHANGE_SCHEMA_V2, ComputeConnectionApplyRequestV1,
+    ComputeConnectionAuthorizationRequestV1, ComputeConnectionOptionsRequestV1,
+    ComputeConnectionPreviewRequestV1, ComputeConnectionTestRequestV1, ComputeManagementQueryV2,
+    ComputeSavePreviewRequestV2, ComputeScanRequestV1, ComputeSubscriptionCheckPreviewRequestV2,
+    ErrorCode, GetEffectivePricesV2, PreviewPriceOverrideChangeV2, PreviewRequestV1,
 };
 #[cfg(test)]
 use hiroute_application_api::{CommandDescriptorV1, command_by_id};
@@ -113,20 +112,7 @@ pub(crate) fn command_payload(
         "agents.connect.apply" => Some(agent_request(options, true)),
         "agents.restore.preview" => Some(agent_restore_request(options, false)),
         "agents.restore.apply" => Some(agent_restore_request(options, true)),
-        "agents.connect.status" => Some(positional(options, |connection_id| {
-            if connection_id.starts_with("agent-context/") {
-                serde_json::to_value(hiroute_application_api::AgentSettingsStatusRequestV2 {
-                    include_skills: true,
-                    native_target: None,
-                    schema_version: hiroute_application_api::AGENT_SETTINGS_SCHEMA_V2,
-                    context_id: connection_id,
-                })
-                .expect("typed status serializes")
-            } else {
-                serde_json::to_value(AgentConnectionStatusRequestV1 { connection_id })
-                    .expect("typed status serializes")
-            }
-        })),
+        "agents.connect.status" => Some(crate::effective_status::payload(options)),
         _ => None,
     }
 }

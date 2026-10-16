@@ -403,7 +403,7 @@ impl LocalControlAdapter {
     }
 }
 
-fn expected_trust(
+pub(super) fn expected_trust(
     snapshot: &GatewayPublicationSnapshotProjectionV3,
     grant_id: &str,
     served_model_id: &str,

@@ -9,6 +9,7 @@ mod args;
 mod client;
 mod collaboration;
 mod control_plane;
+mod effective_status;
 mod help;
 mod host_commands;
 mod managed_launch;
