@@ -61,17 +61,25 @@ pub(super) fn assert_committed(product: &InstalledProduct, plan: &str, count: us
     assert_eq!(execution.candidate_index, 0);
     assert_eq!(execution.policy.floor_millis, 500);
     assert!(execution.policy.criteria_digest.is_some());
-    let protected = quality
+    let upgrade_source = quality
         .samples
         .iter()
         .find(|sample| sample.upgrade.is_some())
         .unwrap();
+    let upgrade = upgrade_source.upgrade.as_ref().unwrap();
+    assert_eq!(upgrade_source.segment_id, scored.segment_id);
+    // The upgrade belongs to the assessed old stage. Its trigger request
+    // identifies the new stage whose actual execution must be Primary.
+    let protected = quality
+        .samples
+        .iter()
+        .find(|sample| sample.first_request_id.as_deref() == Some(&upgrade.trigger_request_id))
+        .expect("the actual upgrade-triggering request must open the protected execution stage");
     assert_eq!(protected.executed_branch_id.as_deref(), Some(scope));
     assert_eq!(
         protected.branch_execution.as_ref().unwrap().group,
         ExecutionGroupV1::Primary
     );
-    let upgrade = protected.upgrade.as_ref().unwrap();
     assert_eq!(upgrade.decision.segment_id, scored.segment_id);
     assert_eq!(upgrade.decision.from_group, ExecutionGroupV1::Regular);
     assert_eq!(upgrade.decision.floor_millis, 500);
