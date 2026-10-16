@@ -739,7 +739,7 @@ fn compile_planner_policy(
                     .collect(),
             }],
             None,
-            StaticCostPolicyV1::ExplicitFixed,
+            StaticCostPolicyV1::PublishedCandidates,
         ),
         Some(routing) => compile_routing(routing, &candidate_key_by_local_id)?,
     };
@@ -848,7 +848,7 @@ fn compile_routing(
                 Some(strategy),
                 // Product has already authorized these explicit, frozen group members,
                 // including paid API bindings. Cost labels are not an entitlement gate.
-                StaticCostPolicyV1::ExplicitFixed,
+                StaticCostPolicyV1::PublishedCandidates,
             )
         }
         AliasRequestOwnedRouteV1::Classified {
@@ -905,7 +905,7 @@ fn compile_routing(
                 ),
                 // Product has already authorized these explicit, frozen group members,
                 // including paid API bindings. Cost labels are not an entitlement gate.
-                StaticCostPolicyV1::ExplicitFixed,
+                StaticCostPolicyV1::PublishedCandidates,
             )
         }
         AliasRequestOwnedRouteV1::Ordered {
@@ -919,7 +919,7 @@ fn compile_routing(
                 None,
                 // Product has already authorized these explicit, frozen group members,
                 // including paid API bindings. Cost labels are not an entitlement gate.
-                StaticCostPolicyV1::ExplicitFixed,
+                StaticCostPolicyV1::PublishedCandidates,
             ),
             [AliasGroupIdV1::Free] => (
                 MaterializedRouteV1::FreeFirst {
@@ -941,7 +941,7 @@ fn compile_routing(
                 None,
                 match cost_policy {
                     AliasCostPolicyV1::StrictFree => StaticCostPolicyV1::StrictFree,
-                    AliasCostPolicyV1::ApiEquivalent => StaticCostPolicyV1::ExplicitFixed,
+                    AliasCostPolicyV1::ApiEquivalent => StaticCostPolicyV1::PublishedCandidates,
                 },
             ),
             _ => return Err(PublicationInstallError::InvalidPlannerPolicy),
