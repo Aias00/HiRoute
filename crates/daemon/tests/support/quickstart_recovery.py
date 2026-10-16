@@ -6,6 +6,15 @@ from publication_process import bootstrap
 from plan_content_process import read_content, operation_count
 
 
+def saved_sources(product):
+    sources = product.public_cli('compute list')[1]['data']['sources']
+    for source in sources:
+        for model in source['models']:
+            # Availability is re-evaluated on reads; its timestamp is not saved content.
+            model['presentation'].pop('evaluated_at_ms')
+    return sources
+
+
 def scenario(repository, boundary):
     product = Product(repository)
     product.collaboration_only = True
@@ -13,7 +22,7 @@ def scenario(repository, boundary):
         bootstrap(product)
         before_head, before_versions = read_content(product)
         before_count = operation_count(product)
-        before_sources = product.public_cli('compute list')[1]['data']['sources']
+        before_sources = saved_sources(product)
         product.stop()
         product.start(boundary)
         path = product.project / 'exact-quickstart-apply.json'
@@ -40,7 +49,7 @@ def scenario(repository, boundary):
         assert after_versions[-1]['configuration']['purpose'] == 'RecoveredPurpose'
         assert after_versions[-1]['configuration']['limits'] == before_versions[-1]['configuration']['limits']
         assert operation_count(product) == before_count + 1
-        assert product.public_cli('compute list')[1]['data']['sources'] == before_sources
+        assert saved_sources(product) == before_sources
         assert path.read_bytes() == exact
         print(json.dumps({'scenario': 'quickstart-exact-file-interruption', 'boundary': boundary,
                           'state': 'green', 'new_operations': 1, 'existing_sources_preserved': True}), flush=True)

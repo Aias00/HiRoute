@@ -39,6 +39,10 @@ def run(repository):
         assert request['request_id'] == 'quickstart-read'
         first = product.cli('quickstart')['data']
         assert '--context' in first['required_choices'] and not first['effects']
+        assert len(first['targets']) > 1 and first['selected_context'] is None
+        assert not product.upstream.requests, 'Navigation made an unrequested provider call'
+        unavailable = product.cli('quickstart', '--context', 'missing-profile', expected=2)
+        assert unavailable['data']['required_choices'] == ['exact_available_context']
         assert product.cli('compute', 'list')['data']['sources'] == before
         assert not product.cli('routing', 'list')['data']['plans']
 
@@ -73,6 +77,12 @@ def run(repository):
                       '--mode', 'smart_saving', '--economy', binding, '--primary', binding)
         missing = product.cli(*route_args, expected=2)
         assert missing['data']['required_choices']
+        unsupported = product.cli(*route_args, '--decision-service', 'ordinary-chat-model@1', expected=2)
+        assert unsupported['data']['required_choices'] == ['--decision-service']
+        for invalid_path in [product.project / 'missing-parent/apply.json', Path('/dev/null/apply.json')]:
+            blocked = product.cli(*route_args, '--decision', 'local_rules', '--apply-file', str(invalid_path), expected=2)
+            assert blocked['data']['required_choices'] == ['new_writable_private_apply_file']
+            assert not invalid_path.exists()
         prepared = product.cli(*route_args, '--decision', 'local_rules', '--apply-file', str(route_file))['data']
         original = json.loads(route_file.read_text())
         editor = original['change']['editor']
