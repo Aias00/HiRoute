@@ -130,6 +130,54 @@ CLI 将这六个变量保存到仅当前用户可读的
 `start` 不更新配置。清除代理时，先 unset 全部六个变量再重启。代理失败不会回退直连。
 代理地址可能包含密码，不要分享此私有文件。这不改变原生 Codex 的登录和 token 刷新归属。
 
+## CLI Quickstart：接入、确认和调整
+
+终端和任意已安装 HiRoute 管理 Skill 的 Agent 都使用同一条路径。调用方可以管理另一个 Agent，自己的模型不必接入 HiRoute。模型路由、管理 Skill 和任务委派保持独立。
+
+```sh
+hiroute quickstart
+hiroute quickstart --context CONTEXT_ID --plan PLAN_ID
+```
+
+Quickstart 只读当前服务、准确的配置目标、可复用的模型来源和路由，并列出待选择项及下一步命令。它不会启动服务、准备凭据、保存配置、重启 Agent 或调用模型。指定 Hermes 配置时加 `--hermes-root /ABSOLUTE/EFFECTIVE/ROOT`；所选目录不可用时，应保留该目标排查，不能自动换到另一个配置。
+
+1. 先用 `compute list` 复用已保存来源；没有合适来源时，扫描接入点并显式调用 `compute connection prepare` 准备凭据。当前接入点扫描使用 `compute scan --request-stdin`，输入 `{"schema":"hiroute.compute-scan-request/v2"}`，Hermes 加上选定的 `native_target`。准备结果包含候选引用、版本和可选择模型。
+2. 预览所选模型，再提交生成的请求文件：
+
+   ```sh
+   hiroute compute connection preview --candidate CANDIDATE_REF --candidate-revision REV --all-selectable --apply-file source-apply.json
+   hiroute compute connection apply --request-file source-apply.json
+   ```
+
+   只选部分模型时重复使用 `--model-ref REF`。`--all-selectable` 会固定为本次候选中的具体模型列表，不会自动扩展到后来发现的模型；没有可选模型时不能保存。准备凭据、保存、供应商检查和原生 Agent 的真实请求是不同效果。
+3. 用 `routing options --request-stdin` 输入 `{}`，获取当前绑定 ID。可选择 `--mode fixed_model --model BINDING_ID`，也可直接创建省钱组合：
+
+   ```sh
+   hiroute routing preview --name '日常省钱' --purpose '处理日常和复杂开发任务' --mode smart_saving --economy ECONOMY_BINDING --primary PRIMARY_BINDING --decision local_rules --apply-file route-apply.json
+   hiroute routing apply --request-file route-apply.json
+   ```
+
+   将示例 ID 替换为当前返回的值；重复模型组参数可以指定顺序。明确选择 `--decision local_rules` 或 `--decision-service ID@REVISION`，普通 Chat 执行模型不等于兼容的决策服务。其余编辑器设置由共享后端默认值补全。调整已有路由时使用 `routing preview --plan PLAN_ID`，只传要改的选项，并生成新文件；其他保存设置会保留。
+4. 使用 `agents connect preview --context CONTEXT_ID --plan PLAN_ID`，按 `--help` 补充原生选择，并加 `--apply-file connect-apply.json`。Hermes 明确选择协议；Codex 明确选择原生模型保留及默认模型策略；Claude 明确选择预设；Qoder/Pi/DSH 添加模型入口，不会声称已修改全局默认。`--management enable` 和 `--collaboration explicit|delegate_by_default` 分别配置独立 Skill，不要求调用方模型接入。检查预览后运行 `agents connect apply --request-file connect-apply.json`。
+5. 查看 Operation 和 `agents connect status --effective --context CONTEXT_ID --plan PLAN_ID`，按返回的指引加载原生配置、选择模型。文件保存不等于运行中 Agent 已加载，供应商直连检查也不等于 Agent 使用了该路由。未经模型调用授权，验证保持待完成。匹配的请求记录仅说明该请求和会话的路由、实际模型、结果及已报告用量；价格未知不等于零成本。
+
+Apply 文件为新建的私有文件，不会覆盖已有文件，包含准确请求和稳定幂等键。保留 `submission.operation_lookup`，响应不确定时用 `operations find` 查找，或原样重放同一个文件；不要重新生成 Preview 和新键来重试可能已接受的工作。再次运行 Quickstart 可复用已完成步骤。只恢复一项能力时，用 `agents restore preview --context CONTEXT_ID --facet management_skill --apply-file restore-apply.json`，再执行 `agents restore apply --request-file restore-apply.json`；`model`、`collaboration` 分别选择其他能力。恢复保留无关数据，运行中的原生会话可能仍需重新加载或选择模型。
+
+通过命令族和子命令的 `--help` 查看分支，用 `schema show --command-id routing.preview --include-schema` 获取完整的已安装请求/响应定义；不加该参数仍返回命令描述。JSON 输入与简化参数二选一，受支持的 Preview 两种形式均可加 `--apply-file`。Desktop 的驻留服务前置条件需由 Desktop 完成，不能在 CLI 中伪造。
+
+业务命令在 stdout 输出一个完整 JSON 文档。应单独保存 stderr 和实际退出码；Operation 被接受不代表执行完成。若 Agent 终端工具合并输出：
+
+```sh
+(
+  hiroute quickstart > quickstart.stdout.json 2> quickstart.stderr.txt
+  hiroute_exit=$?
+  printf '%s\n' "$hiroute_exit" > quickstart.exit.txt
+  exit "$hiroute_exit"
+)
+```
+
+分别读取完整 JSON、诊断文本和保存的退出码，不能只解析第一行，也不能把后续命令的状态当作 HiRoute 退出码。退出码 2 表示输入无效；`--error-details` 提供有限的字段诊断。个人经验笔记应保存在托管 Skill 之外。
+
 ## 先发现当前公开合同
 
 CLI 有两层公开合同：
@@ -145,7 +193,7 @@ hiroute service --help
 hiroute gateway --help
 hiroute protected-input --help
 hiroute schema list --output json
-hiroute schema show --command-id compute.connection.test --output json
+hiroute schema show --command-id compute.connection.test --include-schema --output json
 hiroute compute connection test --help
 ```
 
@@ -323,7 +371,7 @@ jq '{action:"result",operation:.operation}' subscription-operation.json \
 printf '{}\n' | hiroute routing options --request-stdin --output json > routing-options.json
 ```
 
-从 `data.candidates[].binding_id` 选择来源后构造完整编辑器。固定单模型是合法的最小计划：
+日常使用优先采用上面的 Quickstart 参数和共享默认值。下面的高级 JSON 示例展示一种显式选择的固定策略；其中的限制不是产品默认值，也不是启用省钱路由前必须创建的临时计划：
 
 ```json
 {
@@ -816,7 +864,7 @@ hiroute decision services test --request-stdin --output json < decision-test-req
 
 `hiroute subscription-proxy show --output json` 查看订阅代理设置与应用状态。
 `hiroute subscription-proxy set --mode manual --url http://127.0.0.1:1187 --output json`
-保存 HTTP/HTTPS 代理；可加 `--no-proxy example.com,192.168.0.0/16`。本机地址自动绕过。
+保存 HTTP/HTTPS 代理；可加 `--no-proxy example.com,203.0.113.0/24`。本机地址自动绕过。
 使用 `--mode direct` 直接连接，或 `--mode inherit` 恢复既有服务启动环境策略。
 保存后运行 `hiroute service restart --output json` 应用；重启可能中断正在执行的任务和请求。
 手动代理作用于全部受管订阅及 Claude 订阅检查，不作用于 Worker 工具或 Native API。

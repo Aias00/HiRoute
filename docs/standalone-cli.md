@@ -145,6 +145,54 @@ To clear a saved proxy, unset all six variables and restart. Proxy failure does 
 fall back to direct connections. Do not share the private snapshot: proxy URLs may
 contain credentials. This does not change native Codex login or token refresh ownership.
 
+## CLI Quickstart: connect, inspect, and adjust
+
+The same path works from a terminal or any Agent with the HiRoute management Skill. The caller can manage a different Agent; its own model need not use HiRoute. Model routing, management and task delegation remain independent.
+
+```sh
+hiroute quickstart
+hiroute quickstart --context CONTEXT_ID --plan PLAN_ID
+```
+
+Quickstart is read-only: it shows the current service, exact targets, reusable sources/Plans, missing choices and next commands. It does not start a service, import credentials, save changes, restart an Agent or call a model. For a specific Hermes configuration, add `--hermes-root /ABSOLUTE/EFFECTIVE/ROOT`. Preserve a missing selected root; do not silently substitute another profile.
+
+1. Reuse a saved source from `compute list`, or scan a connection point and explicitly prepare its credentials with `compute connection prepare`. Use `compute scan --request-stdin` with `{"schema":"hiroute.compute-scan-request/v2"}`; add the selected typed `native_target` for Hermes. The returned candidate contains its exact reference/revision and selectable models.
+2. Preview the selected models, then save the generated request:
+
+   ```sh
+   hiroute compute connection preview --candidate CANDIDATE_REF --candidate-revision REV --all-selectable --apply-file source-apply.json
+   hiroute compute connection apply --request-file source-apply.json
+   ```
+
+   Use repeated `--model-ref REF` for a subset. `--all-selectable` freezes concrete current refs; zero selectable models blocks saving. Preparation, save, provider checks and real native requests are different effects.
+3. Select returned binding IDs with `routing options --request-stdin` and `{}`. Create a fixed route with `--mode fixed_model --model BINDING_ID`, or go directly to smart saving:
+
+   ```sh
+   hiroute routing preview --name 'Economy work' --purpose 'Routine and complex development' --mode smart_saving --economy ECONOMY_BINDING --primary PRIMARY_BINDING --decision local_rules --apply-file route-apply.json
+   hiroute routing apply --request-file route-apply.json
+   ```
+
+   Replace all example IDs with current returned IDs. Repeat group flags for explicit order. Choose `--decision local_rules` or `--decision-service ID@REVISION` explicitly; an ordinary Chat model is not a decision-service connection. Shared backend defaults fill the editor. To change one choice, use `routing preview --plan PLAN_ID` with only that change and a new Apply file; other saved settings are preserved.
+4. Run `agents connect preview --context CONTEXT_ID --plan PLAN_ID` with the native choices from `--help`, and add `--apply-file connect-apply.json`. Hermes requires an explicit protocol; Codex requires native-model/default choices; Claude requires selected presets; Qoder/Pi/DSH add entries without claiming a global default. `--management enable` and `--collaboration explicit|delegate_by_default` configure independent Skills; neither needs caller model routing. Review the result, then run `agents connect apply --request-file connect-apply.json`.
+5. Inspect the Operation and `agents connect status --effective --context CONTEXT_ID --plan PLAN_ID`. Follow the returned native activation/selection guidance. Saved files do not prove loading, and a provider check does not prove the Agent used the route. Without consent for a model call, verification remains pending. A matching request identifies its route, actual model, outcome and reported usage only for that request/session. Unknown price is not zero cost.
+
+Apply files are new private files, never overwritten, and contain exact requests and stable keys. Keep `submission.operation_lookup` for `operations find`, or replay the identical Apply file after uncertain delivery. Do not reconstruct a new request/key to retry accepted work. Rerun Quickstart to reuse completed steps. To restore only one capability, use `agents restore preview --context CONTEXT_ID --facet management_skill --apply-file restore-apply.json`, then `agents restore apply --request-file restore-apply.json`; `model` and `collaboration` select the other facets. Restore preserves unrelated data and may leave native loading/selection to the user.
+
+Use family/leaf help for branches and `schema show --command-id routing.preview --include-schema` for complete installed definitions. The unflagged schema command remains a descriptor. JSON input and convenience flags are alternatives; `--apply-file` may accompany either supported Preview form. Desktop resident-service prerequisites must be completed through Desktop, not a fabricated CLI declaration.
+
+Business output is one complete JSON document on stdout. Capture stderr separately and save the real exit code; an accepted Operation is not completed work. In a terminal tool that merges streams:
+
+```sh
+(
+  hiroute quickstart > quickstart.stdout.json 2> quickstart.stderr.txt
+  hiroute_exit=$?
+  printf '%s\n' "$hiroute_exit" > quickstart.exit.txt
+  exit "$hiroute_exit"
+)
+```
+
+Read the whole JSON file, diagnostics and saved code separately. Never parse only the first line or use a later shell command's status. Exit 2 is invalid input; `--error-details` adds bounded field diagnostics. Keep personal notes outside the managed Skill file.
+
 ## Discover the current public contract first
 
 The CLI has two public-contract layers:
@@ -161,7 +209,7 @@ hiroute gateway --help
 hiroute protected-input --help
 hiroute subscription-proxy --help
 hiroute schema list --output json
-hiroute schema show --command-id compute.connection.test --output json
+hiroute schema show --command-id compute.connection.test --include-schema --output json
 hiroute compute connection test --help
 ```
 
@@ -392,8 +440,7 @@ Query real candidates instead of hand-writing an internal binding:
 printf '{}\n' | hiroute routing options --request-stdin --output json > routing-options.json
 ```
 
-Select a `binding_id` from `data.candidates[]` and construct a complete editor. A fixed single
-model is a valid minimal plan:
+For the ordinary path, use Quickstart convenience inputs above and shared authoring defaults. The following advanced JSON example demonstrates an explicitly chosen fixed policy; its limits are not product defaults, and it is not required before smart saving:
 
 ```json
 {

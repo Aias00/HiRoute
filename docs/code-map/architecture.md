@@ -21,6 +21,14 @@ CLI JSON request sources (`--request-file` / `--request-stdin`) share the bounde
 typed intent, selector and byte-limit ownership; see the [CLI input guide](../../crates/cli/INPUT.md)
 and [production argv regressions](../../crates/cli/tests/request_input.rs).
 
+[Quickstart and Preview convenience inputs](../../crates/cli/src/quickstart.rs) compose existing
+queries and transactions. They use [Application authoring options](../../crates/application/src/routing/editor_options.rs)
+for both initial and reopened editors, also consumed by Desktop. Exact Apply files are ordinary
+user-selected requests, not another journal or authority. [Offline schemas](../../crates/application-api/src/command_schemas.rs)
+come from shared wire DTOs, including [discovery](../../crates/application-api/src/agent_discovery.rs)
+and [settings Preview](../../crates/application-api/src/agent_settings_preview.rs); Application
+still owns discovery/planning and the daemon supplies adapters.
+
 CLI/Desktop → client-core → daemon control → Application → storage/native adapters
 is the control path. Published plans and grants feed Gateway execution. Worker
 admission freezes a plan and run authority before the native client calls Gateway.
@@ -67,7 +75,10 @@ Do not move either rule into a generic provider merge.
 
 [Model settings status](../../crates/daemon/src/control/runtime/settings_status.rs)
 joins owned native configuration with the current Gateway endpoint as well as
-grant/publication evidence. [CLI listener status](../../crates/cli/src/host_commands.rs)
+grant/publication evidence. Its opt-in [effective-state projection](../../crates/daemon/src/control/runtime/agent_effective_state.rs)
+uses existing Observation queries and authenticated receipts with the same current Plan/publication/grant identity.
+It does not infer loading from saved files, persist new state, restart Agents or send inference requests.
+[CLI listener status](../../crates/cli/src/host_commands.rs)
 uses that read and, for unconfigured/restored targets, the
 [released V1 connection join](../../crates/daemon/src/control/runtime/agent_connection_discovery.rs)
 to request explicit reconfiguration; listener operation history alone

@@ -41,3 +41,28 @@ argument validation. `src/args.rs` preserves the request-file path as an option 
 while extracting global flags. Follow `tests/request_input.rs` for actual binary argv
 regressions and the owner codec tests for typed projections. Generated help/channel
 metadata belongs to application-api; regenerate CLI and Product E2E contracts together.
+
+
+## Quickstart composition and prepared files
+
+`quickstart.rs` and its leaves own read-only navigation, bounded convenience flags and
+composition over existing Local Control requests. They own no default editor, save transaction,
+credential store or observation database. `routing options` authoring owns initial/reopen policy;
+`agent_effective_state` composes current settings with authenticated receipt identity.
+
+Supported Preview commands accept convenience flags OR one JSON input source. `--apply-file`
+may accompany either form and creates a new private request atomically with noclobber semantics.
+The opt-in result wraps the unchanged Preview with the exact Apply argv and Operation lookup tuple.
+The original Apply file/key is the retry identity, not a submission journal. Advanced unsupported
+Preview variants stay available as typed requests but cannot silently produce a different Apply.
+A Desktop login-item requirement blocks prepared submission until the actual host handles it.
+
+`effective_status.rs` preserves legacy positional output and adds explicit `--effective --context
+ID --plan ID` and typed-request forms. Native loading stays unknown without observation. Quickstart
+and status never activate a process or call a model. `command_schemas.rs` in Application API derives
+complete offline schemas from wire DTOs; unflagged descriptor output is unchanged. Detailed input
+errors are opt-in and bounded; raw input, enum values and arbitrary object keys never enter hints.
+
+The installed [Quickstart scenario](../daemon/tests/support/quickstart_product.py) covers first use,
+smart saving, exact replay, stale submission, continuation and one-facet restore. Native caller/target
+activation is a separate acceptance obligation, not established by external fixtures.
