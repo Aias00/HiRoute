@@ -228,6 +228,102 @@ HiRoute SHALL provide independent management-Skill preparation, status and owned
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/125#issuecomment-6186243593
 
+### Requirement: Intent-led CLI configuration binds an explicit target and resumes existing work
+
+HiRoute SHALL provide a CLI Quickstart for connecting a selected supported local Agent through an existing Plan or a new fixed-model or smart-saving Plan, and for inspecting, adjusting and restoring that connection. The calling Agent and managed target SHALL be independent. The caller supplies meaningful source, model/group and target choices; product defaults and existing business operations prepare the complete configuration without requiring hand-authored internal editors or transfer of digests/revisions. Existing selected sources, Plans and connections SHALL be reusable. Ambiguous targets or names SHALL return explicit choices before target writes. An explicitly selected unavailable target SHALL NOT fall back to another profile. A complete prior user choice SHALL NOT acquire repeated confirmation questions. Source preparation, publication and native settings retain their existing separate recoverable Operations; interrupted or uncertain work SHALL be queried or retried with its original identity rather than silently recreated. Quickstart SHALL present remaining activation and verification actions instead of declaring completion from saved configuration alone.
+
+#### Scenario: Configure another Agent
+
+- **WHEN** a supported management Agent or human selects a different supported target and an existing compatible Plan
+- **THEN** the same public CLI path prepares the selected target only, reports its native scope and leaves the caller's model and unrelated facets unchanged.
+
+#### Scenario: Choose smart saving directly
+
+- **WHEN** the user selects economy and primary models and a supported decision method
+- **THEN** the workflow prepares the smart-saving Plan directly with authoritative defaults and explicit choices; no temporary fixed-model Plan or full editor JSON is required.
+
+#### Scenario: Ambiguous or unavailable target
+
+- **WHEN** multiple native contexts match the selection or the explicit target becomes unreadable
+- **THEN** the workflow returns disambiguation or repair actions without choosing the first match, switching roots or reporting successful configuration.
+
+#### Scenario: Resume and preserve completed work
+
+- **WHEN** a source or Plan already exists, or an Apply response is lost after submission
+- **THEN** the workflow identifies reusable state and queries or retries the exact original operation; it does not create duplicate sources/Plans or roll back unrelated completed work.
+
+#### Scenario: Adjust or restore one facet
+
+- **WHEN** the user changes a selected route choice or restores the model facet
+- **THEN** only the requested intent is previewed/applied through the existing owners, other settings remain intact and any required native follow-up is reported.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/125#issuecomment-6206259270
+
+### Requirement: Core management CLI exposes callable contracts and authoritative initial configuration
+
+For the Quickstart and its supported branches, HiRoute SHALL expose navigable family help, complete installed request/response schema definitions including supported wrapper variants, valid input examples and bounded field-level input errors. Dynamic IDs and model choices SHALL come from current queries rather than examples or invented references. The fixed-model and smart-saving convenience paths SHALL obtain initial settings from a common product-owned defaults/capability projection also consumed by Desktop, including judgment settings, request limits, context bounds and valid native reasoning choices. Querying defaults SHALL NOT save, publish, import credentials or invoke models. Existing Plan edits SHALL retain unmodified settings. A supported decision service and local rules SHALL remain explicit distinct choices; a normal Chat execution binding SHALL NOT be silently treated as a compatible decision service. Existing released machine output, exit semantics, protected channels and request interpretation SHALL remain compatible; new explanatory fields SHALL use a compatible or explicitly selected contract.
+
+#### Scenario: Discover a valid request offline
+
+- **WHEN** a caller has the installed CLI but no source checkout or validation artifacts and requests help/schema for a Quickstart command
+- **THEN** the caller can determine required fields, enums, request wrappers and a valid minimal input; examples identify the queries supplying dynamic references.
+
+#### Scenario: Prepare defaults without copying a sample
+
+- **WHEN** a caller chooses fixed-model or smart-saving authoring and current candidates
+- **THEN** the product returns the complete valid initial structure and effective defaults/capability bounds; neither the Skill nor CLI invents maximum context, retry limits or highest reasoning settings.
+
+#### Scenario: Diagnose invalid input
+
+- **WHEN** a request contains a missing required member, wrong wrapper, unsupported enum, wrong type or unknown field
+- **THEN** the failure identifies the bounded field location and expected correction, retains usage failure semantics and does not expose credentials or echo the raw request.
+
+#### Scenario: Unsupported decision binding
+
+- **WHEN** a caller requests an ordinary Chat model as the decision service
+- **THEN** the workflow identifies the unsupported role and offers explicit supported-service or local-rules choices without changing the requested policy silently.
+
+#### Scenario: Preserve an existing editor
+
+- **WHEN** a caller changes one field of an existing Plan using the convenience path
+- **THEN** all other existing settings retain their values rather than being reset from new-plan defaults.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/125#issuecomment-6206259606
+
+### Requirement: One canonical management Skill guides complete generic CLI journeys
+
+HiRoute SHALL ship one canonical management Skill for all supported management Agent families, with the core Quickstart and bounded references for important branches: absent service/target/source, ambiguous scope, unavailable models or decision service, existing/partial setup, adjustment, effective-state diagnosis, observation and owned restoration. The Skill SHALL separate the caller from the managed target and consume installed public CLI capabilities, generated defaults and machine results rather than assuming Hermes, a particular filesystem layout or repository access. It SHALL explain how to obtain prerequisite CLI/Skill availability without coupling management to model routing or delegation. Instructions SHALL capture stdout, stderr and the CLI exit status separately when the native terminal merges them, inspect business/Operation results, preserve submission identity and avoid first-line JSON parsing or treating accepted as complete. Generated configuration and personal experience notes SHALL NOT be written into the product-managed Skill. Existing independent facet ownership, user-authorized effects, protected credentials and collaboration trigger policy remain authoritative.
+
+#### Scenario: Use the same Skill across callers
+
+- **WHEN** any supported Agent invokes management for itself or another supported local target
+- **THEN** the shared instructions guide the same public capability path and use the selected target's returned native requirements, without a per-caller copy of management logic.
+
+#### Scenario: Operate without development artifacts
+
+- **WHEN** an installed management Agent is asked to connect, adjust, inspect or restore an Agent
+- **THEN** the instructions and installed public commands provide the needed path without source code, binary inspection, test fixtures or manually patched Skill contents.
+
+#### Scenario: Capture a merged terminal result
+
+- **WHEN** the native tool presents stdout and stderr together or wraps command execution
+- **THEN** the guidance captures and parses the complete stdout JSON and preserves the real CLI return code separately; diagnostic text or a later shell command cannot be mistaken for CLI success.
+
+#### Scenario: Keep capabilities independent
+
+- **WHEN** the user enables management only or delegation only while leaving the caller's model native
+- **THEN** the Skill uses the requested facet and applicable collaboration policy without configuring a model route or creating a Worker requirement for management.
+
+#### Scenario: Preserve managed instructions
+
+- **WHEN** an Agent learns an environment-specific workaround or encounters externally modified Skill content
+- **THEN** it keeps operational notes outside the managed resource and reports existing drift/ownership rather than silently rewriting or force-upgrading the resource.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/125#issuecomment-6206260381
+
 ## Implementation references
 
 - [Client Core](../../../crates/client-core/src) and

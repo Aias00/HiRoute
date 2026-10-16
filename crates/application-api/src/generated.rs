@@ -588,6 +588,7 @@ mod tests {
                 "agent-launch-descriptor-request.v1.schema.json",
                 "agent-plan-catalog-query.v2.schema.json",
                 "agent-scan-request.v1.schema.json",
+                "compute-connection-options-request.v1.schema.json",
                 "compute-scan-request.union.schema.json",
                 "contract-set.v1.json",
                 "coverage-manifest.v1.json",

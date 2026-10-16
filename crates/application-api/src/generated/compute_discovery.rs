@@ -3,6 +3,14 @@ use super::*;
 pub(super) fn files() -> Vec<(&'static str, String)> {
     vec![
         (
+            "compute-connection-options-request.v1.schema.json",
+            pretty_json(
+                &crate::command_schemas("compute.connection.options")
+                    .expect("current options wire contract")
+                    .request,
+            ),
+        ),
+        (
             "compute-scan-request.union.schema.json",
             pretty_json(&json!({
                 "$schema":"https://json-schema.org/draft/2020-12/schema",

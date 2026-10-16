@@ -128,6 +128,10 @@ fn examples_reach_transport_and_wrong_wrappers_are_rejected_locally() {
     for (id, path) in [
         ("routing.options", vec!["routing", "options"]),
         (
+            "compute.connection.options",
+            vec!["compute", "connection", "options"],
+        ),
+        (
             "decision.services.apply",
             vec!["decision", "services", "apply"],
         ),

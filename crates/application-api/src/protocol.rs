@@ -868,6 +868,7 @@ pub(crate) fn command_request_schema(command_id: &str) -> &'static str {
         "compute.list" | "compute.show" => "hiroute.compute-management-query/v2",
         "compute.connection.preview" => "hiroute.compute-connection-preview-request/union",
         "compute.connection.prepare" => "hiroute.prepare-discovered-model-connection-request/v1",
+        "compute.connection.options" => "hiroute.compute-connection-options-request/v1",
         "compute.scan" => "hiroute.compute-scan-request/union",
         "compute.connection.apply" => "hiroute.compute-connection-apply-request/v1",
         "compute.connection.authorize" => "hiroute.compute-connection-authorization-request/v1",
@@ -990,6 +991,7 @@ pub(crate) fn command_stdin_channels(command_id: &str) -> &'static [&'static str
         | "compute.scan"
         | "agents.scan"
         | "compute.connection.prepare"
+        | "compute.connection.options"
         | "compute.connection.preview"
         | "compute.connection.apply"
         | "compute.connection.authorize"
@@ -1098,6 +1100,7 @@ pub(crate) fn command_usage(command_id: &str, joined_path: &str) -> String {
         "schema.show" => "hiroute schema show --command-id <stable-command-id> [--include-schema] --non-interactive --output json".to_owned(),
         "operations.find" => "hiroute operations find --request-stdin --output json".to_owned(),
         "models.show" | "prices.effective" | "prices.override.preview" | "prices.override.apply" | "compute.credential.add" => format!("hiroute {joined_path} --request-stdin --output json"),
+        "compute.connection.options" => "hiroute compute connection options [--request-file <PATH> | --request-stdin] --output json".to_owned(),
         "compute.list" => "hiroute compute list --output json".to_owned(),
         "compute.show" => "hiroute compute show <SOURCE_ID> --output json".to_owned(),
         "compute.connection.preview" | "compute.connection.apply" | "compute.connection.authorize" | "compute.connection.login" | "compute.connection.test" => {

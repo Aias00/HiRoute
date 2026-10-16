@@ -93,6 +93,7 @@
     "hiroute.compute-connection-apply-request/v1",
     "hiroute.compute-connection-authorization-request/v1",
     "hiroute.compute-connection-change/v1",
+    "hiroute.compute-connection-options-request/v1",
     "hiroute.compute-connection-options/v1",
     "hiroute.compute-connection-preview/v1",
     "hiroute.compute-connection-test-request/v1",

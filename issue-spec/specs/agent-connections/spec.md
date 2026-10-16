@@ -516,6 +516,38 @@ Desktop SHALL retain the supported local Agent catalog when an installation or e
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/125#issuecomment-6193859603
 
+### Requirement: Connection guidance distinguishes saved configuration from effective native requests
+
+HiRoute SHALL provide target/Plan-oriented completion and troubleshooting through its existing status, check and observation capabilities. Results SHALL distinguish saved preparation, known native prerequisites/activation, current selection when observable, and actual recorded request outcomes. Native loading or selection that cannot be observed SHALL remain unknown with an actionable supported next step. Evidence SHALL bind the selected connection/Plan and relevant configuration/publication rather than an unrelated or older request; observed success SHALL describe only the observed surface/session and not every running conversation. A successful direct provider check SHALL NOT establish that a native Agent is using the route. Native activation guidance SHALL use actual adapter capabilities and supported native controls, preserve native lifecycle protections, and keep preparation separate from restart or model-call effects. Verification without model-call consent SHALL remain pending. Restore SHALL retain existing ownership and recovery guarantees and report any remaining activation or selection step.
+
+#### Scenario: Saved but unobserved
+
+- **WHEN** a native configuration and plugin resource are saved while the running Agent has not been observed using them
+- **THEN** the result reports preparation separately from runtime/effective-request state and gives a target-specific follow-up instead of a verified success.
+
+#### Scenario: Verify the intended route
+
+- **WHEN** a request from the selected connection after the relevant change completes
+- **THEN** the user can locate its Plan, actual model, outcome and recorded usage through target/Plan-oriented output; stale or other-target evidence cannot satisfy the result.
+
+#### Scenario: Native control available or unavailable
+
+- **WHEN** the selected Agent exposes a supported reload/new-process/model-selection action, or its effect cannot be established
+- **THEN** the result offers the supported action with its actor/effect and observation limits; it does not bypass protection, promise universal reload or execute it merely because status was queried.
+
+#### Scenario: No live-call consent
+
+- **WHEN** configuration is saved but the user has not authorized a model call and no matching request is recorded
+- **THEN** the result remains configured with verification pending, without a paid call, fabricated savings or false task completion.
+
+#### Scenario: Session override or ownership conflict
+
+- **WHEN** the current native session is known to select a different model, or restoration encounters a foreign edit
+- **THEN** the result explains the observed mismatch/conflict and the applicable native selection or owned recovery action without overwriting unrelated changes.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/125#issuecomment-6206260018
+
 ## Implementation references
 
 - [Shared settings transaction](../../../crates/application/src/agent_connection/settings/transaction.rs)

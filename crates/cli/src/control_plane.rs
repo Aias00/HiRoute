@@ -89,7 +89,11 @@ pub(crate) fn command_payload(
         "compute.connection.prepare" => Some(request::<
             hiroute_application_api::PrepareDiscoveredModelConnectionRequestV1,
         >(options)),
-        "compute.connection.options" => Some(empty::<ComputeConnectionOptionsRequestV1>(options)),
+        "compute.connection.options" => Some(if options.is_empty() {
+            empty::<ComputeConnectionOptionsRequestV1>(options)
+        } else {
+            request::<ComputeConnectionOptionsRequestV1>(options)
+        }),
         "compute.connection.preview" => Some(compute_preview(options)),
         "compute.connection.apply" => Some(request::<ComputeConnectionApplyRequestV1>(options)),
         "compute.connection.authorize" => {
