@@ -881,7 +881,7 @@ const COMMANDS: &[StaticCommandDescriptor] = &[
         ["prices", "effective"],
         "GetEffectivePrices",
         ["CLI-040", "APP-040"],
-        Planned,
+        Released,
         Query,
         "Read effective current-catalog price facts and local override revisions."
     ),
@@ -890,7 +890,7 @@ const COMMANDS: &[StaticCommandDescriptor] = &[
         ["prices", "override", "preview"],
         "PreviewPriceOverrideChange",
         ["CLI-041", "APP-041"],
-        Planned,
+        Released,
         Preview,
         "Preview a typed local price override change."
     ),
@@ -899,7 +899,7 @@ const COMMANDS: &[StaticCommandDescriptor] = &[
         ["prices", "override", "apply"],
         "ApplyPriceOverrideChange",
         ["CLI-042", "APP-042"],
-        Planned,
+        Released,
         Apply,
         "Apply an exact local price override revision."
     ),
