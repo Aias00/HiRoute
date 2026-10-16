@@ -32,7 +32,9 @@ issue-spec artifacts. Omit unavailable revisions with an explicit reason.
 - **Recurrence:** observed count and distinct task contexts, or `unknown`; never infer
   frequency from repeated tool retries or count one report per label as occurrences.
 - **Suggested improvement:** smallest useful correction and any known workaround.
-- **Acceptance:** observable outcome that would demonstrate the correction.
+- **Acceptance and resumption:** observable outcome, minimal sanitized scenario,
+  necessary prerequisites and stable evidence references for a future session.
+  Record known missing context; do not require a complete environment archive.
 - **Related:** matching prior discussions and linked reports for independent causes.
 
 For new evidence on an existing Issue, append the observation date, source revision,
@@ -42,10 +44,33 @@ retry of the same event.
 
 When a correction becomes available, append its public fix/release link and revision.
 When HiRoute adopts it, append the adoption PR/commit, installed CLI or generated
-workflow revision, original scenario rerun and observed before/after result. Keep
+workflow revision and, when feasible, the comparable scenario and observed result.
+Otherwise record why benefit remains unverified or the scenario no longer applies. Keep
 these distinct from occurrence counts. A useful review separates reported findings,
 upstream fixes available, adopted fixes, verified benefit and remaining friction;
 Issue open/closed state alone cannot represent that progression.
+
+## Resume after a gap
+
+The Issue is the durable handoff, not the original chat, agent or temporary checkout.
+Keep the problem, expected outcome and minimal scenario understandable from its body
+and dated comments; use public commit permalinks for historical paths that may move.
+Summarize essential evidence in sanitized text. Raw logs can stay in ignored local
+artifacts, but future understanding must not depend on those artifacts surviving.
+
+On a later relevant task or requested review, read the selected Issue and linked
+fix/adoption records, then check today's commands, versions and project requirements.
+Distinguish an upstream fix being available, a local adoption, verified benefit,
+unverified benefit, and a scenario that no longer applies. These are plain-language
+observations in dated comments, not a new typed workflow, label set or mandatory
+state machine. Write only when new evidence or a material context change exists.
+
+If context is sufficient, use the smallest comparable current scenario and explain
+any differences from the original. If prerequisites or baseline evidence are missing,
+record what cannot be concluded and stop that validation attempt. If requirements
+have changed, explain why the old scenario no longer applies instead of forcing a
+reproduction. Missing baseline measurements cannot establish a quantitative gain.
+A known future trigger can be recorded without creating a reminder or recurring job.
 
 ## Commands and partial failures
 
@@ -100,5 +125,5 @@ label edit or closure and is not evidence of recurrence. Page through results wh
 limits are reached, or split the date range and deduplicate by repository + number;
 state incomplete coverage if it cannot be exhausted. Use the user's timezone and
 explicit inclusive start/end dates in the summary. Include relevant fix/adoption
-updates from that window and distinguish verified benefits from untested upgrades. Do not treat absence of a
-recorded occurrence as evidence that the workflow never encountered the problem.
+updates from that window and distinguish verified benefits from untested upgrades
+and scenarios that no longer apply. Do not treat absence of a recorded occurrence as evidence that the workflow never encountered the problem.

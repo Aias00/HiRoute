@@ -1,13 +1,15 @@
 ---
 name: hiroute-workflow-improvement
-description: Improve HiRoute iteration by capturing issue-spec CLI and workflow friction, routing labeled feedback to its owner, and verifying adopted improvements against the original task. Use during relevant project work or requested feedback reviews; not ordinary product bugs or automatic upgrades.
+description: Improve HiRoute iteration by capturing issue-spec CLI and workflow friction, routing labeled feedback to its owner, and assessing adopted improvements when a later task provides suitable context. Use during relevant project work or requested feedback reviews; not ordinary product bugs or automatic upgrades.
 ---
 
 # Improve issue-spec through evidence
 
 Use HiRoute iteration as the source of concrete improvement evidence: observed
 friction becomes feedback, recurring feedback informs CLI/workflow corrections,
-and adopted corrections should improve subsequent HiRoute work. Labels support
+and adopted corrections should improve subsequent HiRoute work. These steps can
+span weeks and unrelated sessions; no original agent or conversation owns a
+continuous follow-up obligation. Labels support
 periodic analysis; filing Issues is an intermediate result, not proof of improvement.
 
 Capture observations while doing the original task, such as repeated manual repair,
@@ -68,6 +70,8 @@ label definitions, provider commands and time-window queries.
    reopen it automatically. Split unrelated causes even if their symptoms match.
 4. Prepare a self-contained English body with sanitized reproduction, expected and
    observed behavior, impact, owning layer, suggested correction and acceptance.
+   Include the minimal scenario and prerequisites needed by a future session; a
+   conversation link or temporary worktree alone cannot carry required context.
    Distinguish measured facts from hypotheses. A design gap can use an observed
    task sequence rather than a failing command. Do not manufacture a bug to fill
    a category or attach private logs, credentials or local absolute paths.
@@ -104,8 +108,14 @@ feedback does not authorize implementation, closure, relabeling history or a sch
 
 ## Bring improvements back into HiRoute
 
-When a relevant feedback item has a proposed or released fix, assess it as part of
-related HiRoute work or a requested feedback review. Read its actual resolution,
+Resume this loop only when a later related task, an authorized adoption, or a
+requested periodic review makes a feedback item relevant. Do not keep the current
+task open, wait for an upstream release, poll, or scan the entire backlog on every
+iteration. A future session can recover the scenario from its Issue and linked
+durable evidence using the [resumption guide](references/feedback.md#resume-after-a-gap).
+
+When a relevant feedback item has a proposed or released fix, assess its current
+applicability before planning adoption. Read its actual resolution,
 linked implementation and available revision; an Issue closure alone is not proof
 that a fix exists, is installed or addresses HiRoute's scenario. Batch related
 candidates for the user's periodic review instead of repeatedly interrupting work.
@@ -125,11 +135,20 @@ Adoption is separate implementation work: propose it when not yet authorized, an
 proceed without asking again when the current task already includes it. Keep
 feedback Issues linked to the corresponding fix and adoption PR/revision.
 
-After adoption, repeat the original command or representative task scenario with
-the new revision and applicable project checks. Compare the observed failure,
-manual repair, ambiguity or repeated work with the original evidence. Record the
-actual result, remaining limitations and source versions on the feedback Issue or
-adoption PR; if no comparable scenario has run, say that benefit is unverified.
+When a comparable scenario is available within the current scope, validate an
+adopted improvement against the recorded symptom and applicable project checks.
+Recheck current requirements and environment first; historical evidence explains
+the report but does not override today's contract. Record actual results and source
+versions on the feedback Issue or adoption PR.
+
+If the original context is missing, too costly to reconstruct, obsolete or no longer
+relevant, record that limitation and leave the benefit unverified or the scenario
+no longer applicable. State a useful future trigger only when known, such as the
+next task using the affected command. Do not invent a deadline, assign the original
+session ongoing ownership, or reconstruct an old environment solely to finish the
+feedback loop. This does not waive checks required by an actual adoption change.
+
 Do not claim time savings without measurements, count an upstream release as local
-adoption, or automatically close the report. A remaining cause returns to the same
-feedback thread with new evidence, completing the next iteration of the loop.
+adoption, infer success from silence, or automatically close the report. New relevant
+evidence can resume the same thread later; a remaining cause returns there without
+requiring continuity of agent, conversation or worktree.
