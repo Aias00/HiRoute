@@ -1,4 +1,5 @@
 use super::*;
+#[cfg(not(windows))]
 use std::io::Write;
 use std::path::Path;
 
@@ -167,27 +168,40 @@ fn request(
 /// The file appears at its final name only after a complete, synced write. Noclobber rejects
 /// existing regular files and symlinks, including a concurrent creator. No parent is created.
 fn write_new(path: &Path, value: &Value) -> std::io::Result<()> {
-    let parent = path
-        .parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."));
-    if path.file_name().is_none() || path.symlink_metadata().is_ok() {
-        return Err(std::io::ErrorKind::AlreadyExists.into());
-    }
-    let mut file = tempfile::NamedTempFile::new_in(parent)?;
-    #[cfg(unix)]
+    #[cfg(windows)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        file.as_file()
-            .set_permissions(std::fs::Permissions::from_mode(0o600))?;
+        let mut bytes = serde_json::to_vec_pretty(value)?;
+        bytes.push(b'\n');
+        hiroute_platform::private_fs::write_material(
+            path,
+            &bytes,
+            hiroute_platform::private_fs::FileMode::Data,
+        )
     }
-    serde_json::to_writer_pretty(&mut file, value)?;
-    file.write_all(b"\n")?;
-    file.as_file().sync_all()?;
-    file.persist_noclobber(path).map_err(|error| error.error)?;
-    #[cfg(unix)]
-    std::fs::File::open(parent)?.sync_all()?;
-    Ok(())
+    #[cfg(not(windows))]
+    {
+        let parent = path
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        if path.file_name().is_none() || path.symlink_metadata().is_ok() {
+            return Err(std::io::ErrorKind::AlreadyExists.into());
+        }
+        let mut file = tempfile::NamedTempFile::new_in(parent)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            file.as_file()
+                .set_permissions(std::fs::Permissions::from_mode(0o600))?;
+        }
+        serde_json::to_writer_pretty(&mut file, value)?;
+        file.write_all(b"\n")?;
+        file.as_file().sync_all()?;
+        file.persist_noclobber(path).map_err(|error| error.error)?;
+        #[cfg(unix)]
+        std::fs::File::open(parent)?.sync_all()?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -203,6 +217,8 @@ mod tests {
             serde_json::from_slice::<Value>(&std::fs::read(&path).unwrap()).unwrap(),
             value
         );
+        #[cfg(windows)]
+        assert!(hiroute_platform::private_fs::open_private_file(&path).is_ok());
         assert!(write_new(&path, &json!({})).is_err());
         assert_eq!(
             serde_json::from_slice::<Value>(&std::fs::read(&path).unwrap()).unwrap(),

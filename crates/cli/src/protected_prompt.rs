@@ -1,5 +1,6 @@
 //! User-owned controlling-terminal input. Secret bytes never enter ordinary CLI output.
 use hiroute_application_api::ErrorCode;
+#[cfg(unix)]
 use zeroize::{Zeroize, Zeroizing};
 
 pub(crate) fn read(format: &str) -> Result<String, ErrorCode> {
@@ -14,6 +15,7 @@ pub(crate) fn read(format: &str) -> Result<String, ErrorCode> {
     Err(ErrorCode::ActionRequired)
 }
 
+#[cfg(unix)]
 fn authorization(bytes: &[u8], format: &str) -> Result<Zeroizing<String>, ErrorCode> {
     let value = std::str::from_utf8(bytes)
         .map_err(|_| ErrorCode::InvalidArguments)?

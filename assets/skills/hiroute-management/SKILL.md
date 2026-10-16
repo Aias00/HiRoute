@@ -146,7 +146,8 @@ Never run the prompt in an Agent tool or capture keys in chat. The user's termin
 without echo and adds Bearer; the Agent receives status/ref only. Custom full headers use `--format
 raw`, or explicit custom `--no-auth`. Cancel/missing terminal saves nothing. Continue on success;
 missing registration/restart needs a fresh human input/ref. Never substitute argv/env/ordinary JSON
-or files. Desktop's password field is supported.
+or files. Follow installed host help: unavailable terminal prompts need Desktop or an operator's
+protected input handle, never chat.
 
 After registration, choose the actual preset, fill required endpoint/model inputs, review each
 Preview and inspect Operations. Use actual saved revisions:
@@ -239,11 +240,9 @@ For subscription/Coding Plan, keep actual billing independent from API-equivalen
 hiroute value show --routing PLAN_ID --period 7d --basis api-equivalent --reference-binding PRIMARY_BINDING --currency CNY --output json
 ```
 
-Resolve the actual reference Binding (normally primary) and currency with the user. Inspect routed
-and reference estimates, signed savings, price/evaluation basis and paired coverage. This uses current
-prices and recorded tokens, including retries; it does not rewrite historical receipts or prove cash
-saved/output equivalence. Incomplete totals/savings stay null; paired subtotals cover only stated
-complete requests. Negative savings stay negative. Narrow the interval if unavailable.
+Resolve the reference Binding (normally primary) and currency with the user. Read value show --help
+for the current-price basis, retries, paired coverage and signed estimates. This proves neither cash
+savings nor equal output. Incomplete totals stay null; narrow unavailable intervals.
 
 Missing prices: use installed `prices effective` schema with exact Binding locators, currency and
 `valuation_kind=api_equivalent`. Use returned edit_context revisions with `prices override preview`,
