@@ -34,6 +34,9 @@ pub struct CandidateBindingV1 {
     pub stable_target_key: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_binding_id: Option<String>,
+    /// Derived from trusted supplying facts; absence remains unknown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub billing_class: Option<hiroute_domain::BillingClass>,
     pub adapter_id: String,
     pub credential_refs: Vec<String>,
     pub credential_destination_ref: String,
@@ -147,6 +150,7 @@ pub(crate) fn exact_test_candidate(
         local_id,
         stable_target_key: format!("target-{local_id}"),
         source_binding_id: None,
+        billing_class: Some(hiroute_domain::BillingClass::Free),
         adapter_id: "builtin".into(),
         credential_refs: vec![format!("credential-{local_id}")],
         credential_destination_ref: "connection-option/fixture.native.v1".into(),
@@ -194,6 +198,7 @@ pub(crate) fn exact_cpa_test_candidate(
         local_id,
         stable_target_key: format!("target-{local_id}"),
         source_binding_id: None,
+        billing_class: Some(hiroute_domain::BillingClass::Free),
         adapter_id: "adapter.cpa.responses@1".into(),
         credential_refs: vec![format!("credential-{local_id}")],
         credential_destination_ref: "connection-option/fixture.cpa.v1".into(),

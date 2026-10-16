@@ -94,6 +94,19 @@ macro_rules! response { ($($ty:ty),+ $(,)?) => { alternatives(vec![$(schema::<Ma
 
 pub fn command_schemas(command_id: &str) -> Option<CommandSchemasV1> {
     let (mut request, mut response) = match command_id {
+        "value.show" => (
+            observation_request(&[
+                "value",
+                "home_value",
+                "value_report",
+                "api_equivalent_value",
+            ]),
+            response!(
+                hiroute_domain::ObservationValueSummaryV2,
+                hiroute_domain::ObservationValueReportV2,
+                hiroute_domain::ApiEquivalentValueReportV1
+            ),
+        ),
         "sessions.list" => (
             alternatives(vec![
                 schema::<SessionListRequestV1>(false),

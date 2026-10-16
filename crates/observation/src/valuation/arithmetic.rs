@@ -33,6 +33,10 @@ pub fn value_attempt(
     ] {
         let missing = match (tokens, rate) {
             (None, _) => Some(ValuationMissingReason::UsageUnknown),
+            (Some(0), _) => {
+                known += 1;
+                None
+            }
             (
                 Some(tokens),
                 TokenRateV1::Known {

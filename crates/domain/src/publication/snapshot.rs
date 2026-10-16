@@ -103,6 +103,7 @@ pub(super) fn project_grants(
                                 return Err(PublicationError::CandidateIdCollision);
                             }
                             let mut projected = project_candidate(&binding, local_id, &[protocol])?;
+                            projected.billing_class = Some(binding.billing_class);
                             projected.pricing_identity = Some(GatewayCandidatePricingIdentityV1 {
                                 source_id: binding.source_id.clone(),
                                 source_identity_digest: binding.source_identity_digest.clone(),
@@ -175,6 +176,7 @@ pub(super) fn project_candidate(
         local_id,
         stable_target_key: candidate.binding_id.clone(),
         source_binding_id: None,
+        billing_class: None,
         adapter_id: format!("{}@{}", candidate.adapter_ref, candidate.adapter_revision),
         credential_refs: candidate.credential_refs.clone(),
         credential_destination_ref: candidate
@@ -219,6 +221,7 @@ pub(super) fn project_pricing_identities(
             if projected.stable_target_key != candidate.binding_id {
                 projected.source_binding_id = Some(candidate.binding_id.clone());
             }
+            projected.billing_class = Some(candidate.billing_class);
             projected.pricing_identity = Some(GatewayCandidatePricingIdentityV1 {
                 source_id: candidate.source_id.clone(),
                 source_identity_digest: candidate.source_identity_digest.clone(),

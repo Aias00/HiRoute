@@ -29,6 +29,7 @@ pub(crate) struct ObservationControl {
     clock: Arc<dyn ApplicationClockPort>,
     value_scope: Arc<dyn ValueScopePort>,
     workspace_id: WorkspaceId,
+    prices: Option<Arc<dyn crate::prices::SourcePriceControlPort>>,
 }
 
 impl ObservationControl {
@@ -44,7 +45,16 @@ impl ObservationControl {
             clock,
             value_scope,
             workspace_id: WorkspaceId::default(),
+            prices: None,
         }
+    }
+
+    pub(crate) fn with_prices(
+        mut self,
+        prices: Option<Arc<dyn crate::prices::SourcePriceControlPort>>,
+    ) -> Self {
+        self.prices = prices;
+        self
     }
 
     pub(crate) fn list(

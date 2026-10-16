@@ -71,6 +71,9 @@ pub struct GatewayExecutableCandidateV2 {
     /// Derived from the stored Plan; absent on unchanged legacy/fixed projections.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_binding_id: Option<String>,
+    /// Derived only in the executable projection; omitted in retained Product bytes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub billing_class: Option<crate::BillingClass>,
     pub adapter_id: String,
     pub credential_refs: Vec<String>,
     /// Exact Secret authority destination derived from the current connection option.

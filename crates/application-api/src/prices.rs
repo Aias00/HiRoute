@@ -89,8 +89,8 @@ pub struct GetEffectivePricesV2 {
 pub struct EffectivePriceResultItemV2 {
     pub query_id: String,
     pub quote: FrozenPriceQuoteV1,
-    /// Exact optimistic-concurrency inputs for an API price edit. Subscription-backed
-    /// targets deliberately return `None` because this release does not permit editing them.
+    /// Exact optimistic-concurrency inputs for a source-specific price edit. Ordinary
+    /// subscription usage prices are not editable; explicit API-equivalent reference prices are.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub edit_context: Option<PriceEditContextV1>,
 }

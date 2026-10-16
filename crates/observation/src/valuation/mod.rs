@@ -9,9 +9,10 @@ mod retention;
 mod schema;
 mod usage_archive;
 mod worker;
-pub(crate) use ingest::ingest;
+pub(crate) use ingest::{RawUsage, ingest};
 pub(crate) use retention::{archive_request, archive_session};
 pub(crate) use schema::migrate;
+pub(crate) use worker::normalize;
 pub use worker::{ValuationAmountV2, ValuationRecordV2};
 #[cfg(test)]
 mod tests;

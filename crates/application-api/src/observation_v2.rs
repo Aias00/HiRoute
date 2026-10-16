@@ -40,6 +40,7 @@ pub enum ObservationReadIntentV2 {
     Value(ObservationValueQueryV2),
     HomeValue(ObservationHomeValueQueryV2),
     ValueReport(ObservationValueReportOptionsV2),
+    ApiEquivalentValue(ApiEquivalentValueOptionsV1),
     PlanQuality(PlanQualitySamplesQuery),
 }
 impl ObservationReadRequestV2 {
@@ -59,7 +60,8 @@ impl ObservationReadRequestV2 {
             ObservationReadIntentV2::Facts(_) => "GetRoutingReceipt",
             ObservationReadIntentV2::Value(_)
             | ObservationReadIntentV2::HomeValue(_)
-            | ObservationReadIntentV2::ValueReport(_) => "GetValue",
+            | ObservationReadIntentV2::ValueReport(_)
+            | ObservationReadIntentV2::ApiEquivalentValue(_) => "GetValue",
             _ => "GetSession",
         }
     }
@@ -78,7 +80,8 @@ impl ObservationReadRequestV2 {
             }
             ObservationReadIntentV2::Value(_)
             | ObservationReadIntentV2::HomeValue(_)
-            | ObservationReadIntentV2::ValueReport(_) => "GetValueV2",
+            | ObservationReadIntentV2::ValueReport(_)
+            | ObservationReadIntentV2::ApiEquivalentValue(_) => "GetValueV2",
             ObservationReadIntentV2::PlanQuality(_) => "ReadPlanQualitySamplesV1",
         }
     }
@@ -125,4 +128,12 @@ pub struct ObservationValueReportOptionsV2 {
     pub group_by: crate::ValueGroupByV1,
     pub currency: Option<String>,
     pub session_id: Option<crate::SessionId>,
+}
+
+/// Opt-in current-price estimate; old value-report calls keep their output.
+#[derive(schemars::JsonSchema, Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ApiEquivalentValueOptionsV1 {
+    pub report: ObservationValueReportOptionsV2,
+    pub reference_binding_id: String,
 }

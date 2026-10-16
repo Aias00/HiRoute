@@ -1,3 +1,4 @@
+mod api_equivalent;
 use super::*;
 use hiroute_application_api::{ObservationReadIntentV2, ObservationReadRequestV2};
 use hiroute_domain::ObservationReaderContext;
@@ -145,6 +146,9 @@ impl ObservationControl {
                     q.group_by,
                     now,
                 )?)
+            }
+            ObservationReadIntentV2::ApiEquivalentValue(q) => {
+                serde_json::to_value(self.api_equivalent_value(&reader, q, now)?)
             }
             ObservationReadIntentV2::PlanQuality(q) => serde_json::to_value(
                 self.service

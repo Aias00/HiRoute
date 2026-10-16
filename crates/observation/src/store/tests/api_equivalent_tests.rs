@@ -1,0 +1,178 @@
+use super::*;
+use hiroute_domain::{ApiEquivalentPriceV1, ObservationMetricCoverageV2, PriceValuationKindV1};
+
+fn reference_price(binding: &str, model: &str, rate: u64) -> ApiEquivalentPriceV1 {
+    let mut quote = price(100, UsageFrameKindV1::Cumulative).quote.unwrap();
+    quote.exact_target.valuation_kind = PriceValuationKindV1::ApiEquivalent;
+    quote.valuation_kind = PriceValuationKindV1::ApiEquivalent;
+    quote.exact_target.model_identity = PriceModelIdentityV1::CatalogModel(model.into());
+    quote.rates = TokenRatesV1 {
+        input_uncached: TokenRateV1::known(rate),
+        output: TokenRateV1::known(rate),
+        cache_read: TokenRateV1::known(rate),
+        cache_write: TokenRateV1::known(rate),
+    };
+    quote.quote_digest = quote.computed_digest().unwrap();
+    ApiEquivalentPriceV1 {
+        binding_id: binding.into(),
+        quote,
+    }
+}
+fn reader(fixture: &Fixture) -> ObservationReaderContext {
+    ObservationReaderContext::local_user(
+        fixture.workspace.clone(),
+        "local-estimate".into(),
+        1,
+        10_000,
+        false,
+        false,
+    )
+    .unwrap()
+}
+fn query(fixture: &Fixture) -> ObservationValueQueryV2 {
+    ObservationValueQueryV2 {
+        from_ms: 50,
+        to_ms: 1000,
+        session_id: Some(fixture.session.to_string()),
+        plan_id: Some("plan/codex-daily".into()),
+        currency: Some("USD".into()),
+    }
+}
+#[test]
+fn explicit_current_price_comparison_keeps_frozen_values_and_missing_evidence_honest() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    let fixture = Fixture::new("api-estimate");
+    for fact in facts(&fixture, UsageFrameKindV1::Cumulative) {
+        store.ingest_fact(&fact, &[]).unwrap();
+    }
+    store.settle_pending_valuations(16).unwrap();
+    let frozen = serde_json::to_value(latest(&store, &fixture)).unwrap();
+    let cheap = reference_price("binding-a", "model-a", 1_000_000);
+    let expensive = reference_price("binding-ref", "model-reference", 4_000_000);
+    let report = store
+        .observed_api_equivalent_value(
+            &reader(&fixture),
+            &query(&fixture),
+            &expensive,
+            &[cheap.clone()],
+            1000,
+        )
+        .unwrap();
+    assert_eq!(
+        report.coverage,
+        ObservationMetricCoverageV2::Complete,
+        "{report:?}"
+    );
+    assert_eq!(report.request_count, 1);
+    assert_eq!(report.compared_request_count, 1);
+    assert_eq!(
+        report.reference_estimate_micros.unwrap(),
+        report.routed_estimate_micros.unwrap() * 4
+    );
+    assert_eq!(
+        report.estimated_savings_micros.unwrap(),
+        report.routed_estimate_micros.unwrap() as i64 * 3
+    );
+    assert_eq!(report.actual_cash_micros, None);
+    let negative = store
+        .observed_api_equivalent_value(
+            &reader(&fixture),
+            &query(&fixture),
+            &cheap,
+            &[reference_price("binding-a", "model-a", 8_000_000)],
+            1000,
+        )
+        .unwrap();
+    assert!(negative.estimated_savings_micros.unwrap() < 0);
+    assert_eq!(
+        serde_json::to_value(latest(&store, &fixture)).unwrap(),
+        frozen
+    );
+    let mut missing = cheap.clone();
+    missing.quote.rates.cache_read =
+        TokenRateV1::unknown(PriceUnknownReasonV1::CacheRateNotCollected);
+    missing.quote.quote_digest = missing.quote.computed_digest().unwrap();
+    let unknown = store
+        .observed_api_equivalent_value(
+            &reader(&fixture),
+            &query(&fixture),
+            &expensive,
+            &[missing],
+            1000,
+        )
+        .unwrap();
+    assert_eq!(unknown.compared_request_count, 0);
+    assert_eq!(unknown.estimated_savings_micros, None);
+    assert_eq!(unknown.routed_estimate_micros, None);
+    let mut foreign = cheap;
+    foreign.quote.exact_target.source_identity_digest =
+        CanonicalDigest::of_bytes(b"another supplier");
+    foreign.quote.quote_digest = foreign.quote.computed_digest().unwrap();
+    let unknown = store
+        .observed_api_equivalent_value(
+            &reader(&fixture),
+            &query(&fixture),
+            &expensive,
+            &[foreign],
+            1000,
+        )
+        .unwrap();
+    assert_eq!(unknown.estimated_savings_micros, None);
+    assert_eq!(unknown.missing_request_count, 1);
+    let mut expired = query(&fixture);
+    expired.from_ms = 0;
+    let long_reader = ObservationReaderContext::local_user(
+        fixture.workspace.clone(),
+        "local-estimate".into(),
+        1,
+        crate::managed_text::RETENTION_MS + 10_000,
+        false,
+        false,
+    )
+    .unwrap();
+    let unknown = store
+        .observed_api_equivalent_value(
+            &long_reader,
+            &expired,
+            &expensive,
+            &[],
+            crate::managed_text::RETENTION_MS + 500,
+        )
+        .unwrap();
+    assert!(unknown.retention_boundary_partial);
+    assert_eq!(unknown.estimated_savings_micros, None);
+}
+
+#[test]
+fn explicit_comparison_includes_failed_retry_usage_without_rewriting_a_receipt() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    let fixture = Fixture::new("api-retry");
+    for fact in facts(&fixture, UsageFrameKindV1::Cumulative) {
+        store.ingest_fact(&fact, &[]).unwrap();
+    }
+    // The input owner has already admitted two observed Attempts for the same request.
+    // Keep the accepted ordinal unchanged and add a failed attempt's retained normalized input.
+    store.connection.lock().execute("INSERT INTO valuation_attempt_inputs_v2(workspace_id,request_id,ordinal,pricing_json,usage_json) SELECT workspace_id,request_id,2,pricing_json,usage_json FROM valuation_attempt_inputs_v2 WHERE workspace_id=?1 AND request_id=?2 AND ordinal=1",rusqlite::params![fixture.workspace.as_str(),fixture.request.as_str()]).unwrap();
+    let cheap = reference_price("binding-a", "model-a", 1_000_000);
+    let report = store
+        .observed_api_equivalent_value(
+            &reader(&fixture),
+            &query(&fixture),
+            &cheap,
+            &[cheap.clone()],
+            1000,
+        )
+        .unwrap();
+    assert_eq!(
+        report.coverage,
+        ObservationMetricCoverageV2::Complete,
+        "{report:?}"
+    );
+    assert_eq!(
+        report.routed_estimate_micros.unwrap(),
+        2 * report.reference_estimate_micros.unwrap()
+    );
+    assert!(report.estimated_savings_micros.unwrap() < 0);
+}

@@ -668,7 +668,8 @@ impl ApplicationService {
             ports.control.clone(),
             ports.clock.clone(),
             ports.value_scope.clone(),
-        );
+        )
+        .with_prices(ports.prices.clone());
         let result = match operation {
             ObservationOperation::List => control.list(
                 request.principal.kind,

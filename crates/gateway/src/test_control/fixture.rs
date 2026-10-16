@@ -67,6 +67,7 @@ pub fn sealed_native_candidate(
         local_id,
         stable_target_key: stable_target_key.into(),
         source_binding_id: None,
+        billing_class: Some(hiroute_domain::BillingClass::Free),
         adapter_id: "adapter.native-e2e@1".into(),
         credential_refs: credential_refs.to_vec(),
         credential_destination_ref: format!("connection-option/{stable_target_key}"),

@@ -194,7 +194,7 @@ fn subscription_price_query_is_explicitly_non_editable() {
     ));
     assert!(response.error.is_none(), "{response:?}");
     let response: EffectivePricesResultV2 = serde_json::from_value(response.data.unwrap()).unwrap();
-    assert!(response.items[0].edit_context.is_none());
+    assert!(response.items[0].edit_context.is_some());
 }
 
 #[test]
