@@ -158,10 +158,6 @@ impl InstalledProduct {
         self.start_with_entry(false)
     }
 
-    fn start_via_cli(&self) -> RunningDaemon {
-        self.start_with_entry(true)
-    }
-
     fn start_with_entry(&self, cli: bool) -> RunningDaemon {
         self.start_with_environment(cli, &[])
     }
@@ -861,7 +857,8 @@ fn installed_native_headless_roundtrip_and_graceful_then_forced_restart() {
 #[ignore = "requires explicit pinned real Codex, Claude, Pi and Node artifacts"]
 fn actual_windows_complete_public_headless_business() {
     let product = InstalledProduct::create();
-    let mut first = product.start();
+    let contexts = windows_user_models::Contexts::prepare(&product);
+    let mut first = product.start_with_environment(false, contexts.variables());
     gateway_ready(first.listen);
     assert_eq!(product.cli(&["system", "status"])["status"], "succeeded");
     let schema = product.cli(&["schema", "list"]);
@@ -891,7 +888,6 @@ fn actual_windows_complete_public_headless_business() {
             &modes.smart.plan_id,
             &modes.custom.plan_id,
             &native.chat.plan.plan_id,
-            &native.messages.plan.plan_id,
         ],
     );
     let claude =
@@ -905,7 +901,7 @@ fn actual_windows_complete_public_headless_business() {
     claude.launch(&product, &routing.plan.alias);
     routing.assert_native_launch_reached_upstream();
     modes.traffic(&product, first.listen, workers.connection_id());
-    native.traffic(&product, first.listen, workers.connection_id());
+    native.traffic(&product, first.listen);
     let gateway_recovery = windows_gateway_foreground_recovery::Recovery::begin(&product, &first);
     lifecycle::stop(
         &product.layout.lifecycle_endpoint(),
@@ -915,7 +911,7 @@ fn actual_windows_complete_public_headless_business() {
     .unwrap();
     first.wait(true);
     gateway_recovery.recover_without_manager(&product);
-    let mut business_recovered = product.start_via_cli();
+    let mut business_recovered = product.start_with_environment(true, contexts.variables());
     gateway_ready(business_recovered.listen);
     gateway_recovery.recovered(&product, &business_recovered);
     ratings.recovered(&product);
@@ -925,6 +921,7 @@ fn actual_windows_complete_public_headless_business() {
     claude.recovered(&product);
     workers.restore(&product);
     claude.restore(&product);
+    native.restore(&product);
 
     lifecycle::stop(
         &product.layout.lifecycle_endpoint(),

@@ -16,6 +16,8 @@ use std::sync::{Arc, Mutex};
 pub struct NativeProtocols {
     pub chat: Source,
     pub messages: Source,
+    context: String,
+    restore: String,
 }
 pub struct Source {
     pub plan: Plan,
@@ -27,18 +29,58 @@ pub struct Source {
 }
 impl NativeProtocols {
     pub fn setup(product: &InstalledProduct) -> Self {
+        let chat = Source::setup(product, UpstreamProtocol::ChatCompletions);
+        let messages = Source::setup(product, UpstreamProtocol::Messages);
+        // Codex requires developer-role fidelity, so a Messages upstream must
+        // not enter its catalog. Pi supports these bounded Responses requests;
+        // obtain its real public grant instead of bypassing client admission.
+        let scan = cli(product, &["agents", "scan"], None);
+        let agent = scan["data"]["agents"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|agent| agent["agent_id"] == "agent_pi_default")
+            .unwrap();
+        assert_eq!(agent["supported"], true);
+        let context = agent["context_id"].as_str().unwrap().to_owned();
+        super::windows_user_models::checked(product, "agent_pi_default");
+        let spec = json!({"schema_version":{"major":2,"minor":0},"context_id":context,
+            "model":{"intent":"configure","settings":{"mode":"pi_additional",
+                "allowed_plan_ids":[chat.plan.plan_id,messages.plan.plan_id],
+                "plan_protocols":{&chat.plan.plan_id:"responses",&messages.plan.plan_id:"responses"}}}});
+        super::windows_user_models::apply(
+            product,
+            "connect",
+            &spec,
+            "windows-native-protocol-connect",
+        );
+        let status = cli(product, &["agents", "connect", "status", &context], None);
+        assert_eq!(status["data"]["state"], "configured");
+        let restore = status["data"]["restore_point_ref"]
+            .as_str()
+            .unwrap()
+            .to_owned();
         Self {
-            chat: Source::setup(product, UpstreamProtocol::ChatCompletions),
-            messages: Source::setup(product, UpstreamProtocol::Messages),
+            chat,
+            messages,
+            context,
+            restore,
         }
     }
-    pub fn traffic(&mut self, product: &InstalledProduct, gateway: SocketAddr, connection: &str) {
-        let token = grant(product, connection);
+    pub fn traffic(&mut self, product: &InstalledProduct, gateway: SocketAddr) {
+        let token = grant(product, &format!("agent-connection/{}", self.context));
         for source in [&mut self.chat, &mut self.messages] {
             source.traffic(product, gateway, &token);
         }
     }
     pub fn recovered(&self, product: &InstalledProduct) {
+        let status = cli(
+            product,
+            &["agents", "connect", "status", &self.context],
+            None,
+        );
+        assert_eq!(status["data"]["state"], "configured");
+        assert_eq!(status["data"]["restore_point_ref"], self.restore);
         for source in [&self.chat, &self.messages] {
             let shown = cli(
                 product,
@@ -63,6 +105,25 @@ impl NativeProtocols {
             );
             let _ = source.server.address;
         }
+    }
+    pub fn restore(&self, product: &InstalledProduct) {
+        let spec = json!({"schema_version":{"major":2,"minor":0},"context_id":self.context,
+            "model":{"intent":"restore","restore_point_ref":self.restore}});
+        super::windows_user_models::apply(
+            product,
+            "restore",
+            &spec,
+            "windows-native-protocol-restore",
+        );
+        let status = cli(
+            product,
+            &["agents", "connect", "status", &self.context],
+            None,
+        );
+        assert!(matches!(
+            status["data"]["state"].as_str(),
+            Some("restored" | "not_configured")
+        ));
     }
 }
 impl Source {

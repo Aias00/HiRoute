@@ -455,7 +455,7 @@ fn assert_configured(value: &Value, label: &str, plan: &str) {
         json!({"mode":format!("{label}_additional"),"allowed_plan_ids":[plan],"plan_protocols":{plan:"responses"}})
     );
 }
-fn checked(product: &InstalledProduct, agent: &str) {
+pub(super) fn checked(product: &InstalledProduct, agent: &str) {
     let args: Vec<OsString> = [
         "agents",
         "check",
@@ -484,7 +484,7 @@ fn checked(product: &InstalledProduct, agent: &str) {
     assert_eq!(envelope["data"]["skill_loading"], "proven");
     assert_eq!(envelope["data"]["trusted_cli_execution"], "proven");
 }
-fn apply(product: &InstalledProduct, verb: &str, spec: &Value, key: &str) -> Value {
+pub(super) fn apply(product: &InstalledProduct, verb: &str, spec: &Value, key: &str) -> Value {
     let preview = cli(
         product,
         &["agents", verb, "preview"],
