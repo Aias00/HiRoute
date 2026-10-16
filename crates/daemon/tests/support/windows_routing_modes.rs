@@ -382,6 +382,13 @@ impl Modes {
                         .collect::<Vec<_>>()
                 );
             }
+            // Drain the product diagnostic writer before panic cleanup kills
+            // the owned daemon. Request and assertion semantics stay intact.
+            let _ = super::lifecycle::stop(
+                &product.layout.lifecycle_endpoint(),
+                &product.daemon,
+                std::time::Duration::from_secs(30),
+            );
         }
         assert_eq!(
             response.status, 200,
