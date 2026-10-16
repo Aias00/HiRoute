@@ -58,10 +58,15 @@ def run(product, plan):
     assert 'controlled' in text or 'native product answer' in text, text
     now = int(time.time() * 1000)
     # Search is explicitly selected and uses the same current visibility as body reads.
-    search = product.cli('sessions', 'list', '--request-stdin', payload=query('search', {
-        'from_ms': now - 3600000, 'to_ms': now, 'session_id': session['session_id'],
-        'keyword': 'controlled', 'limit': 10, 'cursor': None}))['data']
-    assert 'next_cursor' in search
+    deadline = time.monotonic() + 20
+    while True:
+        search = product.cli('sessions', 'list', '--request-stdin', payload=query('search', {
+            'from_ms': now - 3600000, 'to_ms': now, 'session_id': session['session_id'],
+            'keyword': 'controlled', 'limit': 10, 'cursor': None}))['data']
+        if search['hits'] or time.monotonic() >= deadline:
+            break
+        time.sleep(.2)
+    assert search['hits'] and 'next_cursor' in search, search
     quality = product.cli('observation', 'plan-quality', 'samples', '--plan-id', plan)['data']
     assert 'samples' in quality
     current = product.cli('routing', 'show', plan)['data']
