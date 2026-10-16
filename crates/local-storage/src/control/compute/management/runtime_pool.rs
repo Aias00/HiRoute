@@ -1,5 +1,6 @@
 //! Current managed Native membership. This never reads or decrypts Secret material.
 
+use hiroute_diagnostics::event::NativeCredentialLookupStage as Stage;
 use hiroute_domain::{
     ComputeManagementRepositoryPort, MaterializationState, NativeCredentialAccessDeniedV1,
     NativeCredentialLeaseErrorV1, NativeCredentialLeaseRequestV1, PortError, PortErrorCode,
@@ -23,6 +24,8 @@ impl crate::LocalStorageSet {
                 .any(|model| model.binding_id == request.stable_binding_id)
         });
         let Some(source) = owners.next() else {
+            self.control()
+                .native_credential_unavailable(Stage::PoolBindingMissing);
             // Namespace classification only fails closed; it never grants access.
             return Ok((request.stable_binding_id.starts_with("binding/managed-")
                 || request.credential_id.starts_with("credential/managed-"))
@@ -81,6 +84,8 @@ impl crate::LocalStorageSet {
             ));
         }
         if source.state != MaterializationState::Ready {
+            self.control()
+                .native_credential_unavailable(Stage::PoolSourceNotReady);
             return Ok(Some(Vec::new()));
         }
         let destinations = source.native_destinations().map_err(|_| rejected())?;
@@ -90,6 +95,10 @@ impl crate::LocalStorageSet {
             .filter(|key| key.enabled)
             .collect();
         credentials.sort_by_key(|key| key.ordinal);
+        if credentials.is_empty() {
+            self.control()
+                .native_credential_unavailable(Stage::PoolEmpty);
+        }
         for key in &credentials {
             let reference = &key.credential;
             if reference.owner_scope() != format!("source/{}", source.source_id)

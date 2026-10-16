@@ -222,6 +222,20 @@ impl ApplyCapabilityRegistrar<'_> {
 }
 
 impl ControlStore {
+    pub(crate) fn native_credential_unavailable(
+        &self,
+        stage: hiroute_diagnostics::event::NativeCredentialLookupStage,
+    ) {
+        use hiroute_diagnostics::event::{CredentialLease, LeaseResultCode};
+        self.diagnostics
+            .borrow()
+            .emit(hiroute_diagnostics::DiagnosticEvent::CredentialLease(
+                CredentialLease {
+                    result: LeaseResultCode::Unavailable,
+                    stage: Some(stage),
+                },
+            ));
+    }
     pub fn set_diagnostics(&self, port: hiroute_diagnostics::DiagnosticsPort) {
         *self.diagnostics.borrow_mut() = port;
     }
