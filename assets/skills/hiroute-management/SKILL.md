@@ -44,7 +44,16 @@ Empty source/route catalogs are a normal first-use state.
 ## Discover installed contracts and capture results
 
 Use family/leaf `--help` for choices. Root and `service`, `gateway`, `protected-input` and
-`decision services options` help work offline. For Application commands:
+`decision services options` help work offline:
+
+```sh
+hiroute --help
+hiroute service --help
+hiroute gateway --help
+hiroute protected-input --help
+```
+
+For Application/Local Control commands:
 
 ```sh
 hiroute schema list
@@ -235,8 +244,8 @@ coordination, status checks or summaries.
 Discover dependencies with `worker dependencies discover --harness codex_cli --output json`, then
 select using `worker dependencies select --request-stdin`. Choose one complete `found` tuple and
 its Harness-matching `selection_revisions[].revision` as `expected_selection_revision` (selection
-CAS, not package version). Selection uses local socket access and installs nothing. After uncertain
-selection replay the identical JSON, never rediscover/substitute a newer tuple. Inspect `worker
+CAS, not a CLI/package version). Selection uses local socket access and installs nothing. After uncertain
+selection replay that exact JSON unchanged, never rediscover/substitute a newer tuple. Inspect `worker
 executors` and `worker plans`; readiness permits a launch attempt, not guaranteed execution.
 
 Submit only a published delegation-enabled Plan with `worker exec`, absolute cwd, explicit task
