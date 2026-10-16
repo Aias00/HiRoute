@@ -582,11 +582,13 @@ pub(crate) fn command(
 ) -> (i32, Value) {
     let (command, stage) = checkpoint(args, payload);
     eprintln!("Windows public business checkpoint: command={command}, stage={stage}");
+    // Exercise the released CLI's default request deadline. This business
+    // journey verifies effects, not an additional fixture-only latency budget.
     let mut args: Vec<OsString> = args.iter().map(OsString::from).collect();
     if payload.is_some() {
         args.push("--request-stdin".into());
     }
-    args.extend(["--output", "json", "--timeout", "10s"].map(OsString::from));
+    args.extend(["--output", "json"].map(OsString::from));
     let environment: Vec<_> = std::env::vars_os().collect();
     let started = Instant::now();
     let mut child = Child::spawn(Launch {
@@ -623,7 +625,7 @@ pub(crate) fn command(
         assert!(bytes.len() <= 65536);
         child.stdin.take().unwrap().write_all(&bytes).unwrap();
     }
-    let deadline = Instant::now() + Duration::from_secs(15);
+    let deadline = Instant::now() + Duration::from_secs(35);
     let exit = loop {
         if let Some(exit) = child.exit_code().unwrap() {
             break exit;
