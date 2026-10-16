@@ -15,6 +15,12 @@ fn released_cli_connection_points_prepare_and_save_exact_models() {
     run_script("connection_point_product.py");
 }
 
+/// Exact prepared CLI files survive both mid-publication and lost-terminal-response crashes.
+#[test]
+fn quickstart_exact_prepared_files_survive_publication_interruption() {
+    run_script("quickstart_recovery.py");
+}
+
 /// Client-bundled release assets, actual binaries and production inherited authority FDs.
 #[test]
 fn real_process_publication_crashes_recover_without_reapplying() {

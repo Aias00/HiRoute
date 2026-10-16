@@ -15,7 +15,7 @@ def submit(product, prepared):
     assert path.stat().st_mode & 0o777 == 0o600
     result = product.cli(*submission['arguments'])
     assert result['operation']['state'] == 'succeeded', result
-    # Simulate an unknown response to the caller: find and replay the same identity.
+    # Discard a successful reply, then find/replay; quickstart_recovery also crashes the daemon.
     found = product.cli('operations', 'find', '--request-stdin',
                         payload=submission['operation_lookup'])['data']
     assert found['digest_matches'] and found['operation']['operation_id'] == result['operation']['operation_id']
