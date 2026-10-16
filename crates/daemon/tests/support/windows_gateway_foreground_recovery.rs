@@ -15,6 +15,7 @@ pub struct Recovery {
     occupied: TcpListener,
     blocked: SocketAddr,
     applied: SocketAddr,
+    recovery_operation: String,
 }
 impl Recovery {
     pub fn begin(product: &InstalledProduct, running: &RunningDaemon) -> Self {
@@ -49,9 +50,10 @@ impl Recovery {
             occupied,
             blocked,
             applied,
+            recovery_operation: String::new(),
         }
     }
-    pub fn recover_without_manager(&self, product: &InstalledProduct) {
+    pub fn recover_without_manager(&mut self, product: &InstalledProduct) {
         self.refuse_blocked_foreground(product);
         assert_eq!(self.occupied.local_addr().unwrap(), self.blocked);
         failed_command(product, &["gateway", "recover"]);
@@ -59,6 +61,7 @@ impl Recovery {
         assert_eq!(config.desired_address().unwrap(), Some(self.applied));
         assert_eq!(config.applied_address().unwrap(), Some(self.applied));
         failed_operation(&config);
+        self.recovery_operation = config.operation.as_ref().unwrap().operation_id.clone();
         assert_eq!(product.cli(&["gateway", "show"])["data"]["ready"], false);
     }
     pub fn recovered(&self, product: &InstalledProduct, running: &RunningDaemon) {
@@ -68,10 +71,14 @@ impl Recovery {
         let config = config(product);
         assert_eq!(config.desired_address().unwrap(), Some(self.applied));
         assert_eq!(config.applied_address().unwrap(), Some(self.applied));
+        // Explicit foreground startup applies the desired address; it must
+        // not rewrite the terminal history of the failed manager request.
         assert_eq!(
-            config.operation.unwrap().state,
-            GatewayListenerOperationStateV1::Succeeded
+            config.operation.as_ref().unwrap().operation_id,
+            self.recovery_operation
         );
+        failed_operation(&config);
+        assert_eq!(product.cli(&["gateway", "show"])["data"]["ready"], true);
         println!(
             "Windows foreground public Gateway recovery: typed unavailable manager, occupied B refused, retained A reapplied by explicit service run; manager recovery remains a separate gate"
         );
@@ -88,6 +95,7 @@ impl Recovery {
             child,
             stdout_reader: None,
             stderr_reader: None,
+            owned_daemon: None,
             listen: self.blocked,
         };
         let output = capture(child.child.stdout.take().unwrap());
@@ -160,7 +168,7 @@ fn failed_command(product: &InstalledProduct, args: &[&str]) {
 fn actual_windows_foreground_gateway_recovery() {
     let product = InstalledProduct::create();
     let mut first = product.start();
-    let recovery = Recovery::begin(&product, &first);
+    let mut recovery = Recovery::begin(&product, &first);
     lifecycle::stop(
         &product.layout.lifecycle_endpoint(),
         &product.daemon,

@@ -77,8 +77,7 @@ impl InstalledProduct {
     fn create() -> Self {
         windows_execution_host::current();
         let layout = StandaloneLayout::from_environment().unwrap();
-        // Native KnownFolders cannot be redirected by HOME. Require a disposable CI
-        // profile and refuse to overwrite or remove an existing user's installation.
+        // Native KnownFolders ignore HOME; require a fresh disposable profile.
         assert!(
             !layout.marker_path.exists() && !layout.state_root.exists(),
             "Windows product gate requires a fresh disposable Windows profile"
@@ -222,27 +221,26 @@ impl InstalledProduct {
             child,
             stdout_reader: Some(stdout_reader),
             stderr_reader: Some(stderr_reader),
+            owned_daemon: None,
             listen: "127.0.0.1:1".parse().unwrap(),
         };
         let ready = readiness
             .recv_timeout(Duration::from_secs(45))
             .expect("real standalone daemon must emit its production readiness frame");
+        running.owned_daemon = Some(
+            lifecycle::query(&self.layout.lifecycle_endpoint(), &self.daemon, IO_BOUND).unwrap(),
+        );
+        let actual = running.owned_daemon.as_ref().unwrap();
+        assert_eq!(ready["process_id"].as_u64(), Some(u64::from(actual.pid)));
+        assert!(!actual.exited().unwrap());
         if cli {
-            let actual =
-                lifecycle::query(&self.layout.lifecycle_endpoint(), &self.daemon, IO_BOUND)
-                    .unwrap();
-            assert_eq!(ready["process_id"].as_u64(), Some(u64::from(actual.pid)));
             assert_ne!(
                 actual.pid,
                 running.child.id(),
                 "service run wrapper must identify the actual daemon separately"
             );
-            assert!(!actual.exited().unwrap());
         } else {
-            assert_eq!(
-                ready["process_id"].as_u64(),
-                Some(u64::from(running.child.id()))
-            );
+            assert_eq!(actual.pid, running.child.id());
         }
         running.listen = ready["gateway_listen"].as_str().unwrap().parse().unwrap();
         assert_eq!(
@@ -276,10 +274,8 @@ impl InstalledProduct {
             );
         }
 
-        // A real service run legitimately leaves this snapshot behind. On a
-        // fresh profile, use its actual writer first: the former whole-directory
-        // freshness assertion rejects this legal, empty production snapshot.
-        // Existing snapshots are borrowed unchanged, never overwritten.
+        // A real service run leaves this snapshot. On a fresh profile, use its
+        // actual writer; borrow existing snapshots unchanged.
         let owns_proxy = existing_service
             .as_ref()
             .is_none_or(|service| service.open_read(PROXY).unwrap().is_none());
@@ -416,6 +412,7 @@ impl InstalledProduct {
                 child,
                 stdout_reader: None,
                 stderr_reader: None,
+                owned_daemon: None,
                 listen: "127.0.0.1:1".parse().unwrap(),
             };
             let deadline = Instant::now() + IO_BOUND;
@@ -574,9 +571,8 @@ impl InstalledProduct {
             exit, 0,
             "actual protected-input CLI inherited handle failed"
         );
-        // Require the held Job to become empty naturally after root exit.
-        // An immediate accounting sample can race with process removal;
-        // forced cleanup would hide the leak this assertion must detect.
+        // Wait for natural Job drainage after root exit; forced cleanup would
+        // hide a descendant leak.
         let drained_by = Instant::now() + Duration::from_secs(5);
         while !child.empty().unwrap() {
             assert!(
@@ -643,6 +639,7 @@ impl Drop for InstalledProduct {
 
 struct RunningDaemon {
     child: Child,
+    owned_daemon: Option<lifecycle::DaemonProcess>,
     stdout_reader: Option<thread::JoinHandle<Vec<u8>>>,
     stderr_reader: Option<thread::JoinHandle<Vec<u8>>>,
     listen: SocketAddr,
@@ -669,6 +666,13 @@ impl RunningDaemon {
 
 impl Drop for RunningDaemon {
     fn drop(&mut self) {
+        // Stop the retained kernel process before joining pipes left open by its wrapper.
+        if let Some(daemon) = &self.owned_daemon
+            && daemon.exited().is_ok_and(|exited| !exited)
+        {
+            let _ = daemon.terminate();
+            let _ = daemon.wait(Duration::from_secs(5));
+        }
         let _ = self.child.kill();
         let _ = self.child.wait();
         windows_qoder_daemon_diagnostic::collect(&mut self.stdout_reader, false);
@@ -961,7 +965,8 @@ fn public_headless_business(include_claude: bool) {
     }
     modes.traffic(&product, first.listen, workers.connection_id());
     native.traffic(&product, first.listen);
-    let gateway_recovery = windows_gateway_foreground_recovery::Recovery::begin(&product, &first);
+    let mut gateway_recovery =
+        windows_gateway_foreground_recovery::Recovery::begin(&product, &first);
     lifecycle::stop(
         &product.layout.lifecycle_endpoint(),
         &product.daemon,

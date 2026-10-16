@@ -317,6 +317,92 @@ def finish(root, run_id):
                 native_configuration='not modified by finish')
 
 
+def stop_interrupted_daemon(pid, image, config, lower, upper):
+    """Terminate only the retained image born during this stopped fixture run."""
+    from ctypes import wintypes
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel.OpenProcess.restype = wintypes.HANDLE
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel.QueryFullProcessImageNameW.argtypes = [wintypes.HANDLE, wintypes.DWORD,
+                                                wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)]
+    kernel.GetProcessTimes.argtypes = [wintypes.HANDLE, *([ctypes.POINTER(wintypes.FILETIME)] * 4)]
+    kernel.ProcessIdToSessionId.argtypes = [wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
+    kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    kernel.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
+    handle = kernel.OpenProcess(0x100000 | 0x1000 | 1, False, pid)
+    if not handle:
+        raise OSError(ctypes.get_last_error(), 'Cannot retain interrupted daemon')
+    try:
+        name, length, session = ctypes.create_unicode_buffer(32768), wintypes.DWORD(32768), wintypes.DWORD()
+        born, exited, system, user = (wintypes.FILETIME() for _ in range(4))
+        if (not kernel.QueryFullProcessImageNameW(handle, 0, name, ctypes.byref(length)) or
+                not kernel.ProcessIdToSessionId(pid, ctypes.byref(session)) or
+                not kernel.GetProcessTimes(handle, ctypes.byref(born), ctypes.byref(exited),
+                                           ctypes.byref(system), ctypes.byref(user))):
+            raise OSError('Cannot verify interrupted daemon identity')
+        birth = ((born.dwHighDateTime << 32) | born.dwLowDateTime) / 10000000 - 11644473600
+        if (Path(name.value) != image or session.value != config['session_id'] or
+                not lower <= birth <= upper):
+            raise ValueError('Daemon image, session or birth differs from the stopped run')
+        if kernel.WaitForSingleObject(handle, 0) != 0:
+            if not kernel.TerminateProcess(handle, 1) or kernel.WaitForSingleObject(handle, 5000) != 0:
+                raise OSError('Interrupted daemon did not stop')
+    finally:
+        kernel.CloseHandle(handle)
+
+
+def recover_interrupted_gateway_fixture(root, run, request):
+    """Preserve an interrupted disposable fixture after its whole-process watchdog."""
+    home = Path.home()
+    marker = plain(home / '.local/share/hiroute/standalone.json')
+    state = plain(Path(os.environ['LOCALAPPDATA']) / 'HiRoute/cli')
+    lower, upper = (run / 'request.json').stat().st_mtime, (run / 'result.json').stat().st_mtime
+    if marker.stat().st_nlink != 1 or not lower <= marker.stat().st_mtime <= upper:
+        raise ValueError('Installation marker is outside the stopped run')
+    record = json.loads(marker.read_text(encoding='utf-8'))
+    install = plain(Path(record['install_root']))
+    if (record.get('schema_version') != 'hiroute.standalone-install/v1' or
+            record.get('target') != 'x86_64-pc-windows-msvc' or
+            not re.fullmatch(r'Windows headless 测试 [1-9][0-9]*', install.name) or
+            install.parent != home / '.local/share/hiroute' or
+            Path(record['service_definition']) != install / 'fixture-task.xml' or
+            record.get('installed_skills', []) or record.get('cpa_binary') or record.get('cpa_sha256')):
+        raise ValueError('Installation is not the disposable gateway fixture')
+    product = manifest(root / 'bundles' / request['product'])
+    entries = []
+    for name in ('hiroute.exe', 'hirouted.exe'):
+        image, stable = plain(install / name), plain(home / '.local/bin' / name)
+        if (digest(image) != product['files'][name]['sha256'] or
+                not image.samefile(stable) or image.stat().st_nlink != 2):
+            raise ValueError('Installed images differ from the owned product bundle')
+        entries.append(stable)
+    harness = plain(root / 'bundles' / request['harness'] / request['binary'])
+    paths = ','.join(literal(p) for p in [harness, install / 'hiroute.exe', install / 'hirouted.exe', *entries])
+    daemon = install / 'hirouted.exe'
+    value = ps("$ErrorActionPreference='Stop';$path=" + literal(daemon) +
+               ';@(Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -eq $path} | '
+               'ForEach-Object {[int]$_.ProcessId}) | ConvertTo-Json -Compress')
+    pids = json.loads(value) if value else []
+    for pid in pids if isinstance(pids, list) else [pids]:
+        stop_interrupted_daemon(pid, daemon, request['config'], lower, upper)
+    live = ps("$ErrorActionPreference='Stop';$paths=@(" + paths +
+              ');@(Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -in $paths}).Count')
+    if live != '0':
+        raise ValueError('Owned fixture still has live processes; preserve it')
+    moves = [(marker, run / 'interrupted-standalone.json'),
+             (install, run / 'interrupted-installation'), (state, run / 'interrupted-state')]
+    if any(target.exists() for _, target in moves):
+        raise ValueError('Interrupted fixture evidence already exists')
+    # Admit all file moves first, preserve bytes in private evidence, and remove
+    # only verified links to the owned images.
+    for entry in entries:
+        entry.unlink()
+    for source, target in moves:
+        source.rename(target)
+    return dict(run_id=request['run_id'], preserved=[p.name for _, p in moves])
+
+
 def recover(root, run_id):
     """Preserve only identifiable files left by this stopped disposable business case."""
     run = directory(root, run_id)
@@ -326,10 +412,15 @@ def recover(root, run_id):
         raise ValueError('Finish the stopped run before recovering its owned configuration')
     if result['passed'] or request['case'] not in (
             'actual_windows_complete_public_headless_business',
-            'actual_windows_public_headless_business_without_claude'):
+            'actual_windows_public_headless_business_without_claude',
+            'windows_gateway_foreground_recovery::actual_windows_foreground_gateway_recovery'):
         raise ValueError('Recovery is limited to failed disposable business cases')
     if os.environ['USERNAME'].casefold() != request['config']['user'].casefold():
         raise ValueError('Recovery must use the same native account')
+    if request['case'] == 'windows_gateway_foreground_recovery::actual_windows_foreground_gateway_recovery':
+        if request['binary'] != 'windows_headless.exe' or result.get('error_type') != 'TimeoutError':
+            raise ValueError('Installed fixture recovery requires the interrupted gateway case')
+        return recover_interrupted_gateway_fixture(root, run, request)
     home = Path.home()
     state = Path(os.environ['LOCALAPPDATA']) / 'HiRoute/cli'
     if any(p.exists() for p in (state, home / '.local/bin/hiroute.exe',

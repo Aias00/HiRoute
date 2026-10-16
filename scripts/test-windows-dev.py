@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import struct
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 import zipfile
@@ -176,6 +177,52 @@ class Runner(unittest.TestCase):
         (self.root / 'runs' / ('a' * 32)).mkdir(parents=True)
         with patch.object(host, 'task_state', return_value=dict(state='Ready', result=0)):
             self.assertEqual(host.status(self.root, 'a' * 32)['state'], 'failed')
+
+    def test_interrupted_gateway_recovery_preserves_only_its_verified_fixture(self):
+        home = self.root / 'home'
+        data = home / '.local/share/hiroute'
+        install = data / 'Windows headless 测试 123'
+        stable = home / '.local/bin'
+        state = home / 'local/HiRoute/cli'
+        run = self.root / 'runs' / ('a' * 32)
+        for path in (install, stable, state, run):
+            path.mkdir(parents=True)
+        request = dict(run_id='a' * 32, harness='b' * 12 + '-' + 'c' * 12,
+                       product='d' * 12 + '-' + 'e' * 12, binary='windows_headless.exe',
+                       config=dict(user='acceptance', session_id=2),
+                       case='windows_gateway_foreground_recovery::actual_windows_foreground_gateway_recovery')
+        (run / 'request.json').write_text(json.dumps(request))
+        (run / 'result.json').write_text('{"passed":false,"error_type":"TimeoutError"}')
+        marker = data / 'standalone.json'
+        marker.write_text(json.dumps(dict(schema_version='hiroute.standalone-install/v1',
+                         target='x86_64-pc-windows-msvc', install_root=str(install),
+                         service_definition=str(install / 'fixture-task.xml'))))
+        os.utime(run / 'request.json', (time.time() - 5,) * 2)
+        files = {}
+        for name in ('hiroute.exe', 'hirouted.exe'):
+            image = install / name
+            image.write_bytes(name.encode())
+            os.link(image, stable / name)
+            files[name] = dict(sha256=host.digest(image))
+        (run / 'result.json').touch()
+        with patch.object(host, 'task_state', return_value=dict(state='absent')), \
+             patch.object(host.Path, 'home', return_value=home), \
+             patch.dict(os.environ, USERNAME='acceptance', LOCALAPPDATA=str(home / 'local')), \
+             patch.object(host, 'manifest', return_value=dict(files=files)), \
+             patch.object(host, 'ps', side_effect=['[]', '1', '[456]', '0']), \
+             patch.object(host, 'stop_interrupted_daemon') as stop:
+            with self.assertRaisesRegex(ValueError, 'still has live processes'):
+                host.recover(self.root, 'a' * 32)
+            self.assertTrue(marker.exists())
+            self.assertTrue((stable / 'hirouted.exe').exists())
+            value = host.recover(self.root, 'a' * 32)
+            stop.assert_called_once_with(456, install / 'hirouted.exe', request['config'],
+                                        (run / 'request.json').stat().st_mtime,
+                                        (run / 'result.json').stat().st_mtime)
+        self.assertFalse(marker.exists())
+        self.assertFalse((stable / 'hirouted.exe').exists())
+        self.assertEqual((run / 'interrupted-installation/hirouted.exe').read_bytes(), b'hirouted.exe')
+        self.assertEqual(len(value['preserved']), 3)
 
     def test_evidence_download_uses_sftp_path_syntax(self):
         self.assertEqual(controller.remote_evidence_path(

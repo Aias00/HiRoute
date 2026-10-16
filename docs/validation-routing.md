@@ -178,6 +178,13 @@ First collect and `finish` the run. Recovery rejects active tasks, existing prod
 foreign content, links and file modification times outside that run. It never deletes
 unrecognized user settings; use public restore while the original product still exists.
 
+If the focused foreground Gateway recovery case hits its whole-process watchdog,
+the same `recover` entry can retain its disposable installation and state in private
+run evidence. It requires the stopped task, original run marker, matching bundle
+hashes and stable hard links. Any orphaned daemon is stopped through a retained
+kernel handle only after its image, session and birth time match that run; other
+live fixture processes block recovery. This path never recovers a daily installation.
+
 Transport uses SSH host-key verification, hashed uploaded scripts/JSON and encoded
 PowerShell invocation. Interrupted submission is an unknown outcome: inspect its
 run/task/lock before retrying. Missing Python, clients, login session or account
