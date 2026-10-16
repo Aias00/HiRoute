@@ -16,6 +16,9 @@ pub(crate) struct CollaborationChallenge {
     expected_cli: String,
     issued: bool,
     completed: bool,
+    poll_count: usize,
+    pending_session: Option<u64>,
+    collected: String,
 }
 
 impl CollaborationChallenge {
@@ -117,6 +120,9 @@ impl CollaborationChallenge {
             expected_cli: expected_cli.trim().into(),
             issued: false,
             completed: false,
+            poll_count: 0,
+            pending_session: None,
+            collected: String::new(),
         })
     }
 
@@ -148,16 +154,58 @@ impl CollaborationChallenge {
                 json!([{"type":"function_call", "id":"fc_hiroute_probe", "call_id":"call_hiroute_probe", "name":name, "arguments":args.to_string(), "status":"completed"}]),
             );
         }
-        let proved = body["input"].as_array().is_some_and(|input| {
-            input.iter().any(|item| {
-                item["type"] == "function_call_output"
-                    && item["call_id"] == "call_hiroute_probe"
-                    && item["output"].as_str().is_some_and(|output| {
-                        output.contains(&self.contents) && output.contains(&self.expected_cli)
-                    })
+        // exec_command may yield before shell startup completes. Follow only this
+        // challenge's correlated session, without re-executing the command.
+        let call_id = if self.poll_count == 0 {
+            "call_hiroute_probe".into()
+        } else {
+            format!("call_hiroute_probe_poll_{}", self.poll_count)
+        };
+        let output = body["input"]
+            .as_array()
+            .and_then(|input| {
+                input.iter().find(|item| {
+                    item["type"] == "function_call_output" && item["call_id"] == call_id
+                })
             })
-        });
-        if !proved {
+            .and_then(|item| item["output"].as_str())
+            .ok_or("native Skill read and trusted CLI execution")?;
+        let payload = output
+            .split_once("\nOutput:\n")
+            .map_or(output, |(_, text)| text);
+        if self.collected.len() + payload.len() > 64 * 1024 {
+            return Err("native CLI output bound");
+        }
+        let running = output
+            .lines()
+            .find_map(|line| line.strip_prefix("Process running with session ID "));
+        if let Some(session) = running {
+            let session = session.parse::<u64>().map_err(|_| "native CLI session")?;
+            if self
+                .pending_session
+                .is_some_and(|pending| pending != session)
+                || self.poll_count >= 2
+                || !body["tools"]
+                    .as_array()
+                    .is_some_and(|tools| tools.iter().any(|tool| tool["name"] == "write_stdin"))
+            {
+                return Err("native CLI pending execution");
+            }
+            self.collected.push_str(payload);
+            self.pending_session = Some(session);
+            self.poll_count += 1;
+            let id = format!("call_hiroute_probe_poll_{}", self.poll_count);
+            return Ok(
+                json!([{"type":"function_call", "id":format!("fc_probe_poll_{}", self.poll_count),
+                "call_id":id, "name":"write_stdin", "status":"completed",
+                "arguments":json!({"session_id":session, "chars":"", "yield_time_ms":10000,
+                    "max_output_tokens":2000}).to_string()}]),
+            );
+        }
+        let complete_output = format!("{}{payload}", self.collected);
+        if !complete_output.contains(&self.contents)
+            || !complete_output.contains(&self.expected_cli)
+        {
             return Err("native Skill read and trusted CLI execution");
         }
         self.completed = true;
@@ -236,6 +284,9 @@ mod tests {
             expected_cli: "CLI-contract-output".into(),
             issued: false,
             completed: false,
+            poll_count: 0,
+            pending_session: None,
+            collected: String::new(),
         }
     }
 
@@ -262,6 +313,55 @@ mod tests {
         }
         check.reply(&json!({"input":[{"type":"function_call_output", "call_id":"call_hiroute_probe", "output":"contents-nonce CLI-contract-output"}]})).unwrap();
         assert!(check.complete());
+    }
+
+    #[test]
+    fn codex_pending_command_requires_correlated_completion_without_reexecution() {
+        let mut check = challenge();
+        check
+            .reply(&json!({"input":"discovery-nonce", "tools":[{"name":"exec_command"}]}))
+            .unwrap();
+        let pending = check
+            .reply(&json!({"tools":[{"name":"write_stdin"}], "input":[{
+            "type":"function_call_output", "call_id":"call_hiroute_probe",
+            "output":"Process running with session ID 42\nOutput:\ncontents-nonce "}]}))
+            .unwrap();
+        assert_eq!(pending[0]["name"], "write_stdin");
+        let args: Value = serde_json::from_str(pending[0]["arguments"].as_str().unwrap()).unwrap();
+        assert_eq!(args["session_id"], 42);
+        assert_eq!(args["chars"], "");
+        assert!(!check.complete());
+        for id in ["unrelated", "call_hiroute_probe"] {
+            assert!(
+                check
+                    .reply(
+                        &json!({"input":[{"type":"function_call_output", "call_id":id,
+                "output":"CLI-contract-output"}]})
+                    )
+                    .is_err()
+            );
+        }
+        check.reply(&json!({"input":[{"type":"function_call_output", "call_id":"call_hiroute_probe_poll_1",
+            "output":"Process exited with code 0\nOutput:\nCLI-contract-output"}]})).unwrap();
+        assert!(check.complete());
+    }
+
+    #[test]
+    fn codex_pending_challenge_has_a_fixed_session_and_poll_bound() {
+        let mut check = challenge();
+        check.issued = true;
+        for (index, session) in [(0, 42), (1, 43), (1, 42), (2, 42)] {
+            let id = if index == 0 {
+                "call_hiroute_probe".into()
+            } else {
+                format!("call_hiroute_probe_poll_{index}")
+            };
+            let result = check.reply(&json!({"tools":[{"name":"write_stdin"}], "input":[{
+                "type":"function_call_output", "call_id":id,
+                "output":format!("Process running with session ID {session}\nOutput:\n")}]}));
+            assert_eq!(result.is_ok(), session == 42 && index < 2);
+            assert!(!check.complete());
+        }
     }
 
     #[test]
