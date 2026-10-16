@@ -352,12 +352,13 @@ def stop_interrupted_daemon(pid, image, config, lower, upper):
         kernel.CloseHandle(handle)
 
 
-def recover_interrupted_gateway_fixture(root, run, request):
+def recover_interrupted_fixture(root, run, request, stop_only=False):
     """Preserve an interrupted disposable fixture after its whole-process watchdog."""
     home = Path.home()
     marker = plain(home / '.local/share/hiroute/standalone.json')
     state = plain(Path(os.environ['LOCALAPPDATA']) / 'HiRoute/cli')
-    lower, upper = (run / 'request.json').stat().st_mtime, (run / 'result.json').stat().st_mtime
+    lower = (run / 'request.json').stat().st_mtime
+    upper = time.time() if stop_only else (run / 'result.json').stat().st_mtime
     if marker.stat().st_nlink != 1 or not lower <= marker.stat().st_mtime <= upper:
         raise ValueError('Installation marker is outside the stopped run')
     record = json.loads(marker.read_text(encoding='utf-8'))
@@ -386,6 +387,8 @@ def recover_interrupted_gateway_fixture(root, run, request):
     pids = json.loads(value) if value else []
     for pid in pids if isinstance(pids, list) else [pids]:
         stop_interrupted_daemon(pid, daemon, request['config'], lower, upper)
+    if stop_only:
+        return dict(run_id=request['run_id'], runtime_stopped=True, test_owner_retained=True)
     live = ps("$ErrorActionPreference='Stop';$paths=@(" + paths +
               ');@(Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -in $paths}).Count')
     if live != '0':
@@ -401,6 +404,25 @@ def recover_interrupted_gateway_fixture(root, run, request):
     for source, target in moves:
         source.rename(target)
     return dict(run_id=request['run_id'], preserved=[p.name for _, p in moves])
+
+
+def stop_panicking_runtime(root, run_id):
+    run = directory(root, run_id)
+    request = json.loads((run / 'request.json').read_text(encoding='utf-8'))
+    if ((run / 'result.json').exists() or
+            json.loads((root / 'active.json').read_text())['run_id'] != run_id or
+            task_state(run_id)['state'] != 'Running'):
+        raise ValueError('Runtime stop requires the active nonterminal run')
+    if (request['binary'] != 'windows_headless.exe' or request['case'] not in (
+            'actual_windows_complete_public_headless_business',
+            'actual_windows_public_headless_business_without_claude',
+            'windows_gateway_foreground_recovery::actual_windows_foreground_gateway_recovery') or
+            os.environ['USERNAME'].casefold() != request['config']['user'].casefold()):
+        raise ValueError('Runtime stop requires the recognized disposable case and account')
+    error = (run / 'stderr.log').read_text(encoding='utf-8', errors='replace')
+    if not re.search(r"^thread '" + re.escape(request['case']) + r"' .* panicked at ", error, re.M):
+        raise ValueError('The selected test has not reported a panic; preserve its runtime')
+    return recover_interrupted_fixture(root, run, request, stop_only=True)
 
 
 def recover(root, run_id):
@@ -420,7 +442,7 @@ def recover(root, run_id):
     if request['case'] == 'windows_gateway_foreground_recovery::actual_windows_foreground_gateway_recovery':
         if request['binary'] != 'windows_headless.exe' or result.get('error_type') != 'TimeoutError':
             raise ValueError('Installed fixture recovery requires the interrupted gateway case')
-        return recover_interrupted_gateway_fixture(root, run, request)
+        return recover_interrupted_fixture(root, run, request)
     home = Path.home()
     state = Path(os.environ['LOCALAPPDATA']) / 'HiRoute/cli'
     if any(p.exists() for p in (state, home / '.local/bin/hiroute.exe',
@@ -493,6 +515,8 @@ def execute(request):
         return dict(directory=str(run), files=[p.name for p in run.iterdir() if p.is_file()])
     if action == 'recover':
         return recover(root, request['run_id'])
+    if action == 'stop-runtime':
+        return stop_panicking_runtime(root, request['run_id'])
     if action == 'finish':
         return finish(root, request['run_id'])
     raise ValueError('Unknown Windows development action')

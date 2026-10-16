@@ -407,7 +407,10 @@ impl WorkerBusiness {
             &["agents", "connect", "status", &self.context],
             None,
         );
-        assert_eq!(status["data"]["state"], "restored");
+        // Model restore withdraws the active grant/artifact. The current model
+        // status returns to its unconfigured baseline; collaboration retains
+        // its separate restore-operation history.
+        assert_eq!(status["data"]["state"], "not_configured");
         assert_eq!(status["data"]["collaboration"]["state"], "restored");
         assert!(status["data"]["current_selection"].is_null());
         assert!(status["data"]["restore_point_ref"].is_null());

@@ -186,6 +186,18 @@ fn actual_windows_foreground_gateway_recovery() {
     )
     .unwrap();
     running.wait(true);
+    let foreground = product.start_with_entry(true);
+    let retained = lifecycle::retain_for_stop(
+        &product.layout.lifecycle_endpoint(),
+        &product.daemon,
+        Duration::from_secs(5),
+    )
+    .unwrap();
+    drop(foreground);
+    assert!(
+        retained.wait(Duration::from_secs(5)).unwrap(),
+        "test cleanup must drain the actual foreground daemon and inherited pipes"
+    );
 }
 fn failed_operation(config: &GatewayListenerConfigV1) {
     let operation = config.operation.as_ref().unwrap();

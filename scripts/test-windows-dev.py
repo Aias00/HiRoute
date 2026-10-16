@@ -229,6 +229,28 @@ class Runner(unittest.TestCase):
             r'C:\Validation\runs\sample', 'result.json'),
             'C:/Validation/runs/sample/result.json')
 
+    def test_active_runtime_stop_requires_selected_panic_and_owner(self):
+        run_id = 'a' * 32
+        run = self.root / 'runs' / run_id
+        run.mkdir(parents=True)
+        request = dict(binary='windows_headless.exe', config=dict(user='acceptance'),
+                       case='actual_windows_public_headless_business_without_claude')
+        (run / 'request.json').write_text(json.dumps(request))
+        (self.root / 'active.json').write_text(json.dumps(dict(run_id=run_id)))
+        (run / 'stderr.log').write_text('ordinary progress')
+        with patch.object(host, 'task_state', return_value=dict(state='Running')), \
+             patch.dict(os.environ, USERNAME='acceptance'), \
+             patch.object(host, 'recover_interrupted_fixture') as recover:
+            with self.assertRaisesRegex(ValueError, 'has not reported a panic'):
+                host.stop_panicking_runtime(self.root, run_id)
+            recover.assert_not_called()
+            (run / 'stderr.log').write_text("thread '" + request['case'] + "' (123) panicked at fixture.rs:1:1:\n")
+            host.stop_panicking_runtime(self.root, run_id)
+            recover.assert_called_once_with(self.root, run, request, stop_only=True)
+            (run / 'result.json').write_text('{"passed":false}')
+            with self.assertRaisesRegex(ValueError, 'active nonterminal run'):
+                host.stop_panicking_runtime(self.root, run_id)
+
 
 if __name__ == '__main__':
     unittest.main()

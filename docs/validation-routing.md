@@ -185,6 +185,12 @@ hashes and stable hard links. Any orphaned daemon is stopped through a retained
 kernel handle only after its image, session and birth time match that run; other
 live fixture processes block recovery. This path never recovers a daily installation.
 
+For an active disposable case that has already emitted its exact Rust panic,
+`windows stop-runtime RUN_ID` can stop only its verified daemon and let the test
+owner finish unwinding and preserve its real failed result. It retains the owner,
+Task and lock; collect and finish normally afterward. It refuses healthy tests,
+foreign accounts, changed images and daemon births outside the run.
+
 Transport uses SSH host-key verification, hashed uploaded scripts/JSON and encoded
 PowerShell invocation. Interrupted submission is an unknown outcome: inspect its
 run/task/lock before retrying. Missing Python, clients, login session or account

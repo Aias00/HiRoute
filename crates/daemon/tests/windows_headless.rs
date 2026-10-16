@@ -227,9 +227,9 @@ impl InstalledProduct {
         let ready = readiness
             .recv_timeout(Duration::from_secs(45))
             .expect("real standalone daemon must emit its production readiness frame");
-        running.owned_daemon = Some(
-            lifecycle::query(&self.layout.lifecycle_endpoint(), &self.daemon, IO_BOUND).unwrap(),
-        );
+        let endpoint = self.layout.lifecycle_endpoint();
+        running.owned_daemon =
+            Some(lifecycle::retain_for_stop(&endpoint, &self.daemon, IO_BOUND).unwrap());
         let actual = running.owned_daemon.as_ref().unwrap();
         assert_eq!(ready["process_id"].as_u64(), Some(u64::from(actual.pid)));
         assert!(!actual.exited().unwrap());
