@@ -1,9 +1,9 @@
 use super::{ClientContext, CommandState, NativeConfirmation, NativeOutcome, confirm, main_window};
+use crate::HostAuthority;
 use crate::failure::DesktopFailure;
 use crate::session::ModelSaveAccepted;
 use hiroute_application_api::*;
 use hiroute_diagnostics::event::ActionOperation;
-use crate::HostAuthority;
 use serde::Serialize;
 use std::sync::atomic::Ordering;
 

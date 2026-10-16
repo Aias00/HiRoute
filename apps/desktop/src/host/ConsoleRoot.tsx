@@ -55,7 +55,7 @@ function ConsoleSessionRoot({ children }: PropsWithChildren) {
   }
   const loginPage = phase === 'login' || phase === 'expired';
   return <>
-    {hadSession && <div hidden={phase !== 'ready'} inert={phase !== 'ready'}>{children}</div>}
+    {hadSession && <div className="console-product" hidden={phase !== 'ready'} inert={phase !== 'ready'}>{children}</div>}
     {phase !== 'ready' && <PresentationRoot language={preferences.language} theme={preferences.resolvedTheme} textScale={1}>
       <main className="console-entry"><section className="console-entry-card">
         <div className="console-entry-brand"><span className="brand-mark">H</span><strong>HiRoute</strong></div>

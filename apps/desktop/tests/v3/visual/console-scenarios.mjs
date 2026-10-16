@@ -48,9 +48,13 @@ export async function runConsoleScenarios(client, baseUrl, output) {
       const geometry = await evaluate(client, `(() => {
         const element = document.querySelector('.console-entry-card') ?? document.querySelector('.console-transport-bar');
         const box = element.getBoundingClientRect();
-        return { overflow: element.scrollWidth > element.clientWidth + 1, left: box.left, right: box.right, viewport: innerWidth, theme: document.querySelector('.hr-ui').dataset.theme };
+        const page = document.querySelector('.main .page');
+        return { overflow: element.scrollWidth > element.clientWidth + 1, left: box.left, right: box.right, viewport: innerWidth, theme: document.querySelector('.hr-ui').dataset.theme,
+          bannerHeight: document.querySelector('.console-transport-bar')?.getBoundingClientRect().height,
+          pageTop: page?.getBoundingClientRect().top, pageBottom: page?.getBoundingClientRect().bottom };
       })()`);
       assert(!geometry.overflow && geometry.left >= 0 && geometry.right <= geometry.viewport + 1 && geometry.theme === theme, `Console layout failed: ${state}/${language}/${theme}/${width}: ${JSON.stringify(geometry)}`);
+      if (state === 'ready') assert(geometry.bannerHeight < 110 && geometry.pageTop < 200 && geometry.pageBottom <= height + 1, 'Console banner displaced the product page: ' + JSON.stringify(geometry));
       const screenshot = await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
       const name = `console-${state}-${language}-${theme}-${width}x${height}.png`;
       await writeFile(path.join(output, name), Buffer.from(screenshot.data, 'base64'));
