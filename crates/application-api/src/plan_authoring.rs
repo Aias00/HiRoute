@@ -317,10 +317,15 @@ pub struct PlanEditorOptionsRequestV1 {
     pub rating_items: Vec<crate::ModelRatingQueryItemV1>,
     #[serde(default)]
     pub editor: Option<PlanEditorStateV2>,
+    /// Explicitly requested authoring policy; absent preserves released response bytes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authoring: Option<PlanAuthoringRequestV1>,
 }
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanEditorOptionsV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authoring: Option<PlanAuthoringOptionsV1>,
     /// Present only when opted-in explanations are bounded to the first page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unavailable_candidate_count: Option<usize>,
@@ -334,6 +339,62 @@ pub struct PlanEditorOptionsV1 {
     pub ratings: Option<crate::ResolveModelRatingsResultV1>,
     pub codex_capabilities: Option<CodexClientCapabilityPreviewV1>,
     pub revisions: RevisionSetV1,
+}
+
+/// Meaningful edits to a new or existing Plan. Omitted fields preserve saved settings.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PlanAuthoringRequestV1 {
+    #[serde(default)]
+    pub plan_id: Option<AgentPlanId>,
+    #[serde(default)]
+    pub mode: Option<PlanEditorMode>,
+    #[serde(default)]
+    pub display_name: Option<String>,
+    #[serde(default)]
+    pub purpose: Option<String>,
+    #[serde(default)]
+    pub candidates: Option<Vec<CandidateSelectionV1>>,
+    #[serde(default)]
+    pub economy: Option<Vec<CandidateSelectionV1>>,
+    #[serde(default)]
+    pub primary: Option<Vec<CandidateSelectionV1>>,
+    #[serde(default)]
+    pub classifier: Option<ComplexityClassifierModeV1>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PlanAuthoringOptionsV1 {
+    pub editor: PlanEditorStateV2,
+    pub plan_id: Option<AgentPlanId>,
+    pub expected_head_revision: Option<u64>,
+    pub required_choices: Vec<PlanAuthoringChoiceV1>,
+    pub candidate_defaults: Vec<PlanCandidateDefaultsV1>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PlanCandidateDefaultsV1 {
+    pub binding_id: String,
+    pub economy: Option<ReasoningSelectionV1>,
+    pub primary: Option<ReasoningSelectionV1>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PlanAuthoringChoiceV1 {
+    pub field: String,
+    pub reason: PlanAuthoringChoiceReasonV1,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlanAuthoringChoiceReasonV1 {
+    Required,
+    CandidateUnavailable,
+    ReasoningRequired,
+    InvalidSelection,
 }
 
 /// Independent capability bound remains visible when a saved custom window becomes invalid.
