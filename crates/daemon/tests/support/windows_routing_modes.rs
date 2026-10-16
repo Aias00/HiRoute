@@ -215,6 +215,7 @@ impl Modes {
             ("windows-modes-smart-simple-again", "economy"),
         ] {
             self.send(
+                product,
                 address,
                 &token,
                 &self.smart,
@@ -232,6 +233,7 @@ impl Modes {
             ("windows-modes-custom-code-simple-again", "economy"),
         ] {
             self.send(
+                product,
                 address,
                 &token,
                 &self.custom,
@@ -257,6 +259,7 @@ impl Modes {
         }
         let token = grant(product, connection);
         self.send(
+            product,
             address,
             &token,
             &self.smart,
@@ -266,6 +269,7 @@ impl Modes {
             "economy",
         );
         self.send(
+            product,
             address,
             &token,
             &self.custom,
@@ -327,6 +331,7 @@ impl Modes {
     #[allow(clippy::too_many_arguments)]
     fn send(
         &self,
+        product: &InstalledProduct,
         address: SocketAddr,
         token: &str,
         plan: &Plan,
@@ -361,6 +366,22 @@ impl Modes {
                 self.executions.lock().unwrap().len(),
                 self.decisions.lock().unwrap().len()
             );
+            for (lane, source) in [("economy", &self.economy), ("primary", &self.primary)] {
+                let shown = cli(product, &["compute", "show", source.source_id()], None);
+                let source: hiroute_application_api::ComputeManagedSourceViewV2 =
+                    serde_json::from_value(shown["data"]["sources"][0].clone()).unwrap();
+                eprintln!(
+                    "Windows routing credential state: lane={lane}, state={:?}, keys={}, enabled={}, generations={:?}",
+                    source.state,
+                    source.keys.len(),
+                    source.keys.iter().filter(|key| key.enabled).count(),
+                    source
+                        .keys
+                        .iter()
+                        .map(|key| key.generation)
+                        .collect::<Vec<_>>()
+                );
+            }
         }
         assert_eq!(
             response.status, 200,
