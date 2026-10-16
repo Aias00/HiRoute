@@ -11,6 +11,8 @@
 
 什么时候切换由 HiRoute 决定，开启智能省钱不需要自己先算一遍账。下面逐条说明。
 
+<figure class="article-video"><video controls playsinline preload="none" poster="/media/hiroute-cache-en-poster.jpg" aria-label="三分钟视频：切换模型会丢缓存，但省下的钱丢不掉"><source src="/media/hiroute-cache-en.mp4" type="video/mp4"></video><figcaption>三分钟视频版：英文旁白，中英双语字幕</figcaption></figure>
+
 ## 先弄清楚：缓存省的是什么钱
 
 Agent 每次调用模型，都要把整段对话历史重新发一遍，包括系统提示词、工具定义、之前的消息和工具结果。对话越长，每次重复发送的内容就越多。

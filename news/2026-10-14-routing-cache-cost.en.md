@@ -11,6 +11,8 @@ Smart routing gives different work to different models. A natural question follo
 
 HiRoute decides when switches happen, so you do not need to work out the math before turning on Smart saving. The sections below explain each point.
 
+<figure class="article-video"><video controls playsinline preload="none" poster="/media/hiroute-cache-en-poster.jpg" aria-label="Three-minute video: switching models loses cache, not the savings"><source src="/media/hiroute-cache-en.mp4" type="video/mp4"></video><figcaption>Three-minute video version: English narration, English and Chinese subtitles</figcaption></figure>
+
 ## First: what does caching save?
 
 Each time an agent calls a model, it resends the whole conversation: system instructions, tool definitions, earlier messages and tool results. The longer the conversation, the more content is repeated on every call.
