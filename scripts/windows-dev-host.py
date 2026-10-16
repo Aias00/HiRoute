@@ -316,6 +316,62 @@ def finish(root, run_id):
                 native_configuration='not modified by finish')
 
 
+def recover(root, run_id):
+    """Preserve only identifiable files left by this stopped disposable business case."""
+    run = directory(root, run_id)
+    request = json.loads((run / 'request.json').read_text(encoding='utf-8'))
+    result = json.loads((run / 'result.json').read_text(encoding='utf-8'))
+    if (root / 'active.json').exists() or task_state(run_id)['state'] != 'absent':
+        raise ValueError('Finish the stopped run before recovering its owned configuration')
+    if result['passed'] or request['case'] not in (
+            'actual_windows_complete_public_headless_business',
+            'actual_windows_public_headless_business_without_claude'):
+        raise ValueError('Recovery is limited to failed disposable business cases')
+    if os.environ['USERNAME'].casefold() != request['config']['user'].casefold():
+        raise ValueError('Recovery must use the same native account')
+    home = Path.home()
+    state = Path(os.environ['LOCALAPPDATA']) / 'HiRoute/cli'
+    if any(p.exists() for p in (state, home / '.local/bin/hiroute.exe',
+                               home / '.local/share/hiroute/standalone.json')):
+        raise ValueError('An installed product remains; use its public restore operation')
+    lower, upper = (run / 'request.json').stat().st_mtime, (run / 'result.json').stat().st_mtime
+    candidates = [('codex-config.toml', home / '.codex/config.toml'),
+                  ('collaboration-skill.md', home / '.agents/skills/hiroute-collaboration/SKILL.md'),
+                  ('claude-settings.json', home / '.claude/settings.json')]
+    admitted = []
+    for name, path in candidates:
+        if not path.exists():
+            continue
+        plain(path)
+        info = path.stat()
+        if info.st_nlink != 1 or not lower <= info.st_mtime <= upper or info.st_size > 1024 * 1024:
+            raise ValueError('Native configuration identity or modification time is outside this run')
+        body = path.read_bytes()
+        if name == 'codex-config.toml':
+            import tomllib
+            value = tomllib.loads(body.decode('utf-8'))
+            if set(value) != {'model', 'model_provider', 'model_catalog_json', 'model_providers'} or value['model_provider'] != 'hiroute':
+                raise ValueError('Unrecognized Codex configuration; retain it')
+            Path(value['model_catalog_json']).relative_to(state / 'storage/managed-artifacts/agent-connections')
+        elif name == 'claude-settings.json':
+            if json.loads(body) != {'windows_headless_preserved': True}:
+                raise ValueError('Claude configuration is not the untouched disposable marker')
+        elif (list(path.parent.iterdir()) != [path] or
+              b'hiroute worker plans' not in body or b'hiroute worker exec' not in body):
+            raise ValueError('Unrecognized collaboration skill; retain it')
+        destination = run / ('recovered-' + name)
+        if destination.exists():
+            raise ValueError('Recovery evidence already exists')
+        admitted.append((path, destination, digest(path)))
+    for path, destination, checksum in admitted:
+        if digest(path) != checksum:
+            raise ValueError('Native file changed during recovery')
+        path.rename(destination)
+        if path.name == 'SKILL.md':
+            path.parent.rmdir()
+    return dict(run_id=run_id, preserved=[p.name for _, p, _ in admitted])
+
+
 def execute(request):
     root = plain(request['config']['root'])
     action = request['action']
@@ -343,6 +399,8 @@ def execute(request):
         if task_state(request['run_id'])['state'] == 'Running':
             raise ValueError('Wait for the runner to stop before collecting final evidence')
         return dict(directory=str(run), files=[p.name for p in run.iterdir() if p.is_file()])
+    if action == 'recover':
+        return recover(root, request['run_id'])
     if action == 'finish':
         return finish(root, request['run_id'])
     raise ValueError('Unknown Windows development action')

@@ -204,7 +204,7 @@ def main():
     run.add_argument('--case', required=True)
     run.add_argument('--ignored', action='store_true')
     run.add_argument('--timeout', type=int, default=900, help='Whole test process watchdog, not CLI timeout')
-    for action in ('status', 'wait', 'logs', 'finish'):
+    for action in ('status', 'wait', 'logs', 'finish', 'recover'):
         command = commands.add_parser(action)
         command.add_argument('run_id')
         if action == 'wait':

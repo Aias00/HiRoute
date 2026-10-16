@@ -164,6 +164,20 @@ task action and removes only that task and owner lock; it keeps evidence, bundle
 and native configuration. Collected output is private raw evidence and must stay
 ignored, not be attached to public records unreviewed.
 
+When Claude acceptance is explicitly excluded for a development run, select
+`actual_windows_public_headless_business_without_claude` instead. It retains the
+same routing, observation, Worker, restart and restore assertions; Pi supplies the
+independent Messages grant. It does not establish native Claude authentication,
+managed launch or Claude configuration recovery, and does not replace the complete
+release case. No product request deadline is changed.
+
+For a failed disposable business case whose product has already been removed,
+`windows recover RUN_ID` can preserve recognized test-owned Codex configuration,
+collaboration Skill and untouched Claude marker in that run's private evidence.
+First collect and `finish` the run. Recovery rejects active tasks, existing products,
+foreign content, links and file modification times outside that run. It never deletes
+unrecognized user settings; use public restore while the original product still exists.
+
 Transport uses SSH host-key verification, hashed uploaded scripts/JSON and encoded
 PowerShell invocation. Interrupted submission is an unknown outcome: inspect its
 run/task/lock before retrying. Missing Python, clients, login session or account

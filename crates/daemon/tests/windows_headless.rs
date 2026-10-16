@@ -856,6 +856,17 @@ fn installed_native_headless_roundtrip_and_graceful_then_forced_restart() {
 #[test]
 #[ignore = "requires explicit pinned real Codex, Claude, Pi and Node artifacts"]
 fn actual_windows_complete_public_headless_business() {
+    public_headless_business(true);
+}
+
+/// Explicit development subset; never substitutes for the complete release gate.
+#[test]
+#[ignore = "development business journey excluding native Claude acceptance"]
+fn actual_windows_public_headless_business_without_claude() {
+    public_headless_business(false);
+}
+
+fn public_headless_business(include_claude: bool) {
     let product = InstalledProduct::create();
     let contexts = windows_user_models::Contexts::prepare(&product);
     let mut first = product.start_with_environment(false, contexts.variables());
@@ -879,7 +890,10 @@ fn actual_windows_complete_public_headless_business() {
     windows_decision_business::roundtrip(&product);
     let routing = windows_routing_business::Routing::setup(&product);
     let modes = windows_routing_modes::Modes::setup(&product);
-    let mut native = windows_native_protocols::NativeProtocols::setup(&product);
+    let mut native = windows_native_protocols::NativeProtocols::setup_with_messages_plan(
+        &product,
+        (!include_claude).then_some(routing.plan.plan_id.as_str()),
+    );
     let ratings = windows_model_ratings::Ratings::run(&product);
     let mut workers = windows_worker_business::WorkerBusiness::run(
         &product,
@@ -890,16 +904,23 @@ fn actual_windows_complete_public_headless_business() {
             &native.chat.plan.plan_id,
         ],
     );
-    let claude =
-        windows_claude_connection::ClaudeConnection::configure(&product, &routing.plan.plan_id);
+    let claude = include_claude.then(|| {
+        windows_claude_connection::ClaudeConnection::configure(&product, &routing.plan.plan_id)
+    });
+    let messages_connection = claude
+        .as_ref()
+        .map(|client| client.connection_id())
+        .unwrap_or_else(|| native.connection_id());
     routing.traffic_and_observe(
         &product,
         first.listen,
         workers.connection_id(),
-        &claude.connection_id(),
+        &messages_connection,
     );
-    claude.launch(&product, &routing.plan.alias);
-    routing.assert_native_launch_reached_upstream();
+    if let Some(claude) = &claude {
+        claude.launch(&product, &routing.plan.alias);
+        routing.assert_native_launch_reached_upstream();
+    }
     modes.traffic(&product, first.listen, workers.connection_id());
     native.traffic(&product, first.listen);
     let gateway_recovery = windows_gateway_foreground_recovery::Recovery::begin(&product, &first);
@@ -918,9 +939,13 @@ fn actual_windows_complete_public_headless_business() {
     modes.recovered(&product, business_recovered.listen, workers.connection_id());
     native.recovered(&product);
     workers.recovered(&product);
-    claude.recovered(&product);
+    if let Some(claude) = &claude {
+        claude.recovered(&product);
+    }
     workers.restore(&product);
-    claude.restore(&product);
+    if let Some(claude) = claude {
+        claude.restore(&product);
+    }
     native.restore(&product);
 
     lifecycle::stop(
@@ -932,7 +957,15 @@ fn actual_windows_complete_public_headless_business() {
     business_recovered.wait(true);
     assert!(product.cli.is_file());
     println!(
-        "Windows public headless: exact pinned native clients, Compute, Decision, plan preview/apply/list/show, independent Responses/Messages grants, streaming, safe facts/usage/value, real managed Claude launch, actual Main Skill to public Worker, durable restart and native settings restore"
+        "Windows native Claude acceptance: {}",
+        if include_claude {
+            "executed"
+        } else {
+            "excluded"
+        }
+    );
+    println!(
+        "Windows public headless: exact pinned selected clients, Compute, Decision, plan preview/apply/list/show, independent Responses/Messages grants, streaming, safe facts/usage/value, selected native launch scope, actual Main Skill to public Worker, durable restart and native settings restore"
     );
 }
 

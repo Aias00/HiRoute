@@ -28,7 +28,10 @@ pub struct Source {
     observed: Vec<String>,
 }
 impl NativeProtocols {
-    pub fn setup(product: &InstalledProduct) -> Self {
+    pub fn setup_with_messages_plan(
+        product: &InstalledProduct,
+        messages_plan: Option<&str>,
+    ) -> Self {
         let chat = Source::setup(product, UpstreamProtocol::ChatCompletions);
         let messages = Source::setup(product, UpstreamProtocol::Messages);
         // Codex requires developer-role fidelity, so a Messages upstream must
@@ -44,10 +47,16 @@ impl NativeProtocols {
         assert_eq!(agent["supported"], true);
         let context = agent["context_id"].as_str().unwrap().to_owned();
         super::windows_user_models::checked(product, "agent_pi_default");
+        let mut plans = vec![chat.plan.plan_id.clone(), messages.plan.plan_id.clone()];
+        let mut protocols =
+            json!({&chat.plan.plan_id:"responses", &messages.plan.plan_id:"responses"});
+        if let Some(plan) = messages_plan {
+            plans.push(plan.to_owned());
+            protocols[plan] = json!("messages");
+        }
         let spec = json!({"schema_version":{"major":2,"minor":0},"context_id":context,
             "model":{"intent":"configure","settings":{"mode":"pi_additional",
-                "allowed_plan_ids":[chat.plan.plan_id,messages.plan.plan_id],
-                "plan_protocols":{&chat.plan.plan_id:"responses",&messages.plan.plan_id:"responses"}}}});
+                "allowed_plan_ids":plans, "plan_protocols":protocols}}});
         super::windows_user_models::apply(
             product,
             "connect",
@@ -66,6 +75,9 @@ impl NativeProtocols {
             context,
             restore,
         }
+    }
+    pub fn connection_id(&self) -> String {
+        format!("agent-connection/{}", self.context)
     }
     pub fn traffic(&mut self, product: &InstalledProduct, gateway: SocketAddr) {
         let token = grant(product, &format!("agent-connection/{}", self.context));

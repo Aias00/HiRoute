@@ -144,6 +144,34 @@ class Runner(unittest.TestCase):
                 host.start(self.root, dict(request, run_id='b' * 32))
         self.assertEqual(json.loads((self.root / 'active.json').read_text())['run_id'], 'a' * 32)
 
+    def test_recovery_refuses_active_or_foreign_configuration(self):
+        run_id = 'a' * 32
+        run = self.root / 'runs' / run_id
+        run.mkdir(parents=True)
+        request = dict(case='actual_windows_complete_public_headless_business',
+                       config=dict(user='acceptance'))
+        (run / 'request.json').write_text(json.dumps(request))
+        home = self.root / 'home'
+        (home / '.claude').mkdir(parents=True)
+        settings = home / '.claude/settings.json'
+        settings.write_text('{"daily_setting":true}')
+        (run / 'result.json').write_text('{"passed":false}')
+        with patch.object(host, 'task_state', return_value=dict(state='absent')), \
+             patch.object(host.Path, 'home', return_value=home), \
+             patch.dict(os.environ, USERNAME='acceptance', LOCALAPPDATA=str(home / 'local')):
+            with self.assertRaisesRegex(ValueError, 'untouched disposable marker'):
+                host.recover(self.root, run_id)
+            self.assertTrue(settings.exists())
+            (self.root / 'active.json').write_text('{}')
+            with self.assertRaisesRegex(ValueError, 'Finish the stopped run'):
+                host.recover(self.root, run_id)
+            (self.root / 'active.json').unlink()
+            settings.write_text('{"windows_headless_preserved":true}')
+            (run / 'result.json').touch()
+            value = host.recover(self.root, run_id)
+            self.assertEqual(value['preserved'], ['recovered-claude-settings.json'])
+            self.assertFalse(settings.exists())
+
     def test_task_success_without_case_result_is_failure(self):
         (self.root / 'runs' / ('a' * 32)).mkdir(parents=True)
         with patch.object(host, 'task_state', return_value=dict(state='Ready', result=0)):
