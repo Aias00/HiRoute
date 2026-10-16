@@ -267,7 +267,8 @@ impl Routing {
         let messages_token = grant(product, messages_connection);
         let response_body = |stream: bool| json!({"model":self.plan.alias,"input":[{"role":"user","content":[{"type":"input_text","text":"windows-routing-responses"}]}],"stream":stream,"instructions":"bounded Windows route prompt".repeat(4000)});
         for token in [None, Some("invalid-windows-gateway-token")] {
-            let denied = http::post(gateway, "/v1/responses", token, &response_body(false));
+            let denied =
+                http::post_expect_continue(gateway, "/v1/responses", token, &response_body(false));
             assert!(
                 matches!(denied.status, 401 | 403),
                 "unauthenticated Gateway must reject before upstream"
@@ -305,7 +306,7 @@ impl Routing {
             }
         }
         let messages_body = |stream: bool| json!({"model":self.plan.alias,"messages":[{"role":"user","content":[{"type":"text","text":"windows-routing-messages"}]}],"max_tokens":128,"stream":stream});
-        let wrong_protocol = http::post(
+        let wrong_protocol = http::post_expect_continue(
             gateway,
             "/v1/messages",
             Some(&response_token),

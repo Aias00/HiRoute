@@ -221,6 +221,28 @@ pub fn post_with_headers(
     headers: &[(&str, &str)],
     body: &Value,
 ) -> Response {
+    post_exchange(address, path, token, headers, body, false)
+}
+
+/// Keep the original large rejected body without racing an early auth response:
+/// Windows may reset a socket closed while the peer is still writing that body.
+pub fn post_expect_continue(
+    address: SocketAddr,
+    path: &str,
+    token: Option<&str>,
+    body: &Value,
+) -> Response {
+    post_exchange(address, path, token, &[], body, true)
+}
+
+fn post_exchange(
+    address: SocketAddr,
+    path: &str,
+    token: Option<&str>,
+    headers: &[(&str, &str)],
+    body: &Value,
+    expect_continue: bool,
+) -> Response {
     let mut stream = TcpStream::connect_timeout(&address, TIMEOUT).unwrap();
     stream.set_read_timeout(Some(TIMEOUT)).unwrap();
     stream.set_write_timeout(Some(TIMEOUT)).unwrap();
@@ -252,9 +274,18 @@ pub fn post_with_headers(
         );
         write!(stream, "{name}: {value}\r\n").unwrap();
     }
+    if expect_continue {
+        stream.write_all(b"Expect: 100-continue\r\n").unwrap();
+    }
     stream.write_all(b"\r\n").unwrap();
-    stream.write_all(&raw).unwrap();
-    let header = head(&mut stream);
+    let early = expect_continue.then(|| head(&mut stream));
+    let header = match early {
+        Some(header) if !header.starts_with(b"HTTP/1.1 100 ") => header,
+        _ => {
+            stream.write_all(&raw).unwrap();
+            head(&mut stream)
+        }
+    };
     let header = std::str::from_utf8(&header).unwrap();
     let status = header
         .lines()
