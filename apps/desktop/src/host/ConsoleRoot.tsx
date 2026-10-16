@@ -1,7 +1,7 @@
 import { type PropsWithChildren, useEffect, useRef, useState } from 'react';
 import { PresentationRoot, UiIcon, usePresentationPreferences } from '../ui';
 import { safeDiagnosticCode } from '../error-code';
-import { hostKind, initializeShellHost } from './index.ts';
+import { hostKind, initializeShellHost, invoke } from './index.ts';
 import { clearConsoleSession, CONSOLE_EXPIRED_EVENT, CONSOLE_UNAVAILABLE_EVENT, exchangeConsoleCredential, readConsoleSession, sessionBearer } from './console.ts';
 type Phase = 'loading' | 'login' | 'expired' | 'unavailable' | 'assets' | 'ready';
 export function ConsoleRoot({ children }: PropsWithChildren) {
@@ -18,16 +18,26 @@ function ConsoleSessionRoot({ children }: PropsWithChildren) {
   const [busy, setBusy] = useState(false);
   const [hadSession, setHadSession] = useState(false);
   const started = useRef(false);
+  const shell = hostKind() === 'shell-console';
+  const reconnecting = useRef(false);
+  async function reconnectShell() {
+    if (reconnecting.current) return;
+    reconnecting.current = true; setHadSession(false); setPhase('loading'); setToken('');
+    try { await invoke('reconnect'); }
+    catch (cause) { setError(safeDiagnosticCode(cause, 'SHELL_RECONNECT_FAILED')); setPhase('unavailable'); }
+    finally { reconnecting.current = false; }
+  }
   const plaintext = location.protocol === 'http:' && !['127.0.0.1', 'localhost', '[::1]', '::1'].includes(location.hostname);
   const accept = (identity: Awaited<ReturnType<typeof readConsoleSession>>) => { setHadSession(true); setPhase(identity.assets_available ? 'ready' : 'assets'); setError(''); };
   async function retry() {
+    if (shell && !sessionBearer()) { await reconnectShell(); return; }
     setBusy(true); setError('');
     try { await initializeShellHost(); if (!sessionBearer()) { setPhase('login'); return; } accept(await readConsoleSession()); }
     catch (cause) { const code = safeDiagnosticCode(cause, 'CONSOLE_UNAVAILABLE'); setError(code); setPhase(code.includes('AUTH') || code.includes('CREDENTIAL') ? 'expired' : 'unavailable'); }
     finally { setBusy(false); }
   }
   useEffect(() => {
-    const expired = () => { setHadSession(false); setPhase('expired'); setToken(''); };
+    const expired = () => { if (shell) { void reconnectShell(); return; } setHadSession(false); setPhase('expired'); setToken(''); };
     const unavailable = () => setPhase(current => current === 'ready' ? 'unavailable' : current);
     window.addEventListener(CONSOLE_EXPIRED_EVENT, expired);
     window.addEventListener(CONSOLE_UNAVAILABLE_EVENT, unavailable);
@@ -41,7 +51,7 @@ function ConsoleSessionRoot({ children }: PropsWithChildren) {
         void initializeShellHost().then(() => {
           if (values.length !== 1 || !/^[a-f0-9]{64}$/.test(values[0])) throw { code: 'CONSOLE_CREDENTIAL_INVALID' };
           return exchangeConsoleCredential('launch', values[0]);
-        }).then(accept).catch(cause => { clearConsoleSession(); setError(safeDiagnosticCode(cause, 'CONSOLE_CREDENTIAL_INVALID')); setPhase('login'); }).finally(() => setBusy(false));
+        }).then(accept).catch(cause => { clearConsoleSession(); if (shell) { void reconnectShell(); return; } setError(safeDiagnosticCode(cause, 'CONSOLE_CREDENTIAL_INVALID')); setPhase('login'); }).finally(() => setBusy(false));
       } else void retry();
     }
     return () => { window.removeEventListener(CONSOLE_EXPIRED_EVENT, expired); window.removeEventListener(CONSOLE_UNAVAILABLE_EVENT, unavailable); };
@@ -53,7 +63,7 @@ function ConsoleSessionRoot({ children }: PropsWithChildren) {
     catch (cause) { setError(safeDiagnosticCode(cause, 'CONSOLE_CREDENTIAL_INVALID')); }
     finally { setBusy(false); }
   }
-  const loginPage = phase === 'login' || phase === 'expired';
+  const loginPage = !shell && (phase === 'login' || phase === 'expired');
   return <>
     {hadSession && <div className="console-product" hidden={phase !== 'ready'} inert={phase !== 'ready'}>{children}</div>}
     {phase !== 'ready' && <PresentationRoot language={preferences.language} theme={preferences.resolvedTheme} textScale={1}>

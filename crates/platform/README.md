@@ -6,6 +6,13 @@ not select an Agent, authorize a business command, or own business state.
 adapters, fixed Known Folder resolution, and their closed installation definitions.
 The CLI and host runtime select lifecycle policy and maintain installation journals.
 
+`windows::install` supplies native x64 admission and the per-account NSIS/recovery
+guard. `shell_login` owns only the fixed current-user Run value for an admitted
+Programs-directory shell. `user_path` merges/removes only the fixed CLI entry and
+broadcasts the environment change. `shell_open` admits bounded HTTP(S) URLs before
+the native browser association. These leaves do not mint console credentials,
+select releases or authorize product operations.
+
 `private_fs` is the cross-platform entry for new private directories/files, storage
 directory preparation, regular/private handle reads, single-link checks and owned
 temporary directory removal. Unix and Windows implementations stay in separate

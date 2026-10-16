@@ -7,6 +7,13 @@ claim requires the native acceptance gates below to pass at the published revisi
 
 ## Install a verified candidate
 
+For the x64 visual application, use the separate
+[Windows Desktop installer](windows-desktop-installation.md). It bundles these
+same standalone components and calls the Rust Task transaction without Python.
+Its program directory is under LocalAppData `Programs`, separate from headless
+state. SCM remains a separate headless administrator path. The installed service
+can also expose the authenticated [Web console](web-console.md).
+
 Use native Windows Python 3 and a distributor-provided archive and companion manifest
 from one exact source revision. The installer checks the archive size and SHA-256,
 closed file inventory, every file digest and the architecture of all three executable

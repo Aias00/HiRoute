@@ -20,6 +20,7 @@ export function hostCapabilities(): HostCapabilities {
 /** Explicit seam for the browser harness. It does not change server authority. */
 export function setHostTransport(transport: HostTransport | undefined): void { override = transport; }
 export async function initializeShellHost(): Promise<void> {
+  if (override) return;
   if (hostKind() === 'shell-console') shellCapabilities = await (await import('@tauri-apps/api/core')).invoke<HostCapabilities>('shell_capabilities');
 }
 function externalUrl(value: unknown): string {
@@ -51,7 +52,7 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
     return override.call<T>(command, args);
   }
   if (hostKind() === 'tauri') return (await import('./tauri.ts')).tauriTransport.call<T>(command, args);
-  if (hostKind() === 'shell-console' && (command.startsWith('update_') || ['open_external_url', 'save_classifier_openapi'].includes(command))) return (await import('@tauri-apps/api/core')).invoke<T>(`shell_${command}`, args);
+  if (hostKind() === 'shell-console' && (command.startsWith('update_') || command.startsWith('login_start_') || ['open_external_url', 'save_classifier_openapi', 'open_in_browser', 'restart_service', 'reconnect'].includes(command))) return (await import('@tauri-apps/api/core')).invoke<T>(`shell_${command}`, args);
   return browserCall(command, args) as Promise<T>;
 }
 export async function listenForHostConfirmations(onRequest: (request: WebConfirmationRequest) => void): Promise<() => void> { return hostKind() === 'tauri' ? (await import('./tauri.ts')).listenNativeConfirmation(onRequest) : () => {}; }

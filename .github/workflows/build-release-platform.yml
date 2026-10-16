@@ -9,6 +9,9 @@ on:
       runner:
         required: true
         type: string
+      windows_desktop:
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -86,14 +89,17 @@ jobs:
         shell: pwsh
         env:
           RELEASE_TARGET: ${{ inputs.target }}
+          WINDOWS_DESKTOP: ${{ inputs.windows_desktop }}
         run: |
           if ((git rev-parse HEAD) -ne $env:GITHUB_SHA) { throw 'Exact dispatch SHA required' }
-          python scripts/build-release.py --target $env:RELEASE_TARGET --cpa-source-repo "$env:RUNNER_TEMP/cpa"
+          $desktop = @()
+          if ($env:WINDOWS_DESKTOP -eq 'true') { $desktop = @('--windows-desktop') }
+          python scripts/build-release.py --target $env:RELEASE_TARGET --cpa-source-repo "$env:RUNNER_TEMP/cpa" @desktop
           if ($LASTEXITCODE -ne 0) { throw 'Native Windows candidate build failed' }
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: release-${{ inputs.target }}-${{ github.sha }}-${{ github.run_attempt }}
+          name: release-${{ inputs.target }}${{ inputs.windows_desktop && '-desktop' || '' }}-${{ github.sha }}-${{ github.run_attempt }}
           path: |
             target/release-candidate/**/assets/*
             target/release-candidate/**/result.json

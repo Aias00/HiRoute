@@ -15,10 +15,9 @@ fn wide(value: &str) -> Vec<u16> {
     value.encode_utf16().chain(Some(0)).collect()
 }
 fn checked_binary(path: &Path) -> io::Result<()> {
-    let programs = super::background::local_app_data()?.join("Programs");
+    let expected = super::background::local_app_data()?.join("Programs/HiRoute/hiroute-shell.exe");
     if !path.is_absolute()
-        || !path.starts_with(programs)
-        || path.file_name().and_then(|s| s.to_str()) != Some("hiroute-shell.exe")
+        || path != expected
         || path
             .components()
             .any(|p| matches!(p, std::path::Component::ParentDir))
@@ -29,6 +28,10 @@ fn checked_binary(path: &Path) -> io::Result<()> {
         ));
     }
     Ok(())
+}
+fn command_line(binary: &Path) -> String {
+    // Always quote, including ordinary profiles whose path contains no spaces.
+    format!("\"{}\" --background", binary.to_string_lossy())
 }
 fn command() -> io::Result<Option<String>> {
     let key = wide(KEY);
@@ -91,10 +94,7 @@ pub fn set(binary: &Path, enabled: bool) -> io::Result<()> {
         return remove();
     }
     let _held = super::security::open_identity(binary, false)?;
-    let value = wide(&format!(
-        "{} --background",
-        super::background::quote_argument(&binary.to_string_lossy())?
-    ));
+    let value = wide(&command_line(binary));
     let key = wide(KEY);
     let name = wide(NAME);
     // SAFETY: fixed HKCU Run value and live, NUL-terminated UTF-16 data.
@@ -115,8 +115,11 @@ pub fn set(binary: &Path, enabled: bool) -> io::Result<()> {
     }
 }
 pub fn remove() -> io::Result<()> {
-    if configured_binary()?.is_none() {
-        return Ok(());
+    match configured_binary() {
+        Ok(None) => return Ok(()),
+        Err(error) if error.to_string() == "SHELL_LOGIN_CONFLICT" => return Ok(()),
+        Err(error) => return Err(error),
+        Ok(Some(_)) => {}
     }
     let key = wide(KEY);
     let name = wide(NAME);
@@ -126,5 +129,33 @@ pub fn remove() -> io::Result<()> {
         Ok(())
     } else {
         Err(io::Error::from_raw_os_error(status as i32))
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn fixed_login_command_is_quoted_even_for_paths_without_spaces() {
+        let binary = super::super::background::local_app_data()
+            .unwrap()
+            .join("Programs/HiRoute/hiroute-shell.exe");
+        let command = command_line(&binary);
+        let decoded = command
+            .strip_prefix('"')
+            .and_then(|s| s.strip_suffix("\" --background"))
+            .unwrap();
+        assert_eq!(Path::new(decoded), binary);
+        assert!(checked_binary(&binary).is_ok());
+        assert!(
+            checked_binary(
+                &binary
+                    .parent()
+                    .unwrap()
+                    .parent()
+                    .unwrap()
+                    .join("Other/hiroute-shell.exe")
+            )
+            .is_err()
+        );
     }
 }

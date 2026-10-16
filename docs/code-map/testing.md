@@ -54,6 +54,25 @@ not substitute a released `bind(0)` probe. Its protected-input channel cannot be
 attached to an existing Desktop. Prepare that instance first, then use real UI
 mutations. Main-Agent delegation must separately invoke the actual public CLI.
 
+The [shared product session](../../crates/product-session/src) owns confirmation,
+exact-digest authority and command orchestration tests. The
+[console composition cases](../../crates/daemon/src/console/tests.rs) exercise the
+real role-all dispatcher while preserving the external Local Control Released
+gate. [Authentication cases](../../crates/daemon/src/console/auth/tests.rs) cover
+launch replay, revocation, hash-only storage and rate limits. Browser scenarios
+run through both host transports; their production CSS screenshots include the
+console and Windows startup/update pages, without establishing native effects.
+
+The [Rust installation journal](../../crates/host-runtime/src/standalone_install/journal/tests.rs)
+retains released Python V1 recovery inputs. The
+[frozen release reader](../../crates/host-runtime/tests/release_catalog_compatibility.rs)
+proves that the V2 projection remains consumable by supported macOS Desktop.
+Windows shell origin/handoff tests live in
+[the shell library](../../apps/shell/src-tauri/src/lib.rs); installed NSIS, WebView,
+Task and upgrade effects require the separate
+[native acceptance inventory](../../scripts/windows-desktop-cases.json), bound to
+the actual standard-user OS, candidate and installer hash.
+
 Keep borrowed user resources, writable native acceptance configuration, fresh
 product storage and per-run materials separate. Each product instance needs a
 private runtime/storage namespace. Worker task submissions recover with the original

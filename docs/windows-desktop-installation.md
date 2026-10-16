@@ -1,0 +1,77 @@
+# Windows Desktop installation and updates
+
+The [English installation guide](../apps/website/content/guides/install-windows.en.md)
+and [Chinese installation guide](../apps/website/content/guides/install-windows.zh.md)
+own the user steps, SHA-256 verification and SmartScreen prompts. The NSIS package
+supports native Windows x64 and installs for the current ordinary user without
+Python, WSL or administrator privileges.
+
+The shell's program directory is fixed at `%LOCALAPPDATA%\Programs\HiRoute`.
+Standalone service state remains under `%LOCALAPPDATA%\HiRoute\cli`; neither root
+can contain the other. The native adapter checks KnownFolders, architecture,
+existing manager ownership and reparse-free paths before product writes. An
+SCM-managed installation is refused by this Desktop/Rust Task path.
+
+The installer verifies the complete embedded standalone package and uses its
+native Rust transaction. The transaction retains
+`hiroute.windows-install-journal/v1` so it can recover an interrupted Python
+installation. A prepared journal blocks business startup until recovery reconciles
+files, the marker and actual Task registration. No new business mutations are
+replayed during installation recovery.
+
+The separate shell inventory records only its installed files and digests. Its
+private preparation journal retains matching previous bytes until installation,
+login settings and actual Control/Gateway readiness succeed. Changed/foreign
+entries are preserved and require repair. Committed cleanup does not replay
+installation or roll back a successfully committed package.
+
+Login-start and tray choices default on and can be deselected independently.
+Login start updates the user's Task and the fixed HKCU Run command together,
+compensating a failed Run update. Disabling the tray makes window close exit the
+shell; a background login launch then opens a visible window. Quit never stops the
+service. A second launch focuses the existing window.
+
+## Update ordering and recovery
+
+The host selects a newer stable x64 NSIS entry from `releases-v3.json`. The page
+cannot supply a download URL, install directory or executable. Downloading and
+size/SHA-256 verification finish in private staging while the service runs. Native
+lifecycle preparation pauses new admissions and reports active calls/tasks. The
+user can cancel; cancellation resumes admission and leaves work untouched.
+
+After drain, a private native finisher acknowledges readiness and requires a
+generation-bound explicit commit. It waits for the shell to exit, rechecks the
+staged installer and runs NSIS passively with its update
+flag. The installer repeats drain before stopping the owned daemon. A manual
+installer uses that same hook and a bounded wait. An older daemon without drain
+support requires a separate explicit interactive confirmation; passive updates
+refuse it.
+
+Pre-stop failures resume admission. Replacement failure attempts the old package
+and Task through the same Rust journal core; it never rewrites a marker to pretend
+recovery succeeded. The next shell start reads the private outcome and can recover
+an interrupted transaction after the installer is no longer active. An unresolved
+file or service conflict stays on the bundled failure page with a diagnostics path.
+
+## Uninstall boundaries
+
+Agent restoration uses production Preview/Apply and waits for the resulting
+Operation before service or file removal. A blocked restore reports the Agent IDs
+and leaves the installation available for a user decision. The Task, exact owned
+shell login command and recorded files are removed; a foreign Run command or file
+is preserved. User PATH removal applies only when the installer added that fixed
+entry. Data removal is an explicit unchecked option and does not turn the headless
+state root into the NSIS program directory.
+
+## Evidence and release claims
+
+The native acceptance inventory is
+[`windows-desktop-cases.json`](../scripts/windows-desktop-cases.json). Windows 11
+x64 and Server selections require real standard-user execution, the candidate SHA,
+installer digest, OS/build and architecture. A Server result is not Windows 11
+evidence. Browser fixtures, Cargo checks and package construction do not establish
+installation, native authorization, upgrade recovery or a live model call.
+
+The [release builder](release-builds.md) keeps a Desktop installer separate from
+the headless archive. Release publication requires both native selections and
+refuses an identity sidecar that is incomplete or bound to another artifact.

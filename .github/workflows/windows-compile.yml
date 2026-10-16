@@ -11,6 +11,7 @@ on:
       - 'assets/**'
       - 'vendor/**'
       - 'tools/**'
+      - 'apps/shell/**'
       - 'scripts/**'
       - '.github/workflows/windows-compile.yml'
 
@@ -38,6 +39,9 @@ jobs:
         shell: pwsh
         run: rustup show active-toolchain
       - uses: mozilla-actions/sccache-action@v0.0.11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - uses: actions/cache@v4
         with:
           path: |
@@ -50,3 +54,12 @@ jobs:
         run: |
           cargo check --locked --target x86_64-pc-windows-msvc -p hiroute-cli -p hiroute-daemon -p hiroute-platform -p hiroute-local-storage --all-targets
           if ($LASTEXITCODE -ne 0) { throw 'Windows headless compilation failed' }
+      - name: Check Windows console shell and its restricted host commands
+        shell: pwsh
+        run: |
+          npm ci --prefix apps/shell
+          if ($LASTEXITCODE -ne 0) { throw 'Shell frontend dependencies failed' }
+          npm run build --prefix apps/shell
+          if ($LASTEXITCODE -ne 0) { throw 'Shell frontend build failed' }
+          cargo check --locked --target x86_64-pc-windows-msvc -p hiroute-shell --features shell-runtime --all-targets
+          if ($LASTEXITCODE -ne 0) { throw 'Windows console shell compilation failed' }

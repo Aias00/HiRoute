@@ -3,6 +3,7 @@ import { invoke } from '../host/index.ts';
 import { useEffect, useState } from 'react';
 import { DiagnosticsSettings } from '../features/diagnostics/DiagnosticsSettings';
 import { UpdatesSettings } from '../features/UpdatesSettings';
+import { ShellHostSettings } from '../features/ShellHostSettings';
 import { safeDiagnosticCode } from '../error-code';
 import { ProductPage } from '../ui';
 import type { Language, LanguagePreference, ThemePreference } from '../ui/preferences';
@@ -170,6 +171,7 @@ export function SettingsPage(props: SettingsPageProps) {
 
   return <ProductPage title={text('设置', 'Settings')} subtitle={text('偏好与本机服务', 'Preferences and local service')}>
     <div className="settings-wrap">
+      {hostCapabilities().host === 'shell-console' && <ShellHostSettings active={props.active} language={props.language} />}
       <section className="settings-group"><h2>{text('偏好', 'Preferences')}</h2><div className="settings-list">
         <div className="settings-row"><div className="settings-copy"><strong>{text('语言', 'Language')}</strong><span>{text('界面与状态文案', 'Interface and status text')}</span></div>
           <div className="segmented">{(['system', 'zh', 'en'] as const).map(language => <button type="button" key={language} className={`segment ${props.languagePreference === language ? 'active' : ''}`} aria-pressed={props.languagePreference === language} onClick={() => props.onLanguageChange(language)}>{language === 'system' ? text('跟随系统', 'System') : language === 'zh' ? '中文' : 'English'}</button>)}</div>

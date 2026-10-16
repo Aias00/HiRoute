@@ -1,4 +1,9 @@
-# Web console host
+# Architecture and ownership
+
+[Code map](README.md) · [Agent/Worker map](worker-context.md) ·
+[Decision map](decision-foundation.md) · [Test map](testing.md)
+
+## Web console and Windows host
 
 `crates/daemon/src/console` owns the separate HTTP listener, origin/asset admission,
 credential stores and per-client product contexts. Its private in-process Client
@@ -8,10 +13,14 @@ drain; external Local Control retains its released-command gate. The frontend
 host capabilities. Browser product requests use explicit Bearer/context headers;
 native host actions stay in their host adapter.
 
-## Architecture and ownership
-
-[Code map](README.md) · [Agent/Worker map](worker-context.md) ·
-[Decision map](decision-foundation.md) · [Test map](testing.md)
+[`apps/shell`](../../apps/shell/README.md) owns the Windows Tauri window, exact-origin
+host IPC, startup/reconnect, tray/login preference and NSIS hooks. The
+[Rust standalone transaction](../../crates/host-runtime/src/standalone_install)
+owns Task installation and Python V1 journal recovery; the shell's separate
+inventory/finisher owns its program files and update outcome. Neither owns business
+transactions or exposes Local Control to WebView. The
+[release catalog](../../apps/website/src/lib/releases.mjs) emits V3 and the registered
+Windows-free V2 projection for supported macOS readers.
 
 ## Shared layers
 

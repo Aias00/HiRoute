@@ -30,3 +30,17 @@ pub fn url(value: &str) -> io::Result<()> {
         Ok(())
     }
 }
+pub fn startup_failure() {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{MB_ICONERROR, MB_OK, MessageBoxW};
+    let title: Vec<u16> = "HiRoute\0".encode_utf16().collect();
+    let message:Vec<u16>="HiRoute could not open its Windows window (SHELL_RUNTIME_UNAVAILABLE). Repair Microsoft Edge WebView2 Runtime or reinstall HiRoute. Existing service data is preserved.\0".encode_utf16().collect();
+    // SAFETY: fixed diagnostic text and a native-owned modal; no caller HTML or commands.
+    unsafe {
+        MessageBoxW(
+            ptr::null_mut(),
+            message.as_ptr(),
+            title.as_ptr(),
+            MB_OK | MB_ICONERROR,
+        );
+    }
+}

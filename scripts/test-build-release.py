@@ -19,7 +19,7 @@ REPO = Path(__file__).resolve().parent.parent
 spec = importlib.util.spec_from_file_location("build_release", REPO / "scripts/build-release.py")
 builder = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(builder)
-MODULES = {name: builder.module(name) for name in ("package-desktop", "package-standalone", "build-cpa", "local-rust", "linux-release-abi", "windows-native-runtime-audit")}
+MODULES = {name: builder.module(name) for name in ("package-desktop", "package-standalone", "package-windows-shell", "build-cpa", "local-rust", "linux-release-abi", "windows-native-runtime-audit")}
 PE_FIXTURES = builder.module("test-windows-native-runtime-audit")
 
 
@@ -235,6 +235,54 @@ class CandidateTests(unittest.TestCase):
         self.assertEqual(result["status"], "failed")
         self.assertNotIn("website_artifact", result)
         self.assertFalse((self.candidate.output / "assets").exists())
+
+    def test_windows_shell_stage_uses_verified_package_bytes_and_preserves_foreign_files(self):
+        result = self.build_windows_candidate()
+        assets = Path(result["assets"])
+        archive = next(assets.glob("*.tar.gz"))
+        manifest = next(assets.glob("*.json"))
+        destination = self.root / "shell-resources/standalone"
+        packager = MODULES["package-windows-shell"]
+        value = packager.stage(manifest, archive, destination)
+        self.assertEqual(value["revision"], "a" * 40)
+        self.assertTrue((destination / "hiroute.exe").read_bytes().startswith(b"MZ"))
+        self.assertEqual((destination / "package-manifest.json").read_bytes(), manifest.read_bytes())
+        self.assertTrue((destination / "console/index.html").is_file())
+        packager.stage(manifest, archive, destination)
+        foreign = destination / "personal.txt"
+        foreign.write_text("preserve me")
+        with self.assertRaisesRegex(ValueError, "foreign"):
+            packager.stage(manifest, archive, destination)
+        self.assertEqual(foreign.read_text(), "preserve me")
+        (destination / "hiroute.exe").write_bytes(b"changed owned entry")
+        with self.assertRaisesRegex(ValueError, "owned standalone stage entry changed"):
+            packager.stage(manifest, archive, destination)
+        self.assertEqual((destination / "hiroute.exe").read_bytes(), b"changed owned entry")
+
+    def test_desktop_publication_rejects_partial_or_misbound_native_attestation(self):
+        # Verifier-shape regression only; fabricated JSON is never installation evidence.
+        packager = MODULES["package-windows-shell"]
+        installer = self.root / f"HiRoute-{self.version}-aaaaaaaaaaaa-windows-x86_64-setup.exe"
+        installer.write_bytes(b"fixture installer")
+        identity = {"schema": packager.SCHEMA, "version": self.version, "revision": "a" * 40,
+                    "architecture": "x86_64", "distribution": "unsigned", "integrity": "green",
+                    "embedded_components": "green", "native_runtime": "green", "installer_sha256": packager.digest(installer),
+                    "installer_size": installer.stat().st_size}
+        with self.assertRaisesRegex(ValueError, "Windows 11"):
+            packager.verify(installer, identity, "a" * 40)
+        required = json.loads((REPO / "scripts/windows-desktop-cases.json").read_text())
+        identity["native_evidence"] = {"runs": [{"platform": platform_name, "revision": "a" * 40,
+            "installer_sha256": packager.digest(installer), "standard_user": True, "architecture": "AMD64",
+            "os_version": "fixture-only", "scenarios": dict.fromkeys(cases, "green")} for platform_name, cases in required.items()]}
+        self.assertIs(packager.verify(installer, identity, "a" * 40), identity)
+        for key, value in (("revision", "b" * 40), ("standard_user", False), ("architecture", "ARM64")):
+            altered = json.loads(json.dumps(identity))
+            altered["native_evidence"]["runs"][0][key] = value
+            with self.assertRaisesRegex(ValueError, "all standard-user"):
+                packager.verify(installer, altered, "a" * 40)
+        identity["native_evidence"]["runs"][0]["scenarios"].pop("update.killed-resume")
+        with self.assertRaisesRegex(ValueError, "all standard-user"):
+            packager.verify(installer, identity, "a" * 40)
 
     def test_windows_release_rejects_ambient_compiler_overrides_without_affecting_other_contexts(self):
         for name in ("RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS",

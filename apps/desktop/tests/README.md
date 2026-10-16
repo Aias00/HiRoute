@@ -1,4 +1,6 @@
-# Console host coverage
+# Desktop behavior tests
+
+## Console and Windows host coverage
 
 The V3 browser runner accepts `HIROUTE_BROWSER_TRANSPORT=console` to execute the
 same required product scenarios through the browser host seam. `--console-only`
@@ -7,7 +9,11 @@ headers, plaintext warnings and host capabilities, and captures zh/en light/dark
 at 1200×813 and 755×600. These component scenarios do not establish real daemon,
 native authorization or installation acceptance.
 
-## Desktop behavior tests
+`--shell-host-only` adds the actual Windows startup HTML/styles and production
+shell settings/update states, host-only command routing and credential-free
+reconnect presentation. It uses synthetic host replies and captures the same
+language/theme/size matrix. Native origin ACLs, NSIS, Task/login effects and real
+upgrades keep their [installed gates](../../../docs/windows-desktop-installation.md#evidence-and-release-claims).
 
 Start with the user capability, then choose the smallest layer that can observe its
 contract. Node state tests explain decision rules; browser scenarios exercise the

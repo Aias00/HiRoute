@@ -95,8 +95,9 @@ def windows_release_environment(target, inherited):
 
 
 class Candidate:
-    def __init__(self, target, source_repo):
+    def __init__(self, target, source_repo, windows_desktop=False):
         self.target = target
+        self.windows_desktop = windows_desktop
         self.source_repo = source_repo.resolve(strict=True)
         self.revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
         parent = REPO / "target/release-candidate" / self.revision / target
@@ -109,10 +110,10 @@ class Candidate:
         self.environment = dict(os.environ, RUSTC_WRAPPER="sccache", CARGO_INCREMENTAL="0",
                                 HIROUTE_BUILD_SOURCE_SHA=self.revision, LC_ALL="C")
 
-    def run(self, *arguments, env=None, timeout=None):
+    def run(self, *arguments, env=None, timeout=None, cwd=None):
         started = time.monotonic()
         print(f"Running {Path(str(arguments[0])).name} {' '.join(map(str, arguments[1:3]))}", file=sys.stderr, flush=True)
-        result = subprocess.run(list(map(str, arguments)), cwd=REPO, env=env or self.environment,
+        result = subprocess.run(list(map(str, arguments)), cwd=cwd or REPO, env=env or self.environment,
                                 text=True, capture_output=True, timeout=timeout)
         self.result["timings"].append({"command": list(map(str, arguments[:3])),
                                        "seconds": round(time.monotonic() - started, 3),
@@ -126,6 +127,8 @@ class Candidate:
         return self.run(sys.executable, REPO / "scripts" / f"{name}.py", *args)
 
     def preflight(self):
+        if self.windows_desktop and self.target != STATIC_CRT_TARGET:
+            raise ValueError("Windows Desktop supports only x86_64-pc-windows-msvc")
         if self.target not in TARGETS or host_target() != self.target:
             raise ValueError(f"native host required for {self.target}; host is {host_target()}")
         if self.run("git", "status", "--porcelain", "--untracked-files=normal"):
@@ -238,6 +241,42 @@ class Candidate:
                     "manifest_sha256": packager.digest(manifest), "manifest_size": manifest.stat().st_size}
         return artifact, [archive, manifest]
 
+    def desktop_windows(self):
+        _, files = self.standalone()
+        archive, manifest = files
+        shell = REPO / "apps/shell"
+        packager = module("package-windows-shell")
+        package = packager.stage(manifest, archive, shell / "src-tauri/resources/standalone")
+        environment = windows_release_environment(self.target, self.environment)
+        self.run("npm.cmd", "ci", cwd=shell)
+        self.run("npm.cmd", "run", "tauri", "--", "build", "--ci", "--target", self.target,
+                 "--features", "shell-runtime", "--no-bundle", "--", "--locked", cwd=shell, env=environment)
+        executable = REPO / "target" / self.target / "release/hiroute-shell.exe"
+        image = module("windows-native-runtime-audit").image_record(executable.read_bytes(), "hiroute-shell.exe", "windows-desktop-release")
+        if image["imports"]["debug_crt"] or image["imports"]["release_vc_runtime"]:
+            raise ValueError("Windows Desktop has an unexpected CRT dependency")
+        self.run("npm.cmd", "run", "tauri", "--", "bundle", "--ci", "--target", self.target,
+                 "--features", "shell-runtime", "--bundles", "nsis", "--no-sign", cwd=shell, env=environment)
+        # Tauri CLI 2.11.4 uses product_version_arch-setup.exe. Select that
+        # exact candidate path; retained installers from other versions are irrelevant.
+        produced = REPO / "target" / self.target / "release/bundle/nsis" / f"HiRoute_{self.version}_x64-setup.exe"
+        if not produced.is_file() or produced.is_symlink():
+            raise ValueError("Windows Desktop bundle did not produce its exact installer")
+        name = f"HiRoute-{self.version}-{self.revision[:12]}-windows-x86_64-setup.exe"
+        installer = self.output / name
+        shutil.copyfile(produced, installer)
+        identity = {"schema": packager.SCHEMA, "version": self.version, "revision": self.revision,
+                    "architecture": "x86_64", "distribution": "unsigned", "installer_sha256": packager.digest(installer),
+                    "installer_size": installer.stat().st_size, "integrity": "green", "embedded_components": "awaiting_runtime",
+                    "native_runtime": "not_executed", "shell_image": image, "standalone_revision": package["revision"],
+                    "standalone_manifest_sha256": packager.digest(manifest)}
+        identity_path = self.output / (name + ".identity.json")
+        identity_path.write_text(json.dumps(identity, indent=2) + "\n")
+        self.result["desktop_result"] = identity
+        artifact = {"kind": "desktop", "platform": "Windows", "architecture": "x86_64", "format": "nsis", "distribution": "unsigned",
+                    "filename": name, "sha256": identity["installer_sha256"], "size": identity["installer_size"]}
+        return artifact, [installer, identity_path]
+
     def build(self):
         try:
             self.preflight()
@@ -247,7 +286,7 @@ class Candidate:
                 module("package-desktop").ensure_sccache_server()
                 lock = windows_build_lock() if self.target.endswith("-pc-windows-msvc") else module("local-rust").Store().locked(REPO)
                 with lock:
-                    artifact, files = self.standalone()
+                    artifact, files = self.desktop_windows() if self.windows_desktop else self.standalone()
             assets = self.output / "assets"
             assets.mkdir()
             for path in files:
@@ -268,6 +307,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--target", choices=TARGETS, required=True)
     parser.add_argument("--cpa-source-repo", type=Path, required=True)
+    parser.add_argument("--windows-desktop", action="store_true", help="Build the x64 NSIS Desktop installer instead of the headless archive")
     args = parser.parse_args()
     try:
         if args.target.endswith("linux-gnu") and not os.environ.get("HIROUTE_LINUX_BASELINE_IMAGE"):
@@ -275,7 +315,7 @@ def main():
         else:
             if args.target.endswith("linux-gnu"):
                 Path.home().mkdir(parents=True, exist_ok=True)
-            candidate = Candidate(args.target, args.cpa_source_repo)
+            candidate = Candidate(args.target, args.cpa_source_repo, args.windows_desktop)
             result = candidate.build()
             if args.target.endswith("linux-gnu"):
                 Path(os.environ["HIROUTE_RELEASE_RESULT"]).write_text(json.dumps({
