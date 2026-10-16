@@ -28,3 +28,4 @@ pub use subscription_proxy::*;
 
 mod console_listener;
 pub use console_listener::*;
+pub mod standalone_install;

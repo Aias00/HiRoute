@@ -723,6 +723,15 @@ fn native_help_document(descriptor: &CommandDescriptorV1) -> String {
 pub fn main_entry() -> u8 {
     let arguments = std::env::args_os().skip(1).collect::<Vec<_>>();
     #[cfg(windows)]
+    if let Some(verb) = arguments.first().and_then(|v| v.to_str()).filter(|v| {
+        matches!(
+            *v,
+            "__windows-install" | "__windows-uninstall" | "__windows-finalize"
+        )
+    }) {
+        return service::windows_install_hidden(verb, &arguments[1..]);
+    }
+    #[cfg(windows)]
     if arguments
         .first()
         .is_some_and(|argument| argument == service::windows_background_finalize_verb())

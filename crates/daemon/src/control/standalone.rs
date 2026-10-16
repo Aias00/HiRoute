@@ -129,7 +129,7 @@ impl ProtectedInputServer {
                 }
                 #[cfg(windows)]
                 if let Some(server) = self.lifecycle.as_ref()
-                    && server.poll_stop()?
+                    && server.poll_stop(&role)?
                 {
                     break Ok(());
                 }

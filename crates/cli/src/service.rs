@@ -16,7 +16,13 @@ const SERVICE_LABEL: &str = "ai.hiroute.cli";
 const MAX_LOG_BYTES: usize = 256 * 1024;
 
 #[cfg(windows)]
+mod restore_agents;
+#[cfg(windows)]
 mod windows;
+#[cfg(windows)]
+pub(crate) fn windows_install_hidden(verb: &str, args: &[std::ffi::OsString]) -> u8 {
+    windows::install_hidden(verb, args)
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ServiceFailure {

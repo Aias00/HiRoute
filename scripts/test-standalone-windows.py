@@ -100,6 +100,27 @@ class WindowsPackage(unittest.TestCase):
 
 
 class WindowsRecovery(unittest.TestCase):
+    def test_task_wrapper_uses_only_the_fixed_native_stdin_entry(self):
+        response = {"schema": "hiroute.windows-install-result/v1", "installed": True}
+        process = SimpleNamespace(returncode=0, stdout=json.dumps(response).encode())
+        request = {"schema": "hiroute.windows-install-request/v1", "package_directory": "C:\\verified package"}
+        with patch.object(installer.subprocess, "run", return_value=process) as run, patch("builtins.print"):
+            self.assertEqual(installer.rust_task_request(Path("verified-cli.exe"), "__windows-install", request), response)
+        self.assertEqual(run.call_args.args[0], ["verified-cli.exe", "__windows-install", "--request-stdin"])
+        self.assertEqual(json.loads(run.call_args.kwargs["input"]), request)
+        self.assertNotIn("shell", run.call_args.kwargs)
+
+    def test_task_wrapper_preserves_drain_and_agent_decision_failures_without_echoing_stderr(self):
+        for code in ("DRAIN_UNSUPPORTED", "UPGRADE_ACTIVE_WORK", "AGENT_RESTORE_REQUIRED", "INSTALL_SCM_MANAGED"):
+            process = SimpleNamespace(returncode=1, stdout=json.dumps({"error": {"code": code, "agents": ["agent/codex"]}}).encode(), stderr=b"must-not-echo")
+            with patch.object(installer.subprocess, "run", return_value=process), self.assertRaisesRegex(ValueError, code):
+                installer.rust_task_request(Path("verified-cli.exe"), "__windows-uninstall", {})
+
+    def test_task_wrapper_refuses_non_x64_before_staging(self):
+        with patch.object(installer.package, "verify", return_value={"target": "aarch64-pc-windows-msvc"}), patch.object(installer.tempfile, "TemporaryDirectory") as stage:
+            with self.assertRaisesRegex(ValueError, "INSTALL_ARCHITECTURE_UNSUPPORTED"):
+                installer.rust_task_install(SimpleNamespace(manifest=Path("manifest"), archive=Path("archive")))
+            stage.assert_not_called()
     def fixture(self, directory, operation="install", old=True):
         root = Path(directory).resolve(); data = root / "data"; (data / "service").mkdir(parents=True)
         bin_root = root / ".local/bin"; bin_root.mkdir(parents=True)

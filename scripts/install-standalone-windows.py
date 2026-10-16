@@ -338,7 +338,49 @@ def password_input(args):
     return getpass.getpass("Windows account password (stored only by SCM): ").encode("utf-8")
 
 
+def rust_task_request(cli, verb, request):
+    body = json.dumps(request, separators=(",", ":")).encode("utf-8")
+    if len(body) > 16 * 1024:
+        raise ValueError("native maintenance request is oversized")
+    result = subprocess.run([str(cli), verb, "--request-stdin"], input=body,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=600, check=False)
+    if len(result.stdout) > 16 * 1024:
+        raise ValueError("native maintenance response is oversized")
+    value = package.load_json_bytes(result.stdout)
+    if result.returncode:
+        error = value.get("error", {})
+        code = error.get("code", "INSTALL_FAILED")
+        allowed = {"DRAIN_UNSUPPORTED", "UPGRADE_ACTIVE_WORK", "INSTALL_SCM_MANAGED", "INSTALL_ARCHITECTURE_UNSUPPORTED", "INSTALL_MAINTENANCE_BUSY", "INSTALL_OWNERSHIP_CONFLICT", "AGENT_RESTORE_REQUIRED", "INSTALL_FAILED"}
+        if code not in allowed:
+            code = "INSTALL_FAILED"
+        agents = error.get("agents")
+        detail = ": " + ", ".join(agents) if isinstance(agents, list) and all(isinstance(a, str) and len(a) <= 512 for a in agents) else ""
+        raise ValueError(code + detail)
+    expected = "hiroute.windows-install-result/v1" if verb == "__windows-install" else "hiroute.windows-uninstall-result/v1"
+    if not isinstance(value, dict) or value.get("schema") != expected:
+        raise ValueError("native maintenance response is invalid")
+    print(json.dumps(value, sort_keys=True))
+    return value
+
+
+def rust_task_install(args):
+    manifest = package.verify(args.manifest, args.archive)
+    if manifest["target"] != "x86_64-pc-windows-msvc":
+        raise ValueError("INSTALL_ARCHITECTURE_UNSUPPORTED")
+    # The native helper repeats architecture/SCM admission before any product write.
+    with tempfile.TemporaryDirectory(prefix="hiroute-verified-") as temporary:
+        staging = Path(temporary)
+        stage_package(manifest, args.archive, staging)
+        (staging / "package-manifest.json").write_text(json.dumps(manifest, sort_keys=True, separators=(",", ":")))
+        return rust_task_request(staging / "hiroute.exe", "__windows-install", {
+            "schema": "hiroute.windows-install-request/v1", "package_directory": str(staging),
+            "allow_legacy_stop": getattr(args, "allow_legacy_stop", False),
+        })
+
+
 def install(args):
+    if args.manager == "task" and not args.external_manager:
+        return rust_task_install(args)
     manifest = package.verify(args.manifest, args.archive)
     if not manifest["target"].endswith("-pc-windows-msvc"):
         raise ValueError("package is not a Windows candidate")
@@ -421,6 +463,11 @@ def install(args):
 
 
 def uninstall(args):
+    if args.manager == "task" and not args.external_manager:
+        return rust_task_request(Path(args.cli).resolve(strict=True), "__windows-uninstall", {
+            "schema": "hiroute.windows-uninstall-request/v1", "remove_data": getattr(args, "remove_data", False),
+            "allow_legacy_stop": getattr(args, "allow_legacy_stop", False),
+        })
     cli = Path(args.cli).resolve(strict=True)
     layout = native(cli, ["layout"])
     data = Path(layout["data_root"])
@@ -526,10 +573,12 @@ def main():
     remove = sub.add_parser("uninstall")
     remove.add_argument("--cli", type=Path, required=True, help="versioned hiroute.exe, not the stable hardlink being removed")
     for leaf in (create, remove):
+        leaf.add_argument("--allow-legacy-stop", action="store_true", help="explicitly permit stopping an older daemon that cannot drain active work")
         leaf.add_argument("--manager", choices=("task", "scm"), default="task")
         leaf.add_argument("--password-stdin", action="store_true")
         leaf.add_argument("--external-manager", action="store_true", help="prepare SCM maintenance for a separate administrator, then run finalize as this owner")
     finish = sub.add_parser("finalize", help="owner verifies actual SCM install/removal and commits prepared maintenance")
+    remove.add_argument("--remove-data", action="store_true", help="remove only standalone data and state after every Agent restore succeeds")
     finish.add_argument("--cli", type=Path, required=True, help="prepared versioned CLI, never the stable hardlink being removed")
     admin = sub.add_parser("admin-scm", help="run as administrator using the administrator's independently verified HiRoute CLI")
     admin.add_argument("--cli", type=Path, required=True, help="administrator's independently verified CLI; do not use the standard owner's writable executable")
