@@ -2214,6 +2214,7 @@ name = "hiroute-application-api"
 version = "0.3.1"
 dependencies = [
  "hiroute-domain",
+ "schemars 1.2.2",
  "serde",
  "serde_json",
  "thiserror 2.0.20",
@@ -2376,6 +2377,7 @@ name = "hiroute-domain"
 version = "0.1.0"
 dependencies = [
  "pinyin",
+ "schemars 1.2.2",
  "serde",
  "serde_json",
  "sha2",

@@ -1,0 +1,87 @@
+//! Non-secret settings Preview projections; planning stays in Application.
+use crate::*;
+use hiroute_domain::{AgentModelGrantV2, CapabilityBlock};
+use serde::Serialize;
+use std::collections::{BTreeMap, BTreeSet};
+
+#[derive(schemars::JsonSchema, Clone, Debug, Serialize)]
+pub struct AgentSettingsPreview {
+    pub context_windows: BTreeMap<String, u64>,
+    pub claude_context_window: Option<u64>,
+    pub spec: AgentSettingsSpecV2,
+    pub dependency_digest: CanonicalDigest,
+    pub accept_digest: CanonicalDigest,
+    pub changed_facets: BTreeSet<AgentSettingsFacet>,
+    pub model_grant: Option<AgentModelGrantV2>,
+    /// None means keep/restore; Configure always persists the selected Skill trigger mode.
+    pub collaboration_trigger_mode: Option<AgentCollaborationTriggerModeV2>,
+    pub blockers: Vec<AgentSettingsBlock>,
+    pub unproven_native_model_ids: Vec<String>,
+}
+
+#[derive(schemars::JsonSchema, Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct AgentSettingsBlock {
+    pub facet: AgentSettingsFacet,
+    pub reason: SettingsBlockReason,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub capabilities: Vec<hiroute_domain::CapabilityBlock>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub model_ids: Vec<String>,
+}
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SettingsBlockReason {
+    QoderDefaultInUse,
+    AdditionalDefaultInUse,
+    QoderModelFileConflict,
+    HermesModelFileConflict,
+    CodexContextOverride,
+    ClaudeContextOverride,
+    ClaudePlanCapabilityUnavailable,
+    ClaudeContextWindowUnsupported,
+    CapabilityUnavailable,
+    ModelPlanUnavailable,
+    NativeModelCoverageUnavailable,
+    NativeDefaultInvalid,
+    RestoreNativeModelInvalid,
+    RestorePointUnavailable,
+    SkillFileConflict,
+}
+
+#[derive(schemars::JsonSchema, Serialize)]
+pub struct AgentSettingsPreviewV2 {
+    #[serde(flatten)]
+    pub preview: AgentSettingsPreview,
+    pub schema: String,
+    pub expected_revisions: RevisionSetV1,
+    pub applicable: bool,
+    pub resident_service: AgentResidentServicePreviewV2,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub collaboration_effect: Option<AgentCollaborationEffectV2>,
+    pub model_effect: AgentModelEffectPreviewV2,
+}
+#[derive(schemars::JsonSchema, Serialize)]
+pub struct AgentResidentServicePreviewV2 {
+    pub login_item_required: bool,
+    pub login_item_removal_required: bool,
+}
+#[derive(schemars::JsonSchema, Serialize)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub enum AgentModelEffectPreviewV2 {
+    Keep,
+    Restore {
+        restore_point_ref: String,
+    },
+    Configure {
+        agent_class: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        provider_id: Option<String>,
+        endpoint: String,
+        selection: AgentModelSelectionV2,
+        authentication: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        context_windows: Option<BTreeMap<String, u64>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        claude_context_window: Option<Option<u64>>,
+    },
+}

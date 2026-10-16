@@ -8,7 +8,7 @@ import { RoutingPage } from '../../../src/product/RoutingPage';
 import { PresentationRoot } from '../../../src/ui';
 import { manualModelError } from '../../../src/features/model-connections/form-support';
 import { blankModel } from '../../../src/features/model-connections/state';
-import { dailyPlan, fixtureTrace, mockProductInvoke, readyDesktop, resetFixtureTrace } from './product-fixtures';
+import { dailyPlan, fixturePlanAuthoring, fixtureTrace, mockProductInvoke, readyDesktop, resetFixtureTrace } from './product-fixtures';
 import '../../../src/occami/styles.css';
 
 const workerChecks = new URLSearchParams(location.search).get('checks') === 'workers';
@@ -28,6 +28,9 @@ mockIPC((command, payload) => {
   if (command === 'desktop_snapshot') {
     fixtureTrace.commands.push(command);
     return structuredClone(savedSnapshot);
+  }
+  if (command === 'plan_editor_options' && (payload as any)?.input?.authoring?.plan_id) {
+    return { ...mockProductInvoke(command, payload as Record<string, unknown>, 'ready') as object, authoring: fixturePlanAuthoring(plan) };
   }
   if (command === 'plan_editor_options' && availabilityChecks) {
     unavailableRequested = (payload as { input?: { include_unavailable?: boolean } }).input?.include_unavailable === true;

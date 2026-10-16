@@ -35,7 +35,17 @@ impl AgentPlanDesiredV1 {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    schemars::JsonSchema,
+    Clone,
+    Debug,
+    Default,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct CapabilityRequirementsV1 {
     #[serde(default)]
@@ -62,7 +72,9 @@ impl CapabilityRequirementsV1 {
 
 pub const DEFAULT_PLAN_CONTEXT_WINDOW_TOKENS: u64 = 272_000;
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct RoutingLimitsV1 {
     /// None follows the bounded default; omission preserves historical signed digests.
@@ -209,7 +221,9 @@ impl FreePoolSpecV1 {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct CandidateSelectionV1 {
     pub binding_id: String,

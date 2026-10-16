@@ -44,7 +44,19 @@ impl WorkerConcurrencySettingsV1 {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    schemars::JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkerHarnessV1 {
     CodexCli,

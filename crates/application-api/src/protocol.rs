@@ -15,7 +15,17 @@ pub const LOCAL_CONTROL_RELEASE_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Maximum newline-delimited JSON frame size, including the trailing newline.
 pub const LOCAL_CONTROL_MAX_FRAME_BYTES: usize = 10 * 1024 * 1024;
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    schemars::JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum PrincipalKind {
     InteractiveUser,
@@ -245,7 +255,9 @@ pub struct AgentCheckRequestV1 {
     pub target: Option<AgentModelCheckTargetV2>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct AgentModelCheckTargetV2 {
     pub context_id: String,
@@ -418,7 +430,9 @@ pub struct ValueScopeViewV1 {
     pub plans: Vec<ValueViewV1>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct OperationLookupV1 {
     pub operation_id: String,
@@ -460,7 +474,9 @@ pub struct SetupPreviewV1 {
     pub effects: Vec<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, PartialEq, Serialize,
+)]
 pub struct PreviewRequestV1 {
     pub schema_version: SchemaVersion,
     pub spec: ChangeSpecV1,
@@ -475,7 +491,9 @@ impl PreviewRequestV1 {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, PartialEq, Serialize,
+)]
 pub struct PreviewResultV1 {
     pub normalized_spec: ChangeSpecV1,
     pub change_digest: CanonicalDigest,
@@ -486,7 +504,9 @@ pub struct PreviewResultV1 {
     pub blockers: Vec<BlockerV1>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 pub struct EffectPreviewV1 {
     pub effect_id: String,
     pub channel: String,
@@ -494,13 +514,17 @@ pub struct EffectPreviewV1 {
     pub target: String,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 pub struct BlockerV1 {
     pub code: String,
     pub details_schema: String,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, PartialEq, Serialize,
+)]
 pub struct ApplyRequestV1 {
     pub schema_version: SchemaVersion,
     /// Apply always resubmits the complete structured spec; a preview handle is forbidden.
@@ -519,7 +543,17 @@ pub struct ApplyResultV1 {
     pub state: String,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    schemars::JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum MachineStatus {
     Succeeded,
@@ -550,7 +584,17 @@ impl MachineStatus {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    schemars::JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Serialize,
+)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ErrorCode {
     UnknownCommand,
@@ -579,7 +623,17 @@ pub enum ErrorCode {
     Internal,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    schemars::JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ErrorCategory {
     Usage,
@@ -667,7 +721,9 @@ impl ErrorCode {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 pub struct ErrorV1 {
     pub code: ErrorCode,
     pub category: ErrorCategory,
@@ -698,20 +754,26 @@ impl ErrorV1 {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 pub struct WarningV1 {
     pub code: String,
     pub details_schema: String,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, PartialEq, Serialize,
+)]
 pub struct NextActionV1 {
     pub command_id: String,
     pub input: serde_json::Value,
     pub reason_code: String,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 pub struct OperationReferenceV1 {
     pub operation_id: String,
     pub state: String,
@@ -720,7 +782,9 @@ pub struct OperationReferenceV1 {
 }
 
 /// Enriched machine envelope negotiated only with machine-schema v2 clients.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, PartialEq, Serialize,
+)]
 pub struct MachineEnvelopeV2<T> {
     pub schema_version: SchemaVersion,
     #[serde(skip_serializing_if = "Option::is_none")]

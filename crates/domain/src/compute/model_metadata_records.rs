@@ -11,7 +11,9 @@ use super::model_metadata::{
     MetadataUsageScenarioV1,
 };
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct ProviderMetadataCompletenessV1 {
     pub authentication: MetadataCompletenessV1,
@@ -20,7 +22,9 @@ pub struct ProviderMetadataCompletenessV1 {
     pub identity: MetadataCompletenessV1,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct ProviderMetadataRecordV1 {
     pub provider_record_key: String,
@@ -46,7 +50,9 @@ pub struct ProviderMetadataRecordV1 {
     pub field_provenance: BTreeMap<String, MetadataFieldProvenanceV1>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct ModelCapabilityHintsV1 {
     pub reasoning: MetadataCapabilityStateV1,
@@ -55,7 +61,9 @@ pub struct ModelCapabilityHintsV1 {
     pub vision: MetadataCapabilityStateV1,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct MetadataReasoningRenderingHintsV1 {
     pub reasoning_effort_maps: Vec<BTreeMap<String, Option<String>>>,
@@ -63,7 +71,9 @@ pub struct MetadataReasoningRenderingHintsV1 {
     pub thinking_level_maps: Vec<BTreeMap<String, Option<String>>>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct ModelMetadataCompletenessV1 {
     pub capabilities: MetadataCompletenessV1,
@@ -75,7 +85,9 @@ pub struct ModelMetadataCompletenessV1 {
     pub reasoning_rendering: MetadataCompletenessV1,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct ModelMetadataRecordV1 {
     pub model_record_key: String,

@@ -17,7 +17,19 @@ pub enum PriceModelIdentityV1 {
     CatalogModel(String),
     LocalModel(String),
 }
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    schemars::JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum PriceValuationKindV1 {
     UsageEstimate,

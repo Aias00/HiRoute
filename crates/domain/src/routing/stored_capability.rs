@@ -3,7 +3,9 @@ use super::*;
 use crate::UpstreamProtocol;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct StoredModelSupportV1 {
     pub tools: GatewayCriticalFactV1<bool>,

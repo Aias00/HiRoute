@@ -8,7 +8,9 @@ use crate::{AgentPlanAuthoringV2, CanonicalDigest, CompiledAgentPlanV1, Workspac
 
 pub const PLAN_VERSION_SCHEMA_V1: &str = "hiroute.plan-version/v2";
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct PlanExecutionRef {
     pub workspace_id: WorkspaceId,
@@ -30,7 +32,9 @@ impl PlanExecutionRef {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct PlanVersionV1 {
     pub schema: String,
@@ -105,7 +109,17 @@ impl PlanVersionV1 {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    schemars::JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum PlanLifecycleV1 {
     Enabled,
@@ -113,7 +127,9 @@ pub enum PlanLifecycleV1 {
     Deleted,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct PlanHeadV1 {
     pub reference: PlanExecutionRef,

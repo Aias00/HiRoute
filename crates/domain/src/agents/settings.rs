@@ -5,7 +5,17 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const AGENT_SETTINGS_SCHEMA_V2: SchemaVersion = SchemaVersion::new(2, 0);
 
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    schemars::JsonSchema,
+    Clone,
+    Debug,
+    Default,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Serialize,
+)]
 #[serde(tag = "intent", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AgentFacetIntent<T> {
     #[default]
@@ -17,7 +27,9 @@ pub enum AgentFacetIntent<T> {
         restore_point_ref: String,
     },
 }
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(tag = "mode", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AgentModelSelectionV2 {
     HermesDefault {
@@ -52,14 +64,36 @@ pub enum AgentModelSelectionV2 {
     },
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    schemars::JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum CodexNativeModelModeV2 {
     HirouteOnly,
     PreserveAvailable,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    schemars::JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentModelSurfaceV2 {
     CodexCli,
@@ -71,14 +105,18 @@ pub enum AgentModelSurfaceV2 {
     HermesCli,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct AgentFixedModelSelectionV2 {
     pub client_model_id: String,
     pub candidate: crate::CandidateSelectionV1,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AgentModelDefaultSelectionV2 {
     PreserveNative,
@@ -86,14 +124,18 @@ pub enum AgentModelDefaultSelectionV2 {
     Plan { plan_id: AgentPlanId },
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AgentClaudePresetSelectionV2 {
     PreserveNative,
     Plan { plan_id: AgentPlanId },
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct AgentClaudePresetMappingsV2 {
     pub opus: AgentClaudePresetSelectionV2,
@@ -229,20 +271,34 @@ pub fn valid_client_model_name(value: &str) -> bool {
     !value.is_empty() && !value.bytes().any(|byte| matches!(byte, 0 | b'\r' | b'\n'))
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct AgentCollaborationSelectionV2 {
     pub trigger_mode: AgentCollaborationTriggerModeV2,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    schemars::JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentCollaborationTriggerModeV2 {
     Explicit,
     DelegateByDefault,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct AgentSettingsSpecV2 {
     pub schema_version: SchemaVersion,
@@ -269,7 +325,17 @@ pub struct AgentSettingsSpecV2 {
 
 /// Token changes belong to the model connection. A custom value is supplied separately through
 /// the protected local input channel; only its one-use slot enters the settings journal.
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    schemars::JsonSchema,
+    Clone,
+    Debug,
+    Default,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Serialize,
+)]
 #[serde(tag = "intent", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AgentAccessTokenIntentV1 {
     #[default]
@@ -345,7 +411,9 @@ impl AgentSettingsSpecV2 {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(
+    schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentSettingsFacet {
     Model,

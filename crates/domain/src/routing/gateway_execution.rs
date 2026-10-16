@@ -8,7 +8,9 @@ use super::materialized::{AttemptOwnedCandidateV1, CompiledPlanError};
 
 pub const GATEWAY_OPERATIONAL_TARGET_SCHEMA_V1: &str = "hiroute.gateway-operational-target/v1";
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum GatewayOperationalTargetV1 {
     RegisteredHttps {
@@ -170,7 +172,9 @@ fn valid_user_configured_https_authority(value: &str) -> bool {
         })
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(
     tag = "state",
     content = "value",
@@ -191,7 +195,17 @@ impl<T> GatewayCriticalFactV1<T> {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    schemars::JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum GatewayFidelityV1 {
     Exact,
@@ -201,7 +215,17 @@ pub enum GatewayFidelityV1 {
     Unknown,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    schemars::JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum GatewayNativeProviderStateEmissionV1 {
     Never,
@@ -209,7 +233,9 @@ pub enum GatewayNativeProviderStateEmissionV1 {
     Unknown,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Copy, Debug, Eq, PartialEq, Serialize,
+)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum GatewayStreamingRefusalSemanticsV1 {
     ExactDelta,
@@ -268,7 +294,9 @@ impl<'de> Deserialize<'de> for GatewayStreamingRefusalSemanticsV1 {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct GatewayRequestFeatureProfileV1 {
     pub text: GatewayFidelityV1,
@@ -291,7 +319,9 @@ pub struct GatewayRequestFeatureProfileV1 {
     pub provider_state: GatewayFidelityV1,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct GatewayResponseFeatureProfileV1 {
     pub text: GatewayFidelityV1,
@@ -310,7 +340,17 @@ pub struct GatewayResponseFeatureProfileV1 {
     pub stream_usage: GatewayFidelityV1,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    schemars::JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum GatewayReasoningControlKindV1 {
     Fixed,
@@ -319,14 +359,26 @@ pub enum GatewayReasoningControlKindV1 {
     Budget,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    schemars::JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum GatewayReasoningAccountingV1 {
     WithinOutputCap,
     Additive,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(
     tag = "kind",
     content = "value",
@@ -339,7 +391,9 @@ pub enum GatewayNativeReasoningValueV1 {
     U64(u64),
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct GatewayNativeReasoningFieldAssignmentV1 {
     pub path: Vec<String>,
@@ -388,7 +442,9 @@ impl GatewayNativeReasoningFieldAssignmentV1 {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum GatewayNativeReasoningRenderV1 {
     NoControlParameter,
@@ -407,7 +463,9 @@ pub enum GatewayNativeReasoningRenderV1 {
     },
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct GatewayReasoningProfileCapabilityV1 {
     pub profile_id: String,
@@ -417,7 +475,9 @@ pub struct GatewayReasoningProfileCapabilityV1 {
     pub additional_reservation_tokens: u64,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct GatewayTokenEstimatorProfileV1 {
     pub revision: String,
@@ -425,7 +485,9 @@ pub struct GatewayTokenEstimatorProfileV1 {
     pub fixed_overhead_tokens: u64,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct GatewayContextLimitsV1 {
     pub max_input_tokens: GatewayCriticalFactV1<u64>,
@@ -434,7 +496,9 @@ pub struct GatewayContextLimitsV1 {
     pub estimator: GatewayCriticalFactV1<GatewayTokenEstimatorProfileV1>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum GatewayAuthenticationSemanticsV1 {
     Bearer,
@@ -442,7 +506,9 @@ pub enum GatewayAuthenticationSemanticsV1 {
     None,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct GatewayHeaderSemanticsV1 {
     pub content_type: String,
@@ -450,7 +516,9 @@ pub struct GatewayHeaderSemanticsV1 {
     pub forbidden_forward_headers: Vec<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct GatewayErrorSemanticsV1 {
     pub http_status_typed: bool,
@@ -458,7 +526,9 @@ pub struct GatewayErrorSemanticsV1 {
     pub retry_after_header: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct GatewayConnectorProfileV1 {
     pub schema_version: String,
@@ -474,7 +544,9 @@ pub struct GatewayConnectorProfileV1 {
     pub errors: GatewayCriticalFactV1<GatewayErrorSemanticsV1>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct GatewayCandidateCapabilityProfileV1 {
     pub schema_version: String,
@@ -497,7 +569,9 @@ pub struct GatewayCandidateCapabilityProfileV1 {
     pub native_provider_state: GatewayNativeProviderStateEmissionV1,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct GatewayCandidateProtocolProfileV1 {
     pub schema_version: String,
@@ -513,7 +587,9 @@ pub struct GatewayCandidateProtocolProfileV1 {
     pub native_target: Option<GatewayNativeProfileTargetV2>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct GatewayNativeProfileTargetV2 {
     pub operational_target: GatewayOperationalTargetV1,

@@ -4,7 +4,9 @@ use crate::CanonicalDigest;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(
+    schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentCapability {
     EffectiveConfiguration,
@@ -168,13 +170,13 @@ impl AgentCapabilitySet {
 #[error("native capability evidence is invalid or duplicated")]
 pub struct InvalidCapabilityEvidence;
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct CapabilityBlock {
     pub capability: AgentCapability,
     pub reason: CapabilityBlockReason,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CapabilityBlockReason {
     Unknown,

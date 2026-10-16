@@ -10,7 +10,9 @@ use crate::OperationReferenceV1;
 pub const COMPUTE_MANAGEMENT_CHANGE_SCHEMA_V2: &str = "hiroute.compute-management-change/v2";
 pub const COMPUTE_SUBSCRIPTION_CHECK_SCHEMA_V2: &str = "hiroute.compute-subscription-check/v2";
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeCandidateRefV2 {
     pub candidate_ref: String,
@@ -28,7 +30,9 @@ impl ComputeCandidateRefV2 {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeCheckCorrelationV2 {
     pub candidate_ref: String,
@@ -56,14 +60,34 @@ impl ComputeCheckCorrelationV2 {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    schemars::JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ComputeCandidateProducerV2 {
     Native,
     Cpa,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    schemars::JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ComputeCandidateProvenanceKindV2 {
     Registered,
@@ -71,7 +95,17 @@ pub enum ComputeCandidateProvenanceKindV2 {
     ConnectorOwned,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    schemars::JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ComputeModelMembershipV2 {
     Catalog,
@@ -79,7 +113,17 @@ pub enum ComputeModelMembershipV2 {
     UserDeclared,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    schemars::JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ComputeCandidateInputStateV2 {
     NotRequired,
@@ -93,7 +137,17 @@ pub enum ComputeCandidateInputStateV2 {
 /// This reports fact presence only. `Complete` allows the candidate to enter save preview, while
 /// save intent validation, persisted management state, and runtime readiness remain separate
 /// decisions.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    schemars::JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ComputeCandidateFactStateV2 {
     PendingCredential,
@@ -108,7 +162,9 @@ impl ComputeCandidateFactStateV2 {
 }
 
 /// Safe, normalized candidate target. It contains no URL userinfo, query, credential, or locator.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeCandidateTargetV2 {
     pub scheme: String,
@@ -120,7 +176,9 @@ pub struct ComputeCandidateTargetV2 {
     pub protocol_profile_revision: u64,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeCandidateModelViewV2 {
     pub model_ref: String,
@@ -133,7 +191,17 @@ pub struct ComputeCandidateModelViewV2 {
     pub reason: Option<String>,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    schemars::JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ComputeCandidateModelFactBasisV2 {
     RegisteredCatalog,
@@ -144,7 +212,9 @@ pub enum ComputeCandidateModelFactBasisV2 {
     Unknown,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeCandidateIssueV2 {
     pub code: String,
@@ -152,7 +222,9 @@ pub struct ComputeCandidateIssueV2 {
     pub retryable: bool,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeValidationRefV2 {
     pub approval_operation: OperationReferenceV1,
@@ -177,7 +249,9 @@ impl ComputeValidationRefV2 {
 ///
 /// Protected input slots, filesystem selectors, Secret references, OAuth material, account refs,
 /// and runtime capabilities have no representation in this type.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeCandidateViewV2 {
     pub candidate: ComputeCandidateRefV2,
@@ -196,14 +270,26 @@ pub struct ComputeCandidateViewV2 {
     pub issues: Vec<ComputeCandidateIssueV2>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ComputeManagementSubjectV2 {
     Candidate { candidate: ComputeCandidateRefV2 },
     SavedSource { source_id: String },
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    schemars::JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ComputeManagementIntentV2 {
     SaveReady,
@@ -221,7 +307,9 @@ impl ComputeManagementIntentV2 {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ComputeKeyEditV2 {
     Add {
@@ -246,7 +334,9 @@ pub enum ComputeKeyEditV2 {
     },
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeManagementChangeV2 {
     pub schema: String,
@@ -263,7 +353,9 @@ pub struct ComputeManagementChangeV2 {
     pub edit: Option<ComputeManagementEditV1>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ComputeManagementEditV1 {
     Rename { display_name: String },
@@ -324,7 +416,9 @@ impl ComputeManagementChangeV2 {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeSaveChangeViewV2 {
     pub resource_kind: String,
@@ -332,7 +426,9 @@ pub struct ComputeSaveChangeViewV2 {
     pub action: String,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeSavePreviewV2 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -421,7 +517,9 @@ impl ComputeSubscriptionCheckChangeV2 {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeSubscriptionCheckPreviewV2 {
     pub candidate: ComputeCandidateRefV2,
@@ -431,7 +529,17 @@ pub struct ComputeSubscriptionCheckPreviewV2 {
     pub expected_revisions: RevisionSetV1,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    schemars::JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ComputeSubscriptionCheckStatusV2 {
     Checking,
@@ -444,7 +552,9 @@ pub enum ComputeSubscriptionCheckStatusV2 {
     Retained,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeSubscriptionCheckResultV2 {
     pub candidate: ComputeCandidateRefV2,

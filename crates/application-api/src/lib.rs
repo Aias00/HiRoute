@@ -7,8 +7,12 @@
 //! transport.
 
 mod agent_connection;
+mod agent_discovery;
 mod agent_grant_raw;
 mod agent_settings;
+mod agent_settings_preview;
+pub use agent_discovery::*;
+pub use agent_settings_preview::*;
 mod classifier_diagnostic;
 mod client_access;
 mod work_plans;
@@ -21,9 +25,11 @@ mod worker_actions;
 pub use worker_actions::*;
 mod delegation_tasks;
 pub use delegation_tasks::*;
+mod command_schemas;
 mod commands;
 pub use classifier_diagnostic::*;
 pub use client_access::*;
+pub use command_schemas::{CommandSchemasV1, command_schemas};
 mod compute_control;
 mod compute_key_masks;
 mod compute_management;

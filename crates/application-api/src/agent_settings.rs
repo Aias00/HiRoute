@@ -10,7 +10,9 @@ pub use hiroute_domain::{
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct AgentSettingsApplyV2 {
     pub expected_revisions: hiroute_domain::RevisionSetV1,
@@ -26,7 +28,17 @@ pub struct AgentSettingsApplyV2 {
 }
 
 /// Observed main-app login-item state, mirroring the native ServiceManagement status.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    schemars::JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentLoginItemStatusV2 {
     NotRegistered,
@@ -49,7 +61,9 @@ impl AgentLoginItemStatusV2 {
 /// The Desktop host's own observation of the login item around a confirmed settings apply.
 /// The host performs the real status check and any registration before the Operation is
 /// sealed; the daemon never trusts a declaration that does not prove an active item.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct AgentLoginItemDeclarationV2 {
     /// Status observed before any host action in this apply.
@@ -92,13 +106,17 @@ impl AgentLoginItemDeclarationV2 {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct AgentSettingsPreviewRequestV2 {
     pub spec: AgentSettingsSpecV2,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct AgentSettingsStatusRequestV2 {
     #[serde(default, skip_serializing_if = "is_false")]
@@ -113,7 +131,9 @@ fn is_false(value: &bool) -> bool {
     !*value
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentModelSettingsStateV2 {
     NotConfigured,
@@ -126,14 +146,18 @@ pub enum AgentModelSettingsStateV2 {
 
 /// Settings status follows the actual facets supported by an installation. The model variant
 /// serializes exactly as the existing V2 response, without an added envelope or discriminator.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(untagged)]
 pub enum AgentSettingsStatusV2 {
     Model(Box<AgentModelSettingsStatusV2>),
     CollaborationOnly(Box<AgentCollaborationOnlySettingsStatusV2>),
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct AgentCollaborationOnlySettingsStatusV2 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -183,7 +207,9 @@ impl AgentSettingsStatusV2 {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct AgentModelSettingsStatusV2 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -218,7 +244,9 @@ pub struct AgentModelSettingsStatusV2 {
     pub native_adapter: Option<AgentNativeAdapterStatusV1>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct AgentNativeAdapterStatusV1 {
     pub resources_installed: bool,
@@ -227,19 +255,49 @@ pub struct AgentNativeAdapterStatusV1 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub known_channel_models: Option<Vec<String>>,
 }
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    schemars::JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentNativeRuntimeLoadingV1 {
     Unobserved,
 }
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    schemars::JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentNativeAdapterNextActionV1 {
     ReloadPluginsIfRunning,
     RepairOwnedResources,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    schemars::JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentModelCheckStateV2 {
     NotVerified,
@@ -247,7 +305,9 @@ pub enum AgentModelCheckStateV2 {
     Failed,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct AgentModelSurfaceResultV2 {
     pub surface: AgentModelSurfaceV2,
@@ -299,7 +359,9 @@ impl AgentModelSettingsStatusV2 {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct AgentCollaborationSettingsStatusV2 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -313,14 +375,16 @@ pub struct AgentCollaborationSettingsStatusV2 {
     pub current_selection: Option<AgentCollaborationCurrentSelectionV2>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AgentCollaborationEffectV2 {
     pub action: String,
     pub trigger_mode: AgentCollaborationTriggerModeV2,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct AgentCollaborationCurrentSelectionV2 {
     pub trigger_mode: AgentCollaborationTriggerModeV2,
@@ -510,7 +574,9 @@ pub struct AgentSettingsRetryV1 {
 #[path = "agent_settings_status_tests.rs"]
 mod status_contract_tests;
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct AgentManagementSkillStatusV1 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -523,7 +589,9 @@ pub struct AgentManagementSkillStatusV1 {
 }
 
 /// Native file availability is separate from this context's managed reference and live loading.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct AgentSkillResourceStatusV1 {
     pub directory: String,

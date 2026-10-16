@@ -52,49 +52,8 @@ pub enum CodexCatalogProducerKindV1 {
     HirouteGenerated,
 }
 
-#[derive(Clone, Debug, Serialize)]
-pub struct AgentSettingsPreview {
-    pub context_windows: BTreeMap<String, u64>,
-    pub claude_context_window: Option<u64>,
-    pub spec: AgentSettingsSpecV2,
-    pub dependency_digest: CanonicalDigest,
-    pub accept_digest: CanonicalDigest,
-    pub changed_facets: BTreeSet<AgentSettingsFacet>,
-    pub model_grant: Option<AgentModelGrantV2>,
-    /// None means keep/restore; Configure always persists the selected Skill trigger mode.
-    pub collaboration_trigger_mode: Option<AgentCollaborationTriggerModeV2>,
-    pub blockers: Vec<AgentSettingsBlock>,
-    pub unproven_native_model_ids: Vec<String>,
-}
+pub use hiroute_application_api::{AgentSettingsBlock, AgentSettingsPreview, SettingsBlockReason};
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct AgentSettingsBlock {
-    pub facet: AgentSettingsFacet,
-    pub reason: SettingsBlockReason,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub capabilities: Vec<hiroute_domain::CapabilityBlock>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub model_ids: Vec<String>,
-}
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SettingsBlockReason {
-    QoderDefaultInUse,
-    AdditionalDefaultInUse,
-    QoderModelFileConflict,
-    HermesModelFileConflict,
-    CodexContextOverride,
-    ClaudeContextOverride,
-    ClaudePlanCapabilityUnavailable,
-    ClaudeContextWindowUnsupported,
-    CapabilityUnavailable,
-    ModelPlanUnavailable,
-    NativeModelCoverageUnavailable,
-    NativeDefaultInvalid,
-    RestoreNativeModelInvalid,
-    RestorePointUnavailable,
-    SkillFileConflict,
-}
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum SettingsPlanningError {
     #[error("Agent settings schema or context is invalid")]

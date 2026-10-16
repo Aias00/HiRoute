@@ -8,7 +8,7 @@ use crate::{
     ModelAlias, UpstreamProtocol, valid_client_model_name,
 };
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AgentModelRouteV2 {
     Plan {
@@ -59,13 +59,13 @@ impl ModelRequestRouteV2 {
 }
 
 /// Sealed native consumer classification. Headers and User-Agent never produce this authority.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentModelConsumerV1 {
     Hermes,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AgentModelGrantV2 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
