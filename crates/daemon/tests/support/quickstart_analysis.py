@@ -83,6 +83,7 @@ def run(product, plan):
     assert missing['missing_request_count'] > 0
     historical = product.cli('value', 'show', '--routing', plan)['data']
     operation_ids = []
+    previous_setting = None
     for setting in [
         {'kind': 'set', 'rates': {k: {'state': 'known', 'micros_per_million_tokens': 1000000}
           for k in ['input_uncached', 'output', 'cache_read', 'cache_write']}},
@@ -92,6 +93,8 @@ def run(product, plan):
         edit = effective['items'][0]['edit_context']
         preview = product.cli('prices', 'override', 'preview', '--request-stdin', payload={
             **edit, 'currency': 'CNY', 'valuation_kind': 'api_equivalent', 'action': setting})['data']
+        before = preview['spec']['desired_state']['before']
+        assert (before['setting'] if before else None) == previous_setting
         apply = {'spec': preview['spec'], 'accept_digest': preview['change_digest'],
                  'expected_revisions': preview['expected_revisions'],
                  'idempotency_key': f'analysis-price-{len(operation_ids)}'}
@@ -107,8 +110,12 @@ def run(product, plan):
 
         replay = product.cli('prices', 'override', 'apply', '--request-stdin', payload=apply)['data']
         assert replay['operation_id'] == applied['operation_id']
+        previous_setting = setting
     restored = product.cli('prices', 'effective', '--request-stdin', payload=price_request)['data']
-    assert restored['items'][0]['quote']['rates'] == prior['items'][0]['quote']['rates']
+    # Follow-catalog removes manual pricing. The missing-price reason can become more precise
+    # once a revisioned target exists; it must never retain the former manual rates.
+    assert restored['items'][0]['quote']['origin'] == prior['items'][0]['quote']['origin'] == 'unknown'
+    assert all(rate['state'] == 'unknown' for rate in restored['items'][0]['quote']['rates'].values())
     # Time bounds change, frozen monetary amounts and usage do not.
     after = product.cli('value', 'show', '--routing', plan)['data']
     assert after['summary']['amounts'] == historical['summary']['amounts']
