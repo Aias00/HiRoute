@@ -49,6 +49,10 @@ pub fn rename(source: impl AsRef<Path>, target: impl AsRef<Path>) -> io::Result<
     }
 }
 
+/// Create a private file without replacing an existing entry and sync its bytes.
+/// On Unix this does not sync the parent directory. Callers that must make the
+/// new directory entry durable before publishing dependent state must call
+/// `directory_barrier` on the parent after this function succeeds.
 pub fn write_private_new(path: &Path, bytes: &[u8]) -> io::Result<()> {
     #[cfg(windows)]
     {

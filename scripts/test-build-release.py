@@ -402,7 +402,8 @@ class HostedReleasePolicyTests(unittest.TestCase):
         self.assertIn("SCCACHE_GHA_ENABLED: 'true'", workflow)
         self.assertIn('actions/cache@', workflow)
         self.assertIn('cargo check --locked --target x86_64-pc-windows-msvc '
-                      '-p hiroute-cli -p hiroute-daemon --all-targets', workflow)
+                      '-p hiroute-cli -p hiroute-daemon -p hiroute-platform '
+                      '-p hiroute-local-storage --all-targets', workflow)
         self.assertIn("if ($LASTEXITCODE -ne 0) { throw", workflow)
         self.assertNotIn('cargo test', workflow)
         self.assertNotIn('windows-headless-ci.ps1', workflow)
