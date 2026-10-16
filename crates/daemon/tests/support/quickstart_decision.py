@@ -90,6 +90,8 @@ class Decisions(BaseHTTPRequestHandler):
         result = ({'answers': {key: (
             {'type': 'choice', 'choice': next(iter(question['criteria']))}
             if question['type'] == 'choice' else
+            {'type': 'score', 'score': 2.0}
+            if len(question['criteria']) == 3 else
             {'type': 'score', 'probabilities': {
                 '0': .1 if self.complex else .9, '1': .9 if self.complex else .1}})
             for key, question in body['questions'].items()}} if 'questions' in body else
@@ -171,10 +173,16 @@ def run(product, plan, submit):
         editor = json.loads(route_file.read_text())['change']['editor']
         assert editor['smart']['classifier']['service'] == saved[0]
         submit(product, route)
+        # The external CLI double must send distinct user turns, not replay the same input.
+        native = product.codex
+        text = native.read_text()
+        old = "'input': 'installed headless Agent request'"
+        assert text.count(old) == 1
+        native.write_text(text.replace(old, "'input': sys.argv[-1]"))
         observed = {}
         for complex in [False, True]:
             Decisions.complex = complex
-            launched = subprocess.run([str(product.codex), 'exec', 'controlled branch request'],
+            launched = subprocess.run([str(product.codex), 'exec', 'controlled primary task' if complex else 'controlled economy task'],
                 cwd=product.project, env=product.env, capture_output=True, timeout=60)
             product.outputs.extend((launched.stdout, launched.stderr))
             assert launched.returncode == 0 and b'native product answer' in launched.stdout

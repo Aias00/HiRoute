@@ -26,6 +26,20 @@ pub(super) fn execute(arguments: &[String], globals: &Globals) -> Option<CliExec
                 .find(|entry| entry["id"] == provider)
                 .ok_or_else(|| choices(&["--provider"], view.clone()))?;
             view["selected_provider"] = selected.clone();
+            if provider == "custom" {
+                view["credential_step"]["arguments"] = Value::Null;
+                view["credential_step"]["required_choices"] =
+                    json!(["credential format raw|bearer OR explicit --no-auth"]);
+                view["credential_step"]["argument_template"] = json!([
+                    "protected-input",
+                    "register",
+                    "--candidate",
+                    "CANDIDATE_REF",
+                    "--prompt",
+                    "--format",
+                    "SELECTED_FORMAT"
+                ]);
+            }
         }
         Ok(MachineEnvelopeV2::succeeded(
             view,

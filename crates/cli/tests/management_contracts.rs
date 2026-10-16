@@ -167,6 +167,18 @@ fn decision_choices_work_offline_without_claiming_saved_availability() {
             .unwrap()
             .contains(&json!("--endpoint"))
     );
+    let custom = invoke(
+        &["decision", "services", "options", "--provider", "custom"],
+        b"",
+    );
+    let custom: Value = serde_json::from_slice(&custom.stdout).unwrap();
+    assert!(custom["data"]["credential_step"]["arguments"].is_null());
+    assert!(
+        !custom["data"]["credential_step"]["required_choices"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[test]
