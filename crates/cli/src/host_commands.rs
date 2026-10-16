@@ -62,7 +62,7 @@ fn host_help(family: &str) -> &'static str {
             "Usage\n  hiroute subscription-proxy show --output json\n  hiroute subscription-proxy set --mode inherit|direct|manual [--url <HTTP_PROXY_URL>] [--no-proxy <BYPASS_LIST>] --output json\n  Restart the service to apply saved settings: hiroute service restart --output json\n"
         }
         "protected-input" => {
-            "Usage\n  hiroute protected-input register --candidate <REF> --secret-fd <FD> --output json\n  hiroute protected-input release --candidate <REF> --output json\n"
+            "Usage\n  hiroute protected-input register --candidate <REF> --secret-fd <FD> --output json\n  hiroute protected-input register --candidate <REF> --prompt --format bearer|raw --output json\n  hiroute protected-input release --candidate <REF> --output json\n\n--prompt is a human step in the user's own terminal (for example SSH), outside chat and Agent tools. It reads hidden input from the controlling terminal only; no stdin fallback. bearer accepts a bare API key and adds Bearer; raw accepts the complete custom header value. Never put credentials in argv, environment, normal JSON or chat. Cancellation/missing terminal saves no service. Continue using the candidate reference after registered=true. The existing --secret-fd value remains unchanged.\n"
         }
         _ => unreachable!(),
     }
@@ -365,6 +365,17 @@ fn protected_input_command(
         .map(|client| client.with_timeout(globals.timeout.unwrap_or(Duration::from_secs(30))))
         .map_err(|_| ErrorCode::DaemonUnavailable)?;
     let request = match arguments {
+        [verb, candidate_flag, candidate, prompt, format_flag, format]
+            if verb == "register"
+                && candidate_flag == "--candidate"
+                && prompt == "--prompt"
+                && format_flag == "--format" =>
+        {
+            StandaloneProtectedInputRequestV1::register(
+                candidate.clone(),
+                crate::protected_prompt::read(format)?,
+            )
+        }
         [verb, candidate_flag, candidate, secret_flag, fd]
             if verb == "register"
                 && candidate_flag == "--candidate"

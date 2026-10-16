@@ -34,6 +34,12 @@ pub(super) fn command_network(command_id: &str, kind: CommandKind) -> &'static s
     }
 }
 pub(super) fn automation(command_id: &str) -> &'static str {
+    if command_id == "decision.services.apply" {
+        return "Read decision services options first; reuse an exact saved connection when suitable. Convenience flags prepare a Preview only. A new connection requires --id, --name, --provider and its required endpoint/model plus --candidate, or explicit --no-auth for custom only. --candidate refers to an existing protected registration; never pass a credential in flags/JSON/chat. The user can run protected-input register --candidate REF --prompt --format bearer|raw in their own terminal. System One uses Authorization and bearer; custom supports --header NAME or --no-auth. Updates by --id preserve omitted fields; changing endpoint/provider/header requires explicit new credentials or custom --no-auth. --timeout-ms defaults to 10000 for a new connection. --apply-file creates a new private exact Apply request, never overwrites or applies; submit it with the same decision services apply verb. Keep its Operation lookup and identical request for uncertain delivery. Typed Preview/Apply remain alternatives; --apply-file accepts Preview input only. No save proves connectivity, native loading or decision quality.";
+    }
+    if command_id == "decision.services.test" {
+        return "An explicit potentially billed probe. --service ID@REVISION resolves an exact current listed connection; historical pinned versions remain available through the typed request. Inspect data.outcome and failure_code even when the command itself succeeded. Passing establishes this synthetic connection test, not semantic decision quality, execution model availability or native loading. Never silently switch a selected service to local_rules after failure.";
+    }
     if matches!(
         command_id,
         "routing.preview"

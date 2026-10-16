@@ -73,6 +73,48 @@ Apply 文件为新建的私有文件，不会覆盖已有文件，包含准确�
 
 分别读取完整 JSON、诊断文本和保存的退出码，不能只解析第一行，也不能把后续命令的状态当作 HiRoute 退出码。退出码 2 表示输入无效；`--error-details` 提供有限的字段诊断。个人经验笔记应保存在托管 Skill 之外。
 
+### 通过 CLI 接入决策模型
+
+先运行 `hiroute decision services options`，优先复用明确选定的已保存 `ID@REVISION`。
+“已保存”不代表当前可用。安装包预设包括百炼 Token Plan/业务空间、OpenRouter、TypeSafe，
+以及 System One 兼容和自定义扩展；预设不保证供应商当前可用、账号权限或价格。
+按返回的必填项补充工作空间/兼容接入的地址和模型。普通 Chat 执行模型不是决策服务，
+本地规则仍是可以明确选择的另一条路径。
+
+凭证由用户在聊天之外录入。在 HiRoute 所在机器上，使用自己的终端（例如独立 SSH 会话）执行，
+将候选引用换成新的非敏感标识：
+
+```sh
+hiroute protected-input register --candidate CANDIDATE_REF --prompt --format bearer
+```
+
+在不回显的提示中粘贴裸 API Key，HiRoute 自动加上 `Bearer`，只输出登记结果。
+不要把密钥发给 Agent、输入其终端工具，也不要放进参数、环境变量或普通 JSON/文件。
+自定义完整请求头值使用 `--format raw`。取消或没有控制终端时不会保存连接。
+仅将登记是否成功告诉 Agent，它可用同一引用继续；Desktop 用户也可使用已有密码输入框。
+
+```sh
+hiroute decision services apply --id daily-decision --name '日常决策' --provider typesafe --candidate CANDIDATE_REF --apply-file decision-apply.json
+hiroute decision services apply --request-file decision-apply.json
+hiroute decision services test --service daily-decision@SAVED_REVISION
+hiroute routing preview --plan PLAN_ID --decision-service daily-decision@SAVED_REVISION --apply-file decision-route-apply.json
+hiroute routing apply --request-file decision-route-apply.json
+```
+
+选择实际供应商，并按需补充 `--endpoint`、`--model`。自定义扩展使用 `--provider custom --endpoint URL`，
+选择受保护候选及可选 `--header NAME`，或明确 `--no-auth`。新连接须指定 ID 和名称；
+修改时用 `--id` 加要改的字段，保留其他内容。更换地址须明确提供新凭证，或选择自定义免认证。
+逐项检查 Preview 和 Operation，并用实际保存版本替换示例版本。保留私有 Apply 文件及查找标识，
+响应不确定时原样重试；复用已完成步骤，释放未用的候选引用。
+
+测试是可能计费的显式探测，要查看 `data.outcome` 和 `failure_code`，不能只看 CLI 退出码。
+通过只证明本次连接探测，不代表语义判断质量、执行模型可用或 Agent 已加载。
+发布后用匹配请求核对实际决策来源、执行组、模型和结果；手动把主力模型放进经济组不能证明复杂分流。
+空的自定义关键词不代表内置规则失效，自然复杂任务未命中时应如实报告；取消和传输失败也要计入结果。
+
+恢复或重接管理者自己的模型路由前，先准备独立原生接入或外部操作者接续。
+恢复成功可能撤销运行中进程仍在使用的授权；文件恢复不等于已重新加载，应在执行前安排接续。
+
 ## 查找命令与请求格式
 
 服务启停、Gateway 管理和受保护输入等本机管理命令，用 `--help` 查看。顶层帮助列出命令分类，子命令帮助说明具体用法：

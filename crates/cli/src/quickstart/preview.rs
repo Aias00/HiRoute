@@ -8,6 +8,8 @@ pub(super) fn prepare(
     match command {
         "routing.preview" => routing(client, options),
         "compute.connection.preview" => compute(client, options),
+        "decision.services.apply" => super::decision::prepare(client, options),
+        "decision.services.test" => super::decision::test(client, options),
         "agents.connect.preview" | "agents.restore.preview" => {
             settings::prepare(client, command, options)
         }

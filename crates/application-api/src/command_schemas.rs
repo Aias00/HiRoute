@@ -271,7 +271,11 @@ pub fn command_schemas(command_id: &str) -> Option<CommandSchemasV1> {
         ),
         "decision.services.apply" => (
             request!(PreviewRequestV1, ApplyRequestV1),
-            response!(PreviewResultV1, ApplyResultV1),
+            response!(
+                PreviewResultV1,
+                ApplyResultV1,
+                CliPreparedPreviewV1<PreviewResultV1>
+            ),
         ),
         "decision.services.test" => (
             request!(ClassifierDecisionTestRequestV1),

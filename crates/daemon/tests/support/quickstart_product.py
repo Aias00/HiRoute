@@ -6,6 +6,7 @@ import sys
 
 from standalone_headless_product import InstalledProduct, native_draft, NATIVE_TOKEN
 from quickstart_fixture import support_local_skill_challenge
+from quickstart_decision import run as decision_onboarding
 
 
 def submit(product, prepared):
@@ -154,6 +155,9 @@ def run(repository):
         assert status['state'] == 'configured'
         assert status['management_skill']['state'] != 'configured'
         assert 'effective' not in status
+
+        stage = 'decision-onboarding-and-routed-groups'
+        decision_onboarding(product, plan, binding, submit)
 
         stage = 'terminal-output-and-exit'
         capture = product.project / 'capture'

@@ -15,6 +15,8 @@ Run `hiroute quickstart` to inspect the current service, exact targets and reusa
 
 The main path is source → route → target Agent → native activation → matching request evidence. Existing Preview commands accept concise choices and `--apply-file PATH`, so callers do not hand-write a full editor or transfer digests. See [CLI Quickstart](/en/docs/cli/) for direct smart saving, adjustment, uncertain-response recovery and independent facet restoration. The same management Skill can run in any supported Agent and manage another target while leaving its own model native.
 
+For model decisions, start with `hiroute decision services options` and reuse a suitable saved connection. Enter credentials in your own terminal through the hidden prompt, then let the management Agent continue saving, testing and binding the route. Never send keys in chat. See [CLI decision-service onboarding](/docs/cli/).
+
 ## 2. Connect a model
 
 Open Models → General models and select Add model. You can connect a supported local subscription, or open Advanced connection and choose Custom API. General models execute your tasks; this connection is enough for your first route.

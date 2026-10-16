@@ -66,3 +66,20 @@ errors are opt-in and bounded; raw input, enum values and arbitrary object keys 
 The installed [Quickstart scenario](../daemon/tests/support/quickstart_product.py) covers first use,
 smart saving, exact replay, stale submission, continuation and one-facet restore. Native caller/target
 activation is a separate acceptance obligation, not established by external fixtures.
+
+## Decision onboarding and human terminal input
+
+`quickstart/decision.rs` presents the shared bundled provider presets and existing saved-service
+query without probing them. It translates convenience save/test flags to existing typed operations;
+`--apply-file` on `decision services apply` requires Preview input and never submits an Apply.
+Service edits preserve omitted connection fields and require explicit credentials for endpoint
+changes. Immutable Secret references and pinned Plan revisions remain owned by existing services.
+The same preset asset is consumed by Desktop; it is not a current provider availability catalog.
+
+`protected_prompt.rs` is a user terminal adapter for the existing protected socket. It reads only
+`/dev/tty` with echo and signal characters disabled, restores terminal settings through the guard,
+bounds/zeroizes input, and adds the selected header scheme. It never reads stdin or writes a secret
+to CLI output; `--secret-fd` retains its released meaning. The human executes the prompt outside
+Agent tools/chat and returns registration status only. Non-Unix hosts report action required.
+The installed Quickstart scenario includes PTY cancellation/error/no-terminal checks and actual
+saved-service test, exact retry and controlled decision-to-execution receipts.

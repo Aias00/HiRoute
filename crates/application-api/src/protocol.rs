@@ -1067,6 +1067,8 @@ pub(crate) fn staged_coverage(command_id: &str, positive: bool) -> Option<Covera
 
 pub(crate) fn command_usage(command_id: &str, joined_path: &str) -> String {
     match command_id {
+        "decision.services.apply" => return "hiroute decision services apply (--id ID [--name NAME] [--provider bailian-token-plan|bailian-workspace|openrouter|typesafe|compatible|custom] [--endpoint URL] [--model MODEL] [--timeout-ms MS] [--candidate REF [--header NAME] | --no-auth] | --request-file PATH | --request-stdin) [--apply-file PATH] [--idempotency-key KEY]".into(),
+        "decision.services.test" => return "hiroute decision services test (--service ID@REVISION | --request-file PATH | --request-stdin)".into(),
         "routing.preview" => return "hiroute routing preview (--name NAME --purpose PURPOSE --mode fixed_model --model BINDING | --name NAME --purpose PURPOSE --mode smart_saving --economy BINDING --primary BINDING --decision local_rules | --plan ID <changes> | --request-file PATH | --request-stdin) [--apply-file PATH] [--idempotency-key KEY]".into(),
         "compute.connection.preview" => return "hiroute compute connection preview (--candidate REF --candidate-revision REV (--all-selectable | --model-ref REF...) | --request-file PATH | --request-stdin) [--apply-file PATH] [--idempotency-key KEY]".into(),
         "agents.connect.preview" => return "hiroute agents connect preview (--context ID [--hermes-root PATH] [--plan ID <native choices>] [--management enable|keep] [--collaboration explicit|delegate_by_default|keep] | --request-file PATH | --request-stdin) [--apply-file PATH] [--idempotency-key KEY]".into(),

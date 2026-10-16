@@ -4,6 +4,7 @@ use hiroute_application_api::*;
 use serde_json::{Value, json};
 
 mod apply_file;
+mod decision;
 mod flags;
 mod navigation;
 mod preview;
@@ -16,6 +17,9 @@ type Result<T> = std::result::Result<T, Box<Reply>>;
 pub(crate) const HELP: &str = "HiRoute Quickstart\n\nUsage\n  hiroute quickstart [--context ID] [--plan ID] [--hermes-root PATH]\n\nRead-only: discover an exact target, reuse existing sources and Plans, then inspect connection state and next commands. Does not prepare credentials, save configuration, start a service, restart an Agent or call a model. Caller and target are independent.\n\nMain path\n  quickstart -> compute scan/connection prepare -> compute connection preview/apply\n  -> routing preview/apply -> agents connect preview/apply -> native activation -> agents connect status --effective\n\nUse --help on each Preview for concise choices. --apply-file PATH creates a new private exact Apply request; review the Preview, then submit that same file. Keep the file/key for Operations lookup and identical replay after uncertain delivery.\n";
 
 pub(crate) fn execute(arguments: &[String], globals: &Globals) -> Option<CliExecution> {
+    if let Some(execution) = decision::execute(arguments, globals) {
+        return Some(execution);
+    }
     if arguments.first().is_none_or(|v| v != "quickstart") {
         return None;
     }
@@ -50,6 +54,8 @@ pub(crate) fn preview_command(
             | "routing.preview"
             | "agents.connect.preview"
             | "agents.restore.preview"
+            | "decision.services.apply"
+            | "decision.services.test"
     ) {
         return None;
     }
@@ -68,6 +74,9 @@ pub(crate) fn preview_command(
     let result: Result<Reply> = (|| {
         validate_globals(globals)?;
         let (options, path, key) = flags::submission(options)?;
+        if command == "decision.services.test" && path.is_some() {
+            return Err(error(ErrorCode::InvalidArguments));
+        }
         let client = client(globals)?;
         let payload = if has_input {
             // The existing codec rejects mixed JSON/convenience forms and unknown members.
@@ -75,6 +84,17 @@ pub(crate) fn preview_command(
         } else {
             preview::prepare(&client, command, &options)?
         };
+        if command == "decision.services.apply"
+            && path.is_some()
+            && payload.get("accept_digest").is_some()
+        {
+            return Err(choices(
+                &[
+                    "Preview input for --apply-file; submit an existing Apply file without --apply-file",
+                ],
+                json!({}),
+            ));
+        }
         let descriptor = command_by_id(command).ok_or_else(|| error(ErrorCode::UnknownCommand))?;
         let mut response = call_with_id(
             &client,

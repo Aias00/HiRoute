@@ -62,6 +62,7 @@ fn family_help_is_navigable_and_does_not_promote_unreleased_commands() {
         assert!(!text.contains("setup preview"));
         if family == ["decision", "services"] {
             assert!(!text.contains("  preview\n"));
+            assert!(text.contains("options [--provider ID]"));
         }
     }
     assert!(!invoke(&["setup", "--help"], b"").status.success());
@@ -92,6 +93,7 @@ fn installed_full_schemas_are_offline_complete_and_opt_in() {
         "operations.get",
         "decision.services.list",
         "decision.services.apply",
+        "decision.services.test",
         "sessions.list",
         "sessions.show",
         "sessions.receipt",
@@ -121,6 +123,50 @@ fn installed_full_schemas_are_offline_complete_and_opt_in() {
             "{id} changed legacy output"
         );
     }
+}
+
+#[test]
+fn decision_choices_work_offline_without_claiming_saved_availability() {
+    let output = invoke(&["decision", "services", "options"], b"");
+    assert!(output.status.success());
+    let value: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let options = &value["data"];
+    assert_eq!(options["saved_services_state"], "unavailable");
+    assert_eq!(options["saved_services"], Value::Null);
+    assert_eq!(options["saved_connection_test_state"], "unknown_not_probed");
+    let providers = options["providers"].as_array().unwrap();
+    assert_eq!(providers.len(), 6);
+    let openrouter = providers.iter().find(|p| p["id"] == "openrouter").unwrap();
+    assert_eq!(openrouter["model"], "typesafe/jev-1.13");
+    assert!(options["effects"].as_array().unwrap().is_empty());
+    let invalid = invoke(
+        &[
+            "decision",
+            "services",
+            "options",
+            "--provider",
+            "ordinary-chat",
+        ],
+        b"",
+    );
+    assert_eq!(invalid.status.code(), Some(2));
+    let selected = invoke(
+        &[
+            "decision",
+            "services",
+            "options",
+            "--provider",
+            "bailian-workspace",
+        ],
+        b"",
+    );
+    let selected: Value = serde_json::from_slice(&selected.stdout).unwrap();
+    assert!(
+        selected["data"]["selected_provider"]["required_new_connection_flags"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("--endpoint"))
+    );
 }
 
 #[test]

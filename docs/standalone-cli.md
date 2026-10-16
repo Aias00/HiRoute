@@ -905,6 +905,55 @@ the exact directory and that its contents are no longer needed.
 
 ## Decision services and branch routing
 
+### Connect a decision service from the CLI
+
+Run `hiroute decision services options` before creating a connection. Reuse an explicitly selected
+saved `ID@REVISION`; a saved record is not a connectivity test. Installed presets include Bailian
+Token Plan/workspace, OpenRouter and TypeSafe, plus System One compatible and custom extensions.
+They describe integration defaults, not current provider availability, account entitlement or price.
+Workspace/compatible entries require the endpoint/model shown in their options. Ordinary Chat
+execution models are not decision services. Local rules remain an explicit alternative.
+
+A credential is a human step outside chat. In your own terminal on the HiRoute host (for example
+an SSH session), run the following with a fresh non-secret candidate reference:
+
+```sh
+hiroute protected-input register --candidate CANDIDATE_REF --prompt --format bearer
+```
+
+Paste only the API key into the hidden prompt. HiRoute adds `Bearer` and returns registration
+status. Never give a key to an Agent through chat or a terminal tool, arguments, environment or
+ordinary JSON/files. Use `--format raw` for a custom full header value. Cancellation or no controlling
+terminal saves no service. Tell the managing Agent only whether registration succeeded, then
+continue with the same reference. Desktop's existing password field is also supported.
+
+```sh
+hiroute decision services apply --id daily-decision --name 'Daily decisions' --provider typesafe --candidate CANDIDATE_REF --apply-file decision-apply.json
+hiroute decision services apply --request-file decision-apply.json
+hiroute decision services test --service daily-decision@SAVED_REVISION
+hiroute routing preview --plan PLAN_ID --decision-service daily-decision@SAVED_REVISION --apply-file decision-route-apply.json
+hiroute routing apply --request-file decision-route-apply.json
+```
+
+Choose the actual preset; provide `--endpoint` and `--model` where required. A custom connection
+uses `--provider custom --endpoint URL` with a protected candidate and optional `--header NAME`,
+or explicit `--no-auth`. New connections require an exact ID and name; edits use `--id` and preserve
+omitted fields. Endpoint changes require new credential input or explicit custom no-auth. Review
+each Preview and inspect its Operation; use the returned saved revision, not the placeholder.
+The exact private Apply file and lookup identity support identical retry. Keep completed source/Plan
+steps and release unused candidate references.
+
+The explicit synthetic test may incur provider charges. Inspect `data.outcome` and `failure_code`:
+a successful CLI query can report a failed connection test. Passing proves that probe, not semantic
+quality, actual execution-model access or native loading. After publishing, verify the actual decision
+source, execution group, model and outcome in matching requests. Manual model substitution does not
+prove a complex decision. Empty custom keywords do not disable built-in local rules; report unmatched
+natural tasks honestly. Include cancelled and transport-failed requests in results.
+
+Before restoring or reconnecting the managing caller's own model route, establish independent native
+access or an external operator handoff. A successful restore can revoke the grant still held by a
+running process. Restored files do not prove reload; arrange continuation before that effect.
+
 Desktop manages these connections under **Models → Decision models**; the Released CLI keeps
 `decision services list/apply/test`. Decision models and custom extensions are independent of
 general model sources that execute tasks. Discover the installed contract first:

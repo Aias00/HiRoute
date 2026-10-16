@@ -25,6 +25,7 @@ pub(super) fn run(flags: &Flags, globals: &Globals) -> Result<Reply> {
         }
     };
     view["service"] = service;
+    view["decision_options"] = decision::options(Some(&client));
     let targets = settings::targets(&client, flags.get("--hermes-root"))?;
     view["targets"] = json!(targets);
     let compute = data(&client, "ListCompute", json!({}))?;
@@ -34,6 +35,7 @@ pub(super) fn run(flags: &Flags, globals: &Globals) -> Result<Reply> {
     view["plans_next_cursor"] = plans["next_cursor"].clone();
     let mut required = Vec::new();
     let mut next = Vec::new();
+    next.push(json!({"arguments":["decision","services","options"],"effect":"read_only","reason":"reuse_saved_decision_connection_or_choose_supported_onboarding; local_rules_remains_an_explicit_alternative"}));
     if view["service"]["control_store"] != "ready"
         || view["service"]["recoverable_operations"]
             .as_u64()

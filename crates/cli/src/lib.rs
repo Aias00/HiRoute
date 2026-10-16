@@ -14,6 +14,7 @@ mod help;
 mod host_commands;
 mod managed_launch;
 mod observation;
+mod protected_prompt;
 mod quickstart;
 mod request_input;
 mod service;
@@ -710,7 +711,7 @@ pub fn root_help() -> String {
         .collect::<Vec<_>>()
         .join("\n");
     format!(
-        "HiRoute headless product CLI\n\nUsage\n  hiroute <command> [options]\n\nPublic command families\n{commands}\n\nHost management: run 'hiroute service --help', 'hiroute gateway --help', 'hiroute protected-input --help', or 'hiroute subscription-proxy --help'.\nAgent collaboration workflow: run 'hiroute agents collaboration --help' to enable, edit, disable or inspect collaboration independently of model settings.\nApplication/Local Control: run 'hiroute schema list --output json' and 'hiroute schema show --command-id <ID> --output json', then append '--help' to a complete command path, for example 'hiroute worker dependencies discover --help'.\n"
+        "HiRoute headless product CLI\n\nUsage\n  hiroute <command> [options]\n\nPublic command families\n{commands}\n\nStart or resume: run 'hiroute quickstart --help'.\nDecision connections: run 'hiroute decision services options --help' for installed presets and reusable saved connections.\nHost management: run 'hiroute service --help', 'hiroute gateway --help', 'hiroute protected-input --help', or 'hiroute subscription-proxy --help'.\nAgent collaboration workflow: run 'hiroute agents collaboration --help' to enable, edit, disable or inspect collaboration independently of model settings.\nApplication/Local Control: run 'hiroute schema list --output json' and 'hiroute schema show --command-id <ID> --output json', then append '--help' to a complete command path, for example 'hiroute worker dependencies discover --help'.\n"
     )
 }
 

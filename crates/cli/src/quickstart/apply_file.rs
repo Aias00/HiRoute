@@ -51,6 +51,25 @@ fn request(
 ) -> Result<(Value, &'static str, &'static str)> {
     let internal = |_| error(ErrorCode::Internal);
     match command {
+        "decision.services.apply" => {
+            let result: PreviewResultV1 =
+                serde_json::from_value(preview.clone()).map_err(internal)?;
+            if !result.blockers.is_empty() {
+                return Err(choices(&["resolve_preview_blockers"], preview.clone()));
+            }
+            Ok((
+                json!(ApplyRequestV1 {
+                    schema_version: CHANGE_SPEC_SCHEMA_V1,
+                    spec: result.normalized_spec,
+                    accept_digest: result.change_digest,
+                    expected_revisions: result.expected_revisions,
+                    idempotency_key: key.into(),
+                    apply_capability: None,
+                }),
+                "decision.services.apply",
+                "ApplyDecisionService",
+            ))
+        }
         "routing.preview" if payload["change"]["schema"] == PLAN_CONTENT_CHANGE_SCHEMA_V2 => {
             let input: PlanContentPreviewRequestV2 =
                 serde_json::from_value(payload.clone()).map_err(internal)?;
@@ -140,7 +159,7 @@ fn request(
         }
         _ => Err(choices(
             &["supported_apply_file_variant"],
-            json!({"supported":["compute_save","plan_content_v2","agent_settings_v2"],"advanced":"use_installed_typed_request_contract"}),
+            json!({"supported":["compute_save","plan_content_v2","agent_settings_v2","decision_service"],"advanced":"use_installed_typed_request_contract"}),
         )),
     }
 }

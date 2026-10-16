@@ -133,12 +133,73 @@ Choose the decision method explicitly; an ordinary Chat execution binding is not
 decision-service protocol. Decision services use the **same** `decision services apply` verb with
 either a Preview or Apply wrapper; inspect its full schema. Do not invent a `preview` subcommand.
 
+### Connect a decision model when needed
+
+Start with `hiroute decision services options`. Reuse an explicitly selected saved `ID@REVISION`
+when suitable. Saved means configured, not reachable or tested. Otherwise show the installed
+provider/model/endpoint presets and their required choices: Bailian Token Plan/workspace,
+OpenRouter, TypeSafe, System One compatible or a custom extension. These are integration presets,
+not promises of current provider availability, account access or price. A workspace/compatible
+endpoint and model may need user input. Ordinary Chat model access is not decision-service access.
+
+Credentials are a **human handoff outside this conversation**. Give the user the following command
+with a fresh non-secret candidate reference and ask them to run it in their own terminal on the
+HiRoute host (for example their own SSH session). Do not execute a prompt inside an Agent terminal
+tool, ask for the key in chat, or capture/paste the key on the user's behalf:
+
+```sh
+hiroute protected-input register --candidate CANDIDATE_REF --prompt --format bearer
+```
+
+The user pastes the bare API key into hidden input. HiRoute adds `Bearer` and returns only
+registration status. For a custom full header value use `--format raw`; custom connections may
+explicitly select `--no-auth`. Cancellation or no controlling terminal leaves saved connections
+unchanged. After the user reports `registered=true`, continue using the same candidate reference;
+if the daemon restarted or the registration is unavailable, repeat the human step with a new ref.
+Do not substitute argv, environment, an ordinary file or chat. Desktop users may use its existing
+password field instead. Keep stdout/stderr capture for machine commands, not this human input step.
+
+For example, after selecting a preset and completing registration:
+
+```sh
+hiroute decision services apply --id daily-decision --name 'Daily decisions' --provider typesafe --candidate CANDIDATE_REF --apply-file decision-apply.json
+hiroute decision services apply --request-file decision-apply.json
+hiroute decision services test --service daily-decision@SAVED_REVISION
+hiroute routing preview --plan PLAN_ID --decision-service daily-decision@SAVED_REVISION --apply-file decision-route-apply.json
+hiroute routing apply --request-file decision-route-apply.json
+```
+
+Choose the provider from installed options; use `--endpoint`/`--model` when required. Review and
+apply the exact prepared files, inspect Operations and read the returned saved revision. Testing
+is an explicit potentially billed effect: inspect `data.outcome`/`failure_code`, not just the CLI
+exit. A passing synthetic test establishes connectivity/protocol, not semantic quality or actual
+execution-model availability. Keep the original service on failure and explain repair choices;
+local rules are an explicit alternative, never an automatic successful model-decision fallback.
+Edit a saved service by `--id` plus requested fields; omitted fields remain. Changing the endpoint
+requires explicit new credential input (or custom `--no-auth`). Release unused candidate refs.
+
+After publication and an authorized real request, inspect the actual decision source, group,
+model, publication and request outcome. Verify both intended groups through matched receipts;
+temporarily putting the primary model in the economy group does not prove a complex decision.
+Empty custom keywords do not disable built-in local rules. If natural complex tasks do not match,
+report that limitation and offer explicit rules/decision-service choices without rewriting policy
+to manufacture verification. Count all requests, including cancelled/timeouts; a transport failure
+is not proof of complete delivery. Read configured and actual reasoning separately.
+
 For a change, use `routing preview --plan PLAN_ID` plus only requested options and a new Apply file.
 Reopening preserves other saved settings. Do not reconstruct an editor or guess inactive sections,
 reasoning values, context windows or timeout defaults. Resolve returned required choices. Advanced
 reasoning/lifecycle/draft editors remain available through installed typed JSON contracts.
 
 ## Connect or restore independent capabilities
+
+Before a model restore, reconnect or grant-changing credential action, check whether the managing
+caller's next model request depends on the affected HiRoute connection. Restoring native files
+can revoke its current grant while a running process still holds the old configuration. Establish
+independent native access or hand the effect and subsequent activation to an external operator
+**before** applying it. If dependency is unknown, leave that effect pending and clarify the
+continuation path; continue independent reads/preparation. Do not strand the caller and then
+suggest a self-restart, bypass native restart protection or infer reload from changed files.
 
 If Preview reports unknown Skill-loading capability for Codex or Claude, use the existing
 `hiroute agents check AGENT_ID --scope collaboration` compatibility check explicitly, then
