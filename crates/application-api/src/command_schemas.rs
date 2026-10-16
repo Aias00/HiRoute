@@ -71,10 +71,10 @@ fn alternatives(values: Vec<Value>) -> Value {
 fn rebase(value: &mut Value, prefix: &str) {
     match value {
         Value::Object(object) => {
-            if let Some(Value::String(reference)) = object.get_mut("$ref") {
-                if let Some(suffix) = reference.strip_prefix('#') {
-                    *reference = format!("{prefix}{suffix}");
-                }
+            if let Some(Value::String(reference)) = object.get_mut("$ref")
+                && let Some(suffix) = reference.strip_prefix('#')
+            {
+                *reference = format!("{prefix}{suffix}");
             }
             for child in object.values_mut() {
                 rebase(child, prefix);
@@ -371,15 +371,13 @@ fn specialize_change(value: &mut Value, desired: &Value) {
             Value::Object(object) => {
                 if let Some(properties) =
                     object.get_mut("properties").and_then(Value::as_object_mut)
+                    && properties.contains_key("desired_state")
+                    && properties.contains_key("command_id")
                 {
-                    if properties.contains_key("desired_state")
-                        && properties.contains_key("command_id")
-                    {
-                        let mut schema = desired.clone();
-                        rebase(&mut schema, &format!("#{pointer}/properties/desired_state"));
-                        properties.insert("desired_state".into(), schema);
-                        return;
-                    }
+                    let mut schema = desired.clone();
+                    rebase(&mut schema, &format!("#{pointer}/properties/desired_state"));
+                    properties.insert("desired_state".into(), schema);
+                    return;
                 }
                 for (key, child) in object.iter_mut() {
                     walk(child, desired, &format!("{pointer}/{key}"));

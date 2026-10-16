@@ -35,7 +35,7 @@ pub enum AgentCheckResultV1 {
     Configuration {
         schema: String,
         suite: AgentCheckSuiteV1,
-        agent: DiscoveredAgentV1,
+        agent: Box<DiscoveredAgentV1>,
         model_call: bool,
         gateway_listener: String,
     },

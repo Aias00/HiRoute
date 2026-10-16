@@ -77,7 +77,7 @@ pub enum AgentModelEffectPreviewV2 {
         #[serde(skip_serializing_if = "Option::is_none")]
         provider_id: Option<String>,
         endpoint: String,
-        selection: AgentModelSelectionV2,
+        selection: Box<AgentModelSelectionV2>,
         authentication: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         native_adapter: Option<AgentNativeAdapterPreviewV1>,

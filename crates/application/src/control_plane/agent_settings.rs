@@ -63,7 +63,7 @@ pub(crate) fn preview(
                 agent_class: agent_class.into(),
                 provider_id: provider_id.cloned(),
                 endpoint: endpoint.clone(),
-                selection: selection.clone(),
+                selection: Box::new(selection.clone()),
                 authentication: "connection_scoped_local_grant".into(),
                 native_adapter: (agent_class == "hermes").then(|| hiroute_application_api::AgentNativeAdapterPreviewV1 {
                     resources: "planned".into(), runtime_loading: hiroute_application_api::AgentNativeRuntimeLoadingV1::Unobserved,
