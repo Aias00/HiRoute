@@ -323,7 +323,7 @@ pub async fn compute_connection_options(
     crate::session::query(
         &client,
         "ListConnectionOptions",
-        &ComputeConnectionOptionsRequestV1 {},
+        &ComputeConnectionOptionsRequestV1 { candidate: None },
     )
     .await
 }
