@@ -32,6 +32,7 @@ INTEGRATION_SHARDS = {
         ("hiroute-diagnostics", "writer_bounds"),
         ("hiroute-cli", "contracts"),
         ("hiroute-cli", "desktop_locator"),
+        ("hiroute-cli", "management_contracts"),
         ("hiroute-cli", "request_input"),
         ("hiroute-cli", "service_proxy"),
         ("hiroute-cli", "transport_unavailable"),
