@@ -340,8 +340,8 @@ impl Modes {
         let response = http::post_with_headers(
             address,
             "/v1/responses",
-            Some(token),
-            &[("session-id", session)],
+            None,
+            &[("X-HiRoute-Token", token), ("session-id", session)],
             &json!({"model":plan.alias,"stream":false,"input":input}),
         );
         assert_eq!(

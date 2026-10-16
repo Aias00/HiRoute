@@ -281,10 +281,11 @@ impl Routing {
         assert_eq!(*self.counts.lock().unwrap(), (1, 0));
         for streaming in [false, true] {
             eprintln!("Windows Gateway route stage: responses streaming={streaming}");
-            let response = http::post(
+            let response = http::post_with_headers(
                 gateway,
                 "/v1/responses",
-                Some(&response_token),
+                None,
+                &[("X-HiRoute-Token", &response_token)],
                 &response_body(streaming),
             );
             assert_eq!(response.status, 200);

@@ -237,7 +237,13 @@ impl Source {
             let body = json!({"model":self.plan.alias,"input":[{"role":"user","content":[{"type":"input_text","text":"windows-native-protocol-request"}]}],
                 "max_output_tokens":128,"stream":streaming,
                 "tools":[{"type":"function","name":"native_roundtrip","description":"Bounded native schema conversion","parameters":{"type":"object","properties":{"value":{"type":"string"}},"required":["value"],"additionalProperties":false}}]});
-            let response = http::post(gateway, "/v1/responses", Some(token), &body);
+            let response = http::post_with_headers(
+                gateway,
+                "/v1/responses",
+                None,
+                &[("X-HiRoute-Token", token)],
+                &body,
+            );
             assert_eq!(
                 response.status, 200,
                 "actual Native protocol route must succeed"
