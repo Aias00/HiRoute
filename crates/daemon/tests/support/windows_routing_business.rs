@@ -319,8 +319,13 @@ impl Routing {
             Some(&response_token),
             &messages_body(false),
         );
-        assert!(
-            matches!(wrong_protocol.status, 401 | 403),
+        assert_eq!(
+            wrong_protocol.status, 422,
+            "valid grant with an unsupported protocol"
+        );
+        assert_eq!(
+            wrong_protocol.json()["code"],
+            "AGENT_PROTOCOL_UNSUPPORTED",
             "Responses grant must not authorize Messages"
         );
         assert_eq!(*self.counts.lock().unwrap(), (1, 2));
