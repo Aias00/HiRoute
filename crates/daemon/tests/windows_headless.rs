@@ -478,7 +478,7 @@ impl InstalledProduct {
     fn cli(&self, args: &[&str]) -> Value {
         let output = Command::new(&self.stable)
             .args(args)
-            .args(["--output", "json", "--timeout", "10s"])
+            .args(["--output", "json"])
             .stdin(Stdio::null())
             .output()
             .unwrap();
@@ -512,8 +512,6 @@ impl InstalledProduct {
             (carrier.as_raw_handle() as usize as u64).to_string().into(),
             "--output".into(),
             "json".into(),
-            "--timeout".into(),
-            "10s".into(),
         ];
         let environment: Vec<_> = std::env::vars_os().collect();
         assert!(
@@ -542,7 +540,7 @@ impl InstalledProduct {
         drop(write);
         drop(carrier);
         drop(read);
-        let deadline = Instant::now() + Duration::from_secs(15);
+        let deadline = Instant::now() + Duration::from_secs(35);
         let exit = loop {
             if let Some(exit) = child.exit_code().unwrap() {
                 break exit;

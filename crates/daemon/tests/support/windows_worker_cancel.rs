@@ -159,15 +159,13 @@ pub(super) fn verify(
         "--handled",
         "--output",
         "json",
-        "--timeout",
-        "10s",
     ];
     let (exit, bytes, _) = run(
         &product.stable,
         &arguments.iter().map(OsString::from).collect::<Vec<_>>(),
         product.stable.parent(),
         None,
-        Duration::from_secs(15),
+        Duration::from_secs(35),
     );
     let rejected: Value = serde_json::from_slice(&bytes).unwrap();
     assert_ne!(

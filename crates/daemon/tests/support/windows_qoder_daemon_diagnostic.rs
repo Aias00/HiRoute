@@ -39,6 +39,25 @@ pub(super) fn collect(reader: &mut Option<std::thread::JoinHandle<Vec<u8>>>, std
             .expect("bounded daemon output collector failed");
         super::assert_no_secret(&bytes);
         if stderr {
+            if std::thread::panicking()
+                && let Some(root) = std::env::var_os("HIROUTE_VALIDATION_EVIDENCE_DIR")
+            {
+                // Preserve raw failure output privately; stdout/stderr is not
+                // an allowed source for production structured diagnostics.
+                let retain = || -> std::io::Result<()> {
+                    use hiroute_platform::windows::security;
+                    use std::io::Write;
+                    let root = std::path::PathBuf::from(root);
+                    security::open_identity(&root, true)?;
+                    let mut file =
+                        security::create_owner_only_file(&root.join("daemon-stderr.bin"))?;
+                    file.write_all(&bytes)?;
+                    file.sync_all()
+                };
+                if retain().is_err() {
+                    eprintln!("Windows daemon failure output retention could not complete");
+                }
+            }
             project(&bytes);
         }
     }

@@ -638,6 +638,24 @@ pub fn run(
             phase,
             ProcessPhase::PublicPiCollaborationCheck | ProcessPhase::PublicDshCollaborationCheck
         ) {
+            if let Some(root) = std::env::var_os("HIROUTE_VALIDATION_EVIDENCE_DIR") {
+                // Raw native process output is private development evidence,
+                // never production diagnostics or public test output.
+                let retained = (|| -> std::io::Result<()> {
+                    let root = PathBuf::from(root);
+                    security::open_identity(&root, true)?;
+                    for (kind, bytes) in [("stdout", &output), ("stderr", &error)] {
+                        let path = root.join(format!("native-{phase:?}-{kind}.bin"));
+                        let mut file = security::create_owner_only_file(&path)?;
+                        file.write_all(bytes)?;
+                        file.sync_all()?;
+                    }
+                    Ok(())
+                })();
+                if retained.is_err() {
+                    eprintln!("Windows native failure output retention could not complete");
+                }
+            }
             let diagnostic = public_failure(&output);
             eprintln!(
                 "Windows ordinary public check failure: phase={phase:?}, envelope-json={}, status={:?}, code={:?}, collaboration-reason={:?}",

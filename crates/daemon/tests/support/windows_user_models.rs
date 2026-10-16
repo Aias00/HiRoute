@@ -462,8 +462,6 @@ pub(super) fn checked(product: &InstalledProduct, agent: &str) {
         agent,
         "--scope",
         "collaboration",
-        "--timeout",
-        "90s",
         "--output",
         "json",
     ]
@@ -476,7 +474,7 @@ pub(super) fn checked(product: &InstalledProduct, agent: &str) {
         &env,
         product.stable.parent().unwrap(),
         None,
-        Duration::from_secs(100),
+        Duration::from_secs(35),
     );
     assert_no_secret(&output);
     let envelope: Value = serde_json::from_slice(&output).unwrap();

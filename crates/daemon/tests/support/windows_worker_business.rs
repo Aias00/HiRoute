@@ -755,19 +755,14 @@ fn command_outcome(
     if payload.is_some() {
         args.push("--request-stdin".into());
     }
-    args.extend([
-        "--output".into(),
-        "json".into(),
-        "--timeout".into(),
-        format!("{}s", deadline.as_secs()).into(),
-    ]);
+    args.extend(["--output", "json"].map(OsString::from));
     let input = payload.map(|value| serde_json::to_vec(value).unwrap());
     let (exit, output, _error) = run(
         &product.stable,
         &args,
         product.stable.parent(),
         input.as_deref(),
-        deadline + Duration::from_secs(5),
+        deadline.max(Duration::from_secs(30)) + Duration::from_secs(5),
     );
     let value: Value = serde_json::from_slice(&output)
         .expect("actual public Worker business CLI must return its JSON envelope");
