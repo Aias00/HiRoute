@@ -548,6 +548,28 @@ HiRoute SHALL provide target/Plan-oriented completion and troubleshooting throug
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/125#issuecomment-6206260018
 
+### Requirement: Use compact scoped Hermes provider identities
+
+HiRoute SHALL configure Hermes with a compact recognizable managed-provider identity rather than displaying complete internal context and Plan digests. Native identities SHALL remain deterministic for the selected profile/Plan, distinct across Plan choices within that profile, and bound to the existing context, grant, plugin and ownership rules. Existing managed configurations and accepted operations SHALL retain readable recovery and exact replay; an explicit owned reconfiguration may adopt the compact representation. No foreign provider or remaining unowned native reference may be overwritten or silently redirected. Existing user data and current running-session activation requirements remain authoritative.
+
+#### Scenario: Present a compact provider
+
+- **WHEN** a Hermes main-model connection is newly configured
+- **THEN** the native provider name identifies HiRoute with only a bounded distinguishing suffix; complete internal context hashes are not required in the user-facing name.
+
+#### Scenario: Update or restore a prior managed connection
+
+- **WHEN** a retained older Hermes connection is inspected, recovered, explicitly reconfigured or restored
+- **THEN** old native names and sealed accepted effects remain understood, current owned reconfiguration can produce the compact name, and the original native configuration remains recoverable.
+
+#### Scenario: Preserve foreign native consumers
+
+- **WHEN** a proposed compact provider collides with foreign native content or removing a previous provider would break another native reference
+- **THEN** the existing ownership conflict prevents the write; neither short naming nor a shared endpoint establishes ownership.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/125#issuecomment-6219938656
+
 ## Implementation references
 
 - [Shared settings transaction](../../../crates/application/src/agent_connection/settings/transaction.rs)

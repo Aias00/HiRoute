@@ -239,7 +239,18 @@ fn observation_value_payload(
 ) -> Result<Value, ErrorCode> {
     let request: ObservationReadRequestV2 = crate::request_input::deserialize(value)?;
     let matches_command = match (command, &request.intent) {
-        (ObservationCommand::Sessions, ObservationReadIntentV2::Sessions(_)) => true,
+        (
+            ObservationCommand::Sessions,
+            ObservationReadIntentV2::Sessions(_)
+            | ObservationReadIntentV2::Search(_)
+            | ObservationReadIntentV2::SessionSearch(_),
+        ) => true,
+        (
+            ObservationCommand::Timeline,
+            ObservationReadIntentV2::Catalog(_)
+            | ObservationReadIntentV2::Ancestry(_)
+            | ObservationReadIntentV2::Content(_),
+        ) => true,
         (ObservationCommand::Facts, ObservationReadIntentV2::Facts(_)) => true,
         (ObservationCommand::Timeline, ObservationReadIntentV2::Timeline(query)) => {
             query.session_id.is_some()

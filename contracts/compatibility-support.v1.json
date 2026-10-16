@@ -1472,6 +1472,18 @@
         "crates/gateway/src/publication/schema.rs",
         "crates/gateway/src/publication/mod.rs"
       ]
+    },
+    {
+      "contract": "hiroute.hermes-config-restore/v1",
+      "field": "prior long scoped Hermes provider keys in before/after native fields",
+      "mode": "recovery_read_only",
+      "owner": "agent-integrations/hermes",
+      "reason": "Retained pre-compact restore records and accepted native effects bind full provider keys. Current writes use a compact scoped provider, preserve the original baseline, and validate foreign destinations/references. Frozen synthetic bytes were emitted by product revision 80269c50c0dd15fcc7cd48d3768ca52aa2c7c362 through hermes_configure, with capture inputs recorded in the fixture.",
+      "removal_condition": "Retire only when supported installed profiles and retained operation/restore records no longer contain long provider keys, together with the old-byte production reader regression.",
+      "allowed_paths": [
+        "crates/integrations/src/agents/hermes_config.rs",
+        "crates/integrations/tests/fixtures/hermes-config-restore-80269c5.json"
+      ]
     }
   ]
 }

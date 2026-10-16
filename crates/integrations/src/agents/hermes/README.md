@@ -7,7 +7,11 @@ recovery. Hermes leaves own native configuration and resources:
   profile directory to its context and accepted Operation. Daemon environment does
   not select the profile.
 - [Configuration](../hermes_config.rs) owns the default main model/provider and
-  context controls, one per-Plan provider and the plugin's enabled settings.
+  context controls, one compact per-Plan provider and the plugin's enabled settings.
+  Native names use `hiroute-main-` plus a short alias digest; full profile/context
+  identity stays in the existing grant/effect/restore bindings. Legacy long names
+  remain readable/restorable and an explicit owned reconfiguration can adopt the
+  compact form. Foreign destinations or remaining references block replacement.
   Conditional restore preserves unrelated configuration and refuses changed owned
   fields. Native source providers, credentials, channels and history remain native.
 - [Plugin effects](../hermes_plugin_effects.rs) install the bundled dependency-free

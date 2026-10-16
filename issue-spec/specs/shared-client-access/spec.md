@@ -294,7 +294,7 @@ Source SPEC comments:
 
 ### Requirement: One canonical management Skill guides complete generic CLI journeys
 
-HiRoute SHALL ship one canonical management Skill for all supported management Agent families, with the core Quickstart and bounded references for important branches: absent service/target/source, ambiguous scope, unavailable models or decision service, existing/partial setup, adjustment, effective-state diagnosis, observation and owned restoration. The Skill SHALL separate the caller from the managed target and consume installed public CLI capabilities, generated defaults and machine results rather than assuming Hermes, a particular filesystem layout or repository access. It SHALL explain how to obtain prerequisite CLI/Skill availability without coupling management to model routing or delegation. Instructions SHALL capture stdout, stderr and the CLI exit status separately when the native terminal merges them, inspect business/Operation results, preserve submission identity and avoid first-line JSON parsing or treating accepted as complete. Generated configuration and personal experience notes SHALL NOT be written into the product-managed Skill. Existing independent facet ownership, user-authorized effects, protected credentials and collaboration trigger policy remain authoritative. Before a restoration, reconnect or credential replacement that may revoke the current caller's own HiRoute access, the Skill SHALL establish an independent continuation path or leave that effect pending for an external operator. Verification SHALL distinguish saved state, native loading, request outcomes and actual classifier/group selection; manual model substitution or missing observations cannot establish a semantic decision branch or native activation.
+HiRoute SHALL ship one canonical management Skill for all supported management Agent families, with the core Quickstart and bounded references for important branches: absent service/target/source, ambiguous scope, unavailable models or decision service, existing/partial setup, adjustment, effective-state diagnosis, observation and owned restoration. The Skill SHALL separate the caller from the managed target and consume installed public CLI capabilities, generated defaults and machine results rather than assuming Hermes, a particular filesystem layout or repository access. It SHALL explain how to obtain prerequisite CLI/Skill availability without coupling management to model routing or delegation. Instructions SHALL capture stdout, stderr and the CLI exit status separately when the native terminal merges them, inspect business/Operation results, preserve submission identity and avoid first-line JSON parsing or treating accepted as complete. Generated configuration and personal experience notes SHALL NOT be written into the product-managed Skill. Existing independent facet ownership, user-authorized effects, protected credentials and collaboration trigger policy remain authoritative. Before a restoration, reconnect or credential replacement that may revoke the current caller's own HiRoute access, the Skill SHALL establish an independent continuation path or leave that effect pending for an external operator. Verification SHALL distinguish saved state, native loading, request outcomes and actual classifier/group selection; manual model substitution or missing observations cannot establish a semantic decision branch or native activation. Before changing an existing Plan, the Skill SHALL retain its complete prior effective configuration and provide fully resolved recovery commands to the user, usable from an independent terminal if the caller fails. Plan restoration SHALL be distinguished from owned Agent-facet restoration. Restoring candidate names alone is not full configuration recovery; compare all effective settings after restoration.
 
 #### Scenario: Use the same Skill across callers
 
@@ -331,6 +331,11 @@ HiRoute SHALL ship one canonical management Skill for all supported management A
 - **WHEN** a smart-saving journey is verified
 - **THEN** the guidance checks actual classifier/group/model facts and every matching request outcome, distinguishes pending or failed requests, and does not infer complex-branch coverage from changing the economy model or infer built-in rule behavior solely from custom keywords.
 
+#### Scenario: Provide complete recovery before a change
+
+- **WHEN** an Agent prepares a change to an existing Plan or managed connection
+- **THEN** it retains the complete applicable baseline, identifies recovery scope, supplies concrete CLI Preview and Apply commands with real identities and paths, and verifies restored effective settings rather than only model names; uncertainty, foreign edits and caller continuation follow existing contracts.
+
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/125#issuecomment-6206260381
 
@@ -365,6 +370,33 @@ HiRoute SHALL provide an installed, discoverable CLI path for choosing and conne
 
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/125#issuecomment-6213380806
+
+### Requirement: Recover complete saved Plan configuration through the public CLI
+
+HiRoute SHALL let an installed CLI caller retain the complete effective configuration of an existing Plan and prepare restoration of that configuration without reconstructing editor fields or guessing defaults. Recovery SHALL preserve candidate order and reasoning, decision service and judgment, requirements, limits/context, alias and supported mode/delegation settings. It SHALL target the same existing Plan, use current revision-checked Preview and exact Apply, report invalid or unavailable referenced resources and preserve unrelated resources and observation history. A failed, malformed or different-target saved response SHALL NOT become a restoration. Plan configuration recovery does not rewind immutable revisions or replace native Agent-facet restoration.
+
+#### Scenario: Recover after candidate replacement
+
+- **WHEN** a caller changes a group candidate and later restores a retained complete Plan configuration
+- **THEN** the restored effective configuration matches the retained baseline including reasoning and policy, even if selecting that candidate afresh would choose different defaults.
+
+#### Scenario: Review and submit recovery
+
+- **WHEN** a valid saved configuration for the selected Plan is supplied
+- **THEN** the installed path resolves the current target revision, produces a reviewable existing Plan content Preview and optionally an exact private Apply file; no restoration occurs until the caller applies it.
+
+#### Scenario: Reject invalid or different-target recovery
+
+- **WHEN** the saved output is incomplete, unsuccessful, malformed, from another Plan/workspace, or includes incompatible extra change inputs
+- **THEN** the CLI rejects it before target writes, without silently creating a Plan or dropping saved fields.
+
+#### Scenario: Keep stale and dependency failures safe
+
+- **WHEN** a prepared restore becomes stale or its retained resource references are unavailable
+- **THEN** existing revision/dependency failures remain authoritative; the caller reviews current facts and prepares a fresh request instead of bypassing checks or silently substituting models/services.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/125#issuecomment-6219937964
 
 ## Implementation references
 

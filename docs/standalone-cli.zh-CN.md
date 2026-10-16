@@ -949,3 +949,34 @@ saved_source 的完整形式为 `{"kind":"saved_source","source_id":"SOURCE_ID"}
 此操作仅将已安装的路由配置原样发布到下一版本，支持空配置，不创建路由或新增授权。
 停用路由、草稿和仍保留的执行版本继续阻止删除。Desktop 在删除受阻窗口提供
 “更新引用状态”，完成后再次打开删除窗口检查。
+
+## 恢复完整计划配置
+
+修改已有计划前，先把完整成功响应保存到新的私有文件：
+
+```sh
+(umask 077; set -C; hiroute routing show PLAN_ID --output json > /ABS/plan-before.json)
+```
+
+检查实际退出码和完整响应。在 Apply 前，把已填入 CLI 绝对路径、真实计划 ID 和独一无二绝对文件
+路径的恢复命令交给用户；管理 Agent 无法继续时，用户也能在独立终端执行：
+
+```sh
+hiroute routing preview --plan PLAN_ID --restore-from /ABS/plan-before.json --apply-file /ABS/restore-apply.json
+hiroute routing apply --request-file /ABS/restore-apply.json
+hiroute routing show PLAN_ID --output json
+```
+
+第一条只预览：读取已保存的公开响应，使用当前 head revision 和既有完整编辑器投影，再生成普通
+精确 Apply 文件。`--restore-from` 不能混用单字段编辑参数或请求 JSON。失败、不完整、格式错误或
+不同目标的响应会被拒绝；缺失依赖和版本冲突不会被掩盖。不确定是否已提交时查询或重放同一 Apply；
+确定未接受且已过期的请求才生成新的 Preview 和文件，不跳过版本检查。
+
+恢复后比较全部 `data.desired` 字段：候选及顺序、推理档、决策服务和判断设置、上下文/限制、能力要求、
+模式/委派/work 等，并核对别名；版本和发布编号会正常前进。更换候选可能采用角色默认值，仅换回
+模型名称并不恢复原来的推理档。来源、凭证和 Agent 原生能力保留各自恢复所有权；计划响应不是整套
+安装数据的备份。
+
+原生接入应给出已填好实际参数的 `agents restore preview --context ... --facet ... --apply-file ...`
+和 `agents restore apply --request-file ...` 命令、原生目录/选择参数及已有恢复点。可能撤销调用方授权
+的恢复或重接入前，先安排独立接续；原生加载/当前会话选择单独报告。

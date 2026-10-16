@@ -27,10 +27,18 @@ fn routing(client: &LocalControlClient, options: &[String]) -> Result<Value> {
             "--mode",
             "--decision",
             "--decision-service",
+            "--restore-from",
         ],
         &["--model", "--economy", "--primary"],
         &[],
     )?;
+    if let Some(path) = flags.get("--restore-from") {
+        // A complete baseline is an alternative to editing individual choices.
+        if options.len() != 4 {
+            return Err(error(ErrorCode::InvalidArguments));
+        }
+        return super::plan_restore::prepare(client, flags.required("--plan")?, path);
+    }
     if flags.has("--decision") && flags.has("--decision-service") {
         return Err(error(ErrorCode::InvalidArguments));
     }

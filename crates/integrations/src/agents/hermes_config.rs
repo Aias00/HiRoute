@@ -7,6 +7,24 @@ use std::collections::BTreeMap;
 use zeroize::Zeroizing;
 
 pub const HERMES_PLUGIN_NAME: &str = "hiroute";
+const COMPACT_PROVIDER_PREFIX: &str = "hiroute-main-";
+
+// The native file already scopes this identity to one effective Hermes profile.
+// Full context/grant authority stays in the sealed effect and protected restore record.
+fn native_provider_id(alias: &str) -> String {
+    let digest = CanonicalDigest::of_bytes(alias.as_bytes());
+    format!("{COMPACT_PROVIDER_PREFIX}{}", &digest.as_str()[7..19])
+}
+
+fn compact_provider_key(key: &str) -> bool {
+    key.strip_prefix("providers/hiroute-main-")
+        .is_some_and(|suffix| {
+            suffix.len() == 12
+                && suffix
+                    .bytes()
+                    .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+        })
+}
 const SELECTORS: &[&str] = &[
     "default",
     "provider",
@@ -73,18 +91,25 @@ pub fn hermes_configure(
     {
         return Err(hermes_error("native plugin explicitly disabled"));
     }
-    let concrete_provider =
-        hiroute_domain::additional_model_plan_provider_id(provider_id, &model.alias);
+    let concrete_provider = native_provider_id(&model.alias);
     if let Some(previous) = previous {
         if previous.provider_id != provider_id || !previous.applied(current)? {
             return Err(hermes_error("owned configuration changed"));
         }
-    } else if doc
+    }
+    if doc
         .value
         .get("providers")
         .and_then(|p| p.get(&concrete_provider))
         .is_some()
-        || doc.value.pointer("/plugins/entries/hiroute").is_some()
+        && previous.is_none_or(|p| {
+            !p.after
+                .get(&format!("providers/{concrete_provider}"))
+                .is_some_and(Option::is_some)
+                || p.after.get("model/default").and_then(Option::as_ref)
+                    != Some(&json!(model.alias))
+        })
+        || previous.is_none() && doc.value.pointer("/plugins/entries/hiroute").is_some()
     {
         return Err(hermes_error("foreign provider or plugin entry"));
     }
@@ -122,7 +147,7 @@ pub fn hermes_configure(
         Some(json!(model.context_window_tokens)),
     );
     changes.insert(vec!["providers".into(),concrete_provider.clone()],Some(json!({
-        "api":base,"transport":mode,"api_key":"hiroute-local-placeholder",
+        "name":"HiRoute","api":base,"transport":mode,"api_key":"hiroute-local-placeholder",
         "default_model":model.alias,"models":{&model.alias:{"context_length":model.context_window_tokens}},
         "extra_headers":{"X-HiRoute-Token":token}
     })));
@@ -252,8 +277,20 @@ impl HermesConfigRestoreV1 {
             return Err(hermes_error("restore record"));
         }
         for key in self.after.keys() {
+            let compact = compact_provider_key(key)
+                && self.before[key].is_none()
+                && (self.after[key].is_none()
+                    || self
+                        .after
+                        .get("model/default")
+                        .and_then(Option::as_ref)
+                        .and_then(Value::as_str)
+                        .is_some_and(|alias| {
+                            key == &format!("providers/{}", native_provider_id(alias))
+                        }));
             if !(key.starts_with("model/") && SELECTORS.contains(&&key[6..]))
                 && !key.starts_with(&format!("providers/{}-", self.provider_id))
+                && !compact
                 && key != "plugins/entries/hiroute"
             {
                 return Err(hermes_error("restore ownership"));
@@ -344,6 +381,118 @@ fn refers_to(value: &Value, id: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn fixture_model(alias: &str) -> AdditionalAgentModelV1 {
+        AdditionalAgentModelV1 {
+            alias: alias.into(),
+            protocol: hiroute_domain::AgentIngressProtocolV1::Responses,
+            context_window_tokens: 64000,
+            max_output_tokens: 8192,
+        }
+    }
+
+    #[test]
+    fn prior_long_name_restore_bytes_reconfigure_compactly_and_keep_original_baseline() {
+        // Captured with the unchanged 80269c5 production library, not this producer.
+        let fixture: Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/hermes-config-restore-80269c5.json"
+        ))
+        .unwrap();
+        let original = fixture["original"].as_str().unwrap().as_bytes();
+        let legacy = fixture["managed"].as_str().unwrap().as_bytes();
+        let record: HermesConfigRestoreV1 =
+            serde_json::from_value(fixture["restore"].clone()).unwrap();
+        assert!(record.applied(legacy).unwrap());
+        assert_eq!(record.restore(legacy).unwrap().as_slice(), original);
+        let model = fixture_model("hiroute-fixture");
+        let (compact, updated) = hermes_configure(
+            legacy,
+            Some(&record),
+            &record.provider_id,
+            "http://127.0.0.1:8317/v1",
+            &model,
+            "synthetic-local-grant-token",
+        )
+        .unwrap();
+        let doc = HermesDocument::parse(&compact).unwrap();
+        let provider = doc.value["model"]["provider"].as_str().unwrap();
+        assert_eq!(provider.len(), 25);
+        assert_eq!(provider, native_provider_id(&model.alias));
+        assert_eq!(doc.value["providers"][provider]["name"], "HiRoute");
+        assert_eq!(doc.value["providers"].as_object().unwrap().len(), 1);
+        let reopened = HermesConfigRestoreV1::decode(&updated.encode().unwrap()).unwrap();
+        assert!(reopened.applied(&compact).unwrap());
+        assert_eq!(reopened.restore(&compact).unwrap().as_slice(), original);
+        let (again, next) = hermes_configure(
+            &compact,
+            Some(&reopened),
+            &record.provider_id,
+            "http://127.0.0.1:8317/v1",
+            &fixture_model("hiroute-second"),
+            "synthetic-local-grant-token",
+        )
+        .unwrap();
+        assert_ne!(
+            HermesDocument::parse(&again).unwrap().value["model"]["provider"],
+            provider
+        );
+        assert_eq!(next.restore(&again).unwrap().as_slice(), original);
+    }
+
+    #[test]
+    fn compact_name_never_adopts_foreign_destination_or_drops_native_references() {
+        let namespace = "hiroute-main-owner";
+        let first = fixture_model("hiroute-first");
+        let second = fixture_model("hiroute-second");
+        let (managed, record) = hermes_configure(
+            b"user_note: preserve\n",
+            None,
+            namespace,
+            "http://127.0.0.1:8317/v1",
+            &first,
+            "synthetic-local-grant-token",
+        )
+        .unwrap();
+        let doc = HermesDocument::parse(&managed).unwrap();
+        let foreign = doc
+            .edit(&BTreeMap::from([(
+                vec!["providers".into(), native_provider_id(&second.alias)],
+                Some(json!({"api":"https://foreign.invalid/v1"})),
+            )]))
+            .unwrap();
+        assert!(record.applied(&foreign).unwrap());
+        assert!(
+            hermes_configure(
+                &foreign,
+                Some(&record),
+                namespace,
+                "http://127.0.0.1:8317/v1",
+                &second,
+                "synthetic-local-grant-token"
+            )
+            .is_err()
+        );
+        let referenced = doc
+            .edit(&BTreeMap::from([(
+                vec!["auxiliary".into(), "provider".into()],
+                Some(json!(native_provider_id(&first.alias))),
+            )]))
+            .unwrap();
+        assert!(record.applied(&referenced).unwrap());
+        assert!(
+            hermes_configure(
+                &referenced,
+                Some(&record),
+                namespace,
+                "http://127.0.0.1:8317/v1",
+                &second,
+                "synthetic-local-grant-token"
+            )
+            .is_err()
+        );
+        assert!(record.restore(&referenced).is_err());
+    }
+
     #[test]
     fn selected_transport_uses_native_sdk_base_and_restores_exact_original() {
         use hiroute_domain::AgentIngressProtocolV1::*;

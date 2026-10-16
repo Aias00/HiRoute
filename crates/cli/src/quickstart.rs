@@ -7,6 +7,7 @@ mod apply_file;
 mod decision;
 mod flags;
 mod navigation;
+mod plan_restore;
 mod preview;
 mod settings;
 use flags::Flags;

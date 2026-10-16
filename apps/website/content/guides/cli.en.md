@@ -256,3 +256,39 @@ Cancellation does not undo files or external effects already produced.
 Management business commands default to JSON and accept JSON output. Worker commands support their documented `text|json|quiet` modes and normally default to text; use `--output json` for automation. Check each installed leaf help for its actual modes. `schema show --include-schema` adds full definitions for supported management commands; the unflagged form is a descriptor.
 
 CLI and daemon accept only the currently Released business commands and continue to reject Planned commands. Automation should discover the runtime schema instead of hard-coding the command count or unreleased capabilities.
+
+## Recover the complete Plan configuration
+
+Before modifying an existing Plan, retain its complete successful read in a fresh private file:
+
+```sh
+(umask 077; set -C; hiroute routing show PLAN_ID --output json > /ABS/plan-before.json)
+```
+
+Check the actual exit code and whole response. Before applying a change, provide the user with
+recovery commands populated with the installed CLI's absolute path, real Plan ID and unique absolute
+files. The commands remain usable from an independent terminal if the managing Agent cannot continue:
+
+```sh
+hiroute routing preview --plan PLAN_ID --restore-from /ABS/plan-before.json --apply-file /ABS/restore-apply.json
+hiroute routing apply --request-file /ABS/restore-apply.json
+hiroute routing show PLAN_ID --output json
+```
+
+The first command only previews: it reads the saved public response, uses the current head revision
+and existing complete editor projection, and prepares the normal exact Apply file. Do not combine
+`--restore-from` with individual edit flags or typed request input. Invalid, unsuccessful or
+different-target responses are rejected. Missing dependencies and revision conflicts stay explicit.
+After uncertain delivery, inspect/replay the same Apply; a certainly stale request needs a fresh
+Preview and new file. Never bypass revision checks.
+
+Compare every restored `data.desired` field, including candidate order/reasoning, decision service and
+judgment, context/limits, requirements, mode/delegation/work, plus the alias. Revision/publication
+numbers advance. Replacing a candidate can select role defaults; choosing its old model again does
+not restore custom reasoning. Sources, credentials and native Agent facets retain their own recovery
+owners: a saved Plan response is not a whole-installation backup.
+
+For native settings provide the matching concrete `agents restore preview --context ... --facet ...
+--apply-file ...` and `agents restore apply --request-file ...` commands, with actual native-root or
+selection flags and the owned restore reference. Arrange independent access before a restore/reconnect
+can revoke the caller's grant. Native loading/selection remains a separate reported action.

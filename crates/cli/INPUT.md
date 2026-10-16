@@ -83,3 +83,13 @@ to CLI output; `--secret-fd` retains its released meaning. The human executes th
 Agent tools/chat and returns registration status only. Non-Unix hosts report action required.
 The installed Quickstart scenario includes PTY cancellation/error/no-terminal checks and actual
 saved-service test, exact retry and controlled decision-to-execution receipts.
+
+### Complete Plan recovery input
+
+`routing preview --plan ID --restore-from BEFORE_JSON [--apply-file NEW_FILE]` consumes a complete
+successful `routing show` machine response saved before the edit. It is exclusive of typed request
+input and individual edit flags. The existing strict, bounded regular-file codec validates the
+response/target; the saved authoring value uses the Domain editor projection and the current target
+head for normal content Preview/Apply. It never restores sources/credentials/native files or rewinds
+immutable metadata. An uncertain Apply retains its original file/key; stale/dependency errors remain
+explicit. Both preview effects and all restored effective fields must be reviewed.

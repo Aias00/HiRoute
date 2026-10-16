@@ -1,5 +1,6 @@
 """Installed CLI journey. Real stores/Operations; external clients/providers are fixtures."""
 import json
+import copy
 from pathlib import Path
 import subprocess
 import sys
@@ -7,6 +8,7 @@ import sys
 from standalone_headless_product import InstalledProduct, native_draft, NATIVE_TOKEN
 from quickstart_fixture import support_local_skill_challenge
 from quickstart_decision import run as decision_onboarding
+from quickstart_plan_recovery import run as plan_recovery
 
 
 def submit(product, prepared):
@@ -50,8 +52,16 @@ def run(repository):
         stage = 'prepare-source-exact-file'
         candidate_ref = 'candidate/native/headless-product'
         product.register_secret(candidate_ref, NATIVE_TOKEN)
+        draft = native_draft(product.upstream)
+        draft['models'][0]['capabilities']['native_reasoning']['value'] = {
+            'kind': 'discrete', 'parameter': 'reasoning_effort',
+            'profiles': ['low', 'max'], 'default_profile': 'max'}
+        alternate = copy.deepcopy(draft['models'][0])
+        alternate['upstream_model_id'] += '-alternate'
+        alternate['display_name'] = 'Alternate recovery candidate'
+        draft['models'].append(alternate)
         checked = product.cli('compute', 'connection', 'test', '--request-stdin', payload={
-            'kind': 'native', 'request': {'draft': native_draft(product.upstream),
+            'kind': 'native', 'request': {'draft': draft,
             'input_candidate': {'candidate_ref': candidate_ref, 'candidate_revision': 1}}})['data']
         candidate = checked['candidate']['candidate']
         source_args = ('compute', 'connection', 'preview', '--candidate', candidate['candidate_ref'],
@@ -69,7 +79,10 @@ def run(repository):
         submit(product, prepared)
         sources = product.cli('compute', 'list')['data']['sources']
         assert len(sources) == 1
-        binding = sources[0]['models'][0]['binding_id']
+        binding = next(m['binding_id'] for m in sources[0]['models']
+                       if m['upstream_model_id'] == draft['models'][0]['upstream_model_id'])
+        alternate_binding = next(m['binding_id'] for m in sources[0]['models']
+                                 if m['upstream_model_id'] == alternate['upstream_model_id'])
         product.cli('protected-input', 'release', '--candidate', candidate_ref)
 
         stage = 'direct-smart-route'
@@ -117,6 +130,9 @@ def run(repository):
         submit(product, update)
         product.cli(*stale['submission']['arguments'], expected=3)
         assert len(product.cli('routing', 'list')['data']['plans']) == 1
+
+        stage = 'complete-plan-recovery'
+        plan_recovery(product, plan, alternate_binding, submit)
 
         stage = 'connect-and-independent-management'
         codex = next(agent for agent in first['targets'] if agent['agent_id'] == 'agent_codex_default')
