@@ -866,6 +866,36 @@ fn actual_windows_public_headless_business_without_claude() {
     public_headless_business(false);
 }
 
+/// Focused reproduction of the existing full journey's rejected large POST.
+#[test]
+#[ignore = "focused installed Gateway rejection diagnosis"]
+fn actual_windows_gateway_rejects_unauthorized_large_request() {
+    let product = InstalledProduct::create();
+    let mut running = product.start();
+    gateway_ready(running.listen);
+    let body = json!({"model":"hiroute/0011223344556677","input":[{"role":"user","content":[{"type":"input_text","text":"windows-routing-responses"}]}],"stream":false,"instructions":"bounded Windows route prompt".repeat(4000)});
+    for token in [None, Some("invalid-windows-gateway-token")] {
+        eprintln!(
+            "Windows Gateway rejection stage: token-present={}",
+            token.is_some()
+        );
+        let response = windows_business_http::post_expect_continue(
+            running.listen,
+            "/v1/responses",
+            token,
+            &body,
+        );
+        assert!(matches!(response.status, 401 | 403));
+    }
+    lifecycle::stop(
+        &product.layout.lifecycle_endpoint(),
+        &product.daemon,
+        Duration::from_secs(30),
+    )
+    .unwrap();
+    running.wait(true);
+}
+
 fn public_headless_business(include_claude: bool) {
     let product = InstalledProduct::create();
     let contexts = windows_user_models::Contexts::prepare(&product);

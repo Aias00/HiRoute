@@ -267,6 +267,10 @@ impl Routing {
         let messages_token = grant(product, messages_connection);
         let response_body = |stream: bool| json!({"model":self.plan.alias,"input":[{"role":"user","content":[{"type":"input_text","text":"windows-routing-responses"}]}],"stream":stream,"instructions":"bounded Windows route prompt".repeat(4000)});
         for token in [None, Some("invalid-windows-gateway-token")] {
+            eprintln!(
+                "Windows Gateway route stage: rejected-token-present={}",
+                token.is_some()
+            );
             let denied =
                 http::post_expect_continue(gateway, "/v1/responses", token, &response_body(false));
             assert!(
@@ -276,6 +280,7 @@ impl Routing {
         }
         assert_eq!(*self.counts.lock().unwrap(), (1, 0));
         for streaming in [false, true] {
+            eprintln!("Windows Gateway route stage: responses streaming={streaming}");
             let response = http::post(
                 gateway,
                 "/v1/responses",
@@ -306,6 +311,7 @@ impl Routing {
             }
         }
         let messages_body = |stream: bool| json!({"model":self.plan.alias,"messages":[{"role":"user","content":[{"type":"text","text":"windows-routing-messages"}]}],"max_tokens":128,"stream":stream});
+        eprintln!("Windows Gateway route stage: wrong-protocol");
         let wrong_protocol = http::post_expect_continue(
             gateway,
             "/v1/messages",
@@ -318,6 +324,7 @@ impl Routing {
         );
         assert_eq!(*self.counts.lock().unwrap(), (1, 2));
         for streaming in [false, true] {
+            eprintln!("Windows Gateway route stage: messages streaming={streaming}");
             let response = http::post(
                 gateway,
                 "/v1/messages",
