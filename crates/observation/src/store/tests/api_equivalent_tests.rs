@@ -55,7 +55,7 @@ fn explicit_current_price_comparison_keeps_frozen_values_and_missing_evidence_ho
             &reader(&fixture),
             &query(&fixture),
             &expensive,
-            &[cheap.clone()],
+            std::slice::from_ref(&cheap),
             1000,
         )
         .unwrap();
@@ -161,7 +161,7 @@ fn explicit_comparison_includes_failed_retry_usage_without_rewriting_a_receipt()
             &reader(&fixture),
             &query(&fixture),
             &cheap,
-            &[cheap.clone()],
+            std::slice::from_ref(&cheap),
             1000,
         )
         .unwrap();
@@ -202,7 +202,7 @@ fn missing_cache_creation_split_is_irrelevant_only_under_explicit_equal_rates() 
             &reader(&fixture),
             &query(&fixture),
             &reference,
-            &[source.clone()],
+            std::slice::from_ref(&source),
             1000,
         )
         .unwrap();
