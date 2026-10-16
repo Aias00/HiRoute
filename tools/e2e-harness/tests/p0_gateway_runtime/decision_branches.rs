@@ -10,6 +10,105 @@ fn reply(body: &'static [u8]) -> ProviderReply {
 }
 
 #[test]
+fn follow_up_keeps_an_in_group_backup_and_still_rejudges_the_group() {
+    use hiroute_gateway::server::publication::{AliasGroupIdV1, AliasRequestOwnedRouteV1};
+
+    for smart in [true, false] {
+        for legacy in [false, true] {
+            let simple: &'static [u8] = if smart {
+                br#"{"answers":{"q0":{"type":"score","probabilities":{"0":0.9,"1":0.1}}}}"#
+            } else {
+                br#"{"answers":{"q0":{"type":"choice","choice":"code"},"q1":{"type":"score","probabilities":{"0":0.9,"1":0.1}}}}"#
+            };
+            let complex: &'static [u8] = if smart {
+                br#"{"answers":{"q0":{"type":"score","probabilities":{"0":0.1,"1":0.9}}}}"#
+            } else {
+                br#"{"answers":{"q0":{"type":"choice","choice":"code"},"q1":{"type":"score","probabilities":{"0":0.1,"1":0.9}}}}"#
+            };
+            let first = NativeProvider::start(vec![
+                reply(br#"{"id":"empty","status":"completed","output":[],"usage":{"input_tokens":1,"output_tokens":0,"total_tokens":1}}"#),
+                reply(RESPONSES_OK),
+            ]);
+            let backup = NativeProvider::start(vec![reply(RESPONSES_OK); 2]);
+            let decider = NativeProvider::start(vec![reply(simple), reply(simple), reply(complex)]);
+            let fixture =
+                RuntimeFixture::launch_builtin_branches(&[&first, &backup, &decider], smart);
+            let mut publication = fixture.publication();
+            let alias = &mut publication.aliases[0];
+            let local_ids = alias
+                .candidates
+                .iter()
+                .map(|c| c.local_id)
+                .collect::<Vec<_>>();
+            let routing = alias.routing.as_mut().unwrap();
+            for group in &mut routing.groups {
+                match group.group_id {
+                    AliasGroupIdV1::Economy | AliasGroupIdV1::Branch(0) => {
+                        group.candidate_local_ids = local_ids.clone();
+                    }
+                    AliasGroupIdV1::Primary | AliasGroupIdV1::BranchPrimary(0) => {
+                        group.candidate_local_ids = vec![local_ids[0]];
+                    }
+                    _ => {}
+                }
+            }
+            match &mut routing.request_owned {
+                AliasRequestOwnedRouteV1::Classified {
+                    reselect_on_user_message,
+                    ..
+                }
+                | AliasRequestOwnedRouteV1::Branches {
+                    reselect_on_user_message,
+                    ..
+                } => {
+                    *reselect_on_user_message = legacy;
+                }
+                _ => unreachable!(),
+            }
+            publication.publication_revision += 1;
+            fixture.publish(&mut publication);
+            let mut history = vec![json!({"role":"user","content":"Say hello."})];
+            for (message, expected) in [
+                (None, (1, 1, 1)),
+                (Some("Continue with one more greeting."), (1, 2, 2)),
+                (
+                    Some("Now design a distributed consistency protocol."),
+                    (2, 2, 3),
+                ),
+            ] {
+                if let Some(message) = message {
+                    history.push(json!({"role":"user","content":message}));
+                }
+                let response = request(
+                    fixture.address,
+                    "POST",
+                    "/v1/responses",
+                    &[
+                        ("X-HiRoute-Token", TOKEN),
+                        ("session-id", "follow-up-backup"),
+                    ],
+                    &serde_json::to_vec(&json!({"model":MODEL,"stream":false,"input":history}))
+                        .unwrap(),
+                );
+                assert_eq!(
+                    response.status,
+                    200,
+                    "{}",
+                    String::from_utf8_lossy(&response.body)
+                );
+                assert_eq!(
+                    (first.calls(), backup.calls(), decider.calls()),
+                    expected,
+                    "mode smart={smart}, legacy={legacy}: same-group continuity must not suppress a fresh decision"
+                );
+                let body: Value = serde_json::from_slice(&response.body).unwrap();
+                history.extend(body["output"].as_array().unwrap().iter().cloned());
+            }
+        }
+    }
+}
+
+#[test]
 fn primary_relay_stays_in_this_turn_but_new_users_decide_again() {
     for smart in [true, false] {
         for change_instructions in [false, true] {

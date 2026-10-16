@@ -38,11 +38,5 @@ export function BranchRoutingEditor({ routing, services, language, onChange, onO
     <section className="editor-section"><Disclosure label={t('默认分支', 'Default branch')} language={language}>
       <label className="field"><span className="field-label">{t('默认分支', 'Default branch')}</span><select className="input" value={routing.default_branch_id} onChange={e => patch({ default_branch_id: e.target.value })}>{routing.branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select><span className="field-help">{t('没有匹配的任务条件时使用。整体决策失败时也使用此分支，有主力则使用主力。', 'Used when no task condition matches. Decision failures also use this branch, preferring its primary group when present.')}</span></label>
     </Disclosure></section>
-    <section className="editor-section"><Disclosure label={t('追问设置', 'Follow-up settings')} language={language}>
-      <FollowUpPreference value={routing.reselect_on_user_message} onChange={reselect_on_user_message => patch({ reselect_on_user_message })} language={language} />
-    </Disclosure></section>
   </>;
-}
-export function FollowUpPreference({ value, onChange, language }: { value: boolean; onChange(value: boolean): void; language: 'zh' | 'en' }) {
-  return <label className="field"><span><input type="checkbox" checked={value} onChange={e => onChange(e.target.checked)} />{language === 'zh' ? '追问时允许换模型' : 'Allow model switching on follow-up'}</span><span className="field-help">{language === 'zh' ? '关闭后，追问优先沿用当前模型；模型不可用时仍会自动切换。' : 'When off, follow-ups prefer the current model; unavailable models still trigger automatic switching.'}</span></label>;
 }
