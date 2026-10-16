@@ -784,11 +784,11 @@ mod tests {
     }
 
     #[test]
-    fn root_help_points_to_working_leaf_help_instead_of_unsupported_family_help() {
+    fn root_help_reaches_family_navigation_and_precise_leaf_help() {
         let family = execute(["worker", "--help"]);
-        assert_eq!(family.exit_code, 2);
-        let family_error: Value = serde_json::from_str(&family.stdout).unwrap();
-        assert_eq!(family_error["error"]["code"], "UNKNOWN_COMMAND");
+        assert_eq!(family.exit_code, 0);
+        assert!(family.stdout.contains("dependencies select"));
+        assert!(family.stdout.contains("--include-schema"));
 
         let leaf = execute(["worker", "dependencies", "select", "--help"]);
         assert_eq!(leaf.exit_code, 0);
