@@ -386,7 +386,6 @@
     "hiroute.windows-artifact-fingerprint/v1",
     "hiroute.windows-background-install/v1",
     "hiroute.windows-background/v1",
-    "hiroute.windows-desktop-package/v1",
     "hiroute.windows-install-journal/v1",
     "hiroute.windows-install-layout/v1",
     "hiroute.windows-install-request/v1",
@@ -937,6 +936,7 @@
     {
       "subject": "desktop_update",
       "audited_prefixes": [
+        "hiroute.windows-desktop-package",
         "hiroute.website.releases",
         "hiroute.desktop-upgrade-handoff",
         "hiroute.upgrade-recovery-package",
@@ -946,6 +946,7 @@
         "hiroute.upgrade-installer-decision"
       ],
       "current_contracts": [
+        "hiroute.windows-desktop-package/v1",
         "hiroute.website.releases/v3",
         "hiroute.desktop-upgrade-handoff/v1",
         "hiroute.upgrade-installer-started/v1",
