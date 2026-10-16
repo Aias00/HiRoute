@@ -36,7 +36,7 @@ pub(crate) fn execute(arguments: &[String], globals: &Globals) -> Option<CliExec
         )?;
         navigation::run(&flags, globals)
     })();
-    Some(crate::render(result.unwrap_or_else(|reply| reply)))
+    Some(render_reply(result.unwrap_or_else(|reply| reply), globals))
 }
 
 pub(crate) fn preview_command(
@@ -76,7 +76,12 @@ pub(crate) fn preview_command(
             preview::prepare(&client, command, &options)?
         };
         let descriptor = command_by_id(command).ok_or_else(|| error(ErrorCode::UnknownCommand))?;
-        let mut response = call(&client, &descriptor.operation_id, payload.clone())?;
+        let mut response = call_with_id(
+            &client,
+            &descriptor.operation_id,
+            payload.clone(),
+            globals.request_id.clone(),
+        )?;
         if let Some(path) = path {
             let preview = response
                 .data
@@ -86,7 +91,25 @@ pub(crate) fn preview_command(
         }
         Ok(response)
     })();
-    Some(crate::render(result.unwrap_or_else(|reply| reply)))
+    Some(render_reply(result.unwrap_or_else(|reply| reply), globals))
+}
+
+fn render_reply(mut reply: Reply, globals: &Globals) -> CliExecution {
+    if globals.request_id.is_some() {
+        reply.request_id = globals.request_id.clone();
+    }
+    if reply.data.is_none()
+        && reply
+            .error
+            .as_ref()
+            .is_some_and(|error| error.code == ErrorCode::InvalidArguments)
+    {
+        return crate::request_input::diagnostics::failure(
+            ErrorCode::InvalidArguments,
+            reply.request_id,
+        );
+    }
+    crate::render(reply)
 }
 
 fn validate_globals(globals: &Globals) -> Result<()> {
@@ -113,15 +136,26 @@ fn error(code: ErrorCode) -> Reply {
     MachineEnvelopeV2::failed(ErrorV1::new(code), None)
 }
 fn call(client: &LocalControlClient, operation: &str, payload: Value) -> Result<Reply> {
+    call_with_id(client, operation, payload, None)
+}
+fn call_with_id(
+    client: &LocalControlClient,
+    operation: &str,
+    payload: Value,
+    request_id: Option<String>,
+) -> Result<Reply> {
+    let request_id = request_id.unwrap_or_else(crate::next_request_id);
     let response = client
         .call(LocalControlWireRequestV2 {
             schema_version: LOCAL_CONTROL_SCHEMA_V2,
-            request_id: crate::next_request_id(),
+            request_id: request_id.clone(),
             operation_id: operation.into(),
             payload,
             protected_grant: None,
         })
-        .map_err(|_| error(ErrorCode::DaemonUnavailable))?;
+        .map_err(|_| {
+            MachineEnvelopeV2::failed(ErrorV1::new(ErrorCode::DaemonUnavailable), Some(request_id))
+        })?;
     if response.status != MachineStatus::Succeeded {
         return Err(response);
     }

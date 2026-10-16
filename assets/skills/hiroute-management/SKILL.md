@@ -131,6 +131,13 @@ reasoning/lifecycle/draft editors remain available through installed typed JSON 
 
 ## Connect or restore independent capabilities
 
+If Preview reports unknown Skill-loading capability for Codex or Claude, use the existing
+`hiroute agents check AGENT_ID --scope collaboration` compatibility check explicitly, then
+repeat the Preview. It launches an isolated native process against a local challenge and runs
+read-only CLI discovery; it is not an upstream model call. A missing executable or failed check
+remains a prerequisite. Do not treat an unproven capability as success or bypass the blocker.
+
+
 Use `agents connect preview --context CONTEXT_ID` with the requested facets, then an Apply file.
 `--plan PLAN_ID` configures model routing; `--management enable` installs this Skill;
 `--collaboration explicit|delegate_by_default` configures task routing. Omitted facets stay unchanged.

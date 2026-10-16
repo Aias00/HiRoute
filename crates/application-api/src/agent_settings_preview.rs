@@ -23,9 +23,9 @@ pub struct AgentSettingsPreview {
 pub struct AgentSettingsBlock {
     pub facet: AgentSettingsFacet,
     pub reason: SettingsBlockReason,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub capabilities: Vec<hiroute_domain::CapabilityBlock>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub model_ids: Vec<String>,
 }
 #[derive(schemars::JsonSchema, Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -93,4 +93,19 @@ pub struct AgentNativeAdapterPreviewV1 {
     pub resources: String,
     pub runtime_loading: AgentNativeRuntimeLoadingV1,
     pub next_action: AgentNativeAdapterNextActionV1,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn absent_optional_block_details_round_trip_as_empty() {
+        for value in [
+            serde_json::json!({"facet":"management_skill", "reason":"capability_unavailable", "capabilities":[{"capability":"skill_loading", "reason":"unknown"}]}),
+            serde_json::json!({"facet":"model", "reason":"native_default_invalid", "model_ids":["unavailable-model"]}),
+        ] {
+            let block: AgentSettingsBlock = serde_json::from_value(value.clone()).unwrap();
+            assert_eq!(serde_json::to_value(block).unwrap(), value);
+        }
+    }
 }

@@ -5,6 +5,7 @@ import subprocess
 import sys
 
 from standalone_headless_product import InstalledProduct, native_draft, NATIVE_TOKEN
+from quickstart_fixture import support_local_skill_challenge
 
 
 def submit(product, prepared):
@@ -29,9 +30,13 @@ def run(repository):
     stage = 'install'
     try:
         product.install()
+        support_local_skill_challenge(product)
         product.start()
         stage = 'read-only-navigation'
         before = product.cli('compute', 'list')['data']['sources']
+        assert 'candidate' not in product.cli('compute', 'connection', 'options')['data']
+        request = product.cli('quickstart', '--request-id', 'quickstart-read')
+        assert request['request_id'] == 'quickstart-read'
         first = product.cli('quickstart')['data']
         assert '--context' in first['required_choices'] and not first['effects']
         assert product.cli('compute', 'list')['data']['sources'] == before
@@ -47,6 +52,12 @@ def run(repository):
         source_args = ('compute', 'connection', 'preview', '--candidate', candidate['candidate_ref'],
                        '--candidate-revision', str(candidate['candidate_revision']), '--all-selectable')
         source_file = product.project / 'source-apply.json'
+        exact_candidate = product.cli('compute', 'connection', 'options', '--request-stdin',
+                                      payload={'candidate': candidate})['data']['candidate']
+        assert exact_candidate['candidate'] == candidate
+        invalid_candidate = dict(candidate, candidate_revision=candidate['candidate_revision'] + 1)
+        product.cli('compute', 'connection', 'options', '--request-stdin',
+                    payload={'candidate': invalid_candidate}, expected=3)
         prepared = product.cli(*source_args, '--apply-file', str(source_file))['data']
         assert not product.cli('compute', 'list')['data']['sources'], 'Preview saved a source'
         assert NATIVE_TOKEN not in source_file.read_text()
@@ -102,6 +113,12 @@ def run(repository):
         missing = product.cli('agents', 'connect', 'preview', '--context', context, '--plan', plan, expected=2)
         assert '--native-models' in missing['data']['required_choices']
         connect_file = product.project / 'connect-apply.json'
+        blocked = product.cli('agents', 'connect', 'preview', '--context', context,
+                              '--management', 'enable', '--apply-file', str(connect_file), expected=2)
+        assert blocked['data']['required_choices'] == ['resolve_preview_blockers']
+        assert not connect_file.exists()
+        check = product.cli('agents', 'check', 'agent_codex_default', '--scope', 'collaboration')['data']
+        assert check['skill_loading'] == 'proven', check
         prepared = product.cli('agents', 'connect', 'preview', '--context', context, '--plan', plan,
                                '--native-models', 'hiroute_only', '--native-default', 'plan',
                                '--management', 'enable', '--apply-file', str(connect_file))['data']
