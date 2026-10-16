@@ -580,6 +580,23 @@ pub(crate) fn command(
     args: &[&str],
     payload: Option<&Value>,
 ) -> (i32, Value) {
+    command_capture(product, args, payload, false)
+}
+
+pub(crate) fn missing_gateway_manager(product: &InstalledProduct, args: &[&str]) -> (i32, Value) {
+    assert!(matches!(
+        args,
+        ["gateway", "set", ..] | ["gateway", "recover"]
+    ));
+    command_capture(product, args, None, true)
+}
+
+fn command_capture(
+    product: &InstalledProduct,
+    args: &[&str],
+    payload: Option<&Value>,
+    missing_manager: bool,
+) -> (i32, Value) {
     let (command, stage) = checkpoint(args, payload);
     eprintln!("Windows public business checkpoint: command={command}, stage={stage}");
     // Exercise the released CLI's default request deadline. This business
@@ -645,7 +662,7 @@ pub(crate) fn command(
     }
     let output = stdout.join().unwrap();
     let error = stderr.join().unwrap();
-    if !error.is_empty() {
+    if !error.is_empty() && !missing_manager {
         let value = serde_json::from_slice::<Value>(&output).ok();
         let status = value.as_ref().and_then(|value| {
             serde_json::from_value::<hiroute_application_api::MachineStatus>(
@@ -666,15 +683,20 @@ pub(crate) fn command(
             error.len()
         );
     }
-    assert!(
-        error.is_empty(),
-        "public business CLI emitted unexpected diagnostics"
-    );
-    (
-        exit,
-        serde_json::from_slice(&output)
-            .expect("public business CLI must return its production JSON envelope"),
-    )
+    let envelope: Value = serde_json::from_slice(&output)
+        .expect("public business CLI must return its production JSON envelope");
+    if missing_manager {
+        assert_eq!(exit, 6);
+        assert_eq!(envelope["status"], "unavailable");
+        assert_eq!(envelope["error"]["code"], "DAEMON_UNAVAILABLE");
+        assert!(error == "HiRoute 服务不可用。Standalone 请运行 `hiroute service status`，并在需要时运行 `hiroute service start`；Desktop 请启动或恢复应用。隔离实例请检查运行目录。不会自动启动或重放请求。\n".as_bytes(), "expected unavailable-manager hint changed");
+    } else {
+        assert!(
+            error.is_empty(),
+            "public business CLI emitted unexpected diagnostics"
+        );
+    }
+    (exit, envelope)
 }
 
 /// Only native enums, allowlisted issue codes and numeric facts are diagnostic.

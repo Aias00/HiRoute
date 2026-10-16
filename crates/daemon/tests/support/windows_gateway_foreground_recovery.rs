@@ -1,7 +1,7 @@
 //! Public configuration recovery without manufacturing a Task registration.
 //! The CLI reports manager-unavailable; a later explicit real foreground launch
 //! applies recovered A. This is deliberately distinct from manager restart.
-use super::windows_headless_business::command;
+use super::windows_headless_business::missing_gateway_manager;
 use super::{InstalledProduct, RunningDaemon, assert_no_secret, gateway_ready, lifecycle};
 use hiroute_host_runtime::{GatewayListenerConfigV1, GatewayListenerOperationStateV1};
 use serde_json::Value;
@@ -147,12 +147,37 @@ fn config(product: &InstalledProduct) -> GatewayListenerConfigV1 {
     config
 }
 fn failed_command(product: &InstalledProduct, args: &[&str]) {
-    let (code, result) = command(product, args, None);
+    let (code, result) = missing_gateway_manager(product, args);
     assert_ne!(
         code, 0,
         "missing manager must remain a typed public failure"
     );
     assert_eq!(result["error"]["code"], "DAEMON_UNAVAILABLE");
+}
+
+#[test]
+#[ignore = "focused execution of the full journey's foreground recovery"]
+fn actual_windows_foreground_gateway_recovery() {
+    let product = InstalledProduct::create();
+    let mut first = product.start();
+    let recovery = Recovery::begin(&product, &first);
+    lifecycle::stop(
+        &product.layout.lifecycle_endpoint(),
+        &product.daemon,
+        Duration::from_secs(30),
+    )
+    .unwrap();
+    first.wait(true);
+    recovery.recover_without_manager(&product);
+    let mut running = product.start_with_entry(true);
+    recovery.recovered(&product, &running);
+    lifecycle::stop(
+        &product.layout.lifecycle_endpoint(),
+        &product.daemon,
+        Duration::from_secs(30),
+    )
+    .unwrap();
+    running.wait(true);
 }
 fn failed_operation(config: &GatewayListenerConfigV1) {
     let operation = config.operation.as_ref().unwrap();
