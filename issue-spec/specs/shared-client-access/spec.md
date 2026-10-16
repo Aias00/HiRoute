@@ -294,7 +294,7 @@ Source SPEC comments:
 
 ### Requirement: One canonical management Skill guides complete generic CLI journeys
 
-HiRoute SHALL ship one canonical management Skill for all supported management Agent families, with the core Quickstart and bounded references for important branches: absent service/target/source, ambiguous scope, unavailable models or decision service, existing/partial setup, adjustment, effective-state diagnosis, observation and owned restoration. The Skill SHALL separate the caller from the managed target and consume installed public CLI capabilities, generated defaults and machine results rather than assuming Hermes, a particular filesystem layout or repository access. It SHALL explain how to obtain prerequisite CLI/Skill availability without coupling management to model routing or delegation. Instructions SHALL capture stdout, stderr and the CLI exit status separately when the native terminal merges them, inspect business/Operation results, preserve submission identity and avoid first-line JSON parsing or treating accepted as complete. Generated configuration and personal experience notes SHALL NOT be written into the product-managed Skill. Existing independent facet ownership, user-authorized effects, protected credentials and collaboration trigger policy remain authoritative.
+HiRoute SHALL ship one canonical management Skill for all supported management Agent families, with the core Quickstart and bounded references for important branches: absent service/target/source, ambiguous scope, unavailable models or decision service, existing/partial setup, adjustment, effective-state diagnosis, observation and owned restoration. The Skill SHALL separate the caller from the managed target and consume installed public CLI capabilities, generated defaults and machine results rather than assuming Hermes, a particular filesystem layout or repository access. It SHALL explain how to obtain prerequisite CLI/Skill availability without coupling management to model routing or delegation. Instructions SHALL capture stdout, stderr and the CLI exit status separately when the native terminal merges them, inspect business/Operation results, preserve submission identity and avoid first-line JSON parsing or treating accepted as complete. Generated configuration and personal experience notes SHALL NOT be written into the product-managed Skill. Existing independent facet ownership, user-authorized effects, protected credentials and collaboration trigger policy remain authoritative. Before a restoration, reconnect or credential replacement that may revoke the current caller's own HiRoute access, the Skill SHALL establish an independent continuation path or leave that effect pending for an external operator. Verification SHALL distinguish saved state, native loading, request outcomes and actual classifier/group selection; manual model substitution or missing observations cannot establish a semantic decision branch or native activation.
 
 #### Scenario: Use the same Skill across callers
 
@@ -321,8 +321,50 @@ HiRoute SHALL ship one canonical management Skill for all supported management A
 - **WHEN** an Agent learns an environment-specific workaround or encounters externally modified Skill content
 - **THEN** it keeps operational notes outside the managed resource and reports existing drift/ownership rather than silently rewriting or force-upgrading the resource.
 
+#### Scenario: Preserve the managing caller continuation
+
+- **WHEN** a requested change may invalidate the active caller's model access
+- **THEN** the guidance establishes independent access or an external handoff before the effect; restoring files alone is not evidence that the running caller has reloaded them.
+
+#### Scenario: Report actual decision and execution evidence
+
+- **WHEN** a smart-saving journey is verified
+- **THEN** the guidance checks actual classifier/group/model facts and every matching request outcome, distinguishes pending or failed requests, and does not infer complex-branch coverage from changing the economy model or infer built-in rule behavior solely from custom keywords.
+
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/125#issuecomment-6206260381
+
+### Requirement: Discover and securely connect reusable decision services
+
+HiRoute SHALL provide an installed, discoverable CLI path for choosing and connecting a supported decision service during smart-saving setup. It SHALL first expose reusable saved connection identities and revisions, separately from connectivity or decision-quality evidence, and expose the installed decision-provider presets and compatible/custom extension choices with their required non-secret inputs. Presets SHALL NOT assert current provider availability or account entitlement. CLI and Desktop SHALL consume one preset definition. A user SHALL be able to enter a credential in their own terminal without echo or inclusion in chat, command arguments, shell history, environment variables, ordinary request files or logs, using the existing protected-input and Secret lifecycle. Agents SHALL receive registration results and references only. Cancelling input or lacking a controlling terminal SHALL fail without saving a service or changing existing credentials. The journey SHALL continue through existing reviewable save, explicit connection test, exact revision selection for a Plan and publication, preserving exact retry identity and unrelated state. Local rules SHALL remain an explicit alternative, without a claimed model decision or implicit replacement of a selected service. This path SHALL NOT reinterpret an ordinary Chat model as a decision service.
+
+#### Scenario: Reuse a saved service with honest readiness
+
+- **WHEN** smart saving is configured and decision connections already exist
+- **THEN** the installed path lists exact identities and revisions for explicit reuse, with testing unknown until a current explicit probe establishes its outcome; a saved record is not presented as usable solely because it exists.
+
+#### Scenario: Choose a supported connection
+
+- **WHEN** no suitable saved service is selected
+- **THEN** the installed path exposes its preset provider/model/endpoint choices, required endpoint/model choices for compatible/custom connections, and the secure user credential step without requiring a source checkout or claiming account access.
+
+#### Scenario: Register a credential outside the conversation
+
+- **WHEN** the user runs the provided terminal prompt
+- **THEN** input is hidden, the selected authorization format is applied without exposing the credential, and only a registration result/reference is returned through the ordinary output; cancellation or no controlling terminal leaves saved resources unchanged.
+
+#### Scenario: Continue from registration to published routing
+
+- **WHEN** a protected credential has been registered and the user authorizes the connection
+- **THEN** existing Preview/Apply saves a revision with an exact replayable request, an explicit probe reports its own result, and the selected immutable revision can be bound to a Plan and published without new duplicate services or a new routing backend.
+
+#### Scenario: Retain an explicit local alternative
+
+- **WHEN** a user chooses local rules or cannot yet provide a usable decision connection
+- **THEN** the CLI keeps that choice explicit, preserves existing setup, explains remaining verification and does not claim semantic model decisions or silently downgrade an existing service.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/125#issuecomment-6213380806
 
 ## Implementation references
 

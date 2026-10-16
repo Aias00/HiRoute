@@ -108,8 +108,9 @@ mod terminal {
                     b'\r' | b'\n' => return authorization(&bytes, format),
                     3 | 4 | 26 => return Err(ErrorCode::ActionRequired),
                     8 | 127 => {
-                        if let Some(mut removed) = bytes.pop() {
-                            removed.zeroize();
+                        if let Some(last) = bytes.last_mut() {
+                            last.zeroize();
+                            bytes.pop();
                         }
                     }
                     0..=31 => return Err(ErrorCode::InvalidArguments),

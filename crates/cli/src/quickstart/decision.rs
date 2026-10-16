@@ -14,7 +14,7 @@ pub(super) fn execute(arguments: &[String], globals: &Globals) -> Option<CliExec
             stderr: String::new(),
         });
     }
-    let result = (|| {
+    let result: Result<Reply> = (|| {
         validate_globals(globals)?;
         let flags = Flags::parse(&arguments[3..], &["--provider"], &[], &[])?;
         let mut view = options(client(globals).ok().as_ref());
