@@ -7,6 +7,22 @@ mod diagnostic;
 pub(super) fn project(bytes: &[u8]) {
     for line in bytes.split(|byte| *byte == b'\n') {
         let line = line.strip_suffix(b"\r").unwrap_or(line);
+        if let Some(reason) = line.strip_prefix(
+            b"native collaboration check: native ingress probe could not establish ",
+        ) {
+            let stage = match reason {
+                b"trusted CLI baseline" => "cli-baseline",
+                b"trusted CLI contract" | b"CLI contract" => "cli-contract",
+                b"authenticated native completion" => "native-completion",
+                b"native read-only write rejection" => "readonly-control",
+                b"native Skill read and trusted CLI execution" => "tool-receipts",
+                b"native Skill discovery" => "skill-discovery",
+                b"native launch" => "native-launch",
+                b"deadline" => "deadline",
+                _ => "other-native-check",
+            };
+            eprintln!("Windows collaboration daemon failure: stage={stage}");
+        }
         if let Some(facts) = cli_diagnostic::Facts::parse(line) {
             facts.emit();
         }
