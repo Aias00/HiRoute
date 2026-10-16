@@ -299,6 +299,10 @@ fn residual(
         Duration::from_secs(30),
     );
     let deadline = Instant::now() + Duration::from_secs(30);
+    // The held material deliberately prevents complete cleanup. The shared
+    // ProcessStopped checkpoint keeps this interrupted run Unknown until residual
+    // handling; it only confirms Cancelled when the managed scope AND cleanup are
+    // complete. Acknowledgement must preserve that execution uncertainty.
     loop {
         let observed = command(
             product,
@@ -306,17 +310,20 @@ fn residual(
             None,
             Duration::from_secs(10),
         );
-        if observed["data"]["run_state"] == "cancelled" {
+        if observed["data"]["run_state"] == "unknown" {
             break;
         }
         assert!(
             Instant::now() < deadline,
             "native residual cancellation did not settle"
         );
-        assert!(!matches!(
-            observed["data"]["run_state"].as_str(),
-            Some("succeeded" | "failed" | "unknown")
-        ));
+        assert!(
+            !matches!(
+                observed["data"]["run_state"].as_str(),
+                Some("succeeded" | "failed" | "cancelled")
+            ),
+            "locked residual must retain execution uncertainty"
+        );
     }
     assert_eq!(
         unsafe { WaitForSingleObject(process.as_raw_handle(), 10_000) },
@@ -332,7 +339,7 @@ fn residual(
         .find(|task| task["task_id"] == task_id)
         .unwrap();
     assert_eq!(task["run"]["run_id"], run_id);
-    assert_eq!(task["run"]["state"], "cancelled");
+    assert_eq!(task["run"]["state"], "unknown");
     assert_eq!(
         task["run"]["cleanup"], "unknown",
         "a real deny-delete conflict must remain observable as residual cleanup"
@@ -343,7 +350,7 @@ fn residual(
         None,
         Duration::from_secs(30),
     );
-    assert_eq!(read["data"]["run_state"], "cancelled");
+    assert_eq!(read["data"]["run_state"], "unknown");
     let revision = read["data"]["state_revision"].as_u64().unwrap().to_string();
     drop(deny_delete);
     // Handle only this test's exact locked material. The daemon retains its run
@@ -367,7 +374,7 @@ fn residual(
     let confirmed = command(product, &args, None, Duration::from_secs(30));
     assert_eq!(confirmed["data"]["task_id"], task_id);
     assert_eq!(confirmed["data"]["run_id"], run_id);
-    assert_eq!(confirmed["data"]["state"], "cancelled");
+    assert_eq!(confirmed["data"]["state"], "unknown");
     assert_eq!(confirmed["data"]["cleanup"], "residual_acknowledged");
     let replay = command(product, &args, None, Duration::from_secs(30));
     assert_eq!(confirmed["data"], replay["data"]);
