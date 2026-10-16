@@ -253,6 +253,7 @@ def worker(request):
         result['clients'] = {name: digest(Path(path)) for name, path in config['environment'].items()
                              if Path(path).is_file()}
         environment.update(HIROUTE_VALIDATION_PRODUCT_BIN_DIR=str(product),
+                           HIROUTE_VALIDATION_EVIDENCE_DIR=str(run),
                            HIROUTE_WORKER_CLI_BINARY=str(product / 'hiroute.exe'),
                            HIROUTE_WORKER_DAEMON_BINARY=str(product / 'hirouted.exe'))
         environment['PATH'] = ';'.join(config['path']) + ';' + environment['PATH']

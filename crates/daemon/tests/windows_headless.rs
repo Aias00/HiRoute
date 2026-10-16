@@ -626,6 +626,9 @@ impl Drop for InstalledProduct {
             &self.daemon,
             Duration::from_secs(5),
         );
+        if std::thread::panicking() {
+            windows_qoder_daemon_diagnostic::retain(&self.layout.diagnostics_root());
+        }
         if self.preserve_on_failure && std::thread::panicking() {
             // Borrowed settings may reference this installation. Keep the public
             // restore point and exact binaries until recovery has completed.

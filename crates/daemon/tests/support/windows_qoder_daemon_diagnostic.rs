@@ -43,3 +43,47 @@ pub(super) fn collect(reader: &mut Option<std::thread::JoinHandle<Vec<u8>>>, std
         }
     }
 }
+
+/// Save the final writer bytes before the disposable installation is removed.
+/// Periodic out-of-process collection can otherwise miss the failure itself.
+pub(super) fn retain(root: &std::path::Path) {
+    use hiroute_platform::windows::security;
+    use std::io::Write;
+    let Some(destination) = std::env::var_os("HIROUTE_VALIDATION_EVIDENCE_DIR") else {
+        return;
+    };
+    let save = || -> std::io::Result<()> {
+        let destination = std::path::PathBuf::from(destination);
+        security::open_owner_only(&destination, true)?;
+        let mut index = 0;
+        for role in ["daemon", "desktop"] {
+            let directory = root.join(role);
+            if !directory.exists() {
+                continue;
+            }
+            security::open_owner_only(&directory, true)?;
+            for entry in std::fs::read_dir(directory)? {
+                let path = entry?.path();
+                if path
+                    .extension()
+                    .is_none_or(|extension| extension != "jsonl")
+                {
+                    continue;
+                }
+                let mut input = security::open_owner_only(&path, false)?;
+                if input.metadata()?.len() > 8 * 1024 * 1024 {
+                    continue;
+                }
+                let path = destination.join(format!("diagnostics-final-{index}.jsonl"));
+                let mut output = security::create_owner_only_file(&path)?;
+                std::io::copy(&mut input, &mut output)?;
+                output.flush()?;
+                index += 1;
+            }
+        }
+        Ok(())
+    };
+    if save().is_err() {
+        eprintln!("Windows failure diagnostic retention could not complete");
+    }
+}
