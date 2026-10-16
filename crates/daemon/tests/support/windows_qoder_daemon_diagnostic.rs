@@ -54,7 +54,9 @@ pub(super) fn retain(root: &std::path::Path) {
     };
     let save = || -> std::io::Result<()> {
         let destination = std::path::PathBuf::from(destination);
-        security::open_owner_only(&destination, true)?;
+        // The runner owns this existing directory; its inherited ACL need not
+        // match the product's private-data ACL. Each captured file is private.
+        security::open_identity(&destination, true)?;
         let mut index = 0;
         for role in ["daemon", "desktop"] {
             let directory = root.join(role);
