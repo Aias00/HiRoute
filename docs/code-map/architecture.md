@@ -78,6 +78,8 @@ Follow discovery through an ordinary request using the saved source. The
 [DSH](../../tools/product-e2e/tests/DSH_INTEGRATION.md) acceptance entries cover
 Scan → Prepare → Save → restart → native use, including stale-source rejection.
 
+The shared product-session layer in `crates/product-session` owns Preview composition, confirmation permits, retry identity and protected-input lifetime. Desktop supplies its inherited-channel `HostAuthority` adapter in `apps/desktop/src-tauri/src/bootstrap/authority.rs`; native startup, updater and window authority stay with the Desktop host.
+
 ## State and lifecycle boundaries
 
 | Boundary | Invariant | Read next |

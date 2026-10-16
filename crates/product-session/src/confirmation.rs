@@ -7,11 +7,11 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub(crate) const CONFIRMATION_TTL: Duration = Duration::from_secs(60);
+pub const CONFIRMATION_TTL: Duration = Duration::from_secs(60);
 
 /// Recovery advances the epoch while holding this same mutex. Check only after
 /// acquiring it, before creating a permit or applying an already accepted decision.
-pub(crate) async fn lock_current_session<'a, T>(
+pub async fn lock_current_session<'a, T>(
     sessions: &'a tokio::sync::Mutex<T>,
     epoch: &AtomicU64,
     captured: u64,
@@ -24,23 +24,23 @@ pub(crate) async fn lock_current_session<'a, T>(
 }
 
 #[derive(Default)]
-pub(crate) struct ConfirmationGate {
+pub struct ConfirmationGate {
     identity: Arc<()>,
     generation: u64,
     open: bool,
 }
-pub(crate) struct ConfirmationPermit {
+pub struct ConfirmationPermit {
     identity: Arc<()>,
     generation: u64,
     created: Instant,
 }
 /// Stable for the owning Session, including after its window confirmations expire.
-pub(crate) struct ConfirmationOwner(Arc<()>);
+pub struct ConfirmationOwner(Arc<()>);
 impl ConfirmationGate {
-    pub(crate) fn owner(&self) -> ConfirmationOwner {
+    pub fn owner(&self) -> ConfirmationOwner {
         ConfirmationOwner(self.identity.clone())
     }
-    pub(crate) fn check_owner(&self, owner: &ConfirmationOwner) -> Result<(), &'static str> {
+    pub fn check_owner(&self, owner: &ConfirmationOwner) -> Result<(), &'static str> {
         if Arc::ptr_eq(&self.identity, &owner.0) {
             Ok(())
         } else {

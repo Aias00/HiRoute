@@ -1,3 +1,4 @@
+use crate::authority::HostAuthority;
 #[path = "agent_check_session.rs"]
 mod checks;
 pub use checks::*;
@@ -15,7 +16,7 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::sync::{Arc, atomic::AtomicBool};
 mod prices;
-pub use prices::{PriceConfirmation, PriceDisplayResult, PriceEditInput};
+pub use prices::{DecimalPriceAction, PriceConfirmation, PriceDisplayResult, PriceEditInput};
 mod authoring;
 pub use authoring::EditorInput;
 mod model_save;
@@ -101,8 +102,8 @@ impl Confirmation {
     pub fn action_label(&self) -> &str {
         &self.action_label
     }
-    #[cfg(all(test, target_os = "macos"))]
-    pub(crate) fn test_key(&self) -> &str {
+    #[cfg(feature = "test-support")]
+    pub fn test_key(&self) -> &str {
         &self.request.idempotency_key
     }
     pub fn message(&self) -> String {
@@ -125,9 +126,8 @@ impl Confirmation {
         self.input.language == "en"
     }
 }
-pub struct Session {
-    #[cfg(unix)]
-    pub resident: crate::bootstrap::Resident,
+pub struct ProductSession {
+    pub authority: Arc<crate::authority::SessionAuthority>,
     pub client: Client,
     hint: Option<SubmittedOperation>,
     subscription_hint: Option<SubmittedOperation>,
@@ -139,9 +139,8 @@ pub struct Session {
     subscription_close_requested: Arc<AtomicBool>,
     subscription_cancel_request: Option<OperationCancelRequestV1>,
 }
-impl Session {
-    #[cfg(all(unix, feature = "desktop-runtime"))]
-    pub(crate) async fn deletion_preview(
+impl ProductSession {
+    pub async fn deletion_preview(
         &mut self,
         spec: SessionDeletionSpecV1,
     ) -> Result<SessionDeletionPreviewV2, DesktopFailure> {
@@ -154,7 +153,7 @@ impl Session {
         let request = ObservationDeletePreviewRequestV2 { spec };
         let digest = CanonicalDigest::of(&request).map_err(|_| "REQUEST_INVALID")?;
         let token = self
-            .resident
+            .authority
             .register_retention(&digest, &status.revisions, false)?;
         let result = self
             .client
@@ -172,8 +171,7 @@ impl Session {
         }
         result.data.ok_or_else(|| "RESPONSE_DATA_MISSING".into())
     }
-    #[cfg(all(unix, feature = "desktop-runtime"))]
-    pub(crate) async fn deletion_apply(
+    pub async fn deletion_apply(
         &mut self,
         preview: SessionDeletionPreviewV2,
     ) -> Result<SessionDeletionOutcomeV2, DesktopFailure> {
@@ -189,7 +187,7 @@ impl Session {
         };
         let digest = CanonicalDigest::of(&request).map_err(|_| "REQUEST_INVALID")?;
         let token = self
-            .resident
+            .authority
             .register_retention(&digest, &status.revisions, true)?;
         let result = self
             .client
@@ -212,7 +210,6 @@ impl Session {
         &mut self,
         request: ObservationReadRequestV2,
     ) -> Result<Value, DesktopFailure> {
-        #[cfg(unix)]
         {
             let status: ClientServiceStatusV1 = query(
                 &self.client,
@@ -221,7 +218,7 @@ impl Session {
             )
             .await?;
             let capability = self
-                .resident
+                .authority
                 .register_observation(&request, &status.revisions)?;
             let envelope: MachineEnvelopeV2<Value> = self
                 .client
@@ -239,18 +236,12 @@ impl Session {
             }
             envelope.data.ok_or_else(|| "RESPONSE_DATA_MISSING".into())
         }
-        #[cfg(not(unix))]
-        {
-            let _ = request;
-            Err("TRUSTED_AUTHORITY_UNAVAILABLE".into())
-        }
     }
 
     pub async fn test_classifier_decision(
         &mut self,
         classifier: hiroute_domain::ComplexityClassifierModeV1,
     ) -> Result<ClassifierDecisionTestResultV1, DesktopFailure> {
-        #[cfg(unix)]
         {
             let request = ClassifierDecisionTestRequestV1 {
                 schema: CLASSIFIER_DECISION_TEST_SCHEMA_V1.into(),
@@ -266,7 +257,7 @@ impl Session {
             )
             .await?;
             let capability = self
-                .resident
+                .authority
                 .register_classifier_diagnostic(&request, &status.revisions)?;
             let envelope: MachineEnvelopeV2<Value> = self
                 .client
@@ -288,11 +279,6 @@ impl Session {
             serde_json::from_value(envelope.data.ok_or("RESPONSE_DATA_MISSING")?)
                 .map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
-        #[cfg(not(unix))]
-        {
-            let _ = classifier;
-            Err("TRUSTED_AUTHORITY_UNAVAILABLE".into())
-        }
     }
 
     pub async fn save_classifier_header_secret(
@@ -300,9 +286,8 @@ impl Session {
         secret_id: String,
         secret: zeroize::Zeroizing<String>,
     ) -> Result<ApplyResultV1, DesktopFailure> {
-        #[cfg(unix)]
         {
-            let candidate = self.resident.register_model_input(secret)?;
+            let candidate = self.authority.register_model_input(secret)?;
             let desired_state = match serde_json::to_value(ClassifierHeaderSecretInputV1 {
                 secret_id,
                 input_slot: candidate.candidate_ref.clone(),
@@ -310,7 +295,7 @@ impl Session {
             }) {
                 Ok(value) => value,
                 Err(_) => {
-                    let _ = self.resident.release_model_input(&candidate);
+                    let _ = self.authority.release_model_input(&candidate);
                     return Err("CLASSIFIER_SECRET_INVALID".into());
                 }
             };
@@ -329,14 +314,14 @@ impl Session {
             let preview = match preview {
                 Ok(preview) => preview,
                 Err(error) => {
-                    let _ = self.resident.release_model_input(&candidate);
+                    let _ = self.authority.release_model_input(&candidate);
                     return Err(error);
                 }
             };
             let idempotency_id = match crate::random_id() {
                 Ok(value) => value,
                 Err(error) => {
-                    let _ = self.resident.release_model_input(&candidate);
+                    let _ = self.authority.release_model_input(&candidate);
                     return Err(error.into());
                 }
             };
@@ -351,14 +336,14 @@ impl Session {
             let payload = match serde_json::to_value(request) {
                 Ok(value) => value,
                 Err(_) => {
-                    let _ = self.resident.release_model_input(&candidate);
+                    let _ = self.authority.release_model_input(&candidate);
                     return Err("CLASSIFIER_SECRET_INVALID".into());
                 }
             };
             let request_id = match crate::random_id() {
                 Ok(value) => value,
                 Err(error) => {
-                    let _ = self.resident.release_model_input(&candidate);
+                    let _ = self.authority.release_model_input(&candidate);
                     return Err(error.into());
                 }
             };
@@ -375,7 +360,7 @@ impl Session {
             // Application runs this transaction synchronously. Once the call returns,
             // the protected input is no longer needed, including transport and terminal
             // failures.
-            let release = self.resident.release_model_input(&candidate);
+            let release = self.authority.release_model_input(&candidate);
             let envelope = match envelope {
                 Ok(envelope) => envelope,
                 Err(error) => {
@@ -390,20 +375,14 @@ impl Session {
             serde_json::from_value(envelope.data.ok_or("RESPONSE_DATA_MISSING")?)
                 .map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
-        #[cfg(not(unix))]
-        {
-            let _ = (secret_id, secret);
-            Err("TRUSTED_AUTHORITY_UNAVAILABLE".into())
-        }
     }
 
-    #[cfg(unix)]
-    pub fn new(resident: crate::bootstrap::Resident) -> Self {
+    pub fn new(client: Client, authority: Arc<dyn HostAuthority>) -> Self {
         let mut cursor = ObservationCursor::default();
         let observation_generation = cursor.restart();
         Self {
-            client: resident.client.clone(),
-            resident,
+            client,
+            authority: Arc::new(crate::authority::SessionAuthority::new(authority)),
             hint: None,
             subscription_hint: None,
             confirmation: ConfirmationGate::default(),
@@ -445,10 +424,7 @@ impl Session {
         };
         // The successful status query came over Client Core's verified owner-only Local Control
         // peer. Configuration writes use that same transport, not the separate check grant pipe.
-        #[cfg(unix)]
         let trusted_authority = true;
-        #[cfg(not(unix))]
-        let trusted_authority = false;
         Ok(DesktopSnapshot {
             service,
             catalog,
@@ -601,8 +577,8 @@ impl Session {
             payload: serde_json::to_value(context.request).map_err(|_| "REQUEST_INVALID")?,
             protected_grant: None,
         };
-        #[cfg(all(test, target_os = "macos"))]
-        if crate::fault_tests::take(crate::fault_tests::Fault::LoseBeforeApply) {
+        #[cfg(feature = "test-support")]
+        if crate::fault::take(crate::fault::Fault::LoseBeforeApply) {
             return Err(hiroute_client_core::ClientFailure {
                 code: hiroute_client_core::FailureCode::TransportUnavailable,
                 submission: hiroute_client_core::SubmissionState::MayHaveReachedServer,
@@ -610,8 +586,8 @@ impl Session {
             .into());
         }
         let response = self.client.call_wire(request).await;
-        #[cfg(all(test, target_os = "macos"))]
-        if crate::fault_tests::take(crate::fault_tests::Fault::LoseApplyResponseAndDisconnect) {
+        #[cfg(feature = "test-support")]
+        if crate::fault::take(crate::fault::Fault::LoseApplyResponseAndDisconnect) {
             // Fault boundary: the real daemon processed the request, but the native
             // session receives neither its response nor a subsequent lookup result.
             return Err(hiroute_client_core::ClientFailure {
@@ -732,7 +708,6 @@ impl Session {
                 .expect("checked model save hint")
                 .idempotency_key
                 .clone();
-            #[cfg(unix)]
             self.release_pending_model_inputs(&idempotency_key)?;
         }
         Ok(result)
@@ -779,7 +754,7 @@ async fn read_plan_catalog(client: &Client) -> Result<AgentPlanCatalogViewV2, De
     Err("CATALOG_LIMIT_EXCEEDED".into())
 }
 
-pub(crate) async fn query<P: Serialize, R: serde::de::DeserializeOwned>(
+pub async fn query<P: Serialize, R: serde::de::DeserializeOwned>(
     client: &Client,
     operation: &str,
     payload: &P,
@@ -894,3 +869,5 @@ mod tests {
         assert!(serde_json::from_value::<RestoreInput>(serde_json::json!({"plan_id":"plan/test", "language":"en", "previous_name":"forged"})).is_err());
     }
 }
+
+pub type Session = ProductSession;

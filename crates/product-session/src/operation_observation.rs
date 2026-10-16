@@ -61,7 +61,7 @@ impl IntentEvidence {
     }
 }
 
-pub(crate) async fn lookup(
+pub async fn lookup(
     client: &hiroute_client_core::Client,
     pending: &mut Option<SubmittedOperation>,
 ) -> Result<Option<hiroute_application_api::ClientOperationViewV1>, crate::failure::DesktopFailure>

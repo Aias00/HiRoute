@@ -1010,3 +1010,6 @@ pub(crate) fn acquire_host_lock(root: &Path) -> Result<File, String> {
 mod tests;
 #[cfg(test)]
 pub(crate) use tests::session_resident;
+
+mod authority;
+pub use authority::{NativeAuthority, resident};

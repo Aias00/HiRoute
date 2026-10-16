@@ -1,5 +1,6 @@
 //! Explicit native Agent checks using the existing confirmation and protected channel.
 use super::*;
+use crate::authority::HostAuthority;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -32,7 +33,7 @@ pub struct AgentCheckCompletion {
 }
 
 impl AgentCheckCompletion {
-    pub(crate) fn passed(&self) -> bool {
+    pub fn passed(&self) -> bool {
         self.accepted && self.state.as_deref() == Some("passed")
     }
 
@@ -90,13 +91,13 @@ impl AgentCheckCompletion {
     }
 }
 
-pub(crate) struct PendingAgentCheck {
+pub struct PendingAgentCheck {
     client: hiroute_client_core::Client,
     request: AgentCheckRequestV1,
     capability: zeroize::Zeroizing<String>,
 }
 
-pub(crate) enum AgentCheckDispatch {
+pub enum AgentCheckDispatch {
     Cancelled(AgentCheckCompletion),
     Pending(PendingAgentCheck),
 }
@@ -216,7 +217,7 @@ impl AgentCheckConfirmation {
 }
 
 impl PendingAgentCheck {
-    pub(crate) async fn execute(self) -> Result<AgentCheckCompletion, DesktopFailure> {
+    pub async fn execute(self) -> Result<AgentCheckCompletion, DesktopFailure> {
         let scope = self.request.scope;
         let target = self.request.target.clone();
         let envelope: MachineEnvelopeV2<Value> = self
@@ -328,8 +329,7 @@ impl Session {
         if !snapshot.trusted_authority || !snapshot.service.mutation_available {
             return Err("TRUSTED_AUTHORITY_UNAVAILABLE".into());
         }
-        #[cfg(unix)]
-        if !self.resident.has_authority() {
+        if !self.authority.has_authority() {
             return Err("TRUSTED_AUTHORITY_UNAVAILABLE".into());
         }
         let digest = CanonicalDigest::of(&request).map_err(|_| "AGENT_INPUT_INVALID")?;
@@ -342,7 +342,7 @@ impl Session {
         })
     }
 
-    pub(crate) fn begin_agent_check(
+    pub fn begin_agent_check(
         &mut self,
         context: AgentCheckConfirmation,
         accepted: bool,
@@ -353,12 +353,9 @@ impl Session {
                 AgentCheckCompletion::cancelled(scope),
             ));
         }
-        #[cfg(unix)]
         let capability = self
-            .resident
+            .authority
             .register_agent_check(&context.digest, &context.revisions)?;
-        #[cfg(not(unix))]
-        let capability: zeroize::Zeroizing<String> = return Err("UNSUPPORTED_PLATFORM".into());
         Ok(AgentCheckDispatch::Pending(PendingAgentCheck {
             client: self.client.clone(),
             request: context.request,

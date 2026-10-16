@@ -2343,6 +2343,7 @@ dependencies = [
  "hiroute-diagnostics",
  "hiroute-domain",
  "hiroute-host-runtime",
+ "hiroute-product-session",
  "nix",
  "reqwest",
  "serde",
@@ -2606,6 +2607,22 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.20",
  "tokio",
+]
+
+[[package]]
+name = "hiroute-product-session"
+version = "0.1.0"
+dependencies = [
+ "getrandom 0.3.4",
+ "hiroute-application-api",
+ "hiroute-client-core",
+ "hiroute-diagnostics",
+ "hiroute-domain",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "zeroize",
 ]
 
 [[package]]

@@ -1,4 +1,5 @@
 use super::{Session, terminal};
+use crate::authority::HostAuthority;
 use crate::confirmation::ConfirmationPermit;
 use crate::failure::DesktopFailure;
 use crate::operation_observation::{IntentEvidence, SubmittedOperation};
@@ -222,13 +223,11 @@ impl Session {
             }
         };
         if terminal(&operation.state) {
-            #[cfg(unix)]
             self.release_pending_model_inputs(&model_save_key)?;
         }
         self.resume_observing();
         Ok(ModelSaveAccepted { result, operation })
     }
-    #[cfg(unix)]
     pub(super) fn release_pending_model_inputs(
         &mut self,
         idempotency_key: &str,
@@ -237,7 +236,7 @@ impl Session {
             return Ok(());
         };
         for candidate in &candidates {
-            self.resident.release_model_input(candidate)?;
+            self.authority.release_model_input(candidate)?;
         }
         self.pending_model_inputs.remove(idempotency_key);
         Ok(())

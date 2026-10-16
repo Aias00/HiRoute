@@ -1,4 +1,5 @@
 use super::*;
+use crate::authority::HostAuthority;
 use hiroute_domain::{DecisionConnectionV1, DecisionServiceChangeV1, DecisionServiceV1};
 
 #[derive(Deserialize, Serialize)]
@@ -16,7 +17,6 @@ impl Session {
         mut change: DecisionServiceChangeV1,
         secret: Option<zeroize::Zeroizing<String>>,
     ) -> Result<ApplyResultV1, DesktopFailure> {
-        #[cfg(unix)]
         {
             if change.input_slot.is_some() {
                 return Err("DECISION_SERVICE_INVALID".into());
@@ -41,7 +41,7 @@ impl Session {
                         secret
                     }
                 };
-                let candidate = self.resident.register_model_input(value)?;
+                let candidate = self.authority.register_model_input(value)?;
                 change.input_slot = Some(candidate.candidate_ref.clone());
                 Some(candidate)
             } else {
@@ -49,18 +49,12 @@ impl Session {
             };
             let result = self.apply_decision_service_change(change).await;
             if let Some(candidate) = candidate {
-                self.resident.release_model_input(&candidate)?;
+                self.authority.release_model_input(&candidate)?;
             }
             result
         }
-        #[cfg(not(unix))]
-        {
-            let _ = (change, secret);
-            Err("TRUSTED_AUTHORITY_UNAVAILABLE".into())
-        }
     }
 
-    #[cfg(unix)]
     async fn apply_decision_service_change(
         &self,
         change: DecisionServiceChangeV1,

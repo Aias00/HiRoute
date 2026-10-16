@@ -98,10 +98,10 @@ impl Fixture {
         }
     }
     fn session(&self) -> Session {
-        Session::new(crate::bootstrap::session_resident(
-            self.root.path(),
+        Session::new(
             self.client.clone(),
-        ))
+            Arc::new(crate::authority::UnavailableAuthority),
+        )
     }
 }
 impl Drop for Fixture {

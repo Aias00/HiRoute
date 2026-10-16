@@ -165,3 +165,19 @@ test('native command authority agrees across handlers, manifest and main-window 
     assert.ok(permission.includes(`commands.deny = ["${command}"]`), `${command}: wrong denied command`);
   }
 });
+
+test('the product catalog covers native handlers and excludes host commands from HTTP', () => {
+  const catalog = JSON.parse(read('../../crates/product-session/src/commands.json'));
+  const handlers = [...read('src-tauri/src/bridge.rs').matchAll(/tauri::generate_handler!\[([\s\S]*?)\]/g)][0][1]
+    .split(',').map(item => item.trim()).filter(Boolean).sort();
+  const check = (catalog, handlers) => {
+    assert.deepEqual(catalog.map(c => c.name).sort(), handlers);
+    assert.equal(new Set(catalog.map(c => c.name)).size, catalog.length);
+    assert.ok(catalog.every(c => Array.isArray(c.args) && c.result.startsWith('Result<')));
+    assert.ok(catalog.find(c => c.name === 'quit_desktop').host_only);
+    assert.equal(catalog.find(c => c.name === 'observation_read').host_only, false);
+  };
+  check(catalog, handlers);
+  assert.throws(() => check(catalog.slice(1), handlers), 'missing catalog commands fail closed');
+  assert.throws(() => check(catalog, handlers.slice(1)), 'missing handlers fail closed');
+});

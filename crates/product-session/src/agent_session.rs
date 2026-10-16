@@ -1,5 +1,6 @@
 //! Agent-specific native flow over shared Client Core and the existing confirmation/recovery.
 use super::*;
+use crate::authority::HostAuthority;
 use hiroute_application_api::AgentSettingsStatusV2;
 
 #[derive(Deserialize)]
@@ -421,17 +422,12 @@ impl Session {
             {
                 return Err("AGENT_TOKEN_INVALID".into());
             }
-            #[cfg(unix)]
             {
-                let candidate = self.resident.register_agent_token_input(token)?;
+                let candidate = self.authority.register_agent_token_input(token)?;
                 input.spec.access_token = AgentAccessTokenIntentV1::Set {
                     input_slot: candidate.candidate_ref.clone(),
                 };
                 Some(candidate)
-            }
-            #[cfg(not(unix))]
-            {
-                return Err("TRUSTED_AUTHORITY_UNAVAILABLE".into());
             }
         } else {
             if matches!(
@@ -445,11 +441,10 @@ impl Session {
         let result = self
             .preview_agent_settings_registered(input, candidate.clone())
             .await;
-        #[cfg(unix)]
         if !matches!(&result, Ok(AgentPreparation::Ready(_)))
             && let Some(candidate) = &candidate
         {
-            let _ = self.resident.release_model_input(candidate);
+            let _ = self.authority.release_model_input(candidate);
         }
         result
     }
@@ -592,9 +587,8 @@ impl Session {
         accepted: bool,
     ) -> Result<AgentOutcome, DesktopFailure> {
         if !self.confirmation.finish(&context.permit, accepted)? {
-            #[cfg(unix)]
             if let Some(candidate) = &context.token_candidate {
-                let _ = self.resident.release_model_input(candidate);
+                let _ = self.authority.release_model_input(candidate);
             }
             return Ok(AgentOutcome {
                 preview: context.preview,
@@ -614,7 +608,7 @@ impl Session {
         // release the login item that version created, as proven by the backend journal.
         let login_item = if restore && context.preview.resident_service.login_item_removal_required
         {
-            Some(crate::login_item::remove_resident_login_item()?)
+            Some(self.authority.remove_resident_login_item()?)
         } else {
             None
         };
@@ -651,7 +645,6 @@ impl Session {
             })
             .await;
         let mutation = self.reconcile_apply_response(response).await;
-        #[cfg(unix)]
         if self.hint.is_none()
             || mutation
                 .as_ref()
@@ -674,7 +667,7 @@ impl Session {
             };
             if definitively_failed && declaration.removes_resident_service() {
                 // The rolled-back connection still needs its owned item at the next login.
-                crate::login_item::compensate_resident_login_item_removal();
+                self.authority.compensate_resident_login_item_removal();
             }
         }
         let mutation = mutation?;

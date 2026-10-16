@@ -1,4 +1,5 @@
 use super::{Session, query, terminal};
+use crate::authority::HostAuthority;
 use crate::confirmation::{ConfirmationOwner, ConfirmationPermit};
 use crate::failure::DesktopFailure;
 use crate::operation_observation::{IntentEvidence, SubmittedOperation};
@@ -25,8 +26,7 @@ impl SubscriptionCheckConfirmation {
 
 /// An approved A request whose protected call can run without monopolizing the backend Session.
 /// The only shared state is a close signal; no WebView can construct this value.
-#[cfg(any(feature = "desktop-runtime", test))]
-pub(crate) struct PendingSubscriptionCheck {
+pub struct PendingSubscriptionCheck {
     owner: ConfirmationOwner,
     client: hiroute_client_core::Client,
     request_id: String,
@@ -35,8 +35,7 @@ pub(crate) struct PendingSubscriptionCheck {
     close_requested: Arc<AtomicBool>,
 }
 
-#[cfg(any(feature = "desktop-runtime", test))]
-pub(crate) struct SubscriptionCheckCompletion {
+pub struct SubscriptionCheckCompletion {
     owner: ConfirmationOwner,
     idempotency_key: String,
     accepted_digest: CanonicalDigest,
@@ -44,17 +43,15 @@ pub(crate) struct SubscriptionCheckCompletion {
     close_requested: Arc<AtomicBool>,
 }
 
-#[cfg(any(feature = "desktop-runtime", test))]
 enum SubscriptionCheckSubmission {
     ClosedBeforeSend,
     Submitted(Box<Result<MachineEnvelopeV2<ApplyResultV1>, hiroute_client_core::ClientFailure>>),
 }
 
-#[cfg(any(feature = "desktop-runtime", test))]
 impl PendingSubscriptionCheck {
     /// There is deliberately no await between the close check and entering Client Core. Once the
     /// protected call starts, close follows the normal Operation cancellation/observation policy.
-    pub(crate) async fn execute(self) -> SubscriptionCheckCompletion {
+    pub async fn execute(self) -> SubscriptionCheckCompletion {
         let idempotency_key = self.request.idempotency_key.clone();
         let accepted_digest = self.request.accept_digest.clone();
         let outcome = if self.close_requested.load(Ordering::SeqCst) {
@@ -85,8 +82,7 @@ impl PendingSubscriptionCheck {
 
 /// The submitted operation's completion entry. Window-close epochs expire new intent,
 /// while the originating Session still owns cleanup for work already submitted.
-#[cfg(any(feature = "desktop-runtime", test))]
-pub(crate) async fn complete_subscription_check(
+pub async fn complete_subscription_check(
     sessions: &tokio::sync::Mutex<Option<Session>>,
     completion: SubscriptionCheckCompletion,
 ) -> Result<ComputeSubscriptionCheckResultV2, DesktopFailure> {
@@ -168,8 +164,7 @@ impl Session {
 
     /// Consumes native approval and retains the in-memory request identity before returning a protected
     /// call that the bridge must execute without holding the Session mutex.
-    #[cfg(any(feature = "desktop-runtime", test))]
-    pub(crate) async fn begin_subscription_check_confirmation(
+    pub async fn begin_subscription_check_confirmation(
         &mut self,
         context: SubscriptionCheckConfirmation,
         accepted: bool,
@@ -229,14 +224,10 @@ impl Session {
         };
 
         self.subscription_hint = Some(hint);
-        #[cfg(unix)]
-        let capability = self.resident.register_subscription_check(
+        let capability = self.authority.register_subscription_check(
             &context.request.accept_digest,
             &context.request.expected_revisions,
         )?;
-        #[cfg(not(unix))]
-        let capability: zeroize::Zeroizing<String> =
-            return Err("TRUSTED_AUTHORITY_UNAVAILABLE".into());
         Ok(PendingSubscriptionCheck {
             owner: self.confirmation.owner(),
             client: self.client.clone(),
@@ -249,8 +240,7 @@ impl Session {
 
     /// Reconciles the exact A identity after the protected request completes. If the page closed
     /// while A was running, apply the close policy before returning control to the WebView.
-    #[cfg(any(feature = "desktop-runtime", test))]
-    pub(crate) async fn finish_subscription_check_confirmation(
+    pub async fn finish_subscription_check_confirmation(
         &mut self,
         completion: SubscriptionCheckCompletion,
     ) -> Result<ComputeSubscriptionCheckResultV2, DesktopFailure> {
@@ -384,13 +374,9 @@ impl Session {
         )
         .await?;
         let digest = CanonicalDigest::of(&validation).map_err(|_| "REQUEST_INVALID")?;
-        #[cfg(unix)]
         let capability = self
-            .resident
+            .authority
             .register_subscription_release(&digest, &status.revisions)?;
-        #[cfg(not(unix))]
-        let capability: zeroize::Zeroizing<String> =
-            return Err("TRUSTED_AUTHORITY_UNAVAILABLE".into());
         let result = envelope_data(
             self.client
                 .release_subscription_check(
@@ -476,13 +462,9 @@ impl Session {
         )
         .await?;
         let digest = CanonicalDigest::of(&request).map_err(|_| "REQUEST_INVALID")?;
-        #[cfg(unix)]
         let capability = self
-            .resident
+            .authority
             .register_operation_cancel(&digest, &status.revisions)?;
-        #[cfg(not(unix))]
-        let capability: zeroize::Zeroizing<String> =
-            return Err("TRUSTED_AUTHORITY_UNAVAILABLE".into());
         let _ = envelope_data(
             self.client
                 .cancel_subscription_check(

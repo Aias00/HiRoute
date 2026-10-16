@@ -1,4 +1,5 @@
 //! Independent sign-in management. Callback material never enters ordinary Local Control JSON.
+use hiroute_product_session::HostAuthority;
 
 use super::{DesktopState, main_window};
 use crate::failure::DesktopFailure;
@@ -87,7 +88,7 @@ pub async fn submit_subscription_login_callback(
         .await
         .as_mut()
         .ok_or("RESIDENT_UNAVAILABLE")?
-        .resident
+        .authority
         .register_subscription_callback_input(&input_candidate, callback)?;
     #[cfg(not(unix))]
     return Err("TRUSTED_AUTHORITY_UNAVAILABLE".into());
@@ -105,7 +106,7 @@ pub async fn submit_subscription_login_callback(
     // unconsumed callback must not remain available to an unrelated later operation.
     #[cfg(unix)]
     if let Some(session) = state.0.lock().await.as_mut() {
-        session.resident.release_model_input(&input_candidate)?;
+        session.authority.release_model_input(&input_candidate)?;
     }
     login_data(response?)
 }

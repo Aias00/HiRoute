@@ -961,13 +961,15 @@ pub fn run() {
                         .with_file_name("hirouted");
                     #[cfg(unix)]
                     {
-                        Ok(Session::new(crate::bootstrap::Resident::open_resident(
-                            &root,
-                            &binary,
-                            cancelled,
-                            diagnostics,
-                            preacquired,
-                        )?))
+                        Ok(crate::session_from_resident(
+                            crate::bootstrap::Resident::open_resident(
+                                &root,
+                                &binary,
+                                cancelled,
+                                diagnostics,
+                                preacquired,
+                            )?,
+                        ))
                     }
                     #[cfg(not(unix))]
                     {

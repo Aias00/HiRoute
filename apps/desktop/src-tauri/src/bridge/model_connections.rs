@@ -3,6 +3,7 @@ use crate::failure::DesktopFailure;
 use crate::session::ModelSaveAccepted;
 use hiroute_application_api::*;
 use hiroute_diagnostics::event::ActionOperation;
+use hiroute_product_session::HostAuthority;
 use serde::Serialize;
 use std::sync::atomic::Ordering;
 use tauri::{State, WebviewWindow};
@@ -275,7 +276,7 @@ pub async fn prepare_discovered_model_connection(
         .await
         .as_mut()
         .ok_or("RESIDENT_UNAVAILABLE")?
-        .resident
+        .authority
         .register_discovered_model_prepare(&digest, &status.revisions)?;
     #[cfg(not(unix))]
     let capability: zeroize::Zeroizing<String> = return Err("TRUSTED_AUTHORITY_UNAVAILABLE".into());
@@ -332,7 +333,7 @@ pub async fn register_protected_model_input(
             .await
             .as_mut()
             .ok_or("RESIDENT_UNAVAILABLE")?
-            .resident
+            .authority
             .register_model_input(zeroize::Zeroizing::new(secret))?;
         let key_id = source_id
             .as_deref()
@@ -366,7 +367,7 @@ pub async fn release_protected_model_input(
             .await
             .as_mut()
             .ok_or("RESIDENT_UNAVAILABLE")?
-            .resident
+            .authority
             .release_model_input(&input)
             .map_err(Into::into)
     }
@@ -406,7 +407,7 @@ pub async fn check_model_connection(
         .await
         .as_mut()
         .ok_or("RESIDENT_UNAVAILABLE")?
-        .resident
+        .authority
         .register_model_check(&digest, &status.revisions)?;
     #[cfg(not(unix))]
     let capability: zeroize::Zeroizing<String> = return Err("TRUSTED_AUTHORITY_UNAVAILABLE".into());
@@ -453,7 +454,7 @@ pub async fn check_saved_model_connection(
         .await
         .as_mut()
         .ok_or("RESIDENT_UNAVAILABLE")?
-        .resident
+        .authority
         .register_saved_model_check(&digest, &status.revisions)?;
     #[cfg(not(unix))]
     let capability: zeroize::Zeroizing<String> = return Err("TRUSTED_AUTHORITY_UNAVAILABLE".into());
@@ -503,7 +504,7 @@ pub async fn check_registered_model_connection(
         .await
         .as_mut()
         .ok_or("RESIDENT_UNAVAILABLE")?
-        .resident
+        .authority
         .register_registered_model_check(&digest, &status.revisions)?;
     #[cfg(not(unix))]
     let capability: zeroize::Zeroizing<String> = return Err("TRUSTED_AUTHORITY_UNAVAILABLE".into());

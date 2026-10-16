@@ -1,9 +1,10 @@
 //! Confirmed, recoverable selection of one instance-level Worker installation.
+use crate::authority::HostAuthority;
 
 use super::*;
 
 impl Session {
-    pub(crate) async fn select_worker_dependencies(
+    pub async fn select_worker_dependencies(
         &mut self,
         request: WorkerDependenciesSelectRequestV1,
     ) -> Result<MachineEnvelopeV2<WorkerDependenciesViewV1>, DesktopFailure> {

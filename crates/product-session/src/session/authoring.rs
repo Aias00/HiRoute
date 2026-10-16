@@ -1,5 +1,6 @@
 //! Typed editor actions. WebView supplies edits; native code owns preview, authority and Apply.
 use super::*;
+use crate::authority::HostAuthority;
 use hiroute_domain::{
     PLAN_DRAFT_SCHEMA_V1, PlanDraftActionV1, PlanDraftChangeV1, PlanDraftV1, PlanEditorStateV2,
     PlanLifecycleV1,
