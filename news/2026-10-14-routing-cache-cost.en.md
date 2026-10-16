@@ -29,7 +29,7 @@ HiRoute's context-hold mechanism, ContextHold, follows the rhythm of the convers
 | A new user message | Reassess the task; keep or change the model | Keeping it loses nothing; changing it loses the old prefix once |
 | After compaction or a history rebuild | Keep the choice if it still applies; otherwise reassess | Part of the history must be rebuilt anyway, so switching adds less |
 
-Most calls in a turn are tool round-trips, and these do not change models. In one unattended coding run of 40 requests, 35 reused an existing choice directly, or 87.5%.
+Most calls in a turn are tool round-trips, and these do not change models. In one unattended coding run of 40 requests, routing decided only at the start and around two compactions; the other 35 requests reused an existing choice directly, or 87.5%.
 
 Whether a request actually hits the cache also depends on the provider's caching rules and lifetime, and an unavailable model can still fail over to a backup. See the [model-routing guide](https://hiroute.ai/en/docs/model-routing/) for the rules.
 
