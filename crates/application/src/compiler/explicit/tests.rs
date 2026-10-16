@@ -152,7 +152,9 @@ fn branches_publish_distinct_reasoning_and_freeze_whole_judgment_overrides() {
             .as_array()
             .unwrap()
             .iter()
-            .all(|candidate| candidate.get("source_binding_id").is_none())
+            .all(|candidate| candidate.get("source_binding_id").is_some()
+                && candidate.get("billing_class").is_none()
+                && candidate.get("pricing_identity").is_none())
     );
     assert_eq!(
         hiroute_domain::GatewayPublicationV1::decode(&stored_bytes)
@@ -160,7 +162,7 @@ fn branches_publish_distinct_reasoning_and_freeze_whole_judgment_overrides() {
             .canonical_bytes()
             .unwrap(),
         stored_bytes,
-        "source provenance is derived for Gateway, never added to stored publication bytes"
+        "source membership is durable; billing and pricing projections do not alter stored bytes"
     );
     let snapshot = publication.gateway_snapshot().unwrap();
     let alias = &snapshot.aliases[0];
