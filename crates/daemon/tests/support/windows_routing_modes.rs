@@ -480,3 +480,36 @@ fn model_server(lane: &'static str, executions: Arc<Mutex<Vec<Execution>>>) -> h
         )
     })
 }
+
+pub fn focused() {
+    let product = InstalledProduct::create();
+    let contexts = super::windows_user_models::Contexts::prepare(&product);
+    let mut running = product.start_with_environment(false, contexts.variables());
+    let modes = Modes::setup(&product);
+    let scan = super::windows_headless_business::cli(&product, &["agents", "scan"], None);
+    let agent = scan["data"]["agents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|agent| agent["agent_id"] == "agent_pi_default")
+        .unwrap();
+    let context = agent["context_id"].as_str().unwrap();
+    super::windows_user_models::checked(&product, "agent_pi_default");
+    let spec = json!({"schema_version":{"major":2,"minor":0},"context_id":context,
+        "model":{"intent":"configure","settings":{"mode":"pi_additional",
+            "allowed_plan_ids":[modes.smart.plan_id,modes.custom.plan_id],
+            "plan_protocols":{&modes.smart.plan_id:"responses",&modes.custom.plan_id:"responses"}}}});
+    super::windows_user_models::apply(&product, "connect", &spec, "windows-focused-modes-connect");
+    modes.traffic(
+        &product,
+        running.listen,
+        &format!("agent-connection/{context}"),
+    );
+    super::lifecycle::stop(
+        &product.layout.lifecycle_endpoint(),
+        &product.daemon,
+        std::time::Duration::from_secs(30),
+    )
+    .unwrap();
+    running.wait(true);
+}
