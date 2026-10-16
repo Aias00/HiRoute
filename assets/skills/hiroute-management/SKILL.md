@@ -249,7 +249,7 @@ Missing prices: use installed `prices effective` schema with exact Binding locat
 then exact `prices override apply`/Operation. Set input/output per-million-token rates and separately
 supported cache rates; never invent rates/FX or usage counts. A cache-creation rate equal to ordinary
 input makes an unreported creation split irrelevant to the estimate; it does not create measured usage. Retain the prior
-setting from Preview's spec.desired_state.before and give complete price-restore Preview/Apply commands; follow_catalog
+setting from Preview's spec.desired_state.before.setting (if present) and give complete price-restore Preview/Apply commands; follow_catalog
 removes the manual setting. Re-run the explicit estimate. This never changes entitlement. Ordinary
 `value show` keeps frozen historical valuation; free, subscription, paid and unknown remain distinct.
 
