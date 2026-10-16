@@ -122,23 +122,35 @@ fn admitted(facts: &[ObservationSafeFactV2], protocol: UpstreamProtocol) -> Opti
         .iter()
         .find(|fact| fact.event_kind == "request_finished")?;
     assert_eq!(finished.outcome.as_deref(), Some("accepted"));
-    let started = facts
+    let attempts: Vec<_> = facts
         .iter()
-        .find(|fact| fact.event_kind == "attempt_started")
-        .unwrap();
+        .filter(|fact| fact.event_kind == "attempt_started")
+        .collect();
+    assert_eq!(
+        attempts.len(),
+        1,
+        "fixed Native plan must execute one actual attempt"
+    );
+    let started = attempts[0];
     assert_eq!(started.native_model.as_deref(), Some(MODEL));
     assert!(started.attempt_ordinal.is_some());
     let usages: Vec<_> = facts
         .iter()
         .filter(|fact| fact.event_kind == "usage_and_cache")
         .collect();
-    assert_eq!(
-        usages.len(),
-        1,
-        "fixed Native plan must have one actual attempt usage fact"
+    // Provider completion and accepted canonical events can both retain a
+    // snapshot of the same attempt. Validate its latest complete usage, then
+    // the exact value totals below prove that snapshots are not double-counted.
+    assert!(!usages.is_empty(), "actual attempt usage must be retained");
+    assert!(
+        usages
+            .iter()
+            .all(|fact| fact.attempt_ordinal == started.attempt_ordinal)
     );
-    let measured = usages[0];
-    assert_eq!(measured.attempt_ordinal, started.attempt_ordinal);
+    let measured = usages
+        .iter()
+        .rev()
+        .find(|fact| fact.input_tokens.is_some() && fact.output_tokens.is_some())?;
     assert!(
         measured.native_model.is_none(),
         "safe usage fact must not invent a native model field"

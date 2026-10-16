@@ -27,6 +27,24 @@ pub struct Source {
     protocol: UpstreamProtocol,
     observed: Vec<String>,
 }
+
+#[test]
+#[ignore = "focused execution of the full journey's native protocol receipts"]
+fn actual_windows_native_protocol_receipts() {
+    let product = InstalledProduct::create();
+    let contexts = super::windows_user_models::Contexts::prepare(&product);
+    let mut running = product.start_with_environment(false, contexts.variables());
+    let mut native = NativeProtocols::setup_with_messages_plan(&product, None);
+    native.traffic(&product, running.listen);
+    super::lifecycle::stop(
+        &product.layout.lifecycle_endpoint(),
+        &product.daemon,
+        std::time::Duration::from_secs(30),
+    )
+    .unwrap();
+    running.wait(true);
+}
+
 impl NativeProtocols {
     pub fn setup_with_messages_plan(
         product: &InstalledProduct,
