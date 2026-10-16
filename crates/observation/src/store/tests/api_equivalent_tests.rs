@@ -236,3 +236,27 @@ fn missing_cache_creation_split_is_irrelevant_only_under_explicit_equal_rates() 
         .unwrap();
     assert!(serde_json::from_str::<serde_json::Value>(&raw).unwrap()["write"].is_null());
 }
+
+#[test]
+fn local_price_namespace_uses_the_same_exact_recorded_model_configuration() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    let fixture = Fixture::new("api-local-model");
+    for fact in facts(&fixture, UsageFrameKindV1::Cumulative) {
+        store.ingest_fact(&fact, &[]).unwrap();
+    }
+    let mut local = reference_price("local-binding", "model-a", 1_000_000);
+    local.quote.exact_target.model_identity = PriceModelIdentityV1::LocalModel("model-a".into());
+    local.quote.quote_digest = local.quote.computed_digest().unwrap();
+    let report = store
+        .observed_api_equivalent_value(
+            &reader(&fixture),
+            &query(&fixture),
+            &local,
+            &[local.clone()],
+            1000,
+        )
+        .unwrap();
+    assert_eq!(report.coverage, ObservationMetricCoverageV2::Complete);
+    assert_eq!(report.estimated_savings_micros, Some(0));
+}

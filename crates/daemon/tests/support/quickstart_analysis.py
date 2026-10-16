@@ -54,8 +54,8 @@ def run(product, plan):
     assert 'next_cursor' in search
     quality = product.cli('observation', 'plan-quality', 'samples', '--plan-id', plan)['data']
     assert 'samples' in quality
-    options = product.cli('routing', 'options')['data']['candidates']
-    binding = options[0]['binding_id']
+    current = product.cli('routing', 'show', plan)['data']
+    binding = current['desired']['strategy']['primary'][0]['binding_id']
     target = {'kind': 'binding', 'binding_id': binding}
     price_request = {'targets': [{'query_id': 'analysis', 'target_locator': target,
                                  'currency': 'CNY', 'valuation_kind': 'api_equivalent'}]}
@@ -83,6 +83,13 @@ def run(product, plan):
         applied = product.cli('prices', 'override', 'apply', '--request-stdin', payload=apply)['data']
         assert applied['state'] == 'succeeded', applied
         operation_ids.append(applied['operation_id'])
+        if setting['kind'] == 'set':
+            estimate = product.cli('value', 'show', '--routing', plan, '--basis', 'api-equivalent',
+                '--reference-binding', binding, '--currency', 'CNY')['data']
+            assert estimate['coverage'] == 'complete' and estimate['compared_request_count'] > 0, estimate
+            assert estimate['routed_estimate_micros'] > 0 and estimate['estimated_savings_micros'] == 0, estimate
+            assert estimate['actual_cash_micros'] is None
+
         replay = product.cli('prices', 'override', 'apply', '--request-stdin', payload=apply)['data']
         assert replay['operation_id'] == applied['operation_id']
     restored = product.cli('prices', 'effective', '--request-stdin', payload=price_request)['data']
@@ -93,5 +100,5 @@ def run(product, plan):
     assert after['summary']['usage'] == historical['summary']['usage']
     print(json.dumps({'scenario': 'installed-management-analysis', 'state': 'green',
         'content_pages': pages, 'price_operations': len(operation_ids),
-        'positive_cost_arithmetic': 'covered by real-store normalized-usage regressions',
+        'positive_cost_arithmetic': 'real installed CLI plus normalized-usage regressions',
         'historical_receipts': 'preserved'}), flush=True)

@@ -112,7 +112,9 @@ impl crate::LocalObservationStore {
                         && p.quote.exact_target.source_id == old.exact_target.source_id
                         && p.quote.exact_target.source_identity_digest
                             == old.exact_target.source_identity_digest
-                        && p.quote.exact_target.model_identity == old.exact_target.model_identity
+                        // Execution binds the exact model_configuration_id. Catalog/local
+                        // is its price-index locator kind, not a different native model.
+                        && model_key(&p.quote.exact_target.model_identity) == model_key(&old.exact_target.model_identity)
                 })
             });
             if let Some(price) = price {
@@ -224,5 +226,12 @@ impl Default for Comparison {
             actual: Some(0),
             accepted: None,
         }
+    }
+}
+
+fn model_key(model: &hiroute_domain::PriceModelIdentityV1) -> &str {
+    match model {
+        hiroute_domain::PriceModelIdentityV1::CatalogModel(id)
+        | hiroute_domain::PriceModelIdentityV1::LocalModel(id) => id,
     }
 }
