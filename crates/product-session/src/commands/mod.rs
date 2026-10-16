@@ -790,3 +790,6 @@ pub async fn observation_read(
 
 mod dispatch;
 pub use dispatch::dispatch;
+
+#[cfg(test)]
+mod action_result_tests;

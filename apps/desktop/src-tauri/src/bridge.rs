@@ -1,4 +1,13 @@
-use hiroute_product_session::commands::*;
+use hiroute_application_api::*;
+use hiroute_product_session::commands::{
+    ClassifierDecisionTestInput, ClassifierHeaderSecretSaveInput, DecisionServiceSaveInput,
+    ObservationDeleteInput, ProtectedModelInputRegistration, WebComputeCandidateViewV2,
+    WebComputeConnectionApplyRequestV1, WebComputeDiscoveryRefV1, WebComputeManagementChangeV2,
+    WebComputeSavePreviewV2, WebComputeSaveResultV2, WebComputeScanResultV1,
+    WebComputeSubscriptionCandidatesV2, WebComputeSubscriptionCheckResultV2, WebValidationRefV2,
+    WorkerDependencyConfirmationInput, WorkerDependencyConfirmationState,
+    WorkerDependencyConfirmationV1,
+};
 use tauri::Emitter;
 // WebView supplies explicit intent and renders prompts; native preview and typed policy own submission.
 use crate::failure::DesktopFailure;
