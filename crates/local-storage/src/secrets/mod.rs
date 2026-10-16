@@ -1811,6 +1811,9 @@ fn create_key_material(path: &Path) -> Result<KeyMaterial, LocalStorageError> {
     complete.extend_from_slice(verifier.as_str().as_bytes());
     complete.extend_from_slice(&bytes);
     hiroute_platform::durable::write_private_new(path, &complete)?;
+    // Preserve the released Unix key-before-database durability ordering.
+    #[cfg(unix)]
+    hiroute_platform::durable::directory_barrier(parent)?;
     validate_owner_file(&fs::metadata(path)?)?;
     Ok(KeyMaterial {
         bytes,

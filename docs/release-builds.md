@@ -65,9 +65,10 @@ container; the HOME is removed afterwards. Logs and package evidence are retaine
 ## Hosted build and publication
 
 Run the **build-release-candidates** workflow on the public candidate branch.
-It first calls the reusable **windows-headless** workflow at the same source
-commit. All five native scopes and their Windows 11 x64-artifact replay must
-succeed before any package-build job can start. This expensive Windows matrix
+Unix candidate builds start independently of the reusable **windows-headless**
+workflow at the same source commit. All five native scopes and their Windows 11
+x64-artifact replay must succeed before Windows package-build jobs can start.
+Both groups use **build-release-platform** for the same per-target build steps. This expensive Windows matrix
 does not run automatically on PR or main pushes; ordinary iteration uses the
 [cross-compilation and development-machine path](validation-routing.md#windows-iteration-and-release-validation).
 Hosted background compile-only cases and real accounts retain their separate

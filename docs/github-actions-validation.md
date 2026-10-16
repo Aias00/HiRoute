@@ -11,16 +11,19 @@ native Windows acceptance uses `scripts/windows-headless-ci.ps1`.
 | `p0-gateway-gates.yml` | Manual, reusable | Linux listener build, neutral loopback, H1/H2 lifecycle, replay/privacy tests, contract checks, benchmark harness smoke |
 | `gateway-core-dedicated.yml` | Manual or reusable | Hosted Linux production stability and socket churn |
 | `p0-gateway-final-gates.yml` | Manual | Aggregate the three current hosted workflows |
-| `build-release.yml` | Manual, exact dispatch SHA | Requires the reusable Windows validation gate before building native macOS ARM64/Intel DMGs and Linux/Windows x86_64/ARM64 archives; uploads candidate assets and integrity evidence for the existing release publisher |
+| `build-release.yml` | Manual, exact dispatch SHA | Builds macOS/Linux candidates independently; only Windows archives require the reusable Windows validation gate; uploads candidate assets and integrity evidence for the existing release publisher |
+| `build-release-platform.yml` | Reusable, exact caller SHA | Shared per-target candidate build and evidence upload |
+| `windows-compile.yml` | Path-filtered PR | One cached x64 MSVC headless CLI/daemon check, including their test targets and transitive production libraries; no runtime tests |
 | `windows-headless.yml` | Release-candidate call, explicit manual diagnosis | Native MSVC primitives, shared business libraries, foreground control/Gateway and fixed upstream clients; complete background artifacts with explicit deferred Task acceptance; x64 artifact replay on Windows 11 ARM64 |
 
 PR and main pushes do not automatically run the Windows matrix. During normal
 development, use [managed cross-compilation and affected execution on the Windows
 development machine](validation-routing.md#windows-iteration-and-release-validation).
 The release-candidate workflow calls the local reusable Windows workflow at the
-same commit, and every package build requires its success. Both native producer
+same commit, and only Windows package builds require its success. Unix builds have
+no dependency on that gate and can complete if Windows fails or is cancelled. Both native producer
 and Windows 11 replay bind `github.sha` and record the `final` phase. This gate
-runs before candidate assets are created, not after a GitHub Release is published.
+runs before Windows candidate assets are created, not after a GitHub Release is published.
 Manual Windows dispatch defaults to `all`, using the same final matrix. Select a
 single `scope` for CI-specific diagnosis: it builds and replays only that scope,
 records the `focused` phase and cannot establish complete Windows acceptance.

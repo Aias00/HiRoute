@@ -204,6 +204,8 @@ native execution. The expensive hosted Windows producer/replay matrix runs from
 `build-release.yml` before release assets can build; `windows-headless.yml` also
 retains an explicit manual entry for diagnosis. PR and main pushes retain their
 ordinary Linux/frontend selection without automatically starting that matrix.
+Affected PRs also run one cached Windows headless compile check; it runs no
+business or account acceptance.
 
 1. Record the comparison base, committed candidate, affected consumers and native
    cases from `test-plan.py --integration`. Run affected Linux tests as selected;

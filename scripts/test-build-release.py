@@ -359,18 +359,53 @@ class HostedReleasePolicyTests(unittest.TestCase):
         # producers; always() remains appropriate only for evidence upload steps.
         self.assertNotRegex(replay, r'(?m)^    (if|continue-on-error):')
 
-    def test_release_assets_cannot_build_when_windows_gate_fails(self):
+    def test_only_windows_assets_require_windows_validation(self):
         workflow = (REPO / '.github/workflows/build-release.yml').read_text()
         jobs = dict(re.findall(r'^  ([\w-]+):\n(.*?)(?=^  [\w-]+:\n|\Z)',
                                workflow.split('\njobs:\n', 1)[1], re.M | re.S))
         gate = jobs['windows-validation']
-        build = jobs['build']
+        windows = jobs['build-windows']
+        unix = jobs['build-unix']
         self.assertIn('uses: ./.github/workflows/windows-headless.yml', gate)
         self.assertNotRegex(gate, r'(?m)^    (if|continue-on-error):')
-        self.assertRegex(build, r'\A    needs: windows-validation\n')
-        self.assertNotRegex(build, r'(?m)^    (if|continue-on-error):')
+        self.assertRegex(windows, r'\A    needs: windows-validation\n')
+        self.assertNotRegex(windows, r'(?m)^    (if|continue-on-error):')
+        self.assertNotRegex(unix, r'(?m)^    (needs|if|continue-on-error):')
+        self.assertEqual(re.findall(r'target: ([a-z0-9_-]+)', windows),
+                         ['x86_64-pc-windows-msvc', 'aarch64-pc-windows-msvc'])
+        self.assertEqual(re.findall(r'target: ([a-z0-9_-]+)', unix),
+                         ['aarch64-apple-darwin', 'x86_64-apple-darwin',
+                          'x86_64-unknown-linux-gnu', 'aarch64-unknown-linux-gnu'])
+        for job in (unix, windows):
+            self.assertIn('uses: ./.github/workflows/build-release-platform.yml', job)
+            self.assertIn('target: ${{ matrix.target }}', job)
+            self.assertIn('runner: ${{ matrix.runner }}', job)
+        build = (REPO / '.github/workflows/build-release-platform.yml').read_text()
         self.assertIn('ref: ${{ github.sha }}', build)
         self.assertIn('--expected-sha "$GITHUB_SHA"', build)
+        self.assertIn("if ((git rev-parse HEAD) -ne $env:GITHUB_SHA)", build)
+        self.assertNotIn('matrix.', build)
+
+    def test_pr_windows_check_is_bounded_cached_and_fails_closed(self):
+        workflow = (REPO / '.github/workflows/windows-compile.yml').read_text()
+        triggers = workflow.split('\non:\n', 1)[1].split('\npermissions:', 1)[0]
+        self.assertEqual(re.findall(r'^  ([a-z_]+):', triggers, re.M), ['pull_request'])
+        for path in ('crates/**', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml',
+                     '.cargo/**', 'assets/**', 'vendor/**', 'tools/**', 'scripts/**',
+                     '.github/workflows/windows-compile.yml'):
+            self.assertIn("- '" + path + "'", triggers)
+        self.assertEqual(workflow.count('runs-on:'), 1)
+        self.assertNotIn('matrix:', workflow)
+        self.assertNotIn('continue-on-error:', workflow)
+        self.assertIn('cancel-in-progress: true', workflow)
+        self.assertIn('mozilla-actions/sccache-action@', workflow)
+        self.assertIn("SCCACHE_GHA_ENABLED: 'true'", workflow)
+        self.assertIn('actions/cache@', workflow)
+        self.assertIn('cargo check --locked --target x86_64-pc-windows-msvc '
+                      '-p hiroute-cli -p hiroute-daemon --all-targets', workflow)
+        self.assertIn("if ($LASTEXITCODE -ne 0) { throw", workflow)
+        self.assertNotIn('cargo test', workflow)
+        self.assertNotIn('windows-headless-ci.ps1', workflow)
 
 
 if __name__ == "__main__":

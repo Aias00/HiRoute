@@ -131,6 +131,9 @@ impl TaskSessionRoot {
         let path = self.path.join(DELEGATION_NATIVE_ROOT_MARKER_FILE_V1);
         hiroute_platform::durable::write_private_new(&path, &marker)
             .map_err(|_| DelegationErrorV1::StorageUnavailable)?;
+        #[cfg(unix)]
+        hiroute_platform::durable::directory_barrier(&self.path)
+            .map_err(|_| DelegationErrorV1::StorageUnavailable)?;
         let file = open_marker(&path)?;
         filesystem_identity(session_base, &self.path, &file)
     }
@@ -288,7 +291,11 @@ impl TaskSessionRoot {
         }
         let path = self.path.join("worker-model-catalog.json");
         match hiroute_platform::durable::write_private_new(&path, contents) {
-            Ok(()) => {}
+            Ok(()) => {
+                #[cfg(unix)]
+                hiroute_platform::durable::directory_barrier(&self.path)
+                    .map_err(|_| DelegationErrorV1::StorageUnavailable)?;
+            }
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
                 let metadata = fs::symlink_metadata(&path)
                     .map_err(|_| DelegationErrorV1::StorageUnavailable)?;

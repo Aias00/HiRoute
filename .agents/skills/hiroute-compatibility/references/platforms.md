@@ -52,7 +52,8 @@ on ARM does not prove an ARM-native package. Do not expand the user's agreed sco
 to RDP, logoff continuity or next-login behavior without a relevant requirement.
 
 The hosted Windows matrix is a release-candidate gate with a manual diagnostic entry.
-Do not restore per-PR Windows runs or mark real failures nonblocking just to reduce
+Keep the full matrix release/manual-only; the path-filtered PR compile check
+does not run runtime acceptance. Do not mark real failures nonblocking just to reduce
 iteration time. Failed/cancelled producers cannot supply complete replay artifacts;
 distinguish that dependency failure from a native test failure. Preserve failures and
 their exact revision until the relevant cause is repaired and checked.

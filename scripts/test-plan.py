@@ -84,6 +84,8 @@ RELEASE_BUILD_TESTS = ("test-build-cpa.py", "test-build-release.py", "test-linux
 RELEASE_BUILD_TOOLING = {"scripts/linux-release-abi.py", "scripts/linux-release-runtime.py",
                          "scripts/linux-release-container.py", "scripts/linux-release-baseline.json",
                          "scripts/linux-release.Dockerfile", ".github/workflows/build-release.yml",
+                         ".github/workflows/build-release-platform.yml",
+                         ".github/workflows/windows-compile.yml",
                          ".github/workflows/windows-headless.yml", "scripts/build-release.py",
                          "scripts/build-cpa.py", "scripts/package-desktop.py",
                          "scripts/package-standalone.py", "scripts/install-standalone.py",
