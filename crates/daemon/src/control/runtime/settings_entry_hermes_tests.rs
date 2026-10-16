@@ -652,3 +652,6 @@ fn independent_skills_without_model_plugin_survive_restart_and_restore_separatel
         b"model: [unused malformed model]\n"
     );
 }
+
+#[path = "settings_effective_tests.rs"]
+mod effective;

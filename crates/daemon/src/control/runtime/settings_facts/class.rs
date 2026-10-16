@@ -28,7 +28,7 @@ impl SettingsAgentClass {
         }
     }
 
-    pub(super) fn context_segment(self) -> &'static str {
+    pub(in crate::control::runtime) fn context_segment(self) -> &'static str {
         match self {
             Self::Codex | Self::CodexProfile => "codex",
             Self::Claude => "claude",

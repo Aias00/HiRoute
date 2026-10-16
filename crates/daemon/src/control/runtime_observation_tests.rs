@@ -1037,7 +1037,7 @@ fn ingest_value(store: &Arc<LocalObservationStore>, suffix: &str, plan: &str, oc
     }
 }
 
-fn envelope(
+pub(super) fn envelope(
     stream: &ObservationStreamV1,
     suffix: &str,
     plan: &str,

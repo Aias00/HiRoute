@@ -122,7 +122,7 @@ impl LocalControlAdapter {
             limit: 100,
             cursor: None,
             agent_id: None,
-            plan_id: Some(request.plan_id.to_string()),
+            plan_id: Some(request.plan_id.as_str().to_owned()),
             native_model: None,
             outcome: None,
             only_model_switch: false,
@@ -193,6 +193,11 @@ fn receipt_matches(
         && receipt.session_id.as_str() == summary.session_id
         && summary.receipt_id.as_deref() == Some(receipt.receipt_id.as_str())
         && !summary.relation_conflicted
+        && matches!(
+            receipt.correlation.correlation_provenance,
+            hiroute_domain::CorrelationProvenance::AgentSupplied
+                | hiroute_domain::CorrelationProvenance::ProtocolState
+        )
         && receipt.validate().is_ok()
         && expected.contains(&receipt.trust)
 }
