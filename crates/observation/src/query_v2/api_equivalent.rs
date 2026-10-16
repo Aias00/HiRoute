@@ -3,7 +3,7 @@ use super::*;
 use crate::valuation::{MetricCoverage, RawUsage, UsageBucketsV2, normalize, value_attempt};
 use hiroute_domain::{
     ApiEquivalentPriceV1, ApiEquivalentValueReportV1, ExecutionPricingEvidenceV1,
-    PriceValuationKindV1,
+    ObservationMetricCoverageV2, ObservationValueQueryV2, PriceValuationKindV1,
 };
 use rusqlite::{Connection, OpenFlags, params};
 use std::collections::BTreeMap;

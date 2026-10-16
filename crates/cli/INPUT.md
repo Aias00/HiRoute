@@ -93,3 +93,13 @@ response/target; the saved authoring value uses the Domain editor projection and
 head for normal content Preview/Apply. It never restores sources/credentials/native files or rewinds
 immutable metadata. An uncertain Apply retains its original file/key; stale/dependency errors remain
 explicit. Both preview effects and all restored effective fields must be reviewed.
+
+
+Observation content/search reads use same-user Local Control without a separate GUI ticket;
+explicit grants remain checked. The CLI accepts matching V2 catalog/ancestry/content on sessions
+show and search/session_search on sessions list. Request facts and plan-quality use their existing
+owners. `value show --basis api-equivalent --reference-binding ID --currency CNY|USD` selects a new
+read-only V2 intent; unflagged value calls retain the released historical response. Application pins
+one current price handle, and Observation reuses normalized retained usage and integer valuation.
+This does not rewrite settlement or claim subscription cash savings. See the standalone CLI guide
+for the explicit reference, incomplete coverage and source-specific price restoration workflow.

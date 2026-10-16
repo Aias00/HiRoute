@@ -980,3 +980,27 @@ hiroute routing show PLAN_ID --output json
 原生接入应给出已填好实际参数的 `agents restore preview --context ... --facet ... --apply-file ...`
 和 `agents restore apply --request-file ...` 命令、原生目录/选择参数及已有恢复点。可能撤销调用方授权
 的恢复或重接入前，先安排独立接续；原生加载/当前会话选择单独报告。
+
+
+## 分析历史会话和 API 等价省钱效果
+
+本机 CLI 复用同一系统用户的 Local Control 权限。显式读取消息、工具内容和搜索不再需要另一个 Desktop 授权票据；显式传入的票据仍会校验。模型网关凭证不能用于管理。先查询：
+
+```sh
+hiroute sessions list --include-unlinked --limit 50 --output json
+hiroute sessions show SESSION_ID --content messages-and-tools --output json
+hiroute sessions receipt RECEIPT_ID --output json
+hiroute observation plan-quality samples --plan-id PLAN_ID --output json
+```
+
+使用实际返回的 ID。`schema show --command-id sessions.show --include-schema` 给出 V2 时间线、请求内容目录、上下文来源和内容分页查询。`sessions list --request-file QUERY_JSON` 支持 search/session_search；`sessions receipt --request-file QUERY_JSON` 支持请求事实。沿用相同时间和筛选条件跟进 `next_cursor`。将任务内容、工具结果和回答与实际决策来源、简单概率/阈值、执行组、胜任度、模型/推理档和发布版本关联分析。缺失采集、过期内容或索引尚未完成只是证据缺口。调整策略前先说明依据，保留前述完整恢复命令，再审阅和应用。
+
+Coding Plan 的订阅支出与 API 等价估算分开。选定实际基准 Binding（通常为计划主力模型）和币种：
+
+```sh
+hiroute value show --routing PLAN_ID --period 7d --basis api-equivalent --reference-binding PRIMARY_BINDING --currency CNY --output json
+```
+
+该显式视图用**当前来源下的 API 等价单价**计算已记录用量，计入重试，列出基准、价格来源/时间、路由估算成本、基准估算成本和带正负号的估算差额。它不会改写历史回执，也不证明回答质量相同、订阅账单或现金节省。不完整的总额和差额保持 null；可比较子集的小计会同时报告完整请求数。负差额不会截成零。过期、缺少用量或单价均降低覆盖率；查询范围过大时可缩短区间；该视图暂不支持按日分组。普通 `value show` 保留历史估值含义。
+
+缺单价时，读取已安装的 `prices.effective` / `prices.override.preview` schema，以实际 Binding、币种和 `valuation_kind: "api_equivalent"` 查询，使用返回的 `edit_context` 修订号生成价格 Preview。手动 rates 单位是每百万 token 的整数货币微单位，输入/输出/缓存分别设置；使用有依据的价格或让用户提供这些非敏感数值，不猜测单价。保留原设置，提前给出填好参数的价格恢复 Preview/Apply 命令；原先没有手动覆盖时可用 `follow_catalog` 恢复目录价格。使用 Preview 返回的完整 spec/digest/revisions 和同一个提交 key 应用。订阅也能设置 API 等价参考价，不改变权益或普通计费分类；免费、订阅、付费和未知保持区别。

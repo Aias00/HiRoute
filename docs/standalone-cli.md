@@ -1153,3 +1153,27 @@ For native settings provide the matching concrete `agents restore preview --cont
 --apply-file ...` and `agents restore apply --request-file ...` commands, with actual native-root or
 selection flags and the owned restore reference. Arrange independent access before a restore/reconnect
 can revoke the caller's grant. Native loading/selection remains a separate reported action.
+
+
+## Analyze historical conversations and estimated API savings
+
+The installed CLI uses the authenticated same-OS-user Local Control socket. Explicit content and search reads do not need a separate Desktop-created read grant. A supplied grant is still validated; a model Gateway key grants no management access. Start with:
+
+```sh
+hiroute sessions list --include-unlinked --limit 50 --output json
+hiroute sessions show SESSION_ID --content messages-and-tools --output json
+hiroute sessions receipt RECEIPT_ID --output json
+hiroute observation plan-quality samples --plan-id PLAN_ID --output json
+```
+
+Use returned IDs. For bounded request details, `schema show --command-id sessions.show --include-schema` describes the existing V2 timeline, catalog, ancestry and content queries. `sessions list --request-file QUERY_JSON` supports V2 search/session_search; `sessions receipt --request-file QUERY_JSON` supports request facts. Follow `next_cursor` with the same time/filter scope. Correlate task text and tool/answer history with decision source, simple probability/threshold, selected group, competence assessment, actual model/reasoning and publication. Missing capture, expired data and pending indexes are coverage gaps. Review proposed policy changes and retain the complete recovery commands above before applying them.
+
+Coding Plan/subscription payments are separate from API-equivalent value. Choose an actual reference Binding, normally the Plan primary model, and a currency:
+
+```sh
+hiroute value show --routing PLAN_ID --period 7d --basis api-equivalent --reference-binding PRIMARY_BINDING --currency CNY --output json
+```
+
+This opt-in view values recorded usage with **current source-specific API-equivalent prices**, including observed retry attempts. It reports the reference and price provenance, evaluation time, routed/reference estimates and signed estimated savings. It does not rewrite frozen historical receipts or establish equal output/quality, a subscription bill or cash savings. Partial/unknown totals stay null; paired subtotals explicitly count their complete comparable requests. Negative savings remain negative. Retention and unpriced/missing usage reduce coverage; narrow a large interval if the bounded query is unavailable. Day grouping is unavailable in this view. Ordinary `value show` retains its historical meaning.
+
+For missing rates, read the installed `prices.effective` and `prices.override.preview` schemas. Query the exact Binding locator with currency and `valuation_kind: "api_equivalent"`; copy the returned `edit_context` revisions into a price Preview. Manual `rates` use integer currency micros per million tokens, with separate input/output/cache rates. Use verified prices or ask for these non-secret values; do not invent them. Apply the exact returned spec/digest/revisions with one retained key. Before changing a price, retain its prior setting and give fully populated price-restore Preview/Apply commands; `follow_catalog` restores catalog lookup when no manual override existed. API-equivalent prices can be set for subscriptions without changing their entitlement or ordinary billing class. Free, subscription, paid and unknown remain distinct.

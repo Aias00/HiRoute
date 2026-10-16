@@ -9,6 +9,7 @@ from standalone_headless_product import InstalledProduct, native_draft, NATIVE_T
 from quickstart_fixture import support_local_skill_challenge
 from quickstart_decision import run as decision_onboarding
 from quickstart_plan_recovery import run as plan_recovery
+from quickstart_analysis import run as management_analysis
 
 
 def submit(product, prepared):
@@ -174,6 +175,9 @@ def run(repository):
 
         stage = 'decision-onboarding-and-routed-groups'
         decision_onboarding(product, plan, submit)
+
+        stage = 'historical-management-analysis'
+        management_analysis(product, plan)
 
         stage = 'terminal-output-and-exit'
         capture = product.project / 'capture'
