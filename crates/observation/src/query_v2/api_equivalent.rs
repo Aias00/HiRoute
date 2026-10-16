@@ -67,7 +67,7 @@ impl crate::LocalObservationStore {
             q.session_id,
             q.plan_id
         ];
-        let scope = "WITH selected AS (SELECT r.* FROM logical_requests r JOIN sessions s ON s.workspace_id=r.workspace_id AND s.session_id=r.session_id WHERE r.workspace_id=?1 AND r.started_at_ms>=?2 AND r.started_at_ms<?3 AND (?4 IS NULL OR r.session_id=?4) AND (?5 IS NULL OR r.plan_id=?5) AND (s.tombstone_reason IS NULL OR s.content_completeness='deleted'))";
+        let scope = "WITH selected AS (SELECT r.* FROM logical_requests r JOIN sessions s ON s.workspace_id=r.workspace_id AND s.session_id=r.session_id WHERE r.workspace_id=?1 AND r.started_at_ms>=?2 AND r.started_at_ms<?3 AND (?4 IS NULL OR r.session_id=?4) AND (?5 IS NULL OR EXISTS(SELECT 1 FROM valuation_requests_v2 v WHERE v.workspace_id=r.workspace_id AND v.request_id=r.request_id AND v.plan_id=?5)) AND (s.tombstone_reason IS NULL OR s.content_completeness='deleted'))";
         let excluded: u64 = tx.query_row(
             &format!("{scope} SELECT COUNT(*) FROM selected WHERE traffic_kind!='normal'"),
             args,
