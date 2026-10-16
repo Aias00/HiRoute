@@ -21,8 +21,12 @@ The release-candidate workflow calls the local reusable Windows workflow at the
 same commit, and every package build requires its success. Both native producer
 and Windows 11 replay bind `github.sha` and record the `final` phase. This gate
 runs before candidate assets are created, not after a GitHub Release is published.
-Manual Windows dispatch remains available for CI-specific diagnosis; it does not
-publish packages or establish the separately required user/account acceptance.
+Manual Windows dispatch defaults to `all`, using the same final matrix. Select a
+single `scope` for CI-specific diagnosis: it builds and replays only that scope,
+records the `focused` phase and cannot establish complete Windows acceptance.
+The reusable release entry accepts no scope input and always runs all five scopes.
+Neither manual mode publishes packages or establishes the separately required
+user/account acceptance.
 
 Normal Rust checks select the organization `Default` runner group with the
 `cncf-ubuntu-16-64-x86` label. The organization must permit this public repository

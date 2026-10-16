@@ -1,6 +1,12 @@
 name: windows-headless
 on:
   workflow_dispatch:
+    inputs:
+      scope:
+        description: 'Use all for final validation; individual scopes are focused diagnosis'
+        type: choice
+        default: all
+        options: [all, components, core, product, background, agents]
   workflow_call:
 permissions:
   contents: read
@@ -9,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scope: [components, core, product, background, agents]
+        scope: ${{ fromJSON(inputs.scope != '' && inputs.scope != 'all' && format('["{0}"]', inputs.scope) || '["components","core","product","background","agents"]') }}
     runs-on: windows-2025
     timeout-minutes: 75
     env:
@@ -58,7 +64,7 @@ jobs:
         shell: pwsh
         run: |
           $assessment = if ('${{ matrix.scope }}' -ceq 'background') { 'hosted' } else { 'full' }
-          & scripts/windows-headless-ci.ps1 -Scope '${{ matrix.scope }}' -ExpectedSha $env:GITHUB_SHA -Evidence artifacts/windows -CpaSource "$env:RUNNER_TEMP/cpa" -Plan windows-headless -Phase final -CaptureArtifacts -Assessment $assessment
+          & scripts/windows-headless-ci.ps1 -Scope '${{ matrix.scope }}' -ExpectedSha $env:GITHUB_SHA -Evidence artifacts/windows -CpaSource "$env:RUNNER_TEMP/cpa" -Plan windows-headless -Phase '${{ inputs.scope != '' && inputs.scope != 'all' && 'focused' || 'final' }}' -CaptureArtifacts -Assessment $assessment
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -72,7 +78,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scope: [components, core, product, background, agents]
+        scope: ${{ fromJSON(inputs.scope != '' && inputs.scope != 'all' && format('["{0}"]', inputs.scope) || '["components","core","product","background","agents"]') }}
     runs-on: windows-11-arm
     timeout-minutes: 75
     steps:
@@ -104,7 +110,7 @@ jobs:
         shell: pwsh
         run: |
           $assessment = if ('${{ matrix.scope }}' -ceq 'background') { 'hosted' } else { 'full' }
-          & scripts/windows-native-replay.ps1 -Scope '${{ matrix.scope }}' -ExpectedSha $env:GITHUB_SHA -Bundle artifacts/producer -Evidence artifacts/windows11 -Plan windows-headless -Phase final -RelatedRun $env:GITHUB_RUN_ID -Assessment $assessment
+          & scripts/windows-native-replay.ps1 -Scope '${{ matrix.scope }}' -ExpectedSha $env:GITHUB_SHA -Bundle artifacts/producer -Evidence artifacts/windows11 -Plan windows-headless -Phase '${{ inputs.scope != '' && inputs.scope != 'all' && 'focused' || 'final' }}' -RelatedRun $env:GITHUB_RUN_ID -Assessment $assessment
       - uses: actions/upload-artifact@v4
         if: always()
         with:

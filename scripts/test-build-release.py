@@ -334,8 +334,22 @@ class HostedReleasePolicyTests(unittest.TestCase):
         self.assertEqual(set(events), {'workflow_dispatch', 'workflow_call'})
         self.assertNotIn('continue-on-error:', workflow)
         self.assertEqual(workflow.count('ref: ${{ github.sha }}'), 2)
-        self.assertEqual(workflow.count('-Phase final'), 2)
+        self.assertEqual(workflow.count(
+            "-Phase '${{ inputs.scope != '' && inputs.scope != 'all' && 'focused' || 'final' }}'"), 2)
         self.assertEqual(workflow.count('-ExpectedSha $env:GITHUB_SHA'), 2)
+
+    def test_manual_scope_cannot_narrow_the_reusable_release_gate(self):
+        workflow = (REPO / '.github/workflows/windows-headless.yml').read_text()
+        triggers = workflow.split('\non:\n', 1)[1].split('\npermissions:', 1)[0]
+        # Scope is a dispatch-only choice. Reusable calls reject undeclared
+        # inputs, so callers cannot turn the release gate into a partial run.
+        self.assertEqual(triggers.split('  workflow_call:', 1)[1].strip(), '')
+        self.assertIn('default: all', triggers)
+        self.assertIn('options: [all, components, core, product, background, agents]', triggers)
+        matrix = ("scope: ${{ fromJSON(inputs.scope != '' && inputs.scope != 'all' && "
+                  "format('[\"{0}\"]', inputs.scope) || "
+                  "'[\"components\",\"core\",\"product\",\"background\",\"agents\"]') }}")
+        self.assertEqual(workflow.count(matrix), 2)
 
     def test_windows_replay_requires_successful_producers(self):
         workflow = (REPO / '.github/workflows/windows-headless.yml').read_text()
