@@ -167,7 +167,10 @@ impl LocalControlAdapter {
         // Both Skill facets consume the same explicitly observed native loading capability.
         // Model-only edits remain independent from that optional check.
         let configure_skill = matches!(spec.collaboration, AgentFacetIntent::Configure { .. })
-            || matches!(spec.management_skill, AgentFacetIntent::Configure { .. });
+            || matches!(
+                spec.management_skill,
+                Some(AgentFacetIntent::Configure { .. })
+            );
         let discovery = if class == SettingsAgentClass::Claude {
             self.scanner.claude_settings_discovery(configure_skill)
         } else if class == SettingsAgentClass::CodexProfile {
