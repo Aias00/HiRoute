@@ -1,6 +1,6 @@
 use crate::ObservationMetricCoverageV2;
 use serde::{Deserialize, Serialize};
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ObservationValueQueryV2 {
     pub from_ms: i64,
@@ -76,7 +76,7 @@ pub struct ObservationCacheHitSummaryV2 {
     pub coverage: ObservationMetricCoverageV2,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ObservationMaintenanceStatusV2 {
     pub running: bool,
     pub index_running: bool,

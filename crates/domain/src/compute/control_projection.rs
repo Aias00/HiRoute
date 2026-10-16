@@ -147,7 +147,7 @@ impl ComputeControlProjectionV1 {
 }
 
 /// Exact pre-state bound into the sealed mutation and checked again by the storage CAS.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeProjectionExpectationV1 {
     pub source_revision: u64,
@@ -185,7 +185,7 @@ impl ComputeProjectionExpectationV1 {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PreparedComputeProjectionV1 {
     pub expected: ComputeProjectionExpectationV1,

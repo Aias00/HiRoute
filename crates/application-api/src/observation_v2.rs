@@ -9,18 +9,18 @@ pub use hiroute_domain::{
     PlanCompetenceFilter, PlanQualitySamplesPage, PlanQualitySamplesQuery,
 };
 use serde::{Deserialize, Serialize};
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ObservationReadRequestV2 {
     pub schema: ObservationReadSchemaV2,
     pub intent: ObservationReadIntentV2,
 }
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum ObservationReadSchemaV2 {
     #[serde(rename = "hiroute.observation.query/v2")]
     V2,
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(
     tag = "view",
     content = "query",
@@ -99,7 +99,7 @@ pub struct ObservationDeleteApplyRequestV2 {
     pub accepted_digest: hiroute_domain::CanonicalDigest,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ObservationHomeValueQueryV2 {
     #[serde(default)]
@@ -110,11 +110,11 @@ pub struct ObservationHomeValueQueryV2 {
     pub currency: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ObservationStatusQueryV2 {}
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ObservationValueReportOptionsV2 {
     pub agent_plan_id: Option<crate::AgentPlanId>,

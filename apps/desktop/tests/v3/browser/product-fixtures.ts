@@ -289,8 +289,8 @@ export function fixturePlanAuthoring(plan?: Plan): AuthoringOptions {
   return { editor, plan_id: plan?.agent_plan_id ?? null, expected_head_revision: plan?.head.head_revision ?? null,
     required_choices: [], candidate_defaults: readyManagement.sources.flatMap(source => source.models.map(model => ({
       binding_id: model.binding_id,
-      economy: model.native_reasoning?.kind === 'discrete' ? { kind: 'profile' as const, profile: 'low' } : null,
-      primary: model.native_reasoning?.kind === 'discrete' ? { kind: 'profile' as const, profile: 'high' } : null,
+      economy: (model.native_reasoning as { kind?: string } | undefined)?.kind === 'discrete' ? { kind: 'profile' as const, profile: 'low' } : null,
+      primary: (model.native_reasoning as { kind?: string } | undefined)?.kind === 'discrete' ? { kind: 'profile' as const, profile: 'high' } : null,
     }))),
   };
 }

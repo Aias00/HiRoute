@@ -8,15 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::control::{ComputeFactsPort, ComputeProjectionReadError, ControlReadError};
 
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct ComputeConnectionPlannerPayloadV1 {
-    connection_option_id: String,
-    source_id: String,
-    explicit_materialization: bool,
-    expected_source_revision: u64,
-    projection: hiroute_domain::PreparedComputeProjectionV1,
-}
+use hiroute_application_api::ComputeConnectionPlannerPayloadV1;
 
 pub(crate) fn validate_apply_spec(
     port: &dyn ComputeFactsPort,

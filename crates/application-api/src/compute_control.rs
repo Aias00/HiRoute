@@ -255,3 +255,13 @@ pub struct ComputeConnectionApplyRequestV1 {
     pub expected_revisions: RevisionSetV1,
     pub idempotency_key: String,
 }
+
+#[derive(schemars::JsonSchema, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ComputeConnectionPlannerPayloadV1 {
+    pub connection_option_id: String,
+    pub source_id: String,
+    pub explicit_materialization: bool,
+    pub expected_source_revision: u64,
+    pub projection: hiroute_domain::PreparedComputeProjectionV1,
+}

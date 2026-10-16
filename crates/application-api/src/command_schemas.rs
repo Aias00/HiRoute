@@ -2,6 +2,7 @@
 //! These definitions describe syntax; current options and Preview remain authoritative for
 //! dynamic IDs, permissions, capabilities and business validation.
 use crate::*;
+use hiroute_domain::ObservationMaintenanceStatusV2;
 use schemars::{JsonSchema, generate::SchemaSettings};
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -91,7 +92,48 @@ macro_rules! request { ($($ty:ty),+ $(,)?) => { alternatives(vec![$(schema::<$ty
 macro_rules! response { ($($ty:ty),+ $(,)?) => { alternatives(vec![$(schema::<MachineEnvelopeV2<$ty>>(true)),+]) }; }
 
 pub fn command_schemas(command_id: &str) -> Option<CommandSchemasV1> {
-    let (request, response) = match command_id {
+    let (mut request, mut response) = match command_id {
+        "sessions.list" => (
+            alternatives(vec![
+                schema::<SessionListRequestV1>(false),
+                observation_request(&["status", "sessions", "search", "session_search"]),
+            ]),
+            response!(
+                SessionListPageV1,
+                ObservationMaintenanceStatusV2,
+                ObservationSessionPageV2,
+                ObservationSearchPageV2,
+                ObservationSessionSearchPageV1
+            ),
+        ),
+        "sessions.show" => (
+            alternatives(vec![
+                schema::<SessionLookupV1>(false),
+                observation_request(&["timeline", "catalog", "ancestry", "content"]),
+            ]),
+            response!(
+                hiroute_domain::SessionDetailV1,
+                ObservationRequestPage,
+                ObservationCatalogPageV2,
+                ObservationAncestryV2,
+                ObservationContentPageV2
+            ),
+        ),
+        "sessions.receipt" => (
+            alternatives(vec![
+                schema::<SessionLookupV1>(false),
+                observation_request(&["facts"]),
+            ]),
+            response!(hiroute_domain::RoutingReceiptV1, ObservationFactsPageV2),
+        ),
+        "sessions.status" => (
+            request!(ClientEmptyRequestV1),
+            response!(hiroute_domain::ObservationStatusV1),
+        ),
+        "observation.plan-quality.samples" => (
+            observation_request(&["plan_quality"]),
+            response!(PlanQualitySamplesPage),
+        ),
         "agents.check" => (request!(AgentCheckRequestV1), response!(AgentCheckResultV1)),
         "decision.services.list" => (
             request!(ClientEmptyRequestV1),
@@ -223,6 +265,26 @@ pub fn command_schemas(command_id: &str) -> Option<CommandSchemasV1> {
         ),
         _ => return None,
     };
+    if command_id == "decision.services.apply" {
+        specialize_change(
+            &mut request,
+            &schema::<hiroute_domain::DecisionServiceChangeV1>(false),
+        );
+        specialize_change(
+            &mut response,
+            &schema::<hiroute_domain::DecisionServiceChangeV1>(true),
+        );
+        remove_property(&mut request, "apply_capability");
+    } else if command_id == "compute.connection.apply" {
+        specialize_change(
+            &mut request,
+            &request!(
+                ComputeConnectionPlannerPayloadV1,
+                ComputeManagementChangeV2,
+                ComputeSubscriptionCheckChangeV2
+            ),
+        );
+    }
     Some(CommandSchemasV1 {
         request,
         response,
@@ -232,6 +294,17 @@ pub fn command_schemas(command_id: &str) -> Option<CommandSchemasV1> {
 
 fn examples(command_id: &str) -> Vec<Value> {
     match command_id {
+        "decision.services.apply" => {
+            let change = json!({"id":"service/example", "expected_revision":0, "service":{
+                "id":"service/example","revision":1,"name":"Example decision service",
+                "connection":{"kind":"custom","endpoint":"https://decisions.example/v1/decisions","timeout_ms":10000,"auth_header":null}
+            }});
+            let spec = json!({"schema_version":hiroute_domain::CHANGE_SPEC_SCHEMA_V1, "command_id":"decision.services.apply", "resource_id":"service/example", "desired_state":change});
+            vec![
+                json!({"schema_version":hiroute_domain::CHANGE_SPEC_SCHEMA_V1,"spec":spec}),
+                json!({"schema_version":hiroute_domain::CHANGE_SPEC_SCHEMA_V1,"spec":spec,"accept_digest":format!("sha256:{}", "0".repeat(64)),"expected_revisions":{"target":0},"idempotency_key":"replace-with-one-stable-key"}),
+            ]
+        }
         "routing.options" => vec![json!({}), json!({"authoring":{}})],
         "compute.scan" => vec![json!({}), json!({"schema":COMPUTE_SCAN_REQUEST_SCHEMA_V2})],
         "compute.connection.options"
@@ -242,4 +315,68 @@ fn examples(command_id: &str) -> Vec<Value> {
         | "system.client-status" => vec![json!({})],
         _ => vec![],
     }
+}
+
+fn observation_request(views: &[&str]) -> Value {
+    let mut result = schema::<ObservationReadRequestV2>(false);
+    if let Some(variants) = result
+        .pointer_mut("/$defs/ObservationReadIntentV2/oneOf")
+        .and_then(Value::as_array_mut)
+    {
+        variants.retain(|variant| {
+            variant
+                .pointer("/properties/view/const")
+                .and_then(Value::as_str)
+                .is_some_and(|view| views.contains(&view))
+        });
+    }
+    result
+}
+fn remove_property(value: &mut Value, name: &str) {
+    match value {
+        Value::Object(object) => {
+            if let Some(properties) = object.get_mut("properties").and_then(Value::as_object_mut) {
+                properties.remove(name);
+            }
+            for child in object.values_mut() {
+                remove_property(child, name);
+            }
+        }
+        Value::Array(values) => {
+            for value in values {
+                remove_property(value, name);
+            }
+        }
+        _ => {}
+    }
+}
+fn specialize_change(value: &mut Value, desired: &Value) {
+    fn walk(value: &mut Value, desired: &Value, pointer: &str) {
+        match value {
+            Value::Object(object) => {
+                if let Some(properties) =
+                    object.get_mut("properties").and_then(Value::as_object_mut)
+                {
+                    if properties.contains_key("desired_state")
+                        && properties.contains_key("command_id")
+                    {
+                        let mut schema = desired.clone();
+                        rebase(&mut schema, &format!("#{pointer}/properties/desired_state"));
+                        properties.insert("desired_state".into(), schema);
+                        return;
+                    }
+                }
+                for (key, child) in object.iter_mut() {
+                    walk(child, desired, &format!("{pointer}/{key}"));
+                }
+            }
+            Value::Array(values) => {
+                for (i, child) in values.iter_mut().enumerate() {
+                    walk(child, desired, &format!("{pointer}/{i}"));
+                }
+            }
+            _ => {}
+        }
+    }
+    walk(value, desired, "");
 }

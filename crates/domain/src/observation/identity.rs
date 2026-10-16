@@ -115,7 +115,19 @@ macro_rules! gateway_digest_identity {
 gateway_digest_identity!(ContentBlobDigest, "blob-");
 gateway_digest_identity!(TranscriptRoot, "transcript-");
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ObservationChannel {
     Fact,
@@ -131,7 +143,9 @@ impl ObservationChannel {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(
+    schemars::JsonSchema, Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct ObservationStreamV1 {
     pub producer_id: ProducerId,

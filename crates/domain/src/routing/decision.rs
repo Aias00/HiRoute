@@ -10,7 +10,7 @@ pub const DEFAULT_COMPETENCE_CRITERIA: [&str; 3] = [
     "The branch was competent for the task: it advanced or completed the work reliably with an appropriate process and no material correction.",
 ];
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct BranchExecutionPolicyV1 {
     pub name: String,
@@ -25,7 +25,7 @@ impl BranchExecutionPolicyV1 {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct BranchExecutionV1 {
     pub policy: BranchExecutionPolicyV1,
@@ -33,7 +33,7 @@ pub struct BranchExecutionV1 {
     pub candidate_index: u16,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CompetenceProtectionV1 {
     pub segment_id: String,
@@ -134,7 +134,19 @@ impl CompetencePolicyV1 {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Deserialize,
+    Eq,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionGroupV1 {
     #[default]
@@ -142,7 +154,7 @@ pub enum ExecutionGroupV1 {
     Primary,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ModelGroupReasonV1 {
     SimpleTask,

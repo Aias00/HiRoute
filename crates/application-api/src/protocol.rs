@@ -298,7 +298,7 @@ pub enum AgentCheckSuiteV1 {
     Conformance,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct SessionLookupV1 {
     pub id: String,
@@ -306,7 +306,9 @@ pub struct SessionLookupV1 {
     pub content: Option<SessionContentModeV1>,
 }
 
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize,
+)]
 pub enum SessionContentModeV1 {
     #[default]
     #[serde(rename = "none")]
@@ -327,7 +329,7 @@ impl From<SessionContentModeV1> for ContentMode {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct SessionListRequestV1 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -348,7 +350,7 @@ pub struct SessionListRequestV1 {
     pub cursor: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct SessionListPageV1 {
     pub sessions: Vec<SessionSummaryV1>,
@@ -356,7 +358,9 @@ pub struct SessionListPageV1 {
     pub next_cursor: Option<String>,
 }
 
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ValuePeriodV1 {
     Today,
@@ -1083,7 +1087,7 @@ pub(crate) fn command_usage(command_id: &str, joined_path: &str) -> String {
         "tasks.continue" => "hiroute tasks continue --request-stdin (--agent <codex|claude-code> | --capability-fd <FD>) --json".into(),
         "work-plans.list" => "hiroute work-plans list --request-stdin (--agent <codex|claude-code> | --capability-fd <FD>) --json".to_owned(),
         "agent.launch" => "hiroute agent launch --agent claude-code --context <CONTEXT_ID> -- <CLAUDE_SESSION_ARGS...>".to_owned(),
-        "schema.show" => "hiroute schema show --command-id <stable-command-id> --non-interactive --output json".to_owned(),
+        "schema.show" => "hiroute schema show --command-id <stable-command-id> [--include-schema] --non-interactive --output json".to_owned(),
         "operations.find" => "hiroute operations find --request-stdin --output json".to_owned(),
         "models.show" | "prices.effective" | "prices.override.preview" | "prices.override.apply" | "compute.credential.add" => format!("hiroute {joined_path} --request-stdin --output json"),
         "compute.list" => "hiroute compute list --output json".to_owned(),
@@ -1150,7 +1154,7 @@ pub(crate) fn command_arguments(command_id: &str) -> String {
         "work-plans.list" => "Required identity: --agent reads the private sealed collaboration installation, or --capability-fd supplies an inherited collaboration pipe; never both. stdin JSON contains workspace_id, context_id, and grant_id as non-secret selectors. The latest allowlist, published Worker metadata, and behavior-verified installation availability are read on every query.".to_owned(),
         "agent.launch" => "--agent claude-code and --context <CONTEXT_ID> are required, followed by the exact -- delimiter. Session arguments after -- are passed as native OsString values. The last --settings object or file supplies the managed overlay, matching native repeated-option precedence (unrelated fields survive; routing, authentication, and provider entries stay managed). --model, --setting-sources, and --fallback-model pass through unchanged. Cloud-provider, authentication, and routing override arguments are rejected before Local Control access or spawn.".to_owned(),
         "schema.list" => "Global --output json and --request-id options only.".to_owned(),
-        "schema.show" => "Required: --command-id <stable-command-id>. Global --output json and --request-id options are supported.".to_owned(),
+        "schema.show" => "Required: --command-id <stable-command-id>. --include-schema returns complete bundled request/response definitions and examples for management commands; omission retains the descriptor. Global --output json and --request-id options are supported.".to_owned(),
         "setup.apply" => "The setup document is read from --spec-fd. Digest, expected revision, and idempotency key are mandatory. Mutation authority is accepted only from the protected inherited capability channel.".to_owned(),
         "agents.check" => "Configuration, native-authentication and collaboration are bounded local checks admitted by the owner-only same-UID transport and make no upstream model call. Live requires --target JSON containing context_id, surface, expected_applied_revision and client_model_ids, --allow-model-call and a separately delivered one-shot capability bound to that target. Targets are forbidden on local checks; provider, credential, prompt and URL overrides are forbidden.".to_owned(),
         "compute.connection.preview" => "--request-stdin accepts exactly one registered v1 projection, compute-management v2 save/edit, or subscription-check v2 preview request. The optional edit action is rename (display_name), append_models (checked candidate; preserves existing models), remove_models (saved source; selected refs are removals), or delete (saved source; no selected refs). Omitting edit retains released save semantics. Referenced models, including disabled routes and retained versions, cannot be deleted. Preview has no durable side effect and returns the exact digest and revisions required by Apply.".to_owned(),
