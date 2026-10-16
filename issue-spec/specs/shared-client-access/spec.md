@@ -398,6 +398,33 @@ HiRoute SHALL let an installed CLI caller retain the complete effective configur
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/125#issuecomment-6219937964
 
+### Requirement: Analyze retained session evidence through same-user CLI management
+
+HiRoute SHALL let the authenticated same-OS-user Local Control CLI read retained session timelines, explicit message/tool content, searchable content and routing/competence evidence for user-authorized model and decision analysis without a separate graphical approval or protected read ticket. Content remains explicitly selected, bounded, paginated and subject to current workspace/run visibility and retention. An explicitly supplied protected grant SHALL still be validated and a model Gateway credential SHALL NOT grant Local Control access. The common management Skill SHALL connect actual content to request/publication, decision source, branch and competence evidence, distinguish missing evidence, and propose reviewable changes with complete recovery rather than silently tune routing.
+
+#### Scenario: Analyze a historical conversation
+
+- **WHEN** a local management Agent requests a retained session and explicitly selected content
+- **THEN** the CLI returns the available conversation and request evidence without requiring a Desktop-created grant; missing or expired content is reported rather than fabricated.
+
+#### Scenario: Follow bounded evidence pages
+
+- **WHEN** analysis requires content search, request facts or competence samples
+- **THEN** the public CLI can follow the existing scoped queries and continuations, preserving identifiers, visibility and partial coverage.
+
+#### Scenario: Preserve actual authority
+
+- **WHEN** a caller supplies an invalid protected grant or only a model Gateway credential
+- **THEN** the invalid authority is rejected; the read change does not grant remote model clients management access.
+
+#### Scenario: Review an evidence-based adjustment
+
+- **WHEN** an Agent identifies an apparent simple/complex or competence mismatch
+- **THEN** it reports the linked evidence and uncertainty, retains complete prior configuration and uses the existing reviewable change/recovery path.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/125#issuecomment-6220387323
+
 ## Implementation references
 
 - [Client Core](../../../crates/client-core/src) and

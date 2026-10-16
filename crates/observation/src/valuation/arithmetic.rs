@@ -20,6 +20,8 @@ pub fn value_attempt(
     }
     let mut numerator = Some(0u128);
     let mut known = 0;
+    let known_base = matches!(quote.rates.input_uncached, TokenRateV1::Known { .. })
+        && matches!(quote.rates.output, TokenRateV1::Known { .. });
     let mut components = Vec::with_capacity(4);
     for (name, tokens, rate) in [
         (
@@ -33,7 +35,7 @@ pub fn value_attempt(
     ] {
         let missing = match (tokens, rate) {
             (None, _) => Some(ValuationMissingReason::UsageUnknown),
-            (Some(0), _) => {
+            (Some(0), _) if known_base => {
                 known += 1;
                 None
             }
