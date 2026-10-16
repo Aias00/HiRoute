@@ -15,8 +15,13 @@ use serde_json::json;
 use crate::args::{Globals, OutputMode};
 use crate::{CliExecution, LocalControlClient, failure, service, success};
 
+mod console;
+
 pub(crate) fn execute(arguments: &[String], globals: &Globals) -> Option<CliExecution> {
     let family = arguments.first()?.as_str();
+    if family == "console" {
+        return Some(console::execute(&arguments[1..], globals));
+    }
     if !matches!(
         family,
         "service" | "gateway" | "protected-input" | "subscription-proxy"

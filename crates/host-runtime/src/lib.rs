@@ -25,3 +25,6 @@ pub use storage_progress::StorageUpgradePhase;
 
 mod subscription_proxy;
 pub use subscription_proxy::*;
+
+mod console_listener;
+pub use console_listener::*;
