@@ -414,7 +414,8 @@
     "hiroute.worker-result-request/v1",
     "hiroute.worker-settings/v1",
     "hiroute.worker-status-request/v1",
-    "hiroute.worker-wait-request/v1"
+    "hiroute.worker-wait-request/v1",
+    "hiroute.api-equivalent-value/v1"
   ],
   "subjects": [
     {
@@ -1483,6 +1484,20 @@
       "allowed_paths": [
         "crates/integrations/src/agents/hermes_config.rs",
         "crates/integrations/tests/fixtures/hermes-config-restore-80269c5.json"
+      ]
+    },
+    {
+      "contract": "hiroute.gateway.publication-snapshot/v3",
+      "field": "omitted billing_class on retained executable projections",
+      "mode": "recovery_read_only",
+      "owner": "routing-publication",
+      "reason": "Preserve strict decoding and canonical stored Product bytes when the derived billing class is absent. gateway_snapshot projects trusted source billing class without rewriting stored publication/Plan records; absence is unknown, never free. Current request receipts use this supplying class independently of any selected API-equivalent estimate.",
+      "removal_condition": "Retire only with an explicit supported publication/cache compatibility decision.",
+      "allowed_paths": [
+        "crates/domain/src/publication/mod.rs",
+        "crates/domain/src/publication/snapshot.rs",
+        "crates/gateway/src/publication/schema.rs",
+        "crates/gateway/src/composition/ports.rs"
       ]
     }
   ]

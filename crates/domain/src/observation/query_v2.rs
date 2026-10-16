@@ -444,7 +444,7 @@ pub struct ObservationValuationAmountV2 {
     pub missing_attempt_count: u64,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ObservationMetricCoverageV2 {
     Complete,

@@ -94,6 +94,18 @@ macro_rules! response { ($($ty:ty),+ $(,)?) => { alternatives(vec![$(schema::<Ma
 
 pub fn command_schemas(command_id: &str) -> Option<CommandSchemasV1> {
     let (mut request, mut response) = match command_id {
+        "prices.effective" => (
+            request!(GetEffectivePricesV2),
+            response!(EffectivePricesResultV2),
+        ),
+        "prices.override.preview" => (
+            request!(PreviewPriceOverrideChangeV2),
+            response!(PriceOverridePreviewV2),
+        ),
+        "prices.override.apply" => (
+            request!(ApplyPriceOverrideChangeV2),
+            response!(PriceApplyOperationV2),
+        ),
         "value.show" => (
             observation_request(&[
                 "value",
