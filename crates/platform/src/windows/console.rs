@@ -40,6 +40,7 @@ pub fn is_attached() -> io::Result<bool> {
 /// https://learn.microsoft.com/en-us/windows/console/getstdhandle#attachdetach-behavior
 pub fn attach_parent_preserving_stdio() -> io::Result<ParentConsoleAttachment> {
     if is_attached()? {
+        enable_foreground_interrupt()?;
         return Ok(ParentConsoleAttachment::AlreadyAttached);
     }
     // SAFETY: GetStartupInfoW fills this process's ordinary startup information.
@@ -83,7 +84,21 @@ pub fn attach_parent_preserving_stdio() -> io::Result<ParentConsoleAttachment> {
     if let Some(error) = restore_error {
         return Err(error);
     }
+    if attachment != ParentConsoleAttachment::ParentHasNoConsole {
+        enable_foreground_interrupt()?;
+    }
     Ok(attachment)
+}
+
+fn enable_foreground_interrupt() -> io::Result<()> {
+    // AttachConsole resets handlers, but the separate Ctrl-C-ignore attribute is
+    // inherited from launching shells. Explicit foreground use must receive the
+    // signal before installing its own shutdown handler. This changes only us.
+    // https://learn.microsoft.com/en-us/windows/console/setconsolectrlhandler
+    if unsafe { SetConsoleCtrlHandler(None, 0) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
 }
 
 static WAIT_HANDLER: AtomicBool = AtomicBool::new(false);

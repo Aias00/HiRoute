@@ -17,6 +17,7 @@ use hiroute_platform::windows::{console, job, lifecycle, security};
 use serde_json::Value;
 use windows_sys::Win32::System::Console::{
     CTRL_BREAK_EVENT, CTRL_C_EVENT, GenerateConsoleCtrlEvent, GetConsoleProcessList,
+    SetConsoleCtrlHandler,
 };
 
 use super::{IO_BOUND, InstalledProduct, assert_no_secret};
@@ -228,6 +229,10 @@ fn foreground_console_host() {
     assert_eq!(subsystem(&cli), 3);
     assert_eq!(subsystem(&daemon), 2);
     checkpoint(1);
+    // Shells and process supervisors may pass this inheritable attribute to a
+    // console child. The actual GUI daemon must restore foreground Ctrl-C after
+    // attaching; this fixture's own handler still protects Ctrl-Break broadcasts.
+    assert_ne!(unsafe { SetConsoleCtrlHandler(None, 1) }, 0);
     // Ordinary CreateProcess inherits this host's already assigned non-breakaway
     // Job and existing console before execution. Do not create a second console.
     let mut child = Command::new(&cli)

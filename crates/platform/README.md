@@ -76,6 +76,12 @@ whole Job when the leader exits. Numeric PIDs do not grant termination authority
 whose argv must cross a caller's cmd invocation. Credential pipes are exclusive,
 private, bounded and explicitly inherited; their raw handle values are locators.
 
+`windows::console` attaches an explicitly foreground GUI daemon to its parent's
+console while preserving redirected I/O. It restores Ctrl-C processing after
+attachment, including when a shell passed the inheritable Ctrl-C-ignore attribute;
+the daemon then registers its own shutdown handlers. Background launches do not
+attach a console or change this foreground policy.
+
 Background lifecycle messages authenticate a held process image, creation time,
 and pipe peer identity. Task mode uses the same interactive account at LUA level;
 SCM mode authenticates a qualified owner account and uses a restricted business
