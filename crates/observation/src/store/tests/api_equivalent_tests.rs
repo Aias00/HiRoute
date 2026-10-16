@@ -254,7 +254,7 @@ fn local_price_namespace_uses_the_same_exact_recorded_model_configuration() {
             &reader(&fixture),
             &query(&fixture),
             &local,
-            &[local.clone()],
+            std::slice::from_ref(&local),
             1000,
         )
         .unwrap();
