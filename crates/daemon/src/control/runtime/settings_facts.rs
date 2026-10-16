@@ -164,18 +164,16 @@ impl LocalControlAdapter {
         } else {
             None
         };
+        // Both Skill facets consume the same explicitly observed native loading capability.
+        // Model-only edits remain independent from that optional check.
+        let configure_skill = matches!(spec.collaboration, AgentFacetIntent::Configure { .. })
+            || matches!(spec.management_skill, AgentFacetIntent::Configure { .. });
         let discovery = if class == SettingsAgentClass::Claude {
-            self.scanner.claude_settings_discovery(matches!(
-                &spec.collaboration,
-                AgentFacetIntent::Configure { .. }
-            ))
+            self.scanner.claude_settings_discovery(configure_skill)
         } else if class == SettingsAgentClass::CodexProfile {
             self.scanner.codex_profile_settings_discovery()
         } else {
-            self.scanner.codex_settings_discovery(matches!(
-                &spec.collaboration,
-                AgentFacetIntent::Configure { .. }
-            ))
+            self.scanner.codex_settings_discovery(configure_skill)
         };
         let mut installation = match &owned_claude {
             Some((installation, _)) => installation.clone(),
@@ -190,7 +188,7 @@ impl LocalControlAdapter {
         };
         #[cfg(unix)]
         if class == SettingsAgentClass::Claude
-            && matches!(&spec.collaboration, AgentFacetIntent::Configure { .. })
+            && configure_skill
             && let Some((_, executable)) = &owned_claude
         {
             self.scanner.attach_claude_collaboration_evidence(
