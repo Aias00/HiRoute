@@ -9,9 +9,7 @@ pub enum RatingSnapshotSelectionV1 {
     Latest,
     Version { version: String },
 }
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModelRatingQueryItemV1 {
     pub query_id: String,
@@ -24,17 +22,13 @@ pub struct ResolveModelRatingsV1 {
     pub snapshot: RatingSnapshotSelectionV1,
     pub items: Vec<ModelRatingQueryItemV1>,
 }
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModelRatingResultItemV1 {
     pub query_id: String,
     pub rating: ResolvedModelRatingV1,
 }
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ResolveModelRatingsResultV1 {
     pub snapshot_ref: RatingSnapshotRefV1,

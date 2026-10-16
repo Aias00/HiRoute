@@ -42,17 +42,7 @@ const MAX_REQUEST_ATTEMPTS: u16 = 6;
 const MAX_LOGICAL_REQUEST_DURATION_MS: u64 = 60 * 60 * 1_000;
 
 #[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    Ord,
-    PartialEq,
-    PartialOrd,
-    Serialize,
+    schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize,
 )]
 #[serde(transparent)]
 pub struct GatewayPublicationRevision(u64);

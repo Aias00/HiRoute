@@ -5,9 +5,7 @@ use serde::{Deserialize, Serialize};
 pub use hiroute_domain::{PUBLICATION_CHECKPOINT_CHANGE_SCHEMA_V1, PublicationCheckpointChangeV1};
 pub const PUBLICATION_CHECKPOINT_PREVIEW_SCHEMA_V1: &str =
     "hiroute.publication-checkpoint-preview/v1";
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PublicationCheckpointPreviewV1 {
     pub schema: String,
@@ -16,16 +14,12 @@ pub struct PublicationCheckpointPreviewV1 {
     pub before_digest: CanonicalDigest,
     pub publication_revision: GatewayPublicationRevision,
 }
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PublicationCheckpointPreviewRequestV1 {
     pub change: PublicationCheckpointChangeV1,
 }
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PublicationCheckpointApplyRequestV1 {
     pub change: PublicationCheckpointChangeV1,
@@ -37,9 +31,7 @@ pub struct PublicationCheckpointApplyRequestV1 {
 pub const PLAN_CONTENT_CHANGE_SCHEMA_V2: &str = "hiroute.plan-content-change/v2";
 pub const PLAN_CONTENT_PREVIEW_SCHEMA_V2: &str = "hiroute.plan-content-preview/v2";
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "intent", rename_all = "snake_case", deny_unknown_fields)]
 pub enum PlanContentTargetV2 {
     Create {
@@ -50,18 +42,14 @@ pub enum PlanContentTargetV2 {
         expected_head_revision: u64,
     },
 }
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanDraftRefV1 {
     pub draft_id: String,
     pub revision: u64,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanContentChangeV2 {
     pub schema: String,
@@ -69,9 +57,7 @@ pub struct PlanContentChangeV2 {
     pub editor: PlanEditorStateV2,
     pub consumed_draft: Option<PlanDraftRefV1>,
 }
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanContentPreviewV2 {
     pub schema: String,
@@ -85,16 +71,12 @@ pub struct PlanContentPreviewV2 {
     pub plan_version: PlanVersionV1,
     pub consumed_draft: Option<PlanDraftRefV1>,
 }
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanContentPreviewRequestV2 {
     pub change: PlanContentChangeV2,
 }
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanContentApplyRequestV2 {
     pub change: PlanContentChangeV2,
@@ -121,9 +103,7 @@ pub fn plan_content_confirmation_digest(
 
 pub const PLAN_LIFECYCLE_CHANGE_SCHEMA_V1: &str = "hiroute.plan-lifecycle-change/v1";
 pub const PLAN_LIFECYCLE_PREVIEW_SCHEMA_V1: &str = "hiroute.plan-lifecycle-preview/v1";
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanLifecycleChangeV1 {
     pub schema: String,
@@ -131,9 +111,7 @@ pub struct PlanLifecycleChangeV1 {
     pub expected_head_revision: u64,
     pub status: PlanLifecycleV1,
 }
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanLifecyclePreviewV1 {
     pub schema: String,
@@ -146,16 +124,12 @@ pub struct PlanLifecyclePreviewV1 {
     pub has_version_holds: bool,
     pub no_new_calls: bool,
 }
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanLifecyclePreviewRequestV1 {
     pub change: PlanLifecycleChangeV1,
 }
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanLifecycleApplyRequestV1 {
     pub change: PlanLifecycleChangeV1,
@@ -166,16 +140,12 @@ pub struct PlanLifecycleApplyRequestV1 {
 
 pub const PLAN_DRAFT_CHANGE_SCHEMA_V1: &str = hiroute_domain::PLAN_DRAFT_CHANGE_SCHEMA_V1;
 pub const PLAN_DRAFT_PREVIEW_SCHEMA_V1: &str = "hiroute.plan-draft-preview/v1";
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanDraftPreviewRequestV1 {
     pub change: PlanDraftChangeV1,
 }
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanDraftApplyRequestV1 {
     pub change: PlanDraftChangeV1,
@@ -183,9 +153,7 @@ pub struct PlanDraftApplyRequestV1 {
     pub expected_revisions: RevisionSetV1,
     pub idempotency_key: String,
 }
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanDraftPreviewV1 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -197,9 +165,7 @@ pub struct PlanDraftPreviewV1 {
     pub after: Option<PlanDraftV1>,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SuggestionUnavailableReasonV1 {
     NotFree,
@@ -208,9 +174,7 @@ pub enum SuggestionUnavailableReasonV1 {
     NativeSelectionRequired,
     NativeSelectionInvalid,
 }
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct FreeSuggestionV1 {
     pub selection: CandidateSelectionV1,
@@ -219,9 +183,7 @@ pub struct FreeSuggestionV1 {
     /// None means the rating service has no snapshot; it is never converted to a zero score.
     pub rating: Option<ResolvedModelRatingV1>,
 }
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct FreeSuggestionsV1 {
     pub snapshot_ref: Option<RatingSnapshotRefV1>,
@@ -229,7 +191,7 @@ pub struct FreeSuggestionsV1 {
     pub unavailable: std::collections::BTreeMap<String, SuggestionUnavailableReasonV1>,
 }
 
-#[derive(schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanCandidateOptionV1 {
     pub binding_id: String,
@@ -243,17 +205,7 @@ pub struct PlanCandidateOptionV1 {
 }
 
 /// Safe local reasons; never carry provider payloads, endpoints or credentials.
-#[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    PartialEq,
-    Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PlanCandidateUnavailableReasonV1 {
     InvalidModelId,
@@ -266,9 +218,7 @@ pub enum PlanCandidateUnavailableReasonV1 {
     InvalidConfiguration,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanUnavailableCandidateV1 {
     pub binding_id: String,
@@ -276,92 +226,40 @@ pub struct PlanUnavailableCandidateV1 {
     pub reason: PlanCandidateUnavailableReasonV1,
 }
 
-#[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    PartialEq,
-    Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CodexInputModalityV1 {
     Text,
     Image,
 }
 
-#[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    PartialEq,
-    Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CodexReasoningControlV1 {
     RouteConfiguration,
 }
 
-#[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    PartialEq,
-    Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CodexCandidateCapabilityLimitKindV1 {
     ContextWindow,
     ImageInput,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CodexCandidateCapabilityLimitV1 {
     pub kind: CodexCandidateCapabilityLimitKindV1,
     pub binding_ids: Vec<String>,
 }
 
-#[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    PartialEq,
-    Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CodexFixedCapabilityLimitV1 {
     ParallelToolCallsDisabled,
 }
 
-#[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    PartialEq,
-    Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CodexCapabilityIssueKindV1 {
     PlanCompilation,
@@ -376,9 +274,7 @@ pub enum CodexCapabilityIssueKindV1 {
     ContextWindow,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CodexCapabilityIssueV1 {
     pub kind: CodexCapabilityIssueKindV1,
@@ -386,9 +282,7 @@ pub struct CodexCapabilityIssueV1 {
     pub binding_id: Option<String>,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "state", rename_all = "snake_case", deny_unknown_fields)]
 pub enum CodexClientCapabilityPreviewV1 {
     Available {
@@ -403,9 +297,7 @@ pub enum CodexClientCapabilityPreviewV1 {
     },
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Default, Deserialize, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanEditorOptionsRequestV1 {
     /// Opt in so released strict response readers keep their original field set.
@@ -429,7 +321,7 @@ pub struct PlanEditorOptionsRequestV1 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub authoring: Option<PlanAuthoringRequestV1>,
 }
-#[derive(schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanEditorOptionsV1 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -450,9 +342,7 @@ pub struct PlanEditorOptionsV1 {
 }
 
 /// Meaningful edits to a new or existing Plan. Omitted fields preserve saved settings.
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Default, Deserialize, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanAuthoringRequestV1 {
     #[serde(default)]
@@ -473,7 +363,7 @@ pub struct PlanAuthoringRequestV1 {
     pub classifier: Option<ComplexityClassifierModeV1>,
 }
 
-#[derive(schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanAuthoringOptionsV1 {
     pub editor: PlanEditorStateV2,
@@ -483,7 +373,7 @@ pub struct PlanAuthoringOptionsV1 {
     pub candidate_defaults: Vec<PlanCandidateDefaultsV1>,
 }
 
-#[derive(schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanCandidateDefaultsV1 {
     pub binding_id: String,
@@ -491,26 +381,14 @@ pub struct PlanCandidateDefaultsV1 {
     pub primary: Option<ReasoningSelectionV1>,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanAuthoringChoiceV1 {
     pub field: String,
     pub reason: PlanAuthoringChoiceReasonV1,
 }
 
-#[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    PartialEq,
-    Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PlanAuthoringChoiceReasonV1 {
     Required,
@@ -520,14 +398,14 @@ pub enum PlanAuthoringChoiceReasonV1 {
 }
 
 /// Independent capability bound remains visible when a saved custom window becomes invalid.
-#[derive(schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanContextWindowPreviewV1 {
     pub maximum_tokens: u64,
     pub default_tokens: u64,
 }
 
-#[derive(schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "state", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ClaudeClientCapabilityPreviewV1 {
     Available {
@@ -539,7 +417,7 @@ pub enum ClaudeClientCapabilityPreviewV1 {
     },
 }
 
-#[derive(schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PublishedPlanCapabilityRequestV1 {
     pub plan_id: hiroute_domain::AgentPlanId,

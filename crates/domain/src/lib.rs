@@ -69,17 +69,7 @@ pub const PRODUCT_CONTRACT_REVISION: &str = "487a807c8dc25cfb24e8b097882cd3bb971
 pub const PROPOSAL_MAP_REVISION: &str = "ab4da93cc49c6ec56a01e046230411ff1ca82300";
 
 #[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    Ord,
-    PartialEq,
-    PartialOrd,
-    Serialize,
+    schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize,
 )]
 pub struct SchemaVersion {
     pub major: u16,
@@ -112,17 +102,7 @@ impl SchemaVersion {
 pub const CHANGE_SPEC_SCHEMA_V1: SchemaVersion = SchemaVersion::new(1, 0);
 
 #[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Debug,
-    Deserialize,
-    Eq,
-    Hash,
-    Ord,
-    PartialEq,
-    PartialOrd,
-    Serialize,
+    schemars::JsonSchema, Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize,
 )]
 #[serde(transparent)]
 pub struct CanonicalDigest(String);
@@ -177,18 +157,14 @@ pub enum CanonicalDigestError {
     InvalidFormat,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct RevisionSetV1 {
     pub target: u64,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub dependencies: BTreeMap<String, u64>,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ChangeSpecV1 {
     pub schema_version: SchemaVersion,
     pub command_id: String,

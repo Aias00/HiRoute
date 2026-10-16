@@ -8,17 +8,7 @@ use super::CONNECTOR_REGISTRY_SCHEMA_V1;
 use super::common::*;
 
 #[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    Ord,
-    PartialEq,
-    PartialOrd,
-    Serialize,
+    schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum ConnectorRuntimeKind {
@@ -27,17 +17,7 @@ pub enum ConnectorRuntimeKind {
 }
 
 #[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    Ord,
-    PartialEq,
-    PartialOrd,
-    Serialize,
+    schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum ConnectionOrigin {
@@ -56,17 +36,7 @@ pub enum InventoryStrategyKind {
 }
 
 #[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    Ord,
-    PartialEq,
-    PartialOrd,
-    Serialize,
+    schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum AuthenticationKind {
@@ -76,17 +46,7 @@ pub enum AuthenticationKind {
 }
 
 #[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    Ord,
-    PartialEq,
-    PartialOrd,
-    Serialize,
+    schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum UpstreamProtocol {
@@ -96,17 +56,7 @@ pub enum UpstreamProtocol {
 }
 
 #[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    Ord,
-    PartialEq,
-    PartialOrd,
-    Serialize,
+    schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum BillingClass {
@@ -127,17 +77,7 @@ impl BillingClass {
 }
 
 #[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    Ord,
-    PartialEq,
-    PartialOrd,
-    Serialize,
+    schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum FreeAccess {
@@ -167,9 +107,7 @@ pub struct ConnectorDescriptorV1 {
     pub cache_policy_revision: u64,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProtocolEndpointV1 {
     pub protocol_endpoint_id: String,

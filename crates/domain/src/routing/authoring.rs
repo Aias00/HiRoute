@@ -11,17 +11,7 @@ use crate::{AgentPlanDisplayName, AgentPlanPurpose};
 pub const PLAN_EDITOR_SCHEMA_V2: &str = "hiroute.plan-editor/v2";
 pub const PLAN_AUTHORING_SCHEMA_V2: &str = "hiroute.plan-authoring/v2";
 
-#[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    PartialEq,
-    Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PlanEditorMode {
     FixedModel,
@@ -31,18 +21,14 @@ pub enum PlanEditorMode {
 }
 
 /// Installation availability belongs to 14 and does not alter saved configuration.
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct WorkerPlanV1 {
     pub harness: WorkerHarnessV1,
     pub protocol: crate::AgentIngressProtocolV1,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct SmartEditorV2 {
     pub economy: Vec<CandidateSelectionV1>,
@@ -53,9 +39,7 @@ pub struct SmartEditorV2 {
     pub complex_keywords: Vec<String>,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct FreeEditorV2 {
     pub candidates: Vec<CandidateSelectionV1>,
@@ -63,9 +47,7 @@ pub struct FreeEditorV2 {
     pub primary_fallback: bool,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanEditorStateV2 {
     pub schema: String,
@@ -195,9 +177,7 @@ impl PlanEditorStateV2 {
     }
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AgentPlanAuthoringV2 {
     pub schema: String,
@@ -212,9 +192,7 @@ pub struct AgentPlanAuthoringV2 {
     pub work: Option<WorkerPlanV1>,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "mode", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AgentPlanStrategyV2 {
     Branches {

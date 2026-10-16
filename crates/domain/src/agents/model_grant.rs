@@ -20,6 +20,7 @@ pub enum AgentModelRouteV2 {
     Fixed {
         candidate: CandidateSelectionV1,
         #[serde(with = "crate::binding_codec")]
+        #[schemars(with = "crate::StoredCandidateV1")]
         binding: Box<AttemptOwnedCandidateV1>,
     },
 }

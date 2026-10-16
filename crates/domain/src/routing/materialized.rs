@@ -25,7 +25,6 @@ thread_local! {
 
 #[derive(
     schemars::JsonSchema,
-    schemars::JsonSchema,
     Clone,
     Copy,
     Debug,
@@ -60,9 +59,7 @@ impl MaterializedGroupId {
     }
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MaterializedBranchV1 {
     pub id: String,
@@ -79,9 +76,7 @@ impl MaterializedBranchV1 {
     }
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "strategy", rename_all = "snake_case", deny_unknown_fields)]
 pub enum RequestOwnedRouteV1 {
     Branches {
@@ -103,26 +98,14 @@ pub enum RequestOwnedRouteV1 {
     },
 }
 
-#[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    PartialEq,
-    Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MaterializedCostPolicyV1 {
     ApiEquivalent,
     StrictFree,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum MaterializedOrderingV1 {
     QualityFirst,
@@ -134,9 +117,7 @@ pub enum MaterializedOrderingV1 {
     ExplicitOrder,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MaterializedModelGroupV1 {
     pub group_id: MaterializedGroupId,
@@ -150,9 +131,7 @@ pub struct MaterializedModelGroupV1 {
     pub candidates: Vec<AttemptOwnedCandidateV1>,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MaterializedRatingFactV1 {
     pub model_configuration_id: String,
@@ -160,9 +139,7 @@ pub struct MaterializedRatingFactV1 {
     pub rating_count: u64,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MaterializedFreeOfferRefV1 {
     pub free_offer_id: String,
@@ -172,9 +149,7 @@ pub struct MaterializedFreeOfferRefV1 {
     pub evidence_digest: CanonicalDigest,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AttemptOwnedCandidateV1 {
     pub binding_id: String,
@@ -339,26 +314,20 @@ impl AttemptOwnedCandidateV1 {
     }
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AttemptOwnedRouteV1 {
     pub limits: RoutingLimitsV1,
     pub groups: Vec<MaterializedModelGroupV1>,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PriceTrackingMode {
     FollowLatest,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AgentPlanFactRefsV1 {
     pub connector_registry_version: String,
@@ -451,9 +420,7 @@ pub enum ReplanReason {
     InventoryChanged,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MaterializedAgentPlanV1 {
     pub fact_refs: AgentPlanFactRefsV1,
@@ -675,9 +642,7 @@ fn validate_request_groups(
     }
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CompiledAgentPlanBodyV1 {
     pub schema: String,
@@ -690,7 +655,7 @@ pub struct CompiledAgentPlanBodyV1 {
 
 /// A sealed body is shared immutably. Copy-on-write edits detach from the proof and must
 /// pass full validation again; deserialization never imports an in-memory proof.
-#[derive(schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CompiledAgentPlanV1 {
     #[serde(serialize_with = "crate::operation::shared_input::serialize")]

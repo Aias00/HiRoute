@@ -5,17 +5,7 @@ use serde::{Deserialize, Serialize};
 pub const AGENT_MODEL_BUDGET_CONFLICT_SCHEMA_V1: &str = "hiroute.agent-model-budget-conflict/v1";
 pub const AGENT_MODEL_BUDGET_CONFLICT_CODE: &str = "AGENT_MODEL_BUDGET_CONFLICT";
 
-#[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    PartialEq,
-    Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AgentModelTokenBudgetV1 {
     pub context_window_tokens: u64,
@@ -23,17 +13,7 @@ pub struct AgentModelTokenBudgetV1 {
 }
 
 #[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    Ord,
-    PartialEq,
-    PartialOrd,
-    Serialize,
+    schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum AgentModelBudgetReasonV1 {
@@ -42,9 +22,7 @@ pub enum AgentModelBudgetReasonV1 {
     BudgetUnavailable,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AgentModelBudgetBlockerV1 {
     pub agent_kind: AgentKindV1,
@@ -56,9 +34,7 @@ pub struct AgentModelBudgetBlockerV1 {
     pub proposed: Option<AgentModelTokenBudgetV1>,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AgentModelBudgetConflictV1 {
     pub schema: String,

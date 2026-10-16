@@ -11,34 +11,14 @@ use crate::{ComputeCandidateTargetV2, ComputeModelMembershipV2};
 
 pub const COMPUTE_MANAGEMENT_SNAPSHOT_SCHEMA_V2: &str = "hiroute.compute-management-snapshot/v2";
 
-#[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Debug,
-    Default,
-    Deserialize,
-    Eq,
-    PartialEq,
-    Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeManagementQueryV2 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_id: Option<String>,
 }
 
-#[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    PartialEq,
-    Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ComputeManagedKeyAvailabilityV2 {
     Available,
@@ -48,9 +28,7 @@ pub enum ComputeManagedKeyAvailabilityV2 {
     Unknown,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeManagedKeyModelStatusV2 {
     pub binding_id: String,
@@ -59,9 +37,7 @@ pub struct ComputeManagedKeyModelStatusV2 {
     pub cooldown_until_ms: Option<i64>,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeManagedKeyViewV2 {
     pub key_id: String,
@@ -72,9 +48,7 @@ pub struct ComputeManagedKeyViewV2 {
     pub model_statuses: Vec<ComputeManagedKeyModelStatusV2>,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeManagedModelViewV2 {
     pub model_ref: String,
@@ -91,17 +65,7 @@ pub struct ComputeManagedModelViewV2 {
     pub presentation: ComputeModelPresentationV1,
 }
 
-#[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    PartialEq,
-    Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ComputeConnectionAccessKindV1 {
     Api,
@@ -109,9 +73,7 @@ pub enum ComputeConnectionAccessKindV1 {
     Unknown,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeConnectionIdentityV1 {
     pub access_kind: ComputeConnectionAccessKindV1,
@@ -121,17 +83,7 @@ pub struct ComputeConnectionIdentityV1 {
     pub product_label: Option<String>,
 }
 
-#[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    PartialEq,
-    Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ComputeModelAvailabilityV1 {
     Available,
@@ -142,17 +94,7 @@ pub enum ComputeModelAvailabilityV1 {
     Unknown,
 }
 
-#[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    PartialEq,
-    Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ComputeModelAvailabilityReasonV1 {
     SourceDisabled,
@@ -169,16 +111,7 @@ pub enum ComputeModelAvailabilityReasonV1 {
 }
 
 #[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Debug,
-    Deserialize,
-    Eq,
-    Ord,
-    PartialEq,
-    PartialOrd,
-    Serialize,
+    schemars::JsonSchema, Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize,
 )]
 #[serde(deny_unknown_fields)]
 pub struct ComputePriceContextV1 {
@@ -186,9 +119,7 @@ pub struct ComputePriceContextV1 {
     pub valuation_kind: PriceValuationKindV1,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeModelPresentationV1 {
     pub billing_class: BillingClass,
@@ -200,17 +131,7 @@ pub struct ComputeModelPresentationV1 {
     pub price_contexts: Vec<ComputePriceContextV1>,
 }
 
-#[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    PartialEq,
-    Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ComputeManagementActionV2 {
     Edit,
@@ -225,26 +146,14 @@ pub enum ComputeManagementActionV2 {
     Disable,
 }
 
-#[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    PartialEq,
-    Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ComputeManagementRuntimeReadStateV2 {
     Complete,
     Partial,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeManagedSourceViewV2 {
     /// Display only; does not confer provider, capability, billing or credential authority.
@@ -269,9 +178,7 @@ pub struct ComputeManagedSourceViewV2 {
     pub actions: Vec<ComputeManagementActionV2>,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeManagementSnapshotV2 {
     pub schema: String,

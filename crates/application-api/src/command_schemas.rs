@@ -6,7 +6,7 @@ use schemars::{JsonSchema, generate::SchemaSettings};
 use serde::Serialize;
 use serde_json::{Value, json};
 
-#[derive(schemars::JsonSchema, schemars::JsonSchema, Serialize)]
+#[derive(schemars::JsonSchema, Serialize)]
 pub struct CommandSchemasV1 {
     pub request: Value,
     pub response: Value,

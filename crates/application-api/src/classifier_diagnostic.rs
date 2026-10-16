@@ -19,9 +19,7 @@ pub struct ClassifierHeaderSecretInputV1 {
     pub expected_generation: u64,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ClassifierDecisionTestRequestV1 {
     pub schema: String,
@@ -36,9 +34,7 @@ impl ClassifierDecisionTestRequestV1 {
     }
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ClassifierDecisionTestResultV1 {
     pub schema: String,
@@ -51,17 +47,7 @@ pub struct ClassifierDecisionTestResultV1 {
     pub failure_code: Option<String>,
 }
 
-#[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    PartialEq,
-    Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ClassifierDecisionTestOutcomeV1 {
     Passed,

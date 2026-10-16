@@ -10,9 +10,7 @@ use super::{
 pub const COMPUTE_CONTROL_PROJECTION_SCHEMA_V1: &str = "hiroute.compute-control-projection/v1";
 
 /// Exact client-bundled ReleaseFacts provenance used to derive one durable compute projection.
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeCatalogProvenanceV1 {
     pub product_release: String,
@@ -26,9 +24,7 @@ pub struct ComputeCatalogProvenanceV1 {
 }
 
 /// Non-secret scanner identity. The opaque source ref is meaningful only to the exact scanner.
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeScannerEvidenceV1 {
     pub scanner_id: String,
@@ -40,9 +36,7 @@ pub struct ComputeScannerEvidenceV1 {
 
 /// Provider observations remain inventory only. They cannot introduce an endpoint, protocol,
 /// authentication kind, billing class, or model capability.
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeInventorySnapshotV1 {
     pub source_id: String,
@@ -79,9 +73,7 @@ impl ComputeInventorySnapshotV1 {
 
 /// Full non-secret projection activated with workspace desired state in one SQLite transaction.
 /// A pool identity is durable even while its Secret-backed pool is intentionally absent.
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeControlProjectionV1 {
     pub schema: String,

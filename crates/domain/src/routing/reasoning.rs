@@ -3,9 +3,7 @@ use thiserror::Error;
 
 /// Exact model-native reasoning capability. The order of `profiles` is native low-to-high order,
 /// not a cross-model effort scale.
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum NativeReasoningCapabilityV1 {
     Fixed {
@@ -28,9 +26,7 @@ pub enum NativeReasoningCapabilityV1 {
     },
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ReasoningSelectionV1 {
     Toggle { enabled: bool },
@@ -38,9 +34,7 @@ pub enum ReasoningSelectionV1 {
     Budget { tokens: u32 },
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ExactNativeReasoningV1 {
     Fixed {
@@ -64,17 +58,7 @@ pub enum ExactNativeReasoningV1 {
     },
 }
 
-#[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    PartialEq,
-    Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReasoningRenderModeV1 {
     NoControlParameter,

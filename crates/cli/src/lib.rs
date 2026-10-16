@@ -9,6 +9,7 @@ mod args;
 mod client;
 mod collaboration;
 mod control_plane;
+mod help;
 mod host_commands;
 mod managed_launch;
 mod observation;
@@ -108,6 +109,15 @@ where
     }
     if let Some(execution) = collaboration::execute(&path_and_options, &globals) {
         return execution;
+    }
+    if globals.help {
+        if let Some(document) = help::family(&path_and_options) {
+            return CliExecution {
+                exit_code: 0,
+                stdout: document,
+                stderr: String::new(),
+            };
+        }
     }
     let Some((descriptor, option_start)) = resolve_callable(&path_and_options) else {
         return failure(ErrorCode::UnknownCommand, globals.request_id);
@@ -594,17 +604,32 @@ fn execute_schema_list(options: &[String], request_id: Option<String>) -> CliExe
 }
 
 fn execute_schema_show(options: &[String], request_id: Option<String>) -> CliExecution {
-    let [flag, command_id] = options else {
-        return failure(ErrorCode::InvalidArguments, request_id);
+    let (command_id, include_schema) = match options {
+        [flag, id] if flag == "--command-id" => (id, false),
+        [flag, id, include] if flag == "--command-id" && include == "--include-schema" => {
+            (id, true)
+        }
+        [include, flag, id] if include == "--include-schema" && flag == "--command-id" => {
+            (id, true)
+        }
+        _ => return failure(ErrorCode::InvalidArguments, request_id),
     };
-    if flag != "--command-id" || command_id.is_empty() {
-        return failure(ErrorCode::InvalidArguments, request_id);
-    }
     let Some(descriptor) = command_by_id(command_id)
         .filter(|descriptor| descriptor.lifecycle == CommandLifecycle::Released)
     else {
         return failure(ErrorCode::ResourceNotFound, request_id);
     };
+    if include_schema {
+        let Some(schemas) = hiroute_application_api::command_schemas(command_id) else {
+            let mut result = failure(ErrorCode::ResourceNotFound, request_id);
+            result.stderr = "Full installed schemas are not yet available for this command. Omit --include-schema to read its descriptor.\n".into();
+            return result;
+        };
+        return success(
+            json!({"descriptor":descriptor,"schemas":schemas}),
+            request_id,
+        );
+    }
     success(descriptor, request_id)
 }
 

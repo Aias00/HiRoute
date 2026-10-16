@@ -11,25 +11,13 @@ pub const COMPUTE_CONNECTION_OPTIONS_SCHEMA_V1: &str = "hiroute.compute-connecti
 pub const COMPUTE_CONNECTION_CHANGE_SCHEMA_V1: &str = "hiroute.compute-connection-change/v1";
 pub const COMPUTE_CONNECTION_PREVIEW_SCHEMA_V1: &str = "hiroute.compute-connection-preview/v1";
 
-#[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Debug,
-    Default,
-    Deserialize,
-    Eq,
-    PartialEq,
-    Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeScanRequestV1 {}
 
 pub const COMPUTE_SCAN_REQUEST_SCHEMA_V2: &str = "hiroute.compute-scan-request/v2";
 pub const COMPUTE_SCAN_RESULT_SCHEMA_V2: &str = "hiroute.compute-scan-result/v2";
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeScanRequestV2 {
     pub schema: String,
@@ -45,9 +33,7 @@ impl ComputeScanRequestV2 {
                 .is_none_or(|t| t.validate().is_ok())
     }
 }
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeConnectionPointV2 {
     pub connection_ref: String,
@@ -66,9 +52,7 @@ pub struct ComputeConnectionPointV2 {
     pub discovery: Option<ComputeDiscoveryRefV1>,
     pub actions_required: Vec<String>,
 }
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeScanDiagnosticV2 {
     pub agent_id: String,
@@ -76,9 +60,7 @@ pub struct ComputeScanDiagnosticV2 {
     pub native_provider_id: Option<String>,
     pub model_id: Option<String>,
 }
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeScanResultV2 {
     pub schema: String,
@@ -87,9 +69,7 @@ pub struct ComputeScanResultV2 {
     pub diagnostics: Vec<ComputeScanDiagnosticV2>,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputePermissionActionV1 {
     pub discovered_source_ref: String,
@@ -101,9 +81,7 @@ pub struct ComputePermissionActionV1 {
 
 /// Non-secret facts needed to bind an already discovered local credential to an exact Preview.
 /// The actual value remains behind `input_slot` and is read only by the protected Apply path.
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeDiscoveredCredentialImportV1 {
     pub input_slot: String,
@@ -119,9 +97,7 @@ pub struct ComputeDiscoveredCredentialImportV1 {
 /// The daemon derives this from complete trusted discovery and current client-bundled catalog facts.
 /// It is safe to project to a WebView, but it is not an authorization and cannot be expanded by
 /// an ordinary client into a source, selector, path, authority, or protected input slot.
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeDiscoveryRefV1 {
     pub discovery_ref: String,
@@ -142,9 +118,7 @@ impl ComputeDiscoveryRefV1 {
     }
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeScanItemV1 {
     pub agent_id: String,
@@ -175,9 +149,7 @@ pub struct ComputeScanItemV1 {
     pub credential_import: Option<ComputeDiscoveredCredentialImportV1>,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeCatalogProvenanceViewV1 {
     pub product_release: String,
@@ -188,9 +160,7 @@ pub struct ComputeCatalogProvenanceViewV1 {
     pub cross_reference_digest: CanonicalDigest,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeScanResultV1 {
     pub schema: String,
@@ -198,23 +168,11 @@ pub struct ComputeScanResultV1 {
     pub items: Vec<ComputeScanItemV1>,
 }
 
-#[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Debug,
-    Default,
-    Deserialize,
-    Eq,
-    PartialEq,
-    Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeConnectionOptionsRequestV1 {}
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeConnectionOptionV1 {
     pub endpoints: Vec<hiroute_domain::ProtocolEndpointV1>,
@@ -233,9 +191,7 @@ pub struct ComputeConnectionOptionV1 {
     pub registered_check_available: bool,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeConnectionOptionsResultV1 {
     pub schema: String,
@@ -249,9 +205,7 @@ pub struct ComputeConnectionOptionsResultV1 {
     pub metadata_catalog: Option<ModelMetadataCatalogV1>,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeConnectionChangeV1 {
     pub schema: String,
@@ -264,17 +218,13 @@ pub struct ComputeConnectionChangeV1 {
     pub explicit_materialization: bool,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeConnectionPreviewRequestV1 {
     pub change: ComputeConnectionChangeV1,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeProjectionEffectV1 {
     pub resource_kind: String,
@@ -283,9 +233,7 @@ pub struct ComputeProjectionEffectV1 {
     pub desired_revision: u64,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeConnectionPreviewResultV1 {
     pub schema: String,
@@ -299,9 +247,7 @@ pub struct ComputeConnectionPreviewResultV1 {
     pub effects: Vec<ComputeProjectionEffectV1>,
 }
 
-#[derive(
-    schemars::JsonSchema, schemars::JsonSchema, Clone, Debug, Deserialize, PartialEq, Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeConnectionApplyRequestV1 {
     pub spec: ChangeSpecV1,

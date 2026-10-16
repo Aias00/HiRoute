@@ -39,17 +39,7 @@ pub struct ManagedCollaborationSkill {
     pub file_effect: Option<SkillFileEffectRef>,
 }
 
-#[derive(
-    schemars::JsonSchema,
-    schemars::JsonSchema,
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    PartialEq,
-    Serialize,
-)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CollaborationSkillFileOwnership {
     /// HiRoute created the file and may remove its exact managed generation.
