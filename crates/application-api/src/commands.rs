@@ -179,7 +179,7 @@ impl StaticCommandDescriptor {
                 automation: automation(self.command_id).to_owned(),
                 output: output(self.command_id).to_owned(),
                 exit_status: exit_status(self.command_id).to_owned(),
-                examples: vec![example(self.command_id, &joined_path)],
+                examples: examples(self.command_id, &joined_path),
                 see_also: vec![format!(
                     "hiroute schema show --command-id {}",
                     self.command_id

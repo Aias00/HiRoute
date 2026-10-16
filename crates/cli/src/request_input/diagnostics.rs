@@ -1,15 +1,9 @@
 //! Bounded presentation diagnostics. Never return serde's raw message or a submitted value.
 use hiroute_application_api::{ErrorCode, ErrorV1, MachineEnvelopeV2};
-use serde::Serialize;
 use serde_json::{Value, json};
 use std::{cell::RefCell, collections::BTreeSet};
 
-#[derive(Clone, Serialize)]
-pub(crate) struct InputDiagnostic {
-    category: &'static str,
-    path: String,
-    expected: &'static str,
-}
+use hiroute_application_api::CliInputDiagnosticV1 as InputDiagnostic;
 struct State {
     command: String,
     rich: bool,
@@ -40,9 +34,9 @@ pub(crate) fn record(category: &'static str, path: &str, expected: &'static str)
     CURRENT.with(|current| {
         if let Some(state) = current.borrow_mut().as_mut() {
             state.diagnostic = Some(InputDiagnostic {
-                category,
+                category: category.into(),
                 path: path.chars().take(256).collect(),
-                expected,
+                expected: expected.into(),
             });
         }
     });
@@ -146,7 +140,7 @@ pub(crate) fn failure(code: ErrorCode, request_id: Option<String>) -> crate::Cli
     CURRENT.with(|current| {
         let current = current.borrow();
         let Some(state) = current.as_ref() else { return crate::failure(code, request_id); };
-        let diagnostic = state.diagnostic.clone().unwrap_or(InputDiagnostic { category: "invalid_request", path: "$".into(), expected: "the command's declared options and request wrapper" });
+        let diagnostic = state.diagnostic.clone().unwrap_or(InputDiagnostic { category: "invalid_request".into(), path: "$".into(), expected: "the command's declared options and request wrapper" });
         let envelope = if state.rich { MachineEnvelopeV2::failed_with_data(ErrorV1::new(code), json!({
             "schema":"hiroute.cli-input-diagnostic/v1", "command_id":state.command, "diagnostic":diagnostic,
         }), request_id) } else { MachineEnvelopeV2::failed(ErrorV1::new(code), request_id) };

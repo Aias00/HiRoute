@@ -176,6 +176,16 @@ pub(super) fn network_and_model_use(command_id: &str, kind: CommandKind) -> &'st
         }
     }
 }
+pub(super) fn examples(command_id: &str, joined_path: &str) -> Vec<String> {
+    if command_id == "decision.services.apply" {
+        return vec![
+            "hiroute decision services apply --request-file preview-request.json --output json  # Preview: schema_version and spec".into(),
+            "hiroute decision services apply --request-file apply-request.json --output json  # Apply: add exact accept_digest, expected_revisions and a stable idempotency_key".into(),
+            "hiroute schema show --command-id decision.services.apply --include-schema  # Complete wrappers; substitute current IDs and exact Preview values".into(),
+        ];
+    }
+    vec![example(command_id, joined_path)]
+}
 pub(super) fn example(command_id: &str, joined_path: &str) -> String {
     match command_id {
         "compute.connection.login" => "printf '%s' '{\"action\":\"start\",\"provider\":\"claude\"}' | hiroute compute connection login --request-stdin --output json".to_owned(),
@@ -219,11 +229,14 @@ pub(super) fn example(command_id: &str, joined_path: &str) -> String {
         }
         "decision.services.list" => "hiroute decision services list --output json".to_owned(),
         "decision.services.apply" | "decision.services.test" => format!("hiroute {joined_path} --request-stdin --output json < request.json"),
+        "routing.options" => "printf '%s' '{}' | hiroute routing options --request-stdin --output json".into(),
+        "routing.preview" | "agents.connect.preview" | "agents.restore.preview" => format!("hiroute {joined_path} --request-file preview-request.json --output json"),
+        "routing.apply" | "compute.connection.apply" | "agents.connect.apply" | "agents.restore.apply" => format!("hiroute {joined_path} --request-file apply-request.json --output json"),
         "routing.list" => "hiroute routing list --non-interactive --output json".to_owned(),
         "routing.show" => {
             "hiroute routing show plan/example --non-interactive --output json".to_owned()
         }
-        "agents.scan" => "hiroute agents scan [--request-stdin | --request-file <PATH>] --non-interactive --output json".to_owned(),
+        "agents.scan" => "hiroute agents scan --non-interactive --output json".to_owned(),
         "sessions.list" => "hiroute sessions list --non-interactive --output json".to_owned(),
         "sessions.show" => {
             "hiroute sessions show session/example --non-interactive --output json".to_owned()

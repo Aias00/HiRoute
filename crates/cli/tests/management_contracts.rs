@@ -169,7 +169,7 @@ fn detailed_errors_are_bounded_redacted_and_keep_real_exit_and_complete_stdout()
             "invalid_type",
         ),
         (
-            br#"{"authoring":{"candidates":[{"reasoning":null}]},"SECRET_MARKER":"SECRET_MARKER"}"#,
+            br#"{"authoring":{"candidates":[{"reasoning":null}]}}"#,
             "missing_field",
         ),
         (

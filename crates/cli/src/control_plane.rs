@@ -168,6 +168,14 @@ fn compute_scan(options: &[String]) -> Result<Value, ErrorCode> {
 
 fn routing_request(options: &[String], apply: bool) -> Result<Value, ErrorCode> {
     let value = request_input::read(options, MAX_REQUEST_BYTES)?;
+    if value.get("change").is_none() {
+        request_input::diagnostics::record(
+            "missing_field",
+            "$.change",
+            "a change object inside the Preview/Apply request wrapper",
+        );
+        return Err(ErrorCode::InvalidArguments);
+    }
     if value
         .get("change")
         .and_then(|c| c.get("schema"))

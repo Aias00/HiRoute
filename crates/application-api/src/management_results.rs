@@ -45,3 +45,20 @@ pub enum AgentCheckResultV1 {
         model_call: bool,
     },
 }
+
+/// Included only when the CLI caller explicitly requests detailed input errors.
+#[derive(schemars::JsonSchema, Clone, Serialize)]
+pub struct CliInputDiagnosticV1 {
+    #[schemars(length(max = 64))]
+    pub category: String,
+    #[schemars(length(max = 256))]
+    pub path: String,
+    #[schemars(length(max = 128))]
+    pub expected: String,
+}
+#[derive(schemars::JsonSchema, Serialize)]
+pub struct CliInputDiagnosticDataV1 {
+    pub schema: String,
+    pub command_id: String,
+    pub diagnostic: CliInputDiagnosticV1,
+}

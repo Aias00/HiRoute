@@ -12,6 +12,7 @@ pub struct CommandSchemasV1 {
     pub request: Value,
     pub response: Value,
     pub examples: Vec<Value>,
+    pub example_guidance: &'static str,
 }
 
 fn schema<T: JsonSchema>(serialize: bool) -> Value {
@@ -89,7 +90,7 @@ fn rebase(value: &mut Value, prefix: &str) {
 }
 
 macro_rules! request { ($($ty:ty),+ $(,)?) => { alternatives(vec![$(schema::<$ty>(false)),+]) }; }
-macro_rules! response { ($($ty:ty),+ $(,)?) => { alternatives(vec![$(schema::<MachineEnvelopeV2<$ty>>(true)),+]) }; }
+macro_rules! response { ($($ty:ty),+ $(,)?) => { alternatives(vec![$(schema::<MachineEnvelopeV2<$ty>>(true)),+, schema::<MachineEnvelopeV2<CliInputDiagnosticDataV1>>(true)]) }; }
 
 pub fn command_schemas(command_id: &str) -> Option<CommandSchemasV1> {
     let (mut request, mut response) = match command_id {
@@ -134,7 +135,10 @@ pub fn command_schemas(command_id: &str) -> Option<CommandSchemasV1> {
             observation_request(&["plan_quality"]),
             response!(PlanQualitySamplesPage),
         ),
-        "agents.check" => (request!(AgentCheckRequestV1), response!(AgentCheckResultV1)),
+        "agents.check" => (
+            request!(AgentCheckRequestV1),
+            response!(AgentCheckResultV1, AgentCollaborationCheckFailureV1),
+        ),
         "decision.services.list" => (
             request!(ClientEmptyRequestV1),
             response!(DecisionServicesListV1),
@@ -289,6 +293,7 @@ pub fn command_schemas(command_id: &str) -> Option<CommandSchemasV1> {
         request,
         response,
         examples: examples(command_id),
+        example_guidance: "Examples show syntax. Resolve resource IDs from current queries. For Apply, copy the exact Preview spec/change, digest and expected revisions; keep one submission key. Example digests and revisions do not authorize writes.",
     })
 }
 
