@@ -344,6 +344,24 @@ impl Modes {
             &[("X-HiRoute-Token", token), ("session-id", session)],
             &json!({"model":plan.alias,"stream":false,"input":input}),
         );
+        if response.status != 200 {
+            let body = response.json();
+            let code = body["code"]
+                .as_str()
+                .filter(|code| {
+                    code.len() <= 80
+                        && code
+                            .bytes()
+                            .all(|byte| byte.is_ascii_uppercase() || byte == b'_')
+                })
+                .unwrap_or("UNCLASSIFIED");
+            eprintln!(
+                "Windows routing mode failure: marker={marker}, status={}, code={code}, executions={}, decisions={}",
+                response.status,
+                self.executions.lock().unwrap().len(),
+                self.decisions.lock().unwrap().len()
+            );
+        }
         assert_eq!(
             response.status, 200,
             "published mode must execute through actual Gateway authorization and planning"

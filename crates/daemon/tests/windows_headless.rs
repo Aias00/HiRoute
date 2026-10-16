@@ -896,6 +896,42 @@ fn actual_windows_gateway_rejects_unauthorized_large_request() {
     running.wait(true);
 }
 
+/// Focused execution of the full journey's multi-turn routing assertions.
+#[test]
+#[ignore = "focused installed smart/custom route diagnosis"]
+fn actual_windows_public_routing_modes() {
+    let product = InstalledProduct::create();
+    let contexts = windows_user_models::Contexts::prepare(&product);
+    let mut running = product.start_with_environment(false, contexts.variables());
+    let modes = windows_routing_modes::Modes::setup(&product);
+    let scan = windows_headless_business::cli(&product, &["agents", "scan"], None);
+    let agent = scan["data"]["agents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|agent| agent["agent_id"] == "agent_pi_default")
+        .unwrap();
+    let context = agent["context_id"].as_str().unwrap();
+    windows_user_models::checked(&product, "agent_pi_default");
+    let spec = json!({"schema_version":{"major":2,"minor":0},"context_id":context,
+        "model":{"intent":"configure","settings":{"mode":"pi_additional",
+            "allowed_plan_ids":[modes.smart.plan_id,modes.custom.plan_id],
+            "plan_protocols":{&modes.smart.plan_id:"responses",&modes.custom.plan_id:"responses"}}}});
+    windows_user_models::apply(&product, "connect", &spec, "windows-focused-modes-connect");
+    modes.traffic(
+        &product,
+        running.listen,
+        &format!("agent-connection/{context}"),
+    );
+    lifecycle::stop(
+        &product.layout.lifecycle_endpoint(),
+        &product.daemon,
+        Duration::from_secs(30),
+    )
+    .unwrap();
+    running.wait(true);
+}
+
 fn public_headless_business(include_claude: bool) {
     let product = InstalledProduct::create();
     let contexts = windows_user_models::Contexts::prepare(&product);
