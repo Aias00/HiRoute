@@ -173,9 +173,9 @@ fn branches_publish_distinct_reasoning_and_freeze_whole_judgment_overrides() {
     {
         candidate.source_binding_id = None;
     }
-    let bytes = legacy.canonical_bytes().unwrap();
+    let bytes = serde_json::to_vec(&legacy).unwrap();
     assert_eq!(
-        hiroute_domain::GatewayPublicationV1::decode(&bytes)
+        hiroute_domain::GatewayPublicationV1::decode_persisted(&bytes)
             .unwrap()
             .into_current()
             .unwrap(),
