@@ -635,8 +635,8 @@ Session ID、v1 Receipt ID 与此定位符不同：
 `sessions show` 默认只返回事实和 timeline，不返回对话正文。RoutingReceipt 的
 `route_decision`、`attempt_started`、`usage_and_cache` 等有序事实给出实际计划、模型选择、Attempt
 和上游报告的已知 token。`value show` 只返回已有账价值；没有可信价格证据时金额保持 `null`，
-且不得把未知金额或尚未形成账值行的 token 伪造为零成本。正文、搜索、catalog 与 ancestry 仍需
-各自精确的受保护 capability。
+且不得把未知金额或尚未形成账值行的 token 伪造为零成本。同一用户通过 Local Control 显式读取正文、
+搜索、catalog 与 ancestry 无需另取读取票据；显式传入的授权仍绑定准确操作和范围，运行范围受限的调用方仍保留原有边界。
 
 ## 配置 Worker 并委派任务
 

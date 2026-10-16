@@ -725,8 +725,9 @@ RoutingReceipt facts such as `route_decision`, `attempt_started`, and `usage_and
 the actual plan, model choice, Attempt, and known upstream-reported tokens. `value show`
 returns only existing ledger value. Without trustworthy price evidence, an amount stays
 `null`; unknown amounts or tokens without value-ledger rows are never fabricated as zero
-cost. Bodies, search, catalog, and ancestry each require their own precise protected
-capability.
+cost. Same-user Local Control can explicitly read bodies, search, catalog, and ancestry
+without a second read ticket. Supplied grants still bind their precise operation and scope;
+run-scoped callers retain their existing limits.
 
 `observation plan-quality samples` returns the same stage facts used by the plan's
 competence view. Each sample's `branch_execution` identifies its actual model group,
