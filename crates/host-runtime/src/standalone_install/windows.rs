@@ -183,12 +183,21 @@ impl ManagerHost for NativeHost<'_> {
                         }
                         Err(e) => return Err(e),
                     }
-                    return lifecycle::stop_with_fallback(
+                    let stopped = lifecycle::stop_with_fallback(
                         &endpoint,
                         &value.daemon,
                         self.timeout,
                         || task::force_stop(&value),
                     );
+                    if stopped.is_err() {
+                        let _ = lifecycle::upgrade(
+                            &endpoint,
+                            &value.daemon,
+                            "upgrade-cancel",
+                            Duration::from_secs(2),
+                        );
+                    }
+                    return stopped;
                 }
                 Err(_) => mismatch = true,
             }
@@ -204,6 +213,20 @@ impl ManagerHost for NativeHost<'_> {
     fn unregister(&mut self, value: &Value) -> io::Result<()> {
         task::unregister(&definition(value)?)
     }
+}
+/// Resume an interrupted installer only through its explicit maintenance entry.
+pub fn recover_pending() -> io::Result<()> {
+    let layout = layout()?;
+    let _lock = lock(&layout)?;
+    let mut host = NativeHost {
+        layout: &layout,
+        timeout: Duration::from_secs(30),
+        allow_legacy_stop: false,
+    };
+    if let Some(journal) = Journal::read(&layout)? {
+        journal.recover(&layout, &mut host)?;
+    }
+    Ok(())
 }
 fn current(
     layout: &StandaloneLayout,
@@ -357,11 +380,25 @@ pub fn install(request: InstallRequest) -> io::Result<Value> {
         new_definition: serde_json::to_value(&native).map_err(|_| invalid())?,
         files: planned,
     };
+    let was_active = journal
+        .old_definition
+        .as_ref()
+        .map(definition)
+        .transpose()?
+        .as_ref()
+        .map(task::active)
+        .transpose()?
+        .unwrap_or(false);
     // Drain precedes preparation: an old daemon refusal cannot leave its admission blocked.
     if let Some(old) = &journal.old_definition {
         host.quiesce(&[old])?;
     }
-    journal.persist(&layout)?;
+    if let Err(error) = journal.persist(&layout) {
+        if was_active && let Some(old) = &journal.old_definition {
+            let _ = task::start(&definition(old)?);
+        }
+        return Err(error);
+    }
     let result = (|| {
         journal.apply_files()?;
         write_json(&layout.marker_path, &journal.new_marker)?;
@@ -375,7 +412,12 @@ pub fn install(request: InstallRequest) -> io::Result<Value> {
         journal.finish(&layout)
     })();
     if let Err(error) = result {
-        let _ = journal.recover(&layout, &mut host);
+        if journal.recover(&layout, &mut host).is_ok()
+            && was_active
+            && let Some(old) = &old
+        {
+            let _ = task::start(&definition(&old.1)?);
+        }
         return Err(error);
     }
     if request.console_loopback {

@@ -155,7 +155,7 @@ pub(super) fn restore(layout: &hiroute_host_runtime::StandaloneLayout) -> io::Re
         let result = (|| -> io::Result<()> {
             let preview = preview(&client, &spec)?;
             let mut bytes = [0; 16];
-            getrandom::fill(&mut bytes).map_err(io::Error::other)?;
+            getrandom::fill(&mut bytes).map_err(|e| io::Error::other(e.to_string()))?;
             let key: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
             let applied = call(
                 &client,

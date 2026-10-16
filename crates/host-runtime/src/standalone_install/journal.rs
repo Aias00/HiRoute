@@ -57,6 +57,10 @@ impl Journal {
         layout.data_root.join("service/install-journal.json")
     }
     pub fn read(layout: &StandaloneLayout) -> io::Result<Option<Self>> {
+        #[cfg(windows)]
+        if Self::path(layout).try_exists()? {
+            hiroute_platform::windows::security::verify_owner_only(&Self::path(layout), false)?;
+        }
         let journal: Option<Self> = read_json(&Self::path(layout), MAX_RECORD)?;
         if let Some(value) = &journal {
             value.validate(layout)?;

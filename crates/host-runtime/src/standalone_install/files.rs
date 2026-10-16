@@ -158,7 +158,7 @@ pub(crate) fn write_json(path: &Path, value: &impl serde::Serialize) -> io::Resu
 }
 pub(crate) fn nonce() -> io::Result<String> {
     let mut bytes = [0; 16];
-    getrandom::fill(&mut bytes).map_err(io::Error::other)?;
+    getrandom::fill(&mut bytes).map_err(|e| io::Error::other(e.to_string()))?;
     Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
 }
 pub(crate) fn copy_new(source: &Path, target: &Path) -> io::Result<()> {
