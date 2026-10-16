@@ -7,9 +7,9 @@ mod diagnostic;
 pub(super) fn project(bytes: &[u8]) {
     for line in bytes.split(|byte| *byte == b'\n') {
         let line = line.strip_suffix(b"\r").unwrap_or(line);
-        if let Some(reason) = line.strip_prefix(
-            b"native collaboration check: native ingress probe could not establish ",
-        ) {
+        if let Some(reason) = line
+            .strip_prefix(b"native collaboration check: native ingress probe could not establish ")
+        {
             let stage = match reason {
                 b"trusted CLI baseline" => "cli-baseline",
                 b"trusted CLI contract" | b"CLI contract" => "cli-contract",
