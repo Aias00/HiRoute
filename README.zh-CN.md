@@ -41,7 +41,9 @@ HiRoute 是长程 Agent 的本地控制与执行层。它把模型来源、可�
 ## News · 最新动态
 
 - **最新稳定版本** — 提供 macOS Desktop 与 Linux 无界面版的 x86_64 / ARM64 安装包。[版本说明](https://github.com/higress-group/HiRoute/releases/latest) · [下载](https://hiroute.ai/download/)
+- **2026-10-14** — [切换模型会丢缓存，但省下的钱丢不掉](news/2026-10-14-routing-cache-cost.zh-CN.md)。[官网阅读](https://hiroute.ai/news/routing-cache-cost/)
 - **2026-10-04** — [HiRoute 智能路由实战：GPT-6 Astra × Qwen-3.8 Flash，同等质量下成本降低 90%](news/2026-10-04-astra-qwen.zh-CN.md)。[官网阅读](https://hiroute.ai/news/astra-qwen-smart-routing/) · [复现实验](experiments/README.md)
+- [让 AI Agent 更能干，让模型订阅更耐用：HiRoute 正式开源](news/hiroute-open-source.zh-CN.md)。[官网阅读](https://hiroute.ai/news/hiroute-open-source/)
 - [全部新闻](news/README.md)
 
 ## 为什么使用 HiRoute
