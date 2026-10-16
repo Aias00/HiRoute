@@ -115,14 +115,14 @@ where
     if let Some(execution) = quickstart::execute(&path_and_options, &globals) {
         return execution;
     }
-    if globals.help {
-        if let Some(document) = help::family(&path_and_options) {
-            return CliExecution {
-                exit_code: 0,
-                stdout: document,
-                stderr: String::new(),
-            };
-        }
+    if globals.help
+        && let Some(document) = help::family(&path_and_options)
+    {
+        return CliExecution {
+            exit_code: 0,
+            stdout: document,
+            stderr: String::new(),
+        };
     }
     let Some((descriptor, option_start)) = resolve_callable(&path_and_options) else {
         return failure(ErrorCode::UnknownCommand, globals.request_id);

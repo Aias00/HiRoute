@@ -11,7 +11,7 @@ mod settings;
 use flags::Flags;
 
 type Reply = MachineEnvelopeV2<Value>;
-type Result<T> = std::result::Result<T, Reply>;
+type Result<T> = std::result::Result<T, Box<Reply>>;
 
 pub(crate) const HELP: &str = "HiRoute Quickstart\n\nUsage\n  hiroute quickstart [--context ID] [--plan ID] [--hermes-root PATH]\n\nRead-only: discover an exact target, reuse existing sources and Plans, then inspect connection state and next commands. Does not prepare credentials, save configuration, start a service, restart an Agent or call a model. Caller and target are independent.\n\nMain path\n  quickstart -> compute scan/connection prepare -> compute connection preview/apply\n  -> routing preview/apply -> agents connect preview/apply -> native activation -> agents connect status --effective\n\nUse --help on each Preview for concise choices. --apply-file PATH creates a new private exact Apply request; review the Preview, then submit that same file. Keep the file/key for Operations lookup and identical replay after uncertain delivery.\n";
 
@@ -36,7 +36,7 @@ pub(crate) fn execute(arguments: &[String], globals: &Globals) -> Option<CliExec
         )?;
         navigation::run(&flags, globals)
     })();
-    Some(render_reply(result.unwrap_or_else(|reply| reply), globals))
+    Some(render_reply(result.unwrap_or_else(|reply| *reply), globals))
 }
 
 pub(crate) fn preview_command(
@@ -91,7 +91,7 @@ pub(crate) fn preview_command(
         }
         Ok(response)
     })();
-    Some(render_reply(result.unwrap_or_else(|reply| reply), globals))
+    Some(render_reply(result.unwrap_or_else(|reply| *reply), globals))
 }
 
 fn render_reply(mut reply: Reply, globals: &Globals) -> CliExecution {
@@ -132,8 +132,8 @@ fn client(globals: &Globals) -> Result<LocalControlClient> {
         })
         .map_err(|_| error(ErrorCode::DaemonUnavailable))
 }
-fn error(code: ErrorCode) -> Reply {
-    MachineEnvelopeV2::failed(ErrorV1::new(code), None)
+fn error(code: ErrorCode) -> Box<Reply> {
+    Box::new(MachineEnvelopeV2::failed(ErrorV1::new(code), None))
 }
 fn call(client: &LocalControlClient, operation: &str, payload: Value) -> Result<Reply> {
     call_with_id(client, operation, payload, None)
@@ -157,7 +157,7 @@ fn call_with_id(
             MachineEnvelopeV2::failed(ErrorV1::new(ErrorCode::DaemonUnavailable), Some(request_id))
         })?;
     if response.status != MachineStatus::Succeeded {
-        return Err(response);
+        return Err(Box::new(response));
     }
     Ok(response)
 }
@@ -166,7 +166,7 @@ fn data(client: &LocalControlClient, operation: &str, payload: Value) -> Result<
         .data
         .ok_or_else(|| error(ErrorCode::Internal))
 }
-fn choices(fields: &[&str], available: Value) -> Reply {
+fn choices(fields: &[&str], available: Value) -> Box<Reply> {
     let mut response = error(ErrorCode::InvalidArguments);
     response.data = Some(
         json!({"schema":"hiroute.cli-required-choices/v1", "required_choices":fields, "available":available}),
