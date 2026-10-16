@@ -9,6 +9,7 @@
 mod desktop_package;
 mod gateway_listener;
 mod releases;
+mod releases_v3;
 mod service_proxy;
 mod standalone;
 mod upgrade;
@@ -16,6 +17,7 @@ mod upgrade;
 pub use desktop_package::*;
 pub use gateway_listener::*;
 pub use releases::*;
+pub use releases_v3::*;
 pub use service_proxy::*;
 pub use standalone::*;
 pub use upgrade::*;
