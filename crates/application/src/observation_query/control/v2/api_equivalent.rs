@@ -75,7 +75,7 @@ impl ObservationControl {
                 from_ms,
                 to_ms,
                 session_id: q.session_id.map(|s| s.to_string()),
-                plan_id: q.agent_plan_id.map(|p| p.to_string()),
+                plan_id: q.agent_plan_id.map(|p| p.as_str().to_owned()),
                 currency: Some(currency),
             },
             reference,
