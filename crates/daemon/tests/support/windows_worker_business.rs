@@ -669,6 +669,33 @@ fn command(
     deadline: Duration,
 ) -> Value {
     let (exit, value) = command_outcome(product, args, payload, deadline);
+    if exit != 0 && args.starts_with(&["agents", "collaboration", "configure"]) {
+        // Read-only failure localization: transport health and the same intent's
+        // preview distinguish daemon loss from the CLI's frozen receipt boundary.
+        for (stage, probe) in [
+            ("service", vec!["system", "status"]),
+            (
+                "preview",
+                vec![
+                    "agents",
+                    "collaboration",
+                    "configure",
+                    args[3],
+                    "--trigger",
+                    "explicit",
+                    "--preview",
+                ],
+            ),
+        ] {
+            let (probe_exit, observed) =
+                command_outcome(product, &probe, None, Duration::from_secs(30));
+            println!(
+                "Windows collaboration failure facts: stage={stage}, exit={probe_exit}, code={}, applicable={:?}",
+                dependency_selection::error_code(&observed),
+                observed["data"]["applicable"].as_bool()
+            );
+        }
+    }
     assert_eq!(
         exit,
         0,
