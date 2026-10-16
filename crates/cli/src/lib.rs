@@ -699,7 +699,7 @@ pub fn root_help() -> String {
         .collect::<Vec<_>>()
         .join("\n");
     format!(
-        "HiRoute headless product CLI\n\nUsage\n  hiroute <command> [options]\n\nPublic command families\n{commands}\n\nHost management: run 'hiroute service --help', 'hiroute gateway --help', 'hiroute protected-input --help', or 'hiroute subscription-proxy --help'.\nAgent collaboration workflow: run 'hiroute agents collaboration --help' to enable, edit, disable or inspect collaboration independently of model settings.\nApplication/Local Control: run 'hiroute schema list --output json' and 'hiroute schema show --command-id <ID> --output json', then append '--help' to a complete command path, for example 'hiroute worker dependencies discover --help'.\n"
+        "HiRoute headless product CLI\n\nUsage\n  hiroute <command> [options]\n\nPublic command families\n{commands}\n\nHost management: run 'hiroute service --help', 'hiroute gateway --help', 'hiroute protected-input --help', 'hiroute subscription-proxy --help', or 'hiroute console --help'.\nAgent collaboration workflow: run 'hiroute agents collaboration --help' to enable, edit, disable or inspect collaboration independently of model settings.\nApplication/Local Control: run 'hiroute schema list --output json' and 'hiroute schema show --command-id <ID> --output json', then append '--help' to a complete command path, for example 'hiroute worker dependencies discover --help'.\n"
     )
 }
 
@@ -723,12 +723,11 @@ fn native_help_document(descriptor: &CommandDescriptorV1) -> String {
 pub fn main_entry() -> u8 {
     let arguments = std::env::args_os().skip(1).collect::<Vec<_>>();
     #[cfg(windows)]
-    if let Some(verb) = arguments.first().and_then(|v| v.to_str()).filter(|v| {
-        matches!(
-            *v,
-            "__windows-install" | "__windows-uninstall" | "__windows-finalize"
-        )
-    }) {
+    if let Some(verb) = arguments
+        .first()
+        .and_then(|v| v.to_str())
+        .filter(|v| matches!(*v, "__windows-install" | "__windows-uninstall"))
+    {
         return service::windows_install_hidden(verb, &arguments[1..]);
     }
     #[cfg(windows)]

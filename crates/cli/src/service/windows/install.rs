@@ -1,6 +1,4 @@
-use hiroute_host_runtime::standalone_install::windows::{
-    self, FinalizeRequest, InstallRequest, UninstallRequest,
-};
+use hiroute_host_runtime::standalone_install::windows::{self, InstallRequest, UninstallRequest};
 use std::{
     ffi::OsString,
     io::{self, Read, Write},
@@ -20,9 +18,6 @@ pub(crate) fn run(verb: &str, arguments: &[OsString]) -> u8 {
             return Err(io::ErrorKind::InvalidInput.into());
         }
         match verb {
-            "__windows-finalize" => windows::finalize_legacy_scm(
-                serde_json::from_slice::<FinalizeRequest>(&bytes).map_err(io::Error::other)?,
-            ),
             "__windows-install" => windows::install(
                 serde_json::from_slice::<InstallRequest>(&bytes).map_err(io::Error::other)?,
             ),

@@ -110,58 +110,6 @@ fn lock_file(layout: &StandaloneLayout) -> io::Result<File> {
     Ok(file)
 }
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct FinalizeRequest {
-    pub schema: String,
-    pub operation: String,
-}
-
-/// Complete only an already-prepared Python SCM operation after native registration proof.
-pub fn finalize_legacy_scm(request: FinalizeRequest) -> io::Result<Value> {
-    use hiroute_platform::windows::service;
-    if request.schema != "hiroute.windows-finalize-request/v1" {
-        return Err(invalid());
-    }
-    let layout = layout()?;
-    let initial = Journal::read(&layout)?.ok_or_else(invalid)?;
-    let native: Definition =
-        serde_json::from_value(initial.new_definition.clone()).map_err(|_| invalid())?;
-    native.validate()?;
-    if native.manager != Manager::Scm {
-        return Err(invalid());
-    }
-    let _lock = lock_file(&layout)?;
-    let mut journal = Journal::read(&layout)?.ok_or_else(invalid)?;
-    if journal.new_definition != initial.new_definition
-        || request.operation
-            != if journal.operation == Operation::Install {
-                "install"
-            } else {
-                "uninstall"
-            }
-    {
-        return Err(invalid());
-    }
-    if journal.phase == Phase::Prepared {
-        if journal.operation == Operation::Install {
-            journal.apply_files()?;
-            write_json(&layout.marker_path, &journal.new_marker)?;
-            service::verify_registration(&native)?;
-            write_json(&journal.new_marker.service_definition, &native)?;
-        } else {
-            if !service::registration_absent(&native)? {
-                return Err(invalid());
-            }
-            journal.apply_files()?;
-        }
-        journal.commit(&layout)?;
-    }
-    journal.finish(&layout)?;
-    Ok(
-        json!({"schema":"hiroute.windows-finalize-result/v1","operation":request.operation,"completed":true,"manager":"scm","started":false}),
-    )
-}
 struct NativeHost<'a> {
     layout: &'a StandaloneLayout,
     timeout: Duration,
@@ -474,7 +422,11 @@ pub fn uninstall(
         new_definition: value,
         files: planned,
     };
-    journal.persist(&layout)?;
+    if let Err(error) = journal.persist(&layout) {
+        // No uninstall record became durable: restore the service stopped for preparation.
+        let _ = task::start(&native);
+        return Err(error);
+    }
     host.unregister(&journal.new_definition)?;
     journal.apply_files()?;
     journal.commit(&layout)?;
