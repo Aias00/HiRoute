@@ -140,12 +140,29 @@ def run(repository):
         data(product, 'compute scan', request)
         assert {m['upstream_model_id'] for m in data(product, 'compute list')['sources'][0]['models']} == {'first', 'second'}
         write(hermes / 'config.yaml', hermes_config)
-        refreshed = data(product, 'compute scan', request)
-        coding_point = next(p for p in refreshed['connections'] if p.get('native_provider_id') == 'china-coding')
+        # Hermes' ordinary custom-provider setup keeps the selected connection in
+        # model itself, with no providers map. Exercise that actual native shape
+        # through scan, prepare, exact save and routing eligibility.
+        bare = product.root / 'bare-custom-hermes-profile'
+        write(bare / 'config.yaml', {'model': {
+            'provider': 'custom', 'default': 'glm-5.3',
+            'base_url': 'https://open.bigmodel.cn/api/coding/paas/v4',
+            'api_mode': 'chat_completions', 'api_key': 'bare-custom-fixture-secret'}})
+        product.secrets.add('bare-custom-fixture-secret')
+        bare_before = (bare / 'config.yaml').read_bytes()
+        refreshed = data(product, 'compute scan', {'schema': request['schema'],
+            'native_target': {'kind': 'hermes', 'config_root': str(bare)}})
+        coding_points = [p for p in refreshed['connections'] if p['agent_id'] == 'agent_hermes_default']
+        assert len(coding_points) == 1
+        coding_point = coding_points[0]
+        assert coding_point['native_provider_id'] == 'custom'
+        assert coding_point['default_model_id'] == 'glm-5.3'
+        assert coding_point['connection_option_id'] == 'zhipu.coding-chat.cn.v1'
         coding = prepare(product, coding_point, 'prepare/point-product/routable-coding')
         chosen = [m['model_ref'] for m in coding['models'] if m['selectable']]
         assert apply(product, preview(product, coding, chosen), 'point-coding-exact-save')[1]['data']['state'] == 'succeeded'
         saved = next(s for s in data(product, 'compute list')['sources'] if {m['upstream_model_id'] for m in s['models']} == {'glm-5.3', 'glm-5.3-flash'})
+        assert (bare / 'config.yaml').read_bytes() == bare_before
         options = data(product, 'routing options', {})['candidates']
         for model in saved['models']:
             option = next(o for o in options if o['binding_id'] == model['binding_id'])
@@ -154,7 +171,7 @@ def run(repository):
         print(json.dumps({'scenario': 'released-cli-connection-points', 'state': 'green',
                           'cases': ['legacy-one-model', 'private-multi-model-prepare', 'hermes-default-chat',
                                     'unselectable-member', 'equal-secret-selector-drift', 'exact-save-restart', 'no-refresh-expansion',
-                                    'qualified-native-and-catalog-models-are-routable']}), flush=True)
+                                    'bare-custom-native-and-catalog-models-are-routable']}), flush=True)
     finally:
         product.close()
 
