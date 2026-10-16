@@ -1,5 +1,5 @@
 {
-  "descriptor_digest": "sha256:9074af4d1126289db835760356bb6110d6c533bc2d7eaecb3620fe0a917e8626",
+  "descriptor_digest": "sha256:c60cd5a66a8cd673b31165ecabde20815a70868f640dbc77716e15578e3eee21",
   "expected_red_reasons": [],
   "planned_commands": [
     "schema.list",
@@ -147,6 +147,9 @@
     "decision.services.apply",
     "decision.services.test",
     "models.show",
+    "prices.effective",
+    "prices.override.preview",
+    "prices.override.apply",
     "operations.get",
     "sessions.list",
     "sessions.show",

@@ -1024,44 +1024,44 @@
     },
     {
       "command_id": "prices.effective",
-      "lifecycle": "planned",
+      "lifecycle": "released",
       "negative": {
         "polarity": "negative",
         "scenario_id": "p0.prices.effective.negative",
-        "state": "planned"
+        "state": "executable"
       },
       "positive": {
         "polarity": "positive",
         "scenario_id": "p0.prices.effective.positive",
-        "state": "planned"
+        "state": "executable"
       }
     },
     {
       "command_id": "prices.override.preview",
-      "lifecycle": "planned",
+      "lifecycle": "released",
       "negative": {
         "polarity": "negative",
         "scenario_id": "p0.prices.override.preview.negative",
-        "state": "planned"
+        "state": "executable"
       },
       "positive": {
         "polarity": "positive",
         "scenario_id": "p0.prices.override.preview.positive",
-        "state": "planned"
+        "state": "executable"
       }
     },
     {
       "command_id": "prices.override.apply",
-      "lifecycle": "planned",
+      "lifecycle": "released",
       "negative": {
         "polarity": "negative",
         "scenario_id": "p0.prices.override.apply.negative",
-        "state": "planned"
+        "state": "executable"
       },
       "positive": {
         "polarity": "positive",
         "scenario_id": "p0.prices.override.apply.positive",
-        "state": "planned"
+        "state": "executable"
       }
     },
     {
@@ -1233,7 +1233,7 @@
       }
     }
   ],
-  "descriptor_digest": "sha256:a73cc620616c3f2167866efb0eb4dabdb4b316035f8d4e2b1c1150692793f939",
+  "descriptor_digest": "sha256:c60cd5a66a8cd673b31165ecabde20815a70868f640dbc77716e15578e3eee21",
   "schema_version": {
     "major": 1,
     "minor": 0

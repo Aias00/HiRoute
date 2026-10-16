@@ -179,14 +179,36 @@ impl crate::LocalObservationStore {
         let overflow = (compared > 0 && (actual.is_none() || baseline.is_none()))
             || (complete && difference.is_none());
         Ok(ApiEquivalentValueReportV1 {
-            schema: "hiroute.api-equivalent-value/v1".into(), from_ms:q.from_ms,to_ms:q.to_ms,evaluated_at_ms:now_ms,
-            currency:currency.into(),reference:reference.clone(),prices:prices.iter().filter(|p|used.contains(&p.binding_id)).cloned().collect(),
-            request_count:total,compared_request_count:compared,arithmetic_overflow:overflow,missing_request_count:total-compared,excluded_request_count:excluded,
-            retention_boundary_partial:retention,
-            coverage: if complete && !overflow { ObservationMetricCoverageV2::Complete } else if compared>0 { ObservationMetricCoverageV2::Partial } else { ObservationMetricCoverageV2::Unknown },
-            routed_estimate_micros:complete.then_some(actual).flatten(),reference_estimate_micros:complete.then_some(baseline).flatten(),estimated_savings_micros:difference,
-            compared_routed_subtotal_micros:(compared>0).then_some(actual).flatten(), compared_reference_subtotal_micros:(compared>0).then_some(baseline).flatten(), actual_cash_micros:None,
-            disclosure:"API-equivalent estimate using current source-specific prices and recorded tokens, including retries. The reference values accepted usage at the selected model's rates; equal output or quality is not established. This does not reprice historical receipts or prove a bill or cash saving. Missing/expired evidence is not zero; subtotals cover paired complete requests only.".into(),
+            schema: "hiroute.api-equivalent-value/v1".into(),
+            from_ms: q.from_ms,
+            to_ms: q.to_ms,
+            evaluated_at_ms: now_ms,
+            currency: currency.into(),
+            reference: reference.clone(),
+            prices: prices.iter().filter(|p| used.contains(&p.binding_id)).cloned().collect(),
+            request_count: total,
+            compared_request_count: compared,
+            arithmetic_overflow: overflow,
+            missing_request_count: total-compared,
+            excluded_request_count: excluded,
+            retention_boundary_partial: retention,
+            coverage: if complete && !overflow {
+                ObservationMetricCoverageV2::Complete
+            } else if compared>0 {
+                ObservationMetricCoverageV2::Partial
+            } else {
+                ObservationMetricCoverageV2::Unknown
+            },
+            routed_estimate_micros: complete.then_some(actual).flatten(),
+            reference_estimate_micros: complete.then_some(baseline).flatten(),
+            estimated_savings_micros: difference,
+            compared_routed_subtotal_micros: (compared>0).then_some(actual).flatten(),
+            compared_reference_subtotal_micros: (compared>0).then_some(baseline).flatten(),
+            actual_cash_micros: None,
+            disclosure: concat!("API-equivalent estimate using current source-specific prices and recorded tokens, including retries. ",
+                "The reference values accepted usage at the selected model's rates; equal output or quality is not established. ",
+                "This does not reprice historical receipts or prove a bill or cash saving. ",
+                "Missing/expired evidence is not zero; subtotals cover paired complete requests only.").into(),
         })
     }
 }

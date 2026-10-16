@@ -5,7 +5,7 @@
   },
   "product_contract_revision": "487a807c8dc25cfb24e8b097882cd3bb9716a009",
   "proposal_map_revision": "ab4da93cc49c6ec56a01e046230411ff1ca82300",
-  "descriptor_digest": "sha256:a73cc620616c3f2167866efb0eb4dabdb4b316035f8d4e2b1c1150692793f939",
+  "descriptor_digest": "sha256:c60cd5a66a8cd673b31165ecabde20815a70868f640dbc77716e15578e3eee21",
   "visibility": "planned",
   "commands": [
     {
@@ -3544,7 +3544,7 @@
         "APP-040"
       ],
       "scope": "p0",
-      "lifecycle": "planned",
+      "lifecycle": "released",
       "kind": "query",
       "request_schema": "hiroute.empty-request/v1",
       "response_schema": "hiroute.command-result/v1",
@@ -3575,12 +3575,12 @@
       "positive": {
         "scenario_id": "p0.prices.effective.positive",
         "polarity": "positive",
-        "state": "planned"
+        "state": "executable"
       },
       "negative": {
         "scenario_id": "p0.prices.effective.negative",
         "polarity": "negative",
-        "state": "planned"
+        "state": "executable"
       }
     },
     {
@@ -3596,7 +3596,7 @@
         "APP-041"
       ],
       "scope": "p0",
-      "lifecycle": "planned",
+      "lifecycle": "released",
       "kind": "preview",
       "request_schema": "hiroute.empty-request/v1",
       "response_schema": "hiroute.command-result/v1",
@@ -3627,12 +3627,12 @@
       "positive": {
         "scenario_id": "p0.prices.override.preview.positive",
         "polarity": "positive",
-        "state": "planned"
+        "state": "executable"
       },
       "negative": {
         "scenario_id": "p0.prices.override.preview.negative",
         "polarity": "negative",
-        "state": "planned"
+        "state": "executable"
       }
     },
     {
@@ -3648,7 +3648,7 @@
         "APP-042"
       ],
       "scope": "p0",
-      "lifecycle": "planned",
+      "lifecycle": "released",
       "kind": "apply",
       "request_schema": "hiroute.empty-request/v1",
       "response_schema": "hiroute.command-result/v1",
@@ -3679,12 +3679,12 @@
       "positive": {
         "scenario_id": "p0.prices.override.apply.positive",
         "polarity": "positive",
-        "state": "planned"
+        "state": "executable"
       },
       "negative": {
         "scenario_id": "p0.prices.override.apply.negative",
         "polarity": "negative",
-        "state": "planned"
+        "state": "executable"
       }
     },
     {

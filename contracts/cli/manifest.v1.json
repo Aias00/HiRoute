@@ -5,7 +5,7 @@
   },
   "product_contract_revision": "487a807c8dc25cfb24e8b097882cd3bb9716a009",
   "proposal_map_revision": "ab4da93cc49c6ec56a01e046230411ff1ca82300",
-  "descriptor_digest": "sha256:a73cc620616c3f2167866efb0eb4dabdb4b316035f8d4e2b1c1150692793f939",
+  "descriptor_digest": "sha256:c60cd5a66a8cd673b31165ecabde20815a70868f640dbc77716e15578e3eee21",
   "visibility": "release",
   "commands": [
     {
@@ -2176,6 +2176,161 @@
       },
       "negative": {
         "scenario_id": "p0.models.show.negative",
+        "polarity": "negative",
+        "state": "executable"
+      }
+    },
+    {
+      "command_id": "prices.effective",
+      "path": [
+        "prices",
+        "effective"
+      ],
+      "operation_id": "GetEffectivePrices",
+      "trace_ids": [
+        "CLI-040",
+        "APP-040"
+      ],
+      "scope": "p0",
+      "lifecycle": "released",
+      "kind": "query",
+      "request_schema": "hiroute.empty-request/v1",
+      "response_schema": "hiroute.command-result/v1",
+      "effect": "none",
+      "network": "local_control_only",
+      "model_call": "never",
+      "stdin_channels": [
+        "request_stdin",
+        "request_file"
+      ],
+      "idempotency": "not_applicable",
+      "help": {
+        "purpose": "Read effective current-catalog price facts and local override revisions.",
+        "usage": "hiroute prices effective (--request-stdin | --request-file <PATH>) --output json",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. Only the typed options declared by the generated request schema are accepted; arbitrary patches, URLs, shell, or plaintext Secret argv are forbidden.",
+        "effects": "Read-only; no product side effect.",
+        "network_and_model_use": "No model use; any external dependency is declared by the typed Application operation.",
+        "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
+        "output": "One hiroute.machine-envelope/v2 JSON object on stdout; diagnostics belong on stderr.",
+        "exit_status": "0 success/accepted; 2 usage; 3 conflict/blocker; 4 capability denied; 5 not found; 6 unavailable; 7 action required; 8 needs attention.",
+        "examples": [
+          "hiroute prices effective --non-interactive --output json"
+        ],
+        "see_also": [
+          "hiroute schema show --command-id prices.effective"
+        ]
+      },
+      "positive": {
+        "scenario_id": "p0.prices.effective.positive",
+        "polarity": "positive",
+        "state": "executable"
+      },
+      "negative": {
+        "scenario_id": "p0.prices.effective.negative",
+        "polarity": "negative",
+        "state": "executable"
+      }
+    },
+    {
+      "command_id": "prices.override.preview",
+      "path": [
+        "prices",
+        "override",
+        "preview"
+      ],
+      "operation_id": "PreviewPriceOverrideChange",
+      "trace_ids": [
+        "CLI-041",
+        "APP-041"
+      ],
+      "scope": "p0",
+      "lifecycle": "released",
+      "kind": "preview",
+      "request_schema": "hiroute.empty-request/v1",
+      "response_schema": "hiroute.command-result/v1",
+      "effect": "none",
+      "network": "local_control_only",
+      "model_call": "never",
+      "stdin_channels": [
+        "request_stdin",
+        "request_file"
+      ],
+      "idempotency": "not_applicable",
+      "help": {
+        "purpose": "Preview a typed local price override change.",
+        "usage": "hiroute prices override preview (--request-stdin | --request-file <PATH>) --output json",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. Only the typed options declared by the generated request schema are accepted; arbitrary patches, URLs, shell, or plaintext Secret argv are forbidden.",
+        "effects": "Stateless Preview: no ID, TTL, Operation, Secret, file, database, publication, or network write.",
+        "network_and_model_use": "No model use and no non-fixture network access.",
+        "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
+        "output": "One hiroute.machine-envelope/v2 JSON object on stdout; diagnostics belong on stderr.",
+        "exit_status": "0 success/accepted; 2 usage; 3 conflict/blocker; 4 capability denied; 5 not found; 6 unavailable; 7 action required; 8 needs attention.",
+        "examples": [
+          "hiroute prices override preview --non-interactive --output json"
+        ],
+        "see_also": [
+          "hiroute schema show --command-id prices.override.preview"
+        ]
+      },
+      "positive": {
+        "scenario_id": "p0.prices.override.preview.positive",
+        "polarity": "positive",
+        "state": "executable"
+      },
+      "negative": {
+        "scenario_id": "p0.prices.override.preview.negative",
+        "polarity": "negative",
+        "state": "executable"
+      }
+    },
+    {
+      "command_id": "prices.override.apply",
+      "path": [
+        "prices",
+        "override",
+        "apply"
+      ],
+      "operation_id": "ApplyPriceOverrideChange",
+      "trace_ids": [
+        "CLI-042",
+        "APP-042"
+      ],
+      "scope": "p0",
+      "lifecycle": "released",
+      "kind": "apply",
+      "request_schema": "hiroute.empty-request/v1",
+      "response_schema": "hiroute.command-result/v1",
+      "effect": "high_impact_write",
+      "network": "local_control_only",
+      "model_call": "never",
+      "stdin_channels": [
+        "request_stdin",
+        "request_file"
+      ],
+      "idempotency": "not_applicable",
+      "help": {
+        "purpose": "Apply an exact local price override revision.",
+        "usage": "hiroute prices override apply (--request-stdin | --request-file <PATH>) --output json",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. Only the typed options declared by the generated request schema are accepted; arbitrary patches, URLs, shell, or plaintext Secret argv are forbidden.",
+        "effects": "Application-owned journaled operation after exact spec, digest, revision, capability, and idempotency checks.",
+        "network_and_model_use": "No model inference; external access, when required, is limited to registered typed ports.",
+        "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
+        "output": "One hiroute.machine-envelope/v2 JSON object on stdout; diagnostics belong on stderr.",
+        "exit_status": "0 success/accepted; 2 usage; 3 conflict/blocker; 4 capability denied; 5 not found; 6 unavailable; 7 action required; 8 needs attention.",
+        "examples": [
+          "hiroute prices override apply --non-interactive --output json"
+        ],
+        "see_also": [
+          "hiroute schema show --command-id prices.override.apply"
+        ]
+      },
+      "positive": {
+        "scenario_id": "p0.prices.override.apply.positive",
+        "polarity": "positive",
+        "state": "executable"
+      },
+      "negative": {
+        "scenario_id": "p0.prices.override.apply.negative",
         "polarity": "negative",
         "state": "executable"
       }
