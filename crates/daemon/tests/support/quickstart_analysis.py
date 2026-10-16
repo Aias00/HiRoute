@@ -18,9 +18,18 @@ def run(product, plan):
         for turn in detail['turns']:
             for rid in turn['receipt_ids']:
                 receipt = product.cli('sessions', 'receipt', rid)['data']
-                if receipt['trust'].get('agent_plan_id') == plan:
+                route_decisions = [e['fact'] for e in receipt['ordered_facts']
+                    if e['fact']['kind'] == 'route_decision'
+                    and e['fact'].get('complexity', {}).get('decision_source') == 'external_classifier']
+                accepted = any(e['fact']['kind'] == 'request_finished'
+                    and e['fact']['outcome'] == 'accepted' for e in receipt['ordered_facts'])
+                if receipt['trust'].get('agent_plan_id') == plan and route_decisions and accepted:
                     selected = (session, receipt)
                     break
+            if selected:
+                break
+        if selected:
+            break
     assert selected
     session, receipt = selected
     request = receipt['request_id']
@@ -28,7 +37,8 @@ def run(product, plan):
                for e in receipt['ordered_facts']), 'Custom/paid/unknown access must not be called free'
     facts = product.cli('sessions', 'receipt', '--request-stdin', payload=query('facts', {
         'request_id': request, 'limit': 200, 'cursor': None}))['data']
-    assert facts['facts'] and 'external_classifier' in json.dumps(facts)
+    # V1 receipts own full decision evidence; V2 facts retain their existing safe summary.
+    assert any(f['event_kind'] == 'route_decision' for f in facts['facts']), facts
     catalog = product.cli('sessions', 'show', '--request-stdin', payload=query('catalog', {
         'request_id': request, 'limit': 1, 'cursor': None}))['data']
     entries = list(catalog['contents'])
