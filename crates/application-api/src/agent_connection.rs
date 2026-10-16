@@ -130,7 +130,7 @@ pub struct AgentLaunchDescriptorRequestV1 {
 pub const AGENT_COLLABORATION_CHECK_FAILURE_SCHEMA_V1: &str =
     "hiroute.agent-collaboration-check-failure/v1";
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentCollaborationCheckFailureReasonV1 {
     LoginRequired,
@@ -144,7 +144,7 @@ pub enum AgentCollaborationCheckFailureReasonV1 {
     VerificationFailed,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AgentCollaborationCheckFailureV1 {
     pub schema: String,
