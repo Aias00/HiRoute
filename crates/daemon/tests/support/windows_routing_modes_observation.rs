@@ -1,7 +1,7 @@
 //! Public projections must describe actual route execution and its preceding
 //! scored stage. No observation records are inserted by this acceptance gate.
 use super::super::InstalledProduct;
-use super::super::windows_headless_business::cli;
+use super::super::windows_headless_business::{cli, command};
 use super::MODEL;
 use hiroute_domain::{ExecutionGroupV1, PlanQualitySamplesPage};
 use serde_json::{Value, json};
@@ -12,13 +12,11 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 pub(super) fn assert_committed(product: &InstalledProduct, plan: &str, count: usize, smart: bool) {
     let deadline = Instant::now() + Duration::from_secs(40);
     let quality = loop {
-        let envelope = cli(
+        let page = quality_page(
             product,
             &["observation", "plan-quality", "samples", "--plan-id", plan],
-            None,
+            deadline,
         );
-        let page: PlanQualitySamplesPage = serde_json::from_value(envelope["data"].clone())
-            .expect("actual public quality response must conform to its production DTO");
         if page.summary.scored_stage_count > 0
             && page.samples.iter().any(|sample| sample.upgrade.is_some())
         {
@@ -106,7 +104,7 @@ pub(super) fn assert_committed(product: &InstalledProduct, plan: &str, count: us
             "a single-group docs category cannot inherit code primary protection"
         );
     }
-    let below = cli(
+    let below = quality_page(
         product,
         &[
             "observation",
@@ -117,9 +115,8 @@ pub(super) fn assert_committed(product: &InstalledProduct, plan: &str, count: us
             "--competence",
             "below-floor",
         ],
-        None,
+        deadline,
     );
-    let below: PlanQualitySamplesPage = serde_json::from_value(below["data"].clone()).unwrap();
     assert!(
         below
             .samples
@@ -236,6 +233,40 @@ pub(super) fn assert_committed(product: &InstalledProduct, plan: &str, count: us
             "actual mode usage did not settle in the public value view"
         );
         thread::sleep(Duration::from_millis(100));
+    }
+}
+
+/// The public query rejects a page when ingestion changes its generation.
+/// Repeat only a cursor-free first page within the existing settlement bound;
+/// every other failure and all returned business assertions remain mandatory.
+fn quality_page(
+    product: &InstalledProduct,
+    args: &[&str],
+    deadline: Instant,
+) -> PlanQualitySamplesPage {
+    use hiroute_application_api::{ErrorCode, MachineStatus};
+    loop {
+        let (exit, envelope) = command(product, args, None);
+        let status = serde_json::from_value::<MachineStatus>(envelope["status"].clone()).ok();
+        let code = serde_json::from_value::<ErrorCode>(envelope["error"]["code"].clone()).ok();
+        if exit == 3
+            && status == Some(MachineStatus::Conflict)
+            && code == Some(ErrorCode::ChangePreviewStale)
+        {
+            assert!(
+                Instant::now() < deadline,
+                "quality snapshot did not settle within its original bound"
+            );
+            thread::sleep(Duration::from_millis(100));
+            continue;
+        }
+        assert_eq!(
+            exit, 0,
+            "public quality query failed: status={status:?}, code={code:?}"
+        );
+        assert_eq!(status, Some(MachineStatus::Succeeded));
+        return serde_json::from_value(envelope["data"].clone())
+            .expect("actual public quality response must conform to its production DTO");
     }
 }
 fn now() -> i64 {
