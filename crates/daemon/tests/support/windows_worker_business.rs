@@ -637,6 +637,38 @@ fn apply_settings(product: &InstalledProduct, verb: &str, spec: &Value, key: &st
         Some(&json!({"spec":spec})),
     )["data"]
         .clone();
+    if preview["applicable"] != true {
+        for blocker in preview["blockers"].as_array().into_iter().flatten() {
+            let reason = match blocker["reason"].as_str() {
+                Some("capability_unavailable") => "capability-unavailable",
+                Some("model_plan_unavailable") => "model-plan-unavailable",
+                Some("native_model_coverage_unavailable") => "native-model-coverage",
+                Some("codex_context_override") => "codex-context-override",
+                _ => "other-blocker",
+            };
+            let capabilities: Vec<_> = blocker["capabilities"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|block| {
+                    let capability = serde_json::from_value::<hiroute_domain::AgentCapability>(
+                        block["capability"].clone(),
+                    )
+                    .ok();
+                    let reason = match block["reason"].as_str() {
+                        Some("unknown") => "unknown",
+                        Some("unavailable") => "unavailable",
+                        Some("stale") => "stale",
+                        _ => "unclassified",
+                    };
+                    (capability, reason)
+                })
+                .collect();
+            eprintln!(
+                "Windows Agent preview failure: reason={reason}, capabilities={capabilities:?}"
+            );
+        }
+    }
     assert_eq!(
         preview["applicable"], true,
         "public Agent preview must admit this actual native context"
