@@ -1104,7 +1104,7 @@ pub(crate) fn command_usage(command_id: &str, joined_path: &str) -> String {
         "compute.scan" | "compute.connection.prepare" | "agents.connect.preview" | "agents.connect.apply" | "agents.restore.preview" | "agents.restore.apply" => {
             format!("hiroute {joined_path} --request-stdin --output json")
         }
-        "agents.connect.status" => "hiroute agents connect status <CONNECTION_OR_CONTEXT_ID> --output json".to_owned(),
+        "agents.connect.status" => "hiroute agents connect status <CONNECTION_OR_CONTEXT_ID> | --effective --context <ID> --plan <ID> [--session-id <ID>] [--observed-request-id <ID>] | --request-file <PATH> --output json".to_owned(),
         "sessions.list" | "value.show" | "observation.plan-quality.samples" => {
             format!("hiroute {joined_path} ([OPTIONS] | --request-stdin) [--capability-fd <FD>] --non-interactive --output json")
         }

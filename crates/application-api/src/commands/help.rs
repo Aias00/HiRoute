@@ -34,6 +34,9 @@ pub(super) fn command_network(command_id: &str, kind: CommandKind) -> &'static s
     }
 }
 pub(super) fn automation(command_id: &str) -> &'static str {
+    if command_id == "agents.connect.status" {
+        return "Use --effective --context ID --plan ID for separate saved, native-loading, selection and exact request evidence. Unknown loading stays unknown. This read-only query never restarts an Agent or calls a model; recorded outcomes apply only to the identified request/session.";
+    }
     if command_id == "compute.connection.login" {
         return "Keep the returned login_ref for status, cancel and forget. After uncertain delivery, list/status the existing session before starting again or resubmitting a one-use callback. Never persist the authorization URL or put callback material in argv, environment, logs or ordinary request JSON.";
     }

@@ -34,6 +34,9 @@ impl LocalControlAdapter {
         let preparation = match status.state {
             AgentModelSettingsStateV2::Configured => fact(Known, "managed_configuration_saved"),
             AgentModelSettingsStateV2::Restored => fact(Known, "owned_configuration_restored"),
+            AgentModelSettingsStateV2::NotConfigured if owned_restore_completed(status) => {
+                fact(Known, "owned_configuration_restored")
+            }
             AgentModelSettingsStateV2::NotConfigured => {
                 fact(Pending, "model_routing_not_configured")
             }
@@ -281,6 +284,7 @@ fn native_actions(
             );
             return actions;
         }
+        NotConfigured if owned_restore_completed(status) => {}
         Pending | NotConfigured => return actions,
         Configured | Restored => {}
     }
@@ -340,4 +344,13 @@ fn native_actions(
         );
     }
     actions
+}
+
+// The released status deliberately calls a completed model restore `not_configured`.
+// Its succeeded operation locator distinguishes it from a never-configured target.
+fn owned_restore_completed(status: &AgentModelSettingsStatusV2) -> bool {
+    status.state == AgentModelSettingsStateV2::NotConfigured
+        && status.operation_id.is_some()
+        && status.operation_state.as_deref()
+            == Some(hiroute_domain::OperationState::Succeeded.as_str())
 }
