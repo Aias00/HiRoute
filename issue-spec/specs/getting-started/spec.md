@@ -170,6 +170,87 @@ and exits. Deleting the App alone preserves data; optional cleanup cannot delete
 projects or native Agent credentials. Package construction alone is not signing,
 notarization, native installation, or live-Agent evidence.
 
+### Requirement: Windows x64 Desktop installs per user and opens ready to use
+
+HiRoute SHALL provide a Windows x64 Desktop installer that a standard user can run without administrator rights, Python or a terminal. It SHALL verify the package, publish the same user-owned Windows standalone installation used by headless HiRoute, including CLI, daemon, CPA and Skills, register the default Task Scheduler manager, add the Desktop shell, start the service and open the shell when the service is ready. Login start and tray residency SHALL be enabled by default and SHALL be optional during installation. An existing standalone installation for the same user SHALL be upgraded in place with its data and Agent recovery references preserved, and an existing SCM-managed installation SHALL NOT have its manager changed silently. The installer SHALL refuse non-x64 systems before writing. A missing WebView2 runtime SHALL be installed or explained. An interrupted installation SHALL be repairable by running the installer again. Uninstall SHALL restore managed Agent access, remove the manager registration, shell and entries, and preserve business data unless the user explicitly selects its removal.
+
+#### Scenario: Fresh standard-user installation
+
+- **WHEN** a standard user without Python runs the installer on Windows x64 and accepts the defaults
+- **THEN** installation completes without elevation, the HiRoute window opens with a healthy service, and `hiroute` in a new terminal reaches the same instance.
+
+#### Scenario: Existing headless installation
+
+- **WHEN** the user already has a Windows headless installation with saved sources and plans
+- **THEN** Desktop installation keeps that data and manager, and the console shows the same sources and plans.
+
+#### Scenario: Unsupported architecture
+
+- **WHEN** the installer runs on a Windows ARM64 system
+- **THEN** it stops before writing any file and explains that only x64 is supported.
+
+#### Scenario: Interrupted installation
+
+- **WHEN** installation stops after files were partially published
+- **THEN** the service is not admitted with mixed files, and rerunning the installer repairs or completes the installation without losing data.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/132#issuecomment-6219731276
+
+### Requirement: The Windows shell is a thin host for the console
+
+The Windows Desktop shell SHALL run as a single instance, show the console in an embedded WebView after the service is ready, and offer tray actions to open the window, open the console in the default browser and quit the shell. It SHALL obtain console sessions through the private named-pipe Local Control path and SHALL NOT persist session or launch credentials. Quitting the shell SHALL NOT stop the service. When the service is stopped or unhealthy, the shell SHALL start it through the installed manager and show progress, failure and the location of logs. The shell SHALL NOT execute business operations of its own; product actions go through the console and its HTTP control interface. Host-only features available in the shell, such as update and login-start preference, SHALL be exposed to the console as explicit host capabilities.
+
+#### Scenario: Second launch
+
+- **WHEN** the user starts HiRoute again while the shell is running
+- **THEN** the existing window is focused and no second shell or service is started.
+
+#### Scenario: Service stopped
+
+- **WHEN** the shell starts while the background service is stopped
+- **THEN** the shell starts it through the manager and opens the console once Local Control and Gateway are ready, or shows the failure with its log location.
+
+#### Scenario: Quit the shell
+
+- **WHEN** the user quits from the tray
+- **THEN** the shell exits while the Gateway keeps serving configured Agents.
+
+#### Scenario: Open in browser
+
+- **WHEN** the user selects open in browser
+- **THEN** the default browser opens a fresh single-use launch link and reaches an authenticated console session.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/132#issuecomment-6219733037
+
+### Requirement: Windows Desktop updates verify unsigned packages by catalog digest
+
+The Windows shell SHALL select a newer stable Windows x64 Desktop release from the trusted website release catalog and download it over HTTPS while the service keeps running. Before any stop it SHALL verify byte count and SHA-256 against the catalog. Windows packages are not code-signed; package origin SHALL be established by the HTTPS catalog and digest, and HiRoute SHALL NOT claim a publisher identity. Release pages SHALL publish each package SHA-256, and documentation SHALL guide users through the unknown-publisher prompt. Replacement SHALL follow the existing orderly-stop handoff: preflight, drain active requests and accepted Worker work with user cancellation, stop the shell and service, replace through the journaled installation transaction, run storage validation and migration, restart and report health. A failure before replacement SHALL restore the old running service; an interrupted replacement SHALL be repaired on the next start or installer run. A manually downloaded newer installer SHALL use the same transaction.
+
+#### Scenario: Digest mismatch
+
+- **WHEN** a downloaded package size or SHA-256 differs from the catalog
+- **THEN** the update fails before stopping the service and the existing version remains in use.
+
+#### Scenario: Cancel while draining
+
+- **WHEN** the user cancels while accepted Worker work is still running
+- **THEN** the work is neither killed nor resubmitted and normal admission resumes.
+
+#### Scenario: Replacement failure
+
+- **WHEN** file replacement fails after the service stopped
+- **THEN** the previous verified version is restored and restarted, and the failure stage is reported.
+
+#### Scenario: Successful update
+
+- **WHEN** an update completes
+- **THEN** the new version starts with existing sources, plans, Agent configuration and observations intact, and the shell reopens the console.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/132#issuecomment-6219734656
+
 ## Implementation references
 
 - [Native updater](../../../apps/desktop/src-tauri/src/updates.rs) and
