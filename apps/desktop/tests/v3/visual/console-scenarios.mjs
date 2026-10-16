@@ -5,6 +5,10 @@ import { evaluate, navigate, waitFor } from './cdp-client.mjs';
 export async function runConsoleScenarios(client, baseUrl, output) {
   const results = [];
   const assert = (value, message) => { if (!value) throw new Error(message); };
+  const settleVisual = () => evaluate(client, `Promise.all(document.getAnimations()
+    .filter(animation => animation.effect?.getTiming().iterations !== Infinity)
+    .map(animation => animation.finished.catch(() => undefined)))
+    .then(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))`);
   const open = async (state, language = 'zh', theme = 'light', width = 1200, height = 813) => {
     const url = new URL('console-entry.html', baseUrl);
     for (const [key, value] of Object.entries({ case: state, language, theme })) url.searchParams.set(key, value);
@@ -55,6 +59,7 @@ export async function runConsoleScenarios(client, baseUrl, output) {
       })()`);
       assert(!geometry.overflow && geometry.left >= 0 && geometry.right <= geometry.viewport + 1 && geometry.theme === theme, `Console layout failed: ${state}/${language}/${theme}/${width}: ${JSON.stringify(geometry)}`);
       if (state === 'ready') assert(geometry.bannerHeight < 110 && geometry.pageTop < 200 && geometry.pageBottom <= height + 1, 'Console banner displaced the product page: ' + JSON.stringify(geometry));
+      await settleVisual();
       const screenshot = await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
       const name = `console-${state}-${language}-${theme}-${width}x${height}.png`;
       await writeFile(path.join(output, name), Buffer.from(screenshot.data, 'base64'));
@@ -68,6 +73,7 @@ export async function runConsoleScenarios(client, baseUrl, output) {
         await click('Coding Plan', '.connection-product-card');
         await waitFor(client, 'Boolean(document.querySelector(".console-secret-warning"))');
         assert(await evaluate(client, 'document.querySelector("input[type=password]").getBoundingClientRect().width > 100 && document.querySelector(".console-secret-warning").getBoundingClientRect().width > 100'), 'Plaintext secret form is unreadable');
+        await settleVisual();
         const shot = await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
         const secretName = `console-secret-${language}-${theme}-${width}x${height}.png`;
         await writeFile(path.join(output, secretName), Buffer.from(shot.data, 'base64'));

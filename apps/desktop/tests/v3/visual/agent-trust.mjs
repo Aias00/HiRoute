@@ -40,6 +40,11 @@ const terminate = async child => {
     new Promise(resolve => child.once('exit', resolve)),
     new Promise(resolve => setTimeout(resolve, 1500)),
   ]);
+  // A detached browser descendant can retain inherited pipes after its parent
+  // exits. Close our pipe handles so completed scenarios do not keep Node alive.
+  child.stdin?.destroy();
+  child.stdout?.destroy();
+  child.stderr?.destroy();
 };
 const removeProfile = async directory => {
   for (let attempt = 0; attempt < 5; attempt += 1) {
