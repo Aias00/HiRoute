@@ -95,6 +95,9 @@ class Decisions(BaseHTTPRequestHandler):
             {'type': 'score', 'probabilities': {
                 '0': .1 if self.complex else .9, '1': .9 if self.complex else .1}})
             for key, question in body['questions'].items()}} if 'questions' in body else
+            {'decision': {'kind':'categorical', 'choice':body['decision']['options'][0]['id'],
+                'refinement':{'kind':'ordinal', 'probabilities':{'simple':.9, 'complex':.1}}}}
+            if body['decision']['kind'] == 'categorical' else
             {'decision': {'kind':'ordinal', 'probabilities':{'simple':.9, 'complex':.1}}})
         raw = json.dumps(result).encode()
         self.send_response(200)
