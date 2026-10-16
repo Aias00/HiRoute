@@ -95,6 +95,12 @@ fn installed_standalone_cli_completes_the_headless_management_loop() {
     run_standalone_script("standalone_headless_product.py");
 }
 
+#[test]
+#[cfg(target_os = "linux")]
+fn installed_cli_quickstart_reuses_resources_and_exact_apply_files() {
+    run_standalone_script("quickstart_product.py");
+}
+
 /// Runs only on request: five isolated one-candidate Plan publishes through the production
 /// Local Control socket and Gateway installer. The opt-in fixture prints per-run wall time and
 /// Debug stage counts; it is not a five-candidate or Desktop/WebView benchmark.

@@ -170,13 +170,13 @@ impl AgentCapabilitySet {
 #[error("native capability evidence is invalid or duplicated")]
 pub struct InvalidCapabilityEvidence;
 
-#[derive(schemars::JsonSchema, Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct CapabilityBlock {
     pub capability: AgentCapability,
     pub reason: CapabilityBlockReason,
 }
 
-#[derive(schemars::JsonSchema, Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CapabilityBlockReason {
     Unknown,
