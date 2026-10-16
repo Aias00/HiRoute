@@ -1,9 +1,6 @@
 use super::{DesktopFailure, main_window};
-use crate::confirmation::CONFIRMATION_TTL;
 use std::sync::atomic::Ordering;
-use tauri::{Emitter, EventTarget, Manager, State, WebviewWindow};
-
-pub(super) const WEB_CONFIRMATION_EVENT: &str = "hiroute-web-confirmation";
+use tauri::{Manager, State, WebviewWindow};
 
 pub(crate) fn expire_window_confirmations(app: &tauri::AppHandle, window_label: &str) {
     app.state::<super::DesktopState>()
@@ -16,35 +13,8 @@ pub(crate) fn expire_window_confirmations(app: &tauri::AppHandle, window_label: 
 }
 
 pub use hiroute_product_session::web_confirmation::{
-    ConfirmationBroker as WebConfirmationState, WebConfirmationDecision, WebConfirmationPrompt,
-    WebConfirmationRequest,
+    ConfirmationBroker as WebConfirmationState, WebConfirmationDecision, WebConfirmationRequest,
 };
-
-pub(super) async fn request_web_confirmation(
-    window: &WebviewWindow,
-    prompt: WebConfirmationPrompt,
-) -> bool {
-    let state = window.state::<WebConfirmationState>();
-    let Ok((request, receive)) = state.begin(window.label(), prompt) else {
-        return false;
-    };
-    let confirmation_id = request.confirmation_id.clone();
-    if window
-        .emit_to(
-            EventTarget::webview(window.label()),
-            WEB_CONFIRMATION_EVENT,
-            request,
-        )
-        .is_err()
-    {
-        state.cancel(window.label(), &confirmation_id);
-    }
-    let decision = tokio::time::timeout(CONFIRMATION_TTL, receive).await;
-    if decision.is_err() {
-        state.cancel(window.label(), &confirmation_id);
-    }
-    decision.ok().and_then(Result::ok).unwrap_or(false)
-}
 
 #[tauri::command]
 pub(super) async fn web_confirmation_snapshot(

@@ -328,7 +328,7 @@ async fn resident_call<T: Send + 'static>(
     sessions: &Sessions,
     call: impl FnOnce(&mut crate::bootstrap::Resident) -> Result<T, String> + Send + 'static,
 ) -> Result<T, String> {
-    let mut session = sessions.clone().lock_owned().await;
+    let session = sessions.clone().lock_owned().await;
     tokio::task::spawn_blocking(move || {
         call(&mut *crate::bootstrap::resident(
             session.as_ref().ok_or("RESIDENT_UNAVAILABLE")?,

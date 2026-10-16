@@ -3,7 +3,6 @@
 use hiroute_desktop::{
     bootstrap::Resident,
     bridge::{self, DesktopState},
-    session::Session,
 };
 use std::{
     io::{Read, Write},

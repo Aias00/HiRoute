@@ -12,23 +12,14 @@ use tauri::Emitter;
 // WebView supplies explicit intent and renders prompts; native preview and typed policy own submission.
 use crate::failure::DesktopFailure;
 use crate::session::{
-    AgentCheckCompletion, AgentCheckConfirmation, AgentCheckDispatch, AgentCheckInput,
-    AgentConfirmation, AgentOutcome, AgentPreparation, AgentSettingsInput, AgentSnapshot,
-    Confirmation, DesktopSnapshot, EditorInput, ModelSaveAccepted, ModelSaveConfirmation,
-    MutationOutcome, PriceConfirmation, PriceDisplayResult, PriceEditInput, RenameInput,
-    RestoreInput, Session, SubscriptionCheckConfirmation,
+    AgentCheckCompletion, AgentCheckInput, AgentOutcome, AgentSettingsInput, AgentSnapshot,
+    DesktopSnapshot, EditorInput, ModelSaveAccepted, MutationOutcome, PriceDisplayResult,
+    PriceEditInput, RenameInput, RestoreInput, Session,
 };
 use hiroute_application_api::{
     ClientOperationViewV1, GetEffectivePricesV2, ModelCatalogQueryV1, ModelCatalogResultV1,
 };
-use hiroute_diagnostics::context::{DiagnosticContext, DiagnosticHandle};
-use hiroute_diagnostics::correlation::CorrelationDomain;
-use hiroute_diagnostics::error::EventErrorCode;
-use hiroute_diagnostics::event::{
-    ActionEnd, ActionOperation, ActionResult, ApplyEvent, ApplyPhase, ConfirmationEvent,
-    ConfirmationPhase, DiagnosticEvent, PreviewEvent, PreviewPhase,
-};
-use hiroute_diagnostics::identity::CorrelationToken;
+use hiroute_diagnostics::context::DiagnosticHandle;
 use serde_json::Value;
 use std::sync::{
     Arc,
