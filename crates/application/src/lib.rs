@@ -143,9 +143,10 @@ impl ApplicationService {
                     return failed(ErrorCode::DaemonUnavailable, request.request_id);
                 };
                 match port.decision_services(&WorkspaceId::default()) {
-                    Ok(services) => {
-                        succeeded(serde_json::json!({"services":services}), request.request_id)
-                    }
+                    Ok(services) => succeeded(
+                        hiroute_application_api::DecisionServicesListV1 { services },
+                        request.request_id,
+                    ),
                     Err(error) => failed(map_control_error(error), request.request_id),
                 }
             }
@@ -250,7 +251,10 @@ impl ApplicationService {
             None => ports.discovery.discover(),
         };
         match result {
-            Ok(agents) => succeeded(json!({"agents": agents}), request.request_id),
+            Ok(agents) => succeeded(
+                hiroute_application_api::AgentDiscoveryListV1 { agents },
+                request.request_id,
+            ),
             Err(error) => failed(map_control_error(error), request.request_id),
         }
     }

@@ -225,6 +225,8 @@ fn execute_control(
     options: &[String],
     globals: Globals,
 ) -> CliExecution {
+    let _diagnostics =
+        request_input::diagnostics::Scope::enter(&descriptor.command_id, globals.error_details);
     let request_id = globals.request_id.unwrap_or_else(next_request_id);
     if globals.agent.is_some()
         && descriptor.command_id != "work-plans.list"
@@ -243,7 +245,7 @@ fn execute_control(
     }
     let payload = match command_payload(&descriptor.command_id, options) {
         Ok(payload) => payload,
-        Err(code) => return failure(code, Some(request_id)),
+        Err(code) => return request_input::diagnostics::failure(code, Some(request_id)),
     };
     let client = match LocalControlClient::cli_from_environment().map(|client| {
         client.with_timeout(

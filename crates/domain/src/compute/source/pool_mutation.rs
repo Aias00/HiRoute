@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::*;
 
+#[derive(schemars::JsonSchema)]
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CredentialPoolMutationKind {
@@ -15,6 +16,7 @@ pub enum CredentialPoolMutationKind {
 
 /// A command-specific desired pool transition. Secret bytes are absent; the HMAC fingerprint,
 /// exact target credential, and Offer-bound desired pool bind the control CAS.
+#[derive(schemars::JsonSchema)]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CredentialPoolMutationV1 {

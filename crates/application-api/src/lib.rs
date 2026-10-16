@@ -25,6 +25,8 @@ mod worker_actions;
 pub use worker_actions::*;
 mod delegation_tasks;
 pub use delegation_tasks::*;
+mod management_results;
+pub use management_results::*;
 mod command_schemas;
 mod commands;
 pub use classifier_diagnostic::*;

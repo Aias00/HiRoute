@@ -14,6 +14,7 @@ pub(crate) enum OutputMode {
 pub(crate) struct Globals {
     pub(crate) request_id: Option<String>,
     pub(crate) help: bool,
+    pub(crate) error_details: bool,
     pub(crate) capability_fd: Option<u32>,
     pub(crate) timeout: Option<Duration>,
     pub(crate) agent: Option<String>,
@@ -78,6 +79,10 @@ pub(crate) fn split_globals(
             }
         }
         match arguments[index].as_str() {
+            "--error-details" => {
+                globals.error_details = true;
+                index += 1;
+            }
             "--help" | "-h" => {
                 globals.help = true;
                 index += 1;

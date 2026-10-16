@@ -233,7 +233,7 @@ pub struct SetupApplyRequestV1 {
     pub idempotency_key: String,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AgentCheckRequestV1 {
     pub agent_id: String,
@@ -279,7 +279,7 @@ impl AgentCheckRequestV1 {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentCheckScopeV1 {
     Configuration,
@@ -290,7 +290,7 @@ pub enum AgentCheckScopeV1 {
     Live,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentCheckSuiteV1 {
     Quick,
@@ -512,7 +512,7 @@ pub struct ApplyRequestV1 {
     pub apply_capability: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ApplyResultV1 {
     pub operation_id: String,
     pub accepted_digest: CanonicalDigest,

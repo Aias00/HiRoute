@@ -92,6 +92,11 @@ macro_rules! response { ($($ty:ty),+ $(,)?) => { alternatives(vec![$(schema::<Ma
 
 pub fn command_schemas(command_id: &str) -> Option<CommandSchemasV1> {
     let (request, response) = match command_id {
+        "agents.check" => (request!(AgentCheckRequestV1), response!(AgentCheckResultV1)),
+        "decision.services.list" => (
+            request!(ClientEmptyRequestV1),
+            response!(DecisionServicesListV1),
+        ),
         "agents.scan" | "agents.list" => (
             request!(AgentScanRequestV1),
             response!(AgentDiscoveryListV1),
@@ -134,7 +139,7 @@ pub fn command_schemas(command_id: &str) -> Option<CommandSchemasV1> {
         ),
         "compute.connection.apply" => (
             request!(ComputeConnectionApplyRequestV1),
-            response!(ClientOperationViewV1),
+            response!(ApplyResultV1),
         ),
         "compute.connection.login" => (
             request!(ComputeSubscriptionLoginRequestV1),
@@ -142,7 +147,7 @@ pub fn command_schemas(command_id: &str) -> Option<CommandSchemasV1> {
         ),
         "compute.connection.test" => (
             request!(ComputeConnectionTestRequestV1),
-            response!(ModelConnectionCheckViewV1),
+            response!(ModelConnectionCheckViewV1, ComputeCandidateViewV2),
         ),
         "routing.options" => (
             request!(PlanEditorOptionsRequestV1),
@@ -174,7 +179,7 @@ pub fn command_schemas(command_id: &str) -> Option<CommandSchemasV1> {
                 PlanLifecycleApplyRequestV1,
                 PublicationCheckpointApplyRequestV1
             ),
-            response!(ClientOperationViewV1),
+            response!(ApplyResultV1),
         ),
         "agents.connect.preview" => (
             request!(
@@ -188,20 +193,21 @@ pub fn command_schemas(command_id: &str) -> Option<CommandSchemasV1> {
             response!(AgentSettingsPreviewV2),
         ),
         "agents.connect.apply" => (
-            request!(AgentConnectionApplyRequestV1, AgentSettingsApplyV2),
-            response!(ClientOperationViewV1),
+            request!(
+                AgentConnectionApplyRequestV1,
+                AgentSettingsApplyV2,
+                AgentSettingsRetryV1
+            ),
+            response!(ApplyResultV1),
         ),
-        "agents.restore.apply" => (
-            request!(AgentSettingsApplyV2),
-            response!(ClientOperationViewV1),
-        ),
+        "agents.restore.apply" => (request!(AgentSettingsApplyV2), response!(ApplyResultV1)),
         "agents.connect.status" => (
             request!(AgentConnectionStatusRequestV1, AgentSettingsStatusRequestV2),
             response!(AgentConnectionStatusV1, AgentSettingsStatusV2),
         ),
         "operations.get" => (
             request!(OperationLookupV1),
-            response!(ClientOperationViewV1),
+            response!(hiroute_domain::OperationV1),
         ),
         "operations.find" => (
             request!(OperationIdempotencyLookupV1),
@@ -209,7 +215,7 @@ pub fn command_schemas(command_id: &str) -> Option<CommandSchemasV1> {
         ),
         "decision.services.apply" => (
             request!(PreviewRequestV1, ApplyRequestV1),
-            response!(PreviewResultV1, ClientOperationViewV1),
+            response!(PreviewResultV1, ApplyResultV1),
         ),
         "decision.services.test" => (
             request!(ClassifierDecisionTestRequestV1),
@@ -232,11 +238,8 @@ fn examples(command_id: &str) -> Vec<Value> {
         | "compute.list"
         | "routing.list"
         | "agents.scan"
-        | "agents.list" => (
-            request!(AgentScanRequestV1),
-            response!(AgentDiscoveryListV1),
-        ),
-        "system.client-status" => vec![json!({})],
+        | "agents.list"
+        | "system.client-status" => vec![json!({})],
         _ => vec![],
     }
 }

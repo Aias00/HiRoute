@@ -498,7 +498,7 @@ mod tests {
 
 /// Resume an original already-authorized settings Operation for a supported native client;
 /// never creates a new intent or changes the original context.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AgentSettingsRetryV1 {
     pub schema: String,
