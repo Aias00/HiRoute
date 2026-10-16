@@ -50,7 +50,16 @@ An empty model/route catalog is a normal first-use state, not a reason to block 
 
 ## Discover the installed contract progressively
 
-Use family/leaf `--help` for commands and choices. For supported management JSON requests:
+Use family/leaf `--help` for commands and choices. Root and host discovery are available offline:
+
+```sh
+hiroute --help
+hiroute service --help
+hiroute gateway --help
+hiroute protected-input --help
+```
+
+For supported Application/Local Control commands with management JSON requests:
 
 ```sh
 hiroute schema list

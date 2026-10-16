@@ -139,7 +139,7 @@ fn packaged_headless_docs_distinguish_host_and_application_discovery() {
         "hiroute subscription-proxy --help",
         "Application/Local Control",
         "hiroute schema list --output json",
-        "hiroute schema show --command-id compute.connection.test --output json",
+        "hiroute schema show --command-id compute.connection.test --include-schema --output json",
     ] {
         assert!(
             docs.contains(required),
