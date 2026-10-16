@@ -24,12 +24,14 @@ impl crate::LocalStorageSet {
                 .any(|model| model.binding_id == request.stable_binding_id)
         });
         let Some(source) = owners.next() else {
-            self.control()
-                .native_credential_unavailable(Stage::PoolBindingMissing);
             // Namespace classification only fails closed; it never grants access.
-            return Ok((request.stable_binding_id.starts_with("binding/managed-")
-                || request.credential_id.starts_with("credential/managed-"))
-            .then(Vec::new));
+            let managed = request.stable_binding_id.starts_with("binding/managed-")
+                || request.credential_id.starts_with("credential/managed-");
+            if managed {
+                self.control()
+                    .native_credential_unavailable(Stage::PoolBindingMissing);
+            }
+            return Ok(managed.then(Vec::new));
         };
         if owners.next().is_some() || !source.provenance.is_native() {
             return Err(rejected().into());

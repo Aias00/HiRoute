@@ -1442,6 +1442,22 @@
         "crates/daemon/src/control/runtime/settings_entry_tests.rs",
         "crates/daemon/src/control/runtime/settings_entry_collaboration_tests.rs"
       ]
+    },
+    {
+      "contract": "hiroute.gateway-publication/v3",
+      "field": "source_binding_id absent from all executable candidates",
+      "mode": "recovery_read_only",
+      "owner": "routing-publication",
+      "reason": "Released v0.3.1 branch projections use distinct branch/reasoning execution keys without a separate source binding. Authenticate the complete original alias projection, including old routing/display-name variants, then rebuild source membership from the sealed Plans before current publication. Explicit mismatches and partially stripped bindings are rejected; credential or target checks are not relaxed.",
+      "removal_condition": "Retire only after all supported active, prepared, last-known-good and backup publications have explicit branch source bindings and the corresponding old-projection recovery assertions are retired.",
+      "allowed_paths": [
+        "crates/domain/src/publication/mod.rs",
+        "crates/domain/src/publication/projection.rs",
+        "crates/domain/src/publication/snapshot.rs",
+        "crates/gateway/src/publication/schema.rs",
+        "crates/gateway/src/publication/mod.rs",
+        "crates/application/src/compiler/explicit/tests.rs"
+      ]
     }
   ]
 }
