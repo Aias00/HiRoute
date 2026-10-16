@@ -1,6 +1,6 @@
 ---
 name: hiroute-management
-description: Manage HiRoute via installed CLI: connect, inspect, analyze, adjust, restore and delegate when authorized.
+description: Manage HiRoute via CLI: connect, analyze, adjust, recover and delegate when authorized.
 metadata:
   schema: hiroute.management-skill/v1
   access: local-user
@@ -19,9 +19,9 @@ Journey: target → source → Plan → connect → native activation → matchi
 starts with economy/primary and an explicit decision method. Reuse exact IDs; names may repeat.
 Saved, loaded, selected and served differ.
 
-Start with hiroute quickstart/help. Select returned --context CONTEXT_ID and optional --plan PLAN_ID.
-Hermes needs actual --hermes-root /ABSOLUTE/EFFECTIVE/ROOT, never an IM profile inferred from daemon env.
-Resolve ambiguity; keep missing/unreadable targets selected for repair.
+Start with hiroute quickstart/help; select returned --context CONTEXT_ID and optional --plan PLAN_ID.
+Hermes needs actual --hermes-root /ABS/ROOT, never an IM profile inferred from daemon env.
+Resolve ambiguity; retain missing/unreadable targets for repair.
 
 Missing CLI: Desktop Settings → CLI or standalone installer; Agent → HiRoute management enables
 this Skill. Files do not prove CLI availability. Recover the existing Desktop/service; inspect
@@ -29,8 +29,7 @@ this Skill. Files do not prove CLI availability. Recover the existing Desktop/se
 
 ## Contracts and result capture
 
-Use family/leaf `--help` for choices. Root and `service`, `gateway`, `protected-input` and
-`decision services options` help work offline:
+Use family/leaf --help. Root/service/gateway/protected-input/decision services options work offline:
 
 ```sh
 hiroute --help
@@ -162,8 +161,7 @@ hiroute routing apply --request-file decision-route-apply.json
 
 The apply verb handles Preview and Apply; no separate preview subcommand. Edit --id/requested fields;
 omissions remain. Endpoint changes need explicit credentials/custom no-auth. Retain exact retry files;
-release unused refs. A potentially billed test needs data.outcome/failure_code, not only exit. A probe
-proves neither quality, execution access nor native loading. Report failures; local rules are explicit,
+release unused refs. Inspect billed tests' data.outcome/failure_code, not only exit; a probe proves no quality/native loading. Report failures; local rules are explicit,
 never silent model-decision success.
 
 Verify decision source, group, model, publication, reasoning and each request outcome. Model swaps
@@ -250,7 +248,8 @@ complete requests. Negative savings stay negative. Narrow the interval if unavai
 Missing prices: use installed `prices effective` schema with exact Binding locators, currency and
 `valuation_kind=api_equivalent`. Use returned edit_context revisions with `prices override preview`,
 then exact `prices override apply`/Operation. Set input/output per-million-token rates and separately
-supported cache rates; never invent rates, exchange rates or unknown cache counts. Retain the prior
+supported cache rates; never invent rates/FX or usage counts. A cache-creation rate equal to ordinary
+input makes an unreported creation split irrelevant to the estimate; it does not create measured usage. Retain the prior
 setting and give complete price-restore Preview/Apply commands before changing it; follow_catalog
 removes the manual setting. Re-run the explicit estimate. This never changes entitlement. Ordinary
 `value show` keeps frozen historical valuation; free, subscription, paid and unknown remain distinct.

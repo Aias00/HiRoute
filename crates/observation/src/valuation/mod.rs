@@ -3,7 +3,9 @@
 
 mod arithmetic;
 mod comparison;
+mod reference_usage;
 pub use comparison::{ReferenceComparisonV2, compare_reference};
+pub(crate) use reference_usage::reference_usage;
 mod ingest;
 mod retention;
 mod schema;

@@ -49,6 +49,7 @@
     "hiroute.agent-settings-preview/v2",
     "hiroute.agent-settings-retry/v1",
     "hiroute.agent-surface-check/v1",
+    "hiroute.api-equivalent-value/v1",
     "hiroute.borrowed-claude-binding/v1",
     "hiroute.borrowed-claude-evidence/v1",
     "hiroute.borrowed-codex-access-lease/v1",
@@ -414,8 +415,7 @@
     "hiroute.worker-result-request/v1",
     "hiroute.worker-settings/v1",
     "hiroute.worker-status-request/v1",
-    "hiroute.worker-wait-request/v1",
-    "hiroute.api-equivalent-value/v1"
+    "hiroute.worker-wait-request/v1"
   ],
   "subjects": [
     {

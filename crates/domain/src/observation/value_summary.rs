@@ -100,6 +100,7 @@ pub struct ApiEquivalentValueReportV1 {
     pub prices: Vec<ApiEquivalentPriceV1>,
     pub request_count: u64,
     pub compared_request_count: u64,
+    pub arithmetic_overflow: bool,
     pub missing_request_count: u64,
     pub excluded_request_count: u64,
     pub retention_boundary_partial: bool,

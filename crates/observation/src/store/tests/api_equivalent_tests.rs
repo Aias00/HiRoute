@@ -176,3 +176,63 @@ fn explicit_comparison_includes_failed_retry_usage_without_rewriting_a_receipt()
     );
     assert!(report.estimated_savings_micros.unwrap() < 0);
 }
+
+#[test]
+fn missing_cache_creation_split_is_irrelevant_only_under_explicit_equal_rates() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    let fixture = Fixture::new("api-cache-creation");
+    let mut events = facts(&fixture, UsageFrameKindV1::Cumulative);
+    for event in &mut events {
+        if let ExecutionFactV1::UsageAndCache {
+            cache_write_tokens,
+            cache_write_provenance,
+            ..
+        } = &mut event.fact
+        {
+            *cache_write_tokens = None;
+            *cache_write_provenance = UsageProvenanceV1::Unknown;
+        }
+        store.ingest_fact(event, &[]).unwrap();
+    }
+    let source = reference_price("binding-a", "model-a", 1_000_000);
+    let reference = reference_price("reference", "primary", 4_000_000);
+    let report = store
+        .observed_api_equivalent_value(
+            &reader(&fixture),
+            &query(&fixture),
+            &reference,
+            &[source.clone()],
+            1000,
+        )
+        .unwrap();
+    assert_eq!(
+        report.coverage,
+        ObservationMetricCoverageV2::Complete,
+        "{report:?}"
+    );
+    assert!(report.estimated_savings_micros.unwrap() > 0);
+    let mut unequal = source;
+    unequal.quote.rates.cache_write = TokenRateV1::known(3_000_000);
+    unequal.quote.quote_digest = unequal.quote.computed_digest().unwrap();
+    let report = store
+        .observed_api_equivalent_value(
+            &reader(&fixture),
+            &query(&fixture),
+            &reference,
+            &[unequal],
+            1000,
+        )
+        .unwrap();
+    assert_eq!(report.estimated_savings_micros, None);
+    let raw: String = store
+        .connection
+        .lock()
+        .query_row(
+            "SELECT usage_json FROM valuation_attempt_inputs_v2 WHERE request_id=?1 LIMIT 1",
+            [fixture.request.as_str()],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(serde_json::from_str::<serde_json::Value>(&raw).unwrap()["write"].is_null());
+}

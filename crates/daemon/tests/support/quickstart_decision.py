@@ -188,7 +188,9 @@ def run(product, plan, submit):
             launched = subprocess.run([str(product.codex), 'exec', 'controlled primary task' if complex else 'controlled economy task'],
                 cwd=product.project, env=product.env, capture_output=True, timeout=60)
             product.outputs.extend((launched.stdout, launched.stderr))
-            assert launched.returncode == 0 and b'native product answer' in launched.stdout
+            assert launched.returncode == 0 and b'native product answer' in launched.stdout, {
+                'exit': launched.returncode, 'stdout': launched.stdout.decode(errors='replace'),
+                'stderr': launched.stderr.decode(errors='replace')}
             group = 'primary' if complex else 'regular'
             deadline = time.monotonic() + 20
             while time.monotonic() < deadline:
