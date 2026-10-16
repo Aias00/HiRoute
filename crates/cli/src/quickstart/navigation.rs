@@ -16,7 +16,7 @@ pub(super) fn run(flags: &Flags, globals: &Globals) -> Result<Reply> {
             return Err(response);
         }
     };
-    let service = match data(&client, "GetClientServiceStatus", json!({})) {
+    let service = match data(&client, "GetSystemStatus", json!({})) {
         Ok(service) => service,
         Err(mut response) => {
             unavailable(&mut view);
@@ -34,8 +34,12 @@ pub(super) fn run(flags: &Flags, globals: &Globals) -> Result<Reply> {
     view["plans_next_cursor"] = plans["next_cursor"].clone();
     let mut required = Vec::new();
     let mut next = Vec::new();
-    if view["service"]["recovery_ready"] != true || view["service"]["mutation_available"] != true {
-        view["blockers"] = json!(["service_not_ready_for_mutation"]);
+    if view["service"]["control_store"] != "ready"
+        || view["service"]["recoverable_operations"]
+            .as_u64()
+            .is_some_and(|count| count > 0)
+    {
+        view["blockers"] = json!(["inspect_control_store_or_recoverable_operations"]);
         next.push(json!({"arguments":["service","doctor"],"effect":"read_only","reason":"inspect_service_recovery"}));
     }
     let target = match flags.get("--context") {

@@ -442,6 +442,7 @@ impl ComputeFactsPort for LocalControlAdapter {
             options,
             subscriptions: None,
             metadata_catalog: Some(catalog.model_metadata().clone()),
+            candidate: None,
         })
     }
 

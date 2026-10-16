@@ -170,7 +170,11 @@ pub struct ComputeScanResultV1 {
 
 #[derive(schemars::JsonSchema, Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct ComputeConnectionOptionsRequestV1 {}
+pub struct ComputeConnectionOptionsRequestV1 {
+    /// Opt in to the existing candidate registry's exact, non-secret public view.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub candidate: Option<crate::ComputeCandidateRefV2>,
+}
 
 #[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -203,6 +207,8 @@ pub struct ComputeConnectionOptionsResultV1 {
     pub subscriptions: Option<crate::ComputeSubscriptionCandidatesV2>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata_catalog: Option<ModelMetadataCatalogV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub candidate: Option<crate::ComputeCandidateViewV2>,
 }
 
 #[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

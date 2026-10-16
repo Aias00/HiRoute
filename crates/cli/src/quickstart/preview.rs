@@ -165,12 +165,13 @@ fn compute(client: &LocalControlClient, options: &[String]) -> Result<Value> {
     reference
         .validate_shape()
         .map_err(|_| error(ErrorCode::InvalidArguments))?;
-    let candidate: ComputeCandidateViewV2 = serde_json::from_value(data(
+    let options = data(
         client,
-        GET_COMPUTE_CANDIDATE_OPERATION_V2,
+        "ListConnectionOptions",
         json!({"candidate":reference}),
-    )?)
-    .map_err(|_| error(ErrorCode::Internal))?;
+    )?;
+    let candidate: ComputeCandidateViewV2 = serde_json::from_value(options["candidate"].clone())
+        .map_err(|_| error(ErrorCode::Internal))?;
     let selectable = candidate
         .models
         .iter()
