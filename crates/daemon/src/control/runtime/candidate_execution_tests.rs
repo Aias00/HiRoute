@@ -114,11 +114,12 @@ fn source_local_fact(
 
 #[test]
 fn source_local_none_projection_keeps_port_and_has_no_credential_pool() {
-    let candidate = materialize_management_candidate(
-        &source_local_fact(GatewayAuthenticationSemanticsV1::None),
-        None,
-    )
-    .unwrap();
+    let fact = source_local_fact(GatewayAuthenticationSemanticsV1::None);
+    let candidate = materialize_management_candidate(&fact, None).unwrap();
+    assert_eq!(
+        management_execution_model_id(&fact).as_deref(),
+        Some(candidate.model.model_configuration_id.as_str())
+    );
     assert_eq!(
         candidate.authority,
         CandidateFactAuthorityV1::SourceLocalUser

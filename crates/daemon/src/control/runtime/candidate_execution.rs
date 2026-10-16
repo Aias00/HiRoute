@@ -316,24 +316,8 @@ pub(super) fn materialize_management_candidate(
         .value
         .unwrap_or(UNKNOWN_TEXT_OUTPUT_TOKENS)
         .min(context_tokens);
-    let identity = CanonicalDigest::of(&(
-        if runtime_fallback {
-            "hiroute.runtime-fallback-candidate/v1"
-        } else {
-            "hiroute.source-local-candidate/v2"
-        },
-        &fact.source_id,
-        fact.source_revision,
-        &fact.binding_id,
-        fact.binding_revision,
-    ))
-    .ok()?;
+    let (identity_kind, identity) = native_management_identity(fact)?;
     let suffix = &identity.as_str()["sha256:".len()..][..24];
-    let identity_kind = if runtime_fallback {
-        "runtime-fallback"
-    } else {
-        "source-local"
-    };
     let model_configuration_id = format!("model/{identity_kind}/{suffix}");
     let capability_id = format!("capability/{identity_kind}/{suffix}");
     let offer_ref = format!("offer/{identity_kind}/{suffix}");
@@ -767,13 +751,7 @@ fn materialize_connector_runtime_fallback(
     if endpoints.next().is_some() {
         return None;
     }
-    let identity = CanonicalDigest::of(&(
-        "hiroute.connector-runtime-fallback/v1",
-        &fact.source_id,
-        &fact.binding_id,
-        &fact.upstream_model_id,
-    ))
-    .ok()?;
+    let identity = connector_fallback_identity(fact)?;
     let suffix = &identity.as_str()["sha256:".len()..][..24];
     let model_configuration_id = format!("model/runtime-fallback/{suffix}");
     let capability_id = format!("capability/runtime-fallback/{suffix}");
@@ -924,3 +902,60 @@ fn target_authority(target: &hiroute_domain::ComputeManagementTargetV2) -> Optio
 #[cfg(test)]
 #[path = "candidate_execution_tests.rs"]
 mod tests;
+
+// Execution IDs and canonical price locators have different owners. Share the actual
+// materialization derivation rather than matching display names or native model strings.
+pub(super) fn management_execution_model_id(
+    fact: &ComputeManagementCompilationFactV2,
+) -> Option<String> {
+    use hiroute_domain::ComputeManagementProvenanceV2 as Provenance;
+    let (kind, identity) = match (&fact.provenance, fact.eligibility) {
+        (Provenance::ConnectorOwned { .. }, ComputeManagementEligibilityV2::RuntimeQualified) => {
+            ("runtime-fallback", connector_fallback_identity(fact)?)
+        }
+        (Provenance::UserConfigured { .. }, _)
+        | (Provenance::Registered { .. }, ComputeManagementEligibilityV2::RuntimeQualified) => {
+            native_management_identity(fact)?
+        }
+        _ => return fact.catalog_configuration_id.clone(),
+    };
+    Some(format!("model/{kind}/{}", &identity.as_str()[7..31]))
+}
+
+fn native_management_identity(
+    fact: &ComputeManagementCompilationFactV2,
+) -> Option<(&'static str, CanonicalDigest)> {
+    let fallback = fact.eligibility == ComputeManagementEligibilityV2::RuntimeQualified;
+    let digest = CanonicalDigest::of(&(
+        if fallback {
+            "hiroute.runtime-fallback-candidate/v1"
+        } else {
+            "hiroute.source-local-candidate/v2"
+        },
+        &fact.source_id,
+        fact.source_revision,
+        &fact.binding_id,
+        fact.binding_revision,
+    ))
+    .ok()?;
+    Some((
+        if fallback {
+            "runtime-fallback"
+        } else {
+            "source-local"
+        },
+        digest,
+    ))
+}
+
+fn connector_fallback_identity(
+    fact: &ComputeManagementCompilationFactV2,
+) -> Option<CanonicalDigest> {
+    CanonicalDigest::of(&(
+        "hiroute.connector-runtime-fallback/v1",
+        &fact.source_id,
+        &fact.binding_id,
+        &fact.upstream_model_id,
+    ))
+    .ok()
+}

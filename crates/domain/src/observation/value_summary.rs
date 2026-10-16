@@ -87,6 +87,10 @@ pub struct ObservationMaintenanceStatusV2 {
 #[derive(schemars::JsonSchema, Clone, Debug, Serialize, Deserialize)]
 pub struct ApiEquivalentPriceV1 {
     pub binding_id: String,
+    /// Exact execution identity derived from this source/model's materialization facts.
+    /// A local execution identity can differ from the canonical manual-price locator.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_model_configuration_id: Option<String>,
     pub quote: crate::FrozenPriceQuoteV1,
 }
 #[derive(schemars::JsonSchema, Clone, Debug, Serialize, Deserialize)]

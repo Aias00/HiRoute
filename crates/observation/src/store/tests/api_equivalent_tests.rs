@@ -15,6 +15,7 @@ fn reference_price(binding: &str, model: &str, rate: u64) -> ApiEquivalentPriceV
     quote.quote_digest = quote.computed_digest().unwrap();
     ApiEquivalentPriceV1 {
         binding_id: binding.into(),
+        execution_model_configuration_id: None,
         quote,
     }
 }
@@ -259,4 +260,52 @@ fn local_price_namespace_uses_the_same_exact_recorded_model_configuration() {
         .unwrap();
     assert_eq!(report.coverage, ObservationMetricCoverageV2::Complete);
     assert_eq!(report.estimated_savings_micros, Some(0));
+}
+
+#[test]
+fn source_local_execution_mapping_keeps_the_canonical_price_and_exact_supplier() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    let fixture = Fixture::new("api-execution-model");
+    for fact in facts(&fixture, UsageFrameKindV1::Cumulative) {
+        store.ingest_fact(&fact, &[]).unwrap();
+    }
+    let mut price = reference_price("binding-a", "canonical-model", 1_000_000);
+    price.execution_model_configuration_id = Some("model-a".into());
+    let report = store
+        .observed_api_equivalent_value(
+            &reader(&fixture),
+            &query(&fixture),
+            &price,
+            std::slice::from_ref(&price),
+            1000,
+        )
+        .unwrap();
+    assert_eq!(report.coverage, ObservationMetricCoverageV2::Complete);
+    assert_eq!(report.estimated_savings_micros, Some(0));
+    assert_eq!(
+        report.prices[0].quote.exact_target.model_identity,
+        PriceModelIdentityV1::CatalogModel("canonical-model".into())
+    );
+
+    let mut wrong = price.clone();
+    wrong.execution_model_configuration_id = Some("another-execution-model".into());
+    let report = store
+        .observed_api_equivalent_value(&reader(&fixture), &query(&fixture), &price, &[wrong], 1000)
+        .unwrap();
+    assert_eq!(report.compared_request_count, 0);
+    let mut foreign = price.clone();
+    foreign.quote.exact_target.source_identity_digest =
+        CanonicalDigest::of_bytes(b"foreign-source");
+    foreign.quote.quote_digest = foreign.quote.computed_digest().unwrap();
+    let report = store
+        .observed_api_equivalent_value(
+            &reader(&fixture),
+            &query(&fixture),
+            &price,
+            &[foreign],
+            1000,
+        )
+        .unwrap();
+    assert_eq!(report.compared_request_count, 0);
 }

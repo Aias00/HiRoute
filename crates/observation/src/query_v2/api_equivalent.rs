@@ -114,7 +114,8 @@ impl crate::LocalObservationStore {
                             == old.exact_target.source_identity_digest
                         // Execution binds the exact model_configuration_id. Catalog/local
                         // is its price-index locator kind, not a different native model.
-                        && model_key(&p.quote.exact_target.model_identity) == model_key(&old.exact_target.model_identity)
+                        && (model_key(&p.quote.exact_target.model_identity) == model_key(&old.exact_target.model_identity)
+                            || p.execution_model_configuration_id.as_deref() == Some(model_key(&old.exact_target.model_identity)))
                 })
             });
             if let Some(price) = price {

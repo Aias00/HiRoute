@@ -62,6 +62,7 @@ impl ObservationControl {
                 .map_err(|_| ObservationQueryError::InvalidQuery)?;
             prices.push(ApiEquivalentPriceV1 {
                 binding_id: binding.binding_id.clone(),
+                execution_model_configuration_id: binding.execution_model_configuration_id.clone(),
                 quote,
             });
         }
