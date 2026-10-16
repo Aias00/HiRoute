@@ -233,3 +233,90 @@ pub(super) fn test(client: &LocalControlClient, options: &[String]) -> Result<Va
     Ok(json!({"schema":CLASSIFIER_DECISION_TEST_SCHEMA_V1,
         "classifier":{"kind":"decision_service","service":service}}))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn flags(args: &[&str]) -> Flags {
+        Flags::parse(
+            &args.iter().map(|v| v.to_string()).collect::<Vec<_>>(),
+            &[
+                "--id",
+                "--name",
+                "--candidate",
+                "--header",
+                "--endpoint",
+                "--provider",
+            ],
+            &[],
+            &["--no-auth"],
+        )
+        .unwrap()
+    }
+    fn saved(custom: bool) -> Value {
+        let connection = if custom {
+            json!({"kind":"custom","endpoint":"https://first.example/decide","timeout_ms":1742,
+                "auth_header":{"name":"X-Custom-Key","value_secret_ref":"decision/old/r3"}})
+        } else {
+            json!({"kind":"system_one","provider":"existing-private-compatible-provider","model":"original-model",
+                "endpoint":"https://first.example/systemone","timeout_ms":1742,
+                "auth_header":{"name":"Authorization","value_secret_ref":"decision/old/r3"}})
+        };
+        json!({"services":[{"id":"saved","revision":3,"name":"Original","connection":connection}]})
+    }
+    #[test]
+    fn edit_preserves_unlisted_provider_and_complete_existing_connection() {
+        let before = saved(false);
+        let changed = change(&flags(&["--id", "saved", "--name", "Renamed"]), &before).unwrap();
+        assert_eq!(changed.expected_revision, 3);
+        let service = json!(changed.service);
+        assert_eq!(service["revision"], 4);
+        assert_eq!(service["connection"], before["services"][0]["connection"]);
+        assert!(changed.input_slot.is_none());
+    }
+    #[test]
+    fn endpoint_changes_never_reuse_a_saved_secret_implicitly() {
+        for custom in [false, true] {
+            let changed = change(
+                &flags(&[
+                    "--id",
+                    "saved",
+                    "--endpoint",
+                    "https://other.example/decide",
+                ]),
+                &saved(custom),
+            );
+            assert!(changed.is_err());
+        }
+        let changed = change(
+            &flags(&[
+                "--id",
+                "saved",
+                "--endpoint",
+                "https://other.example/decide",
+                "--no-auth",
+            ]),
+            &saved(true),
+        )
+        .unwrap();
+        assert!(json!(changed.service)["connection"]["auth_header"].is_null());
+        assert!(change(&flags(&["--id", "saved", "--no-auth"]), &saved(false)).is_err());
+    }
+    #[test]
+    fn explicit_rotation_preserves_custom_header_and_uses_an_immutable_new_reference() {
+        let changed = change(
+            &flags(&["--id", "saved", "--candidate", "candidate/new"]),
+            &saved(true),
+        )
+        .unwrap();
+        let service = json!(changed.service);
+        assert_eq!(service["connection"]["auth_header"]["name"], "X-Custom-Key");
+        assert_ne!(
+            service["connection"]["auth_header"]["value_secret_ref"],
+            "decision/old/r3"
+        );
+        assert_eq!(service["connection"]["timeout_ms"], 1742);
+        assert_eq!(changed.input_slot.as_deref(), Some("candidate/new"));
+    }
+}
