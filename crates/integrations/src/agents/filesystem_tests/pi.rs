@@ -235,7 +235,10 @@ fn pi_cli_release_labels_and_entry_layout_do_not_gate_settings() {
         );
         let installation = crate::pi_cli_installation(&cli).unwrap();
         assert_eq!(installation.version, version);
-        assert_eq!(installation.package_root, package);
+        assert_eq!(
+            installation.package_root,
+            fs::canonicalize(&package).unwrap()
+        );
         // A missing Worker SDK does not prevent passive static discovery or settings identity.
         assert!(!package.join("dist/index.js").exists());
         assert!(matches!(

@@ -245,7 +245,68 @@ mod tests {
         assert_ne!(before, replaced);
     }
 }
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 fn dependencies(_executable: Option<&Path>, _target: &Path) -> Result<(CanonicalDigest, bool), ()> {
     Err(())
+}
+
+#[cfg(windows)]
+fn dependencies(executable: Option<&Path>, target: &Path) -> Result<(CanonicalDigest, bool), ()> {
+    use hiroute_platform::file_security::capture;
+    use hiroute_platform::windows::security::{file_identity, file_link_count, open_identity};
+    use std::os::windows::fs::MetadataExt;
+    let identity = |path: &Path, directory: bool| -> std::io::Result<_> {
+        let file = open_identity(path, directory)?;
+        let meta = file.metadata()?;
+        let permissions = capture(&file)?;
+        let version = if directory {
+            None
+        } else {
+            Some((
+                meta.file_size(),
+                meta.creation_time(),
+                meta.last_write_time(),
+            ))
+        };
+        Ok((
+            file_identity(&file)?,
+            permissions,
+            version,
+            file_link_count(&file)?,
+        ))
+    };
+    let binary = executable
+        .map(|path| {
+            let path = super::executable::resolve(path)
+                .map_err(|_| ())?
+                .ok_or(())?;
+            Ok::<_, ()>((path.clone(), identity(&path, false).map_err(|_| ())?))
+        })
+        .transpose()?;
+    let file = match identity(target, false) {
+        Ok(value) => Some(value),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(_) => return Err(()),
+    };
+    let mut parent = target.parent().ok_or(())?;
+    let mut parent_identity = None;
+    for _ in 0..32 {
+        match identity(parent, true) {
+            Ok(value) => {
+                parent_identity = Some(value);
+                break;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                parent = parent.parent().ok_or(())?;
+            }
+            Err(_) => return Err(()),
+        }
+    }
+    let parent_identity = parent_identity.ok_or(())?;
+    let replace = file
+        .as_ref()
+        .is_none_or(|entry| entry.3 == 1 && !entry.1.read_only);
+    let digest =
+        CanonicalDigest::of(&(binary, target, file, parent, parent_identity)).map_err(|_| ())?;
+    Ok((digest, replace))
 }

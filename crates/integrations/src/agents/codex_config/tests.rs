@@ -287,12 +287,14 @@ fn codex_catalog_pointer_restores_original_and_preserves_unrelated_changes() {
     let original = "model_catalog_json = '/user/original.json' # own catalog\ncustom = 1\n";
     let edit = configure(original, CodexSelectionTarget::Root)
         .unwrap()
-        .with_model_catalog(std::path::Path::new("/owned/catalog one.json"))
+        .with_model_catalog(&crate::agents::test_absolute_path(
+            "/owned/catalog one.json",
+        ))
         .unwrap();
     let parsed = edit.rendered.parse::<DocumentMut>().unwrap();
     assert_eq!(
         parsed["model_catalog_json"].as_str(),
-        Some("/owned/catalog one.json")
+        crate::agents::test_absolute_path("/owned/catalog one.json").to_str()
     );
     assert!(edit.rendered.contains("# own catalog"));
     let encoded = edit.restore.encode_protected().unwrap();
@@ -309,7 +311,7 @@ fn codex_catalog_pointer_is_scoped_to_the_selected_profile() {
     let original = "model_catalog_json = '/root.json'\n[profiles.work]\nmodel = 'work'\n[profiles.other]\nmodel_catalog_json = '/other.json'\n";
     let edit = configure(original, CodexSelectionTarget::LegacyProfile("work".into()))
         .unwrap()
-        .with_model_catalog(std::path::Path::new("/owned/work.json"))
+        .with_model_catalog(&crate::agents::test_absolute_path("/owned/work.json"))
         .unwrap();
     let parsed = edit.rendered.parse::<DocumentMut>().unwrap();
     assert_eq!(parsed["model_catalog_json"].as_str(), Some("/root.json"));
@@ -319,7 +321,7 @@ fn codex_catalog_pointer_is_scoped_to_the_selected_profile() {
     );
     assert_eq!(
         parsed["profiles"]["work"]["model_catalog_json"].as_str(),
-        Some("/owned/work.json")
+        crate::agents::test_absolute_path("/owned/work.json").to_str()
     );
     let record =
         CodexNativeRestore::decode_protected(&edit.restore.encode_protected().unwrap()).unwrap();
@@ -336,7 +338,7 @@ fn codex_catalog_update_keeps_first_restore_point() {
     let original = "model_catalog_json = '/user/original.json'\n";
     let first = configure(original, CodexSelectionTarget::Root)
         .unwrap()
-        .with_model_catalog(std::path::Path::new("/owned/first.json"))
+        .with_model_catalog(&crate::agents::test_absolute_path("/owned/first.json"))
         .unwrap();
     let second = reconfigure_codex_native(
         &first.rendered,
@@ -349,11 +351,11 @@ fn codex_catalog_update_keeps_first_restore_point() {
         &AgentAccessGrantMaterial::from_csprng_entropy([5; 32]),
     )
     .unwrap()
-    .with_model_catalog(std::path::Path::new("/owned/second.json"))
+    .with_model_catalog(&crate::agents::test_absolute_path("/owned/second.json"))
     .unwrap();
     assert_eq!(
         second.rendered.parse::<DocumentMut>().unwrap()["model_catalog_json"].as_str(),
-        Some("/owned/second.json")
+        crate::agents::test_absolute_path("/owned/second.json").to_str()
     );
     let record =
         CodexNativeRestore::decode_protected(&second.restore.encode_protected().unwrap()).unwrap();
@@ -369,13 +371,16 @@ fn codex_catalog_update_keeps_first_restore_point() {
 fn codex_catalog_user_change_is_not_overwritten_by_restore() {
     let edit = configure("", CodexSelectionTarget::Root)
         .unwrap()
-        .with_model_catalog(std::path::Path::new("/owned/catalog.json"))
+        .with_model_catalog(&crate::agents::test_absolute_path("/owned/catalog.json"))
         .unwrap();
-    let changed = edit
-        .rendered
-        .replace("/owned/catalog.json", "/user/new.json");
+    let mut changed = edit.rendered.parse::<DocumentMut>().unwrap();
+    changed["model_catalog_json"] = toml_edit::value(
+        crate::agents::test_absolute_path("/user/new.json")
+            .to_str()
+            .unwrap(),
+    );
     assert!(matches!(
-        restore_codex_native(&changed, &edit.restore),
+        restore_codex_native(&changed.to_string(), &edit.restore),
         Err(CodexNativeError::FieldConflict)
     ));
 }
@@ -395,7 +400,7 @@ fn codex_catalog_parent_path_is_rejected() {
     assert!(matches!(
         configure("", CodexSelectionTarget::Root)
             .unwrap()
-            .with_model_catalog(std::path::Path::new("/owned/../catalog.json")),
+            .with_model_catalog(&crate::agents::test_absolute_path("/owned/../catalog.json")),
         Err(CodexNativeError::InvalidIntent)
     ));
 }
@@ -404,10 +409,10 @@ fn codex_catalog_parent_path_is_rejected() {
 fn codex_catalog_repeated_attachment_is_rejected() {
     let edit = configure("", CodexSelectionTarget::Root)
         .unwrap()
-        .with_model_catalog(std::path::Path::new("/owned/first.json"))
+        .with_model_catalog(&crate::agents::test_absolute_path("/owned/first.json"))
         .unwrap();
     assert!(matches!(
-        edit.with_model_catalog(std::path::Path::new("/owned/second.json")),
+        edit.with_model_catalog(&crate::agents::test_absolute_path("/owned/second.json")),
         Err(CodexNativeError::InvalidIntent)
     ));
 }

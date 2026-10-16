@@ -16,12 +16,17 @@ use hiroute_integrations::ManagedClaudeProcessV1;
 use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::io::Read;
-use std::process::{Command, Stdio};
+use std::process::Command;
+#[cfg(not(windows))]
+use std::process::Stdio;
 use std::thread;
 use std::time::{Duration, Instant};
 
 #[path = "agent_live_check_qoder.rs"]
 mod qoder;
+#[cfg(windows)]
+#[path = "agent_live_check_windows.rs"]
+mod windows;
 
 const LIVE_CHECK_BUDGET: Duration = Duration::from_secs(120);
 const RECEIPT_WAIT_BUDGET: Duration = Duration::from_secs(5);
@@ -43,6 +48,40 @@ pub(super) struct AttemptFailure {
 
 struct ProcessOutput {
     stdout: Vec<u8>,
+}
+
+/// Do not delete a native workspace until its owned process scope is confirmed stopped.
+struct LiveWorkspace {
+    cleanup: Option<tempfile::TempDir>,
+    path: std::path::PathBuf,
+}
+
+impl LiveWorkspace {
+    fn new() -> std::io::Result<Self> {
+        let root = tempfile::tempdir()?;
+        #[cfg(windows)]
+        let path = {
+            let path = root.path().join("private");
+            hiroute_platform::windows::security::create_owner_only_directory(&path)?;
+            path
+        };
+        #[cfg(not(windows))]
+        let path = root.path().to_owned();
+        Ok(Self {
+            cleanup: Some(root),
+            path,
+        })
+    }
+
+    fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+
+    fn keep(&mut self) {
+        if let Some(root) = self.cleanup.take() {
+            let _ = root.keep();
+        }
+    }
 }
 
 impl LocalControlAdapter {
@@ -220,12 +259,12 @@ impl LocalControlAdapter {
             executed: false,
             reason: CLIENT_FAILED,
         })?;
-        let working = tempfile::tempdir().map_err(|_| AttemptFailure {
+        let mut working = LiveWorkspace::new().map_err(|_| AttemptFailure {
             executed: false,
             reason: CLIENT_FAILED,
         })?;
         process.command_mut().current_dir(working.path());
-        let output = run_bounded(process.command_mut(), deadline)?;
+        let output = run_bounded(process.command_mut(), deadline, &mut working)?;
         let identity = parse_claude_output(&output.stdout).ok_or(AttemptFailure {
             executed: true,
             reason: CLIENT_OUTPUT_INVALID,
@@ -252,7 +291,7 @@ impl LocalControlAdapter {
                 executed: false,
                 reason: CLIENT_FAILED,
             })?;
-        let working = tempfile::tempdir().map_err(|_| AttemptFailure {
+        let mut working = LiveWorkspace::new().map_err(|_| AttemptFailure {
             executed: false,
             reason: CLIENT_FAILED,
         })?;
@@ -288,7 +327,7 @@ impl LocalControlAdapter {
             model,
             LIVE_PROMPT,
         ]);
-        let output = run_bounded(&mut command, deadline)?;
+        let output = run_bounded(&mut command, deadline, &mut working)?;
         let identities = parse_codex_output(&output.stdout).ok_or(AttemptFailure {
             executed: true,
             reason: CLIENT_OUTPUT_INVALID,
@@ -418,7 +457,28 @@ pub(super) fn expected_trust(
         .map_err(|_| ControlReadError::Corrupt)
 }
 
-fn run_bounded(command: &mut Command, deadline: Instant) -> Result<ProcessOutput, AttemptFailure> {
+#[cfg(windows)]
+fn run_bounded(
+    command: &mut Command,
+    deadline: Instant,
+    working: &mut LiveWorkspace,
+) -> Result<ProcessOutput, AttemptFailure> {
+    let (stdout, success) = windows::run_captured(command, true, deadline, working)?;
+    if !success {
+        return Err(AttemptFailure {
+            executed: true,
+            reason: CLIENT_FAILED,
+        });
+    }
+    Ok(ProcessOutput { stdout })
+}
+
+#[cfg(not(windows))]
+fn run_bounded(
+    command: &mut Command,
+    deadline: Instant,
+    _working: &mut LiveWorkspace,
+) -> Result<ProcessOutput, AttemptFailure> {
     command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -483,6 +543,7 @@ fn run_bounded(command: &mut Command, deadline: Instant) -> Result<ProcessOutput
     Ok(ProcessOutput { stdout })
 }
 
+#[cfg(not(windows))]
 fn drain_bounded(mut reader: impl Read) -> (Vec<u8>, bool) {
     let mut output = Vec::new();
     let mut overflow = false;
@@ -505,6 +566,7 @@ fn drain_bounded(mut reader: impl Read) -> (Vec<u8>, bool) {
     (output, overflow)
 }
 
+#[cfg(not(windows))]
 fn terminate_owned_process(child: &mut std::process::Child) {
     #[cfg(unix)]
     {
@@ -524,6 +586,7 @@ fn terminate_owned_process(child: &mut std::process::Child) {
     let _ = child.wait();
 }
 
+#[cfg(not(windows))]
 fn terminate_remaining_process_group(pid: u32) {
     #[cfg(unix)]
     {

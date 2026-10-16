@@ -4,7 +4,7 @@ use super::*;
 const NATIVE_LOGIN_REQUIRED: &str = "LIVE_NATIVE_LOGIN_REQUIRED";
 
 impl LocalControlAdapter {
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub(super) fn execute_qoder_live_attempt(
         &self,
         context_id: &str,
@@ -12,7 +12,7 @@ impl LocalControlAdapter {
         trust: &FrozenExecutionTrustV1,
         deadline: Instant,
     ) -> Result<CanonicalDigest, AttemptFailure> {
-        use std::os::unix::fs::OpenOptionsExt;
+        #[cfg(unix)]
         use std::os::unix::process::CommandExt;
         let unavailable = || AttemptFailure {
             executed: false,
@@ -26,22 +26,20 @@ impl LocalControlAdapter {
             .scanner
             .qoder_native_context()
             .map_err(|_| unavailable())?;
-        let working = tempfile::tempdir().map_err(|_| unavailable())?;
+        let mut working = LiveWorkspace::new().map_err(|_| unavailable())?;
         let safety = working.path().join("safety.json");
         let safety_bytes = serde_json::to_vec(&serde_json::json!({
             "disableAllHooks":true,"general":{"enableAutoUpdate":false,"sessionRetention":{"enabled":false}},
             "plugins":{"autoUpdate":false},"autoMemoryEnabled":false,"autoMemoryUserScopeEnabled":false,
             "dream":{"enabled":false},"promptSuggestionEnabled":false
         })).map_err(|_| unavailable())?;
-        use std::io::Write;
-        std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .mode(0o600)
-            .open(&safety)
-            .and_then(|mut file| file.write_all(&safety_bytes))
+        hiroute_platform::durable::write_private_new(&safety, &safety_bytes)
             .map_err(|_| unavailable())?;
+        #[cfg(unix)]
         let output_path = working.path().join("native-output.private");
+        #[cfg(unix)]
+        use std::os::unix::fs::OpenOptionsExt;
+        #[cfg(unix)]
         let output = std::fs::OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -86,50 +84,85 @@ impl LocalControlAdapter {
             .env("HOME", &context.home)
             .env("QODER_CONFIG_DIR", &context.config_root)
             .env("TMPDIR", working.path())
+            .current_dir(working.path());
+        #[cfg(windows)]
+        {
+            // Retain only absolute executable-search directories. No ambient
+            // provider credentials, routing overrides or relative project paths.
+            let search = std::env::var_os("PATH").unwrap_or_default();
+            let directories = std::env::split_paths(&search)
+                .filter(|path| path.is_absolute())
+                .collect::<Vec<_>>();
+            command
+                .env(
+                    "PATH",
+                    std::env::join_paths(directories).map_err(|_| unavailable())?,
+                )
+                .env("TEMP", working.path())
+                .env("TMP", working.path());
+        }
+        #[cfg(unix)]
+        command
             .env("PATH", "/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin")
             .stdin(Stdio::null())
             .stdout(Stdio::from(output))
             .stderr(Stdio::null())
-            .current_dir(working.path())
             .process_group(0);
-        let child = command.spawn().map_err(|_| unavailable())?;
-        let mut child = hiroute_integrations::NativeProbeProcess::new(child);
+        #[cfg(windows)]
+        let (bytes, success) = windows::run_captured(&command, false, deadline, &mut working)?;
+        #[cfg(unix)]
+        let (bytes, success) = {
+            let child = command.spawn().map_err(|_| unavailable())?;
+            let mut child = hiroute_integrations::NativeProbeProcess::new(child);
+            let failure = |reason| AttemptFailure {
+                executed: true,
+                reason,
+            };
+            let result = (|| {
+                loop {
+                    if Instant::now() >= deadline {
+                        return Err(failure(CHECK_TIMEOUT));
+                    }
+                    if std::fs::metadata(&output_path)
+                        .map_err(|_| failure(CLIENT_OUTPUT_INVALID))?
+                        .len()
+                        > OUTPUT_LIMIT as u64
+                    {
+                        return Err(failure(CLIENT_OUTPUT_INVALID));
+                    }
+                    if let Some(success) = child.observe().map_err(|_| failure(CLIENT_FAILED))? {
+                        break Ok(success);
+                    }
+                    thread::sleep(Duration::from_millis(20));
+                }
+            })();
+            if child.stop().is_err() {
+                working.keep();
+                return Err(failure(CLIENT_FAILED));
+            }
+            let success = result?;
+            let mut bytes = zeroize::Zeroizing::new(Vec::new());
+            std::fs::File::open(&output_path)
+                .map_err(|_| failure(CLIENT_OUTPUT_INVALID))?
+                .take(OUTPUT_LIMIT as u64 + 1)
+                .read_to_end(&mut bytes)
+                .map_err(|_| failure(CLIENT_OUTPUT_INVALID))?;
+            if bytes.len() > OUTPUT_LIMIT {
+                return Err(failure(CLIENT_OUTPUT_INVALID));
+            }
+            (bytes.to_vec(), success)
+        };
+        let bytes = zeroize::Zeroizing::new(bytes);
         let failure = |reason| AttemptFailure {
             executed: true,
             reason,
         };
-        let success = loop {
-            if Instant::now() >= deadline {
-                return Err(failure(CHECK_TIMEOUT));
-            }
-            if std::fs::metadata(&output_path)
-                .map_err(|_| failure(CLIENT_OUTPUT_INVALID))?
-                .len()
-                > OUTPUT_LIMIT as u64
-            {
-                return Err(failure(CLIENT_OUTPUT_INVALID));
-            }
-            if let Some(success) = child.observe().map_err(|_| failure(CLIENT_FAILED))? {
-                break success;
-            }
-            thread::sleep(Duration::from_millis(20));
-        };
-        child.stop().map_err(|_| failure(CLIENT_FAILED))?;
-        let mut bytes = zeroize::Zeroizing::new(Vec::new());
-        std::fs::File::open(&output_path)
-            .map_err(|_| failure(CLIENT_OUTPUT_INVALID))?
-            .take(OUTPUT_LIMIT as u64 + 1)
-            .read_to_end(&mut bytes)
-            .map_err(|_| failure(CLIENT_OUTPUT_INVALID))?;
-        if bytes.len() > OUTPUT_LIMIT {
-            return Err(failure(CLIENT_OUTPUT_INVALID));
-        }
         let identity = parse_qoder_output(&bytes, success).map_err(failure)?;
         let response_digest = CanonicalDigest::of_bytes(&bytes);
         self.verify_live_receipt(trust, &[identity], &response_digest, deadline)
     }
 
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     pub(super) fn execute_qoder_live_attempt(
         &self,
         _context_id: &str,

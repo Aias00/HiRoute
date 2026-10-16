@@ -75,8 +75,9 @@ python3 experiments/cache_cost_analysis.py
 
 The calculator verifies the frozen evidence before using its prices, fixed FX,
 all-attempt usage and recorded delivery bounds. It preserves all three paired
-acceptance outcomes and computes an idealized all-input-cached Astra reference
-with each run's observed outputs held fixed. Prefix-loss examples are conditional
+acceptance outcomes and computes two idealized all-input-cached references with
+each run's observed outputs held fixed: mixed routing, to bound how much any cache
+loss can change its savings, and all-Astra, for the price-cut comparison. Prefix-loss examples are conditional
 calculations, not measured cache-hit rates. This analysis adds no model calls and
 changes neither the historical evidence nor its acceptance rules. Read the article
 in [English](../news/2026-10-14-routing-cache-cost.en.md) or
@@ -88,6 +89,12 @@ cache calculations. Writing counts use the tracked October 6 structured results
 evidence, distinguishing the whole native turn from its final stable Astra segment.
 The calculator includes the writing source hash and keeps decision reuse distinct
 from cache hits.
+
+It also reports a hypothetical uniform Astra price-cut sensitivity: the whole-task
+break-even price for each pair, with Qwen prices, usage and outcomes held as
+recorded. The article's
+cache-cost figures are rebuilt with the other figures by
+`python3 experiments/render_figures.py`.
 
 ## Add an experiment
 

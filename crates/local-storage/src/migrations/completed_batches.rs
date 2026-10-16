@@ -45,7 +45,7 @@ pub(super) fn archive_if_needed(
         Err(error) => return Err(error.into()),
     }
     crate::backup::source_snapshot::archive_guide(backup_root, &archived, previous.set_id())?;
-    fs::rename(backup_root, &archived)?;
-    std::fs::File::open(parent)?.sync_all()?;
+    hiroute_platform::durable::rename(backup_root, &archived)?;
+    hiroute_platform::durable::directory_barrier(parent)?;
     Ok(())
 }

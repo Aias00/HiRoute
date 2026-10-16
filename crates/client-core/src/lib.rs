@@ -3,7 +3,7 @@
 mod compute_management;
 mod endpoint;
 mod error;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 mod frame;
 mod model_catalog;
 mod model_connections;
@@ -113,7 +113,7 @@ impl Client {
         })
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub async fn call_wire(
         &self,
         request: LocalControlWireRequestV2,
@@ -162,9 +162,7 @@ impl Client {
                 {
                     return Err(FailureCode::PeerRejected);
                 }
-                let stream = tokio::net::UnixStream::connect(self.endpoint.path())
-                    .await
-                    .map_err(|_| FailureCode::TransportUnavailable)?;
+                let stream = self.endpoint.connect().await?;
                 self.endpoint.validate_peer(&stream)?;
                 Ok::<_, FailureCode>(stream)
             };
@@ -243,6 +241,12 @@ impl Client {
                         {
                             return Err(FailureCode::FrameInvalid);
                         }
+                        #[cfg(windows)]
+                        stream
+                            .get_mut()
+                            .write_all(hiroute_platform::local_record::CONTROL_ACK)
+                            .await
+                            .map_err(|_| FailureCode::TransportUnavailable)?;
                         return Ok(Some(rejection));
                     }
                 }
@@ -292,6 +296,12 @@ impl Client {
                 if result.request_id.as_deref() != Some(&request.0.request_id) {
                     return Err(FailureCode::ResponseMismatch);
                 }
+                #[cfg(windows)]
+                stream
+                    .get_mut()
+                    .write_all(hiroute_platform::local_record::CONTROL_ACK)
+                    .await
+                    .map_err(|_| FailureCode::TransportUnavailable)?;
                 Ok(result)
             };
             let result = read.await;
@@ -345,7 +355,7 @@ impl Client {
         }
     }
 
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     pub async fn call_wire(
         &self,
         request: LocalControlWireRequestV2,

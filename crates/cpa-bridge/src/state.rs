@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+#[cfg(not(windows))]
 use std::fs;
 use std::io::Read;
 use std::path::Path;
@@ -26,6 +27,9 @@ pub(crate) fn load_account_state(
         return Ok(Vec::new());
     }
     validate_private_file(path)?;
+    #[cfg(windows)]
+    let file = crate::windows_private::file(path).map_err(CpaLifecycleError::AccountStateIo)?;
+    #[cfg(not(windows))]
     let file = fs::File::open(path).map_err(CpaLifecycleError::AccountStateIo)?;
     let mut bytes = Vec::new();
     file.take(MAX_ACCOUNT_STATE_BYTES + 1)

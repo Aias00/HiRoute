@@ -67,14 +67,14 @@ impl FilesystemAgentScannerV1 {
             );
             // Only a collaboration install consumes its explicitly checked Skill/CLI proof.
             // Ordinary model saves keep stable dependencies when the short-lived probe expires.
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             if include_collaboration_evidence
                 && let Ok(cache) = self.codex_ingress.lock()
                 && let Some(evidence) = cache.as_ref()
             {
                 evidence.attach_collaboration(installation);
             }
-            #[cfg(not(unix))]
+            #[cfg(not(any(unix, windows)))]
             let _ = include_collaboration_evidence;
         }
         discovery
@@ -112,7 +112,7 @@ impl FilesystemAgentScannerV1 {
                         installation,
                         &self.layout.claude_user_settings,
                     );
-                    #[cfg(unix)]
+                    #[cfg(any(unix, windows))]
                     if let Ok(cache) = self.claude_ingress.lock()
                         && let Some(evidence) = cache.as_ref()
                     {
@@ -122,7 +122,7 @@ impl FilesystemAgentScannerV1 {
                             evidence.attach_authentication(&path, installation);
                         }
                     }
-                    #[cfg(not(unix))]
+                    #[cfg(not(any(unix, windows)))]
                     let _ = include_collaboration_evidence;
                 }
                 discovery

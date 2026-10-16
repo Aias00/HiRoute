@@ -166,14 +166,14 @@ impl FilesystemAgentScannerV1 {
                     proof.reason = Some(hiroute_domain::CapabilityReason::IsolationUnproven);
                 }
             }
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             if include_collaboration_evidence
                 && let Ok(cache) = self.qoder_collaboration.lock()
                 && let Some(evidence) = cache.evidence.as_ref()
             {
                 evidence.attach(&executable, &context, installation);
             }
-            #[cfg(not(unix))]
+            #[cfg(not(any(unix, windows)))]
             let _ = include_collaboration_evidence;
         }
         FilesystemAgentDiscoveryV1 {
@@ -186,7 +186,7 @@ impl FilesystemAgentScannerV1 {
         }
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub fn qoder_installed_collaboration_verified(&self) -> bool {
         let (Some(executable), Ok(context)) =
             (self.qoder_executable_target(), self.qoder_native_context())
@@ -205,7 +205,7 @@ impl FilesystemAgentScannerV1 {
             .unwrap_or(false)
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub fn check_qoder_collaboration(
         &self,
         cli: &Path,

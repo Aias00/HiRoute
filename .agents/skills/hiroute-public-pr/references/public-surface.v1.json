@@ -4,6 +4,7 @@
   "default_branch": "main",
   "include_files": [
     ".gitignore",
+    ".gitattributes",
     "Cargo.lock",
     "Cargo.toml",
     "CONTRIBUTING.md",
@@ -57,6 +58,7 @@
     "docs/smart-saving-model-classification.zh-CN.md",
     "docs/standalone-cli.md",
     "docs/standalone-cli.zh-CN.md",
+    "docs/standalone-windows.md",
     "docs/test-selection.md",
     "docs/validation-feedback.md",
     "docs/validation-routing.md"

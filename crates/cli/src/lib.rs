@@ -72,7 +72,7 @@ where
                 .expect("released managed-launch descriptor is registered");
             return CliExecution {
                 exit_code: 0,
-                stdout: descriptor.help_document(),
+                stdout: native_help_document(&descriptor),
                 stderr: String::new(),
             };
         }
@@ -131,7 +131,7 @@ where
     if globals.help {
         return CliExecution {
             exit_code: 0,
-            stdout: descriptor.help_document(),
+            stdout: native_help_document(&descriptor),
             stderr: String::new(),
         };
     }
@@ -237,14 +237,14 @@ fn execute_control(
 ) -> CliExecution {
     let _diagnostics =
         request_input::diagnostics::Scope::enter(&descriptor.command_id, globals.error_details);
-    let request_id = globals.request_id.unwrap_or_else(next_request_id);
+    let request_id = globals.request_id.clone().unwrap_or_else(next_request_id);
     if globals.agent.is_some()
         && descriptor.command_id != "work-plans.list"
         && !descriptor.command_id.starts_with("tasks.")
     {
         return failure(ErrorCode::InvalidArguments, Some(request_id));
     }
-    if globals.capability_fd.is_some()
+    if globals.has_capability()
         && !descriptor
             .stdin_channels
             .iter()
@@ -267,6 +267,22 @@ fn execute_control(
         Ok(client) => client,
         Err(_) => return failure(ErrorCode::DaemonUnavailable, Some(request_id)),
     };
+    #[cfg(windows)]
+    let native_capability = match globals.capability_handle {
+        Some(handle) => match if descriptor.command_id == "work-plans.list"
+            || descriptor.command_id.starts_with("tasks.")
+        {
+            work_plans::credential_handle(handle)
+        } else {
+            client::read_protected_handle(handle, 512)
+        } {
+            Ok(value) => Some(value),
+            Err(_) => return failure(ErrorCode::CapabilityDenied, Some(request_id)),
+        },
+        None => None,
+    };
+    #[cfg(not(windows))]
+    let native_capability: Option<String> = None;
     let mutation_capability = match globals.capability_fd {
         Some(fd) => match if descriptor.command_id == "work-plans.list"
             || descriptor.command_id.starts_with("tasks.")
@@ -279,19 +295,26 @@ fn execute_control(
             Err(_) => return failure(ErrorCode::CapabilityDenied, Some(request_id)),
         },
         None => {
-            if let Some(agent) = globals.agent.as_deref() {
-                let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
-                match home.and_then(|home| {
-                    hiroute_integrations::collaboration_artifact::read_sealed_collaboration(
-                        &home, agent,
-                    )
-                    .ok()
-                }) {
-                    Some(mut material) => Some(std::mem::take(&mut *material)),
-                    None => return failure(ErrorCode::CapabilityDenied, Some(request_id)),
-                }
+            if native_capability.is_some() {
+                native_capability
             } else {
-                None
+                if let Some(agent) = globals.agent.as_deref() {
+                    #[cfg(not(windows))]
+                    let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
+                    #[cfg(windows)]
+                    let home = hiroute_platform::windows::background::profile().ok();
+                    match home.and_then(|home| {
+                        hiroute_integrations::collaboration_artifact::read_sealed_collaboration(
+                            &home, agent,
+                        )
+                        .ok()
+                    }) {
+                        Some(mut material) => Some(std::mem::take(&mut *material)),
+                        None => return failure(ErrorCode::CapabilityDenied, Some(request_id)),
+                    }
+                } else {
+                    None
+                }
             }
         }
     };
@@ -430,7 +453,11 @@ fn setup_apply(options: &[String]) -> Result<Value, ErrorCode> {
     let mut index = 0;
     while index < options.len() {
         match options[index].as_str() {
+            #[cfg(unix)]
             "--spec-fd" => {
+                if spec.is_some() {
+                    return Err(ErrorCode::InvalidArguments);
+                }
                 let fd = next(options, &mut index)?
                     .parse::<u32>()
                     .map_err(|_| ErrorCode::InvalidArguments)?;
@@ -438,6 +465,22 @@ fn setup_apply(options: &[String]) -> Result<Value, ErrorCode> {
                     std::fs::File::open(format!("/dev/fd/{fd}"))
                         .map_err(|_| ErrorCode::InvalidArguments)?,
                 )?);
+            }
+            #[cfg(windows)]
+            "--spec-handle" => {
+                if spec.is_some() {
+                    return Err(ErrorCode::InvalidArguments);
+                }
+                let handle = next(options, &mut index)?
+                    .parse::<u64>()
+                    .map_err(|_| ErrorCode::InvalidArguments)?;
+                let bytes = hiroute_platform::windows::job::read_inherited_credential(
+                    handle,
+                    1024 * 1024,
+                    std::time::Duration::from_secs(2),
+                )
+                .map_err(|_| ErrorCode::InvalidArguments)?;
+                spec = Some(read_json(bytes.as_slice())?);
             }
             "--accept-digest" => {
                 digest = Some(
@@ -715,8 +758,39 @@ pub fn root_help() -> String {
     )
 }
 
+fn native_help_document(descriptor: &CommandDescriptorV1) -> String {
+    let document = descriptor.help_document();
+    #[cfg(windows)]
+    {
+        // Presentation adapts carriers; the shared registry and its digest retain their bytes.
+        document
+            .replace("--capability-fd", "--capability-handle")
+            .replace("--spec-fd", "--spec-handle")
+            .replace("--secret-fd", "--secret-handle")
+            .replace("<FD>", "<HANDLE>")
+            .replace("capability FD", "capability handle")
+            .replace("same-UID", "same-account")
+    }
+    #[cfg(not(windows))]
+    document
+}
+
 pub fn main_entry() -> u8 {
     let arguments = std::env::args_os().skip(1).collect::<Vec<_>>();
+    #[cfg(windows)]
+    if arguments
+        .first()
+        .is_some_and(|argument| argument == service::windows_background_finalize_verb())
+    {
+        return service::windows_background_finalize(&arguments[1..]);
+    }
+    #[cfg(windows)]
+    if arguments
+        .first()
+        .is_some_and(|argument| argument == service::windows_scm_owner_helper_verb())
+    {
+        return service::windows_scm_owner_helper(&arguments[1..]);
+    }
     if arguments.as_slice() == [OsString::from("service"), OsString::from("run")] {
         return service::foreground_run();
     }

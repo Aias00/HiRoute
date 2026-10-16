@@ -93,6 +93,12 @@ fn persists_desired_and_binds_applied_to_exact_launch_snapshot() {
     );
     assert!(!store.view().unwrap().applied);
     let old = store.configure(manual("http://127.0.0.1:1187")).unwrap();
+    #[cfg(windows)]
+    hiroute_platform::windows::security::verify_owner_only(
+        &root.path().join("subscription-proxy.json"),
+        false,
+    )
+    .unwrap();
     store.mark_applied(&old).unwrap();
     assert!(store.view().unwrap().applied);
     let new = store.configure(SubscriptionProxyPolicy::Direct).unwrap();

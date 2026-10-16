@@ -14,6 +14,8 @@ use crate::{CliExecution, LocalControlClient};
 
 mod input;
 mod render;
+#[cfg(windows)]
+mod selection_windows;
 
 use input::{
     parse_cancel, parse_dependencies_discover, parse_dependency_selection, parse_list, parse_read,
@@ -29,8 +31,12 @@ pub(crate) fn input_failure(code: ErrorCode, globals: Globals) -> CliExecution {
 }
 
 fn failure(code: ErrorCode, output: OutputMode, request_id: Option<String>) -> CliExecution {
+    failure_error(ErrorV1::new(code), output, request_id)
+}
+
+fn failure_error(error: ErrorV1, output: OutputMode, request_id: Option<String>) -> CliExecution {
     render_erased(
-        MachineEnvelopeV2::failed(ErrorV1::new(code), request_id),
+        MachineEnvelopeV2::failed(error, request_id),
         output,
         "worker",
         None,
@@ -42,7 +48,7 @@ pub(crate) fn execute(command: &str, options: &[String], globals: Globals) -> Cl
         .request_id
         .clone()
         .unwrap_or_else(super::next_request_id);
-    if globals.agent.is_some() || globals.capability_fd.is_some() {
+    if globals.agent.is_some() || globals.has_capability() {
         return failure(
             ErrorCode::InvalidArguments,
             globals.output,
@@ -115,10 +121,19 @@ pub(crate) fn execute(command: &str, options: &[String], globals: Globals) -> Cl
                 Ok(request) => request,
                 Err(code) => return failure(code, globals.output, Some(request_id)),
             };
+            #[cfg(windows)]
+            let prepared = match selection_windows::prepare(request) {
+                Ok(prepared) => prepared,
+                Err(error) => return failure_error(error, globals.output, Some(request_id)),
+            };
+            #[cfg(windows)]
+            let request = &prepared.request;
+            #[cfg(not(windows))]
+            let request = &request;
             let response = call(
                 client
                     .shared_client()
-                    .select_worker_dependencies(&request_id, &request),
+                    .select_worker_dependencies(&request_id, request),
             );
             render_transport(response, globals.output, "worker.dependencies.select", None)
         }

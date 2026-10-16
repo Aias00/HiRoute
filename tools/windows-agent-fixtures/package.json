@@ -1,0 +1,20 @@
+{
+  "name": "hiroute-windows-agent-acceptance-fixtures",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Pinned upstream clients used only by native Windows acceptance gates",
+  "engines": { "node": ">=22.19.0" },
+  "dependencies": {
+    "@openai/codex": "0.160.0",
+    "@agentclientprotocol/codex-acp": "2.1.1",
+    "@anthropic-ai/claude-code": "2.1.231",
+    "@agentclientprotocol/claude-agent-acp": "0.60.0",
+    "@earendil-works/pi-coding-agent": "1.0.2",
+    "@deepseek-ai/dsh": "0.2.0-rc.2"
+  },
+  "overrides": {
+    "@earendil-works/pi-coding-agent": {
+      "@earendil-works/pi-codemode": "1.0.2"
+    }
+  }
+}

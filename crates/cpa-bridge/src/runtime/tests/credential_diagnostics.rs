@@ -9,8 +9,8 @@ fn credential_inspection_reports_closed_causes_without_input_or_paths() {
         ("store", "credential_store_unsupported"),
         ("invalid", "credential_invalid"),
     ] {
-        let root = tempfile::tempdir().unwrap();
-        let logs = tempfile::tempdir().unwrap();
+        let root = crate::private_test_support::tempdir().unwrap();
+        let logs = crate::private_test_support::tempdir().unwrap();
         let diagnostics_root = logs.path().join("d");
         let report = DiagnosticRuntime::start(RuntimeConfig {
             root: diagnostics_root.clone(),

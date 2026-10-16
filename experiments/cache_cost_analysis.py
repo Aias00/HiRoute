@@ -92,15 +92,29 @@ def analyze():
         decisions = sum((Decimal(c['accounting']['jev_reported_usd']) for c in strong['components']), Decimal(0))
         ideal = (inputs * primary['cache_read'] + outputs * primary['output']) / million + decisions
         mixed_upper = Decimal(mixed['usd']['upper'])
-        headroom = ideal - mixed_upper
+        strong_lower = Decimal(strong['usd']['lower'])
+        mixed_attempts = [a for c in mixed['components'] for a in c['accounting']['attempts']]
+        require({a['model'] for a in mixed_attempts} == {'gpt-6-astra', 'qwen3.8-flash'}, 'mixed arm models changed')
+        mixed_decisions = sum((Decimal(c['accounting']['jev_reported_usd']) for c in mixed['components']), Decimal(0))
+        mixed_output = sum((a['usage']['output_tokens'] * rates[a['model']]['output'] for a in mixed_attempts), Decimal(0)) / million
+        # Mixed routing as if every input had hit the cache, with observed outputs and routing decisions fixed.
+        mixed_cached = sum((a['usage']['input_tokens'] * rates[a['model']]['cache_read'] for a in mixed_attempts), Decimal(0)) / million + mixed_output + mixed_decisions
+        mixed_astra = sum((Decimal(a['cost']['usd_upper']) for a in mixed_attempts if a['model'] == 'gpt-6-astra'), Decimal(0))
+        # Scale every Astra tariff by one factor; Qwen attempts and Jev decisions keep their recorded cost.
+        astra_break_even_scale = (mixed_upper - mixed_astra - decisions) / (ideal - decisions - mixed_astra)
         pairs.append({
             'pair': pair['pair'], 'both_deliveries_accepted': pair['accepted'],
             'observed_savings_percent_floor': pair['conservative_savings_percent'],
             'mixed_usd_upper': mixed_upper, 'astra_input_tokens': inputs, 'astra_output_tokens': outputs,
             'astra_all_input_cached_hypothetical_usd': ideal,
             'hypothetical_savings_percent_floor': ((1 - mixed_upper / ideal) * 100).quantize(Decimal('.01'), rounding=ROUND_FLOOR),
-            'additional_cost_break_even_usd': headroom,
-            'extra_astra_cache_write_tokens_at_break_even': headroom * million / (primary['cache_write'] - primary['cache_read']),
+            'mixed_all_input_cached_hypothetical_usd': mixed_cached,
+            'mixed_all_input_cached_savings_percent_floor': ((1 - mixed_cached / strong_lower) * 100).quantize(Decimal('.01'), rounding=ROUND_FLOOR),
+            'mixed_output_usd': mixed_output,
+            'mixed_astra_usd_upper': mixed_astra, 'strong_decisions_usd': decisions,
+            'mixed_qwen_output_tokens': sum(a['usage']['output_tokens'] for a in mixed_attempts if a['model'] == 'qwen3.8-flash'),
+            'mixed_qwen_cache_read_tokens': sum(a['usage']['cache_read_tokens'] or 0 for a in mixed_attempts if a['model'] == 'qwen3.8-flash'),
+            'astra_price_break_even_percent_of_frozen': astra_break_even_scale * 100,
         })
     return {
         'basis': 'Historical API-equivalent prices checked 2026-10-03; fixed 2026-09-30 FX, not current billing.',
@@ -134,6 +148,7 @@ def analyze():
             'uncached_tokens_added_per_continuation': continuation_growth,
             'hit_rate_examples': new_turn_examples, 'prefix_cost_by_direction': directions,
         },
+        'astra_price_sensitivity': 'Per-pair break-even assumes a uniform Astra price change; Qwen prices, usage and outcomes held fixed.',
         'original_three_pair_gate_passed': assessment['original_three_pair_gate_passed'],
         'paid_model_calls': 0,
     }

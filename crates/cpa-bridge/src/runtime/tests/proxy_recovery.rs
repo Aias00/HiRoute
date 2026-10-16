@@ -8,7 +8,7 @@ fn changed_or_unrecorded_proxy_policy_replaces_only_an_authenticated_orphan() {
         return;
     }
     for legacy in [false, true] {
-        let root = tempfile::tempdir().unwrap();
+        let root = crate::private_test_support::tempdir().unwrap();
         let backend = Arc::new(FakeBackend::default());
         let control = Arc::new(FakeControl::default());
         let first = fixture_runtime(&root, backend.clone(), control.clone(), 2)

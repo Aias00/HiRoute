@@ -121,7 +121,61 @@ impl LocalControlClient {
         Ok(response)
     }
 
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    fn protected_stream(
+        &self,
+        endpoint: &Path,
+    ) -> Result<hiroute_platform::windows::pipe::Stream, LocalControlClientError> {
+        let deadline = std::time::Instant::now()
+            .checked_add(self.timeout)
+            .ok_or(LocalControlClientError::Transport)?;
+        let stream =
+            hiroute_platform::windows::pipe::Stream::connect_timeout(endpoint, self.timeout)
+                .map_err(|_| LocalControlClientError::Transport)?;
+        stream
+            .set_deadline(Some(deadline))
+            .map_err(|_| LocalControlClientError::Transport)?;
+        Ok(stream)
+    }
+
+    #[cfg(windows)]
+    pub(crate) fn call_protected_input(
+        &self,
+        request: StandaloneProtectedInputRequestV1,
+    ) -> Result<StandaloneProtectedInputResponseV1, LocalControlClientError> {
+        use hiroute_platform::local_record::{self, Channel, Direction};
+        let mut stream = self.protected_stream(&self.protected_input_endpoint())?;
+        let bytes = Zeroizing::new(
+            serde_json::to_vec(&request).map_err(|_| LocalControlClientError::Protocol)?,
+        );
+        local_record::write(
+            &mut stream,
+            Channel::ProtectedInput,
+            Direction::Request,
+            &bytes,
+            STANDALONE_PROTECTED_INPUT_MAX_FRAME_BYTES_V1 as usize,
+        )
+        .map_err(|_| LocalControlClientError::Transport)?;
+        let bytes = local_record::read(
+            &mut stream,
+            Channel::ProtectedInput,
+            Direction::Response,
+            STANDALONE_PROTECTED_INPUT_MAX_FRAME_BYTES_V1 as usize,
+        )
+        .map_err(|_| LocalControlClientError::Transport)?;
+        let response: StandaloneProtectedInputResponseV1 =
+            serde_json::from_slice(&bytes).map_err(|_| LocalControlClientError::Protocol)?;
+        if response.schema != STANDALONE_PROTECTED_INPUT_RESPONSE_SCHEMA_V1
+            || !response.registered
+            || response.action != request.action
+        {
+            return Err(LocalControlClientError::Protocol);
+        }
+        local_record::acknowledge(&mut stream).map_err(|_| LocalControlClientError::Transport)?;
+        Ok(response)
+    }
+
+    #[cfg(not(any(unix, windows)))]
     pub(crate) fn call_protected_input(
         &self,
         _request: StandaloneProtectedInputRequestV1,
@@ -223,7 +277,44 @@ impl LocalControlClient {
         Ok(material)
     }
 
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    pub(crate) fn read_agent_grant(
+        &self,
+        connection_id: &str,
+    ) -> Result<AgentGrantMaterial, LocalControlClientError> {
+        use hiroute_platform::local_record::{self, Channel, Direction};
+        let mut stream = self.protected_stream(&self.agent_grant_endpoint())?;
+        let frame = AgentGrantRawRequestV1::new(connection_id)
+            .map_err(|_| LocalControlClientError::Protocol)?
+            .encode();
+        local_record::write(
+            &mut stream,
+            Channel::AgentGrant,
+            Direction::Request,
+            &frame,
+            12 + hiroute_application_api::MAX_AGENT_GRANT_CONNECTION_ID_BYTES_V1,
+        )
+        .map_err(|_| LocalControlClientError::Transport)?;
+        let bytes = local_record::read(
+            &mut stream,
+            Channel::AgentGrant,
+            Direction::Response,
+            MAX_AGENT_GRANT_TOKEN_BYTES_V1 + 1,
+        )
+        .map_err(|_| LocalControlClientError::Transport)?;
+        if bytes.len() < 2
+            || bytes.last() != Some(&b'\n')
+            || bytes[..bytes.len() - 1]
+                .iter()
+                .any(|byte| !(byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_')))
+        {
+            return Err(LocalControlClientError::Protocol);
+        }
+        local_record::acknowledge(&mut stream).map_err(|_| LocalControlClientError::Transport)?;
+        Ok(AgentGrantMaterial(bytes.to_vec()))
+    }
+
+    #[cfg(not(any(unix, windows)))]
     pub(crate) fn read_agent_grant(
         &self,
         _connection_id: &str,
@@ -339,36 +430,74 @@ pub(crate) fn read_protected_fd(fd: u32) -> Result<String, LocalControlClientErr
     }
 }
 
+#[cfg(windows)]
+pub(crate) fn read_protected_handle(
+    handle: u64,
+    limit: usize,
+) -> Result<String, LocalControlClientError> {
+    let bytes = hiroute_platform::windows::job::read_inherited_credential(
+        handle,
+        limit,
+        std::time::Duration::from_secs(2),
+    )
+    .map_err(|_| LocalControlClientError::ProtectedInput)?;
+    let value = std::str::from_utf8(&bytes).map_err(|_| LocalControlClientError::ProtectedInput)?;
+    let value = value
+        .strip_suffix("\r\n")
+        .or_else(|| value.strip_suffix('\n'))
+        .unwrap_or(value);
+    if value.is_empty() || value.contains('\0') {
+        return Err(LocalControlClientError::ProtectedInput);
+    }
+    Ok(value.to_owned())
+}
+
 #[cfg(test)]
 mod locator_tests {
     use super::*;
 
     #[test]
     fn desktop_default_and_explicit_isolation() {
+        let absolute = |value| match (cfg!(windows), value) {
+            (true, "/isolated") => "C:/isolated",
+            (true, "/xdg") => "C:/xdg",
+            (_, value) => value,
+        };
         let resolve = |explicit: Option<&str>, xdg: Option<&str>, macos| {
             resolve_runtime_root(
                 explicit.map(Into::into),
                 xdg.map(Into::into),
-                Some("/Users/test".into()),
+                Some(
+                    if cfg!(windows) {
+                        "C:/Users/test"
+                    } else {
+                        "/Users/test"
+                    }
+                    .into(),
+                ),
                 macos,
                 None,
             )
         };
         assert_eq!(
             resolve(None, None, true).unwrap(),
-            PathBuf::from("/Users/test/Library/Application Support/ai.hiroute.desktop/run")
+            PathBuf::from(if cfg!(windows) {
+                "C:/Users/test/Library/Application Support/ai.hiroute.desktop/run"
+            } else {
+                "/Users/test/Library/Application Support/ai.hiroute.desktop/run"
+            })
         );
         assert_eq!(
-            resolve(Some("/isolated"), Some("/xdg"), true).unwrap(),
-            PathBuf::from("/isolated")
+            resolve(Some(absolute("/isolated")), Some(absolute("/xdg")), true).unwrap(),
+            PathBuf::from(absolute("/isolated"))
         );
         assert_eq!(
-            resolve(None, Some("/xdg"), true).unwrap(),
-            PathBuf::from("/xdg")
+            resolve(None, Some(absolute("/xdg")), true).unwrap(),
+            PathBuf::from(absolute("/xdg"))
         );
         for invalid in ["", "relative"] {
             assert_eq!(
-                resolve(Some(invalid), Some("/xdg"), true),
+                resolve(Some(invalid), Some(absolute("/xdg")), true),
                 Err(LocalControlClientError::LocatorUnavailable)
             );
             assert_eq!(
@@ -388,14 +517,27 @@ mod locator_tests {
             resolve_runtime_root(
                 None,
                 Some("/xdg".into()),
-                Some("/Users/test".into()),
+                Some(
+                    if cfg!(windows) {
+                        "C:/Users/test"
+                    } else {
+                        "/Users/test"
+                    }
+                    .into()
+                ),
                 true,
-                Some(PathBuf::from(
+                Some(PathBuf::from(if cfg!(windows) {
+                    "C:/Users/test/Library/Application Support/ai.hiroute.cli/run"
+                } else {
                     "/Users/test/Library/Application Support/ai.hiroute.cli/run"
-                )),
+                })),
             )
             .unwrap(),
-            PathBuf::from("/Users/test/Library/Application Support/ai.hiroute.cli/run")
+            PathBuf::from(if cfg!(windows) {
+                "C:/Users/test/Library/Application Support/ai.hiroute.cli/run"
+            } else {
+                "/Users/test/Library/Application Support/ai.hiroute.cli/run"
+            })
         );
         assert_eq!(
             resolve_runtime_root(None, None, Some("relative".into()), true, None),

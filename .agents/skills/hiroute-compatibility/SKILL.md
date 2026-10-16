@@ -1,6 +1,6 @@
 ---
 name: hiroute-compatibility
-description: Maintain HiRoute compatibility when changing persisted data, user configuration, recovery or published CLI/Gateway behavior, and at release handoff. Resolve supported release sources and extend existing adapters or migrations with regression evidence. Not for unrelated UI, docs, tooling or metadata edits.
+description: Maintain HiRoute compatibility when changing persisted data, user configuration, recovery, published CLI/Gateway behavior or OS filesystem/process boundaries, and at release handoff. Resolve supported releases and platform contracts with regression evidence. Not for unrelated UI, docs, tooling or metadata edits.
 ---
 
 # HiRoute compatibility maintenance
@@ -8,6 +8,10 @@ description: Maintain HiRoute compatibility when changing persisted data, user c
 Keep supported released data and callers working through the current production boundaries.
 Apply within the authorized task and ownership; this skill adds no approval, delegation or
 publication step. It does not require a migration for every feature or internal refactor.
+
+For filesystem, permissions, process launch, background lifecycle or packaging changes
+that affect Windows and Unix, read [platform compatibility](references/platforms.md).
+It owns platform-specific decision guidance; the existing validation skill owns execution.
 
 ## Resolve the supported source
 

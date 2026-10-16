@@ -410,6 +410,7 @@ fn agent_connection_transaction_journal_reopens_with_exact_typed_plan() {
 }
 
 #[test]
+#[cfg(unix)]
 fn agent_connection_transaction_artifact_restart_preserves_compensation_ownership() {
     use std::os::unix::fs::PermissionsExt;
 

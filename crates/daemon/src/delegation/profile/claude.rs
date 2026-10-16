@@ -59,7 +59,10 @@ pub(super) fn render(
         // The native flag layer must bypass user-configured proxies for this Gateway.
         // Keep other proxy settings available to native tools; never put a token here.
         let gateway_host = input.gateway.ip().to_string();
-        for key in ["NO_PROXY", "no_proxy"] {
+        for key in ["NO_PROXY", "no_proxy"]
+            .into_iter()
+            .filter(|name| !cfg!(windows) || *name == "NO_PROXY")
+        {
             rendered
                 .env
                 .insert(key.into(), Zeroizing::new(gateway_host.clone()));

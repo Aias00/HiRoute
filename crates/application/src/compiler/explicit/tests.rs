@@ -178,12 +178,36 @@ fn branches_publish_distinct_reasoning_and_freeze_whole_judgment_overrides() {
         "reasoning variants retain separate routing and retry identities"
     );
     for candidate in &alias.candidates {
+        assert!(candidate.stable_target_key.starts_with("candidate/sha256:"));
         assert_eq!(
             candidate.source_binding_id.as_deref(),
-            Some("binding/primary-a"),
-            "both reasoning variants retain the exact source membership for credential lookup"
+            Some("binding/primary-a")
         );
     }
+    // Authenticate the complete old projection before rebuilding membership
+    // from the same compiled Plans, without changing their sealed bytes.
+    let mut legacy = publication.clone();
+    for candidate in legacy
+        .aliases
+        .iter_mut()
+        .flat_map(|alias| &mut alias.candidates)
+    {
+        candidate.source_binding_id = None;
+    }
+    let bytes = serde_json::to_vec(&legacy).unwrap();
+    assert_eq!(
+        hiroute_domain::GatewayPublicationV1::decode_persisted(&bytes)
+            .unwrap()
+            .into_current()
+            .unwrap(),
+        publication
+    );
+    let mut retargeted = publication.clone();
+    retargeted.aliases[0].candidates[0].source_binding_id = Some("binding/another-source".into());
+    assert!(retargeted.validate().is_err());
+    let mut partial = publication.clone();
+    partial.aliases[0].candidates[0].source_binding_id = None;
+    assert!(partial.validate().is_err());
     let routing = alias.routing.as_ref().unwrap();
     let groups = &routing.groups;
     assert_ne!(groups[0].candidate_local_ids, groups[1].candidate_local_ids);

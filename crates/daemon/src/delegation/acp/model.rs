@@ -39,6 +39,7 @@ pub(super) async fn ensure_model(
         return Err(DelegationErrorV1::CapabilityUnavailable);
     }
     let response = super::phase(
+        "set-model",
         cancellation,
         deadline,
         connection

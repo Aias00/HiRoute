@@ -2,14 +2,13 @@ use hiroute_domain::delegation::DelegationErrorV1 as Error;
 use std::{
     collections::BTreeSet,
     fs,
-    io::Write,
     path::{Component, Path, PathBuf},
 };
 
 use crate::delegation::profile::RunMaterials;
+use hiroute_platform::private_fs::{self, FileMode, OwnedDirectory};
 pub(super) struct OwnedRoot {
-    path: PathBuf,
-    identity: same_file::Handle,
+    directory: OwnedDirectory,
     cleanup_on_drop: bool,
 }
 
@@ -46,13 +45,7 @@ fn relative(path: &Path) -> bool {
 }
 
 fn directory(path: &Path) -> Result<(), Error> {
-    let mut builder = fs::DirBuilder::new();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        builder.mode(0o700);
-    }
-    builder.create(path).map_err(|_| Error::StorageUnavailable)
+    private_fs::create_directory(path).map_err(|_| Error::StorageUnavailable)
 }
 
 pub(super) fn prepare(
@@ -111,37 +104,30 @@ pub(super) fn prepare(
             return invalid();
         }
     }
-    // create, never create_dir_all(root): an existing root is never ours to delete.
-    directory(&actual_root)?;
-    let identity =
-        same_file::Handle::from_path(&actual_root).map_err(|_| Error::StorageUnavailable)?;
+    // An existing root is never ours to delete.
     let owned = OwnedRoot {
-        path: actual_root,
-        identity,
+        directory: OwnedDirectory::create(&actual_root).map_err(|_| Error::StorageUnavailable)?,
         cleanup_on_drop: true,
     };
     let mut dirs: Vec<_> = materials.directories.into_iter().collect();
     dirs.sort_by_key(|p| p.components().count());
     for dir in dirs {
-        directory(&owned.path.join(dir))?;
+        directory(&owned.directory.path().join(dir))?;
     }
     for file in materials.files {
-        let mut options = fs::OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            // The profile may provide a token-free native launcher. Only that explicitly
-            // declared material is executable; ordinary configuration stays private data.
-            options.mode(if file.executable { 0o700 } else { 0o600 });
-        }
-        let mut output = options
-            .open(owned.path.join(file.relative_path))
-            .map_err(|_| Error::StorageUnavailable)?;
-        output
-            .write_all(&file.contents)
-            .map_err(|_| Error::StorageUnavailable)?;
+        let mode = if file.executable {
+            FileMode::Executable
+        } else {
+            FileMode::Data
+        };
+        private_fs::write_material(
+            &owned.directory.path().join(file.relative_path),
+            &file.contents,
+            mode,
+        )
+        .map_err(|_| Error::StorageUnavailable)?;
     }
+
     Ok(owned)
 }
 
@@ -152,27 +138,11 @@ impl OwnedRoot {
     }
 
     pub(super) fn cleanup(&mut self) -> Result<(), Error> {
-        let meta = match fs::symlink_metadata(&self.path) {
-            Ok(meta) => meta,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-            Err(_) => return Err(Error::StorageUnavailable),
-        };
-        if !meta.is_dir() || meta.file_type().is_symlink() {
-            return Err(Error::StorageUnavailable);
-        }
-        #[cfg(windows)]
-        {
-            use std::os::windows::fs::MetadataExt;
-            if meta.file_attributes() & 0x400 != 0 {
-                return Err(Error::StorageUnavailable);
-            }
-        }
-        let current =
-            same_file::Handle::from_path(&self.path).map_err(|_| Error::StorageUnavailable)?;
-        if current != self.identity {
-            return Err(Error::StorageUnavailable);
-        }
-        fs::remove_dir_all(&self.path).map_err(|_| Error::StorageUnavailable)
+        self.directory
+            .remove()
+            .map_err(|_| Error::StorageUnavailable)?;
+        self.cleanup_on_drop = false;
+        Ok(())
     }
 }
 
@@ -187,6 +157,68 @@ impl Drop for OwnedRoot {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_materials_pin_root_and_cleanup_only_owned_children() {
+        use crate::delegation::profile::RunMaterialFile;
+        let fixture = tempfile::tempdir().unwrap();
+        let session = fixture.path().join("session");
+        fs::create_dir(&session).unwrap();
+        fs::write(session.join("history"), b"keep native history").unwrap();
+        let path = fixture.path().join("run % ! & ' 空格");
+        let mut owned = prepare(
+            RunMaterials {
+                directories: vec!["nested".into()],
+                files: vec![RunMaterialFile {
+                    relative_path: "nested/route.json".into(),
+                    contents: zeroize::Zeroizing::new(b"public route fixture".to_vec()),
+                    executable: false,
+                }],
+            },
+            path.clone(),
+            session.clone(),
+        )
+        .unwrap();
+        hiroute_platform::windows::security::verify_owner_only(&path, true).unwrap();
+        hiroute_platform::windows::security::verify_owner_only(
+            &path.join("nested/route.json"),
+            false,
+        )
+        .unwrap();
+        assert!(fs::rename(&path, fixture.path().join("redirected")).is_err());
+        owned.cleanup().unwrap();
+        assert!(!path.exists());
+        assert_eq!(
+            fs::read(session.join("history")).unwrap(),
+            b"keep native history"
+        );
+        owned.cleanup().unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_materials_refuse_an_existing_unowned_root() {
+        let fixture = tempfile::tempdir().unwrap();
+        let session = fixture.path().join("session");
+        fs::create_dir(&session).unwrap();
+        let path = fixture.path().join("existing");
+        fs::create_dir(&path).unwrap();
+        fs::write(path.join("foreign"), b"keep").unwrap();
+        assert!(
+            prepare(
+                RunMaterials {
+                    directories: vec![],
+                    files: vec![]
+                },
+                path.clone(),
+                session,
+            )
+            .is_err()
+        );
+        assert_eq!(fs::read(path.join("foreign")).unwrap(), b"keep");
+    }
+
     #[tokio::test]
     async fn local_worker_cancelled_preparation_keeps_cleanup_owner() {
         let temp = tempfile::tempdir().unwrap();

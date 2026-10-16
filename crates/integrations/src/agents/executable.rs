@@ -1,7 +1,9 @@
 //! Read-only, bounded probes of explicitly selected or PATH-resolved installations.
 //! No configuration helper or caller-supplied arguments are executed. Raw output stays private.
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+#[cfg(unix)]
+use std::time::Instant;
 
 const OUTPUT_LIMIT: usize = 64 * 1024;
 
@@ -37,8 +39,11 @@ pub(super) enum ProbeFailure {
     NotExecutable,
     Unavailable,
     LaunchFailed(Option<i32>),
+    #[cfg(unix)]
     PipeSetupFailed(i32),
+    #[cfg(unix)]
     PipeReadFailed(Option<i32>),
+    #[cfg(unix)]
     WaitFailed(Option<i32>),
     CleanupFailed,
     Failed,
@@ -78,20 +83,58 @@ fn probe(path: &Path, timeout: Duration) -> ExecutableProbe {
 
 pub(super) fn resolve(path: &Path) -> Result<Option<PathBuf>, ProbeFailure> {
     let candidates = if path.is_absolute() || path.components().count() > 1 {
+        #[cfg(windows)]
+        if path.extension().is_none() {
+            vec![
+                path.with_extension("exe"),
+                path.with_extension("cmd"),
+                path.to_owned(),
+            ]
+        } else {
+            vec![path.to_owned()]
+        }
+        #[cfg(not(windows))]
         vec![path.to_owned()]
     } else {
         let mut directories = std::env::var_os("PATH")
             .map(|search| std::env::split_paths(&search).collect::<Vec<_>>())
             .unwrap_or_default();
-        if let Some(home) = std::env::var_os("HOME") {
+        if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
             directories.push(PathBuf::from(home).join(".local/bin"));
         }
         directories.extend([PathBuf::from("/usr/local/bin"), PathBuf::from("/usr/bin")]);
         #[cfg(target_os = "macos")]
         directories.push(PathBuf::from("/opt/homebrew/bin"));
-        directories.into_iter().map(|dir| dir.join(path)).collect()
+        directories
+            .into_iter()
+            .flat_map(|dir| {
+                let candidate = dir.join(path);
+                #[cfg(windows)]
+                {
+                    if path.extension().is_none() {
+                        return vec![
+                            candidate.with_extension("exe"),
+                            candidate.with_extension("cmd"),
+                            candidate,
+                        ];
+                    }
+                }
+                vec![candidate]
+            })
+            .collect()
     };
     for candidate in candidates {
+        #[cfg(windows)]
+        {
+            // Open the supplied path without following reparses before any
+            // canonicalization or path-based metadata lookup can hide an alias.
+            match super::managed_launch::windows_executable_path(&candidate) {
+                Ok(canonical) => return Ok(Some(canonical)),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(_) => return Err(ProbeFailure::Unavailable),
+            }
+        }
+        #[cfg(not(windows))]
         match std::fs::symlink_metadata(&candidate) {
             Ok(_) => {
                 let canonical =
@@ -116,7 +159,7 @@ fn check_runnable(path: &Path) -> Result<(), ProbeFailure> {
     Ok(())
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 fn check_runnable(path: &Path) -> Result<(), ProbeFailure> {
     let metadata = std::fs::metadata(path).map_err(|_| ProbeFailure::Unavailable)?;
     if !metadata.is_file() {
@@ -261,7 +304,51 @@ fn bounded_version(path: &Path, timeout: Duration) -> Result<Vec<u8>, ProbeFailu
     result
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn bounded_version(path: &Path, timeout: Duration) -> Result<Vec<u8>, ProbeFailure> {
+    let home =
+        super::probe_files::temporary("hiroute-version-").map_err(|_| ProbeFailure::Unavailable)?;
+    let home_path = std::fs::canonicalize(home.path()).map_err(|_| ProbeFailure::Unavailable)?;
+    let mut command = std::process::Command::new(path);
+    command
+        .arg("--version")
+        .env_clear()
+        .env("HOME", &home_path)
+        .env("USERPROFILE", &home_path)
+        .current_dir(&home_path);
+    for (key, relative) in [
+        ("CODEX_HOME", ".codex"),
+        ("CLAUDE_CONFIG_DIR", ".claude"),
+        ("QODER_CONFIG_DIR", ".qoder"),
+        ("DSH_HOME", ".dsh"),
+        ("PI_CODING_AGENT_DIR", ".pi/agent"),
+    ] {
+        std::fs::create_dir_all(home_path.join(relative)).map_err(|_| ProbeFailure::Unavailable)?;
+        command.env(key, home_path.join(relative));
+    }
+    if let Some(path) = std::env::var_os("PATH") {
+        command.env("PATH", path);
+    }
+    let result = super::windows_runtime::bounded(&command, false, timeout, OUTPUT_LIMIT);
+    if result
+        .as_ref()
+        .is_err_and(super::windows_runtime::cleanup_unknown)
+    {
+        let _ = home.keep();
+    }
+    let bytes = result.map_err(|error| {
+        if let Some(code) = super::windows_runtime::launch_failure_code(&error) {
+            ProbeFailure::LaunchFailed(code)
+        } else if error.kind() == std::io::ErrorKind::TimedOut {
+            ProbeFailure::TimedOut
+        } else {
+            ProbeFailure::Unavailable
+        }
+    })?;
+    Ok(bytes.to_vec())
+}
+
+#[cfg(not(any(unix, windows)))]
 fn bounded_version(_path: &Path, _timeout: Duration) -> Result<Vec<u8>, ProbeFailure> {
     Err(ProbeFailure::Unavailable)
 }
@@ -290,3 +377,74 @@ fn parse_version(bytes: &[u8]) -> Option<String> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    use super::*;
+    use hiroute_domain::{
+        AgentClaudePresetValuesV2, CanonicalDigest, ManagedClaudeLaunchDescriptorV2,
+        ManagedLaunchProfileV1,
+    };
+
+    #[test]
+    fn windows_executable_observation_prepares_managed_launch_with_native_drive_identity() {
+        let current = std::env::current_exe().unwrap();
+        let trusted = std::fs::canonicalize(&current).unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let selected = directory.path().join("native 路径 %! '&.exe");
+        // This is a copy of the actual native test executable, not script bytes
+        // named .exe. It is borrowed executable input, not a private auth file.
+        std::fs::copy(&current, &selected).unwrap();
+        let projected = resolve(&selected).unwrap().unwrap();
+        assert!(!projected.to_str().unwrap().starts_with(r"\\?\"));
+        assert_eq!(
+            std::fs::canonicalize(&projected).unwrap(),
+            std::fs::canonicalize(&selected).unwrap()
+        );
+        let native = hiroute_platform::windows::security::open_identity(&selected, false).unwrap();
+        let projected_file =
+            hiroute_platform::windows::security::open_identity(&projected, false).unwrap();
+        assert_eq!(
+            hiroute_platform::windows::security::file_identity(&native).unwrap(),
+            hiroute_platform::windows::security::file_identity(&projected_file).unwrap()
+        );
+        let ExecutableProbe::Installed(observation) = probe(&selected, Duration::from_secs(2))
+        else {
+            panic!("actual native executable observation unavailable");
+        };
+        assert_eq!(observation.canonical_path, projected.to_str().unwrap());
+        let preflight = super::super::ManagedClaudeLaunchPreflightV1::from_observations(
+            observation.canonical_path,
+            &ManagedLaunchProfileV1::claude_code(),
+            &[],
+        );
+        let helper = super::super::managed_launch::windows_executable_path(&current).unwrap();
+        let descriptor = ManagedClaudeLaunchDescriptorV2::trusted(
+            "agent-connection/windows-native-path",
+            "claude-messages-v1",
+            &preflight.executable,
+            CanonicalDigest::of_bytes(b"native-path-snapshot"),
+            1,
+            CanonicalDigest::of_bytes(b"native-path-publication"),
+            "http://127.0.0.1:5837",
+            AgentClaudePresetValuesV2 {
+                opus: None,
+                sonnet: None,
+                haiku: None,
+            },
+            helper.to_str().unwrap(),
+        )
+        .unwrap();
+        let mut prepared = super::super::ManagedClaudeProcessV1::prepare(
+            &descriptor,
+            &serde_json::json!({"env":{"UNRELATED":"keep"}}),
+            &[],
+            trusted.to_str().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(prepared.command_mut().get_program(), projected.as_os_str());
+        drop(prepared);
+        drop(projected_file);
+        drop(native);
+    }
+}

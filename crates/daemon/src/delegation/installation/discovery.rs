@@ -91,6 +91,7 @@ impl ScanEnvironment {
         Self {
             path: std::env::var_os("PATH"),
             home: std::env::var_os("HOME")
+                .or_else(|| std::env::var_os("USERPROFILE"))
                 .map(PathBuf::from)
                 .filter(|path| path.is_absolute()),
             npm_prefix: std::env::var_os("NPM_CONFIG_PREFIX")
@@ -124,6 +125,21 @@ fn validate_selection_for(
         .map(|path| normalize_required(Path::new(path), request.node_path.is_none()))
         .transpose()?;
     let cli = normalize_required(Path::new(&request.cli_path), true)?;
+    #[cfg(windows)]
+    let (adapter, cli) = {
+        let mut adapter = adapter;
+        let mut cli = cli;
+        for selected in adapter.iter_mut().chain(std::iter::once(&mut cli)) {
+            if selected
+                .extension()
+                .is_some_and(|ext| ext.as_encoded_bytes().eq_ignore_ascii_case(b"cmd"))
+            {
+                *selected = hiroute_integrations::agents::windows_npm_entry(selected)
+                    .map_err(|_| DelegationErrorV1::DependenciesInvalid)?;
+            }
+        }
+        (adapter, cli)
+    };
     if request.harness == WorkerHarnessV1::Pi {
         hiroute_integrations::pi_cli_installation(&cli)
             .map_err(|_| DelegationErrorV1::DependenciesInvalid)?;
@@ -133,7 +149,7 @@ fn validate_selection_for(
         .as_deref()
         .map(|path| normalize_required(Path::new(path), true))
         .transpose()?;
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     if request.harness == WorkerHarnessV1::Pi {
         hiroute_integrations::check_pi_sdk_capability(
             &cli,
@@ -267,6 +283,11 @@ impl HarnessScan {
                 directories.push(home.join(".qoder/bin"));
             }
         }
+        #[cfg(windows)]
+        if let Some(appdata) = std::env::var_os("APPDATA") {
+            directories.push(PathBuf::from(appdata).join("npm"));
+        }
+        #[cfg(unix)]
         directories.extend([PathBuf::from("/usr/local/bin"), PathBuf::from("/usr/bin")]);
         #[cfg(target_os = "macos")]
         directories.push(PathBuf::from("/opt/homebrew/bin"));
@@ -333,6 +354,10 @@ impl HarnessScan {
         }
         if let Some(home) = self.environment.home.as_ref() {
             prefixes.push(home.join(".local"));
+        }
+        #[cfg(windows)]
+        if let Some(appdata) = std::env::var_os("APPDATA") {
+            prefixes.push(PathBuf::from(appdata).join("npm"));
         }
         prefixes.push(PathBuf::from("/usr/local"));
         #[cfg(target_os = "macos")]
@@ -447,6 +472,15 @@ impl HarnessScan {
                 source,
                 true,
             );
+            #[cfg(windows)]
+            for extension in ["exe", "cmd"] {
+                self.add_discovered(
+                    WorkerDependencyComponentV1::Cli,
+                    &directory.join(cli).with_extension(extension),
+                    source,
+                    true,
+                );
+            }
         }
         if let Some(adapter) = adapter {
             self.add_discovered(
@@ -455,11 +489,20 @@ impl HarnessScan {
                 source,
                 false,
             );
+            #[cfg(windows)]
+            for extension in ["exe", "cmd"] {
+                self.add_discovered(
+                    WorkerDependencyComponentV1::Adapter,
+                    &directory.join(adapter).with_extension(extension),
+                    source,
+                    true,
+                );
+            }
         }
         if adapter.is_some() || self.harness == WorkerHarnessV1::Pi {
             self.add_discovered(
                 WorkerDependencyComponentV1::Node,
-                &directory.join("node"),
+                &directory.join(if cfg!(windows) { "node.exe" } else { "node" }),
                 source,
                 true,
             );
@@ -470,7 +513,13 @@ impl HarnessScan {
         let Some(package) = package_name(self.harness) else {
             return;
         };
-        let package_root = prefix.join("lib/node_modules").join(package);
+        let package_root = prefix
+            .join(if cfg!(windows) {
+                "node_modules"
+            } else {
+                "lib/node_modules"
+            })
+            .join(package);
         self.add_npm_package_root(&package_root, source);
     }
 
@@ -773,6 +822,10 @@ fn executable(metadata: &fs::Metadata) -> bool {
 }
 
 fn platform() -> &'static str {
+    #[cfg(windows)]
+    {
+        return "windows";
+    }
     #[cfg(target_os = "macos")]
     {
         "macos"
@@ -781,7 +834,7 @@ fn platform() -> &'static str {
     {
         "linux"
     }
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
     {
         "unsupported"
     }

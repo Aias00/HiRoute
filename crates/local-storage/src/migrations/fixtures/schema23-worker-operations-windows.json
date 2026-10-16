@@ -1,0 +1,1464 @@
+{
+  "cases": [
+    {
+      "effect": {
+        "after_fingerprint": "sha256:591bf9e1805b3af6719b0a312eef8759e929c665ddc74babf0ec09da617f762e",
+        "before_fingerprint": "sha256:6ff3786c51c5c71e55ee00f58508d745a2813bb22f6f6c02345740d776a18919",
+        "compensation": {
+          "after_revision": 2,
+          "operation_id": "op_b11607ab48bae8c308337e49c24b6014",
+          "schema": "hiroute.worker-dependency-selection-compensation/v1"
+        },
+        "effect_id": "worker-dependency-selection:codex_cli",
+        "kind": "control",
+        "target": "personal/default/worker-dependency-selection/codex_cli"
+      },
+      "harness": "codex_cli",
+      "operation_id": "op_b11607ab48bae8c308337e49c24b6014",
+      "previous_effect": {
+        "after_fingerprint": "sha256:6ff3786c51c5c71e55ee00f58508d745a2813bb22f6f6c02345740d776a18919",
+        "compensation": {
+          "after_revision": 1,
+          "operation_id": "op_eae94ac62ab719efa325df7f93567385",
+          "schema": "hiroute.worker-dependency-selection-compensation/v1"
+        },
+        "effect_id": "worker-dependency-selection:codex_cli",
+        "kind": "control",
+        "target": "personal/default/worker-dependency-selection/codex_cli"
+      },
+      "stage": "staged",
+      "tables": {
+        "operation_steps": {
+          "columns": [
+            "operation_id",
+            "step_no",
+            "step_kind",
+            "state",
+            "step_json"
+          ],
+          "rows": [
+            [
+              "op_b11607ab48bae8c308337e49c24b6014",
+              0,
+              "prepare",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:ecf1704c452c42ed5be0531a474880a55ed4169fc3fc2d8ada757b9d7cae0123\",\"effects\":[],\"kind\":\"prepare\",\"sequence\":0,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_b11607ab48bae8c308337e49c24b6014",
+              1,
+              "apply_secrets",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:75f16a5c021b74501c720d197122fe1e672dc27c9025d026d257aad66e6561b4\",\"effects\":[],\"kind\":\"apply_secrets\",\"sequence\":1,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_b11607ab48bae8c308337e49c24b6014",
+              2,
+              "materialize_sources",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:5deeb6a5cdf937d4a20ce1be50865bde1b6888e9c319004bb383faad3dec08fa\",\"effects\":[{\"after_fingerprint\":\"sha256:591bf9e1805b3af6719b0a312eef8759e929c665ddc74babf0ec09da617f762e\",\"before_fingerprint\":\"sha256:6ff3786c51c5c71e55ee00f58508d745a2813bb22f6f6c02345740d776a18919\",\"compensation\":{\"after_revision\":2,\"operation_id\":\"op_b11607ab48bae8c308337e49c24b6014\",\"schema\":\"hiroute.worker-dependency-selection-compensation/v1\"},\"effect_id\":\"worker-dependency-selection:codex_cli\",\"kind\":\"control\",\"target\":\"personal/default/worker-dependency-selection/codex_cli\"}],\"kind\":\"materialize_sources\",\"sequence\":2,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_b11607ab48bae8c308337e49c24b6014",
+              3,
+              "compile_publication",
+              "pending",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":0,\"deterministic_input_digest\":\"sha256:c9171635fed9ca419452391118a4de7a2afe2190f23346129db8cd0fad57e365\",\"effects\":[],\"kind\":\"compile_publication\",\"sequence\":3,\"status\":\"pending\"}}"
+            ],
+            [
+              "op_b11607ab48bae8c308337e49c24b6014",
+              4,
+              "apply_agent_artifacts",
+              "pending",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":0,\"deterministic_input_digest\":\"sha256:5ac4612884ca3ffb3894cdd5bfa06ddfa853f083ca2bdf5605db6cc1f6922b51\",\"effects\":[],\"kind\":\"apply_agent_artifacts\",\"sequence\":4,\"status\":\"pending\"}}"
+            ],
+            [
+              "op_b11607ab48bae8c308337e49c24b6014",
+              5,
+              "activate",
+              "pending",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":0,\"deterministic_input_digest\":\"sha256:e522a4f844eb520088412ae184c9dc4b0cc2c8ca509e02b8c269b8eda7c1ae8b\",\"effects\":[],\"kind\":\"activate\",\"sequence\":5,\"status\":\"pending\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              0,
+              "prepare",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:f20505e90fcae67318f84df60f745611d081200eef1765fff691598fee776dd3\",\"effects\":[],\"kind\":\"prepare\",\"sequence\":0,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              1,
+              "apply_secrets",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:75f16a5c021b74501c720d197122fe1e672dc27c9025d026d257aad66e6561b4\",\"effects\":[],\"kind\":\"apply_secrets\",\"sequence\":1,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              2,
+              "materialize_sources",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:412d5e6b886344882b0420e940f420f6e0e8d8e216bd8efec49385b74a3d4e71\",\"effects\":[{\"after_fingerprint\":\"sha256:6ff3786c51c5c71e55ee00f58508d745a2813bb22f6f6c02345740d776a18919\",\"compensation\":{\"after_revision\":1,\"operation_id\":\"op_eae94ac62ab719efa325df7f93567385\",\"schema\":\"hiroute.worker-dependency-selection-compensation/v1\"},\"effect_id\":\"worker-dependency-selection:codex_cli\",\"kind\":\"control\",\"target\":\"personal/default/worker-dependency-selection/codex_cli\"}],\"kind\":\"materialize_sources\",\"sequence\":2,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              3,
+              "compile_publication",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:c9171635fed9ca419452391118a4de7a2afe2190f23346129db8cd0fad57e365\",\"effects\":[],\"kind\":\"compile_publication\",\"sequence\":3,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              4,
+              "apply_agent_artifacts",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:5ac4612884ca3ffb3894cdd5bfa06ddfa853f083ca2bdf5605db6cc1f6922b51\",\"effects\":[],\"kind\":\"apply_agent_artifacts\",\"sequence\":4,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              5,
+              "activate",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:e522a4f844eb520088412ae184c9dc4b0cc2c8ca509e02b8c269b8eda7c1ae8b\",\"effects\":[],\"kind\":\"activate\",\"sequence\":5,\"status\":\"applied\"}}"
+            ]
+          ]
+        },
+        "operations": {
+          "columns": [
+            "operation_id",
+            "workspace_id",
+            "principal",
+            "operation_kind",
+            "idempotency_key",
+            "request_digest",
+            "accepted_change_digest",
+            "state",
+            "generation",
+            "operation_json",
+            "created_at",
+            "updated_at"
+          ],
+          "rows": [
+            [
+              "op_b11607ab48bae8c308337e49c24b6014",
+              "personal/default",
+              "interactive-user",
+              "SelectWorkerDependencies",
+              "staged",
+              "sha256:5f8cf78eaa6755b91fa931df07923db354c59b2288551ff143ea4128077e7701",
+              "sha256:0fc6fad33ddaf9a4a05f9c5f359d275ac43b1742d8676fbc3baa5143562fe3fa",
+              "materializing_sources",
+              1,
+              "{\"schema_version\":2,\"operation_id\":\"op_b11607ab48bae8c308337e49c24b6014\",\"workspace_id\":\"personal/default\",\"idempotency\":{\"principal\":\"interactive-user\",\"operation_kind\":\"SelectWorkerDependencies\",\"key\":\"staged\"},\"request_digest\":\"sha256:5f8cf78eaa6755b91fa931df07923db354c59b2288551ff143ea4128077e7701\",\"accepted_digest\":\"sha256:0fc6fad33ddaf9a4a05f9c5f359d275ac43b1742d8676fbc3baa5143562fe3fa\",\"expected_revisions\":{\"target\":1},\"plan\":{\"control\":{},\"credential_pool\":null,\"external\":[],\"runtime\":[],\"schema\":\"hiroute.operation-input/v1\",\"secrets\":[],\"spec\":{\"command_id\":\"worker.dependencies.select\",\"desired_state\":{\"adapter_path\":\"C:/opt/new-installation/adapter.js\",\"cli_path\":\"C:/opt/new-installation/cli\",\"harness\":\"codex_cli\",\"node_path\":\"C:/opt/new-installation/node\"},\"resource_id\":\"worker-dependency-selection/codex_cli\",\"schema_version\":{\"major\":1,\"minor\":0}},\"worker_dependency_selection\":{\"after_selection\":{\"adapter_path\":\"C:/opt/new-installation/adapter.js\",\"cli_path\":\"C:/opt/new-installation/cli\",\"harness\":\"codex_cli\",\"node_path\":\"C:/opt/new-installation/node\"},\"before_revision\":1}},\"state\":\"materializing_sources\",\"generation\":1,\"steps\":[{\"sequence\":0,\"kind\":\"prepare\",\"deterministic_input_digest\":\"sha256:ecf1704c452c42ed5be0531a474880a55ed4169fc3fc2d8ada757b9d7cae0123\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":1,\"kind\":\"apply_secrets\",\"deterministic_input_digest\":\"sha256:75f16a5c021b74501c720d197122fe1e672dc27c9025d026d257aad66e6561b4\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":2,\"kind\":\"materialize_sources\",\"deterministic_input_digest\":\"sha256:5deeb6a5cdf937d4a20ce1be50865bde1b6888e9c319004bb383faad3dec08fa\",\"status\":\"applied\",\"attempts\":1,\"effects\":[{\"effect_id\":\"worker-dependency-selection:codex_cli\",\"kind\":\"control\",\"target\":\"personal/default/worker-dependency-selection/codex_cli\",\"before_fingerprint\":\"sha256:6ff3786c51c5c71e55ee00f58508d745a2813bb22f6f6c02345740d776a18919\",\"after_fingerprint\":\"sha256:591bf9e1805b3af6719b0a312eef8759e929c665ddc74babf0ec09da617f762e\",\"compensation\":{\"after_revision\":2,\"operation_id\":\"op_b11607ab48bae8c308337e49c24b6014\",\"schema\":\"hiroute.worker-dependency-selection-compensation/v1\"}}]},{\"sequence\":3,\"kind\":\"compile_publication\",\"deterministic_input_digest\":\"sha256:c9171635fed9ca419452391118a4de7a2afe2190f23346129db8cd0fad57e365\",\"status\":\"pending\",\"attempts\":0,\"effects\":[]},{\"sequence\":4,\"kind\":\"apply_agent_artifacts\",\"deterministic_input_digest\":\"sha256:5ac4612884ca3ffb3894cdd5bfa06ddfa853f083ca2bdf5605db6cc1f6922b51\",\"status\":\"pending\",\"attempts\":0,\"effects\":[]},{\"sequence\":5,\"kind\":\"activate\",\"deterministic_input_digest\":\"sha256:e522a4f844eb520088412ae184c9dc4b0cc2c8ca509e02b8c269b8eda7c1ae8b\",\"status\":\"pending\",\"attempts\":0,\"effects\":[]}],\"safe_error_code\":null}",
+              1791051525,
+              1791051525
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              "personal/default",
+              "interactive-user",
+              "SelectWorkerDependencies",
+              "before",
+              "sha256:6e7a07e13ebfac57bd3b26c1420041a565e0494f7419773bf83d498fb15b93ba",
+              "sha256:b85152db578b8315906b61e150680757532f59aeba4d4d29600ba7ae1b7f9187",
+              "succeeded",
+              1,
+              "{\"schema_version\":2,\"operation_id\":\"op_eae94ac62ab719efa325df7f93567385\",\"workspace_id\":\"personal/default\",\"idempotency\":{\"principal\":\"interactive-user\",\"operation_kind\":\"SelectWorkerDependencies\",\"key\":\"before\"},\"request_digest\":\"sha256:6e7a07e13ebfac57bd3b26c1420041a565e0494f7419773bf83d498fb15b93ba\",\"accepted_digest\":\"sha256:b85152db578b8315906b61e150680757532f59aeba4d4d29600ba7ae1b7f9187\",\"expected_revisions\":{\"target\":0},\"plan\":{\"control\":{},\"credential_pool\":null,\"external\":[],\"runtime\":[],\"schema\":\"hiroute.operation-input/v1\",\"secrets\":[],\"spec\":{\"command_id\":\"worker.dependencies.select\",\"desired_state\":{\"adapter_path\":\"C:/opt/old-installation/adapter.js\",\"cli_path\":\"C:/opt/old-installation/cli\",\"harness\":\"codex_cli\",\"node_path\":\"C:/opt/old-installation/node\"},\"resource_id\":\"worker-dependency-selection/codex_cli\",\"schema_version\":{\"major\":1,\"minor\":0}},\"worker_dependency_selection\":{\"after_selection\":{\"adapter_path\":\"C:/opt/old-installation/adapter.js\",\"cli_path\":\"C:/opt/old-installation/cli\",\"harness\":\"codex_cli\",\"node_path\":\"C:/opt/old-installation/node\"},\"before_revision\":0}},\"state\":\"succeeded\",\"generation\":1,\"steps\":[{\"sequence\":0,\"kind\":\"prepare\",\"deterministic_input_digest\":\"sha256:f20505e90fcae67318f84df60f745611d081200eef1765fff691598fee776dd3\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":1,\"kind\":\"apply_secrets\",\"deterministic_input_digest\":\"sha256:75f16a5c021b74501c720d197122fe1e672dc27c9025d026d257aad66e6561b4\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":2,\"kind\":\"materialize_sources\",\"deterministic_input_digest\":\"sha256:412d5e6b886344882b0420e940f420f6e0e8d8e216bd8efec49385b74a3d4e71\",\"status\":\"applied\",\"attempts\":1,\"effects\":[{\"effect_id\":\"worker-dependency-selection:codex_cli\",\"kind\":\"control\",\"target\":\"personal/default/worker-dependency-selection/codex_cli\",\"after_fingerprint\":\"sha256:6ff3786c51c5c71e55ee00f58508d745a2813bb22f6f6c02345740d776a18919\",\"compensation\":{\"after_revision\":1,\"operation_id\":\"op_eae94ac62ab719efa325df7f93567385\",\"schema\":\"hiroute.worker-dependency-selection-compensation/v1\"}}]},{\"sequence\":3,\"kind\":\"compile_publication\",\"deterministic_input_digest\":\"sha256:c9171635fed9ca419452391118a4de7a2afe2190f23346129db8cd0fad57e365\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":4,\"kind\":\"apply_agent_artifacts\",\"deterministic_input_digest\":\"sha256:5ac4612884ca3ffb3894cdd5bfa06ddfa853f083ca2bdf5605db6cc1f6922b51\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":5,\"kind\":\"activate\",\"deterministic_input_digest\":\"sha256:e522a4f844eb520088412ae184c9dc4b0cc2c8ca509e02b8c269b8eda7c1ae8b\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]}],\"safe_error_code\":null}",
+              1791051525,
+              1791051525
+            ]
+          ]
+        },
+        "worker_dependency_selection_effects": {
+          "columns": [
+            "operation_id",
+            "workspace_id",
+            "harness",
+            "before_revision",
+            "before_json",
+            "before_owner_operation_id",
+            "after_revision",
+            "after_json",
+            "activated",
+            "compensated"
+          ],
+          "rows": [
+            [
+              "op_b11607ab48bae8c308337e49c24b6014",
+              "personal/default",
+              "codex_cli",
+              1,
+              "{\"harness\":\"codex_cli\",\"adapter_path\":\"C:/opt/old-installation/adapter.js\",\"cli_path\":\"C:/opt/old-installation/cli\",\"node_path\":\"C:/opt/old-installation/node\"}",
+              "op_eae94ac62ab719efa325df7f93567385",
+              2,
+              "{\"harness\":\"codex_cli\",\"adapter_path\":\"C:/opt/new-installation/adapter.js\",\"cli_path\":\"C:/opt/new-installation/cli\",\"node_path\":\"C:/opt/new-installation/node\"}",
+              0,
+              0
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              "personal/default",
+              "codex_cli",
+              0,
+              null,
+              null,
+              1,
+              "{\"harness\":\"codex_cli\",\"adapter_path\":\"C:/opt/old-installation/adapter.js\",\"cli_path\":\"C:/opt/old-installation/cli\",\"node_path\":\"C:/opt/old-installation/node\"}",
+              1,
+              0
+            ]
+          ]
+        },
+        "worker_dependency_selections": {
+          "columns": [
+            "workspace_id",
+            "harness",
+            "revision",
+            "selection_json",
+            "owner_operation_id",
+            "updated_at"
+          ],
+          "rows": [
+            [
+              "personal/default",
+              "codex_cli",
+              1,
+              "{\"harness\":\"codex_cli\",\"adapter_path\":\"C:/opt/old-installation/adapter.js\",\"cli_path\":\"C:/opt/old-installation/cli\",\"node_path\":\"C:/opt/old-installation/node\"}",
+              "op_eae94ac62ab719efa325df7f93567385",
+              1791051525
+            ]
+          ]
+        },
+        "writer_claim": {
+          "columns": [
+            "singleton",
+            "operation_id",
+            "admitted_at"
+          ],
+          "rows": [
+            [
+              1,
+              "op_b11607ab48bae8c308337e49c24b6014",
+              1791051525
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "effect": {
+        "after_fingerprint": "sha256:591bf9e1805b3af6719b0a312eef8759e929c665ddc74babf0ec09da617f762e",
+        "before_fingerprint": "sha256:6ff3786c51c5c71e55ee00f58508d745a2813bb22f6f6c02345740d776a18919",
+        "compensation": {
+          "after_revision": 2,
+          "operation_id": "op_3824e5057bdb23d4b2bf76685d797b4e",
+          "schema": "hiroute.worker-dependency-selection-compensation/v1"
+        },
+        "effect_id": "worker-dependency-selection:codex_cli",
+        "kind": "control",
+        "target": "personal/default/worker-dependency-selection/codex_cli"
+      },
+      "harness": "codex_cli",
+      "operation_id": "op_3824e5057bdb23d4b2bf76685d797b4e",
+      "previous_effect": {
+        "after_fingerprint": "sha256:6ff3786c51c5c71e55ee00f58508d745a2813bb22f6f6c02345740d776a18919",
+        "compensation": {
+          "after_revision": 1,
+          "operation_id": "op_eae94ac62ab719efa325df7f93567385",
+          "schema": "hiroute.worker-dependency-selection-compensation/v1"
+        },
+        "effect_id": "worker-dependency-selection:codex_cli",
+        "kind": "control",
+        "target": "personal/default/worker-dependency-selection/codex_cli"
+      },
+      "stage": "activated",
+      "tables": {
+        "operation_steps": {
+          "columns": [
+            "operation_id",
+            "step_no",
+            "step_kind",
+            "state",
+            "step_json"
+          ],
+          "rows": [
+            [
+              "op_3824e5057bdb23d4b2bf76685d797b4e",
+              0,
+              "prepare",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:ecf1704c452c42ed5be0531a474880a55ed4169fc3fc2d8ada757b9d7cae0123\",\"effects\":[],\"kind\":\"prepare\",\"sequence\":0,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_3824e5057bdb23d4b2bf76685d797b4e",
+              1,
+              "apply_secrets",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:75f16a5c021b74501c720d197122fe1e672dc27c9025d026d257aad66e6561b4\",\"effects\":[],\"kind\":\"apply_secrets\",\"sequence\":1,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_3824e5057bdb23d4b2bf76685d797b4e",
+              2,
+              "materialize_sources",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:5deeb6a5cdf937d4a20ce1be50865bde1b6888e9c319004bb383faad3dec08fa\",\"effects\":[{\"after_fingerprint\":\"sha256:591bf9e1805b3af6719b0a312eef8759e929c665ddc74babf0ec09da617f762e\",\"before_fingerprint\":\"sha256:6ff3786c51c5c71e55ee00f58508d745a2813bb22f6f6c02345740d776a18919\",\"compensation\":{\"after_revision\":2,\"operation_id\":\"op_3824e5057bdb23d4b2bf76685d797b4e\",\"schema\":\"hiroute.worker-dependency-selection-compensation/v1\"},\"effect_id\":\"worker-dependency-selection:codex_cli\",\"kind\":\"control\",\"target\":\"personal/default/worker-dependency-selection/codex_cli\"}],\"kind\":\"materialize_sources\",\"sequence\":2,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_3824e5057bdb23d4b2bf76685d797b4e",
+              3,
+              "compile_publication",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:c9171635fed9ca419452391118a4de7a2afe2190f23346129db8cd0fad57e365\",\"effects\":[],\"kind\":\"compile_publication\",\"sequence\":3,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_3824e5057bdb23d4b2bf76685d797b4e",
+              4,
+              "apply_agent_artifacts",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:5ac4612884ca3ffb3894cdd5bfa06ddfa853f083ca2bdf5605db6cc1f6922b51\",\"effects\":[],\"kind\":\"apply_agent_artifacts\",\"sequence\":4,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_3824e5057bdb23d4b2bf76685d797b4e",
+              5,
+              "activate",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:e522a4f844eb520088412ae184c9dc4b0cc2c8ca509e02b8c269b8eda7c1ae8b\",\"effects\":[],\"kind\":\"activate\",\"sequence\":5,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              0,
+              "prepare",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:f20505e90fcae67318f84df60f745611d081200eef1765fff691598fee776dd3\",\"effects\":[],\"kind\":\"prepare\",\"sequence\":0,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              1,
+              "apply_secrets",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:75f16a5c021b74501c720d197122fe1e672dc27c9025d026d257aad66e6561b4\",\"effects\":[],\"kind\":\"apply_secrets\",\"sequence\":1,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              2,
+              "materialize_sources",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:412d5e6b886344882b0420e940f420f6e0e8d8e216bd8efec49385b74a3d4e71\",\"effects\":[{\"after_fingerprint\":\"sha256:6ff3786c51c5c71e55ee00f58508d745a2813bb22f6f6c02345740d776a18919\",\"compensation\":{\"after_revision\":1,\"operation_id\":\"op_eae94ac62ab719efa325df7f93567385\",\"schema\":\"hiroute.worker-dependency-selection-compensation/v1\"},\"effect_id\":\"worker-dependency-selection:codex_cli\",\"kind\":\"control\",\"target\":\"personal/default/worker-dependency-selection/codex_cli\"}],\"kind\":\"materialize_sources\",\"sequence\":2,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              3,
+              "compile_publication",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:c9171635fed9ca419452391118a4de7a2afe2190f23346129db8cd0fad57e365\",\"effects\":[],\"kind\":\"compile_publication\",\"sequence\":3,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              4,
+              "apply_agent_artifacts",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:5ac4612884ca3ffb3894cdd5bfa06ddfa853f083ca2bdf5605db6cc1f6922b51\",\"effects\":[],\"kind\":\"apply_agent_artifacts\",\"sequence\":4,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              5,
+              "activate",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:e522a4f844eb520088412ae184c9dc4b0cc2c8ca509e02b8c269b8eda7c1ae8b\",\"effects\":[],\"kind\":\"activate\",\"sequence\":5,\"status\":\"applied\"}}"
+            ]
+          ]
+        },
+        "operations": {
+          "columns": [
+            "operation_id",
+            "workspace_id",
+            "principal",
+            "operation_kind",
+            "idempotency_key",
+            "request_digest",
+            "accepted_change_digest",
+            "state",
+            "generation",
+            "operation_json",
+            "created_at",
+            "updated_at"
+          ],
+          "rows": [
+            [
+              "op_3824e5057bdb23d4b2bf76685d797b4e",
+              "personal/default",
+              "interactive-user",
+              "SelectWorkerDependencies",
+              "activated",
+              "sha256:c423c380c2151df5da63235d47c4b3c95e392f31718e3d3e4eb7455c1443ea66",
+              "sha256:0fc6fad33ddaf9a4a05f9c5f359d275ac43b1742d8676fbc3baa5143562fe3fa",
+              "activating",
+              1,
+              "{\"schema_version\":2,\"operation_id\":\"op_3824e5057bdb23d4b2bf76685d797b4e\",\"workspace_id\":\"personal/default\",\"idempotency\":{\"principal\":\"interactive-user\",\"operation_kind\":\"SelectWorkerDependencies\",\"key\":\"activated\"},\"request_digest\":\"sha256:c423c380c2151df5da63235d47c4b3c95e392f31718e3d3e4eb7455c1443ea66\",\"accepted_digest\":\"sha256:0fc6fad33ddaf9a4a05f9c5f359d275ac43b1742d8676fbc3baa5143562fe3fa\",\"expected_revisions\":{\"target\":1},\"plan\":{\"control\":{},\"credential_pool\":null,\"external\":[],\"runtime\":[],\"schema\":\"hiroute.operation-input/v1\",\"secrets\":[],\"spec\":{\"command_id\":\"worker.dependencies.select\",\"desired_state\":{\"adapter_path\":\"C:/opt/new-installation/adapter.js\",\"cli_path\":\"C:/opt/new-installation/cli\",\"harness\":\"codex_cli\",\"node_path\":\"C:/opt/new-installation/node\"},\"resource_id\":\"worker-dependency-selection/codex_cli\",\"schema_version\":{\"major\":1,\"minor\":0}},\"worker_dependency_selection\":{\"after_selection\":{\"adapter_path\":\"C:/opt/new-installation/adapter.js\",\"cli_path\":\"C:/opt/new-installation/cli\",\"harness\":\"codex_cli\",\"node_path\":\"C:/opt/new-installation/node\"},\"before_revision\":1}},\"state\":\"activating\",\"generation\":1,\"steps\":[{\"sequence\":0,\"kind\":\"prepare\",\"deterministic_input_digest\":\"sha256:ecf1704c452c42ed5be0531a474880a55ed4169fc3fc2d8ada757b9d7cae0123\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":1,\"kind\":\"apply_secrets\",\"deterministic_input_digest\":\"sha256:75f16a5c021b74501c720d197122fe1e672dc27c9025d026d257aad66e6561b4\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":2,\"kind\":\"materialize_sources\",\"deterministic_input_digest\":\"sha256:5deeb6a5cdf937d4a20ce1be50865bde1b6888e9c319004bb383faad3dec08fa\",\"status\":\"applied\",\"attempts\":1,\"effects\":[{\"effect_id\":\"worker-dependency-selection:codex_cli\",\"kind\":\"control\",\"target\":\"personal/default/worker-dependency-selection/codex_cli\",\"before_fingerprint\":\"sha256:6ff3786c51c5c71e55ee00f58508d745a2813bb22f6f6c02345740d776a18919\",\"after_fingerprint\":\"sha256:591bf9e1805b3af6719b0a312eef8759e929c665ddc74babf0ec09da617f762e\",\"compensation\":{\"after_revision\":2,\"operation_id\":\"op_3824e5057bdb23d4b2bf76685d797b4e\",\"schema\":\"hiroute.worker-dependency-selection-compensation/v1\"}}]},{\"sequence\":3,\"kind\":\"compile_publication\",\"deterministic_input_digest\":\"sha256:c9171635fed9ca419452391118a4de7a2afe2190f23346129db8cd0fad57e365\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":4,\"kind\":\"apply_agent_artifacts\",\"deterministic_input_digest\":\"sha256:5ac4612884ca3ffb3894cdd5bfa06ddfa853f083ca2bdf5605db6cc1f6922b51\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":5,\"kind\":\"activate\",\"deterministic_input_digest\":\"sha256:e522a4f844eb520088412ae184c9dc4b0cc2c8ca509e02b8c269b8eda7c1ae8b\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]}],\"safe_error_code\":null}",
+              1791051525,
+              1791051525
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              "personal/default",
+              "interactive-user",
+              "SelectWorkerDependencies",
+              "before",
+              "sha256:6e7a07e13ebfac57bd3b26c1420041a565e0494f7419773bf83d498fb15b93ba",
+              "sha256:b85152db578b8315906b61e150680757532f59aeba4d4d29600ba7ae1b7f9187",
+              "succeeded",
+              1,
+              "{\"schema_version\":2,\"operation_id\":\"op_eae94ac62ab719efa325df7f93567385\",\"workspace_id\":\"personal/default\",\"idempotency\":{\"principal\":\"interactive-user\",\"operation_kind\":\"SelectWorkerDependencies\",\"key\":\"before\"},\"request_digest\":\"sha256:6e7a07e13ebfac57bd3b26c1420041a565e0494f7419773bf83d498fb15b93ba\",\"accepted_digest\":\"sha256:b85152db578b8315906b61e150680757532f59aeba4d4d29600ba7ae1b7f9187\",\"expected_revisions\":{\"target\":0},\"plan\":{\"control\":{},\"credential_pool\":null,\"external\":[],\"runtime\":[],\"schema\":\"hiroute.operation-input/v1\",\"secrets\":[],\"spec\":{\"command_id\":\"worker.dependencies.select\",\"desired_state\":{\"adapter_path\":\"C:/opt/old-installation/adapter.js\",\"cli_path\":\"C:/opt/old-installation/cli\",\"harness\":\"codex_cli\",\"node_path\":\"C:/opt/old-installation/node\"},\"resource_id\":\"worker-dependency-selection/codex_cli\",\"schema_version\":{\"major\":1,\"minor\":0}},\"worker_dependency_selection\":{\"after_selection\":{\"adapter_path\":\"C:/opt/old-installation/adapter.js\",\"cli_path\":\"C:/opt/old-installation/cli\",\"harness\":\"codex_cli\",\"node_path\":\"C:/opt/old-installation/node\"},\"before_revision\":0}},\"state\":\"succeeded\",\"generation\":1,\"steps\":[{\"sequence\":0,\"kind\":\"prepare\",\"deterministic_input_digest\":\"sha256:f20505e90fcae67318f84df60f745611d081200eef1765fff691598fee776dd3\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":1,\"kind\":\"apply_secrets\",\"deterministic_input_digest\":\"sha256:75f16a5c021b74501c720d197122fe1e672dc27c9025d026d257aad66e6561b4\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":2,\"kind\":\"materialize_sources\",\"deterministic_input_digest\":\"sha256:412d5e6b886344882b0420e940f420f6e0e8d8e216bd8efec49385b74a3d4e71\",\"status\":\"applied\",\"attempts\":1,\"effects\":[{\"effect_id\":\"worker-dependency-selection:codex_cli\",\"kind\":\"control\",\"target\":\"personal/default/worker-dependency-selection/codex_cli\",\"after_fingerprint\":\"sha256:6ff3786c51c5c71e55ee00f58508d745a2813bb22f6f6c02345740d776a18919\",\"compensation\":{\"after_revision\":1,\"operation_id\":\"op_eae94ac62ab719efa325df7f93567385\",\"schema\":\"hiroute.worker-dependency-selection-compensation/v1\"}}]},{\"sequence\":3,\"kind\":\"compile_publication\",\"deterministic_input_digest\":\"sha256:c9171635fed9ca419452391118a4de7a2afe2190f23346129db8cd0fad57e365\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":4,\"kind\":\"apply_agent_artifacts\",\"deterministic_input_digest\":\"sha256:5ac4612884ca3ffb3894cdd5bfa06ddfa853f083ca2bdf5605db6cc1f6922b51\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":5,\"kind\":\"activate\",\"deterministic_input_digest\":\"sha256:e522a4f844eb520088412ae184c9dc4b0cc2c8ca509e02b8c269b8eda7c1ae8b\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]}],\"safe_error_code\":null}",
+              1791051525,
+              1791051525
+            ]
+          ]
+        },
+        "worker_dependency_selection_effects": {
+          "columns": [
+            "operation_id",
+            "workspace_id",
+            "harness",
+            "before_revision",
+            "before_json",
+            "before_owner_operation_id",
+            "after_revision",
+            "after_json",
+            "activated",
+            "compensated"
+          ],
+          "rows": [
+            [
+              "op_3824e5057bdb23d4b2bf76685d797b4e",
+              "personal/default",
+              "codex_cli",
+              1,
+              "{\"harness\":\"codex_cli\",\"adapter_path\":\"C:/opt/old-installation/adapter.js\",\"cli_path\":\"C:/opt/old-installation/cli\",\"node_path\":\"C:/opt/old-installation/node\"}",
+              "op_eae94ac62ab719efa325df7f93567385",
+              2,
+              "{\"harness\":\"codex_cli\",\"adapter_path\":\"C:/opt/new-installation/adapter.js\",\"cli_path\":\"C:/opt/new-installation/cli\",\"node_path\":\"C:/opt/new-installation/node\"}",
+              1,
+              0
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              "personal/default",
+              "codex_cli",
+              0,
+              null,
+              null,
+              1,
+              "{\"harness\":\"codex_cli\",\"adapter_path\":\"C:/opt/old-installation/adapter.js\",\"cli_path\":\"C:/opt/old-installation/cli\",\"node_path\":\"C:/opt/old-installation/node\"}",
+              1,
+              0
+            ]
+          ]
+        },
+        "worker_dependency_selections": {
+          "columns": [
+            "workspace_id",
+            "harness",
+            "revision",
+            "selection_json",
+            "owner_operation_id",
+            "updated_at"
+          ],
+          "rows": [
+            [
+              "personal/default",
+              "codex_cli",
+              2,
+              "{\"harness\":\"codex_cli\",\"adapter_path\":\"C:/opt/new-installation/adapter.js\",\"cli_path\":\"C:/opt/new-installation/cli\",\"node_path\":\"C:/opt/new-installation/node\"}",
+              "op_3824e5057bdb23d4b2bf76685d797b4e",
+              1791051525
+            ]
+          ]
+        },
+        "writer_claim": {
+          "columns": [
+            "singleton",
+            "operation_id",
+            "admitted_at"
+          ],
+          "rows": [
+            [
+              1,
+              "op_3824e5057bdb23d4b2bf76685d797b4e",
+              1791051525
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "effect": {
+        "after_fingerprint": "sha256:591bf9e1805b3af6719b0a312eef8759e929c665ddc74babf0ec09da617f762e",
+        "before_fingerprint": "sha256:6ff3786c51c5c71e55ee00f58508d745a2813bb22f6f6c02345740d776a18919",
+        "compensation": {
+          "after_revision": 2,
+          "operation_id": "op_6693417061f9f840b88fa9f61f367441",
+          "schema": "hiroute.worker-dependency-selection-compensation/v1"
+        },
+        "effect_id": "worker-dependency-selection:codex_cli",
+        "kind": "control",
+        "target": "personal/default/worker-dependency-selection/codex_cli"
+      },
+      "harness": "codex_cli",
+      "operation_id": "op_6693417061f9f840b88fa9f61f367441",
+      "previous_effect": {
+        "after_fingerprint": "sha256:6ff3786c51c5c71e55ee00f58508d745a2813bb22f6f6c02345740d776a18919",
+        "compensation": {
+          "after_revision": 1,
+          "operation_id": "op_eae94ac62ab719efa325df7f93567385",
+          "schema": "hiroute.worker-dependency-selection-compensation/v1"
+        },
+        "effect_id": "worker-dependency-selection:codex_cli",
+        "kind": "control",
+        "target": "personal/default/worker-dependency-selection/codex_cli"
+      },
+      "stage": "succeeded",
+      "tables": {
+        "operation_steps": {
+          "columns": [
+            "operation_id",
+            "step_no",
+            "step_kind",
+            "state",
+            "step_json"
+          ],
+          "rows": [
+            [
+              "op_6693417061f9f840b88fa9f61f367441",
+              0,
+              "prepare",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:ecf1704c452c42ed5be0531a474880a55ed4169fc3fc2d8ada757b9d7cae0123\",\"effects\":[],\"kind\":\"prepare\",\"sequence\":0,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_6693417061f9f840b88fa9f61f367441",
+              1,
+              "apply_secrets",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:75f16a5c021b74501c720d197122fe1e672dc27c9025d026d257aad66e6561b4\",\"effects\":[],\"kind\":\"apply_secrets\",\"sequence\":1,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_6693417061f9f840b88fa9f61f367441",
+              2,
+              "materialize_sources",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:5deeb6a5cdf937d4a20ce1be50865bde1b6888e9c319004bb383faad3dec08fa\",\"effects\":[{\"after_fingerprint\":\"sha256:591bf9e1805b3af6719b0a312eef8759e929c665ddc74babf0ec09da617f762e\",\"before_fingerprint\":\"sha256:6ff3786c51c5c71e55ee00f58508d745a2813bb22f6f6c02345740d776a18919\",\"compensation\":{\"after_revision\":2,\"operation_id\":\"op_6693417061f9f840b88fa9f61f367441\",\"schema\":\"hiroute.worker-dependency-selection-compensation/v1\"},\"effect_id\":\"worker-dependency-selection:codex_cli\",\"kind\":\"control\",\"target\":\"personal/default/worker-dependency-selection/codex_cli\"}],\"kind\":\"materialize_sources\",\"sequence\":2,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_6693417061f9f840b88fa9f61f367441",
+              3,
+              "compile_publication",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:c9171635fed9ca419452391118a4de7a2afe2190f23346129db8cd0fad57e365\",\"effects\":[],\"kind\":\"compile_publication\",\"sequence\":3,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_6693417061f9f840b88fa9f61f367441",
+              4,
+              "apply_agent_artifacts",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:5ac4612884ca3ffb3894cdd5bfa06ddfa853f083ca2bdf5605db6cc1f6922b51\",\"effects\":[],\"kind\":\"apply_agent_artifacts\",\"sequence\":4,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_6693417061f9f840b88fa9f61f367441",
+              5,
+              "activate",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:e522a4f844eb520088412ae184c9dc4b0cc2c8ca509e02b8c269b8eda7c1ae8b\",\"effects\":[],\"kind\":\"activate\",\"sequence\":5,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              0,
+              "prepare",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:f20505e90fcae67318f84df60f745611d081200eef1765fff691598fee776dd3\",\"effects\":[],\"kind\":\"prepare\",\"sequence\":0,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              1,
+              "apply_secrets",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:75f16a5c021b74501c720d197122fe1e672dc27c9025d026d257aad66e6561b4\",\"effects\":[],\"kind\":\"apply_secrets\",\"sequence\":1,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              2,
+              "materialize_sources",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:412d5e6b886344882b0420e940f420f6e0e8d8e216bd8efec49385b74a3d4e71\",\"effects\":[{\"after_fingerprint\":\"sha256:6ff3786c51c5c71e55ee00f58508d745a2813bb22f6f6c02345740d776a18919\",\"compensation\":{\"after_revision\":1,\"operation_id\":\"op_eae94ac62ab719efa325df7f93567385\",\"schema\":\"hiroute.worker-dependency-selection-compensation/v1\"},\"effect_id\":\"worker-dependency-selection:codex_cli\",\"kind\":\"control\",\"target\":\"personal/default/worker-dependency-selection/codex_cli\"}],\"kind\":\"materialize_sources\",\"sequence\":2,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              3,
+              "compile_publication",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:c9171635fed9ca419452391118a4de7a2afe2190f23346129db8cd0fad57e365\",\"effects\":[],\"kind\":\"compile_publication\",\"sequence\":3,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              4,
+              "apply_agent_artifacts",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:5ac4612884ca3ffb3894cdd5bfa06ddfa853f083ca2bdf5605db6cc1f6922b51\",\"effects\":[],\"kind\":\"apply_agent_artifacts\",\"sequence\":4,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              5,
+              "activate",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:e522a4f844eb520088412ae184c9dc4b0cc2c8ca509e02b8c269b8eda7c1ae8b\",\"effects\":[],\"kind\":\"activate\",\"sequence\":5,\"status\":\"applied\"}}"
+            ]
+          ]
+        },
+        "operations": {
+          "columns": [
+            "operation_id",
+            "workspace_id",
+            "principal",
+            "operation_kind",
+            "idempotency_key",
+            "request_digest",
+            "accepted_change_digest",
+            "state",
+            "generation",
+            "operation_json",
+            "created_at",
+            "updated_at"
+          ],
+          "rows": [
+            [
+              "op_6693417061f9f840b88fa9f61f367441",
+              "personal/default",
+              "interactive-user",
+              "SelectWorkerDependencies",
+              "succeeded",
+              "sha256:333073c4155f0bd05323857095216a7ede54c22c565c7e1ab3f76223ebcb4b1a",
+              "sha256:0fc6fad33ddaf9a4a05f9c5f359d275ac43b1742d8676fbc3baa5143562fe3fa",
+              "succeeded",
+              1,
+              "{\"schema_version\":2,\"operation_id\":\"op_6693417061f9f840b88fa9f61f367441\",\"workspace_id\":\"personal/default\",\"idempotency\":{\"principal\":\"interactive-user\",\"operation_kind\":\"SelectWorkerDependencies\",\"key\":\"succeeded\"},\"request_digest\":\"sha256:333073c4155f0bd05323857095216a7ede54c22c565c7e1ab3f76223ebcb4b1a\",\"accepted_digest\":\"sha256:0fc6fad33ddaf9a4a05f9c5f359d275ac43b1742d8676fbc3baa5143562fe3fa\",\"expected_revisions\":{\"target\":1},\"plan\":{\"control\":{},\"credential_pool\":null,\"external\":[],\"runtime\":[],\"schema\":\"hiroute.operation-input/v1\",\"secrets\":[],\"spec\":{\"command_id\":\"worker.dependencies.select\",\"desired_state\":{\"adapter_path\":\"C:/opt/new-installation/adapter.js\",\"cli_path\":\"C:/opt/new-installation/cli\",\"harness\":\"codex_cli\",\"node_path\":\"C:/opt/new-installation/node\"},\"resource_id\":\"worker-dependency-selection/codex_cli\",\"schema_version\":{\"major\":1,\"minor\":0}},\"worker_dependency_selection\":{\"after_selection\":{\"adapter_path\":\"C:/opt/new-installation/adapter.js\",\"cli_path\":\"C:/opt/new-installation/cli\",\"harness\":\"codex_cli\",\"node_path\":\"C:/opt/new-installation/node\"},\"before_revision\":1}},\"state\":\"succeeded\",\"generation\":1,\"steps\":[{\"sequence\":0,\"kind\":\"prepare\",\"deterministic_input_digest\":\"sha256:ecf1704c452c42ed5be0531a474880a55ed4169fc3fc2d8ada757b9d7cae0123\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":1,\"kind\":\"apply_secrets\",\"deterministic_input_digest\":\"sha256:75f16a5c021b74501c720d197122fe1e672dc27c9025d026d257aad66e6561b4\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":2,\"kind\":\"materialize_sources\",\"deterministic_input_digest\":\"sha256:5deeb6a5cdf937d4a20ce1be50865bde1b6888e9c319004bb383faad3dec08fa\",\"status\":\"applied\",\"attempts\":1,\"effects\":[{\"effect_id\":\"worker-dependency-selection:codex_cli\",\"kind\":\"control\",\"target\":\"personal/default/worker-dependency-selection/codex_cli\",\"before_fingerprint\":\"sha256:6ff3786c51c5c71e55ee00f58508d745a2813bb22f6f6c02345740d776a18919\",\"after_fingerprint\":\"sha256:591bf9e1805b3af6719b0a312eef8759e929c665ddc74babf0ec09da617f762e\",\"compensation\":{\"after_revision\":2,\"operation_id\":\"op_6693417061f9f840b88fa9f61f367441\",\"schema\":\"hiroute.worker-dependency-selection-compensation/v1\"}}]},{\"sequence\":3,\"kind\":\"compile_publication\",\"deterministic_input_digest\":\"sha256:c9171635fed9ca419452391118a4de7a2afe2190f23346129db8cd0fad57e365\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":4,\"kind\":\"apply_agent_artifacts\",\"deterministic_input_digest\":\"sha256:5ac4612884ca3ffb3894cdd5bfa06ddfa853f083ca2bdf5605db6cc1f6922b51\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":5,\"kind\":\"activate\",\"deterministic_input_digest\":\"sha256:e522a4f844eb520088412ae184c9dc4b0cc2c8ca509e02b8c269b8eda7c1ae8b\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]}],\"safe_error_code\":null}",
+              1791051525,
+              1791051525
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              "personal/default",
+              "interactive-user",
+              "SelectWorkerDependencies",
+              "before",
+              "sha256:6e7a07e13ebfac57bd3b26c1420041a565e0494f7419773bf83d498fb15b93ba",
+              "sha256:b85152db578b8315906b61e150680757532f59aeba4d4d29600ba7ae1b7f9187",
+              "succeeded",
+              1,
+              "{\"schema_version\":2,\"operation_id\":\"op_eae94ac62ab719efa325df7f93567385\",\"workspace_id\":\"personal/default\",\"idempotency\":{\"principal\":\"interactive-user\",\"operation_kind\":\"SelectWorkerDependencies\",\"key\":\"before\"},\"request_digest\":\"sha256:6e7a07e13ebfac57bd3b26c1420041a565e0494f7419773bf83d498fb15b93ba\",\"accepted_digest\":\"sha256:b85152db578b8315906b61e150680757532f59aeba4d4d29600ba7ae1b7f9187\",\"expected_revisions\":{\"target\":0},\"plan\":{\"control\":{},\"credential_pool\":null,\"external\":[],\"runtime\":[],\"schema\":\"hiroute.operation-input/v1\",\"secrets\":[],\"spec\":{\"command_id\":\"worker.dependencies.select\",\"desired_state\":{\"adapter_path\":\"C:/opt/old-installation/adapter.js\",\"cli_path\":\"C:/opt/old-installation/cli\",\"harness\":\"codex_cli\",\"node_path\":\"C:/opt/old-installation/node\"},\"resource_id\":\"worker-dependency-selection/codex_cli\",\"schema_version\":{\"major\":1,\"minor\":0}},\"worker_dependency_selection\":{\"after_selection\":{\"adapter_path\":\"C:/opt/old-installation/adapter.js\",\"cli_path\":\"C:/opt/old-installation/cli\",\"harness\":\"codex_cli\",\"node_path\":\"C:/opt/old-installation/node\"},\"before_revision\":0}},\"state\":\"succeeded\",\"generation\":1,\"steps\":[{\"sequence\":0,\"kind\":\"prepare\",\"deterministic_input_digest\":\"sha256:f20505e90fcae67318f84df60f745611d081200eef1765fff691598fee776dd3\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":1,\"kind\":\"apply_secrets\",\"deterministic_input_digest\":\"sha256:75f16a5c021b74501c720d197122fe1e672dc27c9025d026d257aad66e6561b4\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":2,\"kind\":\"materialize_sources\",\"deterministic_input_digest\":\"sha256:412d5e6b886344882b0420e940f420f6e0e8d8e216bd8efec49385b74a3d4e71\",\"status\":\"applied\",\"attempts\":1,\"effects\":[{\"effect_id\":\"worker-dependency-selection:codex_cli\",\"kind\":\"control\",\"target\":\"personal/default/worker-dependency-selection/codex_cli\",\"after_fingerprint\":\"sha256:6ff3786c51c5c71e55ee00f58508d745a2813bb22f6f6c02345740d776a18919\",\"compensation\":{\"after_revision\":1,\"operation_id\":\"op_eae94ac62ab719efa325df7f93567385\",\"schema\":\"hiroute.worker-dependency-selection-compensation/v1\"}}]},{\"sequence\":3,\"kind\":\"compile_publication\",\"deterministic_input_digest\":\"sha256:c9171635fed9ca419452391118a4de7a2afe2190f23346129db8cd0fad57e365\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":4,\"kind\":\"apply_agent_artifacts\",\"deterministic_input_digest\":\"sha256:5ac4612884ca3ffb3894cdd5bfa06ddfa853f083ca2bdf5605db6cc1f6922b51\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":5,\"kind\":\"activate\",\"deterministic_input_digest\":\"sha256:e522a4f844eb520088412ae184c9dc4b0cc2c8ca509e02b8c269b8eda7c1ae8b\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]}],\"safe_error_code\":null}",
+              1791051525,
+              1791051525
+            ]
+          ]
+        },
+        "worker_dependency_selection_effects": {
+          "columns": [
+            "operation_id",
+            "workspace_id",
+            "harness",
+            "before_revision",
+            "before_json",
+            "before_owner_operation_id",
+            "after_revision",
+            "after_json",
+            "activated",
+            "compensated"
+          ],
+          "rows": [
+            [
+              "op_6693417061f9f840b88fa9f61f367441",
+              "personal/default",
+              "codex_cli",
+              1,
+              "{\"harness\":\"codex_cli\",\"adapter_path\":\"C:/opt/old-installation/adapter.js\",\"cli_path\":\"C:/opt/old-installation/cli\",\"node_path\":\"C:/opt/old-installation/node\"}",
+              "op_eae94ac62ab719efa325df7f93567385",
+              2,
+              "{\"harness\":\"codex_cli\",\"adapter_path\":\"C:/opt/new-installation/adapter.js\",\"cli_path\":\"C:/opt/new-installation/cli\",\"node_path\":\"C:/opt/new-installation/node\"}",
+              1,
+              0
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              "personal/default",
+              "codex_cli",
+              0,
+              null,
+              null,
+              1,
+              "{\"harness\":\"codex_cli\",\"adapter_path\":\"C:/opt/old-installation/adapter.js\",\"cli_path\":\"C:/opt/old-installation/cli\",\"node_path\":\"C:/opt/old-installation/node\"}",
+              1,
+              0
+            ]
+          ]
+        },
+        "worker_dependency_selections": {
+          "columns": [
+            "workspace_id",
+            "harness",
+            "revision",
+            "selection_json",
+            "owner_operation_id",
+            "updated_at"
+          ],
+          "rows": [
+            [
+              "personal/default",
+              "codex_cli",
+              2,
+              "{\"harness\":\"codex_cli\",\"adapter_path\":\"C:/opt/new-installation/adapter.js\",\"cli_path\":\"C:/opt/new-installation/cli\",\"node_path\":\"C:/opt/new-installation/node\"}",
+              "op_6693417061f9f840b88fa9f61f367441",
+              1791051525
+            ]
+          ]
+        },
+        "writer_claim": {
+          "columns": [
+            "singleton",
+            "operation_id",
+            "admitted_at"
+          ],
+          "rows": []
+        }
+      }
+    },
+    {
+      "effect": {
+        "after_fingerprint": "sha256:98a25b47626b065beaaa41e62d01b41e02d11a5de5ad6d221b8ca89d85710cd5",
+        "before_fingerprint": "sha256:99039e4f8b02f020c389a1f8c87b98d7e9c0e03457315c65ab7c317d89040b81",
+        "compensation": {
+          "after_revision": 2,
+          "operation_id": "op_b11607ab48bae8c308337e49c24b6014",
+          "schema": "hiroute.worker-dependency-selection-compensation/v1"
+        },
+        "effect_id": "worker-dependency-selection:claude_code",
+        "kind": "control",
+        "target": "personal/default/worker-dependency-selection/claude_code"
+      },
+      "harness": "claude_code",
+      "operation_id": "op_b11607ab48bae8c308337e49c24b6014",
+      "previous_effect": {
+        "after_fingerprint": "sha256:99039e4f8b02f020c389a1f8c87b98d7e9c0e03457315c65ab7c317d89040b81",
+        "compensation": {
+          "after_revision": 1,
+          "operation_id": "op_eae94ac62ab719efa325df7f93567385",
+          "schema": "hiroute.worker-dependency-selection-compensation/v1"
+        },
+        "effect_id": "worker-dependency-selection:claude_code",
+        "kind": "control",
+        "target": "personal/default/worker-dependency-selection/claude_code"
+      },
+      "stage": "staged",
+      "tables": {
+        "operation_steps": {
+          "columns": [
+            "operation_id",
+            "step_no",
+            "step_kind",
+            "state",
+            "step_json"
+          ],
+          "rows": [
+            [
+              "op_b11607ab48bae8c308337e49c24b6014",
+              0,
+              "prepare",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:16700384aa8e2d4a2bcd38a0601e43abbfefe253e39b600a568c7df6fc24564e\",\"effects\":[],\"kind\":\"prepare\",\"sequence\":0,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_b11607ab48bae8c308337e49c24b6014",
+              1,
+              "apply_secrets",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:75f16a5c021b74501c720d197122fe1e672dc27c9025d026d257aad66e6561b4\",\"effects\":[],\"kind\":\"apply_secrets\",\"sequence\":1,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_b11607ab48bae8c308337e49c24b6014",
+              2,
+              "materialize_sources",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:26ed1c42bd2a8a4f125eebf94e8bb1097737206efce4f6171a68d91b8b1e46d0\",\"effects\":[{\"after_fingerprint\":\"sha256:98a25b47626b065beaaa41e62d01b41e02d11a5de5ad6d221b8ca89d85710cd5\",\"before_fingerprint\":\"sha256:99039e4f8b02f020c389a1f8c87b98d7e9c0e03457315c65ab7c317d89040b81\",\"compensation\":{\"after_revision\":2,\"operation_id\":\"op_b11607ab48bae8c308337e49c24b6014\",\"schema\":\"hiroute.worker-dependency-selection-compensation/v1\"},\"effect_id\":\"worker-dependency-selection:claude_code\",\"kind\":\"control\",\"target\":\"personal/default/worker-dependency-selection/claude_code\"}],\"kind\":\"materialize_sources\",\"sequence\":2,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_b11607ab48bae8c308337e49c24b6014",
+              3,
+              "compile_publication",
+              "pending",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":0,\"deterministic_input_digest\":\"sha256:c9171635fed9ca419452391118a4de7a2afe2190f23346129db8cd0fad57e365\",\"effects\":[],\"kind\":\"compile_publication\",\"sequence\":3,\"status\":\"pending\"}}"
+            ],
+            [
+              "op_b11607ab48bae8c308337e49c24b6014",
+              4,
+              "apply_agent_artifacts",
+              "pending",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":0,\"deterministic_input_digest\":\"sha256:5ac4612884ca3ffb3894cdd5bfa06ddfa853f083ca2bdf5605db6cc1f6922b51\",\"effects\":[],\"kind\":\"apply_agent_artifacts\",\"sequence\":4,\"status\":\"pending\"}}"
+            ],
+            [
+              "op_b11607ab48bae8c308337e49c24b6014",
+              5,
+              "activate",
+              "pending",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":0,\"deterministic_input_digest\":\"sha256:e522a4f844eb520088412ae184c9dc4b0cc2c8ca509e02b8c269b8eda7c1ae8b\",\"effects\":[],\"kind\":\"activate\",\"sequence\":5,\"status\":\"pending\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              0,
+              "prepare",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:ddad037e23aaa5ce20a594dacf2c946f8079dfcae9101f9381de041adee0c8eb\",\"effects\":[],\"kind\":\"prepare\",\"sequence\":0,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              1,
+              "apply_secrets",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:75f16a5c021b74501c720d197122fe1e672dc27c9025d026d257aad66e6561b4\",\"effects\":[],\"kind\":\"apply_secrets\",\"sequence\":1,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              2,
+              "materialize_sources",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:da2789630193ce828226c29367229f217b06c66f3f09d554bac42a5250a8a584\",\"effects\":[{\"after_fingerprint\":\"sha256:99039e4f8b02f020c389a1f8c87b98d7e9c0e03457315c65ab7c317d89040b81\",\"compensation\":{\"after_revision\":1,\"operation_id\":\"op_eae94ac62ab719efa325df7f93567385\",\"schema\":\"hiroute.worker-dependency-selection-compensation/v1\"},\"effect_id\":\"worker-dependency-selection:claude_code\",\"kind\":\"control\",\"target\":\"personal/default/worker-dependency-selection/claude_code\"}],\"kind\":\"materialize_sources\",\"sequence\":2,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              3,
+              "compile_publication",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:c9171635fed9ca419452391118a4de7a2afe2190f23346129db8cd0fad57e365\",\"effects\":[],\"kind\":\"compile_publication\",\"sequence\":3,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              4,
+              "apply_agent_artifacts",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:5ac4612884ca3ffb3894cdd5bfa06ddfa853f083ca2bdf5605db6cc1f6922b51\",\"effects\":[],\"kind\":\"apply_agent_artifacts\",\"sequence\":4,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              5,
+              "activate",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:e522a4f844eb520088412ae184c9dc4b0cc2c8ca509e02b8c269b8eda7c1ae8b\",\"effects\":[],\"kind\":\"activate\",\"sequence\":5,\"status\":\"applied\"}}"
+            ]
+          ]
+        },
+        "operations": {
+          "columns": [
+            "operation_id",
+            "workspace_id",
+            "principal",
+            "operation_kind",
+            "idempotency_key",
+            "request_digest",
+            "accepted_change_digest",
+            "state",
+            "generation",
+            "operation_json",
+            "created_at",
+            "updated_at"
+          ],
+          "rows": [
+            [
+              "op_b11607ab48bae8c308337e49c24b6014",
+              "personal/default",
+              "interactive-user",
+              "SelectWorkerDependencies",
+              "staged",
+              "sha256:5f8cf78eaa6755b91fa931df07923db354c59b2288551ff143ea4128077e7701",
+              "sha256:f344376f5ac00cb78cb9dcfa8acb7e767115828f3b5eebb5180f784aa3d7ddb5",
+              "materializing_sources",
+              1,
+              "{\"schema_version\":2,\"operation_id\":\"op_b11607ab48bae8c308337e49c24b6014\",\"workspace_id\":\"personal/default\",\"idempotency\":{\"principal\":\"interactive-user\",\"operation_kind\":\"SelectWorkerDependencies\",\"key\":\"staged\"},\"request_digest\":\"sha256:5f8cf78eaa6755b91fa931df07923db354c59b2288551ff143ea4128077e7701\",\"accepted_digest\":\"sha256:f344376f5ac00cb78cb9dcfa8acb7e767115828f3b5eebb5180f784aa3d7ddb5\",\"expected_revisions\":{\"target\":1},\"plan\":{\"control\":{},\"credential_pool\":null,\"external\":[],\"runtime\":[],\"schema\":\"hiroute.operation-input/v1\",\"secrets\":[],\"spec\":{\"command_id\":\"worker.dependencies.select\",\"desired_state\":{\"adapter_path\":\"C:/opt/new-installation/adapter.js\",\"cli_path\":\"C:/opt/new-installation/cli\",\"harness\":\"claude_code\",\"node_path\":\"C:/opt/new-installation/node\"},\"resource_id\":\"worker-dependency-selection/claude_code\",\"schema_version\":{\"major\":1,\"minor\":0}},\"worker_dependency_selection\":{\"after_selection\":{\"adapter_path\":\"C:/opt/new-installation/adapter.js\",\"cli_path\":\"C:/opt/new-installation/cli\",\"harness\":\"claude_code\",\"node_path\":\"C:/opt/new-installation/node\"},\"before_revision\":1}},\"state\":\"materializing_sources\",\"generation\":1,\"steps\":[{\"sequence\":0,\"kind\":\"prepare\",\"deterministic_input_digest\":\"sha256:16700384aa8e2d4a2bcd38a0601e43abbfefe253e39b600a568c7df6fc24564e\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":1,\"kind\":\"apply_secrets\",\"deterministic_input_digest\":\"sha256:75f16a5c021b74501c720d197122fe1e672dc27c9025d026d257aad66e6561b4\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":2,\"kind\":\"materialize_sources\",\"deterministic_input_digest\":\"sha256:26ed1c42bd2a8a4f125eebf94e8bb1097737206efce4f6171a68d91b8b1e46d0\",\"status\":\"applied\",\"attempts\":1,\"effects\":[{\"effect_id\":\"worker-dependency-selection:claude_code\",\"kind\":\"control\",\"target\":\"personal/default/worker-dependency-selection/claude_code\",\"before_fingerprint\":\"sha256:99039e4f8b02f020c389a1f8c87b98d7e9c0e03457315c65ab7c317d89040b81\",\"after_fingerprint\":\"sha256:98a25b47626b065beaaa41e62d01b41e02d11a5de5ad6d221b8ca89d85710cd5\",\"compensation\":{\"after_revision\":2,\"operation_id\":\"op_b11607ab48bae8c308337e49c24b6014\",\"schema\":\"hiroute.worker-dependency-selection-compensation/v1\"}}]},{\"sequence\":3,\"kind\":\"compile_publication\",\"deterministic_input_digest\":\"sha256:c9171635fed9ca419452391118a4de7a2afe2190f23346129db8cd0fad57e365\",\"status\":\"pending\",\"attempts\":0,\"effects\":[]},{\"sequence\":4,\"kind\":\"apply_agent_artifacts\",\"deterministic_input_digest\":\"sha256:5ac4612884ca3ffb3894cdd5bfa06ddfa853f083ca2bdf5605db6cc1f6922b51\",\"status\":\"pending\",\"attempts\":0,\"effects\":[]},{\"sequence\":5,\"kind\":\"activate\",\"deterministic_input_digest\":\"sha256:e522a4f844eb520088412ae184c9dc4b0cc2c8ca509e02b8c269b8eda7c1ae8b\",\"status\":\"pending\",\"attempts\":0,\"effects\":[]}],\"safe_error_code\":null}",
+              1791051525,
+              1791051525
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              "personal/default",
+              "interactive-user",
+              "SelectWorkerDependencies",
+              "before",
+              "sha256:6e7a07e13ebfac57bd3b26c1420041a565e0494f7419773bf83d498fb15b93ba",
+              "sha256:0bcf7a1e927f994409757f25a650a39d86c183ed8001b5d31a861dbc0e86199a",
+              "succeeded",
+              1,
+              "{\"schema_version\":2,\"operation_id\":\"op_eae94ac62ab719efa325df7f93567385\",\"workspace_id\":\"personal/default\",\"idempotency\":{\"principal\":\"interactive-user\",\"operation_kind\":\"SelectWorkerDependencies\",\"key\":\"before\"},\"request_digest\":\"sha256:6e7a07e13ebfac57bd3b26c1420041a565e0494f7419773bf83d498fb15b93ba\",\"accepted_digest\":\"sha256:0bcf7a1e927f994409757f25a650a39d86c183ed8001b5d31a861dbc0e86199a\",\"expected_revisions\":{\"target\":0},\"plan\":{\"control\":{},\"credential_pool\":null,\"external\":[],\"runtime\":[],\"schema\":\"hiroute.operation-input/v1\",\"secrets\":[],\"spec\":{\"command_id\":\"worker.dependencies.select\",\"desired_state\":{\"adapter_path\":\"C:/opt/old-installation/adapter.js\",\"cli_path\":\"C:/opt/old-installation/cli\",\"harness\":\"claude_code\",\"node_path\":\"C:/opt/old-installation/node\"},\"resource_id\":\"worker-dependency-selection/claude_code\",\"schema_version\":{\"major\":1,\"minor\":0}},\"worker_dependency_selection\":{\"after_selection\":{\"adapter_path\":\"C:/opt/old-installation/adapter.js\",\"cli_path\":\"C:/opt/old-installation/cli\",\"harness\":\"claude_code\",\"node_path\":\"C:/opt/old-installation/node\"},\"before_revision\":0}},\"state\":\"succeeded\",\"generation\":1,\"steps\":[{\"sequence\":0,\"kind\":\"prepare\",\"deterministic_input_digest\":\"sha256:ddad037e23aaa5ce20a594dacf2c946f8079dfcae9101f9381de041adee0c8eb\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":1,\"kind\":\"apply_secrets\",\"deterministic_input_digest\":\"sha256:75f16a5c021b74501c720d197122fe1e672dc27c9025d026d257aad66e6561b4\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":2,\"kind\":\"materialize_sources\",\"deterministic_input_digest\":\"sha256:da2789630193ce828226c29367229f217b06c66f3f09d554bac42a5250a8a584\",\"status\":\"applied\",\"attempts\":1,\"effects\":[{\"effect_id\":\"worker-dependency-selection:claude_code\",\"kind\":\"control\",\"target\":\"personal/default/worker-dependency-selection/claude_code\",\"after_fingerprint\":\"sha256:99039e4f8b02f020c389a1f8c87b98d7e9c0e03457315c65ab7c317d89040b81\",\"compensation\":{\"after_revision\":1,\"operation_id\":\"op_eae94ac62ab719efa325df7f93567385\",\"schema\":\"hiroute.worker-dependency-selection-compensation/v1\"}}]},{\"sequence\":3,\"kind\":\"compile_publication\",\"deterministic_input_digest\":\"sha256:c9171635fed9ca419452391118a4de7a2afe2190f23346129db8cd0fad57e365\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":4,\"kind\":\"apply_agent_artifacts\",\"deterministic_input_digest\":\"sha256:5ac4612884ca3ffb3894cdd5bfa06ddfa853f083ca2bdf5605db6cc1f6922b51\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":5,\"kind\":\"activate\",\"deterministic_input_digest\":\"sha256:e522a4f844eb520088412ae184c9dc4b0cc2c8ca509e02b8c269b8eda7c1ae8b\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]}],\"safe_error_code\":null}",
+              1791051525,
+              1791051525
+            ]
+          ]
+        },
+        "worker_dependency_selection_effects": {
+          "columns": [
+            "operation_id",
+            "workspace_id",
+            "harness",
+            "before_revision",
+            "before_json",
+            "before_owner_operation_id",
+            "after_revision",
+            "after_json",
+            "activated",
+            "compensated"
+          ],
+          "rows": [
+            [
+              "op_b11607ab48bae8c308337e49c24b6014",
+              "personal/default",
+              "claude_code",
+              1,
+              "{\"harness\":\"claude_code\",\"adapter_path\":\"C:/opt/old-installation/adapter.js\",\"cli_path\":\"C:/opt/old-installation/cli\",\"node_path\":\"C:/opt/old-installation/node\"}",
+              "op_eae94ac62ab719efa325df7f93567385",
+              2,
+              "{\"harness\":\"claude_code\",\"adapter_path\":\"C:/opt/new-installation/adapter.js\",\"cli_path\":\"C:/opt/new-installation/cli\",\"node_path\":\"C:/opt/new-installation/node\"}",
+              0,
+              0
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              "personal/default",
+              "claude_code",
+              0,
+              null,
+              null,
+              1,
+              "{\"harness\":\"claude_code\",\"adapter_path\":\"C:/opt/old-installation/adapter.js\",\"cli_path\":\"C:/opt/old-installation/cli\",\"node_path\":\"C:/opt/old-installation/node\"}",
+              1,
+              0
+            ]
+          ]
+        },
+        "worker_dependency_selections": {
+          "columns": [
+            "workspace_id",
+            "harness",
+            "revision",
+            "selection_json",
+            "owner_operation_id",
+            "updated_at"
+          ],
+          "rows": [
+            [
+              "personal/default",
+              "claude_code",
+              1,
+              "{\"harness\":\"claude_code\",\"adapter_path\":\"C:/opt/old-installation/adapter.js\",\"cli_path\":\"C:/opt/old-installation/cli\",\"node_path\":\"C:/opt/old-installation/node\"}",
+              "op_eae94ac62ab719efa325df7f93567385",
+              1791051525
+            ]
+          ]
+        },
+        "writer_claim": {
+          "columns": [
+            "singleton",
+            "operation_id",
+            "admitted_at"
+          ],
+          "rows": [
+            [
+              1,
+              "op_b11607ab48bae8c308337e49c24b6014",
+              1791051525
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "effect": {
+        "after_fingerprint": "sha256:98a25b47626b065beaaa41e62d01b41e02d11a5de5ad6d221b8ca89d85710cd5",
+        "before_fingerprint": "sha256:99039e4f8b02f020c389a1f8c87b98d7e9c0e03457315c65ab7c317d89040b81",
+        "compensation": {
+          "after_revision": 2,
+          "operation_id": "op_3824e5057bdb23d4b2bf76685d797b4e",
+          "schema": "hiroute.worker-dependency-selection-compensation/v1"
+        },
+        "effect_id": "worker-dependency-selection:claude_code",
+        "kind": "control",
+        "target": "personal/default/worker-dependency-selection/claude_code"
+      },
+      "harness": "claude_code",
+      "operation_id": "op_3824e5057bdb23d4b2bf76685d797b4e",
+      "previous_effect": {
+        "after_fingerprint": "sha256:99039e4f8b02f020c389a1f8c87b98d7e9c0e03457315c65ab7c317d89040b81",
+        "compensation": {
+          "after_revision": 1,
+          "operation_id": "op_eae94ac62ab719efa325df7f93567385",
+          "schema": "hiroute.worker-dependency-selection-compensation/v1"
+        },
+        "effect_id": "worker-dependency-selection:claude_code",
+        "kind": "control",
+        "target": "personal/default/worker-dependency-selection/claude_code"
+      },
+      "stage": "activated",
+      "tables": {
+        "operation_steps": {
+          "columns": [
+            "operation_id",
+            "step_no",
+            "step_kind",
+            "state",
+            "step_json"
+          ],
+          "rows": [
+            [
+              "op_3824e5057bdb23d4b2bf76685d797b4e",
+              0,
+              "prepare",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:16700384aa8e2d4a2bcd38a0601e43abbfefe253e39b600a568c7df6fc24564e\",\"effects\":[],\"kind\":\"prepare\",\"sequence\":0,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_3824e5057bdb23d4b2bf76685d797b4e",
+              1,
+              "apply_secrets",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:75f16a5c021b74501c720d197122fe1e672dc27c9025d026d257aad66e6561b4\",\"effects\":[],\"kind\":\"apply_secrets\",\"sequence\":1,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_3824e5057bdb23d4b2bf76685d797b4e",
+              2,
+              "materialize_sources",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:26ed1c42bd2a8a4f125eebf94e8bb1097737206efce4f6171a68d91b8b1e46d0\",\"effects\":[{\"after_fingerprint\":\"sha256:98a25b47626b065beaaa41e62d01b41e02d11a5de5ad6d221b8ca89d85710cd5\",\"before_fingerprint\":\"sha256:99039e4f8b02f020c389a1f8c87b98d7e9c0e03457315c65ab7c317d89040b81\",\"compensation\":{\"after_revision\":2,\"operation_id\":\"op_3824e5057bdb23d4b2bf76685d797b4e\",\"schema\":\"hiroute.worker-dependency-selection-compensation/v1\"},\"effect_id\":\"worker-dependency-selection:claude_code\",\"kind\":\"control\",\"target\":\"personal/default/worker-dependency-selection/claude_code\"}],\"kind\":\"materialize_sources\",\"sequence\":2,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_3824e5057bdb23d4b2bf76685d797b4e",
+              3,
+              "compile_publication",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:c9171635fed9ca419452391118a4de7a2afe2190f23346129db8cd0fad57e365\",\"effects\":[],\"kind\":\"compile_publication\",\"sequence\":3,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_3824e5057bdb23d4b2bf76685d797b4e",
+              4,
+              "apply_agent_artifacts",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:5ac4612884ca3ffb3894cdd5bfa06ddfa853f083ca2bdf5605db6cc1f6922b51\",\"effects\":[],\"kind\":\"apply_agent_artifacts\",\"sequence\":4,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_3824e5057bdb23d4b2bf76685d797b4e",
+              5,
+              "activate",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:e522a4f844eb520088412ae184c9dc4b0cc2c8ca509e02b8c269b8eda7c1ae8b\",\"effects\":[],\"kind\":\"activate\",\"sequence\":5,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              0,
+              "prepare",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:ddad037e23aaa5ce20a594dacf2c946f8079dfcae9101f9381de041adee0c8eb\",\"effects\":[],\"kind\":\"prepare\",\"sequence\":0,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              1,
+              "apply_secrets",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:75f16a5c021b74501c720d197122fe1e672dc27c9025d026d257aad66e6561b4\",\"effects\":[],\"kind\":\"apply_secrets\",\"sequence\":1,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              2,
+              "materialize_sources",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:da2789630193ce828226c29367229f217b06c66f3f09d554bac42a5250a8a584\",\"effects\":[{\"after_fingerprint\":\"sha256:99039e4f8b02f020c389a1f8c87b98d7e9c0e03457315c65ab7c317d89040b81\",\"compensation\":{\"after_revision\":1,\"operation_id\":\"op_eae94ac62ab719efa325df7f93567385\",\"schema\":\"hiroute.worker-dependency-selection-compensation/v1\"},\"effect_id\":\"worker-dependency-selection:claude_code\",\"kind\":\"control\",\"target\":\"personal/default/worker-dependency-selection/claude_code\"}],\"kind\":\"materialize_sources\",\"sequence\":2,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              3,
+              "compile_publication",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:c9171635fed9ca419452391118a4de7a2afe2190f23346129db8cd0fad57e365\",\"effects\":[],\"kind\":\"compile_publication\",\"sequence\":3,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              4,
+              "apply_agent_artifacts",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:5ac4612884ca3ffb3894cdd5bfa06ddfa853f083ca2bdf5605db6cc1f6922b51\",\"effects\":[],\"kind\":\"apply_agent_artifacts\",\"sequence\":4,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              5,
+              "activate",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:e522a4f844eb520088412ae184c9dc4b0cc2c8ca509e02b8c269b8eda7c1ae8b\",\"effects\":[],\"kind\":\"activate\",\"sequence\":5,\"status\":\"applied\"}}"
+            ]
+          ]
+        },
+        "operations": {
+          "columns": [
+            "operation_id",
+            "workspace_id",
+            "principal",
+            "operation_kind",
+            "idempotency_key",
+            "request_digest",
+            "accepted_change_digest",
+            "state",
+            "generation",
+            "operation_json",
+            "created_at",
+            "updated_at"
+          ],
+          "rows": [
+            [
+              "op_3824e5057bdb23d4b2bf76685d797b4e",
+              "personal/default",
+              "interactive-user",
+              "SelectWorkerDependencies",
+              "activated",
+              "sha256:c423c380c2151df5da63235d47c4b3c95e392f31718e3d3e4eb7455c1443ea66",
+              "sha256:f344376f5ac00cb78cb9dcfa8acb7e767115828f3b5eebb5180f784aa3d7ddb5",
+              "activating",
+              1,
+              "{\"schema_version\":2,\"operation_id\":\"op_3824e5057bdb23d4b2bf76685d797b4e\",\"workspace_id\":\"personal/default\",\"idempotency\":{\"principal\":\"interactive-user\",\"operation_kind\":\"SelectWorkerDependencies\",\"key\":\"activated\"},\"request_digest\":\"sha256:c423c380c2151df5da63235d47c4b3c95e392f31718e3d3e4eb7455c1443ea66\",\"accepted_digest\":\"sha256:f344376f5ac00cb78cb9dcfa8acb7e767115828f3b5eebb5180f784aa3d7ddb5\",\"expected_revisions\":{\"target\":1},\"plan\":{\"control\":{},\"credential_pool\":null,\"external\":[],\"runtime\":[],\"schema\":\"hiroute.operation-input/v1\",\"secrets\":[],\"spec\":{\"command_id\":\"worker.dependencies.select\",\"desired_state\":{\"adapter_path\":\"C:/opt/new-installation/adapter.js\",\"cli_path\":\"C:/opt/new-installation/cli\",\"harness\":\"claude_code\",\"node_path\":\"C:/opt/new-installation/node\"},\"resource_id\":\"worker-dependency-selection/claude_code\",\"schema_version\":{\"major\":1,\"minor\":0}},\"worker_dependency_selection\":{\"after_selection\":{\"adapter_path\":\"C:/opt/new-installation/adapter.js\",\"cli_path\":\"C:/opt/new-installation/cli\",\"harness\":\"claude_code\",\"node_path\":\"C:/opt/new-installation/node\"},\"before_revision\":1}},\"state\":\"activating\",\"generation\":1,\"steps\":[{\"sequence\":0,\"kind\":\"prepare\",\"deterministic_input_digest\":\"sha256:16700384aa8e2d4a2bcd38a0601e43abbfefe253e39b600a568c7df6fc24564e\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":1,\"kind\":\"apply_secrets\",\"deterministic_input_digest\":\"sha256:75f16a5c021b74501c720d197122fe1e672dc27c9025d026d257aad66e6561b4\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":2,\"kind\":\"materialize_sources\",\"deterministic_input_digest\":\"sha256:26ed1c42bd2a8a4f125eebf94e8bb1097737206efce4f6171a68d91b8b1e46d0\",\"status\":\"applied\",\"attempts\":1,\"effects\":[{\"effect_id\":\"worker-dependency-selection:claude_code\",\"kind\":\"control\",\"target\":\"personal/default/worker-dependency-selection/claude_code\",\"before_fingerprint\":\"sha256:99039e4f8b02f020c389a1f8c87b98d7e9c0e03457315c65ab7c317d89040b81\",\"after_fingerprint\":\"sha256:98a25b47626b065beaaa41e62d01b41e02d11a5de5ad6d221b8ca89d85710cd5\",\"compensation\":{\"after_revision\":2,\"operation_id\":\"op_3824e5057bdb23d4b2bf76685d797b4e\",\"schema\":\"hiroute.worker-dependency-selection-compensation/v1\"}}]},{\"sequence\":3,\"kind\":\"compile_publication\",\"deterministic_input_digest\":\"sha256:c9171635fed9ca419452391118a4de7a2afe2190f23346129db8cd0fad57e365\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":4,\"kind\":\"apply_agent_artifacts\",\"deterministic_input_digest\":\"sha256:5ac4612884ca3ffb3894cdd5bfa06ddfa853f083ca2bdf5605db6cc1f6922b51\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":5,\"kind\":\"activate\",\"deterministic_input_digest\":\"sha256:e522a4f844eb520088412ae184c9dc4b0cc2c8ca509e02b8c269b8eda7c1ae8b\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]}],\"safe_error_code\":null}",
+              1791051525,
+              1791051525
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              "personal/default",
+              "interactive-user",
+              "SelectWorkerDependencies",
+              "before",
+              "sha256:6e7a07e13ebfac57bd3b26c1420041a565e0494f7419773bf83d498fb15b93ba",
+              "sha256:0bcf7a1e927f994409757f25a650a39d86c183ed8001b5d31a861dbc0e86199a",
+              "succeeded",
+              1,
+              "{\"schema_version\":2,\"operation_id\":\"op_eae94ac62ab719efa325df7f93567385\",\"workspace_id\":\"personal/default\",\"idempotency\":{\"principal\":\"interactive-user\",\"operation_kind\":\"SelectWorkerDependencies\",\"key\":\"before\"},\"request_digest\":\"sha256:6e7a07e13ebfac57bd3b26c1420041a565e0494f7419773bf83d498fb15b93ba\",\"accepted_digest\":\"sha256:0bcf7a1e927f994409757f25a650a39d86c183ed8001b5d31a861dbc0e86199a\",\"expected_revisions\":{\"target\":0},\"plan\":{\"control\":{},\"credential_pool\":null,\"external\":[],\"runtime\":[],\"schema\":\"hiroute.operation-input/v1\",\"secrets\":[],\"spec\":{\"command_id\":\"worker.dependencies.select\",\"desired_state\":{\"adapter_path\":\"C:/opt/old-installation/adapter.js\",\"cli_path\":\"C:/opt/old-installation/cli\",\"harness\":\"claude_code\",\"node_path\":\"C:/opt/old-installation/node\"},\"resource_id\":\"worker-dependency-selection/claude_code\",\"schema_version\":{\"major\":1,\"minor\":0}},\"worker_dependency_selection\":{\"after_selection\":{\"adapter_path\":\"C:/opt/old-installation/adapter.js\",\"cli_path\":\"C:/opt/old-installation/cli\",\"harness\":\"claude_code\",\"node_path\":\"C:/opt/old-installation/node\"},\"before_revision\":0}},\"state\":\"succeeded\",\"generation\":1,\"steps\":[{\"sequence\":0,\"kind\":\"prepare\",\"deterministic_input_digest\":\"sha256:ddad037e23aaa5ce20a594dacf2c946f8079dfcae9101f9381de041adee0c8eb\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":1,\"kind\":\"apply_secrets\",\"deterministic_input_digest\":\"sha256:75f16a5c021b74501c720d197122fe1e672dc27c9025d026d257aad66e6561b4\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":2,\"kind\":\"materialize_sources\",\"deterministic_input_digest\":\"sha256:da2789630193ce828226c29367229f217b06c66f3f09d554bac42a5250a8a584\",\"status\":\"applied\",\"attempts\":1,\"effects\":[{\"effect_id\":\"worker-dependency-selection:claude_code\",\"kind\":\"control\",\"target\":\"personal/default/worker-dependency-selection/claude_code\",\"after_fingerprint\":\"sha256:99039e4f8b02f020c389a1f8c87b98d7e9c0e03457315c65ab7c317d89040b81\",\"compensation\":{\"after_revision\":1,\"operation_id\":\"op_eae94ac62ab719efa325df7f93567385\",\"schema\":\"hiroute.worker-dependency-selection-compensation/v1\"}}]},{\"sequence\":3,\"kind\":\"compile_publication\",\"deterministic_input_digest\":\"sha256:c9171635fed9ca419452391118a4de7a2afe2190f23346129db8cd0fad57e365\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":4,\"kind\":\"apply_agent_artifacts\",\"deterministic_input_digest\":\"sha256:5ac4612884ca3ffb3894cdd5bfa06ddfa853f083ca2bdf5605db6cc1f6922b51\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":5,\"kind\":\"activate\",\"deterministic_input_digest\":\"sha256:e522a4f844eb520088412ae184c9dc4b0cc2c8ca509e02b8c269b8eda7c1ae8b\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]}],\"safe_error_code\":null}",
+              1791051525,
+              1791051525
+            ]
+          ]
+        },
+        "worker_dependency_selection_effects": {
+          "columns": [
+            "operation_id",
+            "workspace_id",
+            "harness",
+            "before_revision",
+            "before_json",
+            "before_owner_operation_id",
+            "after_revision",
+            "after_json",
+            "activated",
+            "compensated"
+          ],
+          "rows": [
+            [
+              "op_3824e5057bdb23d4b2bf76685d797b4e",
+              "personal/default",
+              "claude_code",
+              1,
+              "{\"harness\":\"claude_code\",\"adapter_path\":\"C:/opt/old-installation/adapter.js\",\"cli_path\":\"C:/opt/old-installation/cli\",\"node_path\":\"C:/opt/old-installation/node\"}",
+              "op_eae94ac62ab719efa325df7f93567385",
+              2,
+              "{\"harness\":\"claude_code\",\"adapter_path\":\"C:/opt/new-installation/adapter.js\",\"cli_path\":\"C:/opt/new-installation/cli\",\"node_path\":\"C:/opt/new-installation/node\"}",
+              1,
+              0
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              "personal/default",
+              "claude_code",
+              0,
+              null,
+              null,
+              1,
+              "{\"harness\":\"claude_code\",\"adapter_path\":\"C:/opt/old-installation/adapter.js\",\"cli_path\":\"C:/opt/old-installation/cli\",\"node_path\":\"C:/opt/old-installation/node\"}",
+              1,
+              0
+            ]
+          ]
+        },
+        "worker_dependency_selections": {
+          "columns": [
+            "workspace_id",
+            "harness",
+            "revision",
+            "selection_json",
+            "owner_operation_id",
+            "updated_at"
+          ],
+          "rows": [
+            [
+              "personal/default",
+              "claude_code",
+              2,
+              "{\"harness\":\"claude_code\",\"adapter_path\":\"C:/opt/new-installation/adapter.js\",\"cli_path\":\"C:/opt/new-installation/cli\",\"node_path\":\"C:/opt/new-installation/node\"}",
+              "op_3824e5057bdb23d4b2bf76685d797b4e",
+              1791051525
+            ]
+          ]
+        },
+        "writer_claim": {
+          "columns": [
+            "singleton",
+            "operation_id",
+            "admitted_at"
+          ],
+          "rows": [
+            [
+              1,
+              "op_3824e5057bdb23d4b2bf76685d797b4e",
+              1791051525
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "effect": {
+        "after_fingerprint": "sha256:98a25b47626b065beaaa41e62d01b41e02d11a5de5ad6d221b8ca89d85710cd5",
+        "before_fingerprint": "sha256:99039e4f8b02f020c389a1f8c87b98d7e9c0e03457315c65ab7c317d89040b81",
+        "compensation": {
+          "after_revision": 2,
+          "operation_id": "op_6693417061f9f840b88fa9f61f367441",
+          "schema": "hiroute.worker-dependency-selection-compensation/v1"
+        },
+        "effect_id": "worker-dependency-selection:claude_code",
+        "kind": "control",
+        "target": "personal/default/worker-dependency-selection/claude_code"
+      },
+      "harness": "claude_code",
+      "operation_id": "op_6693417061f9f840b88fa9f61f367441",
+      "previous_effect": {
+        "after_fingerprint": "sha256:99039e4f8b02f020c389a1f8c87b98d7e9c0e03457315c65ab7c317d89040b81",
+        "compensation": {
+          "after_revision": 1,
+          "operation_id": "op_eae94ac62ab719efa325df7f93567385",
+          "schema": "hiroute.worker-dependency-selection-compensation/v1"
+        },
+        "effect_id": "worker-dependency-selection:claude_code",
+        "kind": "control",
+        "target": "personal/default/worker-dependency-selection/claude_code"
+      },
+      "stage": "succeeded",
+      "tables": {
+        "operation_steps": {
+          "columns": [
+            "operation_id",
+            "step_no",
+            "step_kind",
+            "state",
+            "step_json"
+          ],
+          "rows": [
+            [
+              "op_6693417061f9f840b88fa9f61f367441",
+              0,
+              "prepare",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:16700384aa8e2d4a2bcd38a0601e43abbfefe253e39b600a568c7df6fc24564e\",\"effects\":[],\"kind\":\"prepare\",\"sequence\":0,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_6693417061f9f840b88fa9f61f367441",
+              1,
+              "apply_secrets",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:75f16a5c021b74501c720d197122fe1e672dc27c9025d026d257aad66e6561b4\",\"effects\":[],\"kind\":\"apply_secrets\",\"sequence\":1,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_6693417061f9f840b88fa9f61f367441",
+              2,
+              "materialize_sources",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:26ed1c42bd2a8a4f125eebf94e8bb1097737206efce4f6171a68d91b8b1e46d0\",\"effects\":[{\"after_fingerprint\":\"sha256:98a25b47626b065beaaa41e62d01b41e02d11a5de5ad6d221b8ca89d85710cd5\",\"before_fingerprint\":\"sha256:99039e4f8b02f020c389a1f8c87b98d7e9c0e03457315c65ab7c317d89040b81\",\"compensation\":{\"after_revision\":2,\"operation_id\":\"op_6693417061f9f840b88fa9f61f367441\",\"schema\":\"hiroute.worker-dependency-selection-compensation/v1\"},\"effect_id\":\"worker-dependency-selection:claude_code\",\"kind\":\"control\",\"target\":\"personal/default/worker-dependency-selection/claude_code\"}],\"kind\":\"materialize_sources\",\"sequence\":2,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_6693417061f9f840b88fa9f61f367441",
+              3,
+              "compile_publication",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:c9171635fed9ca419452391118a4de7a2afe2190f23346129db8cd0fad57e365\",\"effects\":[],\"kind\":\"compile_publication\",\"sequence\":3,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_6693417061f9f840b88fa9f61f367441",
+              4,
+              "apply_agent_artifacts",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:5ac4612884ca3ffb3894cdd5bfa06ddfa853f083ca2bdf5605db6cc1f6922b51\",\"effects\":[],\"kind\":\"apply_agent_artifacts\",\"sequence\":4,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_6693417061f9f840b88fa9f61f367441",
+              5,
+              "activate",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:e522a4f844eb520088412ae184c9dc4b0cc2c8ca509e02b8c269b8eda7c1ae8b\",\"effects\":[],\"kind\":\"activate\",\"sequence\":5,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              0,
+              "prepare",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:ddad037e23aaa5ce20a594dacf2c946f8079dfcae9101f9381de041adee0c8eb\",\"effects\":[],\"kind\":\"prepare\",\"sequence\":0,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              1,
+              "apply_secrets",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:75f16a5c021b74501c720d197122fe1e672dc27c9025d026d257aad66e6561b4\",\"effects\":[],\"kind\":\"apply_secrets\",\"sequence\":1,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              2,
+              "materialize_sources",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:da2789630193ce828226c29367229f217b06c66f3f09d554bac42a5250a8a584\",\"effects\":[{\"after_fingerprint\":\"sha256:99039e4f8b02f020c389a1f8c87b98d7e9c0e03457315c65ab7c317d89040b81\",\"compensation\":{\"after_revision\":1,\"operation_id\":\"op_eae94ac62ab719efa325df7f93567385\",\"schema\":\"hiroute.worker-dependency-selection-compensation/v1\"},\"effect_id\":\"worker-dependency-selection:claude_code\",\"kind\":\"control\",\"target\":\"personal/default/worker-dependency-selection/claude_code\"}],\"kind\":\"materialize_sources\",\"sequence\":2,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              3,
+              "compile_publication",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:c9171635fed9ca419452391118a4de7a2afe2190f23346129db8cd0fad57e365\",\"effects\":[],\"kind\":\"compile_publication\",\"sequence\":3,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              4,
+              "apply_agent_artifacts",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:5ac4612884ca3ffb3894cdd5bfa06ddfa853f083ca2bdf5605db6cc1f6922b51\",\"effects\":[],\"kind\":\"apply_agent_artifacts\",\"sequence\":4,\"status\":\"applied\"}}"
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              5,
+              "activate",
+              "applied",
+              "{\"schema\":\"hiroute.operation-step/v1\",\"step\":{\"attempts\":1,\"deterministic_input_digest\":\"sha256:e522a4f844eb520088412ae184c9dc4b0cc2c8ca509e02b8c269b8eda7c1ae8b\",\"effects\":[],\"kind\":\"activate\",\"sequence\":5,\"status\":\"applied\"}}"
+            ]
+          ]
+        },
+        "operations": {
+          "columns": [
+            "operation_id",
+            "workspace_id",
+            "principal",
+            "operation_kind",
+            "idempotency_key",
+            "request_digest",
+            "accepted_change_digest",
+            "state",
+            "generation",
+            "operation_json",
+            "created_at",
+            "updated_at"
+          ],
+          "rows": [
+            [
+              "op_6693417061f9f840b88fa9f61f367441",
+              "personal/default",
+              "interactive-user",
+              "SelectWorkerDependencies",
+              "succeeded",
+              "sha256:333073c4155f0bd05323857095216a7ede54c22c565c7e1ab3f76223ebcb4b1a",
+              "sha256:f344376f5ac00cb78cb9dcfa8acb7e767115828f3b5eebb5180f784aa3d7ddb5",
+              "succeeded",
+              1,
+              "{\"schema_version\":2,\"operation_id\":\"op_6693417061f9f840b88fa9f61f367441\",\"workspace_id\":\"personal/default\",\"idempotency\":{\"principal\":\"interactive-user\",\"operation_kind\":\"SelectWorkerDependencies\",\"key\":\"succeeded\"},\"request_digest\":\"sha256:333073c4155f0bd05323857095216a7ede54c22c565c7e1ab3f76223ebcb4b1a\",\"accepted_digest\":\"sha256:f344376f5ac00cb78cb9dcfa8acb7e767115828f3b5eebb5180f784aa3d7ddb5\",\"expected_revisions\":{\"target\":1},\"plan\":{\"control\":{},\"credential_pool\":null,\"external\":[],\"runtime\":[],\"schema\":\"hiroute.operation-input/v1\",\"secrets\":[],\"spec\":{\"command_id\":\"worker.dependencies.select\",\"desired_state\":{\"adapter_path\":\"C:/opt/new-installation/adapter.js\",\"cli_path\":\"C:/opt/new-installation/cli\",\"harness\":\"claude_code\",\"node_path\":\"C:/opt/new-installation/node\"},\"resource_id\":\"worker-dependency-selection/claude_code\",\"schema_version\":{\"major\":1,\"minor\":0}},\"worker_dependency_selection\":{\"after_selection\":{\"adapter_path\":\"C:/opt/new-installation/adapter.js\",\"cli_path\":\"C:/opt/new-installation/cli\",\"harness\":\"claude_code\",\"node_path\":\"C:/opt/new-installation/node\"},\"before_revision\":1}},\"state\":\"succeeded\",\"generation\":1,\"steps\":[{\"sequence\":0,\"kind\":\"prepare\",\"deterministic_input_digest\":\"sha256:16700384aa8e2d4a2bcd38a0601e43abbfefe253e39b600a568c7df6fc24564e\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":1,\"kind\":\"apply_secrets\",\"deterministic_input_digest\":\"sha256:75f16a5c021b74501c720d197122fe1e672dc27c9025d026d257aad66e6561b4\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":2,\"kind\":\"materialize_sources\",\"deterministic_input_digest\":\"sha256:26ed1c42bd2a8a4f125eebf94e8bb1097737206efce4f6171a68d91b8b1e46d0\",\"status\":\"applied\",\"attempts\":1,\"effects\":[{\"effect_id\":\"worker-dependency-selection:claude_code\",\"kind\":\"control\",\"target\":\"personal/default/worker-dependency-selection/claude_code\",\"before_fingerprint\":\"sha256:99039e4f8b02f020c389a1f8c87b98d7e9c0e03457315c65ab7c317d89040b81\",\"after_fingerprint\":\"sha256:98a25b47626b065beaaa41e62d01b41e02d11a5de5ad6d221b8ca89d85710cd5\",\"compensation\":{\"after_revision\":2,\"operation_id\":\"op_6693417061f9f840b88fa9f61f367441\",\"schema\":\"hiroute.worker-dependency-selection-compensation/v1\"}}]},{\"sequence\":3,\"kind\":\"compile_publication\",\"deterministic_input_digest\":\"sha256:c9171635fed9ca419452391118a4de7a2afe2190f23346129db8cd0fad57e365\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":4,\"kind\":\"apply_agent_artifacts\",\"deterministic_input_digest\":\"sha256:5ac4612884ca3ffb3894cdd5bfa06ddfa853f083ca2bdf5605db6cc1f6922b51\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":5,\"kind\":\"activate\",\"deterministic_input_digest\":\"sha256:e522a4f844eb520088412ae184c9dc4b0cc2c8ca509e02b8c269b8eda7c1ae8b\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]}],\"safe_error_code\":null}",
+              1791051525,
+              1791051525
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              "personal/default",
+              "interactive-user",
+              "SelectWorkerDependencies",
+              "before",
+              "sha256:6e7a07e13ebfac57bd3b26c1420041a565e0494f7419773bf83d498fb15b93ba",
+              "sha256:0bcf7a1e927f994409757f25a650a39d86c183ed8001b5d31a861dbc0e86199a",
+              "succeeded",
+              1,
+              "{\"schema_version\":2,\"operation_id\":\"op_eae94ac62ab719efa325df7f93567385\",\"workspace_id\":\"personal/default\",\"idempotency\":{\"principal\":\"interactive-user\",\"operation_kind\":\"SelectWorkerDependencies\",\"key\":\"before\"},\"request_digest\":\"sha256:6e7a07e13ebfac57bd3b26c1420041a565e0494f7419773bf83d498fb15b93ba\",\"accepted_digest\":\"sha256:0bcf7a1e927f994409757f25a650a39d86c183ed8001b5d31a861dbc0e86199a\",\"expected_revisions\":{\"target\":0},\"plan\":{\"control\":{},\"credential_pool\":null,\"external\":[],\"runtime\":[],\"schema\":\"hiroute.operation-input/v1\",\"secrets\":[],\"spec\":{\"command_id\":\"worker.dependencies.select\",\"desired_state\":{\"adapter_path\":\"C:/opt/old-installation/adapter.js\",\"cli_path\":\"C:/opt/old-installation/cli\",\"harness\":\"claude_code\",\"node_path\":\"C:/opt/old-installation/node\"},\"resource_id\":\"worker-dependency-selection/claude_code\",\"schema_version\":{\"major\":1,\"minor\":0}},\"worker_dependency_selection\":{\"after_selection\":{\"adapter_path\":\"C:/opt/old-installation/adapter.js\",\"cli_path\":\"C:/opt/old-installation/cli\",\"harness\":\"claude_code\",\"node_path\":\"C:/opt/old-installation/node\"},\"before_revision\":0}},\"state\":\"succeeded\",\"generation\":1,\"steps\":[{\"sequence\":0,\"kind\":\"prepare\",\"deterministic_input_digest\":\"sha256:ddad037e23aaa5ce20a594dacf2c946f8079dfcae9101f9381de041adee0c8eb\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":1,\"kind\":\"apply_secrets\",\"deterministic_input_digest\":\"sha256:75f16a5c021b74501c720d197122fe1e672dc27c9025d026d257aad66e6561b4\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":2,\"kind\":\"materialize_sources\",\"deterministic_input_digest\":\"sha256:da2789630193ce828226c29367229f217b06c66f3f09d554bac42a5250a8a584\",\"status\":\"applied\",\"attempts\":1,\"effects\":[{\"effect_id\":\"worker-dependency-selection:claude_code\",\"kind\":\"control\",\"target\":\"personal/default/worker-dependency-selection/claude_code\",\"after_fingerprint\":\"sha256:99039e4f8b02f020c389a1f8c87b98d7e9c0e03457315c65ab7c317d89040b81\",\"compensation\":{\"after_revision\":1,\"operation_id\":\"op_eae94ac62ab719efa325df7f93567385\",\"schema\":\"hiroute.worker-dependency-selection-compensation/v1\"}}]},{\"sequence\":3,\"kind\":\"compile_publication\",\"deterministic_input_digest\":\"sha256:c9171635fed9ca419452391118a4de7a2afe2190f23346129db8cd0fad57e365\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":4,\"kind\":\"apply_agent_artifacts\",\"deterministic_input_digest\":\"sha256:5ac4612884ca3ffb3894cdd5bfa06ddfa853f083ca2bdf5605db6cc1f6922b51\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]},{\"sequence\":5,\"kind\":\"activate\",\"deterministic_input_digest\":\"sha256:e522a4f844eb520088412ae184c9dc4b0cc2c8ca509e02b8c269b8eda7c1ae8b\",\"status\":\"applied\",\"attempts\":1,\"effects\":[]}],\"safe_error_code\":null}",
+              1791051525,
+              1791051525
+            ]
+          ]
+        },
+        "worker_dependency_selection_effects": {
+          "columns": [
+            "operation_id",
+            "workspace_id",
+            "harness",
+            "before_revision",
+            "before_json",
+            "before_owner_operation_id",
+            "after_revision",
+            "after_json",
+            "activated",
+            "compensated"
+          ],
+          "rows": [
+            [
+              "op_6693417061f9f840b88fa9f61f367441",
+              "personal/default",
+              "claude_code",
+              1,
+              "{\"harness\":\"claude_code\",\"adapter_path\":\"C:/opt/old-installation/adapter.js\",\"cli_path\":\"C:/opt/old-installation/cli\",\"node_path\":\"C:/opt/old-installation/node\"}",
+              "op_eae94ac62ab719efa325df7f93567385",
+              2,
+              "{\"harness\":\"claude_code\",\"adapter_path\":\"C:/opt/new-installation/adapter.js\",\"cli_path\":\"C:/opt/new-installation/cli\",\"node_path\":\"C:/opt/new-installation/node\"}",
+              1,
+              0
+            ],
+            [
+              "op_eae94ac62ab719efa325df7f93567385",
+              "personal/default",
+              "claude_code",
+              0,
+              null,
+              null,
+              1,
+              "{\"harness\":\"claude_code\",\"adapter_path\":\"C:/opt/old-installation/adapter.js\",\"cli_path\":\"C:/opt/old-installation/cli\",\"node_path\":\"C:/opt/old-installation/node\"}",
+              1,
+              0
+            ]
+          ]
+        },
+        "worker_dependency_selections": {
+          "columns": [
+            "workspace_id",
+            "harness",
+            "revision",
+            "selection_json",
+            "owner_operation_id",
+            "updated_at"
+          ],
+          "rows": [
+            [
+              "personal/default",
+              "claude_code",
+              2,
+              "{\"harness\":\"claude_code\",\"adapter_path\":\"C:/opt/new-installation/adapter.js\",\"cli_path\":\"C:/opt/new-installation/cli\",\"node_path\":\"C:/opt/new-installation/node\"}",
+              "op_6693417061f9f840b88fa9f61f367441",
+              1791051525
+            ]
+          ]
+        },
+        "writer_claim": {
+          "columns": [
+            "singleton",
+            "operation_id",
+            "admitted_at"
+          ],
+          "rows": []
+        }
+      }
+    }
+  ],
+  "producer_revision": "test-only-windows-path-projection-of-cdbb2cec",
+  "schema_version": 23
+}

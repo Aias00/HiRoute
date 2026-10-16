@@ -1,7 +1,6 @@
 //! An explicitly requested native compatibility check. Configuration overrides exist only in
 //! the child process; no managed or daily configuration file is created or restored.
 use super::*;
-use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
 
 impl CodexNativeIngressProbe {
     pub fn run_ephemeral(
@@ -28,35 +27,26 @@ impl CodexNativeIngressProbe {
             .map_err(|_| fail("trusted executable"))?
             .ok_or_else(|| fail("executable"))?;
         let collaboration = cli.is_some();
-        if Path::new("/etc/codex/config.toml").exists()
-            || Path::new("/etc/codex/managed_config.toml").exists()
+        if super::super::codex_profile::codex_has_system_configuration()
+            .map_err(|_| fail("organization configuration isolation"))?
         {
             return Err(fail("organization configuration isolation"));
         }
-        let root = tempfile::Builder::new()
-            .prefix("hiroute-native-auth-")
-            .permissions(fs::Permissions::from_mode(0o700))
-            .tempdir()
+        let root = super::super::probe_files::temporary("hiroute-native-auth-")
             .map_err(|_| fail("private check directory"))?;
         let root_path =
             fs::canonicalize(root.path()).map_err(|_| fail("private check directory"))?;
-        fs::set_permissions(&root_path, fs::Permissions::from_mode(0o700))
-            .map_err(|_| fail("private check directory"))?;
         private_directory(&root_path)?;
         let home = root_path.join("home");
         let codex_home = home.join(".codex");
         let workspace = root_path.join("workspace");
         for path in [&home, &codex_home, &workspace] {
-            fs::DirBuilder::new()
-                .mode(0o700)
-                .create(path)
-                .map_err(|_| fail("private check directory"))?;
-            fs::set_permissions(path, fs::Permissions::from_mode(0o700))
+            super::super::probe_files::directory(path)
                 .map_err(|_| fail("private check directory"))?;
             private_directory(path)?;
         }
         let mut challenge = cli
-            .map(|cli| http::CollaborationChallenge::prepare(&home, cli))
+            .map(|cli| http::CollaborationChallenge::prepare(&home, &codex_home, cli))
             .transpose()
             .map_err(fail)?;
         // No shell interpolation, secret argv, inherited auth, project rules or managed file.
@@ -71,7 +61,15 @@ impl CodexNativeIngressProbe {
         );
         let mut command = Command::new(&binary);
         command.arg("exec").arg("--ignore-rules");
-        let mut child = command
+        #[cfg(windows)]
+        if collaboration {
+            // Codex 0.160.0 / a956835d core/exec_policy.rs rejects unmatched
+            // commands under readonly + Never when the Windows backend is Disabled.
+            // Select the actual restricted-token backend, retaining both restrictions.
+            // Never use an execpolicy allow rule: all explicit matches bypass sandboxing.
+            command.args(["-c", "windows.sandbox=\"unelevated\""]);
+        }
+        command
             .args([
                 "--ephemeral",
                 "--skip-git-repo-check",
@@ -100,10 +98,22 @@ impl CodexNativeIngressProbe {
             .current_dir(&workspace)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stderr(Stdio::null());
+        #[cfg(unix)]
+        let child = command
             .process_group(0)
             .spawn()
             .map_err(|_| fail("native launch"))?;
+        #[cfg(windows)]
+        let child = super::super::windows_runtime::spawn(
+            &command,
+            false,
+            hiroute_platform::windows::job::Stream::Null,
+            hiroute_platform::windows::job::Stream::Null,
+            hiroute_platform::windows::job::Stream::Null,
+        )
+        .map_err(|_| fail("native launch"))?;
+        let mut child = super::super::NativeProbeProcess::new(child);
         let started = Instant::now();
         let mut requests = 0;
         let result = (|| {
@@ -125,8 +135,8 @@ impl CodexNativeIngressProbe {
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
                     Err(_) => return Err(fail("loopback accept")),
                 }
-                if let Some(status) = child.try_wait().map_err(|_| fail("native wait"))? {
-                    return if status.success()
+                if let Some(success) = child.observe().map_err(|_| fail("native wait"))? {
+                    return if success
                         && requests > 0
                         && challenge.as_ref().is_none_or(|check| check.complete())
                     {
@@ -142,14 +152,14 @@ impl CodexNativeIngressProbe {
             }
         })();
         // Reap the process before the private directory is reclaimed on either outcome.
-        if child.try_wait().ok().flatten().is_none() {
-            let _ = nix::sys::signal::killpg(
-                nix::unistd::Pid::from_raw(child.id() as i32),
-                nix::sys::signal::Signal::SIGKILL,
-            );
+        if child.stop().is_err() {
+            let _ = root.keep();
+            return Err(fail("native cleanup"));
         }
-        let _ = child.wait();
         result?;
+        if let Some(challenge) = &challenge {
+            challenge.verify_after_stop().map_err(fail)?;
+        }
         Ok(CodexIngressEvidence {
             observed: Instant::now(),
             observed_at: now(),

@@ -1,5 +1,5 @@
 pub(crate) mod source_snapshot;
-use std::fs::{self, File};
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use hiroute_domain::CanonicalDigest;
@@ -59,13 +59,13 @@ impl SqliteBackup {
         key_id: Option<&CanonicalDigest>,
     ) -> Result<Self, LocalStorageError> {
         let parent = path.parent().ok_or(LocalStorageError::InvalidData)?;
-        prepare_owner_directory(parent)?;
+        crate::prepare_owner_directory(parent)?;
         let attempt_id = random_attempt_id()?;
         let file_name = path
             .file_name()
             .and_then(|name| name.to_str())
             .ok_or(LocalStorageError::InvalidData)?;
-        // `VACUUM INTO` creates the destination before this process can tighten its mode. A crash
+        // On Unix, `VACUUM INTO` creates the destination before this process can tighten its mode. A crash
         // in that small window leaves a current-uid regular file in an already owner-only
         // directory. Reconcile those exact attempt names before allocating the next attempt so a
         // restart never treats a recoverable 0644 SQLite stage as a permanent permission fault.
@@ -78,12 +78,17 @@ impl SqliteBackup {
 
         connection.execute_batch("PRAGMA wal_checkpoint(FULL)")?;
         let source_state_digest = database_state_digest(connection)?;
+        // SQLite explicitly accepts an existing empty INTO file. Allocate it
+        // privately first so an elevated default token owner never reaches the
+        // backup, including during the crash window before VACUUM completes.
+        #[cfg(windows)]
+        hiroute_platform::durable::write_private_new(&stage, b"")?;
         connection.execute(
             "VACUUM main INTO ?1",
             params![stage.to_string_lossy().as_ref()],
         )?;
         set_owner_file_permissions(&stage)?;
-        File::open(&stage)?.sync_all()?;
+        hiroute_platform::durable::sync_file(&stage)?;
         validate_database(&stage)?;
         let identity = database_identity(connection)?;
         if identity
@@ -105,7 +110,7 @@ impl SqliteBackup {
             attempt_id: attempt_id.clone(),
         };
         write_manifest(&stage_manifest, &manifest)?;
-        File::open(parent)?.sync_all()?;
+        hiroute_platform::durable::directory_barrier(parent)?;
 
         let final_manifest = manifest_path(path);
         if path.exists() || final_manifest.exists() {
@@ -123,24 +128,24 @@ impl SqliteBackup {
             // Preserve stale or half-published finals for forensic recovery; they never block a
             // fresh exact attempt and are never silently reused for a different source snapshot.
             if path.exists() {
-                fs::rename(
+                hiroute_platform::durable::rename(
                     path,
                     parent.join(format!(".{file_name}.{attempt_id}.stale.db")),
                 )?;
             }
             if final_manifest.exists() {
-                fs::rename(
+                hiroute_platform::durable::rename(
                     &final_manifest,
                     parent.join(format!(".{file_name}.{attempt_id}.stale.manifest.json")),
                 )?;
             }
-            File::open(parent)?.sync_all()?;
+            hiroute_platform::durable::directory_barrier(parent)?;
         }
 
-        fs::rename(&stage, path)?;
-        File::open(parent)?.sync_all()?;
-        fs::rename(&stage_manifest, &final_manifest)?;
-        File::open(parent)?.sync_all()?;
+        hiroute_platform::durable::rename(&stage, path)?;
+        hiroute_platform::durable::directory_barrier(parent)?;
+        hiroute_platform::durable::rename(&stage_manifest, &final_manifest)?;
+        hiroute_platform::durable::directory_barrier(parent)?;
         let backup = Self::open(path)?;
         cleanup_orphan_stages(parent, file_name)?;
         Ok(backup)
@@ -204,18 +209,28 @@ impl SqliteBackup {
             return Err(LocalStorageError::InvalidData);
         }
         let parent = destination.parent().ok_or(LocalStorageError::InvalidData)?;
-        prepare_owner_directory(parent)?;
+        crate::prepare_owner_directory(parent)?;
         let attempt = random_attempt_id()?;
         let temporary = parent.join(format!(".restore-{attempt}.stage.db"));
+        #[cfg(windows)]
+        {
+            use hiroute_platform::windows::security;
+            let mut source = security::open_owner_only(&self.path, false)?;
+            let mut target = security::create_owner_only_file(&temporary)?;
+            std::io::copy(&mut source, &mut target)?;
+            target.sync_all()?;
+            security::verify_owner_only_handle(&target, false)?;
+        }
+        #[cfg(not(windows))]
         fs::copy(&self.path, &temporary)?;
         set_owner_file_permissions(&temporary)?;
-        File::open(&temporary)?.sync_all()?;
+        hiroute_platform::durable::sync_file(&temporary)?;
         validate_database(&temporary)?;
         if file_digest(&temporary)? != self.manifest.source_digest {
             return Err(LocalStorageError::InvalidData);
         }
-        fs::rename(&temporary, destination)?;
-        File::open(parent)?.sync_all()?;
+        hiroute_platform::durable::rename(&temporary, destination)?;
+        hiroute_platform::durable::directory_barrier(parent)?;
         validate_database(destination)?;
         if file_digest(destination)? != self.manifest.source_digest {
             return Err(LocalStorageError::InvalidData);
@@ -376,7 +391,7 @@ impl BackupSet {
         target_schema_version: u32,
         startup_migration: bool,
     ) -> Result<Self, LocalStorageError> {
-        prepare_owner_directory(backup_root)?;
+        crate::prepare_owner_directory(backup_root)?;
         if reconcile_set_manifest_publication(backup_root)? {
             let existing = Self::open_inner(backup_root)?;
             if existing.target_schema_version != target_schema_version
@@ -452,7 +467,7 @@ impl BackupSet {
     }
 
     pub(crate) fn open_inner(backup_root: &Path) -> Result<Self, LocalStorageError> {
-        prepare_owner_directory(backup_root)?;
+        crate::prepare_owner_directory(backup_root)?;
         if !reconcile_set_manifest_publication(backup_root)? {
             return Err(LocalStorageError::InvalidData);
         }
@@ -467,7 +482,7 @@ impl BackupSet {
         if !backup_root.exists() {
             return Ok(false);
         }
-        prepare_owner_directory(backup_root)?;
+        crate::prepare_owner_directory(backup_root)?;
         reconcile_set_manifest_publication(backup_root)
     }
 
@@ -540,15 +555,14 @@ impl BackupSet {
             return validate_restored_set(destination, &expected);
         }
         let parent = destination.parent().ok_or(LocalStorageError::InvalidData)?;
-        prepare_owner_directory(parent)?;
+        crate::prepare_owner_directory(parent)?;
         let name = destination
             .file_name()
             .and_then(|name| name.to_str())
             .ok_or(LocalStorageError::InvalidData)?;
         let attempt = random_attempt_id()?;
         let stage = parent.join(format!(".{name}.{attempt}.restore-set"));
-        fs::create_dir(&stage)?;
-        set_owner_directory_permissions(&stage)?;
+        hiroute_platform::private_fs::create_directory(&stage)?;
 
         for (backup, name) in [
             (&self.control, "control.db"),
@@ -561,9 +575,9 @@ impl BackupSet {
         }
         write_set_manifest(&stage.join(BACKUP_SET_MANIFEST_NAME), &expected)?;
         validate_restored_set(&stage, &expected)?;
-        File::open(&stage)?.sync_all()?;
-        fs::rename(&stage, destination)?;
-        File::open(parent)?.sync_all()?;
+        hiroute_platform::durable::directory_barrier(&stage)?;
+        hiroute_platform::durable::rename(&stage, destination)?;
+        hiroute_platform::durable::directory_barrier(parent)?;
         validate_restored_set(destination, &expected)
     }
 
@@ -579,7 +593,7 @@ impl BackupSet {
             self.persist_phase(barrier, BackupSetPhase::Restoring)?;
         }
         let parent = live_root.parent().ok_or(LocalStorageError::InvalidData)?;
-        prepare_owner_directory(parent)?;
+        crate::prepare_owner_directory(parent)?;
         let live_name = live_root
             .file_name()
             .and_then(|name| name.to_str())
@@ -602,12 +616,12 @@ impl BackupSet {
             if previous.exists() {
                 return Err(LocalStorageError::InvalidData);
             }
-            fs::rename(live_root, &previous)?;
-            File::open(parent)?.sync_all()?;
+            hiroute_platform::durable::rename(live_root, &previous)?;
+            hiroute_platform::durable::directory_barrier(parent)?;
         }
         if !live_root.exists() {
-            fs::rename(&ready, live_root)?;
-            File::open(parent)?.sync_all()?;
+            hiroute_platform::durable::rename(&ready, live_root)?;
+            hiroute_platform::durable::directory_barrier(parent)?;
         }
         validate_restored_set(live_root, &expected)?;
         self.persist_phase(barrier, BackupSetPhase::Restored)
@@ -1064,15 +1078,15 @@ fn publish_set_manifest(
     // The committed name is the durable proof that the complete JSON bytes were fsynced. A
     // writing name can therefore always be discarded after a crash without attempting to parse
     // bytes that may be empty or truncated.
-    File::open(root)?.sync_all()?;
-    fs::rename(&writing, &committed)?;
-    File::open(root)?.sync_all()?;
+    hiroute_platform::durable::directory_barrier(root)?;
+    hiroute_platform::durable::rename(&writing, &committed)?;
+    hiroute_platform::durable::directory_barrier(root)?;
     let final_path = set_manifest_path(root);
     if !replace && final_path.exists() {
         return Err(LocalStorageError::InvalidData);
     }
-    fs::rename(&committed, &final_path)?;
-    File::open(root)?.sync_all()?;
+    hiroute_platform::durable::rename(&committed, &final_path)?;
+    hiroute_platform::durable::directory_barrier(root)?;
     validate_owner_file(&final_path)
 }
 
@@ -1084,7 +1098,7 @@ fn reconcile_set_manifest_publication(root: &Path) -> Result<bool, LocalStorageE
         for (stage, _) in stages {
             tighten_and_remove_owner_orphan(&stage)?;
         }
-        File::open(root)?.sync_all()?;
+        hiroute_platform::durable::directory_barrier(root)?;
         return Ok(true);
     }
 
@@ -1096,7 +1110,7 @@ fn reconcile_set_manifest_publication(root: &Path) -> Result<bool, LocalStorageE
         }
     }
     if committed.is_empty() {
-        File::open(root)?.sync_all()?;
+        hiroute_platform::durable::directory_barrier(root)?;
         return Ok(false);
     }
     if committed.len() != 1 {
@@ -1108,8 +1122,8 @@ fn reconcile_set_manifest_publication(root: &Path) -> Result<bool, LocalStorageE
         serde_json::from_slice(&fs::read(&stage)?).map_err(|_| LocalStorageError::InvalidData)?;
     validate_set_manifest_shape(&manifest)?;
     validate_manifest_against_backups(root, &manifest)?;
-    fs::rename(stage, &final_path)?;
-    File::open(root)?.sync_all()?;
+    hiroute_platform::durable::rename(stage, &final_path)?;
+    hiroute_platform::durable::directory_barrier(root)?;
     validate_owner_file(&final_path)?;
     Ok(true)
 }
@@ -1125,17 +1139,7 @@ fn write_set_manifest(path: &Path, manifest: &BackupSetManifest) -> Result<(), L
 }
 
 fn write_owner_file(path: &Path, bytes: &[u8]) -> Result<(), LocalStorageError> {
-    let mut options = fs::OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    let mut file = options.open(path)?;
-    use std::io::Write as _;
-    file.write_all(bytes)?;
-    file.sync_all()?;
+    hiroute_platform::durable::write_private_new(path, bytes)?;
     validate_owner_file(path)
 }
 
@@ -1170,7 +1174,7 @@ fn cleanup_orphan_stages(parent: &Path, file_name: &str) -> Result<(), LocalStor
             tighten_and_remove_owner_orphan(&entry.path())?;
         }
     }
-    File::open(parent)?.sync_all()?;
+    hiroute_platform::durable::directory_barrier(parent)?;
     Ok(())
 }
 
@@ -1204,33 +1208,9 @@ fn validate_database(path: &Path) -> Result<(), LocalStorageError> {
     }
 }
 
-fn prepare_owner_directory(path: &Path) -> Result<(), LocalStorageError> {
-    if path.exists() {
-        let metadata = fs::symlink_metadata(path)?;
-        if metadata.file_type().is_symlink() || !metadata.file_type().is_dir() {
-            return Err(LocalStorageError::Permission);
-        }
-    } else {
-        fs::create_dir_all(path)?;
-        set_owner_directory_permissions(path)?;
-    }
-    Ok(())
-}
-
-fn set_owner_directory_permissions(path: &Path) -> Result<(), LocalStorageError> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
-    }
-    let metadata = fs::symlink_metadata(path)?;
-    if metadata.file_type().is_symlink() || !metadata.file_type().is_dir() {
-        return Err(LocalStorageError::Permission);
-    }
-    Ok(())
-}
-
 fn set_owner_file_permissions(path: &Path) -> Result<(), LocalStorageError> {
+    #[cfg(windows)]
+    hiroute_platform::windows::security::verify_owner_only(path, false)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -1240,6 +1220,8 @@ fn set_owner_file_permissions(path: &Path) -> Result<(), LocalStorageError> {
 }
 
 fn validate_owner_file(path: &Path) -> Result<(), LocalStorageError> {
+    #[cfg(windows)]
+    let _held = hiroute_platform::windows::security::open_owner_only(path, false)?;
     let metadata = fs::symlink_metadata(path)?;
     if metadata.file_type().is_symlink() || !metadata.file_type().is_file() {
         return Err(LocalStorageError::Permission);
@@ -1275,6 +1257,9 @@ mod tests {
         fs::write(manifest_path(&backup_path), b"stale-final").unwrap();
         let parent = backup_path.parent().unwrap();
         let orphan = parent.join(".control.db.deadbeef.stage.db");
+        #[cfg(windows)]
+        hiroute_platform::durable::write_private_new(&orphan, b"orphan").unwrap();
+        #[cfg(not(windows))]
         fs::write(&orphan, b"orphan").unwrap();
         set_owner_file_permissions(&orphan).unwrap();
         let second = control
@@ -1287,6 +1272,10 @@ mod tests {
         let restored = root.join("restored/control.db");
         second.restore_to(&restored).unwrap();
         validate_database(&restored).unwrap();
+        #[cfg(windows)]
+        for path in [&backup_path, &manifest_path(&backup_path), &restored] {
+            hiroute_platform::windows::security::verify_owner_only(path, false).unwrap();
+        }
     }
 
     #[test]
@@ -1347,7 +1336,7 @@ mod tests {
         });
         let backup_path = root.join("backups/control.db");
         let parent = backup_path.parent().unwrap();
-        prepare_owner_directory(parent).unwrap();
+        crate::prepare_owner_directory(parent).unwrap();
 
         for crash_id in ["after-vacuum-one", "after-vacuum-two"] {
             let orphan = parent.join(format!(".control.db.{crash_id}.stage.db"));
@@ -1405,7 +1394,7 @@ mod tests {
         .unwrap();
         let backup_path = root.join("backups/control.db");
         let parent = backup_path.parent().unwrap();
-        prepare_owner_directory(parent).unwrap();
+        crate::prepare_owner_directory(parent).unwrap();
         let target = root.join("must-not-change");
         fs::write(&target, b"owner-data").unwrap();
         set_owner_file_permissions(&target).unwrap();
@@ -1476,7 +1465,7 @@ mod tests {
             set_manifest_stage_prefix()
         ));
         fs::rename(&final_manifest, &stage_manifest).unwrap();
-        File::open(&backup_root).unwrap().sync_all().unwrap();
+        hiroute_platform::durable::directory_barrier(&backup_root).unwrap();
         let reopened = BackupSet::open(&crate::test_storage_authority(), &backup_root).unwrap();
         assert_eq!(reopened.set_id(), set_id);
         assert_eq!(reopened.phase(), BackupSetPhase::SourcePublished);
@@ -1506,11 +1495,23 @@ mod tests {
         exact
             .restore_to_new_root(&test_writer_barrier(), &restored)
             .unwrap();
+        #[cfg(windows)]
+        hiroute_platform::windows::security::verify_owner_only(&restored, true).unwrap();
         for (name, backup) in [
             ("control.db", &exact.control),
             ("runtime.db", &exact.runtime),
             ("secrets.db", &exact.secrets),
         ] {
+            #[cfg(windows)]
+            {
+                hiroute_platform::windows::security::verify_owner_only(&restored.join(name), false)
+                    .unwrap();
+                hiroute_platform::windows::security::verify_owner_only(
+                    &manifest_path(&restored.join(name)),
+                    false,
+                )
+                .unwrap();
+            }
             let connection = Connection::open_with_flags(
                 restored.join(name),
                 OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
@@ -1521,6 +1522,12 @@ mod tests {
                 backup.manifest().source_state_digest
             );
         }
+        #[cfg(windows)]
+        hiroute_platform::windows::security::verify_owner_only(
+            &restored.join(BACKUP_SET_MANIFEST_NAME),
+            false,
+        )
+        .unwrap();
     }
 
     #[test]

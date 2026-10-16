@@ -12,7 +12,7 @@ a prerequisite, not a model call, installed Skill invocation or resumable task.
 | Capability | Shared owners | Native detail / evidence |
 | --- | --- | --- |
 | Scan, prepare and import model sources | [Source admission map](architecture.md#model-sources-and-native-configuration), [model connection assembly](../../crates/daemon/src/control/runtime/model_connections.rs) | [Pi acceptance](../../tools/product-e2e/tests/PI_INTEGRATION.md), [DSH acceptance](../../tools/product-e2e/tests/DSH_INTEGRATION.md) |
-| Configure, edit and restore models | [Settings transaction](../../crates/application/src/agent_connection/settings), [typed facts](../../crates/daemon/src/control/runtime/settings_facts), [Desktop Agent feature](../../apps/desktop/src/features/agents/README.md) | [Additional native provider guide](../../crates/integrations/src/agents/additional_native/README.md), [saved-model journey](../../crates/daemon/tests/support/additional_model_product.py) |
+| Configure, edit and restore models | [Settings transaction](../../crates/application/src/agent_connection/settings), [typed facts](../../crates/daemon/src/control/runtime/settings_facts), [Desktop Agent feature](../../apps/desktop/src/features/agents/README.md) | [Additional native provider guide](../../crates/integrations/src/agents/additional_native/README.md), [saved-model journey](../../crates/daemon/tests/support/additional_model_product.py), [Windows ordinary Pi/DSH clients](../../crates/daemon/tests/support/windows_user_models.rs), [Windows Qoder official-account journey](../../crates/daemon/tests/support/windows_qoder_user_models.rs) |
 | Enable, edit or disable task collaboration independently | [CLI intent workflow](../../crates/cli/src/collaboration.rs), [Skill effects](../../crates/application/src/agent_connection), [local checks](../../apps/desktop/src-tauri/src/agent_check_session.rs) | [CLI workflow regressions](../../crates/cli/src/collaboration/tests.rs), [real main-Agent → public CLI → Worker journey](../../crates/daemon/tests/support/collaboration_product.py) |
 
 Qoder/Pi/DSH saved models use one owned provider per Plan with an explicit
@@ -67,6 +67,60 @@ the existing local Worker CLI and does not become a Worker executor.
 The [profile guide](../../crates/daemon/src/delegation/profile/README.md) owns startup
 flags, credential delivery, native tool permissions and resource restrictions.
 Do not duplicate the shared admission, process or retention lifecycle for an ecosystem.
+
+On Windows, [native launch admission](../../crates/integrations/src/agents/windows_runtime.rs)
+resolves known npm producers to their declared JavaScript entry and selected Node;
+it never evaluates a `.cmd` shim. System shell selectors come from the actual
+Windows system directory. Worker and CPA subscription-source HOME discovery use
+the same account native-profile selector in the daemon control runtime,
+while explicit ecosystem configuration roots retain their existing meaning.
+[Managed Claude drive paths](../../crates/integrations/src/agents/managed_launch/windows.rs)
+project Rust's verbatim spelling only after reparse-free native file identity
+checks. Discovery and launch share that boundary; the launch retains the selected
+image and trusted helper handles. UNC and device aliases remain outside this contract.
+[Live checks](../../crates/daemon/src/control/runtime/agent_live_check_windows.rs)
+capture output in private files and retain the process Job until all owned tools
+stop. Follow those owners for shell, environment, timeout or background-session
+differences rather than duplicating ecosystem lifecycle code.
+
+The Windows [Qoder collaboration probe](../../crates/integrations/src/agents/qoder_probe.rs)
+retains the actual Skill directory and file before launching the client. Its
+[receipt binding](../../crates/integrations/src/agents/qoder_probe_skill_diagnostic.rs)
+accepts equivalent disk spellings only after native identity, captured permissions and
+content checks; it rejects foreign/reparse paths, changed files and split messages.
+The [HTTP peer](../../crates/integrations/src/agents/qoder_probe_http.rs) still requires
+correlated native Skill and CLI results. No credential contents enter these checks.
+The [private workspace projection](../../crates/integrations/src/agents/qoder_probe_workspace.rs)
+binds Qoder and Git Bash to one ordinary drive spelling of the same private directory.
+Its `Bash` call uses Git Bash syntax on Windows: the selected CLI's native DOS
+path is quoted for Bash. The separate PowerShell tool is not that execution boundary;
+see the [probe ownership guide](../../crates/integrations/src/agents/QODER_PROBE.md).
+
+The [Codex collaboration check](../../crates/integrations/src/agents/collaboration_probe.rs)
+selects the native restricted-token sandbox for its Windows read-only process.
+Its independent [write rejection control](../../crates/integrations/src/agents/collaboration_probe/readonly_control.rs)
+must observe the actual shell's denied write before accepting Skill reads and
+execution of the public CLI; a policy rejection before shell execution is not
+successful sandbox evidence.
+Its [closed tool-output facts](../../crates/integrations/src/agents/collaboration_probe/tool_diagnostic.rs)
+are observed before failed receipt checks return, so early rejection retains
+fixed execution-header facts without logging native output or session identifiers.
+Nonce-bound script checkpoints retain the entered phase, fixed language mode and
+numeric failures; they cannot replace the actual denied-write receipt. Follow the
+read-only control owner for the Windows parse-only gate and shell boundaries.
+
+[CLI dependency input](../../crates/cli/src/worker/selection_windows.rs) projects
+ordinary local drive paths to the existing canonical selection before transport,
+retaining file and ancestor leases through the call. Already canonical requests
+preserve completed-operation replay even after the selected files disappear;
+Application still owns the canonical tuple, revision and durable transaction.
+The shared npm reader lets callers inspect original manifest and declared-entry
+names before reading or canonicalizing them. The [Pi locator](../../crates/integrations/src/agents/pi_native.rs)
+uses that boundary to bind a generated shim to the package's declared entry and
+manifest digest without evaluating the shim or changing borrowed ownership.
+Direct Pi entries retain the [single package reader](../../crates/integrations/src/agents/pi_runtime.rs)
+and its nearest-match semantics; original declared-bin names are inspected before
+canonicalization, so an alias cannot disappear from the identity check.
 
 ### Pi compatibility is a capability contract
 
@@ -126,6 +180,15 @@ adds an actionable `[HiRoute]` reason to the existing Worker progress window;
 [lifecycle](../../crates/daemon/src/delegation/lifecycle.rs) flushes it after owned
 process cleanup. This host explanation is separate from the model result.
 
+Claude [terminal finalization](../../crates/daemon/src/delegation/lifecycle/terminal.rs)
+keeps ACP live while the exact native transcript drains after result publication
+and credential revocation. Terminal tool/text admission closes first; bounded
+history observation controls Continue eligibility. An interrupted observation
+retains the published result and finalization lease with history readiness false.
+Follow the [ACP guide](../../crates/daemon/src/delegation/acp/README.md) and
+[causal tests](../../crates/daemon/src/delegation/lifecycle/tests/terminal.rs) for
+this ordering; installed native tools and Continue require their own acceptance.
+
 The task root owns context descriptors and exact-session bindings. Run roots own
 temporary launch materials and credentials. Borrowed HOME/config/history remain
 native-owned; Continue reads the original descriptor rather than today's service
@@ -136,6 +199,8 @@ Only registered old Codex/Claude tasks may use the legacy private-root recovery
 path in the [compatibility registry](../../contracts/compatibility-support.v1.json).
 A corrupted current binding is not legacy absence. Resource discovery and native
 permission policy are separate; using one OS account does not make HOME a sandbox.
+The legacy scanner encodes filesystem components with `/` at the retained-path
+boundary; native Windows separators do not change that portable contract.
 
 `Preparing` is committed before any native process can spawn. Cancelling an
 `Accepted` run therefore atomically records `Cancelled` with complete cleanup;

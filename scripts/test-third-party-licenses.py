@@ -3,9 +3,12 @@
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import tarfile
 import tempfile
+import subprocess
+import sys
 import unittest
 
 
@@ -18,6 +21,23 @@ SPEC.loader.exec_module(licenses)
 
 
 class ThirdPartyLicenseTests(unittest.TestCase):
+    def test_unicode_notices_are_utf8_bytes_even_with_an_ascii_process_locale(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "notices"
+            program = (
+                "import importlib.util; from pathlib import Path; "
+                f"s=importlib.util.spec_from_file_location('licenses',{str(SPEC.origin)!r}); "
+                "m=importlib.util.module_from_spec(s); s.loader.exec_module(m); "
+                "notice=('Copyright '+chr(322)+chr(20013)+'\\n').encode('utf-8'); "
+                "r=m.package_record('cargo','unicode','1.0.0','MIT',None,[('LICENSE',notice)]); "
+                f"m.render([r],{{}},Path({str(output)!r}))"
+            )
+            environment = dict(os.environ, LC_ALL="C", PYTHONUTF8="0", PYTHONCOERCECLOCALE="0")
+            subprocess.run([sys.executable, "-c", program], env=environment, check=True, capture_output=True)
+            rendered = (output / "THIRD-PARTY-LICENSES.txt").read_bytes()
+            self.assertIn("Copyright ł中\n".encode("utf-8"), rendered)
+            self.assertNotIn(b"\r\n", rendered)
+
     def test_source_archive_extraction_is_portable_and_rejects_traversal(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

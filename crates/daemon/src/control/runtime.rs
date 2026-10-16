@@ -1,6 +1,4 @@
 use std::collections::BTreeMap;
-use std::fs::{self, OpenOptions};
-use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Weak};
@@ -81,6 +79,8 @@ mod native_additional_model;
 mod native_claude_model;
 mod native_hermes;
 mod native_model;
+mod observation_key;
+use observation_key::observation_workspace_key;
 mod plan_content;
 mod plan_content_snapshot;
 mod plan_versions;
@@ -119,6 +119,55 @@ struct RuntimeOpenOverrides {
     model_transport: Option<Arc<dyn hiroute_integrations::ModelDirectoryTransportV1>>,
     codex_desktop_engine: Option<PathBuf>,
     storage_startup: hiroute_local_storage::StorageStartupOptions,
+}
+
+pub(crate) fn native_agent_home() -> Result<PathBuf, String> {
+    #[cfg(windows)]
+    {
+        // This selector exists only in the libtest child launched by test_support.
+        // Production always discovers the actual account profile through Windows.
+        #[cfg(test)]
+        if std::env::var_os("HIROUTE_ISOLATED_DAEMON_TEST")
+            .is_some_and(|selector| !selector.is_empty())
+        {
+            let home = std::env::var_os("HOME")
+                .map(PathBuf::from)
+                .filter(|path| path.is_absolute())
+                .ok_or_else(|| {
+                    "isolated Agent discovery requires an absolute test HOME".to_owned()
+                })?;
+            hiroute_platform::windows::security::verify_owner_only(&home, true).map_err(
+                |error| format!("isolated Agent discovery HOME is not private: {error}"),
+            )?;
+            return Ok(home);
+        }
+        hiroute_platform::windows::background::profile().map_err(|error| {
+            format!("Windows account profile is unavailable for Agent discovery: {error}")
+        })
+    }
+    #[cfg(not(windows))]
+    {
+        std::env::var_os("HOME")
+            .map(PathBuf::from)
+            .ok_or_else(|| "HOME is unavailable for Agent discovery".to_owned())
+    }
+}
+
+#[cfg(all(test, windows))]
+#[test]
+fn windows_agent_discovery_uses_the_private_isolated_test_home() {
+    if crate::test_support::isolated_agent_home(
+        "control::runtime::windows_agent_discovery_uses_the_private_isolated_test_home",
+    ) {
+        return;
+    }
+    let home = native_agent_home().unwrap();
+    assert_eq!(home, PathBuf::from(std::env::var_os("HOME").unwrap()));
+    assert_ne!(
+        home,
+        hiroute_platform::windows::background::profile().unwrap()
+    );
+    hiroute_platform::windows::security::verify_owner_only(&home, true).unwrap();
 }
 
 impl ProductionControlRuntime {
@@ -296,9 +345,7 @@ impl ProductionControlRuntime {
             .begin_plan_version_recovery()
             .map_err(|error| error.to_string())?;
         release_install::activate_release_catalog_revisions(&stores, &release_catalog)?;
-        let home = std::env::var_os("HOME")
-            .map(PathBuf::from)
-            .ok_or_else(|| "HOME is unavailable for Agent discovery".to_owned())?;
+        let home = native_agent_home()?;
         let project = std::env::current_dir().map_err(|error| error.to_string())?;
         let scanner = match overrides.scanner {
             Some(scanner) => scanner,
@@ -769,7 +816,7 @@ impl ProductionControlRuntime {
         Arc::clone(&self.adapter.delegation_run_authority)
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub(crate) fn agent_grant_resolver(&self) -> Arc<dyn super::AgentGrantResolverPort> {
         self.adapter.clone()
     }
@@ -1577,71 +1624,6 @@ fn map_port(error: PortError) -> ControlReadError {
         PortErrorCode::Corrupt | PortErrorCode::InvalidData => ControlReadError::Corrupt,
         _ => ControlReadError::Unavailable,
     }
-}
-
-fn observation_workspace_key(storage_root: &Path) -> Result<Zeroizing<[u8; 32]>, String> {
-    let key_path = storage_root.join("observation-hmac-key");
-    let mut key = [0_u8; 32];
-    match OpenOptions::new().read(true).open(&key_path) {
-        Ok(mut file) => {
-            file.read_exact(&mut key)
-                .map_err(|error| error.to_string())?;
-            let mut trailing = [0_u8; 1];
-            if file
-                .read(&mut trailing)
-                .map_err(|error| error.to_string())?
-                != 0
-            {
-                return Err("observation authority key has an invalid length".to_owned());
-            }
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            fs::create_dir_all(storage_root).map_err(|error| error.to_string())?;
-            getrandom::fill(&mut key).map_err(|error| error.to_string())?;
-            create_owner_key(&key_path, &key)?;
-        }
-        Err(error) => return Err(error.to_string()),
-    }
-    validate_owner_key(&key_path)?;
-    Ok(Zeroizing::new(key))
-}
-
-#[cfg(unix)]
-fn create_owner_key(path: &Path, key: &[u8; 32]) -> Result<(), String> {
-    use std::os::unix::fs::OpenOptionsExt;
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(path)
-        .map_err(|error| error.to_string())?;
-    file.write_all(key).map_err(|error| error.to_string())?;
-    file.sync_all().map_err(|error| error.to_string())
-}
-
-#[cfg(not(unix))]
-fn create_owner_key(path: &Path, key: &[u8; 32]) -> Result<(), String> {
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path)
-        .map_err(|error| error.to_string())?;
-    file.write_all(key).map_err(|error| error.to_string())?;
-    file.sync_all().map_err(|error| error.to_string())
-}
-
-#[cfg(unix)]
-fn validate_owner_key(path: &Path) -> Result<(), String> {
-    let metadata = fs::symlink_metadata(path).map_err(|error| error.to_string())?;
-    if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
-        return Err("observation authority key is not a regular file".to_owned());
-    }
-    Ok(())
-}
-
-#[cfg(not(unix))]
-fn validate_owner_key(_path: &Path) -> Result<(), String> {
-    Ok(())
 }
 
 #[cfg(test)]

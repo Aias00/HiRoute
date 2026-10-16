@@ -11,6 +11,7 @@
 | Local control contract | [Application API](../../crates/application-api/src), [client-core](../../crates/client-core/src) | Shared requests/responses for CLI and Desktop; generated schemas come from typed producers |
 | Business workflows | [Application](../../crates/application/src) | Planning and authorization through ports; external effects are supplied by the daemon |
 | Composition and process lifecycle | [Daemon control](../../crates/daemon/src/control/runtime), [delegation](../../crates/daemon/src/delegation) | Concrete adapters, accepted operations, Worker execution and recovery |
+| Operating-system primitives | [Platform](../../crates/platform/README.md) | Cross-platform private filesystem creation/reads and owned cleanup; native handles, ACLs, file identity and local byte streams. Business authority and lifecycle remain with callers |
 | Durable state and external effects | [Local Storage](../../crates/local-storage/src), [Integrations](../../crates/integrations/src) | Store current state; read or conditionally change external Agent configuration through its native leaf |
 | Request execution | [Gateway](../../crates/gateway/README.md), [gateway-core](../../crates/gateway-core/src) | Authenticate against published authority, plan attempts, adapt protocols and enforce execution budgets |
 | Business evidence | [Observation](../../crates/observation/src), [authorized queries](../../crates/application/src/observation_query) | Execution facts, managed content, session queries and valuation; [diagnostics](../../crates/diagnostics/src) remain separate |
@@ -46,7 +47,9 @@ leases; routing, retry and context identities continue using the execution key.
 CLI secret entry uses the shared local [protected input socket](../../crates/daemon/src/control/standalone.rs)
 in both standalone and Desktop-owned `role=all` processes. The [CLI input owner](../../crates/cli/src/host_commands.rs)
 reads inherited descriptors; ordinary control requests never carry secret bytes.
-All current hosts and the CLI resolve its `hiroute/input.sock` path through host-runtime.
+All current hosts and the CLI resolve its logical `hiroute/input.sock` endpoint through host-runtime.
+Windows maps it to a private named pipe bound to the held runtime directory and account SID;
+it does not create a filesystem socket. Follow [native ownership](../../crates/platform/README.md).
 The name must fit any runtime root that supports `hiroute/control.sock`, including macOS.
 
 | User step | Owners to follow | Representative guard |
@@ -111,6 +114,7 @@ Scan → Prepare → Save → restart → native use, including stale-source rej
 | Named tool decision facts and request receipts | [Strict Gateway adapter](../../crates/integrations/src/gateway/mod.rs), [Product tool choice](../../crates/domain/src/observation/execution.rs), [receipt writer](../../crates/observation/src/receipt/mod.rs) | Preserve callable kind and name; Product's implicit Function encoding preserves historical digests. Each completed HTTP request closes independently of an unfinished Agent turn; [boundary regressions](../../crates/integrations/src/gateway/tests.rs) cover all tool choices |
 | Lifecycle acceptance of empty response end-stream frames | [Transport acceptance capture](../../crates/gateway/src/observation/content.rs), [Product lifecycle validation](../../crates/domain/src/observation/lifecycle.rs), [bounded receiver](../../crates/observation/src/writer/lifecycle.rs) | Successful zero-byte end-stream writes are real operational events with a zero byte count; identity remains strict. [Receiver regressions](../../crates/observation/src/writer/lifecycle_tests.rs) preserve continuous ACK through RequestFinished |
 | Capture completeness | [Content completeness](../../crates/observation/src/content/completeness.rs), [session query](../../crates/observation/src/query_v2/sessions.rs) | Aggregate every required request/direction; a finished stream or readable preview does not prove the session is complete |
+| Windows service logs | [CLI log reader](../../crates/cli/src/service/windows/logs.rs), [held diagnostic directories](../../crates/diagnostics/src/files/windows.rs) | Read only the daemon writer's current and newest rotated log through existing held directories; settings, keys, reparse points and hardlinks cannot supply log content |
 | Streaming memory | [Capture](../../crates/gateway/src/observation/provider/capture.rs), [pending delivery](../../crates/gateway/src/observation/provider/capture/tracker.rs) | Decoder, projector and delivery tracker share the stream budget; queue capacity is not capture evidence |
 | Reported token usage | [Response driver](../../crates/gateway/src/runtime/driver/response.rs), [completion facts](../../crates/gateway/src/observation/request/completion.rs), [capture tracker](../../crates/gateway/src/observation/provider/capture/tracker.rs) | Nonstream completion retains known usage before request termination; capture records content without duplicating it. Follow the [Gateway guide](../../crates/gateway/README.md#response-failure-evidence) for streaming ownership. |
 | Upstream fault attribution | [Wire projection](../../crates/gateway/src/observation/provider/wire_diagnostic.rs), [attempt association](../../crates/gateway/src/observation/request/diagnostic.rs), [decision calls](../../crates/gateway/src/core_runtime/classification/diagnostic.rs) | Actual bounded model/control fields, negotiated HTTP protocol, closed error codes, hashed request IDs and separate client headers/body commit facts must preserve the real outcome without prompts or provider error text |
@@ -124,6 +128,39 @@ Scan → Prepare → Save → restart → native use, including stale-source rej
 | Decision and competence attribution | [Decision observation map](decision-foundation.md#observation-and-public-consumers) | Attribute scores to the stage that actually ran, with its frozen category/group/candidate and rubric |
 
 ## Changing boundaries
+
+Windows process defaults and private handle validation belong to
+[native security](../../crates/platform/src/windows/security.rs), with suspended-child
+initialization in the [Job launcher](../../crates/platform/src/windows/job.rs).
+The [CPA private-object leaf](../../crates/cpa-bridge/src/windows_private.rs) uses those
+primitives for managed files. The [borrowed native reader](../../crates/cpa-bridge/src/borrowed_native_windows.rs)
+retains external file identity and permission facts through access-lease admission;
+it preserves readable native ACLs instead of adopting managed-file permissions.
+Follow these owners for elevated-account defaults or third-party file creation.
+Native client gates select the installed, pinned producer through
+[Windows acceptance](../../scripts/windows-headless-ci.ps1). Ordinary Agent
+recipes and official Qoder account recipes have separate inventories; the latter
+borrow an explicitly prepared private profile and never obtain account authority
+from pull-request environment secrets.
+Stopped Windows source snapshots preserve native permissions through
+[streamed backup copying](../../crates/local-storage/src/backup/source_snapshot.rs)
+and the [durable stage owner](../../crates/platform/src/durable.rs); the
+[native descriptor owner](../../crates/platform/src/windows/file_security.rs)
+restores creation-recomputed DACL control on the unpublished held stage before
+exact permission verification. Native artifact
+activation uses a sealed-file transition; it does not reopen read-only payloads
+for data writes or clear a target's attributes before replacement.
+Windows Agent configuration and restoration reads share the
+[artifact snapshot reader](../../crates/local-storage/src/control/native_permissions.rs).
+Its [read lease](../../crates/platform/src/windows/read_lease.rs) retains all
+reparse-free ancestors and the regular file while bounded bytes, native identity
+and permissions are checked. Native targets keep their existing size limits and
+borrowed ACLs; private restore files additionally require their private owner.
+Worker New and Continue compare ordinary and verbatim directory spellings through
+the existing [native workspace identity](../../crates/daemon/src/delegation/profile/native_context.rs).
+The [managed profile](../../crates/daemon/src/delegation/installation.rs) and
+[retained root reader](../../crates/daemon/src/delegation/profile/materials.rs)
+still require the recorded marker, volume/file identity and complete ancestry.
 
 Keep a change with the owner that can enforce it. Extend a native leaf for a real
 ecosystem difference; reuse settings, admission, lifecycle and observation owners.

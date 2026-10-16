@@ -59,10 +59,17 @@ Unix children start in a new process group. Stop sends TERM once, retains a shor
 bounded native-cleanup window, then KILL fallback within remaining budget. Keep the
 unreaped leader identity while signaling even if adapter exits first; after reap,
 old group IDs support absence checks only, not destructive signals. Budget expiry
-retains owned handles/state for a later bounded stop. A root-only platform needs
-separate native evidence/mechanism for ordinary child-chain cancellation; current
-Windows coverage is recorded from actual runs and their environment. Real cancellation proves tool side effects
-stop while neighboring work continues, not just a signal or root exit.
+retains owned handles/state for a later bounded stop.
+
+Windows launches assign the selected process to an owned Job before resuming it
+and pass only explicitly declared inheritable handles. Stop and cleanup MUST retain
+the native process/Job objects and wait for the owned tree to become empty; leader
+exit, a recycled PID or a successful termination request cannot establish that result.
+Deadline expiry or residual ownership uncertainty remains explicit and retryable.
+A root-only platform needs separate native evidence/mechanism for ordinary child-chain
+cancellation. Windows coverage is recorded from actual runs and their environment.
+Real cancellation proves tool side effects stop while neighboring work continues,
+not just a signal or root exit.
 
 ### Requirement: Bounded cleanup does not replay business work
 

@@ -305,6 +305,14 @@ class SelectionTests(unittest.TestCase):
         self.assertTrue(mixed['rust'])
         self.assertIn('daemon', mixed['groups'])
 
+    def test_windows_development_runner_does_not_select_product_or_hosted_matrix(self):
+        result = plan.select(['scripts/windows-dev.py', 'scripts/windows-dev-host.py',
+                              'scripts/test-windows-dev.py'])
+        self.assertFalse(result['rust'])
+        self.assertFalse(result['frontend'])
+        self.assertEqual(result['product_checks'], [])
+        self.assertIn(['python3', 'scripts/test-windows-dev.py'], result['commands'])
+
     def test_hosted_backend_execution_contract_runs_full_matrix(self):
         for path in sorted(plan.HOSTED_BACKEND_EXECUTION):
             with self.subTest(path=path):
@@ -380,6 +388,15 @@ class SelectionTests(unittest.TestCase):
         self.assertTrue(plan.select(["vendor/cpa/source.json"])["rust"])
         for test in plan.RELEASE_BUILD_TESTS:
             self.assertIn(["python3", "scripts/" + test], plan.select([], full=True)["commands"])
+
+    def test_windows_validation_tooling_preserves_feedback_without_unix_product_builds(self):
+        for path in plan.WINDOWS_VALIDATION_TOOLING | {"tools/windows-agent-fixtures/package-lock.json"}:
+            with self.subTest(path=path):
+                result = plan.select([path])
+                self.assertFalse(result["rust"])
+                self.assertFalse(result["frontend"])
+                self.assertIn(["python3", "scripts/test-windows-ci-report.py"], result["commands"])
+        self.assertIn(["python3", "scripts/test-windows-ci-report.py"], plan.select([], full=True)["commands"])
 
     def test_release_contract_updates_select_their_checks_without_product_builds(self):
         for path in sorted(plan.RELEASE_CONTRACT_TOOLING | {"contracts/releases/v9.0.0.json"}):
@@ -731,7 +748,11 @@ class IntegrationPreflightTests(unittest.TestCase):
                  'issue-spec/project/workflow.md', '.claude/skills/issue-spec-apply',
                  '.agents/skills/hiroute-implementation-writer/SKILL.md',
                  '.agents/skills/hiroute-validation/SKILL.md', '.claude/skills/hiroute-validation',
-                 '.agents/skills/issue-spec-workflow/release.json']
+                 '.agents/skills/issue-spec-workflow/release.json',
+                 '.agents/skills/hiroute-workflow-improvement/SKILL.md',
+                 '.agents/skills/hiroute-workflow-improvement/references/feedback.md',
+                 '.agents/skills/hiroute-workflow-improvement/agents/openai.yaml',
+                 '.claude/skills/hiroute-workflow-improvement']
         result = plan.select(paths)
         self.assertEqual(result['mode'], 'affected')
         self.assertFalse(result['rust'])
@@ -754,7 +775,9 @@ class IntegrationPreflightTests(unittest.TestCase):
                 for command in plan.AGENT_TOOL_COMMANDS[name]:
                     self.assertIn(command, result['commands'])
         for path in ['.agents/skills/unknown/SKILL.md', '.claude/skills/unknown',
-                     'assets/skills/hiroute-cu/SKILL.md', 'assets/skills/hiroute-validation/SKILL.md']:
+                     'assets/skills/hiroute-cu/SKILL.md', 'assets/skills/hiroute-validation/SKILL.md',
+                     '.agents/skills/hiroute-workflow-improvement/scripts/unknown.py',
+                     'assets/skills/hiroute-workflow-improvement/SKILL.md']:
             self.assertEqual(plan.select([path])['mode'], 'full')
 
     def test_only_the_known_operator_skill_is_tooling(self):

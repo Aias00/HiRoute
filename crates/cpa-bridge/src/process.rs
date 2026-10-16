@@ -1,5 +1,6 @@
 use std::io::Write;
 use std::path::PathBuf;
+#[cfg(not(windows))]
 use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
 use std::thread;
@@ -39,6 +40,18 @@ pub trait CpaProcessBackend: Send + Sync {
     fn pid_is_running(&self, pid: u32) -> Result<bool, CpaProcessError>;
 }
 
+pub(crate) fn attach_recovered_process(
+    backend: &dyn CpaProcessBackend,
+    pid: u32,
+) -> Result<Box<dyn CpaProcessHandle>, crate::CpaLifecycleError> {
+    backend
+        .attach_authenticated(pid)
+        .map_err(|error| match error {
+            CpaProcessError::UntrustedOrphan => crate::CpaLifecycleError::UntrustedOrphan,
+            error => crate::CpaLifecycleError::Process(error),
+        })
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct StdCpaProcessBackend;
 
@@ -47,6 +60,7 @@ impl CpaProcessBackend for StdCpaProcessBackend {
         if !launch.config_path.is_absolute() || !launch.work_dir.is_absolute() {
             return Err(CpaProcessError::InvalidLaunch);
         }
+        #[cfg(not(windows))]
         let child = Command::new(launch.binary.path())
             .arg("--config")
             .arg(&launch.config_path)
@@ -61,6 +75,8 @@ impl CpaProcessBackend for StdCpaProcessBackend {
             .stderr(Stdio::null())
             .spawn()
             .map_err(CpaProcessError::Spawn)?;
+        #[cfg(windows)]
+        let child = spawn_windows(launch)?;
         let mut handle = ChildHandle { child };
         // The inherited pipe carries the instance secret once; closing it completes bootstrap.
         // ChildHandle kills and reaps the child if this write fails.
@@ -80,6 +96,14 @@ impl CpaProcessBackend for StdCpaProcessBackend {
         if pid == 0 || !self.pid_is_running(pid)? {
             return Err(CpaProcessError::NotRunning);
         }
+        #[cfg(windows)]
+        {
+            // The first supported Windows daemon owns a no-breakaway resident job. Its
+            // death kills every CPA descendant. A live numeric PID from an old probe
+            // record supplies neither process nor tree termination authority.
+            Err(CpaProcessError::UntrustedOrphan)
+        }
+        #[cfg(not(windows))]
         Ok(Box::new(AttachedHandle { pid }))
     }
 
@@ -89,15 +113,21 @@ impl CpaProcessBackend for StdCpaProcessBackend {
 }
 
 struct ChildHandle {
+    #[cfg(not(windows))]
     child: Child,
+    #[cfg(windows)]
+    child: hiroute_platform::windows::job::Child,
 }
 
 impl Drop for ChildHandle {
     fn drop(&mut self) {
+        #[cfg(not(windows))]
         if self.child.try_wait().ok().flatten().is_none() {
             let _ = self.child.kill();
             let _ = self.child.wait();
         }
+        #[cfg(windows)]
+        let _ = self.child.terminate();
     }
 }
 
@@ -107,21 +137,37 @@ impl CpaProcessHandle for ChildHandle {
     }
 
     fn try_exit(&mut self) -> Result<Option<CpaExit>, CpaProcessError> {
-        self.child
-            .try_wait()
-            .map(|status| {
-                status.map(|status| CpaExit {
-                    code: status.code(),
+        #[cfg(not(windows))]
+        {
+            self.child
+                .try_wait()
+                .map(|status| {
+                    status.map(|status| CpaExit {
+                        code: status.code(),
+                    })
                 })
-            })
-            .map_err(CpaProcessError::Inspect)
+                .map_err(CpaProcessError::Inspect)
+        }
+        #[cfg(windows)]
+        {
+            let code = self.child.exit_code().map_err(CpaProcessError::Inspect)?;
+            if code.is_some() && !self.child.empty().map_err(CpaProcessError::Inspect)? {
+                // A root exit is not a completed cleanup while it still has descendants.
+                self.child.terminate().map_err(CpaProcessError::Terminate)?;
+                return Ok(None);
+            }
+            Ok(code.map(|code| CpaExit { code: Some(code) }))
+        }
     }
 
     fn shutdown(&mut self, timeout: Duration) -> Result<CpaExit, CpaProcessError> {
         if let Some(exit) = self.try_exit()? {
             return Ok(exit);
         }
+        #[cfg(not(windows))]
         self.child.kill().map_err(CpaProcessError::Terminate)?;
+        #[cfg(windows)]
+        self.child.terminate().map_err(CpaProcessError::Terminate)?;
         let deadline = Instant::now() + timeout;
         loop {
             if let Some(exit) = self.try_exit()? {
@@ -135,10 +181,58 @@ impl CpaProcessHandle for ChildHandle {
     }
 }
 
+#[cfg(windows)]
+fn spawn_windows(
+    launch: &CpaLaunch,
+) -> Result<hiroute_platform::windows::job::Child, CpaProcessError> {
+    use hiroute_platform::windows::job::{Child, Launch, Stream};
+    use std::ffi::OsString;
+
+    // Only OS bootstrap and this runtime's captured proxy policy enter the child.
+    // In particular, ambient credentials and shell hooks never cross env_clear().
+    let system_root = std::env::var_os("SystemRoot")
+        .filter(|value| PathBuf::from(value).is_absolute())
+        .ok_or(CpaProcessError::InvalidLaunch)?;
+    let mut environment: Vec<(OsString, OsString)> = launch
+        .proxy_environment
+        .iter()
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect();
+    environment.push(("SystemRoot".into(), system_root.clone()));
+    environment.push(("WINDIR".into(), system_root));
+    // Go's fallback temp directory is the Windows directory, which a standard user
+    // cannot write. Keep temporary OAuth/material work inside this private runtime.
+    let temporary = launch.work_dir.join("tmp");
+    hiroute_platform::windows::security::ensure_private_directory(&temporary)
+        .map_err(CpaProcessError::Spawn)?;
+    hiroute_platform::windows::security::open_owner_only(&temporary, true)
+        .map_err(CpaProcessError::Spawn)?;
+    environment.push(("TEMP".into(), temporary.clone().into_os_string()));
+    environment.push(("TMP".into(), temporary.into_os_string()));
+    let args = [
+        "--config".into(),
+        launch.config_path.clone().into_os_string(),
+        "--local-model".into(),
+        "--local-password-stdin".into(),
+    ];
+    Child::spawn(Launch {
+        program: launch.binary.path(),
+        args: &args,
+        env: &environment,
+        cwd: Some(&launch.work_dir),
+        stdin: Stream::Piped,
+        stdout: Stream::Null,
+        stderr: Stream::Null,
+    })
+    .map_err(CpaProcessError::Spawn)
+}
+
+#[cfg(not(windows))]
 struct AttachedHandle {
     pid: u32,
 }
 
+#[cfg(not(windows))]
 impl CpaProcessHandle for AttachedHandle {
     fn pid(&self) -> u32 {
         self.pid
@@ -213,54 +307,7 @@ fn platform_pid_is_running(pid: u32) -> Result<bool, CpaProcessError> {
     if pid == 0 {
         return Ok(false);
     }
-    let filter = format!("PID eq {pid}");
-    let output = Command::new("tasklist.exe")
-        .args(["/FI", filter.as_str(), "/FO", "CSV", "/NH"])
-        .stdin(Stdio::null())
-        .output()
-        .map_err(CpaProcessError::Platform)?;
-    if !output.status.success() {
-        return Err(CpaProcessError::Platform(std::io::Error::other(
-            "tasklist failed",
-        )));
-    }
-    let text = String::from_utf8_lossy(&output.stdout);
-    Ok(text
-        .lines()
-        .any(|line| line.contains(&format!("\"{pid}\""))))
-}
-
-#[cfg(windows)]
-fn platform_terminate_pid(pid: u32, timeout: Duration) -> Result<(), CpaProcessError> {
-    let pid_arg = pid.to_string();
-    let status = Command::new("taskkill.exe")
-        .args(["/PID", pid_arg.as_str(), "/T"])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map_err(CpaProcessError::Platform)?;
-    if !status.success() && platform_pid_is_running(pid)? {
-        return Err(CpaProcessError::TerminateExternal);
-    }
-    let deadline = Instant::now() + timeout;
-    while platform_pid_is_running(pid)? {
-        if Instant::now() >= deadline {
-            let forced = Command::new("taskkill.exe")
-                .args(["/PID", pid_arg.as_str(), "/T", "/F"])
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .status()
-                .map_err(CpaProcessError::Platform)?;
-            if !forced.success() && platform_pid_is_running(pid)? {
-                return Err(CpaProcessError::ShutdownTimeout);
-            }
-            break;
-        }
-        thread::sleep(Duration::from_millis(10));
-    }
-    Ok(())
+    hiroute_platform::windows::job::process_is_running(pid).map_err(CpaProcessError::Platform)
 }
 
 #[cfg(not(any(unix, windows)))]
@@ -291,6 +338,8 @@ pub enum CpaProcessError {
     TerminateExternal,
     #[error("CPA process is not running")]
     NotRunning,
+    #[error("CPA orphan lacks an authenticated Windows process-tree capability")]
+    UntrustedOrphan,
     #[error("CPA process did not stop before the shutdown deadline")]
     ShutdownTimeout,
     #[error("CPA process platform is not supported by this build")]
@@ -300,3 +349,7 @@ pub enum CpaProcessError {
 #[cfg(all(test, unix))]
 #[path = "process_tests.rs"]
 mod tests;
+
+#[cfg(all(test, windows))]
+#[path = "process_windows_tests.rs"]
+mod windows_tests;

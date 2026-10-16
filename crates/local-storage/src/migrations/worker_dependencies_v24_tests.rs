@@ -7,7 +7,9 @@ use hiroute_domain::{
 };
 use serde_json::Value;
 
-const FIXTURE: &str = include_str!("fixtures/schema23-worker-operations.json");
+const UNIX_FIXTURE: &str = include_str!("fixtures/schema23-worker-operations.json");
+#[cfg(windows)]
+const WINDOWS_FIXTURE: &str = include_str!("fixtures/schema23-worker-operations-windows.json");
 const TABLES: [&str; 5] = [
     "operations",
     "operation_steps",
@@ -17,7 +19,24 @@ const TABLES: [&str; 5] = [
 ];
 
 pub(super) fn cases() -> Vec<Value> {
-    let fixture: Value = serde_json::from_str(FIXTURE).unwrap();
+    // Keep the original exported producer bytes pinned on every platform. The
+    // Windows matrix is a separately frozen, independently derived path/proof
+    // projection, not a purported historical Windows product export.
+    assert_eq!(
+        hiroute_domain::CanonicalDigest::of_bytes(UNIX_FIXTURE.as_bytes()).as_str(),
+        "sha256:1886b84980aab4ddb7b3cd9ed21da0a654b13474e448f02883a233dc312d043f",
+    );
+    #[cfg(not(windows))]
+    let fixture_bytes = UNIX_FIXTURE;
+    #[cfg(windows)]
+    let fixture_bytes = {
+        assert_eq!(
+            hiroute_domain::CanonicalDigest::of_bytes(WINDOWS_FIXTURE.as_bytes()).as_str(),
+            "sha256:5876ea437bd9160de1e0c179b4e78ae19d9cac54fea0756f5031d95c9d3543b2",
+        );
+        WINDOWS_FIXTURE
+    };
+    let fixture: Value = serde_json::from_str(fixture_bytes).unwrap();
     assert_eq!(fixture["schema_version"], 23);
     let cases = fixture["cases"].as_array().unwrap();
     let matrix: std::collections::BTreeSet<_> = cases

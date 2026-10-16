@@ -9,12 +9,14 @@ use hiroute_domain::{
     AgentCapability, CanonicalDigest, CapabilityState, SupportedAgentInstallationV1,
 };
 use serde_json::json;
-use std::fs::{self, OpenOptions};
+use std::fs;
 use std::io::Write;
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
+#[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::Command;
+#[cfg(unix)]
+use std::process::Stdio;
 use std::time::{Duration, Instant};
 
 use super::collaboration_probe as collaboration;
@@ -48,26 +50,16 @@ impl ClaudeNativeIngressProbe {
             .map_err(|_| fail("trusted executable"))?
             .ok_or_else(|| fail("executable"))?;
         let before = binary_identity(&binary)?;
-        let root = tempfile::Builder::new()
-            .prefix("hiroute-native-claude-")
-            .permissions(fs::Permissions::from_mode(0o700))
-            .tempdir()
+        let root = super::probe_files::temporary("hiroute-native-claude-")
             .map_err(|_| fail("private check directory"))?;
         let root_path =
             fs::canonicalize(root.path()).map_err(|_| fail("private check directory"))?;
-        fs::set_permissions(&root_path, fs::Permissions::from_mode(0o700))
-            .map_err(|_| fail("private check directory"))?;
         private_directory(&root_path)?;
         let home = root_path.join("home");
         let config = home.join(".claude");
         let workspace = root_path.join("workspace");
         for path in [&home, &config, &workspace] {
-            fs::DirBuilder::new()
-                .mode(0o700)
-                .create(path)
-                .map_err(|_| fail("private check directory"))?;
-            fs::set_permissions(path, fs::Permissions::from_mode(0o700))
-                .map_err(|_| fail("private check directory"))?;
+            super::probe_files::directory(path).map_err(|_| fail("private check directory"))?;
             private_directory(path)?;
         }
         let (mut challenge, plugin_dir) = if let Some(cli) = cli {
@@ -80,12 +72,8 @@ impl ClaudeNativeIngressProbe {
         };
 
         let helper = root_path.join("grant-helper");
-        let mut helper_file = OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .mode(0o600)
-            .open(&helper)
-            .map_err(|_| fail("private helper"))?;
+        let mut helper_file =
+            super::probe_files::file(&helper).map_err(|_| fail("private helper"))?;
         write!(
             helper_file,
             "#!/bin/sh\n[ \"$1\" = '{}' ] || exit 2\n[ \"$2\" = '{}' ] || exit 3\nprintf '%s\\n' '{}'\n",
@@ -96,8 +84,7 @@ impl ClaudeNativeIngressProbe {
         .map_err(|_| fail("private helper"))?;
         helper_file.sync_all().map_err(|_| fail("private helper"))?;
         drop(helper_file);
-        fs::set_permissions(&helper, fs::Permissions::from_mode(0o700))
-            .map_err(|_| fail("private helper"))?;
+        super::probe_files::executable(&helper).map_err(|_| fail("private helper"))?;
 
         let listener =
             std::net::TcpListener::bind("127.0.0.1:0").map_err(|_| fail("loopback bind"))?;
@@ -109,6 +96,7 @@ impl ClaudeNativeIngressProbe {
             listener.local_addr().map_err(|_| fail("address"))?
         );
         let settings = root_path.join("settings.json");
+        #[cfg(unix)]
         let helper_command = [
             helper.to_string_lossy().into_owned(),
             hiroute_domain::HIDDEN_AGENT_GRANT_HELPER_VERB_V1.to_owned(),
@@ -118,12 +106,12 @@ impl ClaudeNativeIngressProbe {
         .map(|value| shell_quote(value))
         .collect::<Vec<_>>()
         .join(" ");
-        let mut settings_file = OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .mode(0o600)
-            .open(&settings)
-            .map_err(|_| fail("private settings"))?;
+        // Windows' native helper command runs under cmd.exe. This public local marker
+        // carries no grant authority; inline echo avoids interpreting a temp path in cmd.
+        #[cfg(windows)]
+        let helper_command = format!("echo {MARKER}");
+        let mut settings_file =
+            super::probe_files::file(&settings).map_err(|_| fail("private settings"))?;
         serde_json::to_writer(
             &mut settings_file,
             &json!({
@@ -141,13 +129,7 @@ impl ClaudeNativeIngressProbe {
         drop(settings_file);
 
         let output_path = root_path.join("output.private");
-        let output = OpenOptions::new()
-            .create_new(true)
-            .read(true)
-            .write(true)
-            .mode(0o600)
-            .open(output_path)
-            .map_err(|_| fail("private output"))?;
+        let output = super::probe_files::file(&output_path).map_err(|_| fail("private output"))?;
         let observer = output.try_clone().map_err(|_| fail("private output"))?;
         let mut command = Command::new(&binary);
         command
@@ -181,13 +163,15 @@ impl ClaudeNativeIngressProbe {
         } else {
             "Reply with OK only. Do not use tools."
         });
-        let mut child = command
+        command
             .env_clear()
             .env("HOME", &home)
             .env("CLAUDE_CONFIG_DIR", &config)
             .env("TMPDIR", &workspace)
             .env("PATH", super::native_ingress_probe::native_probe_path())
-            .current_dir(&workspace)
+            .current_dir(&workspace);
+        #[cfg(unix)]
+        let child = command
             .stdin(Stdio::null())
             .stdout(Stdio::from(
                 output.try_clone().map_err(|_| fail("private output"))?,
@@ -196,6 +180,16 @@ impl ClaudeNativeIngressProbe {
             .process_group(0)
             .spawn()
             .map_err(|_| fail("native launch"))?;
+        #[cfg(windows)]
+        let child = super::windows_runtime::spawn(
+            &command,
+            false,
+            hiroute_platform::windows::job::Stream::Null,
+            hiroute_platform::windows::job::Stream::File(&output),
+            hiroute_platform::windows::job::Stream::File(&output),
+        )
+        .map_err(|_| fail("native launch"))?;
+        let mut child = super::NativeProbeProcess::new(child);
         let started = Instant::now();
         let mut requests = 0;
         let mut authenticated_message = false;
@@ -214,8 +208,8 @@ impl ClaudeNativeIngressProbe {
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
                     Err(_) => return Err(fail("loopback accept")),
                 }
-                if let Some(status) = child.try_wait().map_err(|_| fail("native wait"))? {
-                    return if status.success()
+                if let Some(success) = child.observe().map_err(|_| fail("native wait"))? {
+                    return if success
                         && authenticated_message
                         && challenge.as_ref().is_none_or(|check| check.complete())
                     {
@@ -238,13 +232,10 @@ impl ClaudeNativeIngressProbe {
                 std::thread::sleep(Duration::from_millis(10));
             }
         })();
-        if child.try_wait().ok().flatten().is_none() {
-            let _ = nix::sys::signal::killpg(
-                nix::unistd::Pid::from_raw(child.id() as i32),
-                nix::sys::signal::Signal::SIGKILL,
-            );
+        if child.stop().is_err() {
+            let _ = root.keep();
+            return Err(fail("native cleanup"));
         }
-        let _ = child.wait();
         result?;
         if binary_identity(&binary)? != before {
             return Err(fail("stable executable"));
@@ -344,13 +335,15 @@ impl ClaudeIngressEvidence {
     }
 }
 
+#[cfg(unix)]
 fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
+    use std::os::unix::fs::PermissionsExt;
 
     #[test]
     #[ignore = "requires explicitly selected Claude Code and HiRoute CLI binaries"]

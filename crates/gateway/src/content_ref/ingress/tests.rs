@@ -1023,7 +1023,7 @@ fn literal_marker_in_native_reasoning_extension_is_not_replaced_by_another_field
     let projected: Value = serde_json::from_slice(&projected).unwrap();
     assert_eq!(projected["input"][0]["summary"][0]["text"], summary);
     assert_eq!(projected["input"][0]["provider_extension"]["foo"], literal);
-    drop((request, workspace, document, store, manager));
+    drop((reader, request, workspace, document, store, manager));
     std::fs::remove_dir_all(root).unwrap();
 }
 

@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+#![cfg_attr(windows, windows_subsystem = "windows")]
 
 use std::io::{Read, Write};
 use std::net::SocketAddr;
@@ -23,9 +24,13 @@ use serde::Deserialize;
 use zeroize::{Zeroize, Zeroizing};
 
 mod ready;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 mod standalone;
+#[cfg(windows)]
+mod windows_task;
 use ready::{write_ready_frame, write_startup_failure_frame};
+#[cfg(any(unix, windows))]
+use standalone::{apply_standalone_defaults, run_all_standalone};
 
 const MAX_PROTECTED_FRAME_BYTES: usize = 64 * 1024;
 const PROTECTED_FRAME_DEADLINE: Duration = Duration::from_secs(2);
@@ -34,6 +39,12 @@ const PROTECTED_FRAME_DEADLINE: Duration = Duration::from_secs(2);
 struct Arguments {
     role: Option<String>,
     standalone: bool,
+    #[cfg(windows)]
+    windows_service: Option<String>,
+    #[cfg(windows)]
+    foreground_parent_console: bool,
+    #[cfg(windows)]
+    windows_task_runtime: bool,
     storage_root: Option<PathBuf>,
     runtime_root: Option<PathBuf>,
     listen: Option<SocketAddr>,
@@ -50,13 +61,127 @@ struct Arguments {
 }
 
 fn main() {
+    #[cfg(windows)]
+    if std::env::args_os().nth(1).as_deref() == Some(std::ffi::OsStr::new("app-server"))
+        && std::env::var_os("HIROUTE_NATIVE_LAUNCH_DESCRIPTOR").is_some()
+    {
+        if hiroute_platform::windows::security::initialize_current_process_private_defaults()
+            .is_err()
+        {
+            eprintln!("hirouted private process defaults unavailable");
+            std::process::exit(6);
+        }
+        match hiroute_platform::windows::launcher::run_from_environment() {
+            Ok(code) => std::process::exit(code),
+            Err(_) => {
+                eprintln!("hirouted native app-server launcher failed");
+                std::process::exit(1);
+            }
+        }
+    }
     let mut arguments = parse_arguments();
+    #[cfg(windows)]
+    if arguments.windows_task_runtime
+        && (!arguments.standalone
+            || arguments.role.as_deref() != Some("all")
+            || arguments.windows_service.is_some()
+            || arguments.foreground_parent_console)
+    {
+        exit_usage();
+    }
+    #[cfg(windows)]
+    if arguments.foreground_parent_console
+        && (!arguments.standalone
+            || arguments.role.as_deref() != Some("all")
+            || arguments.windows_service.is_some())
+    {
+        exit_usage();
+    }
+    #[cfg(windows)]
+    if let Some(name) = arguments.windows_service.take() {
+        if !arguments.standalone
+            || arguments.role.as_deref() != Some("all")
+            || arguments.storage_root.is_some()
+            || arguments.runtime_root.is_some()
+            || arguments.listen.is_some()
+            || arguments.lkg.is_some()
+            || arguments.shutdown_fd.is_some()
+            || arguments.capability_fd.is_some()
+            || arguments.capability_ack_fd.is_some()
+            || arguments.cpa_binary.is_some()
+            || arguments.cpa_sha256.is_some()
+            || arguments.codex_desktop_engine.is_some()
+            || arguments.diagnostics_root.is_some()
+            || arguments.diagnostics_parent_session.is_some()
+            || arguments.diagnostic_level_override.is_some()
+        {
+            exit_usage();
+        }
+        if let Err(error) = hiroute_platform::windows::service::run_service(&name, |_| {
+            // The sealed, privileged SCM host may only dispatch its protected
+            // descriptor to an owner-SID restricted child. Never run business here.
+            Err("Windows service host cannot execute the business runtime".into())
+        }) {
+            eprintln!("hirouted failed: {error}");
+            std::process::exit(6);
+        }
+        return;
+    }
+    #[cfg(windows)]
+    if hiroute_platform::windows::security::initialize_current_process_private_defaults().is_err() {
+        eprintln!("hirouted private process defaults unavailable");
+        std::process::exit(6);
+    }
+    #[cfg(windows)]
+    if arguments.standalone
+        && arguments.role.as_deref() == Some("all")
+        && !arguments.windows_task_runtime
+        && !arguments.foreground_parent_console
+        && std::env::args_os()
+            .skip(1)
+            .eq(["--role", "all", "--standalone"]
+                .into_iter()
+                .map(std::ffi::OsString::from))
+    {
+        match windows_task::run_if_installed_task() {
+            Ok(true) => return,
+            Ok(false) => {}
+            Err(error) => {
+                eprintln!("hirouted failed: {error}");
+                std::process::exit(6);
+            }
+        }
+    }
     if arguments.standalone
         && let Err(error) = apply_standalone_defaults(&mut arguments)
     {
         eprintln!("hirouted failed: {error}");
         std::process::exit(6);
     }
+    #[cfg(windows)]
+    if arguments.foreground_parent_console
+        && hiroute_platform::windows::console::attach_parent_preserving_stdio().is_err()
+    {
+        eprintln!("hirouted foreground parent console unavailable");
+        std::process::exit(6);
+    }
+    if let Err(error) = run_daemon(
+        arguments,
+        #[cfg(windows)]
+        None,
+    ) {
+        eprintln!("hirouted failed: {error}");
+        std::process::exit(6);
+    }
+}
+
+fn run_daemon(
+    arguments: Arguments,
+    #[cfg(windows)] service: Option<hiroute_platform::windows::service::ServiceShutdown>,
+) -> Result<(), String> {
+    #[cfg(windows)]
+    hiroute_platform::windows::job::initialize_resident()
+        .map_err(|_| "daemon process-tree lifetime unavailable")?;
     let managed_role = arguments.role.as_deref() == Some("all");
     let level_override = match arguments.diagnostic_level_override.as_deref() {
         Some(value) => match value.parse::<DiagnosticLevel>() {
@@ -83,7 +208,12 @@ fn main() {
     hiroute_diagnostics::panic::install_panic_hook(diagnostics.handle().clone());
     let result = match arguments.role.as_deref() {
         Some("control") => run_control(arguments, &diagnostics),
-        Some("all") => run_all(arguments, &diagnostics),
+        Some("all") => run_all(
+            arguments,
+            &diagnostics,
+            #[cfg(windows)]
+            service,
+        ),
         _ => exit_usage(),
     };
     if let Err(error) = result {
@@ -94,11 +224,11 @@ fn main() {
         if managed_role {
             let _ = write_startup_failure_frame(error.code);
         }
-        eprintln!("hirouted failed: {}", error.message);
         diagnostics.shutdown();
-        std::process::exit(6);
+        return Err(error.message);
     }
     diagnostics.shutdown();
+    Ok(())
 }
 
 /// One stable startup failure: a fixed code plus a local diagnostic message that is never
@@ -192,11 +322,20 @@ fn run_control(arguments: Arguments, diagnostics: &DiagnosticRuntime) -> Result<
         .map_err(|error| StartupError::new(StartupFailureCode::ControlUnavailable, error))
 }
 
-fn run_all(arguments: Arguments, diagnostics: &DiagnosticRuntime) -> Result<(), StartupError> {
+fn run_all(
+    arguments: Arguments,
+    diagnostics: &DiagnosticRuntime,
+    #[cfg(windows)] service: Option<hiroute_platform::windows::service::ServiceShutdown>,
+) -> Result<(), StartupError> {
     if arguments.standalone {
-        #[cfg(unix)]
-        return run_all_standalone(arguments, diagnostics);
-        #[cfg(not(unix))]
+        #[cfg(any(unix, windows))]
+        return run_all_standalone(
+            arguments,
+            diagnostics,
+            #[cfg(windows)]
+            service,
+        );
+        #[cfg(not(any(unix, windows)))]
         return Err("standalone role=all is not available on this platform".into());
     }
     diagnostics.stage_begin(StartupStage::RootValidate);
@@ -369,6 +508,14 @@ fn parse_arguments() -> Arguments {
         match name {
             "--role" => parsed.role = value(&mut arguments),
             "--standalone" => parsed.standalone = true,
+            #[cfg(windows)]
+            "--windows-service" => {
+                parsed.windows_service = Some(value(&mut arguments).unwrap_or_else(|| exit_usage()))
+            }
+            #[cfg(windows)]
+            "--foreground-parent-console" => parsed.foreground_parent_console = true,
+            #[cfg(windows)]
+            "--windows-task-runtime" => parsed.windows_task_runtime = true,
             "--storage-root" => parsed.storage_root = value(&mut arguments).map(PathBuf::from),
             "--runtime-root" => parsed.runtime_root = value(&mut arguments).map(PathBuf::from),
             "--listen" => {
@@ -403,185 +550,6 @@ fn parse_arguments() -> Arguments {
         }
     }
     parsed
-}
-
-fn apply_standalone_defaults(arguments: &mut Arguments) -> Result<(), String> {
-    if arguments.role.as_deref() != Some("all")
-        || arguments.storage_root.is_some()
-        || arguments.runtime_root.is_some()
-        || arguments.listen.is_some()
-        || arguments.lkg.is_some()
-        || arguments.shutdown_fd.is_some()
-        || arguments.capability_fd.is_some()
-        || arguments.capability_ack_fd.is_some()
-        || arguments.codex_desktop_engine.is_some()
-    {
-        return Err("standalone role=all arguments are invalid".into());
-    }
-    let layout = hiroute_host_runtime::StandaloneLayout::from_environment()
-        .map_err(|error| error.to_string())?;
-    let installation = hiroute_host_runtime::read_standalone_install_record(&layout.marker_path)
-        .map_err(|_| "standalone installation marker is unavailable")?;
-    if installation.target != standalone_host_target()
-        || std::fs::canonicalize(
-            std::env::current_exe().map_err(|_| "standalone executable is unavailable")?,
-        )
-        .ok()
-            != std::fs::canonicalize(installation.install_root.join("hirouted")).ok()
-    {
-        return Err("standalone installation identity does not match this daemon".into());
-    }
-    match (&arguments.cpa_binary, &arguments.cpa_sha256) {
-        (None, None) => {
-            arguments.cpa_binary = installation.cpa_binary.clone();
-            arguments.cpa_sha256 = installation.cpa_sha256.clone();
-        }
-        (Some(binary), Some(digest))
-            if Some(binary) == installation.cpa_binary.as_ref()
-                && Some(digest) == installation.cpa_sha256.as_ref() => {}
-        _ => return Err("standalone installation CPA identity does not match this daemon".into()),
-    }
-    #[cfg(target_os = "macos")]
-    {
-        let desktop_endpoint = layout
-            .home
-            .join("Library/Application Support/ai.hiroute.desktop/run/hiroute/control.sock");
-        if [
-            std::path::PathBuf::from("/Applications/HiRoute.app"),
-            layout.home.join("Applications/HiRoute.app"),
-        ]
-        .iter()
-        .any(|path| std::fs::symlink_metadata(path).is_ok())
-            || std::fs::symlink_metadata(desktop_endpoint).is_ok()
-        {
-            return Err("HiRoute Desktop conflicts with standalone mode".into());
-        }
-    }
-    standalone_private_directory(&layout.state_root)?;
-    standalone_private_directory(&layout.storage_root())?;
-    standalone_private_directory(&layout.runtime_root)?;
-    standalone_private_directory(&layout.diagnostics_root())?;
-    arguments.storage_root = Some(layout.storage_root());
-    arguments.runtime_root = Some(layout.runtime_root.clone());
-    arguments.lkg = Some(layout.gateway_lkg());
-    let diagnostics_root = layout.diagnostics_root();
-    if arguments
-        .diagnostics_root
-        .as_ref()
-        .is_some_and(|root| root != &diagnostics_root)
-    {
-        return Err("standalone diagnostics root does not match the current user layout".into());
-    }
-    arguments.diagnostics_root = Some(diagnostics_root);
-    Ok(())
-}
-
-fn standalone_host_target() -> String {
-    let architecture = std::env::consts::ARCH;
-    let suffix = match std::env::consts::OS {
-        "linux" => "unknown-linux-gnu",
-        "macos" => "apple-darwin",
-        other => other,
-    };
-    format!("{architecture}-{suffix}")
-}
-
-#[cfg(unix)]
-fn standalone_private_directory(path: &std::path::Path) -> Result<(), String> {
-    use std::os::unix::fs::DirBuilderExt;
-    std::fs::DirBuilder::new()
-        .recursive(true)
-        .mode(0o700)
-        .create(path)
-        .map_err(|_| "standalone directory is unavailable")?;
-    let metadata =
-        std::fs::symlink_metadata(path).map_err(|_| "standalone directory is unavailable")?;
-    if !metadata.is_dir() || metadata.file_type().is_symlink() {
-        return Err("standalone directory is unsafe".into());
-    }
-    Ok(())
-}
-
-#[cfg(not(unix))]
-fn standalone_private_directory(_path: &std::path::Path) -> Result<(), String> {
-    Err("standalone role=all is not available on this platform".into())
-}
-
-#[cfg(unix)]
-fn run_all_standalone(
-    arguments: Arguments,
-    diagnostics: &DiagnosticRuntime,
-) -> Result<(), StartupError> {
-    diagnostics.stage_begin(StartupStage::RootValidate);
-    let layout = hiroute_host_runtime::StandaloneLayout::from_environment()
-        .map_err(|error| error.to_string())?;
-    let (Some(storage_root), Some(runtime_root), Some(lkg)) = (
-        arguments.storage_root,
-        arguments.runtime_root,
-        arguments.lkg,
-    ) else {
-        return Err("standalone roots are unavailable".into());
-    };
-    if storage_root != layout.storage_root()
-        || runtime_root != layout.runtime_root
-        || lkg != layout.gateway_lkg()
-    {
-        return Err("standalone roots do not match the current user layout".into());
-    }
-    let store = hiroute_host_runtime::GatewayListenerStore::new(layout.gateway_config_root());
-    let reservation = store.reserve().map_err(|error| {
-        StartupError::new(StartupFailureCode::InvalidConfiguration, error.to_string())
-    })?;
-    let listen = reservation.listen;
-    diagnostics.stage_end(StartupStage::RootValidate, StageOutcome::Completed);
-    let mut config = RoleAllConfig::new(storage_root, runtime_root, listen, lkg)
-        .with_diagnostics(diagnostics.port())
-        .with_released_commands_only();
-    match (arguments.cpa_binary, arguments.cpa_sha256) {
-        (Some(binary), Some(expected_sha256_hex)) => {
-            config = config.with_cpa(RoleAllCpaConfig {
-                binary,
-                expected_sha256_hex,
-            });
-        }
-        (None, None) => {}
-        _ => return Err("standalone CPA arguments are incomplete".into()),
-    }
-    reservation.release();
-    let mut role = match start_role_all(config) {
-        Ok(role) => role,
-        Err(error) => {
-            let _ = store.mark_failed("GATEWAY_START_FAILED");
-            return Err(StartupError::new(
-                classify_role_all_error(&error),
-                error.to_string(),
-            ));
-        }
-    };
-    let server = match standalone::ProtectedInputServer::bind(&layout) {
-        Ok(server) => server,
-        Err(error) => {
-            role.shutdown();
-            let _ = role.join(Duration::from_secs(30));
-            let _ = store.mark_failed("PROTECTED_INPUT_UNAVAILABLE");
-            return Err(StartupError::new(
-                StartupFailureCode::ControlUnavailable,
-                error,
-            ));
-        }
-    };
-    store.mark_applied(listen).map_err(|error| {
-        StartupError::new(StartupFailureCode::StorageUnavailable, error.to_string())
-    })?;
-    write_ready(&role, diagnostics)
-        .map_err(|error| StartupError::new(StartupFailureCode::ReadyChannelFailed, error))?;
-    diagnostics.emit(DiagnosticEvent::StartupEnd(StartupEnd {
-        outcome: StartupOutcome::Success,
-        elapsed_ms: diagnostics_elapsed_ms(diagnostics),
-    }));
-    server
-        .run(role)
-        .map_err(|error| StartupError::new(StartupFailureCode::Internal, error))
 }
 
 fn value(arguments: &mut impl Iterator<Item = std::ffi::OsString>) -> Option<String> {

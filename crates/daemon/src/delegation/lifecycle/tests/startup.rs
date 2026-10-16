@@ -126,7 +126,11 @@ async fn next(events: &mut mpsc::UnboundedReceiver<String>, expected: &str) {
 fn borrowed(
     root: &std::path::Path,
     nonce: &str,
-) -> (WorkerLaunchRequest, AcpRunInput, tempfile::TempDir) {
+) -> (
+    WorkerLaunchRequest,
+    AcpRunInput,
+    crate::test_support::PrivateTempDir,
+) {
     let (mut request, mut input, fixture) = inputs_in_context(Some(root));
     request.launch_nonce = nonce.into();
     input.deadline = Instant::now() + Duration::from_secs(5);

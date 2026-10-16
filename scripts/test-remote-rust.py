@@ -45,6 +45,31 @@ class Contract(unittest.TestCase):
                      patch.object(runner.sys, 'argv', ['remote-rust.py', '--workbench', runner.ROOT, 'status', key]):
                     runner.main()
                 self.assertIn(runner.ROOT + '/runs/', ssh.call_args.args[0][-1])
+            executor, candidate = 'a' * 40, 'b' * 40
+            commands = []
+            def committed_command(arguments):
+                commands.append(arguments)
+                if arguments == ['git', 'rev-parse', 'HEAD']:
+                    return executor
+                if arguments == ['git', 'remote', 'get-url', 'origin']:
+                    return 'fixture-origin'
+                if arguments[:2] == ['git', 'show'] and arguments[2].startswith(executor + ':scripts/'):
+                    return '# committed fixture source'
+                self.fail('Unexpected controller command')
+            with patch.object(runner, 'CONFIG', config), \
+                 patch.object(runner, 'validate'), patch.object(runner, 'command', side_effect=committed_command), \
+                 patch.object(runner.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)) as ssh, \
+                 patch.object(runner.sys, 'argv', ['remote-rust.py', 'run', '--ref', 'refs/heads/fixture',
+                                                  '--sha', candidate, '--plan', 'workbench-port', '--phase', 'focused',
+                                                  '--', 'cargo', 'check', '--locked']):
+                runner.main()
+            payload = json.loads(ssh.call_args.kwargs['input'])
+            self.assertEqual((payload['sha'], payload['executor_sha']), (candidate, executor))
+            self.assertEqual((payload['workbench'], payload['capacity_root']),
+                             ('.local/share/github-workbench', runner.ROOT))
+            self.assertIn(['git', 'show', executor + ':scripts/remote-rust.py'], commands)
+            self.assertEqual(payload['source'], '# committed fixture source\n')
+            self.assertEqual(payload['executor_digest'], hashlib.sha256(payload['source'].encode()).hexdigest())
 
     def test_configured_bootstrap_keeps_repository_files_separate(self):
         with tempfile.TemporaryDirectory() as directory:

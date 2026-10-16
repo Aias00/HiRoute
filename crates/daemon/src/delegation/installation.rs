@@ -24,6 +24,9 @@ mod installation_probe;
 #[cfg(test)]
 #[path = "installation/probe_server.rs"]
 mod probe_server;
+#[cfg(all(test, windows))]
+#[path = "installation/windows_tests.rs"]
+mod windows_tests;
 pub(crate) use availability::WorkerExecutorAvailabilityRegistry;
 pub(crate) use discovery::{
     discover as discover_worker_dependencies, validate_persisted_installation_for_run,
@@ -157,7 +160,7 @@ pub(super) fn check_installation(
             check_entry(Path::new(node), true)?;
             hiroute_integrations::agents::pi_cli_installation(Path::new(cli))
                 .map_err(|_| DelegationErrorV1::CapabilityUnavailable)?;
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             hiroute_integrations::check_pi_sdk_capability(
                 Path::new(cli),
                 Path::new(node),
@@ -224,17 +227,25 @@ fn create_private_child(parent: &Path, name: &str) -> Result<PathBuf, Delegation
     }
     let parent = fs::canonicalize(parent).map_err(|_| DelegationErrorV1::StorageUnavailable)?;
     let path = parent.join(name);
+    #[cfg(not(windows))]
     let mut builder = fs::DirBuilder::new();
     #[cfg(unix)]
     {
         use std::os::unix::fs::DirBuilderExt;
         builder.mode(0o700);
     }
-    match builder.create(&path) {
+    #[cfg(not(windows))]
+    let created = builder.create(&path);
+    #[cfg(windows)]
+    let created = hiroute_platform::windows::security::create_owner_only_directory(&path).map(drop);
+    match created {
         Ok(()) => {}
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
         Err(_) => return Err(DelegationErrorV1::StorageUnavailable),
     }
+    #[cfg(windows)]
+    hiroute_platform::windows::security::verify_owner_only(&path, true)
+        .map_err(|_| DelegationErrorV1::PermissionDenied)?;
     let metadata =
         fs::symlink_metadata(&path).map_err(|_| DelegationErrorV1::StorageUnavailable)?;
     if metadata.file_type().is_symlink() || !metadata.is_dir() || !private(&metadata) {
@@ -425,10 +436,30 @@ impl WorkerProfileSource for ManagedWorkerProfileSource {
             .join(run_root_name(&task.workspace_id, task, run)?);
         let (native_context, workspace) = match session.borrowed_context()? {
             Some(context) => {
-                if fs::canonicalize(&input.workspace_path)
+                #[cfg(windows)]
+                let same_workspace = {
+                    // The descriptor retains a path, while the accepted task retains its
+                    // native object identity. A replaced pathname cannot adopt a new root.
+                    let actual = super::profile::windows_workspace(
+                        input
+                            .workspace_path
+                            .to_str()
+                            .ok_or(DelegationErrorV1::ResumeUnavailable)?,
+                    )
                     .map_err(|_| DelegationErrorV1::ResumeUnavailable)?
-                    != context.workspace
-                {
+                    .0;
+                    actual == task.workspace
+                        && super::profile::same_windows_directory(
+                            &input.workspace_path,
+                            &context.workspace,
+                        )
+                        .map_err(|_| DelegationErrorV1::ResumeUnavailable)?
+                };
+                #[cfg(not(windows))]
+                let same_workspace = fs::canonicalize(&input.workspace_path)
+                    .map_err(|_| DelegationErrorV1::ResumeUnavailable)?
+                    == context.workspace;
+                if !same_workspace {
                     return Err(DelegationErrorV1::ResumeUnavailable);
                 }
                 if run.continued_from.is_some() {
@@ -581,13 +612,14 @@ mod tests {
     #[test]
     fn first_concurrent_root_preparation_revalidates_existing_directories() {
         let root = tempfile::tempdir().unwrap();
+        let root_path = fs::canonicalize(root.path()).unwrap();
         let barrier = std::sync::Barrier::new(2);
         let prepared = std::thread::scope(|scope| {
             let jobs = (0..2)
                 .map(|_| {
                     scope.spawn(|| {
                         barrier.wait();
-                        WorkerProfileRoots::prepare(root.path()).unwrap()
+                        WorkerProfileRoots::prepare(&root_path).unwrap()
                     })
                 })
                 .collect::<Vec<_>>();
@@ -603,31 +635,28 @@ mod tests {
             assert!(private(&metadata));
             assert_eq!(fs::canonicalize(path).unwrap(), *path);
         }
-        fs::write(root.path().join("file"), b"not a directory").unwrap();
+        fs::write(root_path.join("file"), b"not a directory").unwrap();
         assert_eq!(
-            create_private_child(root.path(), "file"),
+            create_private_child(&root_path, "file"),
             Err(DelegationErrorV1::PermissionDenied)
         );
         #[cfg(unix)]
         {
             use std::os::unix::fs::{PermissionsExt, symlink};
-            symlink(&prepared[0].sessions, root.path().join("link")).unwrap();
+            symlink(&prepared[0].sessions, root_path.join("link")).unwrap();
             assert_eq!(
-                create_private_child(root.path(), "link"),
+                create_private_child(&root_path, "link"),
                 Err(DelegationErrorV1::PermissionDenied)
             );
-            fs::create_dir(root.path().join("public")).unwrap();
-            fs::set_permissions(
-                root.path().join("public"),
-                fs::Permissions::from_mode(0o755),
-            )
-            .unwrap();
+            fs::create_dir(root_path.join("public")).unwrap();
+            fs::set_permissions(root_path.join("public"), fs::Permissions::from_mode(0o755))
+                .unwrap();
             assert_eq!(
-                create_private_child(root.path(), "public").unwrap(),
-                root.path().join("public")
+                create_private_child(&root_path, "public").unwrap(),
+                root_path.join("public")
             );
             assert_eq!(
-                fs::metadata(root.path().join("public"))
+                fs::metadata(root_path.join("public"))
                     .unwrap()
                     .permissions()
                     .mode()

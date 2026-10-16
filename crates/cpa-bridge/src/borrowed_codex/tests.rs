@@ -32,8 +32,8 @@ const ID_ONE: &str = "fixture.id.lease-one";
 const ID_TWO: &str = "fixture.id.lease-two";
 const REFRESH_SENTINEL: &str = "fixture-refresh-must-never-be-copied";
 
-fn setup() -> (tempfile::TempDir, PathBuf, PathBuf) {
-    let temp = tempfile::tempdir().unwrap();
+fn setup() -> (crate::private_test_support::TempDir, PathBuf, PathBuf) {
+    let temp = crate::private_test_support::tempdir().unwrap();
     ensure_private_dir(temp.path()).unwrap();
     let auth_dir = ensure_private_dir(&temp.path().join("cpa-auth")).unwrap();
     let source = temp.path().join("codex-auth.json");
@@ -139,7 +139,7 @@ fn explicit_recheck_recovers_a_failed_version_within_the_same_access_lease() {
 
 #[test]
 fn evidence_scan_is_read_only_and_redacts_the_source() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = crate::private_test_support::tempdir().unwrap();
     ensure_private_dir(temp.path()).unwrap();
     let source = temp.path().join("codex-auth.json");
     let untouched_auth_dir = temp.path().join("must-not-exist");
@@ -179,6 +179,7 @@ fn bounded_reader_rejects_a_source_that_changes_during_every_attempt() {
     let mut revision = 0_u64;
     let result = read_nested_source_after_read(&source, || {
         revision += 1;
+        #[cfg(not(windows))]
         write_source(
             &source,
             &format!("account-changing-{revision}"),
@@ -186,6 +187,22 @@ fn bounded_reader_rejects_a_source_that_changes_during_every_attempt() {
             ID_TWO,
             &format!("refresh-{revision}"),
         );
+        #[cfg(windows)]
+        {
+            use std::io::Write as _;
+            // The active reader denies deleting/replacing its held native file.
+            // A real in-place native writer still invalidates the read stamp.
+            let bytes = serde_json::to_vec(&json!({
+                "auth_mode":"chatgpt", "last_refresh":format!("refresh-{revision}"),
+                "tokens":{"access_token":ACCESS_TWO, "id_token":ID_TWO,
+                          "account_id":format!("account-changing-{revision}")}
+            }))
+            .unwrap();
+            let mut writer = hiroute_platform::windows::security::open_read_write(&source).unwrap();
+            writer.set_len(0).unwrap();
+            writer.write_all(&bytes).unwrap();
+            writer.sync_all().unwrap();
+        }
     });
 
     assert!(matches!(
@@ -196,7 +213,7 @@ fn bounded_reader_rejects_a_source_that_changes_during_every_attempt() {
 
 #[test]
 fn missing_source_has_a_distinct_local_failure() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = crate::private_test_support::tempdir().unwrap();
     let result = BorrowedCodexAuthSpec::new(temp.path().join("missing.json")).inspect();
     assert!(matches!(
         result,
@@ -344,7 +361,7 @@ fn duplicated_auth_descriptor_retains_managed_writer_exclusion_until_final_close
         return;
     }
     for kind in [CpaAccountKind::Codex, CpaAccountKind::Claude] {
-        let root = tempfile::tempdir().unwrap();
+        let root = crate::private_test_support::tempdir().unwrap();
         let auth_dir = ensure_private_dir(&root.path().join("managed-auth")).unwrap();
         let lease = ManagedAuthLease::acquire_subscription(&auth_dir, None, None, Some(kind), None)
             .unwrap();

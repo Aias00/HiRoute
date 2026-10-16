@@ -1,5 +1,7 @@
 //! Native files and a controlled profile reader exercise identity lookup behavior.
 use super::*;
+#[cfg(windows)]
+use crate::config::ensure_private_dir;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Barrier, Condvar, Mutex as StdMutex, mpsc};
@@ -83,19 +85,40 @@ impl ClaudeProfileReader for ControlledReader {
 }
 
 fn write_source(path: &Path, token: &str) {
-    private_atomic_write(
-        path,
-        &serde_json::to_vec(&serde_json::json!({
-            "claudeAiOauth": {
-                "accessToken": token,
-                "refreshToken": "TEST_REFRESH_MUST_REMAIN_NATIVE",
-                "expiresAt": u64::MAX,
-                "scopes": ["user:profile", "user:inference"]
-            }
-        }))
-        .unwrap(),
-    )
-    .unwrap();
+    private_atomic_write(path, &source_bytes(token)).unwrap();
+}
+
+fn source_bytes(token: &str) -> Vec<u8> {
+    serde_json::to_vec(&serde_json::json!({
+        "claudeAiOauth": {
+            "accessToken": token,
+            "refreshToken": "TEST_REFRESH_MUST_REMAIN_NATIVE",
+            "expiresAt": u64::MAX,
+            "scopes": ["user:profile", "user:inference"]
+        }
+    }))
+    .unwrap()
+}
+
+fn rotate_source_while_reading(path: &Path, token: &str) {
+    #[cfg(not(windows))]
+    write_source(path, token);
+    #[cfg(windows)]
+    {
+        use std::io::Write as _;
+        // The borrowed reader pins its native file against replacement while
+        // remote profile IO is outstanding. Native refresh may still update the
+        // same object; keep that real write boundary rather than relaxing it.
+        let mut writer = hiroute_platform::windows::security::open_read_write(path).unwrap();
+        let identity = hiroute_platform::windows::security::file_identity(&writer).unwrap();
+        writer.set_len(0).unwrap();
+        writer.write_all(&source_bytes(token)).unwrap();
+        writer.sync_all().unwrap();
+        assert_eq!(
+            hiroute_platform::windows::security::file_identity(&writer).unwrap(),
+            identity
+        );
+    }
 }
 
 fn source(root: &Path, token: &str, reader: &Arc<ControlledReader>) -> BorrowedClaudeAuthSpec {
@@ -110,7 +133,7 @@ fn source(root: &Path, token: &str, reader: &Arc<ControlledReader>) -> BorrowedC
 #[test]
 fn concurrent_identical_revision_fetches_one_profile_on_success_and_failure() {
     for fail in [false, true] {
-        let root = tempfile::tempdir().unwrap();
+        let root = crate::private_test_support::tempdir().unwrap();
         let gate = Arc::new(ProfileGate::default());
         let _release = ReleaseProfileOnDrop(Arc::clone(&gate));
         let reader = Arc::new(ControlledReader {
@@ -149,7 +172,7 @@ fn concurrent_identical_revision_fetches_one_profile_on_success_and_failure() {
 
 #[test]
 fn failed_profile_is_backed_off_but_new_access_revision_is_immediately_eligible() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let reader = Arc::new(ControlledReader::default());
     reader.fail.store(true, Ordering::SeqCst);
     let spec = source(root.path(), "failed-access", &reader);
@@ -188,7 +211,7 @@ fn failed_profile_is_backed_off_but_new_access_revision_is_immediately_eligible(
 #[test]
 fn slow_old_revision_does_not_hold_up_new_identity_or_overwrite_its_result() {
     for fail_old in [false, true] {
-        let root = tempfile::tempdir().unwrap();
+        let root = crate::private_test_support::tempdir().unwrap();
         let gate = Arc::new(ProfileGate::default());
         let _release = ReleaseProfileOnDrop(Arc::clone(&gate));
         let reader = Arc::new(ControlledReader {
@@ -212,7 +235,7 @@ fn slow_old_revision_does_not_hold_up_new_identity_or_overwrite_its_result() {
         let old_spec = spec.clone();
         let old = thread::spawn(move || old_spec.inspect());
         gate.wait_entered();
-        write_source(spec.source_path(), "new-access");
+        rotate_source_while_reading(spec.source_path(), "new-access");
         let new_spec = spec.clone();
         let (completed, completion) = mpsc::channel();
         let new = thread::spawn(move || {
@@ -238,7 +261,7 @@ fn slow_old_revision_does_not_hold_up_new_identity_or_overwrite_its_result() {
 #[test]
 fn a_terminated_waiter_does_not_cancel_another_callers_shared_profile() {
     for cancel in [false, true] {
-        let root = tempfile::tempdir().unwrap();
+        let root = crate::private_test_support::tempdir().unwrap();
         let gate = Arc::new(ProfileGate::default());
         let _release = ReleaseProfileOnDrop(Arc::clone(&gate));
         let reader = Arc::new(ControlledReader {
@@ -309,7 +332,7 @@ fn initiating_owner_cancellation_lets_a_valid_waiter_take_over_without_failure_b
         }
     }
 
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     ensure_private_dir(root.path()).unwrap();
     let path = root.path().join(".credentials.json");
     write_source(&path, "shared-access");
@@ -364,7 +387,7 @@ fn initiating_owner_cancellation_lets_a_valid_waiter_take_over_without_failure_b
 
 #[test]
 fn profile_cache_key_keeps_canonical_native_sources_distinct() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let reader = Arc::new(ControlledReader::default());
     let first = source(root.path(), "shared-token", &reader);
     let first_evidence = first.inspect().unwrap();
@@ -390,7 +413,7 @@ fn profile_cache_key_keeps_canonical_native_sources_distinct() {
 
 #[test]
 fn retained_profile_results_are_bounded_without_rejecting_new_revisions() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::private_test_support::tempdir().unwrap();
     let reader = Arc::new(ControlledReader::default());
     let spec = source(root.path(), "access-0", &reader);
     for index in 0..12 {

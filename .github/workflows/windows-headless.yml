@@ -1,0 +1,121 @@
+name: windows-headless
+on:
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: 'Use all for final validation; individual scopes are focused diagnosis'
+        type: choice
+        default: all
+        options: [all, components, core, product, background, agents]
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        scope: ${{ fromJSON(inputs.scope != '' && inputs.scope != 'all' && format('["{0}"]', inputs.scope) || '["components","core","product","background","agents"]') }}
+    runs-on: windows-2025
+    timeout-minutes: 75
+    env:
+      CARGO_NET_GIT_FETCH_WITH_CLI: 'true'
+      CARGO_INCREMENTAL: '0'
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Repository Rust toolchain
+        shell: pwsh
+        run: rustup show active-toolchain
+      - uses: mozilla-actions/sccache-action@v0.0.11
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        if: matrix.scope == 'agents'
+        with:
+          node-version: '22.19.0'
+      - name: Locked upstream client fixtures
+        if: matrix.scope == 'agents'
+        shell: pwsh
+        working-directory: tools/windows-agent-fixtures
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'Locked client fixtures failed to install' }
+      - name: Exact CPA source for native package acceptance
+        if: matrix.scope == 'background'
+        shell: pwsh
+        run: |
+          $pin = Get-Content vendor/cpa/source.json -Raw | ConvertFrom-Json
+          git init "$env:RUNNER_TEMP/cpa"
+          git -C "$env:RUNNER_TEMP/cpa" fetch --depth=1 $pin.repository $pin.commit
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned CPA fetch failed' }
+          git -C "$env:RUNNER_TEMP/cpa" checkout --detach FETCH_HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned CPA checkout failed' }
+      - uses: actions/setup-go@v5
+        if: matrix.scope == 'background'
+        with:
+          go-version-file: ${{ runner.temp }}/cpa/go.mod
+          cache: false
+      - name: Complete artifacts and selected native assessment on the exact revision
+        shell: pwsh
+        run: |
+          $assessment = if ('${{ matrix.scope }}' -ceq 'background') { 'hosted' } else { 'full' }
+          & scripts/windows-headless-ci.ps1 -Scope '${{ matrix.scope }}' -ExpectedSha $env:GITHUB_SHA -Evidence artifacts/windows -CpaSource "$env:RUNNER_TEMP/cpa" -Plan windows-headless -Phase '${{ inputs.scope != '' && inputs.scope != 'all' && 'focused' || 'final' }}' -CaptureArtifacts -Assessment $assessment
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-${{ matrix.scope }}-${{ github.sha }}-${{ github.run_attempt }}
+          path: artifacts/windows
+          if-no-files-found: error
+          retention-days: 14
+  windows11:
+    name: windows11-x64 (${{ matrix.scope }})
+    needs: native
+    strategy:
+      fail-fast: false
+      matrix:
+        scope: ${{ fromJSON(inputs.scope != '' && inputs.scope != 'all' && format('["{0}"]', inputs.scope) || '["components","core","product","background","agents"]') }}
+    runs-on: windows-11-arm
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - uses: actions/setup-node@v4
+        if: matrix.scope == 'agents'
+        with:
+          node-version: '22.19.0'
+          architecture: x64
+      - name: Locked x64 upstream clients
+        if: matrix.scope == 'agents'
+        shell: pwsh
+        working-directory: tools/windows-agent-fixtures
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'Locked x64 client fixtures unavailable' }
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-${{ matrix.scope }}-${{ github.sha }}-${{ github.run_attempt }}
+          path: artifacts/producer
+      - name: Complete artifacts and selected Windows 11 runtime assessment
+        shell: pwsh
+        run: |
+          $assessment = if ('${{ matrix.scope }}' -ceq 'background') { 'hosted' } else { 'full' }
+          & scripts/windows-native-replay.ps1 -Scope '${{ matrix.scope }}' -ExpectedSha $env:GITHUB_SHA -Bundle artifacts/producer -Evidence artifacts/windows11 -Plan windows-headless -Phase '${{ inputs.scope != '' && inputs.scope != 'all' && 'focused' || 'final' }}' -RelatedRun $env:GITHUB_RUN_ID -Assessment $assessment
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows11-${{ matrix.scope }}-${{ github.sha }}-${{ github.run_attempt }}
+          path: artifacts/windows11
+          if-no-files-found: error
+          retention-days: 14

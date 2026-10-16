@@ -584,7 +584,12 @@ fn codex_plan_selections_preview_only_with_catalog_facts() {
         content_digest: CanonicalDigest::of_bytes(b"merged-catalog"),
         before_fingerprint: None,
         producer_kind: CodexCatalogProducerKindV1::TargetCache,
-        producer_path: "/target/.codex/models_cache.json".into(),
+        producer_path: if cfg!(windows) {
+            "C:/target/.codex/models_cache.json"
+        } else {
+            "/target/.codex/models_cache.json"
+        }
+        .into(),
         producer_content_digest: CanonicalDigest::of_bytes(b"native-catalog"),
         producer_context_digest: CanonicalDigest::of_bytes(b"codex-context"),
         producer_dependency_digest: CanonicalDigest::of_bytes(b"catalog-dependencies"),
@@ -614,7 +619,12 @@ fn codex_plan_selections_preview_only_with_catalog_facts() {
         content_digest: CanonicalDigest::of_bytes(b"merged-catalog"),
         before_fingerprint: None,
         producer_kind: CodexCatalogProducerKindV1::TargetCache,
-        producer_path: "/target/.codex/models_cache.json".into(),
+        producer_path: if cfg!(windows) {
+            "C:/target/.codex/models_cache.json"
+        } else {
+            "/target/.codex/models_cache.json"
+        }
+        .into(),
         producer_content_digest: CanonicalDigest::of_bytes(b"native-catalog"),
         producer_context_digest: CanonicalDigest::of_bytes(b"codex-context"),
         producer_dependency_digest: CanonicalDigest::of_bytes(b"catalog-dependencies"),
@@ -867,7 +877,12 @@ fn codex_model_file_journal_binds_the_catalog_to_plan_carrying_grants() {
                         content_digest: digest,
                         before_fingerprint: None,
                         producer_kind: CodexCatalogProducerKindV1::TargetCache,
-                        producer_path: "/target/.codex/models_cache.json".into(),
+                        producer_path: if cfg!(windows) {
+                            "C:/target/.codex/models_cache.json"
+                        } else {
+                            "/target/.codex/models_cache.json"
+                        }
+                        .into(),
                         producer_content_digest: CanonicalDigest::of_bytes(b"native-catalog"),
                         producer_context_digest: CanonicalDigest::of_bytes(b"codex-context"),
                         producer_dependency_digest: CanonicalDigest::of_bytes(

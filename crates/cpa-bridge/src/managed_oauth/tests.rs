@@ -1,3 +1,14 @@
+fn fixture_write(path: impl AsRef<Path>, bytes: impl AsRef<[u8]>) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        crate::windows_private::write(path.as_ref(), bytes.as_ref())
+    }
+    #[cfg(not(windows))]
+    {
+        fs::write(path, bytes)
+    }
+}
+
 use super::*;
 
 fn fixture(kind: CpaAccountKind, account: &str, access: &str, refresh: &str) -> Vec<u8> {
@@ -118,15 +129,25 @@ fn managed_store_reads_without_rewriting_tokens_and_rejects_account_pool() {
     let auth_dir = crate::config::ensure_private_dir(&root.path().join("auth")).unwrap();
     let kind = CpaAccountKind::Codex;
     let bytes = fixture(kind, "account", "access", "refresh");
-    fs::write(auth_dir.join("one.json"), &bytes).unwrap();
+    fixture_write(auth_dir.join("one.json"), &bytes).unwrap();
     let source = ManagedOAuthCredentialSource {
         auth_dir: auth_dir.clone(),
         kind,
     };
     assert!(source.inspect().is_ok());
     assert_eq!(fs::read(auth_dir.join("one.json")).unwrap(), bytes);
+    #[cfg(not(windows))]
     crate::config::validate_private_file(&auth_dir.join("one.json")).unwrap();
-    fs::write(auth_dir.join("two.json"), &bytes).unwrap();
+    #[cfg(windows)]
+    {
+        let parent = crate::windows_private::existing_directory(&auth_dir).unwrap();
+        hiroute_platform::windows::security::open_inherited_private_file_at(
+            &parent,
+            "one.json".as_ref(),
+        )
+        .unwrap();
+    }
+    fixture_write(auth_dir.join("two.json"), &bytes).unwrap();
     assert!(source.inspect().is_err());
 }
 
@@ -155,9 +176,9 @@ fn managed_lease_is_single_writer_and_rejects_subject_replacement() {
         .is_err()
     );
     let path = auth_dir.join("one.json");
-    fs::write(&path, fixture(kind, "first", "access", "refresh")).unwrap();
+    fixture_write(&path, fixture(kind, "first", "access", "refresh")).unwrap();
     let first = lease.refresh_subscription(None, None).unwrap();
-    fs::write(
+    fixture_write(
         &path,
         fixture(kind, "first", "rotated-access", "rotated-refresh"),
     )
@@ -168,7 +189,7 @@ fn managed_lease_is_single_writer_and_rejects_subject_replacement() {
             .unwrap(),
         first
     );
-    fs::write(&path, fixture(kind, "second", "access", "refresh")).unwrap();
+    fixture_write(&path, fixture(kind, "second", "access", "refresh")).unwrap();
     assert!(matches!(
         lease.refresh_subscription(None, None),
         Err(CpaLifecycleError::ManagedOAuthAccountChanged)
@@ -187,7 +208,7 @@ fn managed_store_never_follows_symlink_or_accepts_hardlinked_credentials() {
     let auth_dir = crate::config::ensure_private_dir(&root.path().join("auth")).unwrap();
     let external = root.path().join("external");
     let bytes = fixture(CpaAccountKind::Claude, "account", "access", "refresh");
-    fs::write(&external, &bytes).unwrap();
+    fixture_write(&external, &bytes).unwrap();
     let source = ManagedOAuthCredentialSource {
         auth_dir: auth_dir.clone(),
         kind: CpaAccountKind::Claude,

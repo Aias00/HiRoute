@@ -512,6 +512,12 @@ mod tests {
     use super::*;
     use hiroute_domain::delegation::{WorkerNetworkV1, WorkerToolV1, WorkspaceAccessV1};
 
+    const WORKSPACE: &str = if cfg!(windows) {
+        "C:/workspace"
+    } else {
+        "/workspace"
+    };
+
     fn request() -> DelegationStartRequestV1 {
         DelegationStartRequestV1 {
             schema: DELEGATION_START_SCHEMA_V1.to_owned(),
@@ -525,7 +531,7 @@ mod tests {
             expected_plan: None,
             permit_id: "permit".to_owned(),
             permit_generation: 1,
-            workspace_path: "/workspace".to_owned(),
+            workspace_path: WORKSPACE.to_owned(),
             execution: WorkerExecutionIntentV1 {
                 root_identity: "root".to_owned(),
                 access: WorkspaceAccessV1::ReadOnly,
@@ -551,7 +557,15 @@ mod tests {
         assert!(value.valid());
         value.workspace_path = "relative".to_owned();
         assert!(!value.valid());
-        value.workspace_path = "/workspace".to_owned();
+        value.workspace_path = WORKSPACE.to_owned();
+        assert!(value.valid());
+        if cfg!(windows) {
+            for rooted_or_drive_relative in ["/workspace", r"\workspace", "C:workspace"] {
+                value.workspace_path = rooted_or_drive_relative.into();
+                assert!(!value.valid(), "{rooted_or_drive_relative}");
+            }
+            value.workspace_path = WORKSPACE.to_owned();
+        }
         value.execution.delegation_depth = 2;
         assert!(!value.valid());
         value.execution.delegation_depth = 1;

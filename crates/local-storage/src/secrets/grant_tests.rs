@@ -48,7 +48,7 @@ fn ensure(scope: AgentAccessGrantScopeV1, expected_generation: u64) -> AgentAcce
     AgentAccessGrantMutationV1::ensure(OWNER_SCOPE, scope, expected_generation).unwrap()
 }
 
-fn store() -> (tempfile::TempDir, LocalSecretStore) {
+fn store() -> (crate::TestTempDir, LocalSecretStore) {
     let directory = tempdir().unwrap();
     let root = directory.path().join("data");
     let store = LocalSecretStore::open(

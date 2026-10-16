@@ -33,10 +33,13 @@ fn isolated_agent_home_inner(
                 == 1,
         "isolated daemon test must select exactly one case: {test_name}"
     );
-    let directory = tempfile::tempdir().unwrap();
+    let directory = private_tempdir();
     let home = directory.path().canonicalize().unwrap();
     let claude_home = home.join(".claude");
+    #[cfg(not(windows))]
     std::fs::create_dir(&claude_home).unwrap();
+    #[cfg(windows)]
+    drop(hiroute_platform::windows::security::create_owner_only_directory(&claude_home).unwrap());
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -62,11 +65,23 @@ fn isolated_agent_home_inner(
         .env(CHILD, test_name)
         .env("HOME", &home)
         .env("CODEX_HOME", home.join(".codex"))
-        .env("CLAUDE_CONFIG_DIR", &claude_home)
-        .env(
-            "PATH",
-            path.unwrap_or(std::ffi::OsStr::new("/usr/bin:/bin")),
-        );
+        .env("CLAUDE_CONFIG_DIR", &claude_home);
+    #[cfg(unix)]
+    command.env(
+        "PATH",
+        path.unwrap_or(std::ffi::OsStr::new("/usr/bin:/bin")),
+    );
+    #[cfg(windows)]
+    {
+        let system =
+            hiroute_platform::windows::launcher::system_executable(std::path::Path::new("cmd.exe"))
+                .unwrap();
+        command
+            .env("USERPROFILE", &home)
+            .env("APPDATA", home.join("AppData/Roaming"))
+            .env("LOCALAPPDATA", home.join("AppData/Local"))
+            .env("PATH", path.unwrap_or(system.parent().unwrap().as_os_str()));
+    }
     for name in [
         "ANTHROPIC_API_KEY",
         "ANTHROPIC_AUTH_TOKEN",
@@ -80,7 +95,13 @@ fn isolated_agent_home_inner(
         "CLAUDE_CODE_USE_BEDROCK",
         "CLAUDE_CODE_USE_FOUNDRY",
         "CLAUDE_CODE_USE_VERTEX",
-    ] {
+    ]
+    .into_iter()
+    .chain(
+        hiroute_domain::CLAUDE_CONTEXT_CONFLICT_ENVIRONMENT
+            .iter()
+            .copied(),
+    ) {
         command.env_remove(name);
     }
     let status = command.status().unwrap();
@@ -95,12 +116,43 @@ fn missing_isolated_child_cannot_report_success() {
 }
 
 /// Filesystem-observing fixtures must be private regardless of the caller's umask.
-pub(crate) fn private_tempdir() -> tempfile::TempDir {
-    let mut builder = tempfile::Builder::new();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        builder.permissions(std::fs::Permissions::from_mode(0o700));
+#[cfg(not(windows))]
+pub(crate) type PrivateTempDir = tempfile::TempDir;
+
+#[cfg(windows)]
+pub(crate) struct PrivateTempDir {
+    _cleanup: tempfile::TempDir,
+    path: std::path::PathBuf,
+}
+
+#[cfg(windows)]
+impl PrivateTempDir {
+    pub(crate) fn path(&self) -> &std::path::Path {
+        &self.path
     }
-    builder.tempdir().unwrap()
+}
+
+pub(crate) fn private_tempdir() -> PrivateTempDir {
+    let builder = tempfile::Builder::new();
+    #[cfg(unix)]
+    let builder = {
+        use std::os::unix::fs::PermissionsExt;
+        let mut builder = builder;
+        builder.permissions(std::fs::Permissions::from_mode(0o700));
+        builder
+    };
+    let directory = builder.tempdir().unwrap();
+    #[cfg(not(windows))]
+    {
+        directory
+    }
+    #[cfg(windows)]
+    {
+        let path = directory.path().join("private");
+        drop(hiroute_platform::windows::security::create_owner_only_directory(&path).unwrap());
+        PrivateTempDir {
+            _cleanup: directory,
+            path,
+        }
+    }
 }

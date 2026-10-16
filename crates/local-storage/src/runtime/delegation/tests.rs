@@ -75,7 +75,12 @@ fn sample(task_id: &str, run_id: &str, root: &str) -> DelegationAcceptanceV1 {
                 format_version: DELEGATION_RUN_CONFIGURATION_VERSION_V1,
                 scope_id: format!("run-config/{run_id}"),
                 generation: 1,
-                canonical_workspace_path: "/workspace".into(),
+                canonical_workspace_path: if cfg!(windows) {
+                    "C:/workspace"
+                } else {
+                    "/workspace"
+                }
+                .into(),
                 permission_policy: WorkerPermissionPolicyV1::ApproveAll,
             },
             execution,
@@ -117,9 +122,19 @@ fn commit_ready_root(store: &RuntimeStore, workspace: &WorkspaceId, task_id: &st
             task_id: task_id.to_owned(),
             root_generation: snapshot.root.root_generation,
             creation_nonce: snapshot.root.creation_nonce,
-            managed_base_path: "/managed/sessions".into(),
+            managed_base_path: if cfg!(windows) {
+                "C:/managed/sessions"
+            } else {
+                "/managed/sessions"
+            }
+            .into(),
             filesystem_identity: DelegationNativeFilesystemIdentityV1 {
-                scheme: "unix-dev-inode-v1".into(),
+                scheme: if cfg!(windows) {
+                    "windows-volume-file-index-v1"
+                } else {
+                    "unix-dev-inode-v1"
+                }
+                .into(),
                 base_device: 1,
                 base_inode: 2,
                 root_device: 1,

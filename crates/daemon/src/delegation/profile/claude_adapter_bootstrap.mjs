@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 
 const fixedNames = new Set([
   "HOME", "PATH", "PWD", "TMPDIR", "TMP", "TEMP",
+  "USERPROFILE", "APPDATA", "LOCALAPPDATA", "SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT",
   "CLAUDE_CONFIG_DIR", "CLAUDE_CODE_EXECUTABLE",
   "CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST",
   "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
@@ -25,15 +26,25 @@ const transportNames = new Set([
 
 class ManagedTransportConflict extends Error {}
 
+const normalize = (name) => process.platform === "win32" && typeof name === "string"
+  ? name.toUpperCase() : name;
+const isTransport = (name) => transportNames.has(normalize(name));
+function environmentValue(target, key) {
+  if (process.platform !== "win32") return target[key];
+  const actual = Object.keys(target).find((name) => normalize(name) === normalize(key));
+  return actual === undefined ? undefined : target[actual];
+}
+
 function checkTransportWrite(target, key, value) {
   // Managed policy outranks the native flag layer and is read again by the CLI.
   // Swallowing a conflicting adapter write would leave that later bypass intact.
-  if (transportNames.has(key) && target[key] !== value) {
+  if (isTransport(key) && environmentValue(target, key) !== value) {
     throw new ManagedTransportConflict();
   }
 }
 
 function hostControlled(name) {
+  name = normalize(name);
   return typeof name === "string" && (
     fixedNames.has(name)
     || transportNames.has(name)
@@ -48,7 +59,7 @@ function hostControlled(name) {
 // provider backend or runtime loader. Other settings env values remain native inputs.
 const guardedEnvironment = new Proxy(process.env, {
   set(target, key, value) {
-    if (transportNames.has(key)) checkTransportWrite(target, key, String(value));
+    if (isTransport(key)) checkTransportWrite(target, key, String(value));
     return hostControlled(key) || Reflect.set(target, key, value);
   },
   deleteProperty(target, key) {
@@ -56,7 +67,7 @@ const guardedEnvironment = new Proxy(process.env, {
     return hostControlled(key) || Reflect.deleteProperty(target, key);
   },
   defineProperty(target, key, descriptor) {
-    if (transportNames.has(key)) {
+    if (isTransport(key)) {
       if (!("value" in descriptor)) throw new ManagedTransportConflict();
       checkTransportWrite(target, key, String(descriptor.value));
     }

@@ -31,6 +31,17 @@ pub struct PiCliInstallation {
 pub fn pi_cli_installation(
     cli: &Path,
 ) -> Result<PiCliInstallation, super::AgentFilesystemScanError> {
+    pi_cli_installation_with_inspection(cli, |_| Ok(()))
+}
+
+/// Inspect only files the existing package reader uses: qualifying manifests
+/// before their bytes are read, then the declared entry before canonicalizing.
+/// Callers can retain native leases without changing the nearest-package search
+/// or interpreting npm declarations a second time.
+pub fn pi_cli_installation_with_inspection(
+    cli: &Path,
+    mut inspect: impl FnMut(&Path) -> std::io::Result<()>,
+) -> Result<PiCliInstallation, super::AgentFilesystemScanError> {
     use super::AgentFilesystemScanError::SourceUnavailable;
     let cli = std::fs::canonicalize(cli).map_err(|_| SourceUnavailable)?;
     // npm/pnpm may move the entry; the owning manifest, not a depth or filename,
@@ -43,6 +54,7 @@ pub fn pi_cli_installation(
         if !metadata.is_file() || metadata.len() > 64 * 1024 {
             continue;
         }
+        inspect(&manifest).map_err(|_| SourceUnavailable)?;
         let bytes = std::fs::read(&manifest).map_err(|_| SourceUnavailable)?;
         let package: serde_json::Value =
             serde_json::from_slice(&bytes).map_err(|_| SourceUnavailable)?;
@@ -53,7 +65,9 @@ pub fn pi_cli_installation(
             .pointer("/bin/pi")
             .and_then(serde_json::Value::as_str)
             .ok_or(SourceUnavailable)?;
-        let entry = std::fs::canonicalize(root.join(bin)).map_err(|_| SourceUnavailable)?;
+        let declared = root.join(bin);
+        inspect(&declared).map_err(|_| SourceUnavailable)?;
+        let entry = std::fs::canonicalize(declared).map_err(|_| SourceUnavailable)?;
         let version = package["version"]
             .as_str()
             .filter(|v| !v.is_empty() && v.len() <= 128)
@@ -80,7 +94,7 @@ pub enum PiSdkCapability {
 
 /// Load only the SDK exported by the selected CLI's package. No native prompt,
 /// user credential store, helper, extension or network model refresh is used.
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub fn check_pi_sdk_capability(
     cli: &Path,
     node: &Path,
@@ -98,13 +112,16 @@ pub fn check_pi_sdk_capability(
         reason: NativeDependencyFailureReasonV1::Unsupported,
     })?;
     validate_pi_node(node)?;
-    let mut script = tempfile::Builder::new()
-        .suffix(".mjs")
-        .tempfile()
+    let scripts = super::probe_files::temporary("hiroute-pi-sdk-")
         .map_err(|_| failure(NativeDependencyFailureReasonV1::Unavailable))?;
-    script
-        .write_all(PI_SDK_CONTRACT.as_bytes())
-        .map_err(|_| failure(NativeDependencyFailureReasonV1::Unavailable))?;
+    let script = scripts.path().join("capability.mjs");
+    {
+        let mut output = super::probe_files::file(&script)
+            .map_err(|_| failure(NativeDependencyFailureReasonV1::Unavailable))?;
+        output
+            .write_all(PI_SDK_CONTRACT.as_bytes())
+            .map_err(|_| failure(NativeDependencyFailureReasonV1::Unavailable))?;
+    }
     let scope = match capability {
         PiSdkCapability::Models => "models",
         PiSdkCapability::Collaboration => "collaboration",
@@ -113,7 +130,7 @@ pub fn check_pi_sdk_capability(
     };
     let mut command = Command::new(node);
     command
-        .arg(script.path())
+        .arg(&script)
         .arg("--check")
         .arg(cli)
         .arg(scope)
@@ -134,7 +151,7 @@ pub fn check_pi_sdk_capability(
 pub const PI_NODE_MINIMUM: (u32, u32, u32) = (22, 19, 0);
 
 /// One bounded native version read; neither stdout nor stderr reaches product diagnostics.
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub fn validate_pi_node(node: &Path) -> Result<(), NativeDependencyFailureV1> {
     use std::process::Command;
     use std::time::Duration;
@@ -169,7 +186,7 @@ pub fn validate_pi_node(node: &Path) -> Result<(), NativeDependencyFailureV1> {
     Ok(())
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use hiroute_domain::delegation::{
     NativeDependencyCheckV1, NativeDependencyFailureReasonV1, NativeDependencyFailureV1,
 };
@@ -216,6 +233,36 @@ fn bounded_check(
     // A failed check also stops and accounts for its owned scope before returning.
     child.stop().map_err(|_| failure(Reason::CleanupFailed))?;
     result
+}
+
+#[cfg(windows)]
+fn bounded_check(
+    mut command: std::process::Command,
+    check: NativeDependencyCheckV1,
+    timeout: std::time::Duration,
+    output_limit: usize,
+) -> Result<zeroize::Zeroizing<Vec<u8>>, NativeDependencyFailureV1> {
+    command
+        .env_remove("NODE_OPTIONS")
+        .env_remove("HIROUTE_RUN_TOKEN");
+    super::windows_runtime::bounded(&command, true, timeout, output_limit).map_err(|error| {
+        NativeDependencyFailureV1 {
+            check,
+            reason: if super::windows_runtime::cleanup_unknown(&error) {
+                NativeDependencyFailureReasonV1::CleanupFailed
+            } else if super::windows_runtime::process_exit_code(&error).is_some() {
+                NativeDependencyFailureReasonV1::ProcessFailed
+            } else {
+                match error.kind() {
+                    std::io::ErrorKind::TimedOut => NativeDependencyFailureReasonV1::Timeout,
+                    std::io::ErrorKind::InvalidData => {
+                        NativeDependencyFailureReasonV1::InvalidOutput
+                    }
+                    _ => NativeDependencyFailureReasonV1::Unavailable,
+                }
+            },
+        }
+    })
 }
 
 #[cfg(all(test, unix))]

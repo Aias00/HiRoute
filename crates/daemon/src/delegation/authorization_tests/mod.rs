@@ -272,16 +272,22 @@ fn legacy_permit_partial_failure_does_not_replay_into_public_worker_authority() 
     assert!(admission.accept(&next, |_, _| Ok(())).is_ok());
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 #[test]
 fn prepared_credential_crosses_only_protected_channel_and_uses_current_grant() {
     use super::bootstrap;
+    #[cfg(unix)]
     use std::os::{fd::OwnedFd, unix::net::UnixStream};
     let (_dir, stores, _gate, _safety) = setup();
     let (grant, material) = configured(&stores);
+    #[cfg(unix)]
     let (write, read) = UnixStream::pair().unwrap();
+    #[cfg(unix)]
     let write = std::fs::File::from(OwnedFd::from(write));
+    #[cfg(unix)]
     let read = std::fs::File::from(OwnedFd::from(read));
+    #[cfg(windows)]
+    let (write, read) = hiroute_platform::windows::job::credential_pipe_pair().unwrap();
     bootstrap::supply(&write, &material).unwrap();
     let principal = bootstrap::receive(
         &read,
@@ -312,6 +318,28 @@ fn prepared_credential_crosses_only_protected_channel_and_uses_current_grant() {
         )
         .is_err()
     );
+}
+
+#[cfg(windows)]
+#[test]
+fn prepared_credential_empty_windows_pipe_has_a_bounded_deadline() {
+    use super::bootstrap;
+    let (_dir, stores, _gate, _safety) = setup();
+    let (grant, _material) = configured(&stores);
+    let (_write, read) = hiroute_platform::windows::job::credential_pipe_pair().unwrap();
+    let start = std::time::Instant::now();
+    assert!(matches!(
+        bootstrap::receive(
+            &read,
+            stores.control(),
+            &grant.workspace_id,
+            &grant.grant_id,
+            &grant.context_id,
+            1,
+        ),
+        Err(DelegationErrorV1::DeadlineExceeded)
+    ));
+    assert!(start.elapsed() < std::time::Duration::from_secs(3));
 }
 
 #[test]

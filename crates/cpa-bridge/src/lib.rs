@@ -21,6 +21,8 @@ mod http;
 mod managed_oauth;
 pub use managed_oauth::{CpaManagedCredentialSummary, CpaManagedEvidence};
 mod owner;
+#[cfg(test)]
+mod private_test_support;
 mod process;
 mod proxy_environment;
 mod request_context;
@@ -30,6 +32,8 @@ mod runtime_set;
 pub use runtime_set::{CpaLoginSession, CpaLoginState, ManagedCpaRuntimeSet};
 mod state;
 mod subscription;
+#[cfg(windows)]
+mod windows_private;
 
 pub use accounts::{CpaAccountKind, CpaProfileBinding};
 pub use artifact::{

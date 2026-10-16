@@ -424,11 +424,49 @@ HiRoute SHALL let the authenticated same-OS-user Local Control CLI read retained
 
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/125#issuecomment-6220387323
+### Requirement: Windows headless preserves the logged-on user's native authority
+
+Windows standalone MUST use the actual user's Profile and LocalAppData KnownFolders
+for installation and runtime ownership. HOME/XDG values cannot redirect an installed
+instance. Native headless operation uses the shared CLI, role-all daemon, Application,
+Gateway and business stores without requiring Desktop or WSL.
+
+The default Task Scheduler manager runs as the current logged-on user with an
+InteractiveToken and least privilege. Ordinary install/start/stop does not require
+administrator access or an account password. The background process MUST survive
+closure of its launching terminal. Its lifetime requires that user's logged-on
+session; login-start preference and starting now remain separate operations.
+Unexpected business-process exit uses bounded recovery, while an explicit stop
+terminates the owned child tree and cancels pending recovery. Manager registration
+or action launch alone is not proof of healthy Control and Gateway service.
+
+Installation MUST verify the complete package inventory, source revision, file
+digests and native executable architecture before publishing stable entries.
+A prepared replacement blocks business startup until package files, installation
+record and actual manager definition agree. Repair/rollback preserves saved Sources,
+secrets, routes, Agent recovery references and observations instead of replaying
+business mutations or initializing empty stores. Uninstall preserves business data
+and unrelated native configuration.
+
+Local Control, lifecycle and protected input use private named pipes bound to the
+account SID, held runtime objects and verified native peers. Protected credential
+carriers use explicitly inherited non-stdio pipe handles with bounded input and EOF;
+argv, environment variables and ordinary JSON input do not supply that authority.
+Remote peers, replaced objects and occupied endpoints cannot impersonate the instance.
+
+An optional SCM installation is a separate administrator operation over verified
+administrator-controlled package bytes. Its privileged host cannot execute an
+arbitrary user-selected image. Task acceptance cannot establish service-account,
+logout or SCM acceptance; native OS, architecture and real-provider claims require
+their own revision-bound execution evidence.
 
 ## Implementation references
 
 - [Client Core](../../../crates/client-core/src) and
   [CLI request-input guide](../../../crates/cli/INPUT.md).
+- [Windows installation and manager boundaries](../../../docs/standalone-windows.md),
+  [native platform owners](../../../crates/platform/README.md), and
+  [installed background and upgrade scenarios](../../../crates/daemon/tests/windows_background.rs).
 - [Real argv scenarios](../../../crates/cli/tests/request_input.rs) and
   [stateless Worker submission scenarios](../../../crates/cli/tests/worker_submission.rs).
 - [Release builder/installation contract](../../../docs/release-builds.md).

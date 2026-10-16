@@ -31,10 +31,7 @@ pub(crate) fn execute(arguments: &[String], globals: &Globals) -> Option<CliExec
         });
     }
     let request_id = globals.request_id.clone();
-    if globals.agent.is_some()
-        || globals.capability_fd.is_some()
-        || globals.output != OutputMode::Json
-    {
+    if globals.agent.is_some() || globals.has_capability() || globals.output != OutputMode::Json {
         return Some(failure(ErrorCode::InvalidArguments, request_id));
     }
     let result = match family {
@@ -53,7 +50,7 @@ pub(crate) fn execute(arguments: &[String], globals: &Globals) -> Option<CliExec
 fn host_help(family: &str) -> &'static str {
     match family {
         "service" => {
-            "Usage\n  hiroute service start|stop|restart|status|logs|doctor --output json\n  hiroute service autostart enable|disable|status --output json\n  hiroute service run\n"
+            "Usage\n  hiroute service start|stop|restart|status|logs|doctor --output json\n  hiroute service autostart enable|disable|status --output json\n  hiroute service run\n  Windows package maintenance:\n  hiroute service install --manager task --output json\n  hiroute service install --manager scm --password-stdin --output json\n  hiroute service uninstall --output json\n  hiroute service layout --output json\n  hiroute service publish-install --request-stdin --output json\n  hiroute service write-record --path <PATH> --request-stdin --output json\n"
         }
         "gateway" => {
             "Usage\n  hiroute gateway show --output json\n  hiroute gateway set --address <IPV4> --port auto|<PORT> [--accept-remote-risk] --output json\n  hiroute gateway recover --output json\n"
@@ -62,6 +59,11 @@ fn host_help(family: &str) -> &'static str {
             "Usage\n  hiroute subscription-proxy show --output json\n  hiroute subscription-proxy set --mode inherit|direct|manual [--url <HTTP_PROXY_URL>] [--no-proxy <BYPASS_LIST>] --output json\n  Restart the service to apply saved settings: hiroute service restart --output json\n"
         }
         "protected-input" => {
+            #[cfg(windows)]
+            {
+                return "Usage\n  hiroute protected-input register --candidate <REF> --secret-handle <INHERITED_HANDLE> --output json\n  hiroute protected-input release --candidate <REF> --output json\nThe inherited handle must name a private non-stdio pipe; payload and EOF are bounded.\n";
+            }
+            #[cfg(not(windows))]
             "Usage\n  hiroute protected-input register --candidate <REF> --secret-fd <FD> --output json\n  hiroute protected-input register --candidate <REF> --prompt --format bearer|raw --output json\n  hiroute protected-input release --candidate <REF> --output json\n\n--prompt is a human step in the user's own terminal (for example SSH), outside chat and Agent tools. It reads hidden input from the controlling terminal only; no stdin fallback. bearer accepts a bare API key and adds Bearer; raw accepts the complete custom header value. Never put credentials in argv, environment, normal JSON or chat. Cancellation/missing terminal saves no service. Continue using the candidate reference after registered=true. The existing --secret-fd value remains unchanged.\n"
         }
         _ => unreachable!(),
@@ -80,6 +82,35 @@ fn service_command(
         [verb] if verb == "status" => json_value(service::status().map_err(map)?)?,
         [verb] if verb == "logs" => service::logs().map_err(map)?,
         [verb] if verb == "doctor" => service::doctor(),
+        [verb] if verb == "layout" => service::windows_layout().map_err(map)?,
+        [verb] if verb == "prepare-install" => service::prepare_windows_install().map_err(map)?,
+        [verb, manager_flag, manager, daemon_flag, daemon]
+            if verb == "describe-install"
+                && manager_flag == "--manager"
+                && daemon_flag == "--daemon" =>
+        {
+            service::describe_windows_manager(manager, std::path::Path::new(daemon)).map_err(map)?
+        }
+        [verb, source] if verb == "publish-install" && source == "--request-stdin" => {
+            service::publish_install_record().map_err(map)?
+        }
+        [verb, path_flag, path, source]
+            if verb == "write-record" && path_flag == "--path" && source == "--request-stdin" =>
+        {
+            service::write_private_record(std::path::Path::new(path)).map_err(map)?
+        }
+        [verb, flag, manager] if verb == "install" && flag == "--manager" && manager == "task" => {
+            service::install_manager(manager, false).map_err(map)?
+        }
+        [verb, flag, manager, password]
+            if verb == "install"
+                && flag == "--manager"
+                && manager == "scm"
+                && password == "--password-stdin" =>
+        {
+            service::install_manager(manager, true).map_err(map)?
+        }
+        [verb] if verb == "uninstall" => service::uninstall_manager(timeout).map_err(map)?,
         [autostart, verb] if autostart == "autostart" && verb == "enable" => {
             json_value(service::set_autostart(true).map_err(map)?)?
         }
@@ -375,6 +406,19 @@ fn protected_input_command(
                 candidate.clone(),
                 crate::protected_prompt::read(format)?,
             )
+        }
+        #[cfg(windows)]
+        [verb, candidate_flag, candidate, secret_flag, handle]
+            if verb == "register"
+                && candidate_flag == "--candidate"
+                && secret_flag == "--secret-handle" =>
+        {
+            let handle = handle
+                .parse::<u64>()
+                .map_err(|_| ErrorCode::InvalidArguments)?;
+            let secret = crate::client::read_protected_handle(handle, 512)
+                .map_err(|_| ErrorCode::InvalidArguments)?;
+            StandaloneProtectedInputRequestV1::register(candidate.clone(), secret)
         }
         [verb, candidate_flag, candidate, secret_flag, fd]
             if verb == "register"

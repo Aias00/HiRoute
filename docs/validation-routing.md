@@ -42,6 +42,19 @@ checkouts while sharing the same account-wide compiler capacity locks. `repo`/`p
 are interpreted on the execution host, never expanded using the caller's HOME.
 The wrapper sends argument arrays as JSON, not interpolated shell commands.
 
+The submitted candidate and the validation driver have separate revision identities.
+The driver uses committed bytes at the caller's HEAD; `--sha` selects the candidate
+from the advertised branch. Both revisions must satisfy Git admission. A tooling-only
+driver repair can validate an unchanged candidate without treating new source as old
+runtime evidence. Related runs remain in their selected workbench; another origin
+or workbench does not import their results.
+
+Windows development execution uses `validation.py windows` below; hosted CI retains
+its [own execution entry](github-actions-validation.md).
+Linux backend success does not establish Windows runtime, real account, or logged-on
+Task acceptance. Use the corresponding native environment and record the actual OS
+and executed cases.
+
 ## Commands
 
 ```sh
@@ -78,6 +91,180 @@ and supports `finish/preview/apply/keep/release/retire/gc`. Its logs stay beside
 result on that host. SSH interruption is not proof of completion: inspect that
 host's run record before retrying. This wrapper adds no queue for Mac builds.
 Existing direct runner commands remain available.
+
+### Windows iteration and release validation
+
+#### Development-machine execution
+
+The unified entry is `python3 scripts/validation.py windows`. It reads
+`~/.config/hiroute/windows-validation.json` (mode `0600`, outside the checkout).
+The configuration contains machine locations, never provider tokens. Use an existing
+SSH key and a dedicated already logged-on Windows acceptance account. The runner
+neither creates accounts nor logs users in, restarts Windows or changes RDP.
+
+```json
+{
+  "version": 1,
+  "host": "windows-dev",
+  "identity_file": "~/.ssh/id_ed25519",
+  "python": "C:/Validation/python/python.exe",
+  "root": "C:/Validation/hiroute-runs",
+  "user": "acceptance",
+  "session_id": 2,
+  "environment": {
+    "HIROUTE_WINDOWS_SOURCE_ROOT": "C:/Validation/source",
+    "HIROUTE_WORKER_NODE": "C:/Validation/node/node.exe",
+    "HIROUTE_WORKER_CODEX_BINARY": "C:/Validation/clients/codex.exe",
+    "HIROUTE_WORKER_CLAUDE_BINARY": "C:/Validation/clients/claude.exe",
+    "HIROUTE_WORKER_PI_BINARY": "C:/Validation/clients/pi/dist/bundle/cli.js",
+    "HIROUTE_WORKER_DSH_BINARY": "C:/Validation/clients/dsh/lib/bin.js",
+    "HIROUTE_WORKER_CODEX_ACP_ADAPTER": "C:/Validation/clients/codex-acp/dist/index.js",
+    "HIROUTE_WORKER_CLAUDE_ACP_ADAPTER": "C:/Validation/clients/claude-agent-acp/dist/index.js"
+  },
+  "path": ["C:/Validation/node", "C:/Validation/clients", "C:/Validation/git/bin", "C:/Validation/pwsh"]
+}
+```
+
+Replace example locations with installed, pinned clients. The source root contains
+matching `tools/windows-agent-fixtures` declarations, lockfile and installed npm
+modules. `doctor` reports the actual OS and existing sessions; select the intended
+session in HOME rather than silently falling back to SSH service context. An
+administrator session is not standard-user evidence. The configured account must
+be able to read the bundles and register a task for its existing login session.
+
+```sh
+python3 scripts/validation.py windows doctor
+# Export on the cross-build host before continuing the managed checkout.
+python3 scripts/validation.py windows bundle --result /path/to/run/result.json \
+  --log /path/to/run/command.log --output /path/to/development-bundle.zip
+python3 scripts/validation.py windows stage /path/to/development-bundle.zip
+python3 scripts/validation.py windows run --harness HARNESS_BUNDLE_ID \
+  --product PRODUCT_BUNDLE_ID --binary windows_headless.exe \
+  --case actual_windows_complete_public_headless_business --ignored
+python3 scripts/validation.py windows wait RUN_ID --timeout 50
+python3 scripts/validation.py windows logs RUN_ID --tail 60
+python3 scripts/validation.py windows collect RUN_ID --output artifacts/windows-dev/RUN_ID
+python3 scripts/validation.py windows finish RUN_ID
+```
+
+Stage separate product and harness bundles when reusing an unchanged product for
+a test-only repair. Results record both full revisions, binary hashes, driver hash,
+client hashes, actual OS/session/elevation and exactly one test outcome. Zero exit
+without the selected passing case is failure. Archive entries must be flat,
+manifested x64 executables with matching size/hash; partial stages cannot be reused.
+Cross-built artifacts never become native CI producers.
+
+Execution uses a one-off `Interactive`/`Limited` Task, with no startup trigger or
+saved password. One workbench lock prevents overlapping product mutation. Product
+profile and request deadlines remain intact; `run --timeout` is only a whole-test
+watchdog. Existing installations cause prerequisite failure, not automatic deletion.
+After failure, inspect logs/diagnostics and apply the product recovery procedure
+to only test-owned configuration before retrying. `finish` verifies the stopped
+task action and removes only that task and owner lock; it keeps evidence, bundles
+and native configuration. Collected output is private raw evidence and must stay
+ignored, not be attached to public records unreviewed.
+
+When Claude acceptance is explicitly excluded for a development run, select
+`actual_windows_public_headless_business_without_claude` instead. It retains the
+same routing, observation, Worker, restart and restore assertions; Pi supplies the
+independent Messages grant. It does not establish native Claude authentication,
+managed launch or Claude configuration recovery, and does not replace the complete
+release case. No product request deadline is changed.
+
+For a failed disposable business case whose product has already been removed,
+`windows recover RUN_ID` can preserve recognized test-owned Codex configuration,
+collaboration Skill and untouched Claude marker in that run's private evidence.
+First collect and `finish` the run. Recovery rejects active tasks, existing products,
+foreign content, links and file modification times outside that run. It never deletes
+unrecognized user settings; use public restore while the original product still exists.
+
+If the focused foreground Gateway recovery case hits its whole-process watchdog,
+the same `recover` entry can retain its disposable installation and state in private
+run evidence. It requires the stopped task, original run marker, matching bundle
+hashes and stable hard links. Any orphaned daemon is stopped through a retained
+kernel handle only after its image, session and birth time match that run; other
+live fixture processes block recovery. This path never recovers a daily installation.
+
+For an active disposable case that has already emitted its exact Rust panic,
+`windows stop-runtime RUN_ID` can stop only its verified daemon and let the test
+owner finish unwinding and preserve its real failed result. It retains the owner,
+Task and lock; collect and finish normally afterward. It refuses healthy tests,
+foreign accounts, changed images and daemon births outside the run.
+
+Transport uses SSH host-key verification, hashed uploaded scripts/JSON and encoded
+PowerShell invocation. Interrupted submission is an unknown outcome: inspect its
+run/task/lock before retrying. Missing Python, clients, login session or account
+access is a prerequisite gap, not permission to substitute a different identity.
+
+#### Compilation and release boundary
+
+Ordinary development uses the configured Linux workbench for Windows MSVC
+cross-compilation and the configured Windows development machine for affected
+native execution. The expensive hosted Windows producer/replay matrix runs from
+`build-release.yml` before release assets can build; `windows-headless.yml` also
+retains an explicit manual entry for diagnosis. PR and main pushes retain their
+ordinary Linux/frontend selection without automatically starting that matrix.
+Affected PRs also run one cached Windows headless compile check; it runs no
+business or account acceptance.
+
+1. Record the comparison base, committed candidate, affected consumers and native
+   cases from `test-plan.py --integration`. Run affected Linux tests as selected;
+   compile affected macOS consumers on the configured Mac when their contracts
+   change. Cross-compiling Windows does not validate either Unix runtime.
+2. Use the managed backend runner with a nonempty plan and retained checkout.
+   The Linux host must already have the matching Rust target, MSVC-compatible
+   linker and Windows SDK/import libraries in its personal toolchain configuration.
+   Record their versions and compiler flags. Keep SDK paths and remote host details
+   outside the repository. An unavailable toolchain is a build prerequisite gap,
+   not permission to substitute a GNU target for the supported MSVC target.
+   For release-equivalent x64 builds, preserve the static CRT contract owned by
+   `build-release.py`; a development compiler configuration is not release evidence.
+
+   ```sh
+   python3 scripts/validation.py backend run \
+     --ref refs/heads/codex/my-change --sha CANDIDATE_SHA \
+     --plan windows-my-change --phase focused --retention always -- \
+     cargo build --locked --target x86_64-pc-windows-msvc \
+     -p hiroute-cli -p hiroute-daemon --bins --message-format=json
+   python3 scripts/validation.py backend run \
+     --ref refs/heads/codex/my-change --sha CANDIDATE_SHA \
+     --plan windows-my-change --phase focused --retention always \
+     --continue-checkout LAST_STOPPED_RUN_ID -- \
+     cargo test --locked --target x86_64-pc-windows-msvc \
+     -p hiroute-daemon --test windows_headless --no-run --message-format=json
+   ```
+
+   Replace the example package/test selection with the affected inventory and
+   feature context. Continue from the last stopped run after each repair; preserve
+   its default `target/`, locks and cleanup owner. `--no-run` proves compilation
+   and linking only. A configured target runner must not silently execute via Wine.
+3. Export the exact Cargo `compiler-artifact` paths from the successful JSON output,
+   with the source SHA, driver SHA, target/features, compiler configuration, build
+   run IDs and SHA-256/size of every transferred EXE and fixture. Verify PE target
+   identity and recheck hashes after transfer. Use an isolated Windows staging
+   directory; do not select files by modification time or a glob over old builds.
+   Cross-built bundles are development evidence. The native artifact producer
+   deliberately requires a native Windows rustc host; do not rewrite that provenance
+   or feed a cross-built bundle into the native Windows 11 replay as if it were native.
+4. Execute only the affected test bodies and business paths on the Windows machine.
+   Use the [Windows scope inventory](../scripts/windows-native-scopes.ps1) and
+   [operating guide](standalone-windows.md) to identify required fixtures and owner
+   context. Installation/background/upgrade changes require the real installed
+   package and logged-on standard user; provider-account cases require an officially
+   prepared account. Reuse the same verified binaries across cases. A Server host
+   result records Server, not Windows 11; x64 execution does not prove native ARM64.
+5. Keep the original failed run and targeted repair result. At convergence, report
+   each required case's actual execution, source/artifact identity, OS/architecture,
+   user context and evidence. Reuse unaffected evidence only at its original SHA
+   with an explanation. Do not add RDP connectivity or real next-login exercises
+   unless the changed behavior or agreed acceptance scope requires them.
+
+At release, freeze the source and require the complete release-candidate workflow
+to pass for that same SHA. Hosted background compilation still leaves the documented
+logged-on-user and real-account gates separate; the release matrix does not turn
+them into runtime passes. A missing development capability requires an explicit
+capable environment or remains an unexecuted obligation. It must not be hidden by
+waiting until release or reporting compilation as complete acceptance.
 
 ### Native consumer compilation
 

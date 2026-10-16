@@ -133,6 +133,16 @@ exit 0"#,
     let _ = unrelated.kill();
     let _ = unrelated.wait();
     std::thread::sleep(Duration::from_millis(1000));
+    let stage = match &found {
+        ExecutableProbe::Installed(_) => "installed".to_owned(),
+        ExecutableProbe::NotFound => "not-found".to_owned(),
+        ExecutableProbe::Unknown(reason) => format!("unavailable-{reason:?}"),
+    };
+    eprintln!(
+        "native version cleanup fixture: stage={stage} unrelated_running={unrelated_running} child_started={} delayed_writer_survived={}",
+        root.path().join("agent.child-started").exists(),
+        root.path().join("agent.child-survived").exists()
+    );
     assert!(matches!(found, ExecutableProbe::Installed(_)));
     assert!(unrelated_running);
     assert!(root.path().join("agent.child-started").exists());

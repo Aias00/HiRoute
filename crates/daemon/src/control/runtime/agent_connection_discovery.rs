@@ -130,7 +130,7 @@ impl LocalControlAdapter {
     }
 }
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 #[path = "agent_connection_endpoint_tests.rs"]
 mod endpoint_tests;
 #[cfg(all(test, unix))]

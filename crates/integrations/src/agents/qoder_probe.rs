@@ -1,14 +1,18 @@
 //! Explicit collaboration checks in the selected, normally logged-in Qoder context.
 //! Auth is read only by Qoder. HiRoute owns the private workspace and local challenge, not HOME.
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File};
 use std::io::{Read, Write};
-use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt};
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
+#[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
+#[cfg(unix)]
+use std::process::Stdio;
 use std::time::{Duration, Instant};
 
-use super::native_probe_process::{NativeProbeProcess, read_bounded};
+use super::native_probe_process::{NativeProbeProcess, read_bounded, read_bounded_file};
 use super::qoder::{
     QoderNativeContext, QoderNativeError, QoderTransientRouteInput, qoder_error,
     render_qoder_transient_route,
@@ -18,8 +22,23 @@ use hiroute_domain::{
 };
 use serde_json::Value;
 
+#[cfg(all(test, unix))]
+#[path = "qoder_probe_bash_parse_tests.rs"]
+mod bash_parse_tests;
 #[path = "qoder_probe_http.rs"]
 mod http;
+#[cfg(test)]
+#[path = "qoder_probe_output_diagnostic_tests.rs"]
+mod output_diagnostic_tests;
+#[cfg(any(test, windows))]
+#[path = "qoder_probe_skill_diagnostic.rs"]
+mod skill_diagnostic;
+#[cfg(all(test, windows))]
+#[path = "qoder_probe_windows_cli.rs"]
+mod windows_cli;
+#[cfg(windows)]
+#[path = "qoder_probe_workspace.rs"]
+mod workspace;
 
 const CONTRACT: &str = "hiroute.qoder-borrowed-context-collaboration/v1";
 const MARKER: &str = "hiroute-local-challenge-no-authority";
@@ -157,13 +176,14 @@ impl QoderCollaborationProbe {
             .ok_or_else(|| qoder_error("trusted CLI"))?;
         let before = dependencies(&executable, context, &cli, &target)?;
         let settings_before = settings_receipt(context)?;
-        let root = tempfile::Builder::new()
-            .prefix("hiroute-qoder-check-")
-            .permissions(fs::Permissions::from_mode(0o700))
-            .tempdir()
+        let root = super::probe_files::temporary("hiroute-qoder-check-")
             .map_err(|_| qoder_error("private workspace"))?;
+        #[cfg(not(windows))]
         let root_path =
             fs::canonicalize(root.path()).map_err(|_| qoder_error("private workspace"))?;
+        #[cfg(windows)]
+        let (root_path, _root_identity) =
+            workspace::retain(root.path()).map_err(|_| qoder_error("private workspace"))?;
         let workspace = root_path.join("workspace");
         let temporary = root_path.join("tmp");
         for path in [&workspace, &temporary] {
@@ -181,11 +201,13 @@ impl QoderCollaborationProbe {
                 let text = format!(
                     "---\nname: hiroute-probe-{suffix}\ndescription: HiRoute native discovery {suffix}\n---\n\nPrivate content receipt: {suffix}\nFollow only this local compatibility check.\n"
                 );
-                fs::DirBuilder::new()
-                    .recursive(true)
-                    .mode(0o700)
-                    .create(path.parent().unwrap())
-                    .map_err(|_| qoder_error("private Skill"))?;
+                for path in [
+                    workspace.join(".qoder"),
+                    workspace.join(".qoder/skills"),
+                    path.parent().unwrap().to_owned(),
+                ] {
+                    private_dir(&path)?;
+                }
                 write_private(&path, text.as_bytes())?;
                 (path, text, "user,project,local")
             }
@@ -201,6 +223,15 @@ impl QoderCollaborationProbe {
                 .ok_or_else(|| qoder_error("Skill target"))?,
         )
         .map_err(|_| qoder_error("Skill target"))?;
+        #[cfg(windows)]
+        let expected_skill = skill_diagnostic::NativeSkill::retain(
+            skill_path
+                .parent()
+                .ok_or_else(|| qoder_error("Skill target"))?,
+            content.as_bytes(),
+            matches!(target, QoderCollaborationProbeTarget::PreinstallCapability),
+        )
+        .map_err(|_| qoder_error("Skill target"))?;
         let skill_name = skill_directory
             .file_name()
             .and_then(|name| name.to_str())
@@ -208,9 +239,10 @@ impl QoderCollaborationProbe {
             .to_owned();
         let body = skill_body(&content)?;
         let expected_cli = cli_baseline(&cli, &root_path)?;
-        let command = format!("{} schema list --output json", shell_quote(&cli)?);
+        let command = cli_command(&cli)?;
         let mut challenge = http::Challenge {
             skill_name,
+            #[cfg(any(test, not(windows)))]
             skill_directory: skill_directory
                 .to_str()
                 .ok_or_else(|| qoder_error("Skill target encoding"))?
@@ -219,6 +251,13 @@ impl QoderCollaborationProbe {
             command,
             expected_cli,
             step: 0,
+            #[cfg(windows)]
+            expected_skill: Some(expected_skill),
+            #[cfg(windows)]
+            expected_workspace: Some(
+                workspace::Receipt::retain(&workspace)
+                    .map_err(|_| qoder_error("private workspace"))?,
+            ),
         };
         let listener =
             std::net::TcpListener::bind("127.0.0.1:0").map_err(|_| qoder_error("loopback bind"))?;
@@ -284,45 +323,89 @@ impl QoderCollaborationProbe {
             .env("HOME", &context.home)
             .env("QODER_CONFIG_DIR", &context.config_root)
             .env("TMPDIR", &temporary)
-            .env("PATH", "/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin")
+            .env("PATH", super::native_ingress_probe::native_probe_path())
             .env("HIROUTE_QODER_PROBE_TOKEN", MARKER)
+            .current_dir(&workspace);
+        #[cfg(unix)]
+        let child = command
             .stdin(Stdio::null())
             .stdout(Stdio::from(output))
             .stderr(Stdio::null())
-            .current_dir(&workspace)
-            .process_group(0);
-        let mut child =
-            NativeProbeProcess::new(command.spawn().map_err(|_| qoder_error("native launch"))?);
+            .process_group(0)
+            .spawn();
+        #[cfg(windows)]
+        let child = super::windows_runtime::spawn(
+            &command,
+            false,
+            hiroute_platform::windows::job::Stream::Null,
+            hiroute_platform::windows::job::Stream::File(&output),
+            hiroute_platform::windows::job::Stream::Null,
+        );
+        let mut child = NativeProbeProcess::new(child.map_err(|_| qoder_error("native launch"))?);
         let started = Instant::now();
-        let status = loop {
-            if started.elapsed() > Duration::from_secs(45) {
-                return Err(qoder_error("native check deadline"));
-            }
-            if observer
-                .metadata()
-                .map_err(|_| qoder_error("private output"))?
-                .len()
-                > 512 * 1024
-            {
-                return Err(qoder_error("native output bound"));
-            }
-            match listener.accept() {
-                Ok((mut stream, _)) => {
-                    http::serve(&mut stream, MARKER, MODEL, &mut challenge).map_err(qoder_error)?
+        #[cfg(test)]
+        let mut requests = 0;
+        let result = (|| {
+            loop {
+                if started.elapsed() > Duration::from_secs(45) {
+                    return Err(qoder_error("native check deadline"));
                 }
-                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
-                Err(_) => return Err(qoder_error("loopback accept")),
+                if observer
+                    .metadata()
+                    .map_err(|_| qoder_error("private output"))?
+                    .len()
+                    > 512 * 1024
+                {
+                    return Err(qoder_error("native output bound"));
+                }
+                match listener.accept() {
+                    Ok((mut stream, _)) => {
+                        #[cfg(test)]
+                        {
+                            requests += 1;
+                        }
+                        http::serve(&mut stream, MARKER, MODEL, &mut challenge)
+                            .map_err(qoder_error)?;
+                        #[cfg(test)]
+                        eprintln!(
+                            "native Qoder acceptance stage=model-served requests={requests} challenge-step={}",
+                            challenge.step
+                        );
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
+                    Err(_) => return Err(qoder_error("loopback accept")),
+                }
+                if let Some(status) = child.observe().map_err(|_| qoder_error("native wait"))? {
+                    break Ok(status);
+                }
+                std::thread::sleep(Duration::from_millis(10));
             }
-            if let Some(status) = child.observe().map_err(|_| qoder_error("native wait"))? {
-                break status;
-            }
-            std::thread::sleep(Duration::from_millis(10));
-        };
-        child
-            .stop()
-            .map_err(|_| qoder_error("native process scope"))?;
-        let output = read_bounded(&root_path.join("output.private"), 512 * 1024)
-            .map_err(|_| qoder_error("native output bound"))?;
+        })();
+        if child.stop().is_err() {
+            let _ = root.keep();
+            return Err(qoder_error("native process scope"));
+        }
+        #[cfg(test)]
+        if result
+            .as_ref()
+            .is_err_and(|error| error.stage == "native output bound")
+        {
+            // A duplicated File shares its seek pointer. Inspect only after the actual
+            // owned scope has stopped, never disturb a live native stdout writer.
+            safe_output_bound(&observer, challenge.step, requests, started.elapsed());
+        }
+        let status = result?;
+        #[cfg(test)]
+        let final_read = observed_final_output(
+            &observer,
+            challenge.step,
+            requests,
+            &started,
+            |diagnostic| diagnostic.emit(),
+        );
+        #[cfg(not(test))]
+        let final_read = read_bounded_file(&observer, 512 * 1024);
+        let output = final_read.map_err(|_| qoder_error("native output bound"))?;
         let result = output
             .split(|byte| *byte == b'\n')
             .filter_map(|line| serde_json::from_slice::<Value>(line).ok())
@@ -414,19 +497,53 @@ fn dependencies(
         if !m.is_dir() {
             return Err(qoder_error("selected native context"));
         }
-        Ok((path, m.dev(), m.ino(), m.uid(), m.gid(), m.mode()))
+        #[cfg(unix)]
+        return CanonicalDigest::of(&(path, m.dev(), m.ino(), m.uid(), m.gid(), m.mode()))
+            .map_err(|_| qoder_error("selected native context"));
+        #[cfg(windows)]
+        {
+            let file = hiroute_platform::windows::security::open_identity(&path, true)
+                .map_err(|_| qoder_error("selected native context"))?;
+            let identity = hiroute_platform::windows::security::file_identity(&file)
+                .map_err(|_| qoder_error("selected native context"))?;
+            CanonicalDigest::of(&(path, identity))
+                .map_err(|_| qoder_error("selected native context"))
+        }
     };
     let settings = match fs::symlink_metadata(context.config_root.join("settings.json")) {
-        Ok(m) => Some((
-            m.dev(),
-            m.ino(),
-            m.mode(),
-            m.len(),
-            m.mtime(),
-            m.mtime_nsec(),
-            m.ctime(),
-            m.ctime_nsec(),
-        )),
+        Ok(metadata) => {
+            #[cfg(unix)]
+            let receipt = CanonicalDigest::of(&(
+                metadata.dev(),
+                metadata.ino(),
+                metadata.mode(),
+                metadata.len(),
+                metadata.mtime(),
+                metadata.mtime_nsec(),
+                metadata.ctime(),
+                metadata.ctime_nsec(),
+            ))
+            .map_err(|_| qoder_error("native settings metadata"))?;
+            #[cfg(windows)]
+            let receipt = {
+                use std::os::windows::fs::MetadataExt;
+                let file = hiroute_platform::windows::security::open_identity(
+                    &context.config_root.join("settings.json"),
+                    false,
+                )
+                .map_err(|_| qoder_error("native settings metadata"))?;
+                let identity = hiroute_platform::windows::security::file_identity(&file)
+                    .map_err(|_| qoder_error("native settings metadata"))?;
+                CanonicalDigest::of(&(
+                    identity,
+                    metadata.file_size(),
+                    metadata.creation_time(),
+                    metadata.last_write_time(),
+                ))
+                .map_err(|_| qoder_error("native settings metadata"))?
+            };
+            Some(receipt)
+        }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
         Err(_) => return Err(qoder_error("native settings metadata")),
     };
@@ -473,19 +590,10 @@ fn settings_receipt(
 }
 
 fn private_dir(path: &Path) -> Result<(), QoderNativeError> {
-    fs::DirBuilder::new()
-        .mode(0o700)
-        .create(path)
-        .map_err(|_| qoder_error("private directory"))
+    super::probe_files::directory(path).map_err(|_| qoder_error("private directory"))
 }
 fn private_file(path: &Path) -> Result<File, QoderNativeError> {
-    OpenOptions::new()
-        .create_new(true)
-        .read(true)
-        .write(true)
-        .mode(0o600)
-        .open(path)
-        .map_err(|_| qoder_error("private file"))
+    super::probe_files::file(path).map_err(|_| qoder_error("private file"))
 }
 fn write_private(path: &Path, bytes: &[u8]) -> Result<(), QoderNativeError> {
     private_file(path)?
@@ -501,24 +609,67 @@ fn shell_quote(path: &Path) -> Result<String, QoderNativeError> {
     ))
 }
 
+fn cli_command(cli: &Path) -> Result<String, QoderNativeError> {
+    // Qoder 1.1.65's Bash tool uses Git Bash on Windows, independently of its
+    // separate PowerShell tool. The resolved native image already passed the
+    // shared ordinary-drive projection; retain that same identity when making
+    // its separators suitable for Bash. Never send PowerShell's '&' or quoting.
+    #[cfg(windows)]
+    let quoted = {
+        use hiroute_platform::windows::security;
+        let ordinary = super::managed_launch::windows_executable_path(cli)
+            .map_err(|_| qoder_error("trusted CLI path"))?;
+        let original = security::open_identity(&ordinary, false)
+            .map_err(|_| qoder_error("trusted CLI path"))?;
+        let spelling = PathBuf::from(
+            ordinary
+                .to_str()
+                .ok_or_else(|| qoder_error("trusted CLI path"))?
+                .replace('\\', "/"),
+        );
+        let projected = security::open_identity(&spelling, false)
+            .map_err(|_| qoder_error("trusted CLI path"))?;
+        if security::file_identity(&original).map_err(|_| qoder_error("trusted CLI path"))?
+            != security::file_identity(&projected).map_err(|_| qoder_error("trusted CLI path"))?
+        {
+            return Err(qoder_error("trusted CLI path"));
+        }
+        shell_quote(&spelling)?
+    };
+    #[cfg(not(windows))]
+    let quoted = shell_quote(cli)?;
+    Ok(format!("{quoted} schema list --output json"))
+}
+
+#[cfg(unix)]
 fn cli_baseline(cli: &Path, root: &Path) -> Result<String, QoderNativeError> {
     let output = private_file(&root.join("cli.private"))?;
     let observer = output
         .try_clone()
         .map_err(|_| qoder_error("trusted CLI baseline"))?;
-    let mut child = NativeProbeProcess::new(
-        Command::new(cli)
-            .args(["schema", "list", "--output", "json"])
-            .env_clear()
-            .env("HOME", root)
-            .env("PATH", "/usr/bin:/bin")
-            .stdin(Stdio::null())
-            .stdout(output)
-            .stderr(Stdio::null())
-            .process_group(0)
-            .spawn()
-            .map_err(|_| qoder_error("trusted CLI baseline"))?,
+    let mut command = Command::new(cli);
+    command
+        .args(["schema", "list", "--output", "json"])
+        .env_clear()
+        .env("HOME", root)
+        .env("PATH", super::native_ingress_probe::native_probe_path());
+    #[cfg(unix)]
+    let child = command
+        .stdin(Stdio::null())
+        .stdout(output)
+        .stderr(Stdio::null())
+        .process_group(0)
+        .spawn();
+    #[cfg(windows)]
+    let child = super::windows_runtime::spawn(
+        &command,
+        false,
+        hiroute_platform::windows::job::Stream::Null,
+        hiroute_platform::windows::job::Stream::File(&output),
+        hiroute_platform::windows::job::Stream::Null,
     );
+    let mut child =
+        NativeProbeProcess::new(child.map_err(|_| qoder_error("trusted CLI baseline"))?);
     let start = Instant::now();
     loop {
         if start.elapsed() > Duration::from_secs(10)
@@ -561,9 +712,237 @@ fn cli_baseline(cli: &Path, root: &Path) -> Result<String, QoderNativeError> {
     Ok(text.trim().to_owned())
 }
 
+#[cfg(windows)]
+fn cli_baseline(cli: &Path, root: &Path) -> Result<String, QoderNativeError> {
+    let mut command = Command::new(cli);
+    command
+        .args(["schema", "list", "--output", "json"])
+        .env_clear()
+        .env("HOME", root)
+        .env("PATH", super::native_ingress_probe::native_probe_path());
+    let bytes =
+        super::windows_runtime::bounded(&command, false, Duration::from_secs(10), 128 * 1024)
+            .map_err(|_| qoder_error("trusted CLI baseline"))?;
+    let text = std::str::from_utf8(&bytes).map_err(|_| qoder_error("trusted CLI output"))?;
+    let body: Value =
+        serde_json::from_str(text).map_err(|_| qoder_error("trusted CLI contract"))?;
+    if body["status"] != "succeeded"
+        || !body["data"]["commands"].as_array().is_some_and(|commands| {
+            commands
+                .iter()
+                .any(|command| command["command_id"] == "schema.list")
+        })
+    {
+        return Err(qoder_error("trusted CLI contract"));
+    }
+    Ok(text.trim().to_owned())
+}
+
 #[cfg(test)]
+fn observed_final_output(
+    observer: &File,
+    step: usize,
+    requests: usize,
+    started: &Instant,
+    observe: impl FnOnce(OutputReadDiagnostic),
+) -> std::io::Result<zeroize::Zeroizing<Vec<u8>>> {
+    read_bounded_file(observer, 512 * 1024).inspect_err(|error| {
+        observe(output_read_diagnostic(
+            observer,
+            "final_read",
+            Some(error),
+            step,
+            requests,
+            started.elapsed(),
+        ));
+    })
+}
+
+#[cfg(test)]
+fn safe_output_bound(file: &File, step: usize, requests: usize, elapsed: Duration) {
+    let diagnostic = output_read_diagnostic(file, "live_guard", None, step, requests, elapsed);
+    diagnostic.emit();
+    // Preserve the original closed frame for older observers. Only this
+    // original live-guard branch emits it; final reads have their own phase.
+    if let (Some(bytes), Some(types)) = (diagnostic.sampled_bytes, diagnostic.record_counts) {
+        eprintln!(
+            "native Qoder acceptance stage=output-bound challenge-step={step} requests={requests} elapsed-ms={} sampled-bytes={bytes} record-counts-system-assistant-user-result-stream-other-invalid={types:?}",
+            elapsed.as_millis(),
+        );
+    }
+}
+
+#[cfg(test)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
+struct ClosedOutputIo {
+    kind: &'static str,
+    raw_os_error: Option<i32>,
+}
+
+#[cfg(test)]
+impl ClosedOutputIo {
+    fn from_error(error: &std::io::Error) -> Self {
+        use std::io::ErrorKind;
+        let kind = match error.kind() {
+            ErrorKind::NotFound => "not_found",
+            ErrorKind::PermissionDenied => "permission_denied",
+            ErrorKind::InvalidInput => "invalid_input",
+            ErrorKind::InvalidData => "invalid_data",
+            ErrorKind::UnexpectedEof => "unexpected_eof",
+            ErrorKind::Interrupted => "interrupted",
+            ErrorKind::TimedOut => "timed_out",
+            ErrorKind::WouldBlock => "would_block",
+            ErrorKind::Unsupported => "unsupported",
+            ErrorKind::OutOfMemory => "out_of_memory",
+            ErrorKind::IsADirectory => "is_a_directory",
+            ErrorKind::NotADirectory => "not_a_directory",
+            ErrorKind::Other => "other",
+            _ => "unknown",
+        };
+        Self {
+            kind,
+            raw_os_error: error.raw_os_error(),
+        }
+    }
+}
+
+#[cfg(test)]
+#[derive(Debug, serde::Serialize)]
+struct OutputReadDiagnostic {
+    phase: &'static str,
+    challenge_step: usize,
+    requests: usize,
+    elapsed_ms: u128,
+    observer_length: Option<u64>,
+    observer_metadata_error: Option<ClosedOutputIo>,
+    read_error: Option<ClosedOutputIo>,
+    sample_stage: &'static str,
+    sample_error: Option<ClosedOutputIo>,
+    sampled_bytes: Option<usize>,
+    record_counts: Option<[usize; 7]>,
+}
+
+#[cfg(test)]
+impl OutputReadDiagnostic {
+    fn emit(&self) {
+        eprintln!(
+            "native Qoder acceptance stage=output-read diagnostic={}",
+            serde_json::to_string(self).expect("closed output-read facts are serializable")
+        );
+    }
+}
+
+#[cfg(test)]
+fn output_read_diagnostic(
+    file: &File,
+    phase: &'static str,
+    error: Option<&std::io::Error>,
+    step: usize,
+    requests: usize,
+    elapsed: Duration,
+) -> OutputReadDiagnostic {
+    let metadata = file.metadata();
+    let mut diagnostic = OutputReadDiagnostic {
+        phase,
+        challenge_step: step,
+        requests,
+        elapsed_ms: elapsed.as_millis(),
+        observer_length: metadata.as_ref().ok().map(std::fs::Metadata::len),
+        observer_metadata_error: metadata.as_ref().err().map(ClosedOutputIo::from_error),
+        read_error: error.map(ClosedOutputIo::from_error),
+        sample_stage: "clone",
+        sample_error: None,
+        sampled_bytes: None,
+        record_counts: None,
+    };
+    if let Err(error) = sample_output(file, &mut diagnostic) {
+        diagnostic.sample_error = Some(ClosedOutputIo::from_error(&error));
+    }
+    diagnostic
+}
+
+#[cfg(test)]
+fn sample_output(file: &File, diagnostic: &mut OutputReadDiagnostic) -> std::io::Result<()> {
+    // All callers run only after stop has confirmed the native process scope.
+    // Cloning shares the writer's seek pointer, so this must never run live.
+    use std::io::{Seek, SeekFrom};
+    let mut file = file.try_clone()?;
+    diagnostic.sample_stage = "seek";
+    file.seek(SeekFrom::Start(0))?;
+    diagnostic.sample_stage = "read";
+    let mut bytes = zeroize::Zeroizing::new(Vec::new());
+    file.take(512 * 1024).read_to_end(&mut bytes)?;
+    let mut types = [0usize; 7];
+    for line in bytes.split(|byte| *byte == b'\n') {
+        let parsed = serde_json::from_slice::<Value>(line).ok();
+        let index = match parsed.as_ref().and_then(|value| value["type"].as_str()) {
+            Some("system") => 0,
+            Some("assistant") => 1,
+            Some("user") => 2,
+            Some("result") => 3,
+            Some("stream_event") => 4,
+            Some(_) => 5,
+            None => 6,
+        };
+        types[index] += 1;
+    }
+    diagnostic.sample_stage = "complete";
+    diagnostic.sampled_bytes = Some(bytes.len());
+    diagnostic.record_counts = Some(types);
+    Ok(())
+}
+
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn qoder_bash_command_rejects_the_old_windows_powershell_prefix() {
+        let path = Path::new("C:/literal space ' ; $probe & 中文/hiroute.exe");
+        let old = format!(
+            "& '{}' schema list --output json",
+            path.to_str().unwrap().replace('\'', "''")
+        );
+        let new = cli_command(path).unwrap();
+        let parse = |command: &str| {
+            Command::new("/bin/bash")
+                .args(["-n", "-c", command])
+                .env_clear()
+                .output()
+                .unwrap()
+        };
+        let rejected = parse(&old);
+        let control = parse(bash_parse_tests::MINIMAL_INVALID);
+        assert!(bash_parse_tests::correlated_rejection(
+            &old, &rejected, &control
+        ));
+        let parsed = parse(&new);
+        assert!(parsed.status.success() && parsed.stdout.is_empty() && parsed.stderr.is_empty());
+    }
+
+    #[test]
+    fn qoder_bash_quote_preserves_literal_apostrophe_and_shell_characters() {
+        let path = Path::new("C:/literal space ' ; $probe & 中文/hiroute.exe");
+        let arguments = format!("printf '%s' {}", shell_quote(path).unwrap());
+        let output = Command::new("/bin/bash")
+            .args(["-c", &arguments])
+            .env_clear()
+            .output()
+            .unwrap();
+        assert!(output.status.success() && output.stderr.is_empty());
+        assert!(output.stdout == path.as_os_str().as_encoded_bytes());
+        let old = format!(
+            "printf '%s' '{}'",
+            path.to_str().unwrap().replace('\'', "''")
+        );
+        let output = Command::new("/bin/bash")
+            .args(["-c", &old])
+            .env_clear()
+            .output()
+            .unwrap();
+        assert!(output.status.success() && output.stderr.is_empty());
+        assert!(output.stdout != path.as_os_str().as_encoded_bytes());
+    }
 
     #[test]
     fn older_completion_cannot_replace_a_newer_explicit_check() {

@@ -49,8 +49,8 @@ INTEGRATION_SKILL = ".agents/skills/hiroute-integrate/SKILL.md"
 PROJECT_AGENT_SKILLS = {
     "hiroute-compatibility", "hiroute-cu", "hiroute-design-author", "hiroute-implementation-writer",
     "hiroute-integrate", "hiroute-macos-launch", "hiroute-process-coordinator",
-    "hiroute-public-pr", "hiroute-ui-quality", "hiroute-validation", "issue-spec-apply", "issue-spec-github",
-    "issue-spec-propose", "issue-spec-workflow", "model-metadata-maintainer",
+    "hiroute-public-pr", "hiroute-ui-quality", "hiroute-validation", "hiroute-workflow-improvement",
+    "issue-spec-apply", "issue-spec-github", "issue-spec-propose", "issue-spec-workflow", "model-metadata-maintainer",
 }
 AGENT_TOOL_COMMANDS = {
     "hiroute-cu": [["node", "--test", ".agents/skills/hiroute-cu/tests/" + name]
@@ -80,12 +80,16 @@ def project_agent_tooling(path):
 
 WEBSITE_TOOLING = {".github/workflows/website.yml", ".github/workflows/release.yml"}
 RELEASE_BUILD_TESTS = ("test-build-cpa.py", "test-build-release.py", "test-linux-release.py", "test-package-desktop.py",
-                       "test-standalone-install.py", "test-third-party-licenses.py")
+                       "test-standalone-install.py", "test-standalone-windows.py", "test-windows-ci-package.py", "test-third-party-licenses.py")
 RELEASE_BUILD_TOOLING = {"scripts/linux-release-abi.py", "scripts/linux-release-runtime.py",
                          "scripts/linux-release-container.py", "scripts/linux-release-baseline.json",
-                         "scripts/linux-release.Dockerfile", ".github/workflows/build-release.yml", "scripts/build-release.py",
+                         "scripts/linux-release.Dockerfile", ".github/workflows/build-release.yml",
+                         ".github/workflows/build-release-platform.yml",
+                         ".github/workflows/windows-compile.yml",
+                         ".github/workflows/windows-headless.yml", "scripts/build-release.py",
                          "scripts/build-cpa.py", "scripts/package-desktop.py",
                          "scripts/package-standalone.py", "scripts/install-standalone.py",
+                         "scripts/install-standalone-windows.py", "scripts/windows-ci-package.py",
                          "scripts/collect-third-party-licenses.py",
                          *("scripts/" + name for name in RELEASE_BUILD_TESTS)}
 WEBSITE_PREFIXES = ("apps/website/", ".github/scripts/", "news/", "experiments/")
@@ -98,6 +102,7 @@ HOSTED_BACKEND_EXECUTION = {
     "scripts/ci-shards.py",
 }
 VALIDATION_TOOLING = {"scripts/validation.py", "scripts/validation-host.py", "scripts/test-validation.py",
+                      "scripts/windows-dev.py", "scripts/windows-dev-host.py", "scripts/test-windows-dev.py",
                       "scripts/validation-report.py", "scripts/test-validation-report.py",
                       "scripts/ci-run.py", "scripts/test-ci-run.py",
                       "scripts/ci-shards.py", "scripts/test-ci-shards.py",
@@ -106,6 +111,13 @@ VALIDATION_TOOLING = {"scripts/validation.py", "scripts/validation-host.py", "sc
                       "scripts/local-rust.py", "scripts/test-local-rust.py",
                       "scripts/remote-rust.py", "scripts/test-remote-rust.py",
                       "scripts/validation-schedule.py", "scripts/test-validation-schedule.py"}
+WINDOWS_VALIDATION_TOOLING = {"scripts/windows-headless-ci.ps1", "scripts/windows-ci-report.py",
+                              "scripts/windows-upgrade-inputs.ps1",
+                              "scripts/test-windows-ci-report.py", "scripts/windows-agent-fixtures.py",
+                              ".github/workflows/windows-headless.yml",
+                              "scripts/windows-native-replay.ps1", "scripts/windows-native-scopes.ps1",
+                              "scripts/windows-native-artifacts.py", "scripts/test-windows-native-artifacts.py",
+                              "scripts/windows-native-runtime-audit.py", "scripts/test-windows-native-runtime-audit.py"}
 PRODUCT_GROUPS = set(GROUPS) - {"diagnostics"}
 
 # Known shared Worker contracts consumed by the feature-gated Tauri bridge and
@@ -353,6 +365,7 @@ def select(paths, full=False):
     local_gc_tooling = False
     release_contract_tooling = False
     release_build_tooling = False
+    windows_validation_tooling = False
     targets = set()
     agent_commands = []
     for path in sorted(set(paths)):
@@ -361,6 +374,10 @@ def select(paths, full=False):
             agent_commands.extend(c for c in selected_agent_commands if c not in agent_commands)
             if path == INTEGRATION_SKILL:
                 selection_tooling = True
+            continue
+        if path in WINDOWS_VALIDATION_TOOLING or path.startswith("tools/windows-agent-fixtures/"):
+            windows_validation_tooling = True
+            release_build_tooling |= path in RELEASE_BUILD_TOOLING
             continue
         if path in RELEASE_BUILD_TOOLING:
             release_build_tooling = True
@@ -493,6 +510,10 @@ def select(paths, full=False):
     commands.extend(agent_commands)
     if selection_tooling:
         commands.append(["python3", "scripts/test-test-plan.py"])
+    if full or windows_validation_tooling:
+        commands.append(["python3", "scripts/test-windows-ci-report.py"])
+        commands.append(["python3", "scripts/test-windows-native-artifacts.py"])
+        commands.append(["python3", "scripts/test-windows-native-runtime-audit.py"])
     if full or release_build_tooling:
         commands.extend([["python3", "scripts/" + name] for name in RELEASE_BUILD_TESTS])
     product_checks = worker_product_checks(paths)
@@ -514,7 +535,7 @@ def select(paths, full=False):
                          ["python3", "scripts/release-contracts.py", "check"]])
     if validation_tooling:
         commands.extend([["python3", "scripts/" + name] for name in
-                         ("test-validation.py", "test-validation-report.py", "test-local-rust.py", "test-remote-rust.py", "test-validation-schedule.py",
+                         ("test-validation.py", "test-windows-dev.py", "test-validation-report.py", "test-local-rust.py", "test-remote-rust.py", "test-validation-schedule.py",
                           "test-ci-run.py", "test-ci-shards.py", "test-desktop-pilot.py", "test-pilot-builds.py")])
     if full or validation_tooling or local_gc_tooling:
         if ["python3", "scripts/test-local-rust.py"] not in commands:
