@@ -158,7 +158,6 @@
     "hiroute.daemon-ready/v1",
     "hiroute.daemon-startup-failure/v1",
     "hiroute.daemon-upgrade-progress/v1",
-    "hiroute.decision-provider-presets/v1",
     "hiroute.decision-services/v1",
     "hiroute.delegation-accepted/v1",
     "hiroute.delegation-cancel-request/v1",
