@@ -55,6 +55,7 @@ tokio-util.workspace = true
 command-fds = "0.3.3"
 
 [target.'cfg(windows)'.dev-dependencies]
+base64.workspace = true
 hiroute-platform-test-support = { path = "../platform/test-support" }
 windows = { version = "=0.62.2", features = ["Win32_Foundation", "Win32_UI_Shell"] }
 windows-sys = { version = "0.61.2", features = [

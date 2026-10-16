@@ -86,11 +86,16 @@ impl Oracle {
                     "WindowsPowerShell/v1.0/powershell.exe",
                 ))
                 .unwrap();
+                use base64::Engine;
+                // Bash crosses Windows' native argv parser before PowerShell
+                // interprets its program. Encoding preserves quotes/backslashes
+                // in JSON and native paths through both command languages.
+                let payload: Vec<u8> = script.encode_utf16().flat_map(u16::to_le_bytes).collect();
+                let encoded = base64::engine::general_purpose::STANDARD.encode(payload);
                 let bash_literal = |text: &str| format!("'{}'", text.replace('\'', "'\\''"));
                 let command = format!(
-                    "{} -NoLogo -NoProfile -NonInteractive -Command {}",
+                    "{} -NoLogo -NoProfile -NonInteractive -EncodedCommand {encoded}",
                     bash_literal(&powershell.to_string_lossy().replace('\\', "/")),
-                    bash_literal(&script),
                 );
                 return function_reply(
                     body,
