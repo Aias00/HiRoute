@@ -33,6 +33,12 @@ and project behavior; a second preview must report zero changes. Conflicts requi
 reconciliation, not deleting the manifest or force-overwriting local edits.
 Commit the manifest, generated files and links together so worktrees stay pinned.
 
+The shared [workflow improvement skill](skills/hiroute-workflow-improvement/SKILL.md)
+owns feedback routing, deduplication and stable analysis labels. Its CLI and shared
+workflow suggestions go upstream; HiRoute policy suggestions stay here. It has no
+Codex host dependency and is exposed to Claude through its own relative link.
+Generated workflow files and their manifest remain owned by issue-spec.
+
 ## Codex-only skills
 
 | Skill | Why it is not exposed to Claude |

@@ -731,7 +731,11 @@ class IntegrationPreflightTests(unittest.TestCase):
                  'issue-spec/project/workflow.md', '.claude/skills/issue-spec-apply',
                  '.agents/skills/hiroute-implementation-writer/SKILL.md',
                  '.agents/skills/hiroute-validation/SKILL.md', '.claude/skills/hiroute-validation',
-                 '.agents/skills/issue-spec-workflow/release.json']
+                 '.agents/skills/issue-spec-workflow/release.json',
+                 '.agents/skills/hiroute-workflow-improvement/SKILL.md',
+                 '.agents/skills/hiroute-workflow-improvement/references/feedback.md',
+                 '.agents/skills/hiroute-workflow-improvement/agents/openai.yaml',
+                 '.claude/skills/hiroute-workflow-improvement']
         result = plan.select(paths)
         self.assertEqual(result['mode'], 'affected')
         self.assertFalse(result['rust'])
@@ -754,7 +758,9 @@ class IntegrationPreflightTests(unittest.TestCase):
                 for command in plan.AGENT_TOOL_COMMANDS[name]:
                     self.assertIn(command, result['commands'])
         for path in ['.agents/skills/unknown/SKILL.md', '.claude/skills/unknown',
-                     'assets/skills/hiroute-cu/SKILL.md', 'assets/skills/hiroute-validation/SKILL.md']:
+                     'assets/skills/hiroute-cu/SKILL.md', 'assets/skills/hiroute-validation/SKILL.md',
+                     '.agents/skills/hiroute-workflow-improvement/scripts/unknown.py',
+                     'assets/skills/hiroute-workflow-improvement/SKILL.md']:
             self.assertEqual(plan.select([path])['mode'], 'full')
 
     def test_only_the_known_operator_skill_is_tooling(self):
