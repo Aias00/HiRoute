@@ -26,7 +26,7 @@ pub(crate) fn execute(arguments: &[String], globals: &Globals) -> Option<CliExec
             stderr: String::new(),
         });
     }
-    let result = (|| {
+    let result: Result<Reply> = (|| {
         validate_globals(globals)?;
         let flags = Flags::parse(
             &arguments[1..],
@@ -65,7 +65,7 @@ pub(crate) fn preview_command(
     }
     let _diagnostics =
         crate::request_input::diagnostics::Scope::enter(command, globals.error_details);
-    let result = (|| {
+    let result: Result<Reply> = (|| {
         validate_globals(globals)?;
         let (options, path, key) = flags::submission(options)?;
         let client = client(globals)?;
