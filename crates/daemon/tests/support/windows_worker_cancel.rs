@@ -101,9 +101,12 @@ pub(super) fn verify(
     );
     let deadline = Instant::now() + Duration::from_secs(30);
     while current["data"]["run_state"] != "cancelled" {
+        // ACP interruption may publish Unknown before the owned stop checkpoint
+        // confirms Cancelled. Wait for that proof within the existing bound;
+        // persistent uncertainty still fails and is never accepted as cancellation.
         assert!(!matches!(
             current["data"]["run_state"].as_str(),
-            Some("failed" | "succeeded" | "unknown")
+            Some("failed" | "succeeded")
         ));
         assert!(
             Instant::now() < deadline,
