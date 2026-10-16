@@ -1,6 +1,6 @@
 //! Non-secret settings Preview projections; planning stays in Application.
 use crate::*;
-use hiroute_domain::{AgentModelGrantV2, CapabilityBlock};
+use hiroute_domain::AgentModelGrantV2;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -80,8 +80,17 @@ pub enum AgentModelEffectPreviewV2 {
         selection: AgentModelSelectionV2,
         authentication: String,
         #[serde(skip_serializing_if = "Option::is_none")]
+        native_adapter: Option<AgentNativeAdapterPreviewV1>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         context_windows: Option<BTreeMap<String, u64>>,
         #[serde(skip_serializing_if = "Option::is_none")]
         claude_context_window: Option<Option<u64>>,
     },
+}
+
+#[derive(schemars::JsonSchema, Serialize)]
+pub struct AgentNativeAdapterPreviewV1 {
+    pub resources: String,
+    pub runtime_loading: AgentNativeRuntimeLoadingV1,
+    pub next_action: AgentNativeAdapterNextActionV1,
 }

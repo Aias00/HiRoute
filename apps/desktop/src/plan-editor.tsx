@@ -111,9 +111,13 @@ export const PlanEditor = forwardRef<PlanEditorHandle, PlanEditorProps>(function
   }, [seed, props.active, props.plan?.agent_plan_id, retry]);
   if (seed) return <LoadedPlanEditor {...props} ref={ref} initialEditor={seed.editor} initialHead={seed.head} />;
   const en = props.language === 'en';
-  return <section className="settings-card" aria-busy={!failure}>
-    <p role={failure ? 'alert' : 'status'}>{failure ? planErrorMessage(failure, props.language) : (en ? 'Loading plan settings…' : '正在读取计划设置…')}</p>
-    {Boolean(failure) && <button type="button" className="button" onClick={() => setRetry(value => value + 1)}>{en ? 'Retry' : '重试'}</button>}
+  return <section className="plan-editor" aria-busy={!failure} aria-label={en ? 'Plan settings' : '计划设置'}>
+    <div className={`callout${failure ? ' bad' : ''}`} role={failure ? 'alert' : 'status'} data-error-code={failure ? planErrorCode(failure) : undefined}>
+      <UiIcon name={failure ? 'warning' : 'info'} />
+      <div><p>{failure ? (en ? 'Unable to load plan settings. Retry to continue editing.' : '未能读取计划设置，请重试后继续编辑。') : (en ? 'Loading plan settings…' : '正在读取计划设置…')}</p>
+        {Boolean(failure) && <button type="button" className="btn" onClick={() => setRetry(value => value + 1)}>{en ? 'Retry' : '重试'}</button>}
+      </div>
+    </div>
   </section>;
 });
 

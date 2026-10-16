@@ -65,6 +65,10 @@ pub(crate) fn preview(
                 endpoint: endpoint.clone(),
                 selection: selection.clone(),
                 authentication: "connection_scoped_local_grant".into(),
+                native_adapter: (agent_class == "hermes").then(|| hiroute_application_api::AgentNativeAdapterPreviewV1 {
+                    resources: "planned".into(), runtime_loading: hiroute_application_api::AgentNativeRuntimeLoadingV1::Unobserved,
+                    next_action: hiroute_application_api::AgentNativeAdapterNextActionV1::ReloadPluginsIfRunning,
+                }),
                 context_windows: (!preview.context_windows.is_empty())
                     .then(|| preview.context_windows.clone()),
                 claude_context_window: (!preview.context_windows.is_empty())
@@ -75,6 +79,14 @@ pub(crate) fn preview(
         &preview.spec.model,
         input.model_file.as_ref().map(|file| &file.target),
     ) {
+        (
+            hiroute_application_api::AgentFacetIntent::Configure { settings },
+            Some(SettingsModelTargetFacts::Hermes {
+                provider_id,
+                endpoint,
+                ..
+            }),
+        ) => configured("hermes", Some(provider_id), endpoint, settings),
         (
             hiroute_application_api::AgentFacetIntent::Configure { settings },
             Some(SettingsModelTargetFacts::Codex {

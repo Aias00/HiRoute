@@ -22,9 +22,8 @@ use hiroute_domain::{
     AgentPlanId, ObservationQueryPort, OperationId, OperationV1, PreparedComputeProjectionV1,
     SessionId, WorkspaceId,
 };
-use std::collections::{BTreeMap, BTreeSet};
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::Value;
 
 mod collaboration_check;

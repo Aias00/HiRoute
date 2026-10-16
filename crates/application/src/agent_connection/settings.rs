@@ -4,9 +4,8 @@ use hiroute_application_api::{
 };
 use hiroute_domain::{
     AgentAccessTokenIntentV1, AgentAction, AgentCapability, AgentCapabilitySet,
-    AgentCollaborationTriggerModeV2, AgentIngressProtocolV1, AgentModelDefaultSelectionV2,
-    AgentModelGrantV2, AgentModelRouteV2, AgentModelSelectionV2, CanonicalDigest,
-    GatewayPublicationV1,
+    AgentIngressProtocolV1, AgentModelDefaultSelectionV2, AgentModelGrantV2, AgentModelRouteV2,
+    AgentModelSelectionV2, CanonicalDigest, GatewayPublicationV1,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};

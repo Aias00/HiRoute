@@ -278,7 +278,7 @@ const authoringCases: [string, () => Promise<void>][] = [
     assert(!document.body.textContent?.includes('private-provider-message'), 'Raw service error leaked');
     assert(!document.querySelector('.plan-identity-fields'), 'Failed initialization enabled guessed defaults');
     const rect = button(authoringLanguage === 'en' ? 'Retry' : '重试').getBoundingClientRect();
-    assert(rect.width > 30 && rect.left >= 0 && rect.right <= innerWidth, 'Retry is not usable');
+    assert(rect.width > 30 && rect.height >= 32 && rect.left >= 16 && rect.right <= innerWidth - 16, 'Retry is not usable or lacks page spacing');
   }],
   ['routing.authoring.reopen: retry uses the backend revision and settings', async () => {
     button(authoringLanguage === 'en' ? 'Retry' : '重试').click();

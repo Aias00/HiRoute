@@ -4,7 +4,6 @@ use hiroute_application_api::{
     ComputeProjectionEffectV1, ComputeScanResultV1, PreviewResultV1,
 };
 use hiroute_domain::{CHANGE_SPEC_SCHEMA_V1, ChangeSpecV1};
-use serde::{Deserialize, Serialize};
 
 use crate::control::{ComputeFactsPort, ComputeProjectionReadError, ControlReadError};
 
