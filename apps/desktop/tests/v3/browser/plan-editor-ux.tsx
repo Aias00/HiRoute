@@ -331,7 +331,7 @@ function Harness() {
     setResults(next);
     setRunning(false);
   }
-  return <PresentationRoot language={authoringChecks ? authoringLanguage : "zh"} theme="light" textScale={1}>
+  return <PresentationRoot language={authoringChecks ? authoringLanguage : "zh"} theme={new URLSearchParams(location.search).get('theme') === 'dark' ? 'dark' : 'light'} textScale={1}>
     <aside style={{ padding: 16 }}>
       <p>React + mock IPC 回归检查；不代表原生 Desktop 或真实 daemon 验收。</p>
       <button className="btn" disabled={running || results.length > 0} onClick={() => void run()}>运行智能路由交互检查</button>
