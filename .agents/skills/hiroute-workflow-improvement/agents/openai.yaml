@@ -1,6 +1,6 @@
 interface:
   display_name: "HiRoute Workflow Improvement"
-  short_description: "Route and label evidence-backed workflow feedback"
-  default_prompt: "Use $hiroute-workflow-improvement to capture observed issue-spec friction as deduplicated, labeled feedback in the owning repository."
+  short_description: "Turn iteration friction into verified workflow gains"
+  default_prompt: "Use $hiroute-workflow-improvement to capture issue-spec friction from HiRoute work, route labeled feedback, and assess whether adopted fixes improve the original scenario."
 policy:
   allow_implicit_invocation: true

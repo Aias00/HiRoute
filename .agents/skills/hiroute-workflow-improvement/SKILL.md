@@ -1,11 +1,18 @@
 ---
 name: hiroute-workflow-improvement
-description: Capture concrete issue-spec CLI or workflow friction encountered in HiRoute, route actionable feedback upstream or to the project, and label and deduplicate reports for later analysis. Also use for requested feedback reviews; not ordinary product bugs or automatic workflow rewrites.
+description: Improve HiRoute iteration by capturing issue-spec CLI and workflow friction, routing labeled feedback to its owner, and verifying adopted improvements against the original task. Use during relevant project work or requested feedback reviews; not ordinary product bugs or automatic upgrades.
 ---
 
 # Improve issue-spec through evidence
 
-Turn observed CLI/workflow friction into small, searchable suggestion Issues.
+Use HiRoute iteration as the source of concrete improvement evidence: observed
+friction becomes feedback, recurring feedback informs CLI/workflow corrections,
+and adopted corrections should improve subsequent HiRoute work. Labels support
+periodic analysis; filing Issues is an intermediate result, not proof of improvement.
+
+Capture observations while doing the original task, such as repeated manual repair,
+ambiguous guidance, unnecessary steps or missing command capability. Do not launch
+a separate broad audit or require a feedback report for every task.
 Continue the original task wherever possible. Feedback is not a new planning,
 review or delivery gate, and creating an Issue does not authorize its implementation.
 
@@ -94,3 +101,35 @@ by underlying cause and layer, link representative evidence, distinguish unique
 Issues from occurrences, and prioritize by observed impact and recurrence.
 Propose common fixes upstream and project-specific fixes locally. Summarizing
 feedback does not authorize implementation, closure, relabeling history or a schedule.
+
+## Bring improvements back into HiRoute
+
+When a relevant feedback item has a proposed or released fix, assess it as part of
+related HiRoute work or a requested feedback review. Read its actual resolution,
+linked implementation and available revision; an Issue closure alone is not proof
+that a fix exists, is installed or addresses HiRoute's scenario. Batch related
+candidates for the user's periodic review instead of repeatedly interrupting work.
+
+- **CLI correction:** identify the tested fix/release and the currently installed
+  revision. Propose adoption when needed. Install or change a global CLI only within
+  the user's authorized scope; a feedback-filing policy does not authorize upgrades.
+- **Shared workflow correction:** use the reviewed CLI revision and the workflow
+  preview/apply procedure in [instruction ownership](../../README.md). Review the
+  generated diff and project supplements together; preserve the manifest and links.
+  Do not hand-patch generated instructions or update them merely to clear a warning.
+- **Project correction:** change the owning HiRoute supplement, skill or validation
+  path through the normal authorized change and PR process. Avoid copying generic
+  upstream rules into local policy when the shared source now supplies them.
+
+Adoption is separate implementation work: propose it when not yet authorized, and
+proceed without asking again when the current task already includes it. Keep
+feedback Issues linked to the corresponding fix and adoption PR/revision.
+
+After adoption, repeat the original command or representative task scenario with
+the new revision and applicable project checks. Compare the observed failure,
+manual repair, ambiguity or repeated work with the original evidence. Record the
+actual result, remaining limitations and source versions on the feedback Issue or
+adoption PR; if no comparable scenario has run, say that benefit is unverified.
+Do not claim time savings without measurements, count an upstream release as local
+adoption, or automatically close the report. A remaining cause returns to the same
+feedback thread with new evidence, completing the next iteration of the loop.

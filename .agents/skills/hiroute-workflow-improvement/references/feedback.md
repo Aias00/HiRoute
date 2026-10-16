@@ -40,6 +40,13 @@ new reproduction/impact and what differs. Do not overwrite its original evidence
 Record a recurrence only for a distinct observed occurrence, not another search or
 retry of the same event.
 
+When a correction becomes available, append its public fix/release link and revision.
+When HiRoute adopts it, append the adoption PR/commit, installed CLI or generated
+workflow revision, original scenario rerun and observed before/after result. Keep
+these distinct from occurrence counts. A useful review separates reported findings,
+upstream fixes available, adopted fixes, verified benefit and remaining friction;
+Issue open/closed state alone cannot represent that progression.
+
 ## Commands and partial failures
 
 Read exact command help before unfamiliar options. Search/read and recurrence
@@ -92,5 +99,6 @@ and count only explicitly dated observations in the interval. An update can be a
 label edit or closure and is not evidence of recurrence. Page through results when
 limits are reached, or split the date range and deduplicate by repository + number;
 state incomplete coverage if it cannot be exhausted. Use the user's timezone and
-explicit inclusive start/end dates in the summary. Do not treat absence of a
+explicit inclusive start/end dates in the summary. Include relevant fix/adoption
+updates from that window and distinguish verified benefits from untested upgrades. Do not treat absence of a
 recorded occurrence as evidence that the workflow never encountered the problem.
