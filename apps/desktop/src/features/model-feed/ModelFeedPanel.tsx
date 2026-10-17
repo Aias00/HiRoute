@@ -23,7 +23,7 @@ export function ModelFeedPanel({ language, mutable = true, onChanged }: { langua
     active.current = true; setBusy(true); setError('');
     try {
       const result = await invoke<ModelFeedStatus>(command, input === undefined ? undefined : { input });
-      if (live.current) { setStatus(result); setPreview(null); onChanged?.(); }
+      if (live.current) { setStatus(result); setPreview(null); window.dispatchEvent(new Event('model-feed-changed')); onChanged?.(); }
     } catch (failure) {
       if (live.current) {
         setError(String(failure).includes('STALE') ? (zh ? '影响范围已变化，请重新查看后再移除。' : 'The affected sources changed. Review the impact again.') : (zh ? '操作未完成，请重试。当前已验证的信息会保留。' : 'The action did not complete. Retry; verified information is retained.'));

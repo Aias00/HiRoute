@@ -634,7 +634,7 @@ impl ComputeManagementControlPort for LocalControlAdapter {
         self.validate_feed_save_plan(preview.plan(), &catalog)?;
         let prepared = planner.prepare_apply(request).map_err(map_planning)?;
         let feed = self.model_feed.clone();
-        Ok(prepared.with_revalidation(move || {
+        Ok(prepared.with_current_facts_check(move || {
             if feed.as_ref().is_some_and(|feed| {
                 feed.available_catalog()
                     .is_none_or(|current| current.generation != catalog.generation)

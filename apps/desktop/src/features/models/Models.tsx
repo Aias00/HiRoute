@@ -1,3 +1,4 @@
+import { ModelOriginDetails } from '../model-feed/ModelOriginDetails';
 import { ModelFeedPanel } from '../model-feed/ModelFeedPanel';
 import { ProviderIcon } from '../../ui/ProviderIcon';
 import { connectionName } from '../../ui/provider-identity';
@@ -5,7 +6,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { Plan } from '../../plan-editor';
 import { branchSelections } from '../decision-services/types';
-import { Dialog, UiIcon } from '../../ui';
+import { Dialog, Disclosure, UiIcon } from '../../ui';
 import { confirmDiscard, useDiscardGuard } from '../../ui/discard-guard';
 import type { PriceDisplay } from '../model-reference/types';
 import { clientOperationId } from '../model-connections/state';
@@ -337,7 +338,7 @@ export function Models(props: Props) {
     : null;
 
   return <section className="models-feature" aria-label={text('我的模型', 'My models')}>
-    <details className="model-feed-section"><summary>{text('模型信息更新', 'Model feed')}</summary><ModelFeedPanel language={props.language} mutable={props.mutable} onChanged={() => { void props.onRefresh(); }} /></details>
+    <Disclosure className="model-feed-section" label={text('模型信息更新', 'Model feed')} language={props.language}><ModelFeedPanel language={props.language} mutable={props.mutable} onChanged={() => { void props.onRefresh(); }} /></Disclosure>
     <div className={`split-view oc-models${detailOpen ? ' oc-model-detail-open' : ''}`}>
       <aside className="master-pane" aria-label={text('模型列表', 'Model list')}>
         <div className="master-toolbar">
@@ -380,6 +381,8 @@ export function Models(props: Props) {
             <div className="detail-identity"><ProviderIcon optionId={source.display_template_id ?? source.connection_identity?.connection_option_id} language={props.language} /><div><h2>{model?.display_name ?? source.display_name}</h2><p>{sourceLabel}</p></div></div>
             <StatusBadge value={status} reason={reason} subscription={access === 'subscription'} language={props.language} />
           </div>
+
+          {model?.catalog_configuration_id && <ModelOriginDetails modelId={model.catalog_configuration_id} language={props.language} />}
 
           {status === 'available' && <p className="field-help">{text('接入就绪仅表示本地路由条件满足，不代表上游推理或工具调用已验证。', 'Connection ready means local routing conditions are met; upstream inference and tool calls are not verified by this status.')}</p>}
 

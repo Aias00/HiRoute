@@ -248,15 +248,57 @@ pub fn valid_date(date: &str) -> bool {
 }
 
 fn valid_utc_timestamp(value: &str) -> bool {
-    if value.len() != 20 || !value.is_ascii() || !valid_date(&value[..10]) {
+    if value.len() < 20 || !value.is_ascii() || !valid_date(&value[..10]) {
         return false;
     }
-    let b = value.as_bytes();
-    b[10] == b'T'
-        && b[13] == b':'
-        && b[16] == b':'
-        && b[19] == b'Z'
-        && value[11..13].parse::<u8>().is_ok_and(|n| n < 24)
-        && value[14..16].parse::<u8>().is_ok_and(|n| n < 60)
-        && value[17..19].parse::<u8>().is_ok_and(|n| n < 60)
+    let Some(clock) = value
+        .strip_suffix('Z')
+        .or_else(|| value.strip_suffix("+00:00"))
+    else {
+        return false;
+    };
+    if clock.len() < 19 {
+        return false;
+    }
+    let seconds = &clock[17..];
+    let (seconds, fraction) = seconds
+        .split_once('.')
+        .map_or((seconds, None), |(s, f)| (s, Some(f)));
+    let digits = |s: &str| s.bytes().all(|b| b.is_ascii_digit());
+    clock.as_bytes()[10] == b'T'
+        && clock.as_bytes()[13] == b':'
+        && clock.as_bytes()[16] == b':'
+        && digits(&clock[11..13])
+        && clock[11..13].parse::<u8>().is_ok_and(|n| n < 24)
+        && digits(&clock[14..16])
+        && clock[14..16].parse::<u8>().is_ok_and(|n| n < 60)
+        && seconds.len() == 2
+        && digits(seconds)
+        && seconds.parse::<u8>().is_ok_and(|n| n < 60)
+        && fraction.is_none_or(|s| !s.is_empty() && digits(s))
+}
+
+#[cfg(test)]
+mod timestamp_tests {
+    use super::*;
+    #[test]
+    fn utc_rfc3339_supports_fractional_seconds_and_explicit_zero_offset() {
+        for value in [
+            "2026-10-18T08:09:10Z",
+            "2026-10-18T08:09:10.123456Z",
+            "2026-10-18T08:09:10+00:00",
+        ] {
+            assert!(valid_utc_timestamp(value), "{value}");
+        }
+        for value in [
+            "2026-10-18T08:09:10+01:00",
+            "2026-10-18T08:09:10.Z",
+            "2026-02-30T08:09:10Z",
+            "2026-10-18T+8:09:10Z",
+            "2026-10-18T08:09:60Z",
+            "2026-10-18T+00:00",
+        ] {
+            assert!(!valid_utc_timestamp(value), "{value}");
+        }
+    }
 }
