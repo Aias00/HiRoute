@@ -232,8 +232,8 @@ fn current_journal_has_closed_fields_and_refuses_escaped_paths() {
             .unwrap()
             .keys()
             .map(String::as_str)
-            .collect::<Vec<_>>(),
-        [
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from([
             "files",
             "new_definition",
             "new_marker",
@@ -242,7 +242,7 @@ fn current_journal_has_closed_fields_and_refuses_escaped_paths() {
             "operation",
             "phase",
             "schema"
-        ]
+        ])
     );
     for field in ["destination", "source", "backup"] {
         let mut changed = bytes.clone();
