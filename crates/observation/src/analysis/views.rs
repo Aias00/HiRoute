@@ -23,6 +23,20 @@ pub(super) fn rows(
     s: &Scope,
     q: &ObservationAnalysisQueryV1,
 ) -> Result<Vec<Row>, Error> {
+    let routing = matches!(q.view, AnalysisViewV1::Routing | AnalysisViewV1::Switches);
+    let from = if routing {
+        s.expires_ms
+            .saturating_sub(crate::managed_text::RETENTION_MS)
+            .saturating_add(1)
+            .max(0)
+    } else {
+        s.range.effective_from_ms
+    };
+    let request_filter = if routing {
+        None
+    } else {
+        s.initial_request.as_deref()
+    };
     let sql="SELECT r.session_id,r.request_id,r.started_at_ms,r.finished_at_ms,r.outcome,r.receipt_id,
       m.anchor_id,m.predecessor,m.gap,s.agent_id,
       COALESCE(a.native_model,(SELECT model_id FROM observation_attempt_models_v2 am WHERE am.workspace_id=r.workspace_id AND am.request_id=r.request_id AND am.ordinal=v.accepted_ordinal)),
@@ -45,12 +59,12 @@ pub(super) fn rows(
             params![
                 s.id,
                 s.workspace,
-                s.range.effective_from_ms,
+                from,
                 s.range.effective_to_ms,
                 s.source_watermark,
                 s.plan,
                 s.agent,
-                s.initial_request,
+                request_filter,
                 q.session_id
             ],
             |r| {
@@ -285,7 +299,17 @@ pub(super) fn content(
                     Ok(page) => {
                         let text = page.chunks.into_iter().map(|p| p.text).collect::<String>();
                         remaining = remaining.saturating_sub(text.len());
-                        c.text = Some(text);
+                        let fits = serde_json::to_vec(&text)
+                            .map_err(|_| Error::Unavailable)?
+                            .len()
+                            <= 256 * 1024;
+                        if fits {
+                            c.text = Some(text);
+                        } else {
+                            c.completeness = "reference_only".into();
+                            r.content_partial = true;
+                            r.content_state = "partial".into();
+                        }
                         c.next_cursor = page.next_cursor;
                         if c.next_cursor.is_some() {
                             r.content_partial = true;

@@ -67,7 +67,7 @@ pub(super) fn evaluate(
             reader.check(now, false, false)?;
         }
         let id: String = r.get(0)?;
-        if r.get::<_, String>(5) != "normal" {
+        if r.get::<_, String>(5)? != "normal" {
             if last_excluded != id {
                 result.excluded += 1;
                 last_excluded = id;

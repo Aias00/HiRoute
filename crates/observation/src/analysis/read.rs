@@ -153,7 +153,18 @@ impl LocalObservationStore {
                 }
                 AnalysisViewV1::Routing | AnalysisViewV1::Switches => {
                     let rows = views::rows(&tx, &s, q)?;
-                    let transitions = routing::transitions(&rows);
+                    let transitions: Vec<_> = routing::transitions(&rows)
+                        .into_iter()
+                        .filter(|t| {
+                            t.at_ms >= s.range.effective_from_ms
+                                && t.at_ms < s.range.effective_to_ms
+                        })
+                        .filter(|t| {
+                            s.initial_request
+                                .as_ref()
+                                .is_none_or(|id| &t.request_id == id)
+                        })
+                        .collect();
                     for t in &transitions {
                         let key = serde_json::to_value(t.kind)
                             .ok()
@@ -184,6 +195,10 @@ impl LocalObservationStore {
                 _ => return Err(Error::Invalid),
             }
         }
+        if s.range.effective_from_ms == s.range.effective_to_ms {
+            page.gaps.push("no_retained_stable_interval".into());
+            page.status = AnalysisStatusV1::Partial;
+        }
         if s.range.clipped_for_retention {
             page.gaps.push("retention_prefix_clipped".into());
             if page.status == AnalysisStatusV1::Ready {
@@ -202,6 +217,27 @@ impl LocalObservationStore {
         tx.commit()?;
         if q.view.content() {
             views::content(self, &db, reader, &mut page.requests, now)?;
+        }
+        // Leave envelope/cursor headroom in the existing 1 MiB Local Control
+        // frame. Limit is an upper bound; continue at the actual returned item.
+        let returned = match q.view {
+            AnalysisViewV1::Conversation => Some(frame_prefix(&page.requests)?),
+            AnalysisViewV1::Routing | AnalysisViewV1::Switches => {
+                Some(frame_prefix(&page.transitions)?)
+            }
+            _ => None,
+        };
+        if let Some(returned) = returned {
+            let previous = if q.view == AnalysisViewV1::Conversation {
+                page.requests.len()
+            } else {
+                page.transitions.len()
+            };
+            if returned < previous {
+                page.requests.truncate(returned);
+                page.transitions.truncate(returned);
+                page.next_cursor = Some(scope::next(self, &s, q, offset + returned as u64)?);
+            }
         }
         if page.conversations.iter().any(|c| c.lineage_partial) {
             page.gaps.push("native_grouping_partial".into());
@@ -223,6 +259,24 @@ impl LocalObservationStore {
         reader.check(now, q.view.content(), q.query.is_some())?;
         Ok(page)
     }
+}
+
+fn frame_prefix<T: serde::Serialize>(values: &[T]) -> Result<usize, Error> {
+    let mut bytes = 32 * 1024;
+    for (i, value) in values.iter().enumerate() {
+        bytes += serde_json::to_vec(value)
+            .map_err(|_| Error::Unavailable)?
+            .len()
+            + 1;
+        if bytes > 768 * 1024 {
+            return if i == 0 {
+                Err(Error::Unavailable)
+            } else {
+                Ok(i)
+            };
+        }
+    }
+    Ok(values.len())
 }
 
 fn pending(

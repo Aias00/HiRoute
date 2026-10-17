@@ -10,12 +10,20 @@ pub(super) fn transitions(rows: &[Row]) -> Vec<AnalysisTransitionV1> {
     let mut previous_http = BTreeMap::<&str, &Row>::new();
     let mut previous_turn = BTreeMap::<&str, &Row>::new();
     let mut last_by_turn = BTreeMap::new();
+    let mut first_by_turn = BTreeMap::new();
     let last_by_session: BTreeMap<_, _> = rows
         .iter()
         .map(|r| (r.request.request.session_id.as_str(), r))
         .collect();
     for r in rows {
         if let Some(turn) = r.turn.as_deref() {
+            first_by_turn
+                .entry((
+                    r.request.request.session_id.as_str(),
+                    r.epoch.as_deref(),
+                    turn,
+                ))
+                .or_insert(r.request.request.started_at_ms);
             last_by_turn.insert(
                 (
                     r.request.request.session_id.as_str(),
@@ -54,12 +62,23 @@ pub(super) fn transitions(rows: &[Row]) -> Vec<AnalysisTransitionV1> {
             prior_http
         };
         let known = r.terminal && r.request.model.native_model.is_some();
+        let endpoint_start = if final_turn && !boundary {
+            r.turn
+                .as_deref()
+                .and_then(|turn| {
+                    first_by_turn.get(&(own.session_id.as_str(), r.epoch.as_deref(), turn))
+                })
+                .copied()
+                .unwrap_or(own.started_at_ms)
+        } else {
+            own.started_at_ms
+        };
         let endpoints = known
             && prev.is_some_and(|p| {
                 p.terminal
                     && p.request
                         .finished_at_ms
-                        .is_some_and(|at| at < own.started_at_ms)
+                        .is_some_and(|at| at < endpoint_start)
                     && p.request.model.native_model.is_some()
             });
         let changed = endpoints

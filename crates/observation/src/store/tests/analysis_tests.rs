@@ -300,3 +300,35 @@ fn numeric_legacy_comparison_preserves_the_original_reader_output() {
     );
     assert_eq!(projected.compared_request_count, 3);
 }
+
+#[test]
+fn deleting_and_reusing_the_last_source_row_cannot_replace_a_frozen_population() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    let a = ingest(&store, "population-old");
+    let q = ObservationAnalysisQueryV1::new(AnalysisViewV1::Conversations);
+    let first = store
+        .observed_analysis(&reader(), &q, Some(&range()), None, 1000)
+        .unwrap();
+    store
+        .connection
+        .lock()
+        .execute(
+            "DELETE FROM logical_requests WHERE workspace_id=?1 AND request_id=?2",
+            rusqlite::params![a.workspace.as_str(), a.request.as_str()],
+        )
+        .unwrap();
+    let mut replacement = Fixture::new("population-replacement");
+    replacement.session = a.session;
+    for e in facts(&replacement, UsageFrameKindV1::Cumulative) {
+        store.ingest_fact(&e, &[]).unwrap();
+    }
+    let mut detail = q;
+    detail.analysis_scope = first.analysis_scope;
+    assert_eq!(
+        store
+            .observed_analysis(&reader(), &detail, None, None, 1001)
+            .unwrap_err(),
+        crate::query_v2::ObservationV2Error::Stale
+    );
+}

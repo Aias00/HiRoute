@@ -30,6 +30,7 @@ pub(super) struct Scope {
     pub used_edges: Vec<u64>,
     pub used_roots: Vec<(String, String)>,
     pub source_count: u64,
+    pub source_digest: String,
     pub source_watermark: i64,
     pub index_partial: bool,
 }
@@ -129,12 +130,17 @@ pub(super) fn load(
             return Err(Error::Invalid);
         }
     }
-    if q.session_id
+    if let Some(selected) = &s.initial_session {
+        if let Some(requested) = &q.session_id {
+            let same:bool=db.query_row("SELECT EXISTS(SELECT 1 FROM observation_analysis_members_v1 a JOIN observation_analysis_members_v1 b ON b.scope_id=a.scope_id AND b.anchor_id=a.anchor_id WHERE a.scope_id=?1 AND a.session_id=?2 AND (b.session_id=?3 OR b.anchor_id=?3))",params![s.id,selected,requested],|r|r.get(0))?;
+            if !same {
+                return Err(Error::Invalid);
+            }
+        }
+    }
+    if q.request_id
         .as_ref()
-        .is_some_and(|id| s.initial_session.as_ref().is_some_and(|old| id != old))
-        || q.request_id
-            .as_ref()
-            .is_some_and(|id| s.initial_request.as_ref().is_some_and(|old| id != old))
+        .is_some_and(|id| s.initial_request.as_ref().is_some_and(|old| id != old))
     {
         return Err(Error::Invalid);
     }
@@ -146,7 +152,7 @@ pub(super) fn load(
     } else {
         0
     };
-    check_live(db, &s)?;
+    check_relations(db, &s)?;
     Ok((s, offset))
 }
 pub(super) fn digest(value: &impl Serialize) -> Result<String, Error> {
@@ -200,7 +206,8 @@ pub(super) fn create(
     );
     range.clipped_for_retention = range.effective_from_ms != range.requested_from_ms;
     if range.effective_from_ms >= range.effective_to_ms {
-        return Err(Error::Invalid);
+        range.effective_from_ms = range.effective_to_ms;
+        range.clipped_for_retention = true;
     }
     let r = schema::get(db, &format!("relation_revision/{}", reader.workspace()))?;
     let e = schema::get(db, "numeric_revision")?;
@@ -346,23 +353,56 @@ pub(super) fn create(
         used_edges,
         used_roots,
         source_count: 0,
+        source_digest: String::new(),
         source_watermark,
         index_partial: matching.is_some_and(|(_, partial)| partial),
     };
-    s.source_count = source_count(db, &s)?;
+    (s.source_count, s.source_digest) = source_population(db, &s)?;
     save(db, &s)?;
     Ok(s)
 }
 
-pub(super) fn source_count(db: &Connection, s: &Scope) -> Result<u64, Error> {
-    Ok(db.query_row("SELECT COUNT(*) FROM logical_requests r
+fn source_population(db: &Connection, s: &Scope) -> Result<(u64, String), Error> {
+    use sha2::{Digest, Sha256};
+    let mut statement=db.prepare("SELECT r.request_id,r.session_id,r.started_at_ms FROM logical_requests r
       JOIN sessions sessions ON sessions.workspace_id=r.workspace_id AND sessions.session_id=r.session_id
       JOIN observation_analysis_members_v1 m ON m.scope_id=?1 AND m.session_id=r.session_id
       LEFT JOIN valuation_requests_v2 v ON v.workspace_id=r.workspace_id AND v.request_id=r.request_id
       WHERE r.workspace_id=?2 AND r.started_at_ms>=?3 AND r.started_at_ms<?4 AND (?5 IS NULL OR v.plan_id=?5) AND (?6 IS NULL OR sessions.agent_id=?6)
-        AND (?7 IS NULL OR r.request_id=?7) AND r.rowid<=?8",params![s.id,s.workspace,s.range.effective_from_ms,s.range.effective_to_ms,s.plan,s.agent,s.initial_request,s.source_watermark],|r|r.get(0))?)
+        AND (?7 IS NULL OR r.request_id=?7) AND r.rowid<=?8 ORDER BY r.request_id")?;
+    let mut rows = statement.query(params![
+        s.id,
+        s.workspace,
+        s.range.effective_from_ms,
+        s.range.effective_to_ms,
+        s.plan,
+        s.agent,
+        s.initial_request,
+        s.source_watermark
+    ])?;
+    let mut count = 0;
+    let mut hash = Sha256::new();
+    while let Some(row) = rows.next()? {
+        for column in [0, 1] {
+            let rusqlite::types::ValueRef::Text(v) = row.get_ref(column)? else {
+                return Err(Error::Unavailable);
+            };
+            hash.update((v.len() as u64).to_be_bytes());
+            hash.update(v);
+        }
+        hash.update(row.get::<_, i64>(2)?.to_be_bytes());
+        count += 1;
+    }
+    Ok((count, format!("{:x}", hash.finalize())))
 }
 pub(super) fn check_live(db: &Connection, s: &Scope) -> Result<(), Error> {
+    check_relations(db, s)?;
+    if source_population(db, s)? != (s.source_count, s.source_digest.clone()) {
+        return Err(Error::Stale);
+    }
+    Ok(())
+}
+fn check_relations(db: &Connection, s: &Scope) -> Result<(), Error> {
     for (root, proof) in &s.used_roots {
         let present:bool=db.query_row("SELECT EXISTS(SELECT 1 FROM observation_native_roots_v1 p JOIN logical_requests source ON source.workspace_id=p.workspace_id AND source.request_id=p.request_id WHERE p.workspace_id=?1 AND p.session_id=?2 AND p.proof_id=?3)",params![s.workspace,root,proof],|r|r.get(0))?;
         if !present {
@@ -392,11 +432,6 @@ pub(super) fn check_live(db: &Connection, s: &Scope) -> Result<(), Error> {
         if invalid {
             return Err(Error::Stale);
         }
-    }
-    // Only the used population can invalidate this scope; no global visibility
-    // generation comparison and no body-only tombstone exclusion.
-    if source_count(db, s)? < s.source_count {
-        return Err(Error::Stale);
     }
     Ok(())
 }

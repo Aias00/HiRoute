@@ -57,10 +57,26 @@ pub(super) fn resolve(
             gaps.insert(child.clone(), "competing_successors".into());
         }
     }
-    let mut members = Vec::with_capacity(physical.len());
+    let mut connected = physical.clone();
+    let mut queue: std::collections::VecDeque<_> = physical.iter().cloned().collect();
+    while let Some(id) = queue.pop_front() {
+        if !gaps.contains_key(&id) {
+            if let Some((parent, _)) = parents.get(&id) {
+                if connected.insert(parent.clone()) {
+                    queue.push_back(parent.clone());
+                }
+            }
+        }
+        for child in successors.get(&id).into_iter().flatten() {
+            if !gaps.contains_key(child) && connected.insert(child.clone()) {
+                queue.push_back(child.clone());
+            }
+        }
+    }
+    let mut members = Vec::with_capacity(connected.len());
     let mut roots = BTreeMap::<String, (String, Option<String>)>::new();
     let mut group_edges = BTreeMap::<String, BTreeSet<u64>>::new();
-    for id in physical {
+    for id in &connected {
         let mut node = id.clone();
         let mut seen = BTreeSet::new();
         let mut path = Vec::<(String, u64)>::new();
