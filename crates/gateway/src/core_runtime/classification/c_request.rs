@@ -97,15 +97,13 @@ pub(super) fn request_template(
     } else {
         0
     };
-    if target_partial {
-        if let Some(id) = bindings.applicability.take() {
-            body["questions"].as_object_mut().unwrap().remove(&id);
-        }
+    if target_partial && let Some(id) = bindings.applicability.take() {
+        body["questions"].as_object_mut().unwrap().remove(&id);
     }
-    if admitted_stage == 0 {
-        if let Some(id) = bindings.assessment.take() {
-            body["questions"].as_object_mut().unwrap().remove(&id);
-        }
+    if admitted_stage == 0
+        && let Some(id) = bindings.assessment.take()
+    {
+        body["questions"].as_object_mut().unwrap().remove(&id);
     }
     body["state"]["assessment_stage"] =
         serde_json::to_value(&stage[stage.len() - admitted_stage..])

@@ -396,22 +396,22 @@ impl ProductionGatewayRuntime {
             u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
         match result {
             Ok(response) => {
-                if let Some(o) = routing_observation.as_mut() {
-                    if o.applicability_requested {
-                        o.applicability_probability = response
-                            .applicability
-                            .and_then(serde_json::Number::from_f64);
-                        o.applicability_state = if o.applicability_probability.is_some() {
-                            hiroute_domain::ApplicabilityStateV1::Valid
-                        } else {
-                            hiroute_domain::ApplicabilityStateV1::Unavailable
-                        };
-                        o.applicability_reason = if o.applicability_probability.is_some() {
-                            hiroute_domain::ApplicabilityReasonV1::Answered
-                        } else {
-                            hiroute_domain::ApplicabilityReasonV1::InvalidOutput
-                        };
-                    }
+                if let Some(o) = routing_observation.as_mut()
+                    && o.applicability_requested
+                {
+                    o.applicability_probability = response
+                        .applicability
+                        .and_then(serde_json::Number::from_f64);
+                    o.applicability_state = if o.applicability_probability.is_some() {
+                        hiroute_domain::ApplicabilityStateV1::Valid
+                    } else {
+                        hiroute_domain::ApplicabilityStateV1::Unavailable
+                    };
+                    o.applicability_reason = if o.applicability_probability.is_some() {
+                        hiroute_domain::ApplicabilityReasonV1::Answered
+                    } else {
+                        hiroute_domain::ApplicabilityReasonV1::InvalidOutput
+                    };
                 }
                 let reason_codes = if response.invalid_assessment {
                     vec![ComplexityReasonCodeV1::ClassifierAssessmentInvalid]
@@ -462,10 +462,10 @@ impl ProductionGatewayRuntime {
             }
             Err(failure) => {
                 let mut fallback = local_decision;
-                if let Some(o) = routing_observation.as_mut() {
-                    if o.applicability_requested {
-                        o.applicability_reason = failure.applicability_reason();
-                    }
+                if let Some(o) = routing_observation.as_mut()
+                    && o.applicability_requested
+                {
+                    o.applicability_reason = failure.applicability_reason();
                 }
                 fallback.routing_observation = routing_observation;
                 fallback.fallback_used = true;
