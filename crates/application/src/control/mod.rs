@@ -47,6 +47,12 @@ pub enum ControlReadError {
     CollaborationRootRequired,
 }
 
+/// Bounded observation composition never waits on a control writer mutex.
+pub enum ControlReadAttempt<T> {
+    Ready(T),
+    Busy,
+}
+
 pub trait ClassifierDiagnosticPort: Send + Sync {
     fn test_classifier_decision(
         &self,
@@ -69,6 +75,24 @@ pub use hiroute_application_api::{
 };
 
 pub trait ControlStatePort: Send + Sync {
+    fn try_observation_revision(
+        &self,
+        _workspace: &WorkspaceId,
+        _deadline: std::time::Instant,
+    ) -> Result<ControlReadAttempt<u64>, ControlReadError> {
+        Err(ControlReadError::Unavailable)
+    }
+    fn try_validate_observation_capability(
+        &self,
+        _capability: &str,
+        _workspace: &WorkspaceId,
+        _principal: PrincipalKind,
+        _operation: &str,
+        _digest: &CanonicalDigest,
+        _deadline: std::time::Instant,
+    ) -> Result<ControlReadAttempt<u64>, ControlReadError> {
+        Err(ControlReadError::Unavailable)
+    }
     fn snapshot(
         &self,
         workspace_id: &WorkspaceId,
@@ -527,6 +551,15 @@ pub trait RoutingFactsPort: Send + Sync {
         &self,
         workspace_id: &WorkspaceId,
     ) -> Result<RoutingCompilationSnapshotV1, ControlReadError>;
+
+    fn try_active_publication(
+        &self,
+        _workspace: &WorkspaceId,
+        _deadline: std::time::Instant,
+    ) -> Result<ControlReadAttempt<Option<hiroute_domain::GatewayPublicationV1>>, ControlReadError>
+    {
+        Err(ControlReadError::Unavailable)
+    }
 }
 
 #[derive(Clone)]

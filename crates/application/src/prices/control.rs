@@ -35,6 +35,12 @@ pub struct PriceSourceBinding {
 }
 pub trait SourcePriceControlPort: Send + Sync {
     fn price_control_facts(&self) -> Result<PriceControlFactsV1, ControlReadError>;
+    fn try_price_control_facts(
+        &self,
+        _deadline: std::time::Instant,
+    ) -> Result<crate::control::ControlReadAttempt<PriceControlFactsV1>, ControlReadError> {
+        Err(ControlReadError::Unavailable)
+    }
 }
 
 pub fn resolve_price_target(

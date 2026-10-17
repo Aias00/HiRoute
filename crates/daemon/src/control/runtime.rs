@@ -1082,6 +1082,72 @@ impl WorkerInstallationSelectionSource for LocalControlAdapter {
 }
 
 impl ControlStatePort for LocalControlAdapter {
+    fn try_observation_revision(
+        &self,
+        workspace: &WorkspaceId,
+        deadline: std::time::Instant,
+    ) -> Result<hiroute_application::control::ControlReadAttempt<u64>, ControlReadError> {
+        use hiroute_application::control::ControlReadAttempt;
+        let stores = match self.stores.try_lock() {
+            Ok(stores) => stores,
+            Err(std::sync::TryLockError::WouldBlock) => return Ok(ControlReadAttempt::Busy),
+            Err(std::sync::TryLockError::Poisoned(_)) => return Err(ControlReadError::Unavailable),
+        };
+        if std::time::Instant::now() >= deadline {
+            return Err(ControlReadError::Unavailable);
+        }
+        stores
+            .control()
+            .current_revisions(workspace)
+            .map(|r| ControlReadAttempt::Ready(r.target))
+            .map_err(map_port)
+    }
+
+    fn try_validate_observation_capability(
+        &self,
+        raw: &str,
+        workspace: &WorkspaceId,
+        principal: PrincipalKind,
+        operation: &str,
+        digest: &CanonicalDigest,
+        deadline: std::time::Instant,
+    ) -> Result<hiroute_application::control::ControlReadAttempt<u64>, ControlReadError> {
+        use hiroute_application::control::ControlReadAttempt;
+        let capability =
+            ProtectedApplyCapability::new(raw.to_owned()).map_err(|_| ControlReadError::Denied)?;
+        let principal = match principal {
+            PrincipalKind::InteractiveUser => "interactive-user",
+            PrincipalKind::Desktop => "desktop",
+            PrincipalKind::Skill | PrincipalKind::SealedCollaboration => {
+                return Err(ControlReadError::Denied);
+            }
+        };
+        let stores = match self.stores.try_lock() {
+            Ok(stores) => stores,
+            Err(std::sync::TryLockError::WouldBlock) => return Ok(ControlReadAttempt::Busy),
+            Err(std::sync::TryLockError::Poisoned(_)) => return Err(ControlReadError::Unavailable),
+        };
+        if std::time::Instant::now() >= deadline {
+            return Err(ControlReadError::Unavailable);
+        }
+        let revisions = stores
+            .control()
+            .current_revisions(workspace)
+            .map_err(map_port)?;
+        stores
+            .control()
+            .verify_apply_authorization(
+                &capability,
+                workspace,
+                principal,
+                operation,
+                digest,
+                &revisions,
+            )
+            .map_err(map_port)?;
+        Ok(ControlReadAttempt::Ready(revisions.target))
+    }
+
     fn snapshot(
         &self,
         workspace_id: &WorkspaceId,

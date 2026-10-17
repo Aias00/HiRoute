@@ -432,6 +432,35 @@ mod tests {
     }
 
     impl ControlStatePort for FixedPorts {
+        fn try_observation_revision(
+            &self,
+            _: &WorkspaceId,
+            _: std::time::Instant,
+        ) -> Result<crate::control::ControlReadAttempt<u64>, ControlReadError> {
+            Ok(crate::control::ControlReadAttempt::Ready(9))
+        }
+
+        fn try_validate_observation_capability(
+            &self,
+            capability: &str,
+            workspace: &WorkspaceId,
+            principal: PrincipalKind,
+            operation: &str,
+            digest: &CanonicalDigest,
+            deadline: std::time::Instant,
+        ) -> Result<crate::control::ControlReadAttempt<u64>, ControlReadError> {
+            let snapshot = self.snapshot(workspace)?;
+            self.validate_protected_capability(
+                capability,
+                workspace,
+                principal,
+                operation,
+                digest,
+                &snapshot.revisions,
+            )?;
+            self.try_observation_revision(workspace, deadline)
+        }
+
         fn snapshot(
             &self,
             _workspace_id: &WorkspaceId,

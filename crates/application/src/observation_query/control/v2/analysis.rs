@@ -18,12 +18,21 @@ impl ObservationControl {
             return Ok(page);
         };
         reader.check(now, false, false)?;
-        let facts = self
+        let deadline = reader
+            .query_deadline()
+            .ok_or(ObservationQueryError::InvalidQuery)?;
+        let result = self
             .prices
             .as_ref()
             .ok_or(ObservationQueryError::Unavailable)?
-            .price_control_facts()
-            .map_err(map_control)?;
+            .try_price_control_facts(deadline);
+        reader.check(now, false, false)?;
+        let facts = match result.map_err(map_control)? {
+            crate::control::ControlReadAttempt::Ready(facts) => facts,
+            crate::control::ControlReadAttempt::Busy => {
+                return Err(ObservationQueryError::ReaderBusy);
+            }
+        };
         if facts.source_bindings.len() > 4096 {
             return Err(ObservationQueryError::Unavailable);
         }
@@ -44,6 +53,7 @@ impl ObservationControl {
         };
         let mut prices = Vec::with_capacity(facts.source_bindings.len());
         for binding in &facts.source_bindings {
+            reader.check(now, false, false)?;
             let (target, _, _) = crate::prices::resolve_price_target(
                 &facts,
                 &PriceTargetLocatorV1::Binding {
@@ -67,9 +77,11 @@ impl ObservationControl {
                 quote,
             });
         }
-        let reference = required
-            .reference_binding_id
-            .or_else(|| self.sole_primary(required.plan_id.as_deref()));
+        let reference = if let Some(id) = required.reference_binding_id {
+            Some(id)
+        } else {
+            self.sole_primary(required.plan_id.as_deref(), reader, now)?
+        };
         let capture = AnalysisPricesV1 {
             generation_ref: facts
                 .effective
@@ -88,20 +100,36 @@ impl ObservationControl {
             .observation_analysis(reader, &q, None, Some(&capture), now)
     }
 
-    fn sole_primary(&self, plan_id: Option<&str>) -> Option<String> {
-        let publication = self
-            .routing
-            .as_ref()?
-            .routing_compilation_snapshot(&self.workspace_id)
-            .ok()?
-            .active_publication?;
+    fn sole_primary(
+        &self,
+        plan_id: Option<&str>,
+        reader: &ObservationReaderContext,
+        now: i64,
+    ) -> Result<Option<String>, ObservationQueryError> {
+        let Some(routing) = &self.routing else {
+            return Ok(None);
+        };
+        let result = routing.try_active_publication(
+            &self.workspace_id,
+            reader
+                .query_deadline()
+                .ok_or(ObservationQueryError::InvalidQuery)?,
+        );
+        reader.check(now, false, false)?;
+        let publication = match result.map_err(map_control)? {
+            crate::control::ControlReadAttempt::Ready(Some(publication)) => publication,
+            crate::control::ControlReadAttempt::Ready(None) => return Ok(None),
+            crate::control::ControlReadAttempt::Busy => {
+                return Err(ObservationQueryError::ReaderBusy);
+            }
+        };
         let plans: Vec<_> = publication
             .plans
             .iter()
             .filter(|p| plan_id.is_none_or(|id| p.body.identity.agent_plan_id.as_str() == id))
             .collect();
         if plans.len() != 1 {
-            return None;
+            return Ok(None);
         }
         let bindings: BTreeSet<_> = plans[0]
             .body
@@ -112,8 +140,8 @@ impl ObservationControl {
             .filter(|g| g.group_id == MaterializedGroupId::Primary)
             .flat_map(|g| g.candidates.iter().map(|c| c.binding_id.clone()))
             .collect();
-        (bindings.len() == 1)
+        Ok((bindings.len() == 1)
             .then(|| bindings.first().cloned())
-            .flatten()
+            .flatten())
     }
 }

@@ -316,11 +316,12 @@ pub(super) fn create(
         .filter(|(root, _)| selected_anchors.contains(root.as_str()))
         .filter_map(|(root, proof)| proof.map(|proof| (root, proof)))
         .collect();
-    for m in selected {
-        db.execute(
-            "INSERT INTO observation_analysis_members_v1 VALUES(?1,?2,?3,?4,?5)",
-            params![id, m.id, m.anchor, m.predecessor, m.gap],
-        )?;
+    {
+        let mut insert =
+            db.prepare("INSERT INTO observation_analysis_members_v1 VALUES(?1,?2,?3,?4,?5)")?;
+        for m in selected {
+            insert.execute(params![id, m.id, m.anchor, m.predecessor, m.gap])?;
+        }
     }
     let source_watermark = db.query_row(
         "SELECT COALESCE(MAX(rowid),0) FROM logical_requests",

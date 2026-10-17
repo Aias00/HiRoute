@@ -33,6 +33,21 @@ pub(super) fn resolve(
             ))
         })?
         .collect::<Result<Vec<_>, _>>()?;
+    if edges.is_empty() {
+        return Ok((
+            physical
+                .iter()
+                .map(|id| Member {
+                    id: id.clone(),
+                    anchor: id.clone(),
+                    predecessor: None,
+                    gap: None,
+                    edge_versions: vec![],
+                })
+                .collect(),
+            vec![],
+        ));
+    }
     let mut parents = BTreeMap::<String, (String, u64)>::new();
     let mut gaps = BTreeMap::<String, String>::new();
     let mut successors = BTreeMap::<String, Vec<String>>::new();
