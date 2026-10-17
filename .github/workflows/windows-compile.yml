@@ -55,6 +55,14 @@ jobs:
         run: |
           cargo check --locked --target x86_64-pc-windows-msvc -p hiroute-cli -p hiroute-daemon -p hiroute-platform -p hiroute-local-storage --all-targets
           if ($LASTEXITCODE -ne 0) { throw 'Windows headless compilation failed' }
+      - name: Test Windows package and restore policy components
+        shell: pwsh
+        run: |
+          $os = Get-CimInstance Win32_OperatingSystem
+          $admin = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+          @{ version=$os.Version; build=$os.BuildNumber; architecture=[Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString(); administrator=$admin; evidence='component fixtures, not standard-user installation acceptance' } | ConvertTo-Json -Compress
+          cargo test --locked --target x86_64-pc-windows-msvc -p hiroute-host-runtime --lib standalone_install::
+          if ($LASTEXITCODE -ne 0) { throw 'Windows installation component regressions failed' }
       - name: Check Windows console shell and its restricted host commands
         shell: pwsh
         env:
