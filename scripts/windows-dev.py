@@ -190,6 +190,60 @@ def bundle(result_path, log_path, output):
     return dict(bundle_sha256=digest(output), source_revision=sha, files=list(images))
 
 
+def bundle_desktop(result_path, log_path, output):
+    """Export a native release candidate and its exact compiled installer test."""
+    result = json.loads(result_path.read_text())
+    sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=REPO, text=True).strip()
+    identity = result.get('desktop_result', {})
+    artifact = result.get('website_artifact', {})
+    if (result.get('revision') != sha or result.get('target') != 'x86_64-pc-windows-msvc'
+            or result.get('status') != 'awaiting_runtime' or result.get('package_integrity') != 'green'
+            or identity.get('revision') != sha or identity.get('native_runtime') != 'not_executed'
+            or artifact.get('kind') != 'desktop' or artifact.get('format') != 'nsis'
+            or artifact.get('platform') != 'Windows' or artifact.get('architecture') != 'x86_64'):
+        raise ValueError('A matching unassessed native x64 NSIS candidate is required')
+    installer = Path(result['assets']) / artifact['filename']
+    installer.resolve(strict=True).relative_to(REPO.resolve() / 'target')
+    if (digest(installer) != identity.get('installer_sha256') or digest(installer) != artifact.get('sha256')
+            or installer.stat().st_size != identity.get('installer_size')):
+        raise ValueError('Installer differs from the measured build identity')
+    tests = set()
+    for line in log_path.read_text().splitlines():
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if (row.get('reason') == 'compiler-artifact' and row.get('target', {}).get('name') == 'windows_desktop'
+                and row.get('profile', {}).get('test') is True and row.get('executable')):
+            tests.add(Path(row['executable']).resolve(strict=True))
+    if len(tests) != 1:
+        raise ValueError('Exactly one compiled Windows Desktop test artifact is required')
+    binaries = REPO / 'target/x86_64-pc-windows-msvc/release'
+    harness = tests.pop()
+    harness.relative_to(binaries.resolve(strict=True))
+    payload = REPO / 'apps/shell/src-tauri/resources/standalone'
+    if digest(payload / 'package-manifest.json') != identity.get('standalone_manifest_sha256'):
+        raise ValueError('Embedded package differs from the installer build identity')
+    package = json.loads((payload / 'package-manifest.json').read_text())
+    if package.get('revision') != sha or package.get('target') != result['target']:
+        raise ValueError('Embedded package source differs from the installer')
+    for name in ('hiroute.exe', 'hirouted.exe'):
+        expected = package['files']['bin/' + name]
+        if digest(payload / name) != expected['sha256'] or (payload / name).stat().st_size != expected['size']:
+            raise ValueError('Embedded product bytes differ from the measured package')
+    files = {'installer.exe': installer, 'windows_desktop.exe': harness,
+             **{name: payload / name for name in ('hiroute.exe', 'hirouted.exe')}}
+    manifest = dict(source_revision=sha, target='x86_64-pc-windows-msvc', installer_format='nsis',
+                    native_ci_assessment='not_assessed', files={})
+    with zipfile.ZipFile(output, 'x', compression=zipfile.ZIP_DEFLATED, compresslevel=1) as archive:
+        for name, path in files.items():
+            manifest['files'][name] = dict(sha256=digest(path), bytes=path.stat().st_size)
+            archive.write(path, name)
+        archive.writestr('manifest.json', json.dumps(manifest))
+    return dict(bundle_sha256=digest(output), source_revision=sha, files=list(files),
+                native_acceptance='not_executed')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, default=CONFIG)
@@ -218,8 +272,14 @@ def main():
     export.add_argument('--result', type=Path, required=True)
     export.add_argument('--log', type=Path, required=True)
     export.add_argument('--output', type=Path, required=True)
+    export = commands.add_parser('bundle-desktop')
+    export.add_argument('--result', type=Path, required=True)
+    export.add_argument('--log', type=Path, required=True)
+    export.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
-    if args.action == 'bundle':
+    if args.action == 'bundle-desktop':
+        value = bundle_desktop(args.result, args.log, args.output)
+    elif args.action == 'bundle':
         value = bundle(args.result, args.log, args.output)
     else:
         remote = Remote(configuration(args.config))

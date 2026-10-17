@@ -96,6 +96,13 @@ does not run automatically on PR or main pushes; ordinary iteration uses the
 Hosted background compile-only cases and real accounts retain their separate
 runtime gates; the CI dependency does not establish those results.
 
+To prepare only an x64 NSIS installer for development-machine acceptance, dispatch
+**build-release-platform** on the exact candidate branch with its default x64
+Windows target, Windows runner and `windows_desktop: true` option. It uploads
+the installer and build evidence, and leaves the identity `awaiting_runtime`.
+It performs no publication and does not replace the required native acceptance
+or the release-candidate matrix.
+
 Every package matrix job checks out the dispatch's exact `github.sha`, uses a native
 runner and uploads its own assets and evidence. Ubuntu runner labels select only
 the native Docker host. Both Linux architectures build against Debian 11 / glibc

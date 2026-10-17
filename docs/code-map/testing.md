@@ -74,6 +74,11 @@ Windows shell origin/handoff tests live in
 Task and upgrade effects require the separate
 [native acceptance inventory](../../scripts/windows-desktop-cases.json), bound to
 the actual standard-user OS, candidate and installer hash.
+The [bounded NSIS journey](../../crates/daemon/tests/windows_desktop.rs) uses the
+verified development bundle and configured existing standard session to check
+silent defaults, repeat install, console/Gateway readiness and uninstall with
+data retained. Its result does not establish WebView, Agent restore or upgrade
+recovery acceptance; see the [execution entry](../validation-routing.md#windows-iteration-and-release-validation).
 
 Keep borrowed user resources, writable native acceptance configuration, fresh
 product storage and per-run materials separate. Each product instance needs a

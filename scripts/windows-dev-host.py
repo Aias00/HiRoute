@@ -39,14 +39,15 @@ def identifier(value, pattern=r'[a-f0-9]{32}'):
     return value
 
 
-def pe(path):
+def pe(path, installer=False):
     with path.open('rb') as stream:
         header = stream.read(64)
         if len(header) != 64 or header[:2] != b'MZ':
             raise ValueError('Expected a native executable')
         stream.seek(struct.unpack_from('<I', header, 60)[0])
-        if stream.read(6) != b'PE\0\0\x64\x86':
-            raise ValueError('Expected an x64 PE artifact')
+        expected = b'PE\0\0\x4c\x01' if installer else b'PE\0\0\x64\x86'
+        if stream.read(6) != expected:
+            raise ValueError('Expected an NSIS x86 stub' if installer else 'Expected an x64 PE artifact')
 
 
 def manifest(directory):
@@ -60,7 +61,10 @@ def manifest(directory):
         file = plain(directory / name)
         if file.stat().st_nlink != 1 or file.stat().st_size != expected['bytes'] or digest(file) != expected['sha256']:
             raise ValueError('Artifact identity differs from its manifest')
-        pe(file)
+        installer = name == 'installer.exe' and value.get('installer_format') == 'nsis'
+        if name == 'installer.exe' and not installer:
+            raise ValueError('Installer requires an explicit NSIS bundle declaration')
+        pe(file, installer=installer)
     return value
 
 

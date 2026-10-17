@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Development-runner admission regressions, not native product evidence."""
 import base64
+import hashlib
 import importlib.util
 import json
 import os
@@ -86,6 +87,76 @@ class Runner(unittest.TestCase):
         binary.write_bytes(content)
         with self.assertRaises(ValueError):
             host.pe(binary)
+
+    def test_nsis_stub_is_admitted_only_as_the_declared_installer(self):
+        payload = bytearray(70)
+        payload[:2] = b'MZ'
+        struct.pack_into('<I', payload, 60, 64)
+        payload[64:] = b'PE\0\0\x4c\x01'
+        entry = dict(sha256=hashlib.sha256(payload).hexdigest(), bytes=len(payload))
+        for declaration in (None, 'nsis'):
+            def mutate(value):
+                value['files']['installer.exe'] = entry
+                if declaration:
+                    value['installer_format'] = declaration
+            archive = self.archive(extra=('installer.exe', payload), mutate=mutate)
+            if declaration:
+                staged = host.stage(self.root, archive, controller.digest(archive))
+                self.assertIn('installer.exe', staged['files'])
+                path = self.root / 'bundles' / staged['bundle'] / 'installer.exe'
+                with self.assertRaises(ValueError):
+                    host.pe(path)  # Ordinary product/harness admission stays x64.
+            else:
+                with self.assertRaisesRegex(ValueError, 'explicit NSIS'):
+                    host.stage(self.root, archive, controller.digest(archive))
+
+    def test_desktop_bundle_binds_installer_and_compiled_harness_to_the_candidate(self):
+        sha = 'a' * 40
+        binaries = self.root / 'target/x86_64-pc-windows-msvc/release'
+        binaries.mkdir(parents=True)
+        harness = binaries / 'windows_desktop.exe'
+        harness.write_bytes(b'component-test-harness')
+        payload = self.root / 'apps/shell/src-tauri/resources/standalone'
+        payload.mkdir(parents=True)
+        for name in ('hiroute.exe', 'hirouted.exe'):
+            (payload / name).write_bytes(b'embedded-' + name.encode())
+        (payload / 'package-manifest.json').write_text(json.dumps(dict(revision=sha,
+            target='x86_64-pc-windows-msvc', files={
+                'bin/' + name: dict(sha256=controller.digest(payload / name), size=(payload / name).stat().st_size)
+                for name in ('hiroute.exe', 'hirouted.exe')})))
+        assets = self.root / 'target/candidate/assets'
+        assets.mkdir(parents=True)
+        installer = assets / 'candidate.exe'
+        installer.write_bytes(b'component-nsis-fixture')
+        result = dict(revision=sha, target='x86_64-pc-windows-msvc', status='awaiting_runtime',
+                      package_integrity='green', assets=str(assets),
+                      desktop_result=dict(revision=sha, native_runtime='not_executed',
+                                          installer_sha256=controller.digest(installer), installer_size=installer.stat().st_size,
+                                          standalone_manifest_sha256=controller.digest(payload / 'package-manifest.json')),
+                      website_artifact=dict(kind='desktop', format='nsis', platform='Windows', architecture='x86_64',
+                                            filename=installer.name, sha256=controller.digest(installer)))
+        record = self.root / 'result.json'
+        record.write_text(json.dumps(result))
+        log = self.root / 'compiler.jsonl'
+        log.write_text(json.dumps(dict(reason='compiler-artifact', target=dict(name='windows_desktop'),
+                                       profile=dict(test=True), executable=str(harness))) + '\n')
+        with patch.object(controller, 'REPO', self.root), \
+             patch.object(controller.subprocess, 'check_output', return_value=sha):
+            output = self.root / 'desktop.zip'
+            exported = controller.bundle_desktop(record, log, output)
+            self.assertEqual(exported['native_acceptance'], 'not_executed')
+            with zipfile.ZipFile(output) as archive:
+                manifest = json.loads(archive.read('manifest.json'))
+                self.assertEqual(manifest['installer_format'], 'nsis')
+                self.assertEqual(archive.read('hirouted.exe'), b'embedded-hirouted.exe')
+            installer.write_bytes(b'changed installer')
+            with self.assertRaisesRegex(ValueError, 'measured build identity'):
+                controller.bundle_desktop(record, log, self.root / 'changed.zip')
+            self.assertFalse((self.root / 'changed.zip').exists())
+            installer.write_bytes(b'component-nsis-fixture')
+            (payload / 'hirouted.exe').write_bytes(b'changed daemon')
+            with self.assertRaisesRegex(ValueError, 'Embedded product bytes'):
+                controller.bundle_desktop(record, log, self.root / 'changed-product.zip')
 
     def test_symlink_and_multiple_links_are_not_runner_storage(self):
         archive = self.archive()

@@ -154,6 +154,29 @@ without the selected passing case is failure. Archive entries must be flat,
 manifested x64 executables with matching size/hash; partial stages cannot be reused.
 Cross-built artifacts never become native CI producers.
 
+For the NSIS candidate, manually dispatch `build-release-platform.yml` with its
+default x64 Windows/Desktop options. Its `artifacts/windows-desktop` upload
+contains a `development-bundle.zip` made from the measured installer, embedded
+product binaries and exact compiled installer test. The explicitly declared NSIS
+entry has an x86 bootstrap stub; ordinary product and test images remain x64.
+Stage this bundle with the same `windows stage` entry, then select:
+
+```sh
+python3 scripts/validation.py windows run --harness BUNDLE_ID --product BUNDLE_ID \
+  --binary windows_desktop.exe \
+  --case actual_nsis_silent_install_repeat_console_and_uninstall_preserve_data --ignored
+```
+
+This bounded case requires a fresh profile in the configured existing standard
+session, rejects even deny-only Administrators membership, and uses the actual
+NSIS `/S` entry for installation, repeat installation and uninstall. It verifies
+default login/tray choices, production Control/Gateway and packaged console
+readiness, and data preservation. Its result explicitly leaves WebView interaction,
+Agent restoration and update recovery unassessed. Preserved standalone data stays
+in that test profile after uninstall; `finish` does not remove it. The complete
+[Windows Desktop inventory](../scripts/windows-desktop-cases.json) retains its
+separate native obligations and artifact-bound release gate.
+
 Execution uses a one-off `Interactive`/`Limited` Task, with no startup trigger or
 saved password. One workbench lock prevents overlapping product mutation. Product
 profile and request deadlines remain intact; `run --timeout` is only a whole-test

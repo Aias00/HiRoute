@@ -12,7 +12,7 @@ native Windows acceptance uses `scripts/windows-headless-ci.ps1`.
 | `gateway-core-dedicated.yml` | Manual or reusable | Hosted Linux production stability and socket churn |
 | `p0-gateway-final-gates.yml` | Manual | Aggregate the three current hosted workflows |
 | `build-release.yml` | Manual, exact dispatch SHA | Builds macOS/Linux candidates independently; only Windows archives require the reusable Windows validation gate; uploads candidate assets and integrity evidence for the existing release publisher |
-| `build-release-platform.yml` | Reusable, exact caller SHA | Shared per-target candidate build and evidence upload |
+| `build-release-platform.yml` | Reusable, or explicit manual x64 Windows build | Shared per-target candidate build and evidence upload; the manual defaults build only an NSIS acceptance input with an `awaiting_runtime` identity |
 | `windows-compile.yml` | Path-filtered PR or manual | One cached x64 MSVC check of CLI, daemon, platform, local-storage and the console shell, including test targets and transitive production libraries. The shell compile excludes release payload resources; packaging validates the real payload separately. No runtime tests. |
 | `windows-headless.yml` | Release-candidate call, explicit manual diagnosis | Native MSVC primitives, shared business libraries, foreground control/Gateway and fixed upstream clients; complete background artifacts with explicit deferred Task acceptance; x64 artifact replay on Windows 11 ARM64 |
 
@@ -30,6 +30,13 @@ records the `focused` phase and cannot establish complete Windows acceptance.
 The reusable release entry accepts no scope input and always runs all five scopes.
 Neither manual mode publishes packages or establishes the separately required
 user/account acceptance.
+
+For installer iteration, manually dispatch **build-release-platform** with its
+default x64 Windows target, Windows runner and Desktop option. This uses the same
+release builder without starting the other platform or headless assessment jobs.
+Its uploaded installer is an acceptance input. The identity remains incomplete
+until the required Windows 11 x64 and Server standard-user scenarios pass, and
+the release publisher still enforces those artifact-bound results.
 
 Native Windows jobs enable sccache's GitHub Actions backend so compiler objects
 can be reused across runs. Cargo targets remain local to each checkout; artifact
