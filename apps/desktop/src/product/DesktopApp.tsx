@@ -1,3 +1,4 @@
+import { reopen } from '../plan-editor';
 import { TrialQuickStart } from '../features/trial/TrialQuickStart';
 import { NewModels } from '../features/trial/NewModels';
 import { useTrustSuggestions } from '../features/trust/use-trust-suggestions';
@@ -503,6 +504,37 @@ export function DesktopApp() {
     }
   }
 
+  async function reviewTrustAction(planId: string, branchId: string) {
+    if (trustSuggestions.status !== 'ready') return;
+    const report = trustSuggestions.plans.find(p => p.plan_id === planId);
+    const plan = home.desktopSnapshot?.catalog.plans.find(p => p.agent_plan_id === planId);
+    const branch = report?.branches.find(b => b.branch_id === branchId);
+    if (!plan || !report || !branch) return;
+    if (report.active_revision !== plan.agent_plan_revision) {
+      await showRouting({ key: `trust/${crypto.randomUUID()}`, plan, initialView: 'performance' }); return;
+    }
+    const suggestion = branch.suggestion;
+    if (suggestion.kind === 'return_to_previous_routing' && report.previous_routing?.length) {
+      setAgentIntent({ key: `agents/${crypto.randomUUID()}`, agentId: report.previous_routing[0].agent });
+      await openPageSafely('agents'); return;
+    }
+    if (suggestion.kind === 'explore_division') {
+      await showRouting({ key: `division/${crypto.randomUUID()}`, plan, initialView: 'performance', initialDivisionBranch: branchId }); return;
+    }
+    if ('threshold_millis' in suggestion) {
+      const editor = reopen(plan);
+      if (editor.mode === 'smart_saving' && branchId === 'smart_saving') editor.smart.judgment.degree.simple_threshold_millis = suggestion.threshold_millis;
+      else {
+        const selected = editor.branch_routing?.branches.find(b => b.id === branchId);
+        if (!selected || !editor.branch_routing) return;
+        selected.judgment = structuredClone(selected.judgment ?? editor.branch_routing.judgment);
+        selected.judgment.degree.simple_threshold_millis = suggestion.threshold_millis;
+      }
+      await showRouting({ key: `trust/${crypto.randomUUID()}`, plan, initialContent: editor }); return;
+    }
+    await showRouting({ key: `trust/${crypto.randomUUID()}`, plan });
+  }
+
   async function handleHomeAction(action: HomeAction) {
     if (action.kind === 'retry-read') {
       void home.refreshDomain(action.domain);
@@ -653,12 +685,13 @@ export function DesktopApp() {
           </div>
         </div>}
 
-        {trialIntent && <TrialQuickStart initialModelId={trialIntent.modelId} language={language} mutable={Boolean(home.desktopSnapshot?.trusted_authority && home.desktopSnapshot.service.mutation_available)} snapshot={home.desktopSnapshot} operation={operation} onOperation={value => acceptOperation(value, { kind: 'routing' })} onRefresh={async () => { setObserving(true); await home.refreshAll(); setRefreshVersion(value => value + 1); }} onClose={() => setTrialIntent(null)} onOpenAgent={id => { setTrialIntent(null); setAgentIntent({ key: `agents/${crypto.randomUUID()}`, agentId: id }); openPage('agents'); }} />}
+        {trialIntent && <TrialQuickStart onOpenPerformance={plan => { setTrialIntent(null); void showRouting({ key: `trial/${crypto.randomUUID()}`, plan, initialView: 'performance' }); }} onOpenSessions={() => { setTrialIntent(null); void openPageSafely('sessions'); }} initialModelId={trialIntent.modelId} language={language} mutable={Boolean(home.desktopSnapshot?.trusted_authority && home.desktopSnapshot.service.mutation_available)} snapshot={home.desktopSnapshot} operation={operation} onOperation={value => acceptOperation(value, { kind: 'routing' })} onRefresh={async () => { setObserving(true); await home.refreshAll(); setRefreshVersion(value => value + 1); }} onClose={() => setTrialIntent(null)} onOpenAgent={id => { setTrialIntent(null); setAgentIntent({ key: `agents/${crypto.randomUUID()}`, agentId: id }); openPage('agents'); }} />}
         <div hidden={page !== 'home'}><Home
             language={language}
             reads={home.reads}
             operation={homeOperation}
             trustSuggestions={trustSuggestions}
+            onTrustAction={(plan, branch) => void reviewTrustAction(plan, branch)}
             newModels={<NewModels language={language} active={page === 'home'} plans={home.desktopSnapshot?.catalog.plans ?? []} refreshVersion={refreshVersion} onTry={modelId => setTrialIntent({ modelId })} />}
             hasTasks={taskRead.status === 'ready' && taskRead.tasks.length > 0}
             onAction={handleHomeAction}
@@ -683,6 +716,7 @@ export function DesktopApp() {
               const plan = home.desktopSnapshot?.catalog.plans.find(item => item.agent_plan_id === planId);
               if (plan) void showRouting({ key: plan.agent_plan_id, plan });
             }}
+            onTryModel={modelId => setTrialIntent({ modelId })}
             onCreatePlan={bindingId => void showRouting({ key: `routing/${crypto.randomUUID()}`, initialBindingId: bindingId })}
           /></div>}
         {visited.has('models') && <div hidden={page !== 'models' || modelTab !== 'decisions'}><DecisionServicesPage

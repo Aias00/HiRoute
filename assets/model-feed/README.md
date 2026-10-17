@@ -27,7 +27,10 @@ node apps/website/scripts/model-feed.mjs check
 
 The Rust producer uses the client's admission code and exact supported release
 bundles from repository history. It computes the minimum admitting client version,
-carries inclusion dates forward, and omits models waiting for a compatible release.
+carries inclusion dates forward from the committed payload, and omits models waiting
+for a compatible release. A model's minimum version requires its executable capability
+and offer together. CI passes `--base <revision>` to reject changed publication bytes
+without a higher sequence and changed first-inclusion dates for retained records.
 The payload's `source_revision` identifies the source facts in Git history; it is
 provenance, not an instruction to replace it with each website deployment's SHA.
 One sequence identifies one immutable payload digest and source revision. Keep the

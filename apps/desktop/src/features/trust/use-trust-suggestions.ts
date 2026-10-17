@@ -3,7 +3,7 @@ import { observationRead } from '../observation-client';
 import { safeDiagnosticCode } from '../../error-code';
 import type { TrustReport } from './types';
 
-export type TrustSuggestionPlan = Pick<TrustReport, 'plan_id' | 'active_revision' | 'branches' | 'rows' | 'announcements'>;
+export type TrustSuggestionPlan = Pick<TrustReport, 'previous_routing' | 'plan_id' | 'active_revision' | 'branches' | 'rows' | 'announcements'>;
 export type TrustSuggestionsRead = { status: 'loading' | 'ready' | 'error'; plans: TrustSuggestionPlan[]; error: string; refresh(): void };
 
 /** One bounded read supplies Home, navigation and Plan-list attention. */

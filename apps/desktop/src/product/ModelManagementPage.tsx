@@ -138,6 +138,7 @@ export function ModelManagementPage({
   agents = [],
   onOpenPlan,
   onCreatePlan,
+  onTryModel,
   tabs,
 }: {
   language: 'zh' | 'en';
@@ -154,6 +155,7 @@ export function ModelManagementPage({
   plans?: Plan[];
   agents?: Agent[];
   onOpenPlan?(planId: string): void;
+  onTryModel?(modelId: string): void;
   onCreatePlan?(bindingId: string): void;
   tabs?: import('react').ReactNode;
 }) {
@@ -1191,6 +1193,7 @@ export function ModelManagementPage({
       onCredentialsSaved={() => setModelNotice(language === 'zh' ? '接入凭据已保存。' : 'Connection credentials saved.')}
       plans={plans}
       onOpenPlan={onOpenPlan}
+      onTryModel={onTryModel}
       onCreatePlan={onCreatePlan}
       onEditPrice={openPrice}
       onReauthorize={repairSubscription}

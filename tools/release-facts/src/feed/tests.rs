@@ -113,7 +113,20 @@ fn without_model(id: &str) -> TrustedReleaseCatalog {
 #[test]
 fn model_feed_projection_closes_a_real_model_graph_and_preserves_first_inclusion() {
     let current = current();
-    let id = current.model_data().price_rates[0]
+    let id = current
+        .model_data()
+        .price_rates
+        .iter()
+        .find(|rate| {
+            current
+                .model_data()
+                .offer(&rate.offer_ref)
+                .is_some_and(|offer| {
+                    offer.billing_class != hiroute_domain::BillingClass::Free
+                        && offer.model_configuration_ids.len() > 1
+                })
+        })
+        .expect("current catalog has a paid model in a shared offer")
         .model_configuration_id
         .clone();
     let clients = vec![

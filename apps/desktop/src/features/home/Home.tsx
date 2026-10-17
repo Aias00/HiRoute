@@ -8,7 +8,7 @@ import type { HomeProps, HomeReads } from './types';
 import { formatCacheHit, formatCacheHitCoverage, formatTokenCount } from '../usage-presentation';
 
 /** v3-shell + occami-core DOM. Only the real read model supplies values. */
-export function Home({ language, reads, onAction, hasTasks = false, trustSuggestions, newModels }: HomeProps & { hasTasks?: boolean; trustSuggestions?: TrustSuggestionsRead; newModels?: ReactNode }) {
+export function Home({ language, reads, onAction, hasTasks = false, trustSuggestions, newModels, onTrustAction }: HomeProps & { hasTasks?: boolean; trustSuggestions?: TrustSuggestionsRead; newModels?: ReactNode; onTrustAction?(planId: string, branchId: string): void }) {
   const text = (zh: string, en: string) => language === 'zh' ? zh : en;
   const mode = deriveHomePrimaryMode(reads);
   const compute = visibleData(reads.compute), plans = visibleData(reads.plans), agents = visibleData(reads.agents);
@@ -83,7 +83,7 @@ export function Home({ language, reads, onAction, hasTasks = false, trustSuggest
         </div></Disclosure>}
       </>}
       {newModels}
-      {trustSuggestions && <TrustAttention read={trustSuggestions} language={language} names={Object.fromEntries((plans?.plans ?? []).map(plan => [plan.planId, plan.displayName]))} onOpen={planId => onAction({kind:'open-plan',returnTo:'home',planId,performance:true})} />}
+      {trustSuggestions && <TrustAttention onAct={onTrustAction} read={trustSuggestions} language={language} names={Object.fromEntries((plans?.plans ?? []).map(plan => [plan.planId, plan.displayName]))} onOpen={planId => onAction({kind:'open-plan',returnTo:'home',planId,performance:true})} />}
       {hasTasks && <button className="v3-text-link" type="button" onClick={() => onAction({kind:'view-all-tasks',returnTo:'home'})}><UiIcon name="agent" />{text('查看任务记录', 'View task history')}<UiIcon name="arrow" /></button>}
     </div>
   </ProductPage>;

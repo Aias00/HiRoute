@@ -22,7 +22,8 @@ export function TrialAgentChoice({ snapshot, value, onChange, language, disabled
 }
 
 /** A published Plan survives every mapping failure and can be mapped here after reload. */
-export function TrialAgentMapping({ plan, initial, language, mutable, onOperation, onChanged, onOpenAgent }: {
+export function TrialAgentMapping({ plan, initial, language, mutable, onOperation, onChanged, onOpenAgent, onOpenPerformance, onOpenSessions }: {
+  onOpenPerformance?(): void; onOpenSessions?(): void;
   plan: Plan; initial?: TrialMapping; language: 'zh' | 'en'; mutable: boolean;
   onOperation(operation: OperationReference): void; onChanged(): void; onOpenAgent?(id: string): void;
 }) {
@@ -106,6 +107,7 @@ export function TrialAgentMapping({ plan, initial, language, mutable, onOperatio
     {done ? <p role="status" className="callout good">{t('映射已确认。回到 Agent 发起新会话，在会话路由时间线中观察试用结果。', 'Mapping confirmed. Start a new session in your Agent and inspect the routing timeline for trial results.')}</p> : snapshot && mapping && <TrialAgentChoice snapshot={snapshot} value={mapping} onChange={setMapping} language={language} disabled={busy || !!pending} />}
     {preview && <AgentSettingsFeedback preview={preview} language={language} facet="model" defaultChoice={{ kind: 'plan', plan_id: plan.agent_plan_id }} disabled={busy || !!pending} onCheck={() => void apply()} />}
     {pending && <p role="status">{t('正在核实本次映射；刷新不会重复提交。', 'Verifying this mapping; refresh does not resubmit.')}</p>}
+    {done && <div className="actions">{onOpenPerformance && <button className="btn" onClick={onOpenPerformance}>{t('查看模型表现', 'View model performance')}</button>}{onOpenSessions && <button className="btn" onClick={onOpenSessions}>{t('查看会话时间线', 'View session timelines')}</button>}</div>}
     <div className="actions"><button className="btn" disabled={busy} onClick={() => void refresh()}>{t('刷新结果', 'Refresh result')}</button>{!done && <button className="btn btn-primary" disabled={busy || !!pending || !mutable || !snapshot?.trusted_authority || !mapping?.agentId || (agentEcosystem(mapping.agentId) === 'claude' && !mapping.presets.length)} onClick={() => void apply()}>{t('检查并映射 Agent', 'Review and map Agent')}</button>}{mapping?.agentId && onOpenAgent && <button className="btn" onClick={() => onOpenAgent(mapping.agentId)}>{t('查看 Agent 配置', 'Inspect Agent settings')}</button>}</div>
   </section>;
 }
