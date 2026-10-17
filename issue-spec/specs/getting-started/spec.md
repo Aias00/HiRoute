@@ -172,17 +172,27 @@ notarization, native installation, or live-Agent evidence.
 
 ### Requirement: Windows x64 Desktop installs per user and opens ready to use
 
-HiRoute SHALL provide a Windows x64 Desktop installer that a standard user can run without administrator rights, Python or a terminal. It SHALL verify the package, publish the same user-owned Windows standalone installation used by headless HiRoute, including CLI, daemon, CPA and Skills, register the default Task Scheduler manager, add the Desktop shell, start the service and open the shell when the service is ready. Login start and tray residency SHALL be enabled by default and SHALL be optional during installation. An existing standalone installation for the same user SHALL be upgraded in place with its data and Agent recovery references preserved, and an existing SCM-managed installation SHALL NOT have its manager changed silently. The installer SHALL refuse non-x64 systems before writing. A missing WebView2 runtime SHALL be installed or explained. An interrupted installation SHALL be repairable by running the installer again. Uninstall SHALL restore managed Agent access, remove the manager registration, shell and entries, and preserve business data unless the user explicitly selects its removal.
+HiRoute SHALL provide a Windows x64 Desktop installer that a standard user can run without administrator rights, Python or a terminal. In this release it is the only supported Windows installation path. It SHALL verify the package, publish the user-owned Windows standalone installation (CLI, daemon, CPA and Skills), register the default Task Scheduler manager, add the Desktop shell, start the service and open the shell when the service is ready. Login start and tray residency SHALL be enabled by default and SHALL be optional during installation. An unattended mode SHALL install with the defaults without prompts. An existing Task Scheduler installation for the same user SHALL be upgraded in place with its data and Agent recovery references preserved. SCM service installation is not offered in this release: an existing SCM-managed installation SHALL be refused before writing, with an explanation, and SHALL remain unchanged. The installer SHALL refuse non-x64 systems before writing. A missing WebView2 runtime SHALL be installed or explained. An interrupted installation SHALL be repairable by running the installer again. Uninstall SHALL restore managed Agent access, remove the manager registration, shell and entries, and preserve business data unless the user explicitly selects its removal.
 
 #### Scenario: Fresh standard-user installation
 
 - **WHEN** a standard user without Python runs the installer on Windows x64 and accepts the defaults
 - **THEN** installation completes without elevation, the HiRoute window opens with a healthy service, and `hiroute` in a new terminal reaches the same instance.
 
-#### Scenario: Existing headless installation
+#### Scenario: Existing user installation
 
-- **WHEN** the user already has a Windows headless installation with saved sources and plans
-- **THEN** Desktop installation keeps that data and manager, and the console shows the same sources and plans.
+- **WHEN** the user already has a Task Scheduler installation of HiRoute with saved sources and plans
+- **THEN** installation keeps that data and manager, and the console shows the same sources and plans.
+
+#### Scenario: Existing SCM installation
+
+- **WHEN** the installer finds an SCM-managed HiRoute installation for the user
+- **THEN** it stops before writing any file, explains that SCM service installation is not offered in this release, and leaves that installation unchanged.
+
+#### Scenario: Unattended installation
+
+- **WHEN** an administrator or script runs the installer in its unattended mode on Windows x64
+- **THEN** installation completes with the default choices without prompts, and the service is healthy afterwards.
 
 #### Scenario: Unsupported architecture
 
@@ -226,7 +236,7 @@ Source SPEC comments:
 
 ### Requirement: Windows Desktop updates verify unsigned packages by catalog digest
 
-The Windows shell SHALL select a newer stable Windows x64 Desktop release from the trusted website release catalog and download it over HTTPS while the service keeps running. Before any stop it SHALL verify byte count and SHA-256 against the catalog. Windows packages are not code-signed; package origin SHALL be established by the HTTPS catalog and digest, and HiRoute SHALL NOT claim a publisher identity. Release pages SHALL publish each package SHA-256, and documentation SHALL guide users through the unknown-publisher prompt. Replacement SHALL follow the existing orderly-stop handoff: preflight, drain active requests and accepted Worker work with user cancellation, stop the shell and service, replace through the journaled installation transaction, run storage validation and migration, restart and report health. A failure before replacement SHALL restore the old running service; an interrupted replacement SHALL be repaired on the next start or installer run. A manually downloaded newer installer SHALL use the same transaction.
+The Windows shell SHALL select a newer stable Windows x64 Desktop release from the trusted website release catalog and download it over HTTPS while the service keeps running. Before any stop it SHALL verify byte count and SHA-256 against the catalog. Windows packages are not code-signed; package origin SHALL be established by the HTTPS catalog and digest, and HiRoute SHALL NOT claim a publisher identity. Release pages SHALL publish each package SHA-256, and documentation SHALL guide users through the unknown-publisher prompt. Replacement SHALL follow the existing orderly-stop handoff: preflight, drain active requests and accepted Worker work with user cancellation, stop the shell and service, replace through the journaled installation transaction, run storage validation and migration, restart and report health. A failure before replacement SHALL restore the old running service; an interrupted replacement SHALL be repaired on the next start or installer run. A manually downloaded newer installer SHALL use the same transaction. In this release, Windows publication SHALL consist only of the x64 Desktop installer named `HiRoute-<version>-<rev12>-windows-x86_64-setup.exe`. Windows standalone archives of any architecture and Windows ARM64 packages SHALL NOT be published, and release catalog validation SHALL reject a Windows standalone artifact.
 
 #### Scenario: Digest mismatch
 
@@ -247,6 +257,11 @@ The Windows shell SHALL select a newer stable Windows x64 Desktop release from t
 
 - **WHEN** an update completes
 - **THEN** the new version starts with existing sources, plans, Agent configuration and observations intact, and the shell reopens the console.
+
+#### Scenario: Windows standalone archive in a release
+
+- **WHEN** a release catalog candidate contains a Windows standalone archive or a Windows ARM64 package
+- **THEN** catalog validation rejects it before publication and released readers never receive it.
 
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/132#issuecomment-6219734656

@@ -10,12 +10,16 @@ The shell's program directory is fixed at `%LOCALAPPDATA%\Programs\HiRoute`.
 Standalone service state remains under `%LOCALAPPDATA%\HiRoute\cli`; neither root
 can contain the other. The native adapter checks KnownFolders, architecture,
 existing manager ownership and reparse-free paths before product writes. An
-SCM-managed installation is refused by this Desktop/Rust Task path.
+SCM-managed installation is refused unchanged because SCM installation is not
+offered in this release.
 
 The installer verifies the complete embedded standalone package and uses its
-native Rust transaction. The transaction retains
-`hiroute.windows-install-journal/v1` so it can recover an interrupted Python
-installation. A prepared journal blocks business startup until recovery reconciles
+native Rust transaction, the single Windows installation producer. The core
+requires the package target to match the native host; the NSIS package and public
+Desktop target alone are x64-only. Only the current
+`hiroute.windows-install-journal/v1` schema is read. An unreleased Task installation
+is adopted when its layout and journal match; incompatible material requires
+repair/reinstallation. A prepared journal blocks business startup until recovery reconciles
 files, the marker and actual Task registration. No new business mutations are
 replayed during installation recovery.
 
@@ -24,6 +28,9 @@ private preparation journal retains matching previous bytes until installation,
 login settings and actual Control/Gateway readiness succeed. Changed/foreign
 entries are preserved and require repair. Committed cleanup does not replay
 installation or roll back a successfully committed package.
+
+The installer accepts `/S` for unattended installation with the default login-start
+and tray choices and no prompts. Failures return a nonzero process exit code.
 
 Login-start and tray choices default on and can be deselected independently.
 Login start updates the user's Task and the fixed HKCU Run command together,

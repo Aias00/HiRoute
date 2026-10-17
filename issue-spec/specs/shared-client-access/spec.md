@@ -189,39 +189,33 @@ identity is explicit, and this evidence cannot replace macOS native or Windows c
 
 ### Requirement: Windows headless preserves the logged-on user's native authority
 
-Windows standalone MUST use the actual user's Profile and LocalAppData KnownFolders
-for installation and runtime ownership. HOME/XDG values cannot redirect an installed
-instance. Native headless operation uses the shared CLI, role-all daemon, Application,
-Gateway and business stores without requiring Desktop or WSL.
+Windows standalone MUST use the actual user's Profile and LocalAppData KnownFolders for installation and runtime ownership. HOME/XDG values cannot redirect an installed instance. Native headless operation uses the shared CLI, role-all daemon, Application, Gateway and business stores without requiring Desktop or WSL. Windows installation, update and uninstall are performed by the native installation transaction used by the Windows Desktop installer; no separate Windows headless installer or Python runtime is required, and a user who needs only the CLI and daemon installs the same package.
 
-The default Task Scheduler manager runs as the current logged-on user with an
-InteractiveToken and least privilege. Ordinary install/start/stop does not require
-administrator access or an account password. The background process MUST survive
-closure of its launching terminal. Its lifetime requires that user's logged-on
-session; login-start preference and starting now remain separate operations.
-Unexpected business-process exit uses bounded recovery, while an explicit stop
-terminates the owned child tree and cancels pending recovery. Manager registration
-or action launch alone is not proof of healthy Control and Gateway service.
+The default Task Scheduler manager runs as the current logged-on user with an InteractiveToken and least privilege. Ordinary install/start/stop does not require administrator access or an account password. The background process MUST survive closure of its launching terminal. Its lifetime requires that user's logged-on session; login-start preference and starting now remain separate operations. Unexpected business-process exit uses bounded recovery, while an explicit stop terminates the owned child tree and cancels pending recovery. Manager registration or action launch alone is not proof of healthy Control and Gateway service.
 
-Installation MUST verify the complete package inventory, source revision, file
-digests and native executable architecture before publishing stable entries.
-A prepared replacement blocks business startup until package files, installation
-record and actual manager definition agree. Repair/rollback preserves saved Sources,
-secrets, routes, Agent recovery references and observations instead of replaying
-business mutations or initializing empty stores. Uninstall preserves business data
-and unrelated native configuration.
+Installation MUST verify the complete package inventory, source revision, file digests and native executable architecture before publishing stable entries. A prepared replacement blocks business startup until package files, installation record and actual manager definition agree. Repair/rollback preserves saved Sources, secrets, routes, Agent recovery references and observations instead of replaying business mutations or initializing empty stores. Uninstall preserves business data and unrelated native configuration.
 
-Local Control, lifecycle and protected input use private named pipes bound to the
-account SID, held runtime objects and verified native peers. Protected credential
-carriers use explicitly inherited non-stdio pipe handles with bounded input and EOF;
-argv, environment variables and ordinary JSON input do not supply that authority.
-Remote peers, replaced objects and occupied endpoints cannot impersonate the instance.
+Local Control, lifecycle and protected input use private named pipes bound to the account SID, held runtime objects and verified native peers. Protected credential carriers use explicitly inherited non-stdio pipe handles with bounded input and EOF; argv, environment variables and ordinary JSON input do not supply that authority. Remote peers, replaced objects and occupied endpoints cannot impersonate the instance.
 
-An optional SCM installation is a separate administrator operation over verified
-administrator-controlled package bytes. Its privileged host cannot execute an
-arbitrary user-selected image. Task acceptance cannot establish service-account,
-logout or SCM acceptance; native OS, architecture and real-provider claims require
-their own revision-bound execution evidence.
+Task Scheduler is the only installation manager offered in this release. SCM service installation has no supported entry point or user documentation; installation, update and uninstall refuse to modify an SCM-managed installation and explain why. Retained SCM platform code MUST NOT execute an arbitrary user-selected image while privileged. Task acceptance cannot establish service-account, logout or SCM acceptance; native OS, architecture and real-provider claims require their own revision-bound execution evidence.
+
+#### Scenario: Install without Python
+
+- **WHEN** a standard user on Windows x64 without Python installs HiRoute
+- **THEN** the native installation transaction publishes and registers the Task Scheduler installation, and the CLI and daemon run headless without Desktop being opened.
+
+#### Scenario: SCM installation is not offered
+
+- **WHEN** a user looks for a way to install HiRoute as a Windows service, or the installer finds an SCM-managed installation
+- **THEN** no supported command or documented path installs an SCM service, and the existing SCM installation is refused unchanged with an explanation.
+
+#### Scenario: Task lifetime
+
+- **WHEN** the user closes the terminal that started the service and later logs off
+- **THEN** the service survives the terminal and stops with the user's session, and login start remains a separate preference.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/132#issuecomment-6228861461
 
 ### Requirement: The daemon serves the shared product console
 

@@ -958,7 +958,7 @@
           "contract": "hiroute.website.releases/v2",
           "mode": "projection",
           "owner": "website-release-catalog",
-          "reason": "Supported macOS Desktop releases strictly reject non-macOS desktop and non-Linux standalone artifacts. The single current V3 catalog emits a restricted V2 projection for those readers; Windows consumers use V3.",
+          "reason": "Supported macOS Desktop releases strictly reject non-macOS desktop and non-Linux standalone artifacts. The single current V3 catalog emits a restricted V2 projection for those readers; Windows consumers use V3 and accept only x64 NSIS Desktop artifacts. No Windows release predates this change; internal standalone/ARM64 payloads and Python journal production have no legacy-support entry.",
           "removal_condition": "Remove only when no supported released Desktop reads the V2 feed, together with the frozen v0.3.1 reader regression.",
           "allowed_paths": [
             "apps/website/src/lib/releases.mjs",

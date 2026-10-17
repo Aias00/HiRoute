@@ -22,9 +22,11 @@ This release is unsigned. Windows may show an unknown publisher or a SmartScreen
 2. Login startup and the tray are enabled by default. You can deselect either option. With the tray disabled, closing the window exits the shell; the background service continues.
 3. Open HiRoute. It checks the current-user Task, starts the service, waits for the Gateway and opens its local console. There is no password or unlock step. Protected actions retain their page confirmation.
 
-An existing current-user Task installation is upgraded. An SCM-managed installation is refused before product writes; use the administrator/headless operating guide for that installation. ARM64 and x86 hosts are unsupported by this Desktop installer.
+An existing current-user Task installation is upgraded. SCM installation is not offered in this release. An existing SCM-managed installation is refused unchanged before product writes. ARM64 and x86 hosts are unsupported by this Desktop installer.
 
 The installer adds the fixed `.local\bin` directory to your user PATH without replacing other entries. Open a new terminal for the updated PATH. Settings and the tray's **Start at login** action manage the shell and Task together. **Quit** exits the shell and leaves the service running.
+
+For unattended installation, run the verified installer with `/S` and wait for its process exit code. It applies the default login-start and tray choices without prompts, starts the service and returns a nonzero code on failure. CLI-only users install this same package. Windows standalone archives and ARM64 packages are not published.
 
 ## Update and recover
 

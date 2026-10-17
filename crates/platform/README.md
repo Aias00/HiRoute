@@ -91,7 +91,9 @@ attach a console or change this foreground policy.
 
 Background lifecycle messages authenticate a held process image, creation time,
 and pipe peer identity. Task mode uses the same interactive account at LUA level;
-SCM mode authenticates a qualified owner account and uses a restricted business
+SCM primitives are retained without a supported installation entry or user
+installation guide in this release; the Rust transaction refuses SCM ownership
+before writes. The retained SCM code authenticates a qualified owner account and uses a restricted business
 token beneath an administrator protected service host. `scm_owner` reads the
 owner's private prepared journal only while impersonating that authenticated
 account, then reverts before machine registration. Sealed publication copies a

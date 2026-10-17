@@ -64,7 +64,9 @@ run through both host transports; their production CSS screenshots include the
 console and Windows startup/update pages, without establishing native effects.
 
 The [Rust installation journal](../../crates/host-runtime/src/standalone_install/journal/tests.rs)
-retains released Python V1 recovery inputs. The
+covers current-schema interruption recovery. Package tests verify x64 and ARM64
+inventories and reject a target/executable mismatch. There is no released Windows
+Python producer to preserve. The
 [frozen release reader](../../crates/host-runtime/tests/release_catalog_compatibility.rs)
 proves that the V2 projection remains consumable by supported macOS Desktop.
 Windows shell origin/handoff tests live in
@@ -160,7 +162,9 @@ requires the reusable native Windows matrix before package builds; PR/main pushe
 do not start that expensive matrix.
 The [Windows CI entry](../../scripts/windows-headless-ci.ps1) requires nonempty
 native inventories for primitives, shared libraries, installed foreground and
-Task/SCM business paths, and fixed upstream clients. The
+Task business paths, retained low-level SCM tests, and fixed upstream clients.
+The Windows 11 ARM install job builds a native ARM64 package and invokes the Rust
+transaction; the other Windows 11 jobs retain their explicit x64 replay boundary. The
 [canonical native link configuration](../../scripts/build-release.py) also owns
 the Debug checks' static CRT; [captured-source inputs](../../scripts/windows-native-artifacts.py)
 bind its CMake toolchain, and the [PE import gate](../../scripts/windows-native-runtime-audit.py)

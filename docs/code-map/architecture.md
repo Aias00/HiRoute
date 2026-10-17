@@ -16,11 +16,14 @@ native host actions stay in their host adapter.
 [`apps/shell`](../../apps/shell/README.md) owns the Windows Tauri window, exact-origin
 host IPC, startup/reconnect, tray/login preference and NSIS hooks. The
 [Rust standalone transaction](../../crates/host-runtime/src/standalone_install)
-owns Task installation and Python V1 journal recovery; the shell's separate
+owns architecture-matched Task installation and current-schema journal recovery; the shell's separate
 inventory/finisher owns its program files and update outcome. Neither owns business
 transactions or exposes Local Control to WebView. The
 [release catalog](../../apps/website/src/lib/releases.mjs) emits V3 and the registered
-Windows-free V2 projection for supported macOS readers.
+Windows-free V2 projection for supported macOS readers. Public Windows artifacts
+are x64 NSIS installers only; headless x64/ARM64 archives stay internal. The
+installer and tests invoke `__windows-install` / `__windows-uninstall`, with no
+Python installer or offered SCM installation entry.
 
 ## Shared layers
 

@@ -2,7 +2,8 @@
 
 The candidate entry builds macOS Desktop DMGs (`arm64`, `x86_64`) and Linux or Windows
 headless archives (`x86_64`, `aarch64`) and a separate x64 Windows Desktop NSIS
-installer. A target's package integrity is separate from its required native runtime
+installer. Windows headless archives are internal installer/test payloads only;
+Windows publication consists solely of the x64 NSIS installer. A target's package integrity is separate from its required native runtime
 acceptance and does not by itself authorize publishing that target. All components of one release must come from the same clean,
 committed source revision, with CPA built from `vendor/cpa/source.json` and its
 checked patch.
@@ -43,7 +44,11 @@ CLI, daemon and CPA. Its builder uses a checkout-local native file lock; it does
 import the Unix workbench lock implementation. The CPA probe retains the actual native
 SystemRoot and uses isolated profile/temp paths. Windows candidates remain
 `awaiting_runtime` until the installed foreground/background and feature gates pass;
-see [Windows operating and evidence boundaries](standalone-windows.md).
+see [Windows operating and evidence boundaries](standalone-windows.md). Internal
+Windows builds write `internal-payloads/` and `publication: internal-only`, without
+an `assets` directory or `website_artifact` row. They cannot be added to a release
+catalog: both native and website validators reject Windows standalone entries
+and Windows ARM64 packages.
 The native x64 Windows Release invocation selects static CRT for Rust and its
 CMake dependencies and rejects ambient compiler overrides. The complete archive's
 three EXEs are checked for both ordinary and delay imports of Debug CRT or VC
@@ -83,8 +88,8 @@ container; the HOME is removed afterwards. Logs and package evidence are retaine
 
 Run the **build-release-candidates** workflow on the public candidate branch.
 Unix candidate builds start independently of the reusable **windows-headless**
-workflow at the same source commit. All five native scopes and their Windows 11
-x64-artifact replay must succeed before Windows package-build jobs can start.
+workflow at the same source commit. All five native scopes, their selected Windows 11
+x64-artifact replays and the native ARM64 Rust-installation job must succeed before Windows package-build jobs can start.
 Both groups use **build-release-platform** for the same per-target build steps. This expensive Windows matrix
 does not run automatically on PR or main pushes; ordinary iteration uses the
 [cross-compilation and development-machine path](validation-routing.md#windows-iteration-and-release-validation).
@@ -177,7 +182,8 @@ product fixes and retain each result at its actual source revision.
 1. Require the Windows validation gate and every selected package job to succeed
    for the same SHA. Keep the exact source
    commit available; internal master and an exported public commit may differ.
-2. Download each job's `assets/` and `result.json`. Use the measured
+2. Download public package jobs' `assets/` and `result.json`. Keep Windows
+   headless `internal-payloads/` out of the release. Use the measured
    `website_artifact` rows in a new release record in
    `apps/website/data/releases.json`, with the intended version/channel/date/notes.
    Preserve historical records and regenerate website content twice, checking
