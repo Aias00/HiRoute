@@ -203,7 +203,7 @@ class Runner(unittest.TestCase):
     def orphaned_profile(self):
         native_home, local = self.root / 'native', self.root / 'appdata'
         roots = profiles.locations(native_home, local)
-        for name in ('data', 'state'):
+        for name in ('data', 'state', 'shell_state'):
             roots[name].mkdir(parents=True)
             (roots[name] / 'retained.txt').write_bytes(name.encode())
         evidence = self.root / 'private-evidence'
@@ -269,13 +269,29 @@ class Runner(unittest.TestCase):
         result = profiles.archive_orphaned_data(native_home, local, evidence, inspected,
                     dict(administrator_groups=False, processes=[], tasks=[]))
         self.assertEqual(result['assessment'], 'preparation_only')
-        for name in ('data', 'state'):
+        for name in ('data', 'state', 'shell_state'):
             self.assertFalse(roots[name].exists())
             self.assertEqual((evidence / ('previous-' + name) / 'retained.txt').read_bytes(), name.encode())
         manifest = json.loads((evidence / 'profile-backup.json').read_text())
         self.assertEqual(manifest['paths'][0]['inventory']['retained.txt']['sha256'],
                          hashlib.sha256(b'data').hexdigest())
         self.assertEqual(native.read_text(), 'model="unrelated"')
+
+    def test_orphaned_partial_shell_backup_is_preserved_with_its_hash(self):
+        native_home, local, roots, evidence = self.orphaned_profile()
+        backup = roots['shell_state'] / 'install-backups/hiroute-shell.exe'
+        backup.parent.mkdir()
+        backup.write_bytes(b"retained previous shell")
+        inspected = profiles.inspect_installation(native_home, local)
+        profiles.archive_orphaned_data(native_home, local, evidence, inspected,
+                                      dict(administrator_groups=False))
+        self.assertEqual((evidence / 'previous-shell_state/install-backups/hiroute-shell.exe').read_bytes(),
+                         b"retained previous shell")
+        manifest = json.loads((evidence / 'profile-backup.json').read_text())
+        shell = next(p for p in manifest['paths'] if p['source'] == str(roots['shell_state']))
+        self.assertEqual(shell['inventory'][str(Path('install-backups/hiroute-shell.exe'))]['sha256'],
+                         hashlib.sha256(b"retained previous shell").hexdigest())
+        self.assertFalse(roots['shell_state'].exists())
 
     def test_live_installation_activity_and_agent_references_prevent_archival(self):
         native_home, local, roots, evidence = self.orphaned_profile()

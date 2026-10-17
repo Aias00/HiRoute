@@ -113,6 +113,23 @@ fn write(path: &Path, value: &impl Serialize) -> io::Result<()> {
         &serde_json::to_vec(value).map_err(|_| invalid())?,
     )
 }
+fn backup_file(source: &Path, dest: &Path, expected: &str) -> io::Result<()> {
+    let parent = security::ensure_private_directory(dest.parent().ok_or_else(invalid)?)?;
+    if !present(dest)? {
+        let mut source = security::open_identity(source, false)?;
+        let mut output =
+            security::create_owner_only_file_at(&parent, dest.file_name().ok_or_else(invalid)?)?;
+        io::copy(&mut source, &mut output)?;
+        output.sync_all()?;
+        // The owner-only writer denies all sharing on Windows. Close it before
+        // reopening the completed backup for identity and content verification.
+        drop(output);
+    }
+    if hash(dest)? != expected {
+        return Err(invalid());
+    }
+    Ok(())
+}
 fn pending() -> io::Result<Pending> {
     let value: Pending = read(&data()?.join(PENDING), true)?;
     if value.schema != "hiroute.windows-shell-transaction/v1" {
@@ -240,23 +257,7 @@ pub(super) fn prepare(manifest: &Path) -> io::Result<()> {
     let backups = data.join("install-backups");
     security::ensure_private_directory(&backups)?;
     for (name, expected) in &old {
-        let dest = backups.join(name);
-        security::ensure_private_directory(dest.parent().ok_or_else(invalid)?)?;
-        if present(&dest)? {
-            if hash(&dest)? != *expected {
-                return Err(invalid());
-            }
-            continue;
-        }
-        let mut source = security::open_identity(&root.join(name), false)?;
-        let parent = security::ensure_private_directory(dest.parent().ok_or_else(invalid)?)?;
-        let mut output =
-            security::create_owner_only_file_at(&parent, dest.file_name().ok_or_else(invalid)?)?;
-        io::copy(&mut source, &mut output)?;
-        output.sync_all()?;
-        if hash(&dest)? != *expected {
-            return Err(invalid());
-        }
+        backup_file(&root.join(name), &backups.join(name), expected)?;
     }
     write(
         &data.join(PENDING),
@@ -337,6 +338,7 @@ pub(super) fn commit() -> io::Result<()> {
     cleanup_committed();
     Ok(())
 }
+
 fn clear(old: &BTreeMap<String, String>) -> io::Result<()> {
     let data = data()?;
     for (name, expected) in old {
@@ -448,4 +450,44 @@ pub(super) fn rollback(allow_unavailable_agent_restore: bool) -> io::Result<()> 
     clear(&value.old)?;
     cleanup_committed();
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn backup_copy_closes_exclusive_writer_before_verification() {
+        struct Temporary(PathBuf);
+        impl Drop for Temporary {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+        let temporary = Temporary(std::env::temp_dir().join(format!(
+            "hiroute-shell-backup-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        )));
+        let parent = security::ensure_private_directory(&temporary.0).unwrap();
+        let source = temporary.0.join("previous-shell.exe");
+        fs::write(&source, b"retained shell bytes").unwrap();
+        let expected = hash(&source).unwrap();
+        let dest = temporary.0.join("backup.exe");
+        let writer =
+            security::create_owner_only_file_at(&parent, dest.file_name().unwrap()).unwrap();
+        assert_eq!(hash(&dest).unwrap_err().raw_os_error(), Some(32));
+        drop(writer);
+        fs::remove_file(&dest).unwrap();
+
+        backup_file(&source, &dest, &expected).unwrap();
+        assert_eq!(fs::read(&dest).unwrap(), b"retained shell bytes");
+        backup_file(&source, &dest, &expected).unwrap();
+        fs::write(&dest, b"changed backup").unwrap();
+        assert!(backup_file(&source, &dest, &expected).is_err());
+        assert_eq!(fs::read(&dest).unwrap(), b"changed backup");
+    }
 }

@@ -38,6 +38,7 @@ def plain(path):
 def locations(native_home, local_app_data):
     return {'data': native_home / '.local/share/hiroute',
             'state': local_app_data / 'HiRoute/cli',
+            'shell_state': local_app_data / 'HiRoute/shell',
             'programs': local_app_data / 'Programs/HiRoute',
             'stable_cli': native_home / '.local/bin/hiroute.exe'}
 
@@ -170,7 +171,8 @@ def archive_orphaned_data(native_home, local_app_data, destination, inspected, a
         raise ValueError('An installed product remains; use its normal uninstall entry first')
     paths = locations(native_home, local_app_data)
     # Moving a managed artifact would invalidate its native Agent reference.
-    roots = [str(paths[n]).replace('/', '\\').casefold() for n in ('data', 'state')]
+    archived = ('data', 'state', 'shell_state')
+    roots = [str(paths[n]).replace('/', '\\').casefold() for n in archived]
     for name in ('.codex/config.toml', '.claude/settings.json',
                  '.agents/skills/hiroute-collaboration/SKILL.md'):
         path = plain(native_home / name)
@@ -181,7 +183,7 @@ def archive_orphaned_data(native_home, local_app_data, destination, inspected, a
             if any(root in text for root in roots):
                 raise ValueError('Native Agent configuration still references the old data; restore it first')
     plans = []
-    for name in ('data', 'state'):
+    for name in archived:
         source, target = paths[name], plain(destination / ('previous-' + name))
         if not source.exists():
             continue

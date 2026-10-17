@@ -164,7 +164,7 @@ When the user explicitly authorizes clearing old validation data, use
 `windows archive-installation-data INSPECTION_RUN_ID --product PRODUCT_BUNDLE_ID`.
 It requires a recent matching standard-account inspection, no installed product,
 no product processes/tasks and no native Agent references to the old data. It moves
-only the two fixed HiRoute data/state directories into private run evidence, with
+only the three fixed HiRoute data, CLI state and shell state directories into private run evidence, with
 complete before/after hashes; native settings remain unchanged. Installed products
 must use their normal uninstall entry first. For the exact measured candidate,
 `windows uninstall-candidate INSPECTION_RUN_ID --product PRODUCT_BUNDLE_ID

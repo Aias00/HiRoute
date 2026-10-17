@@ -76,6 +76,9 @@ Windows shell origin/handoff tests live in
 Task and upgrade effects require the separate
 [native acceptance inventory](../../scripts/windows-desktop-cases.json), bound to
 the actual standard-user OS, candidate and installer hash.
+The [shell transaction regression](../../apps/shell/src-tauri/src/runtime/install_transaction.rs)
+uses real Windows file sharing to verify backup handles close before hash admission;
+the native installer candidate build runs it before exporting the measured bundle.
 The [bounded NSIS journey](../../crates/daemon/tests/windows_desktop.rs) uses the
 verified development bundle and configured existing standard session to check
 silent defaults, repeat install, console/Gateway readiness and uninstall with
