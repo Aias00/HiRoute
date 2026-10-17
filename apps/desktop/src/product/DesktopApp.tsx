@@ -1,3 +1,4 @@
+import { useTrustSuggestions } from '../features/trust/use-trust-suggestions';
 import type { DecisionIntent, OpenDecisionConnection } from '../features/decision-services/presentation';
 import type { DecisionService } from '../features/decision-services/types';
 import { DecisionServicesPage } from '../features/decision-services/DecisionServicesPage';
@@ -116,6 +117,7 @@ export function DesktopApp() {
   const [operation, setOperation] = useState<DesktopOperation | null>(null);
   const [operationPresentation, setOperationPresentation] = useState<OperationPresentation>({ kind: 'background' });
   const [observing, setObserving] = useState(true);
+  const trustSuggestions = useTrustSuggestions(observing && Boolean(home.desktopSnapshot), `${refreshVersion}:${home.desktopSnapshot?.catalog.plans.map(p => `${p.agent_plan_id}:${p.head.head_revision}`).join(',') ?? ''}`);
   const [operationRecoveryPending, setOperationRecoveryPending] = useState(false);
   const [pollingRevision, setPollingRevision] = useState(0);
   const [operationError, setOperationError] = useState('');
@@ -542,7 +544,7 @@ export function DesktopApp() {
     }
     if (action.kind === 'open-plan') {
       const plan = home.desktopSnapshot?.catalog.plans.find(item => item.agent_plan_id === action.planId);
-      if (plan) showRouting({ key: plan.agent_plan_id, plan });
+      if (plan) showRouting({ key: plan.agent_plan_id, plan, initialView: action.performance ? 'performance' : 'configuration' });
       else setNotice(text.targetMissing);
       return;
     }
@@ -623,6 +625,7 @@ export function DesktopApp() {
         language={language}
         items={navigation}
         current={page}
+        routingAttention={trustSuggestions.plans.length > 0}
         serviceLabel={navigationLabel}
         serviceReady={serviceOperational}
         onNavigate={id => void navigate(id)}
@@ -651,6 +654,7 @@ export function DesktopApp() {
             language={language}
             reads={home.reads}
             operation={homeOperation}
+            trustSuggestions={trustSuggestions}
             hasTasks={taskRead.status === 'ready' && taskRead.tasks.length > 0}
             onAction={handleHomeAction}
           /></div>
@@ -698,6 +702,7 @@ export function DesktopApp() {
             busy={refreshing}
             onOpenServices={addDecisionForRoute}
             initialEditor={routingIntent.editor}
+            suggestionPlanIds={trustSuggestions.plans.map(p => p.plan_id)}
             notice={routingIntent.notice}
             onRefresh={async () => { setObserving(true); await home.refreshDesktop(); setRefreshVersion(v => v + 1); }}
             onOpenAgent={agentId => { void (async () => { if (!await allowPageChange('agents')) return; setAgentIntent({ key: `agents/${crypto.randomUUID()}`, agentId }); openPage('agents'); })(); }}

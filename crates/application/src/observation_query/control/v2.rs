@@ -82,7 +82,8 @@ impl ObservationControl {
         )?;
         let trust_read = matches!(
             &request.intent,
-            ObservationReadIntentV2::PlanTrust(_)
+            ObservationReadIntentV2::RoutingTimeline(_)
+                | ObservationReadIntentV2::PlanTrust(_)
                 | ObservationReadIntentV2::PlanTrustReplay(_)
                 | ObservationReadIntentV2::PlanTrustSuggestions(_)
         );

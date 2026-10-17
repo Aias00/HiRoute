@@ -105,7 +105,16 @@ impl crate::LocalObservationStore {
             Some(value) => value,
             None => read::position(&tx)?,
         };
-        let (requests, facts) = read::read(&tx, reader, &query.session_id, target, now_ms)?;
+        let (requests, facts) = read::read(&tx, reader, &query.session_id, target, now_ms)
+            .map_err(|error| {
+                if error == ObservationV2Error::Unavailable
+                    && started.elapsed() >= std::time::Duration::from_millis(500)
+                {
+                    ObservationV2Error::ScopeTooLarge
+                } else {
+                    error
+                }
+            })?;
         let mut turns = projection::project(requests, &facts)?;
         if started.elapsed() > std::time::Duration::from_millis(500) {
             return Err(ObservationV2Error::ScopeTooLarge);

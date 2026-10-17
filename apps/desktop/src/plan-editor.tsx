@@ -1,3 +1,5 @@
+import { DivisionDraftDialog } from './features/trust/DivisionDraftDialog';
+import { ProtectionSummary } from './features/trust/ProtectionSummary';
 import { useTrustEvidence } from './features/trust/use-trust-evidence';
 import { TrustLevelControl } from './features/trust/TrustLevelControl';
 import { candidateUnavailableMessage, type UnavailableCandidate } from './plan-candidate-availability';
@@ -93,11 +95,11 @@ function activePlanQualityModels(plan: Plan, candidates: Candidate[]): PlanQuali
   }
   return models;
 }
-export type PlanEditorProps = { plan?: Plan; draft?: Draft; creating?: boolean; initialBindingId?: string; editingMemory?: PlanEditorMemory; language: 'zh' | 'en'; active?: boolean; refreshVersion?: number; usedBy?: { id: string; name: string; brand: BrandKind; isDefault: boolean }[]; onOpenAgent?: (agentId: string) => void; onOpenSession?: (sessionId: string, requestId: string) => void; onOpenServices?: OpenDecisionConnection; onDone: () => Promise<void>; onClose: () => void; onDirty?: (dirty: boolean) => void; onEdit?: () => void; onBusyChange?: (busy: boolean) => void; onOperation?: (operation: PlanOperation | null) => void; onPersisted?: (editor: PersistedEditor<Plan, Draft> | null, action: 'save_draft' | 'publish', identity: PersistenceIdentity, operation: PlanOperation | null) => void };
+export type PlanEditorProps = { plan?: Plan; draft?: Draft; creating?: boolean; initialBindingId?: string; initialContent?: Editor; onCreateDraft?: (editor: Editor) => Promise<boolean>; initialView?: 'configuration' | 'performance'; editingMemory?: PlanEditorMemory; language: 'zh' | 'en'; active?: boolean; refreshVersion?: number; usedBy?: { id: string; name: string; brand: BrandKind; isDefault: boolean }[]; onOpenAgent?: (agentId: string) => void; onOpenSession?: (sessionId: string, requestId: string) => void; onOpenServices?: OpenDecisionConnection; onDone: () => Promise<void>; onClose: () => void; onDirty?: (dirty: boolean) => void; onEdit?: () => void; onBusyChange?: (busy: boolean) => void; onOperation?: (operation: PlanOperation | null) => void; onPersisted?: (editor: PersistedEditor<Plan, Draft> | null, action: 'save_draft' | 'publish', identity: PersistenceIdentity, operation: PlanOperation | null) => void };
 
 export const PlanEditor = forwardRef<PlanEditorHandle, PlanEditorProps>(function PlanEditor(props, ref) {
   const [seed, setSeed] = useState<{ editor: Editor; head: number | null } | null>(() => props.draft
-    ? { editor: structuredClone(props.draft.editor), head: props.draft.base_head_revision ?? null } : null);
+    ? { editor: structuredClone(props.draft.editor), head: props.draft.base_head_revision ?? null } : props.initialContent ? { editor: structuredClone(props.initialContent), head: null } : null);
   const [failure, setFailure] = useState<unknown>(null);
   const [retry, setRetry] = useState(0);
   useEffect(() => {
@@ -123,15 +125,16 @@ export const PlanEditor = forwardRef<PlanEditorHandle, PlanEditorProps>(function
   </section>;
 });
 
-const LoadedPlanEditor = forwardRef<PlanEditorHandle, PlanEditorProps & { initialEditor: Editor; initialHead: number | null }>(function LoadedPlanEditor({ initialEditor, initialHead, plan, draft, creating = false, initialBindingId, editingMemory, language, active = true, refreshVersion = 0, usedBy = [], onOpenAgent, onOpenSession, onOpenServices, onDone, onClose, onDirty, onEdit, onBusyChange, onOperation, onPersisted }, ref) {
+const LoadedPlanEditor = forwardRef<PlanEditorHandle, PlanEditorProps & { initialEditor: Editor; initialHead: number | null }>(function LoadedPlanEditor({ initialEditor, initialHead, plan, draft, creating = false, initialBindingId, initialContent, onCreateDraft, initialView = 'configuration', editingMemory, language, active = true, refreshVersion = 0, usedBy = [], onOpenAgent, onOpenSession, onOpenServices, onDone, onClose, onDirty, onEdit, onBusyChange, onOperation, onPersisted }, ref) {
   const en = language === 'en', text = (zh: string, eng: string) => en ? eng : zh;
   const [editor, setEditor] = useState<Editor>(() => structuredClone(initialEditor));
   const [draftId] = useState(() => draft?.draft_id ?? 'draft/' + crypto.randomUUID());
   const [base, setBase] = useState(() => ({ expected_head_revision: initialHead, expected_draft_revision: draft?.revision ?? null }));
   const [options, setOptions] = useState<Options | null>(null), [busy, setBusy] = useState(false), [error, setError] = useState('');
-  const [baseline, setBaseline] = useState(() => JSON.stringify(editor));
+  const [baseline, setBaseline] = useState(() => initialContent ? '' : JSON.stringify(editor));
   const [notice, setNotice] = useState('');
-  const [view, setView] = useState<'configuration' | 'performance'>('configuration');
+  const [divisionBranch, setDivisionBranch] = useState<string | null>(null);
+  const [view, setView] = useState<'configuration' | 'performance'>(initialView);
   const trustEvidence = useTrustEvidence(plan?.agent_plan_id, active && view === 'configuration', refreshVersion);
   const [services, setServices] = useState<DecisionService[]>([]);
   useEffect(() => { if (active) void invoke<{ services: DecisionService[] }>('decision_services').then(value => setServices(value.services)).catch(() => {}); }, [active]);
@@ -430,6 +433,7 @@ const LoadedPlanEditor = forwardRef<PlanEditorHandle, PlanEditorProps & { initia
     </>}
     {editor.branch_routing && editor.mode === 'custom_branches' && <BranchRoutingEditor evidence={trustEvidence.data?.branches} evidenceError={trustEvidence.error} newPlan={!plan} routing={editor.branch_routing} services={services} language={language} onChange={branch_routing => update({ branch_routing })} onOpenServices={onOpenServices} group={group} errorGroup={validationIssue?.group} error={validationIssue?.message} />}
     {editor.mode === 'free_first' && <section className="editor-section"><div className="editor-section-heading"><div><h3>{text('免费候选', 'Free candidates')}</h3><p>{text('当前候选与顺序在发布后保持固定。', 'Candidates and order stay fixed after publication.')}</p></div><button className="btn" type="button" onClick={() => void useAllFree()}>{text('使用当前全部可用免费模型', 'Use all available free models')}</button></div><div className="free-lane">{group(text('免费模型', 'Free models'), text('固定顺序', 'Fixed order'), editor.free.candidates, candidates => update({ free: { ...editor.free, candidates } }), { free: true, preferred: 'low', groupId: 'free' })}</div><div className="editor-section-heading fallback-heading"><div><h3>{text('免费模型都不可用时', 'When all free models are unavailable')}</h3></div></div><div className="option-panel"><button type="button" className="option-row" aria-pressed={!editor.free.primary_fallback} onClick={() => update({ free: { ...editor.free, primary_fallback: false } })}><div><strong>{text('停止并提示，只使用免费模型', 'Stop and report; free models only')}</strong><span>{text('绝不会进入订阅或付费模型', 'Never use subscription or paid models')}</span></div><span className={`badge ${!editor.free.primary_fallback ? 'info' : ''} no-dot`}>{!editor.free.primary_fallback ? text('已选择', 'Selected') : text('选择', 'Choose')}</span></button><button type="button" className="option-row" aria-pressed={editor.free.primary_fallback} onClick={() => update({ free: { ...editor.free, primary_fallback: true } })}><div><strong>{text('继续使用主力模型', 'Continue with primary models')}</strong><span>{text('只有免费池全部不可用时才进入主力组合', 'Use primary only when the free pool is unavailable')}</span></div><span className={`badge ${editor.free.primary_fallback ? 'info' : ''} no-dot`}>{editor.free.primary_fallback ? text('已选择', 'Selected') : text('选择', 'Choose')}</span></button></div>{editor.free.primary_fallback && <div className="free-lane">{group(text('主力模型', 'Primary models'), text('免费池的兜底', 'Fallback for free pool'), editor.free.primary, primary => update({ free: { ...editor.free, primary } }), { preferred: 'high', primary: true, groupId: 'free-primary' })}</div>}</section>}
+    <ProtectionSummary editor={editor} options={options} language={language} />
     <PlanRuntimeSettings limits={editor.limits} options={options} language={language} editingMemory={memory} onChange={limits => update({ limits })} />
     <section className="editor-section">
       <Disclosure className="native-details plan-more-settings" label={text('更多设置', 'More settings')} language={language} defaultOpen={moreSettingsOpen} onOpenChange={setMoreSettingsOpen}>
@@ -451,7 +455,7 @@ const LoadedPlanEditor = forwardRef<PlanEditorHandle, PlanEditorProps & { initia
 
     {(base.expected_draft_revision !== null || plan) && <div className="editor-actions editor-footer">{base.expected_draft_revision !== null && <button className="btn" type="button" onClick={() => void act('discard_draft')}>{text('丢弃草稿', 'Discard draft')}</button>}{plan && <Disclosure className="native-details" label={text('更多操作', 'More actions')} language={language}><button className="btn" type="button" onClick={() => void act(plan.head.status === 'disabled' ? 'enable' : 'disable')}>{plan.head.status === 'disabled' ? text('恢复调用', 'Enable') : text('停用路由', 'Disable')}</button><button className="btn btn-danger" type="button" onClick={() => void act('delete')}>{text('删除路由', 'Delete')}</button></Disclosure>}</div>}
     </div>
-    {plan && <section className="editor-section quality-performance-panel" hidden={view !== 'performance'} role="tabpanel"><div className="editor-section-heading"><div><h3>{text('模型表现', 'Model performance')}</h3><p>{text('观察已发布路由中各模型的阶段胜任度，再查看具体执行阶段与证据。', 'Compare stage competence for models in the published route, then inspect execution stages and evidence.')}</p></div><span className="badge no-dot">{text('生效版本 r' + plan.agent_plan_revision, 'Active r' + plan.agent_plan_revision)}</span></div><PlanQuality planId={plan.agent_plan_id} planRevision={plan.agent_plan_revision} currentModels={activePlanQualityModels(plan, options?.candidates ?? [])} language={language} active={active && view === 'performance'} refreshVersion={refreshVersion} onOpenEvidence={onOpenSession} onThreshold={(branch, threshold) => {
+    {plan && <section className="editor-section quality-performance-panel" hidden={view !== 'performance'} role="tabpanel"><div className="editor-section-heading"><div><h3>{text('模型表现', 'Model performance')}</h3><p>{text('观察已发布路由中各模型的阶段胜任度，再查看具体执行阶段与证据。', 'Compare stage competence for models in the published route, then inspect execution stages and evidence.')}</p></div><span className="badge no-dot">{text('生效版本 r' + plan.agent_plan_revision, 'Active r' + plan.agent_plan_revision)}</span></div><PlanQuality planId={plan.agent_plan_id} planRevision={plan.agent_plan_revision} currentModels={activePlanQualityModels(plan, options?.candidates ?? [])} language={language} active={active && view === 'performance'} refreshVersion={refreshVersion} onOpenEvidence={onOpenSession} onDivision={onCreateDraft ? setDivisionBranch : undefined} onThreshold={(branch, threshold) => {
       if (editor.mode === 'smart_saving' && branch === 'smart_saving') update({ smart: { ...editor.smart, judgment: { ...editor.smart.judgment, degree: { ...editor.smart.judgment.degree, simple_threshold_millis: threshold } } } });
       else if (editor.branch_routing) update({ branch_routing: { ...editor.branch_routing, branches: editor.branch_routing.branches.map(item => {
         if (item.id !== branch) return item;
@@ -461,6 +465,7 @@ const LoadedPlanEditor = forwardRef<PlanEditorHandle, PlanEditorProps & { initia
       setView('configuration');
     }} /></section>}
     </fieldset>
+    {plan && divisionBranch && onCreateDraft && <DivisionDraftDialog plan={plan} branch={divisionBranch} options={options} language={language} onClose={() => setDivisionBranch(null)} onDraft={onCreateDraft} />}
     {effort && <ReasoningDialog
       name={effort.name}
       native={effort.native}

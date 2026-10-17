@@ -42,6 +42,14 @@ pub(super) fn project(
             _ => {}
         }
     }
+    for request in requests.values_mut() {
+        if request.view.native_model.is_none() {
+            request.view.native_model = request
+                .models
+                .last_key_value()
+                .map(|(_, model)| model.clone());
+        }
+    }
     let mut ordered: Vec<_> = requests.values().collect();
     ordered.sort_by_key(|r| (r.first_fact, &r.view.request_id));
     let positions: BTreeMap<_, _> = ordered

@@ -1,3 +1,5 @@
+import { TrustAttention } from '../trust/TrustAttention';
+import type { TrustSuggestionsRead } from '../trust/use-trust-suggestions';
 import { useState } from 'react';
 import { ContentExcerpt } from '../Sessions';
 import { agentBrandFromId, BrandIcon, Disclosure, formatMoney, ProductPage, UiIcon } from '../../ui';
@@ -6,7 +8,7 @@ import type { HomeProps, HomeReads } from './types';
 import { formatCacheHit, formatCacheHitCoverage, formatTokenCount } from '../usage-presentation';
 
 /** v3-shell + occami-core DOM. Only the real read model supplies values. */
-export function Home({ language, reads, onAction, hasTasks = false }: HomeProps & { hasTasks?: boolean }) {
+export function Home({ language, reads, onAction, hasTasks = false, trustSuggestions }: HomeProps & { hasTasks?: boolean; trustSuggestions?: TrustSuggestionsRead }) {
   const text = (zh: string, en: string) => language === 'zh' ? zh : en;
   const mode = deriveHomePrimaryMode(reads);
   const compute = visibleData(reads.compute), plans = visibleData(reads.plans), agents = visibleData(reads.agents);
@@ -80,6 +82,7 @@ export function Home({ language, reads, onAction, hasTasks = false }: HomeProps 
           <p>{value.coverage === 'complete' && value.pending === 0 && !value.provisional && value.unknownTrafficRequests === 0 ? text('Token 来自已记录的上游用量；金额是独立估算，不代表供应商账单。', 'Tokens come from recorded upstream usage; monetary values are separate estimates, not provider bills.') : text('部分用量或请求仍未知；已知 Token 与金额分别展示，不把缺失项当作零。', 'Some usage or requests remain unknown. Known tokens and monetary estimates stay separate; missing values are not zero.')}</p>
         </div></Disclosure>}
       </>}
+      {trustSuggestions && <TrustAttention read={trustSuggestions} language={language} names={Object.fromEntries((plans?.plans ?? []).map(plan => [plan.planId, plan.displayName]))} onOpen={planId => onAction({kind:'open-plan',returnTo:'home',planId,performance:true})} />}
       {hasTasks && <button className="v3-text-link" type="button" onClick={() => onAction({kind:'view-all-tasks',returnTo:'home'})}><UiIcon name="agent" />{text('查看任务记录', 'View task history')}<UiIcon name="arrow" /></button>}
     </div>
   </ProductPage>;
