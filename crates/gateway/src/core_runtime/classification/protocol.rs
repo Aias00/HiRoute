@@ -28,6 +28,7 @@ pub(super) struct ClassifierResponse {
     pub(super) assessment: Option<ClassifierAssessment>,
     pub(super) invalid_assessment: bool,
     pub(super) applicability: Option<f64>,
+    pub(super) native_shape_complete: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -251,6 +252,7 @@ pub(super) fn parse_classifier_response(
     });
     Ok(ClassifierResponse {
         applicability: None,
+        native_shape_complete: false,
         branch_id,
         probabilities,
         degree_failed,

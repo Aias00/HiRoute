@@ -5,7 +5,8 @@ pub mod adapters;
 #[path = "core_runtime/classification.rs"]
 mod classification;
 pub use classification::{
-    CLASSIFIER_DIAGNOSTIC_LATEST_USER, ClassifierDiagnosticError, ClassifierDiagnosticOutcome,
+    CClassifierDiagnosticOutcome, CLASSIFIER_DIAGNOSTIC_LATEST_USER, ClassifierDiagnosticError,
+    ClassifierDiagnosticOutcome,
 };
 #[path = "model_ir/mod.rs"]
 pub mod model_ir;

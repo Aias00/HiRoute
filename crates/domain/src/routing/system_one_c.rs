@@ -381,3 +381,7 @@ pub enum NativeProtocolError {
     #[error("native protocol encoding failed")]
     Encoding,
 }
+
+#[cfg(test)]
+#[path = "system_one_c_tests.rs"]
+mod tests;

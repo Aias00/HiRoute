@@ -10,6 +10,8 @@ mod agent_connection;
 mod agent_grant_raw;
 mod agent_settings;
 mod classifier_diagnostic;
+mod classifier_diagnostic_c;
+pub use classifier_diagnostic_c::*;
 mod client_access;
 mod work_plans;
 pub use work_plans::*;

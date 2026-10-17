@@ -14,7 +14,7 @@ use hiroute_domain::{
     ApplicabilityReasonV1 as R, ApplicabilityStateV1 as S, HistoricalProtectionActionV1 as A,
     ProtectionEligibilityV1 as E, RoutingObservationV1,
 };
-use serde_json::{Value, json};
+use serde_json::json;
 use std::sync::Arc;
 
 pub(super) const MAX_REQUEST_BYTES: usize = 256 * 1024;

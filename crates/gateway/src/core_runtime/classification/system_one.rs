@@ -242,24 +242,41 @@ pub(super) fn parse_response(
     let score = raw_score
         .and_then(|raw| serde_json::from_str::<Competence>(raw.get()).ok())
         .filter(|s| s.kind == "score" && s.score.is_finite() && (0.0..=2.0).contains(&s.score));
+    let applicability = bindings
+        .applicability
+        .as_ref()
+        .and_then(|id| answers.get(id))
+        .and_then(|raw| {
+            let degree: Degree = serde_json::from_str(raw.get()).ok()?;
+            if degree.kind != "choice" {
+                return None;
+            }
+            normalize_probabilities(
+                degree.probabilities.0,
+                ["applicable", "not_established"].into_iter(),
+            )
+            .ok()
+            .map(|p| p["applicable"])
+        });
+    let native_shape_complete = bindings.degrees.values().all(|id| {
+        answers.get(id).is_some_and(|raw| {
+            serde_json::from_str::<Degree>(raw.get())
+                .ok()
+                .is_some_and(|d| {
+                    d.kind == "score"
+                        && normalize_probabilities(d.probabilities.0, ["0", "1"].into_iter())
+                            .is_ok()
+                })
+        })
+    }) && (bindings.assessment.is_none() || score.is_some())
+        && (bindings.applicability.is_none() || applicability.is_some());
     Ok(ClassifierResponse {
         branch_id,
         probabilities,
         degree_failed,
         invalid_assessment: raw_score.is_some() && score.is_none(),
-        applicability: bindings
-            .applicability
-            .as_ref()
-            .and_then(|id| answers.get(id))
-            .and_then(|raw| {
-                let degree: Degree = serde_json::from_str(raw.get()).ok()?;
-                if degree.kind != "choice" {
-                    return None;
-                }
-                normalize_probabilities(degree.probabilities.0, ["applicable", "not_established"])
-                    .ok()
-                    .map(|p| p["applicable"])
-            }),
+        applicability,
+        native_shape_complete,
         assessment: score.map(|s| ClassifierAssessment {
             score: s.score / 2.0,
             partial: false,

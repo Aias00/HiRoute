@@ -21,8 +21,11 @@ mod diagnostic;
 use diagnostic::classifier_status_failure;
 use diagnostic::{CallDiagnostic, classifier_response_failure, diagnostic_request};
 
+#[path = "classification/c_capability.rs"]
+mod c_capability;
 #[path = "classification/c_request.rs"]
 mod c_request;
+pub use c_capability::CClassifierDiagnosticOutcome;
 #[path = "classification/group_policy.rs"]
 mod group_policy;
 #[path = "classification/protocol.rs"]
