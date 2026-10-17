@@ -103,7 +103,7 @@ class Remote:
 
     def execute(self, script, timeout=65):
         result = subprocess.run(['ssh', *self.options, self.config['host'], powershell(script)],
-                                capture_output=True, text=True, timeout=timeout)
+                                capture_output=True, text=True, errors='replace', timeout=timeout)
         if result.returncode:
             raise RuntimeError('Windows transport failed; no automatic replay was attempted: ' +
                                result.stderr[-2000:])
