@@ -135,6 +135,11 @@ def directory(root, run_id):
     return plain(root / 'runs' / identifier(run_id))
 
 
+def worker_image(request):
+    path = Path(request['config']['python'])
+    return path.with_name('pythonw.exe') if request.get('operation') == 'desktop' else path
+
+
 def private_runs(root, user):
     path = plain(root / 'runs')
     # Raw native output stays under a private runner-owned parent. Never repair
@@ -201,7 +206,7 @@ def start(root, request):
         manifest(root / 'bundles' / request[field])
     identifier(request['binary'], r'[A-Za-z0-9_-]+\.exe')
     identifier(request['case'], r'[A-Za-z0-9_:]+')
-    worker_python = plain(Path(config['python']).with_name('pythonw.exe')) if request.get('operation') == 'desktop' else Path(config['python'])
+    worker_python = plain(worker_image(request))
     if request.get('operation') == 'desktop':
         pe(worker_python)
     private_runs(root, config['user'])
@@ -445,7 +450,7 @@ def finish(root, run_id):
     expected = subprocess.list2cmdline([request['driver_path'], '--worker', str(run / 'request.json')])
     script = "$ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue';"
     script += '$t=Get-ScheduledTask -TaskName ' + literal(task_name(run_id)) + ';'
-    script += "if($t.State -ne 'Ready' -or $t.Actions.Execute -ne " + literal(config['python'])
+    script += "if($t.State -ne 'Ready' -or $t.Actions.Execute -ne " + literal(worker_image(request))
     script += ' -or $t.Actions.Arguments -ne ' + literal(expected) + "){throw 'Owned task is active or differs'};"
     script += '$t|Unregister-ScheduledTask -Confirm:$false'
     ps(script)

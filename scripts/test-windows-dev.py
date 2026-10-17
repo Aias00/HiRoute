@@ -117,6 +117,25 @@ class Runner(unittest.TestCase):
         prepare.assert_not_called()
         self.assertFalse((self.root / 'active.json').exists())
 
+    def test_desktop_cleanup_keeps_the_exact_windowless_action_identity(self):
+        run_id = 'a' * 32
+        run = self.root / 'runs' / run_id
+        run.mkdir(parents=True)
+        request = dict(config=dict(python=str(self.root / 'python.exe')),
+                       operation='desktop', driver_path=str(self.root / 'driver.py'))
+        (run / 'request.json').write_text(json.dumps(request))
+        lock = self.root / 'active.json'
+        lock.write_text(json.dumps(dict(run_id=run_id)))
+        with patch.object(host, 'ps', side_effect=RuntimeError('active or differs')):
+            with self.assertRaises(RuntimeError):
+                host.finish(self.root, run_id)
+        self.assertTrue(lock.exists())
+        with patch.object(host, 'ps') as ps:
+            self.assertTrue(host.finish(self.root, run_id)['task_removed'])
+        self.assertIn(str(self.root / 'pythonw.exe'), ps.call_args.args[0])
+        self.assertIn("$t.State -ne 'Ready'", ps.call_args.args[0])
+        self.assertFalse(lock.exists())
+
     def test_archive_traversal_and_unmanifested_entries_fail(self):
         for name in ('../escape', '/absolute', 'C:/absolute', 'dir\\file.exe', 'other.exe'):
             with self.subTest(name=name):
