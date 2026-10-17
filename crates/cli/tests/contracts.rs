@@ -333,7 +333,7 @@ fn gateway_show_waits_for_native_discovery_and_honors_control_timeout() {
     use std::time::{Duration, Instant};
 
     use hiroute_application_api::{
-        negotiate_hello, ClientHelloV1, LocalControlWireRequestV2, MachineEnvelopeV2,
+        ClientHelloV1, LocalControlWireRequestV2, MachineEnvelopeV2, negotiate_hello,
     };
     use serde_json::json;
 
@@ -501,9 +501,11 @@ fn real_hidden_helper_uses_only_the_owner_raw_endpoint_and_stdout_token_boundary
         .arg("--help")
         .output()
         .unwrap();
-    assert!(!String::from_utf8(help.stdout)
-        .unwrap()
-        .contains(HIDDEN_AGENT_GRANT_HELPER_VERB_V1));
+    assert!(
+        !String::from_utf8(help.stdout)
+            .unwrap()
+            .contains(HIDDEN_AGENT_GRANT_HELPER_VERB_V1)
+    );
 }
 
 #[cfg(unix)]
