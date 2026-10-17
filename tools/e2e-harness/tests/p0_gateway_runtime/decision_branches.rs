@@ -553,6 +553,20 @@ fn enable_c(fixture: &RuntimeFixture) {
         }
         _ => unreachable!(),
     }
+    publication.aliases[0].agent_plan_revision += 1;
+    let revision = publication.aliases[0].agent_plan_revision;
+    let digest = CanonicalDigest::of(&publication.aliases[0].routing).unwrap();
+    for grant in &mut publication.grants {
+        if let Some(ModelRouteV2::Plan {
+            revision: bound,
+            semantic_digest,
+            ..
+        }) = grant.routes.get_mut(MODEL)
+        {
+            *bound = revision;
+            *semantic_digest = digest.clone();
+        }
+    }
     publication.publication_revision += 1;
     fixture.publish(&mut publication);
 }

@@ -92,7 +92,7 @@ def exercise(product, cli, service, endpoint, selection):
     assert saved['desired']['strategy']['judgment']['degree'] == original['degree']
     assert saved['desired']['strategy']['judgment']['competence']['floor_millis'] == 317
     # The existing options response remains strict unless this projection is requested.
-    assert 'assessment_sources' not in cli('routing options')['data']
+    assert 'assessment_sources' not in cli('routing options', {})['data']
     sources = cli('routing options', {'assessment_review_plan': {'plan_id': product.plan_id,
                   'revision': saved['head']['head_revision']}})['data']['assessment_sources']
     source = next(s for s in sources if s['source']['scope'] == 'smart_saving')
