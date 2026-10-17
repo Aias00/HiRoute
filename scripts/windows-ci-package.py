@@ -36,9 +36,10 @@ def trusted_extraction(packager, manifest, archive, trusted):
     verified = packager.verify(manifest, archive)
     trusted.mkdir(parents=True, exist_ok=False)
     for name, (payload, _) in packager.safe_members(archive, verified["files"]).items():
-        path = trusted / name
+        path = trusted / name.removeprefix("bin/")
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(payload)
+    shutil.copyfile(manifest, trusted / "package-manifest.json")
     # Inheritance flags apply to directories. Applying (OI)(CI) recursively to
     # regular files can leave an empty DACL while icacls reports success.
     for entry in [trusted] + sorted(trusted.rglob("*")):
@@ -61,14 +62,14 @@ def restage(args):
     package_revision = args.package_revision or args.expected_sha
     if not re.fullmatch(r"[a-f0-9]{40}", package_revision):
         raise ValueError("Restaging requires an exact committed package revision")
-    if verified["revision"] != package_revision or verified["target"] != "x86_64-pc-windows-msvc":
-        raise ValueError("Replay requires the explicitly bound verified x64 package")
+    if verified["revision"] != package_revision or verified["target"] != packager.host_target():
+        raise ValueError("Replay requires the explicitly bound host-matching Windows package")
     trusted = args.output.resolve() / "administrator-package"
     trusted_extraction(packager, manifest, archive, trusted)
     return dict(source_revision=package_revision, consumer_revision=args.expected_sha,
                 target=verified["target"], manifest=str(manifest),
-                archive=str(archive), administrator_cli=str(trusted / "bin/hiroute.exe"),
-                worker_daemon=str(trusted / "bin/hirouted.exe"), python=sys.executable,
+                archive=str(archive), administrator_cli=str(trusted / "hiroute.exe"),
+                worker_daemon=str(trusted / "hirouted.exe"), package_directory=str(trusted),
                 archive_sha256=packager.digest(archive), manifest_sha256=packager.digest(manifest),
                 production_runtime="not_executed", permission_source="fresh_verified_complete_extraction")
 
@@ -82,8 +83,8 @@ def prepare(args):
     command("git", "diff", "--exit-code", "HEAD", "--")
     packager = module("package-standalone")
     target = packager.host_target()
-    if target != "x86_64-pc-windows-msvc":
-        raise ValueError("This package acceptance fixture requires native Windows x64")
+    if target not in ("x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc"):
+        raise ValueError("Native Windows package target required")
     pin, _ = module("build-cpa").pinned_source()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
@@ -135,8 +136,8 @@ def prepare(args):
     trusted_extraction(packager, manifest, archive, trusted)
     result = dict(version=1, source_revision=revision, target=target,
                   manifest=str(manifest), archive=str(archive),
-                  administrator_cli=str(trusted / "bin/hiroute.exe"),
-                  worker_daemon=str(trusted / "bin/hirouted.exe"), python=sys.executable,
+                  administrator_cli=str(trusted / "hiroute.exe"),
+                  worker_daemon=str(trusted / "hirouted.exe"), package_directory=str(trusted),
                   archive_sha256=packager.digest(archive), manifest_sha256=packager.digest(manifest),
                   deterministic_publication="green", production_runtime="not_executed",
                   cpa_original_run=provenance.get("build_run_id", args.cpa_original_run),

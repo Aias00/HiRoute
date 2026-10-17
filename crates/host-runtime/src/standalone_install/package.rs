@@ -48,9 +48,7 @@ impl Package {
         Ok(value)
     }
     pub fn validate(&self) -> io::Result<()> {
-        if self.target != WINDOWS_TARGET {
-            return Err(io::Error::other("INSTALL_ARCHITECTURE_UNSUPPORTED"));
-        }
+        windows_machine(&self.target)?;
         let base: BTreeSet<&str> = [
             "bin/hiroute.exe",
             "bin/hirouted.exe",
@@ -146,7 +144,7 @@ impl Package {
                 return Err(invalid());
             }
             if facts.mode == "executable" {
-                pe_x64(file)?;
+                pe_machine(file, windows_machine(&self.target)?)?;
             }
         }
         Ok(())
@@ -154,27 +152,9 @@ impl Package {
     pub fn cpa_digest(&self) -> &str {
         &self.cpa.sha256
     }
-    /// Python used sorted compact JSON; retaining those bytes is essential for old journal digests.
+    /// The current producer serializes one closed manifest shape.
     pub fn canonical(&self) -> io::Result<Vec<u8>> {
-        fn sorted(value: &mut serde_json::Value) {
-            match value {
-                serde_json::Value::Object(map) => {
-                    map.sort_keys();
-                    for value in map.values_mut() {
-                        sorted(value);
-                    }
-                }
-                serde_json::Value::Array(values) => {
-                    for value in values {
-                        sorted(value);
-                    }
-                }
-                _ => {}
-            }
-        }
-        let mut value = serde_json::to_value(self).map_err(|_| invalid())?;
-        sorted(&mut value);
-        serde_json::to_vec(&value).map_err(|_| invalid())
+        serde_json::to_vec(self).map_err(|_| invalid())
     }
 }
 fn walk(root: &Path, current: &Path) -> io::Result<BTreeSet<PathBuf>> {
@@ -205,7 +185,7 @@ fn walk(root: &Path, current: &Path) -> io::Result<BTreeSet<PathBuf>> {
     }
     Ok(files)
 }
-fn pe_x64(mut file: fs::File) -> io::Result<()> {
+fn pe_machine(mut file: fs::File, machine: u16) -> io::Result<()> {
     let mut dos = [0; 64];
     file.read_exact(&mut dos)?;
     let offset = u32::from_le_bytes(dos[60..64].try_into().map_err(|_| invalid())?);
@@ -215,8 +195,11 @@ fn pe_x64(mut file: fs::File) -> io::Result<()> {
     file.seek(SeekFrom::Start(u64::from(offset)))?;
     let mut pe = [0; 6];
     file.read_exact(&mut pe)?;
-    if pe != [b'P', b'E', 0, 0, 0x64, 0x86] {
+    if &pe[..4] != b"PE\0\0" || u16::from_le_bytes([pe[4], pe[5]]) != machine {
         return Err(invalid());
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

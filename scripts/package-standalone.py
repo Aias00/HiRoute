@@ -130,7 +130,7 @@ def digest(path):
 
 
 def host_target():
-    machine = {"AMD64": "x86_64", "arm64": "aarch64"}.get(
+    machine = {"AMD64": "x86_64", "ARM64": "aarch64", "arm64": "aarch64"}.get(
         platform.machine(), platform.machine()
     )
     system = {"Linux": "unknown-linux-gnu", "Darwin": "apple-darwin", "Windows": "pc-windows-msvc"}.get(

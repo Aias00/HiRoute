@@ -1,4 +1,4 @@
-//! The Windows installer transaction and its released Python journal boundary.
+//! The single Windows installation transaction and its current journal schema.
 mod files;
 mod journal;
 mod package;
@@ -10,7 +10,13 @@ use std::{io, path::Path};
 pub mod windows;
 
 pub const JOURNAL_SCHEMA: &str = "hiroute.windows-install-journal/v1";
-pub const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
+pub fn windows_machine(target: &str) -> io::Result<u16> {
+    match target {
+        "x86_64-pc-windows-msvc" => Ok(0x8664),
+        "aarch64-pc-windows-msvc" => Ok(0xaa64),
+        _ => Err(io::Error::other("INSTALL_ARCHITECTURE_UNSUPPORTED")),
+    }
+}
 pub const MAX_RECORD: u64 = 64 * 1024;
 pub(crate) fn invalid() -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, "INSTALL_OWNERSHIP_CONFLICT")

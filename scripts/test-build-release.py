@@ -391,10 +391,10 @@ class HostedReleasePolicyTests(unittest.TestCase):
         events = re.findall(r'^  ([a-z_]+):', triggers, re.M)
         self.assertEqual(set(events), {'workflow_dispatch', 'workflow_call'})
         self.assertNotIn('continue-on-error:', workflow)
-        self.assertEqual(workflow.count('ref: ${{ github.sha }}'), 2)
+        self.assertEqual(workflow.count('ref: ${{ github.sha }}'), 3)
         self.assertEqual(workflow.count(
             "-Phase '${{ inputs.scope != '' && inputs.scope != 'all' && 'focused' || 'final' }}'"), 2)
-        self.assertEqual(workflow.count('-ExpectedSha $env:GITHUB_SHA'), 2)
+        self.assertEqual(workflow.count('-ExpectedSha $env:GITHUB_SHA'), 3)
 
     def test_manual_scope_cannot_narrow_the_reusable_release_gate(self):
         workflow = (REPO / '.github/workflows/windows-headless.yml').read_text()
@@ -407,7 +407,9 @@ class HostedReleasePolicyTests(unittest.TestCase):
         matrix = ("scope: ${{ fromJSON(inputs.scope != '' && inputs.scope != 'all' && "
                   "format('[\"{0}\"]', inputs.scope) || "
                   "'[\"components\",\"core\",\"product\",\"background\",\"agents\"]') }}")
-        self.assertEqual(workflow.count(matrix), 2)
+        self.assertEqual(workflow.count(matrix), 1)
+        self.assertIn("windows11-arm-install:", workflow)
+        self.assertIn("-Scope install", workflow)
 
     def test_windows_replay_requires_successful_producers(self):
         workflow = (REPO / '.github/workflows/windows-headless.yml').read_text()
@@ -415,7 +417,8 @@ class HostedReleasePolicyTests(unittest.TestCase):
         self.assertRegex(replay, r'(?m)^    needs: native$')
         # Default job success admission skips replay after failed or cancelled
         # producers; always() remains appropriate only for evidence upload steps.
-        self.assertNotRegex(replay, r'(?m)^    (if|continue-on-error):')
+        self.assertIn("if: inputs.scope != 'background'", replay)
+        self.assertNotRegex(replay, r'(?m)^    continue-on-error:')
 
     def test_only_windows_assets_require_windows_validation(self):
         workflow = (REPO / '.github/workflows/build-release.yml').read_text()

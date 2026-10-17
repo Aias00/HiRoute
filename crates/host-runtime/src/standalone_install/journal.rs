@@ -86,7 +86,8 @@ impl Journal {
             .chain(std::iter::once(&self.new_marker))
         {
             marker.validate().map_err(|_| invalid())?;
-            if marker.target != WINDOWS_TARGET
+            windows_machine(&marker.target)?;
+            if marker.target != self.new_marker.target
                 || marker.service_definition != definition
                 || !within(&marker.install_root, &root)
                 || marker.install_root == root
@@ -195,7 +196,7 @@ impl Journal {
         }
         Ok(())
     }
-    /// Prepared install rolls back; prepared uninstall completes. These are the Python V1 rules.
+    /// Prepared install rolls back; prepared uninstall completes.
     pub fn recover(
         mut self,
         layout: &StandaloneLayout,

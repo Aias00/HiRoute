@@ -54,7 +54,6 @@ fn deadline(value: u64) -> io::Result<Duration> {
     Ok(Duration::from_millis(value))
 }
 fn layout() -> io::Result<StandaloneLayout> {
-    hiroute_platform::windows::install::require_x64()?;
     StandaloneLayout::from_environment().map_err(|_| invalid())
 }
 fn definition_path(layout: &StandaloneLayout) -> PathBuf {
@@ -80,6 +79,15 @@ fn admit_existing(layout: &StandaloneLayout) -> io::Result<()> {
         definition(&journal.new_definition)?;
         if let Some(old) = &journal.old_definition {
             definition(old)?;
+        }
+        if journal.new_marker.target != hiroute_platform::windows::install::native_target()? {
+            return Err(io::Error::other("INSTALL_ARCHITECTURE_UNSUPPORTED"));
+        }
+    }
+    if let Some(marker) = read_json::<StandaloneInstallRecordV1>(&layout.marker_path, MAX_RECORD)? {
+        marker.validate().map_err(|_| invalid())?;
+        if marker.target != hiroute_platform::windows::install::native_target()? {
+            return Err(io::Error::other("INSTALL_ARCHITECTURE_UNSUPPORTED"));
         }
     }
     Ok(())
@@ -191,7 +199,8 @@ fn current(
             marker.validate().map_err(|_| invalid())?;
             if native.daemon != marker.install_root.join("hirouted.exe")
                 || marker.service_definition != definition_path(layout)
-                || marker.target != WINDOWS_TARGET
+                || marker.target != hiroute_platform::windows::install::native_target()?
+                || package.target != marker.target
                 || package.version != marker.version
                 || !within(
                     &marker.install_root,
@@ -272,8 +281,10 @@ pub fn install(request: InstallRequest) -> io::Result<Value> {
     if request.schema != "hiroute.windows-install-request/v1" {
         return Err(invalid());
     }
-    hiroute_platform::windows::install::require_x64()?;
     let package = Package::read(&request.package_directory)?;
+    if package.target != hiroute_platform::windows::install::native_target()? {
+        return Err(io::Error::other("INSTALL_ARCHITECTURE_UNSUPPORTED"));
+    }
     let timeout = deadline(request.timeout_ms)?;
     let layout = layout()?;
     let _lock = lock(&layout)?;
@@ -296,7 +307,7 @@ pub fn install(request: InstallRequest) -> io::Result<Value> {
     let marker = StandaloneInstallRecordV1 {
         schema_version: crate::STANDALONE_INSTALL_SCHEMA_V1.into(),
         version: package.version.clone(),
-        target: WINDOWS_TARGET.into(),
+        target: package.target.clone(),
         install_root: root,
         service_definition: definition_path(&layout),
         installed_skills: [".agents", ".claude"]

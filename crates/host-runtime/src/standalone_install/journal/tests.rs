@@ -33,7 +33,7 @@ fn fixture() -> (tempfile::TempDir, StandaloneLayout, Journal) {
     let marker = StandaloneInstallRecordV1 {
         schema_version: crate::STANDALONE_INSTALL_SCHEMA_V1.into(),
         version: "0.3.1".into(),
-        target: WINDOWS_TARGET.into(),
+        target: "x86_64-pc-windows-msvc".into(),
         install_root: root.clone(),
         service_definition: layout.data_root.join("service/windows-background.json"),
         installed_skills: [".agents", ".claude"]
@@ -93,7 +93,7 @@ fn pending_manager_delete_keeps_prepared_journal_and_all_owned_files() {
     );
 }
 #[test]
-fn duplicate_json_object_keys_are_rejected_like_the_python_reader() {
+fn duplicate_json_object_keys_are_rejected() {
     let (_temp, layout, _) = fixture();
     fs::write(
         Journal::path(&layout),
@@ -223,7 +223,7 @@ fn prepared_uninstall_completes_after_each_crash_boundary_and_keeps_data() {
     }
 }
 #[test]
-fn journal_has_the_same_closed_python_v1_fields_and_refuses_escaped_paths() {
+fn current_journal_has_closed_fields_and_refuses_escaped_paths() {
     let (_temp, layout, journal) = fixture();
     let bytes = serde_json::to_value(&journal).unwrap();
     assert_eq!(

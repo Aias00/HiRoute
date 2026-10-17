@@ -52,7 +52,7 @@ pub(crate) fn run(verb: &str, arguments: &[OsString]) -> u8 {
             };
             (
                 1,
-                serde_json::json!({"schema":"hiroute.windows-maintenance-error/v1","error":{"code":code,"agents":agents}}),
+                serde_json::json!({"schema":"hiroute.windows-maintenance-error/v1","error":{"code":code,"agents":agents,"message": if code == "INSTALL_SCM_MANAGED" { Some("SCM service installation is not offered in this release. The existing installation was left unchanged.") } else { None }}}),
             )
         }
     };
