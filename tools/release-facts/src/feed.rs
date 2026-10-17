@@ -363,7 +363,7 @@ pub fn project(
         payload.records.push(FeedRecord::Model {
             min_client_version: earliest.clone(),
             included_on: date("model", &model.model_configuration_id),
-            record: FeedModel {
+            record: Box::new(FeedModel {
                 definition: model.clone(),
                 native_reasoning: current
                     .native_reasoning()
@@ -371,7 +371,7 @@ pub fn project(
                     .find(|native| native.model_configuration_id == model.model_configuration_id)
                     .cloned(),
                 canonical: canonical.clone(),
-            },
+            }),
         });
     }
     for record in &current.model_data().model_endpoint_capabilities {

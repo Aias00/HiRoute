@@ -25,7 +25,7 @@ pub enum FeedRecord {
     Model {
         min_client_version: String,
         included_on: String,
-        record: FeedModel,
+        record: Box<FeedModel>,
     },
     ModelEndpointCapability {
         min_client_version: String,
@@ -172,12 +172,12 @@ impl FeedPayload {
                         "model identity/evidence is not closed",
                     ));
                 }
-                if let Some(reasoning) = &record.native_reasoning {
-                    if reasoning.model_configuration_id != record.definition.model_configuration_id
-                        || reasoning.validate().is_err()
-                    {
-                        return Err(FeedError::validation("invalid native reasoning"));
-                    }
+                if let Some(reasoning) = &record.native_reasoning
+                    && (reasoning.model_configuration_id
+                        != record.definition.model_configuration_id
+                        || reasoning.validate().is_err())
+                {
+                    return Err(FeedError::validation("invalid native reasoning"));
                 }
             }
         }

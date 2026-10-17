@@ -219,12 +219,11 @@ pub fn admit(
         if outcome.outcome != RecordAdmission::Applied {
             continue;
         }
-        if let FeedRecord::PriceRate { record, .. } = item {
-            if !offers.contains(&record.offer_ref)
-                && embedded.model_data().offer(&record.offer_ref).is_none()
-            {
-                outcome.outcome = RecordAdmission::Unresolved;
-            }
+        if let FeedRecord::PriceRate { record, .. } = item
+            && !offers.contains(&record.offer_ref)
+            && embedded.model_data().offer(&record.offer_ref).is_none()
+        {
+            outcome.outcome = RecordAdmission::Unresolved;
         }
     }
     let mut counts = FeedCounts::default();

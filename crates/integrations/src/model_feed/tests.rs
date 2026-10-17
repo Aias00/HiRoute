@@ -71,11 +71,11 @@ fn new_model() -> FeedPayload {
         FeedRecord::Model {
             min_client_version: "0.3.2".into(),
             included_on: "2026-10-18".into(),
-            record: FeedModel {
+            record: Box::new(FeedModel {
                 definition,
                 native_reasoning: None,
                 canonical,
-            },
+            }),
         },
         FeedRecord::ModelEndpointCapability {
             min_client_version: "0.3.2".into(),
