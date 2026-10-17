@@ -1,8 +1,8 @@
 # Use smart model routing
 
-After each fresh judgment, a valid held candidate is preferred within the selected group to preserve model context and prompt cache. This includes a backup reached after another candidate failed. A different group selects from its own candidates, and an invalid or unavailable hold uses normal selection and automatic relay. This behavior is automatic; there is no follow-up switching setting.
-
 Smart model routing selects and executes models according to the published configuration. Fixed model and Free first follow candidate order. Smart saving and Custom branches judge the task to select a model group and judge again for every new user message. For these two routing types, tool continuations reuse the frozen decision when HiRoute can identify the same turn, history is continuous, and the choice remains reusable.
+
+When a new judgment selects the same group, HiRoute prefers the model from the previous turn if the conversation still matches and the model can serve the request. This includes a backup selected after another model failed, and helps reuse model context and prompt caches. If the group changes or the previous model cannot be reused, normal selection and automatic relay apply. This happens automatically, with no follow-up switching setting.
 
 This guide shows Desktop. Linux headless exposes the same production paths through `routing options/list/show/preview/apply` and `decision services list/apply/test`. Start with [Run HiRoute headless on Linux](/en/docs/install-linux/) and [HiRoute CLI](/en/docs/cli/); obtain request fields from the installed schema. For a first connection, follow [Quickstart](/en/docs/) to create a fixed route, then add decision models when needed.
 

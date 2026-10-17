@@ -71,7 +71,7 @@ export function reopen(plan: Plan): Editor {
   const s = plan.desired.strategy;
   if (s.mode === 'branches' && s.routing) e.branch_routing = structuredClone(s.routing);
   else if (e.mode === 'fixed_model') e.candidates = s.candidates ?? [];
-  else if (e.mode === 'smart_saving') e.smart = { economy: s.economy ?? [], primary: s.primary ?? [], judgment: structuredClone(s.judgment!), classifier: s.classifier as SmartClassifier, complex_keywords: s.complex_keywords ?? [] };
+  else if (e.mode === 'smart_saving') e.smart = { economy: s.economy ?? [], primary: s.primary ?? [], judgment: structuredClone(s.judgment!), ...(s.reselect_on_user_message !== undefined && { reselect_on_user_message: s.reselect_on_user_message }), classifier: s.classifier as SmartClassifier, complex_keywords: s.complex_keywords ?? [] };
   else e.free = { candidates: s.candidates ?? [], primary: s.primary ?? [], primary_fallback: s.primary_fallback ?? false };
   return e;
 }

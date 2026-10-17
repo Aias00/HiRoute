@@ -477,7 +477,7 @@ const scenarios = [
     assert(calls('preview_compute_save').at(-1).payload.change.expected_revisions.target === c().management.revisions.target, 'Credential change reused the revision from before the decision save');
     await until(() => text().includes('接入凭据已保存'), 'credential save completed');
   }),
-  scenario('desktop.routing.follow-up-preference', ['routing-editor', 'decision-services'], 'New routes omit the retired setting and both editors retain their judgment and default-branch controls', async () => {
+  scenario('desktop.routing.follow-up-preference', ['routing-editor', 'decision-services'], 'New routes omit the retired setting; both editors preserve saved legacy values without exposing a control', async () => {
     await fresh(); await routing(); await click('新建智能路由');
     const fields = all('.plan-identity-fields input');
     setInput(fields[0], 'Continuous routing'); setInput(fields[1], 'Check routing without a follow-up setting');
@@ -495,6 +495,37 @@ const scenarios = [
     await until(() => calls('preview_plan_editor').length > 0, 'draft without follow-up setting');
     const editor = calls('preview_plan_editor').at(-1).payload.input.editor;
     assert(!('reselect_on_user_message' in editor.smart) && !('reselect_on_user_message' in editor.branch_routing), 'New frontend drafts still generate the retired setting');
+    for (const mode of ['smart_saving', 'custom_branches']) {
+      for (const legacy of [true, false, undefined]) {
+        const label = `${mode}, legacy=${legacy}`;
+        await fresh(() => {
+          const plan = c().desktop.catalog.plans[0];
+          if (mode === 'custom_branches') {
+            const smart = plan.desired.strategy;
+            plan.desired.mode = mode;
+            plan.desired.strategy = { mode: 'branches', routing: {
+              classifier: { kind: 'decision_service', service: { id: 'decision/fixture', revision: 1, name: 'Fixture extension', connection: { kind: 'custom', endpoint: 'https://example.test/decision', timeout_ms: 10000 } } },
+              default_branch_id: 'primary', judgment: structuredClone(smart.judgment),
+              branches: [
+                { id: 'economy', name: 'Economy', condition: 'Simple', judgment: null, candidates: structuredClone(smart.economy), primary_candidates: [] },
+                { id: 'primary', name: 'Primary', condition: 'Complex', judgment: null, candidates: structuredClone(smart.primary), primary_candidates: [] },
+              ],
+            } };
+          }
+          const settings = mode === 'custom_branches' ? plan.desired.strategy.routing : plan.desired.strategy;
+          if (legacy === undefined) delete settings.reselect_on_user_message;
+          else settings.reselect_on_user_message = legacy;
+        });
+        await routing();
+        setInput(all('.plan-identity-fields input')[1], `Edit saved route: ${label}`);
+        await click('保存草稿');
+        await until(() => calls('preview_plan_editor').length > 0 && !button('保存草稿').disabled, `saved draft: ${label}`);
+        const saved = calls('preview_plan_editor').at(-1).payload.input.editor;
+        const settings = mode === 'custom_branches' ? saved.branch_routing : saved.smart;
+        assert(settings.reselect_on_user_message === legacy && Object.hasOwn(settings, 'reselect_on_user_message') === (legacy !== undefined), `Editing changed the retired value: ${label}`);
+        assert(!all('.plan-editor label').some(item => /追问时允许换模型|Allow model switching on follow-up/.test(item.textContent)), `A saved route exposes the retired control: ${label}`);
+      }
+    }
   }),
   scenario('desktop.routing.judgment-settings', ['routing-editor', 'decision-services'], 'Advanced judgment starts collapsed; branch copy/reset stays independent and draft payload retains settings', async () => {
     await fresh(); await routing();

@@ -157,18 +157,18 @@ this setting changes neither client timeout nor model output limits.
 
 ### Requirement: Delegation configuration remains independently usable
 
-Delegation MUST start off. Enabling reveals the [supported Harnesses](../agent-delegation/spec.md)
+Delegation starts off. Enabling reveals the [supported Harnesses](../agent-delegation/spec.md)
 with readable names/logos and required installation components. Selection is single;
 Qoder/DSH need their native CLI, Pi needs selected CLI/Node, and adapter Harnesses
 retain their own rules. Disabling hides but retains selection and must not start
-new discovery from stale UI callbacks. Missing Worker dependencies do not prevent
+new discovery from stale UI callbacks. Missing Worker dependencies MUST NOT prevent
 saving/publishing an otherwise valid model route. Installation guidance is explicit,
 copyable, platform-specific, and never auto-runs.
 
-#### Scenario: Worker configuration is independent of follow-up continuity
+#### Scenario: Missing Worker dependencies do not block model routing
 
-- **WHEN** delegation is disabled or Worker dependencies are missing
-- **THEN** the user MUST still be able to save or publish an otherwise valid model route without a follow-up preference.
+- **WHEN** Worker dependencies are missing
+- **THEN** the user MUST still be able to save or publish an otherwise valid model route.
 
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/133#issuecomment-6220134774
