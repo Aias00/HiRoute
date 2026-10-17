@@ -83,10 +83,6 @@ pub fn roundtrip(product: &InstalledProduct) {
         cli(product, &["decision", "services", "list"], None)["data"]["services"],
         json!([service])
     );
-    test_c(product, &historical, false, "unsupported");
-    c_vectors.store(true, Ordering::SeqCst);
-    test_c(product, &historical, false, "verified");
-    test_c(product, &service, true, "verified");
     test(product, &service);
     assert_eq!(*seen.lock().unwrap(), vec![("r1".to_owned(), 3)]);
     // Without accept_digest this public command previews a change. Retain a
@@ -141,6 +137,10 @@ pub fn roundtrip(product: &InstalledProduct) {
         cli(product, &["decision", "services", "list"], None)["data"]["services"],
         json!([service])
     );
+    test_c(product, &historical, false, "unsupported");
+    c_vectors.store(true, Ordering::SeqCst);
+    test_c(product, &historical, false, "verified");
+    test_c(product, &service, true, "verified");
     mutate(
         product,
         &json!({"id":service["id"],"expected_revision":2,"service":null}),
