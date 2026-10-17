@@ -443,7 +443,8 @@ class HostedReleasePolicyTests(unittest.TestCase):
     def test_pr_windows_check_is_bounded_cached_and_fails_closed(self):
         workflow = (REPO / '.github/workflows/windows-compile.yml').read_text()
         triggers = workflow.split('\non:\n', 1)[1].split('\npermissions:', 1)[0]
-        self.assertEqual(re.findall(r'^  ([a-z_]+):', triggers, re.M), ['pull_request'])
+        self.assertEqual(re.findall(r'^  ([a-z_]+):', triggers, re.M), ['workflow_dispatch', 'pull_request'])
+        self.assertIn('github.event.pull_request.number || github.run_id', workflow)
         for path in ('crates/**', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml',
                      '.cargo/**', 'assets/**', 'vendor/**', 'tools/**', 'scripts/**',
                      '.github/workflows/windows-compile.yml'):
