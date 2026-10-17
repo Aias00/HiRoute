@@ -61,9 +61,16 @@ fn standard_model_bearer_preserves_current_grants_and_legacy_carrier_precedence(
         assert_eq!(send(&headers, body).status, 401);
     }
     assert_eq!(
-        send(&[("Authorization", &format!("Bearer {CHAT_TOKEN}"))], body).status,
+        request(
+            fixture.address,
+            "POST",
+            "/v1/messages",
+            &[("Authorization", &bearer)],
+            br#"{"model":"runtime-model","messages":[]}"#,
+        )
+        .status,
         422,
-        "a valid grant for another protocol cannot authorize Responses"
+        "a valid Responses grant cannot authorize Messages"
     );
     assert_eq!(
         send(
