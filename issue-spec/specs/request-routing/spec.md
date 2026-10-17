@@ -16,10 +16,15 @@ A Fixed route binds the chosen source/account/raw model without inventing plan
 identity. Duplicate/conflicting names inside one grant fail publication. Directory
 visibility alone grants no access.
 
-Ordinary Responses model grants use `X-HiRoute-Token`, not native Authorization
-fallback. Qoder's dedicated local model-provider route uses a single standard
-bearer for its current model grant and rejects run authority, duplicate auth, and
-mixed `X-HiRoute-Token`. Messages model grants use bearer; an arbitrary `x-api-key`
+Ordinary Responses, Chat Completions, Messages and model-catalog requests SHALL
+accept a single standard `Authorization: Bearer <HiRoute connection token>` for
+an issued current model grant. This carrier does not authorize native provider
+API Keys, OAuth credentials, revoked grants, another protocol or another alias.
+Retained `X-HiRoute-Token` clients SHALL continue to work: when present, that
+explicit carrier remains authoritative and an invalid value SHALL NOT fall back
+to Authorization. Duplicate or malformed credentials SHALL fail authentication.
+Qoder's dedicated local model-provider route retains its existing single-bearer,
+no-run-authority and no-mixed-`X-HiRoute-Token` rules. An arbitrary `x-api-key`
 is not model authority. The separately validated DSH run-model carrier follows
 [Worker delegation](../agent-delegation/spec.md). Worker run-model and run-control
 authority remain distinct. Outbound auth is rebuilt for the exact leased destination;
@@ -28,6 +33,29 @@ inbound HiRoute/native tokens or account-override headers cannot pass through.
 Fixed execution shares request projection, pricing, deadlines, and observation but
 retries only its exact source's eligible Key pool. It cannot fall back to another
 account/model or an otherwise allowed Plan. Plan relay remains in published scope.
+
+#### Scenario: Standard model Bearer across native protocols
+
+- **WHEN** a client sends a current HiRoute connection token through a single Authorization Bearer header
+- **THEN** the issued grant authorizes only its published protocol and aliases, including ordinary Responses, without requiring a HiRoute-specific header.
+
+#### Scenario: Retained explicit carrier has precedence
+
+- **WHEN** a retained client sends X-HiRoute-Token together with its native SDK Authorization header
+- **THEN** only the explicit HiRoute token determines model authority; an empty, malformed, duplicated or unissued explicit token cannot fall back to the other header.
+
+#### Scenario: A different secret does not become a model grant
+
+- **WHEN** a Bearer value is a native provider API Key, OAuth credential, revoked token, run-control credential or an unissued value
+- **THEN** ordinary model access is denied by the existing current-grant or separately validated run-model authority, and no upstream model attempt is made.
+
+#### Scenario: Inbound credentials never become provider authorization
+
+- **WHEN** a model request is accepted through either supported carrier
+- **THEN** the outbound attempt reconstructs authorization from the exact leased provider credential and strips the inbound model token and private metadata.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/125#issuecomment-6236001882
 
 ### Requirement: Native forwarding retains payload without granting new authority
 

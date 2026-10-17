@@ -9,6 +9,16 @@ branch decision, plan and freeze candidates, then admit execution into
 `hiroute-gateway-core`. The core owns attempts, response commit, cancellation and
 resource cleanup; the Gateway does not run a second execution loop.
 
+Ordinary Responses, Chat Completions, Messages and model-catalog clients may carry
+their HiRoute connection token as `Authorization: Bearer <token>`. The current
+publication still verifies the issued grant, protocol and aliases. Retained
+`X-HiRoute-Token` clients keep explicit-header precedence, including when native
+SDKs also send Authorization; an invalid explicit token never falls back to it.
+Qoder's dedicated entry and delegated run authority keep their existing rules.
+Upstream authorization is rebuilt from the selected provider lease. The
+[listener scenario](../../tools/e2e-harness/tests/p0_gateway_runtime/bearer_auth.rs)
+covers admission, rejection, token rotation and outbound isolation.
+
 Branch candidates may use distinct execution keys for different reasoning settings
 on the same model. Publication freezes `source_binding_id` for their current Native
 credential membership checks; execution keys continue to own selection and runtime

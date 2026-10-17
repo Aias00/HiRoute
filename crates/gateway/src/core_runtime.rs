@@ -1535,9 +1535,16 @@ fn inbound_authorization<'a>(
         return None;
     }
     let authorization = headers.get(AUTHORIZATION)?.to_str().ok()?;
-    if path == "/v1/responses" && !authorization.starts_with("Bearer hr_run_model_") {
+    let token = authorization.strip_prefix("Bearer ")?;
+    if token.is_empty()
+        || token
+            .bytes()
+            .any(|byte| byte.is_ascii_whitespace() || byte == b',')
+    {
         return None;
     }
+    // The carrier does not identify authority. Publication/run verification below
+    // must still resolve an issued current token and its exact protocol/aliases.
     Some(std::borrow::Cow::Borrowed(authorization))
 }
 
