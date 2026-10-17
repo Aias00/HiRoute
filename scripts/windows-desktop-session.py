@@ -21,11 +21,20 @@ Add-Type @'
 using System;
 using System.Runtime.InteropServices;
 public class DesktopWindow {
+ [StructLayout(LayoutKind.Sequential)] public struct Rect {public int Left,Top,Right,Bottom;}
+ [StructLayout(LayoutKind.Sequential)] public struct MenuBar {public uint Size;public Rect Bounds;public IntPtr Menu,Window;public uint Flags;}
+ [StructLayout(LayoutKind.Sequential)] public struct Point {public int X,Y;public Point(int x,int y){X=x;Y=y;}}
  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr window,int command);
  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
  [DllImport("user32.dll")] public static extern bool SetCursorPos(int x,int y);
  [DllImport("user32.dll")] public static extern void mouse_event(uint flags,uint dx,uint dy,uint data,UIntPtr extra);
+ [DllImport("user32.dll")] public static extern bool GetMenuBarInfo(IntPtr window,int kind,int item,ref MenuBar info);
+ [DllImport("user32.dll")] public static extern int GetMenuItemCount(IntPtr menu);
+ [DllImport("user32.dll",CharSet=CharSet.Unicode)] public static extern int GetMenuString(IntPtr menu,uint item,System.Text.StringBuilder text,int capacity,uint flags);
+ [DllImport("user32.dll")] public static extern uint GetMenuState(IntPtr menu,uint item,uint flags);
+ [DllImport("user32.dll")] public static extern bool GetMenuItemRect(IntPtr window,IntPtr menu,uint item,out Rect rect);
+ [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(Point point);
 }
 '@
 $q=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'ui-request.json') -Raw | ConvertFrom-Json
@@ -56,6 +65,37 @@ if($q.action -eq 'quit') {
  $name=[Windows.Automation.AutomationElement]::NameProperty
  $children=[Windows.Automation.TreeScope]::Children
  $descendants=[Windows.Automation.TreeScope]::Descendants
+ function NativeQuit {
+  $menus=@($desktop.FindAll($children,[Windows.Automation.Condition]::TrueCondition) | Where-Object {$_.Current.ProcessId -eq $q.pid -and $_.Current.ClassName -eq '#32768' -and -not $_.Current.IsOffscreen})
+  if($menus.Count -eq 0){return $false}
+  if($menus.Count -ne 1){throw 'More than one measured-process popup menu is visible'}
+  $window=[IntPtr]$menus[0].Current.NativeWindowHandle
+  $bar=[DesktopWindow+MenuBar]::new()
+  $bar.Size=[Runtime.InteropServices.Marshal]::SizeOf($bar)
+  # Documented OBJID_CLIENT reads the real popup menu; no app command is injected.
+  if(-not [DesktopWindow]::GetMenuBarInfo($window,-4,0,[ref]$bar)){throw 'Cannot inspect the owned native popup menu'}
+  $count=[DesktopWindow]::GetMenuItemCount($bar.Menu)
+  if($count -lt 1 -or $count -gt 32){throw 'Native popup menu exceeds its bound'}
+  $items=@(for($i=0;$i -lt $count;$i++) {
+   $text=[Text.StringBuilder]::new(512)
+   [void][DesktopWindow]::GetMenuString($bar.Menu,[uint32]$i,$text,512,0x400)
+   $rect=[DesktopWindow+Rect]::new()
+   if(-not [DesktopWindow]::GetMenuItemRect([IntPtr]::Zero,$bar.Menu,[uint32]$i,[ref]$rect)){throw 'Native menu geometry is unavailable'}
+   @{name=$text.ToString();index=$i;state=[DesktopWindow]::GetMenuState($bar.Menu,[uint32]$i,0x400);left=$rect.Left;top=$rect.Top;right=$rect.Right;bottom=$rect.Bottom}
+  })
+  $items | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $PSScriptRoot 'menu-native-before.json') -Encoding UTF8
+  $choice=@($items | Where-Object {$_.name.Replace('&','') -eq 'Quit'})
+  if($choice.Count -ne 1 -or ($choice[0].state -band 3) -ne 0){throw 'One enabled native Quit item is required'}
+  $item=$choice[0]
+  $point=[DesktopWindow+Point]::new([int](($item.left+$item.right)/2),[int](($item.top+$item.bottom)/2))
+  if([DesktopWindow]::WindowFromPoint($point) -ne $window){throw 'The observed native menu is obscured'}
+  [void][DesktopWindow]::SetCursorPos($point.X,$point.Y)
+  [DesktopWindow]::mouse_event(2,0,0,0,[UIntPtr]::Zero)
+  [DesktopWindow]::mouse_event(4,0,0,0,[UIntPtr]::Zero)
+  if(-not $p.WaitForExit(10000)){throw 'Native Quit did not exit the measured Desktop'}
+  return $true
+ }
+ if(NativeQuit){@{quit=$true;pid=$p.Id;menu_item='Quit';method='native popup readback and mouse click'}|ConvertTo-Json -Compress;exit 0}
  function QuitItems {
   $windows=$desktop.FindAll($children,[Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ProcessIdProperty,[int]$q.pid))
   $items=@()
@@ -90,6 +130,7 @@ if($q.action -eq 'quit') {
  if($icons.Count -ne 1){throw 'Exactly one visible HiRoute notification icon is required'}
  $icons[0].GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
  Start-Sleep -Milliseconds 500
+ if(NativeQuit){@{quit=$true;pid=$p.Id;menu_item='Quit';method='native popup readback and mouse click'}|ConvertTo-Json -Compress;exit 0}
  $quit=@(QuitItems)
  }
  if($quit.Count -ne 1){throw "The measured Desktop exposed $($quit.Count) native Quit menu items; inspect menu-before.json"}
