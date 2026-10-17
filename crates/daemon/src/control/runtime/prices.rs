@@ -375,6 +375,21 @@ impl LocalControlAdapter {
         if current.generation_ref() == Some(&generation) {
             return Ok(generation);
         }
+        // Serialize the final generation check and installation with feed activation. An old
+        // builder must not reinstall withdrawn default prices after the slot was invalidated.
+        let stores = self.stores_lock()?;
+        if stores
+            .control()
+            .current_revisions(&WorkspaceId::default())?
+            .dependencies
+            .get("feed.model_data")
+            != facts.revisions.dependencies.get("feed.model_data")
+        {
+            return Err(PortError::new(
+                PortErrorCode::Conflict,
+                "prices.feed.changed",
+            ));
+        }
         self.price_snapshot
             .install(snapshot, current.generation_ref())
             .map_err(|_| PortError::new(PortErrorCode::Conflict, "prices.snapshot.install"))?;

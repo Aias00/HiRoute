@@ -1,20 +1,18 @@
 use super::*;
 use hiroute_integrations::model_feed::{FeedError, FeedPayload, MODEL_FEED_SCHEMA};
 
-// This fixture isolates store/activation recovery. Exact-byte signature verification is tested
-// by integrations::model_feed; production open has no key or URL override.
+use base64::{Engine, engine::general_purpose::STANDARD};
+use ring::signature::{Ed25519KeyPair, KeyPair};
+fn test_key() -> Ed25519KeyPair {
+    Ed25519KeyPair::from_seed_unchecked(&[19; 32]).unwrap()
+}
+// Test-only trust root. Production open never accepts a runtime key/URL override.
 fn verify_fixture(bytes: &[u8]) -> Result<VerifiedFeed, FeedError> {
-    let payload: FeedPayload = serde_json::from_slice(bytes).unwrap();
-    payload.validate()?;
-    Ok(VerifiedFeed {
-        payload,
-        payload_bytes: bytes.to_vec(),
-        payload_digest: CanonicalDigest::of_bytes(bytes),
-        envelope_digest: CanonicalDigest::of_bytes(bytes),
-    })
+    let keys=serde_json::to_vec(&serde_json::json!({"keys":[{"key_id":"daemon-test","ed25519":STANDARD.encode(test_key().public_key().as_ref())}]})).unwrap();
+    hiroute_integrations::model_feed::verify_envelope_with_keys(bytes, &keys)
 }
 fn payload(sequence: u64) -> Vec<u8> {
-    serde_json::to_vec(&FeedPayload {
+    let bytes = serde_json::to_vec(&FeedPayload {
         schema: MODEL_FEED_SCHEMA.into(),
         sequence,
         issued_at: "2026-10-18T00:00:00Z".into(),
@@ -22,7 +20,8 @@ fn payload(sequence: u64) -> Vec<u8> {
         records: vec![],
         featured: vec![],
     })
-    .unwrap()
+    .unwrap();
+    serde_json::to_vec(&serde_json::json!({"schema":hiroute_integrations::model_feed::MODEL_FEED_ENVELOPE_SCHEMA,"payload":STANDARD.encode(&bytes),"signatures":[{"key_id":"daemon-test","ed25519":STANDARD.encode(test_key().sign(&bytes).as_ref())}]})).unwrap()
 }
 fn open(path: &Path, min: u64) -> ModelFeedService {
     ModelFeedService::open_with_verifier(

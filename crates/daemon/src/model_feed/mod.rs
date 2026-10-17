@@ -84,7 +84,7 @@ impl ModelFeedService {
         verify: FeedVerifier,
     ) -> Result<Self, String> {
         let store = FeedStore::open(root)?;
-        let (mut state, refused) = match store.read_state() {
+        let (mut state, mut refused) = match store.read_state() {
             Ok(state) => (state, None),
             Err(reason) => (
                 FeedState {
@@ -140,7 +140,17 @@ impl ModelFeedService {
             }
         }
         if state.generation < minimum_generation {
-            return Err("feed_generation_rollback".into());
+            // A lost/rolled-back commit record cannot reset acceptance, nor block frozen Plans.
+            // Preserve the directory and use embedded facts with feed mutations refused.
+            effective = embedded.clone();
+            counts = FeedCounts::default();
+            state.held = None;
+            state.etag = None;
+            state.retrieval_enabled = false;
+            state.generation = minimum_generation
+                .checked_add(1)
+                .ok_or("feed_generation_overflow")?;
+            refused = Some("feed_state_rollback_or_missing".into());
         }
         let generation = state.generation;
         let next_attempt = state

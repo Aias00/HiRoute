@@ -34,6 +34,7 @@ use super::LocalControlAdapter;
 
 mod discovered;
 mod hermes_points;
+mod feed_admission;
 mod key_inputs;
 mod key_masks;
 mod pi_discovered;
@@ -582,20 +583,30 @@ impl ComputeManagementControlPort for LocalControlAdapter {
         &self,
         change: ComputeManagementChangeV2,
     ) -> Result<ComputeSavePreviewV2, ComputeManagementControlError> {
+        let catalog = self
+            .current_catalog()
+            .ok_or(ComputeManagementControlError::Unavailable)?;
         self.validate_subscription_save_change(&change)?;
         self.bind_saved_key_inputs(&change)?;
         let stores = self
             .stores_lock()
             .map_err(|_| ComputeManagementControlError::Unavailable)?;
-        ComputeManagementPlanner::new(
+        let preview = ComputeManagementPlanner::new(
             self.model_connections.candidate_port(),
             stores.control(),
             stores.secrets(),
             self,
         )
         .preview(change)
-        .map(|preview| preview.result)
-        .map_err(map_planning)
+        .map_err(map_planning)?;
+        self.validate_feed_save_plan(preview.plan(), &catalog)?;
+        if self.model_feed.as_ref().is_some_and(|feed| {
+            feed.available_catalog()
+                .is_none_or(|current| current.generation != catalog.generation)
+        }) {
+            return Err(ComputeManagementControlError::Conflict);
+        }
+        Ok(preview.result)
     }
 
     fn prepare_compute_save(
@@ -605,19 +616,33 @@ impl ComputeManagementControlPort for LocalControlAdapter {
         let change =
             serde_json::from_value::<ComputeManagementChangeV2>(request.spec.desired_state.clone())
                 .map_err(|_| ComputeManagementControlError::Invalid)?;
+        let catalog = self
+            .current_catalog()
+            .ok_or(ComputeManagementControlError::Unavailable)?;
         self.validate_subscription_save_change(&change)?;
         self.bind_saved_key_inputs(&change)?;
         let stores = self
             .stores_lock()
             .map_err(|_| ComputeManagementControlError::Unavailable)?;
-        ComputeManagementPlanner::new(
+        let planner = ComputeManagementPlanner::new(
             self.model_connections.candidate_port(),
             stores.control(),
             stores.secrets(),
             self,
-        )
-        .prepare_apply(request)
-        .map_err(map_planning)
+        );
+        let preview = planner.preview(change).map_err(map_planning)?;
+        self.validate_feed_save_plan(preview.plan(), &catalog)?;
+        let prepared = planner.prepare_apply(request).map_err(map_planning)?;
+        let feed = self.model_feed.clone();
+        Ok(prepared.with_revalidation(move || {
+            if feed.as_ref().is_some_and(|feed| {
+                feed.available_catalog()
+                    .is_none_or(|current| current.generation != catalog.generation)
+            }) {
+                return Err(hiroute_application::TransactionError::ChangePreviewStale);
+            }
+            Ok(())
+        }))
     }
 
     fn compute_save_result(

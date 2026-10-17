@@ -1,3 +1,4 @@
+import { ModelFeedPanel } from '../model-feed/ModelFeedPanel';
 import { ProviderIcon } from '../../ui/ProviderIcon';
 import { connectionName } from '../../ui/provider-identity';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -336,6 +337,7 @@ export function Models(props: Props) {
     : null;
 
   return <section className="models-feature" aria-label={text('我的模型', 'My models')}>
+    <details className="model-feed-section"><summary>{text('模型信息更新', 'Model feed')}</summary><ModelFeedPanel language={props.language} mutable={props.mutable} onChanged={() => { void props.onRefresh(); }} /></details>
     <div className={`split-view oc-models${detailOpen ? ' oc-model-detail-open' : ''}`}>
       <aside className="master-pane" aria-label={text('模型列表', 'Model list')}>
         <div className="master-toolbar">

@@ -15,6 +15,20 @@ struct Cli {
 enum Command {
     Generate(Arguments),
     Check(Arguments),
+    Feed {
+        #[command(subcommand)]
+        command: FeedCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum FeedCommand {
+    Build {
+        #[arg(long)]
+        check: bool,
+        #[arg(long, default_value = ".")]
+        root: PathBuf,
+    },
 }
 
 #[derive(Clone, Debug, clap::Args)]
@@ -27,9 +41,20 @@ struct Arguments {
 
 fn main() {
     let cli = Cli::parse();
+    if let Command::Feed {
+        command: FeedCommand::Build { check, root },
+    } = &cli.command
+    {
+        if let Err(error) = hiroute_release_facts::feed::build(root, *check) {
+            eprintln!("hiroute-release-facts: {error}");
+            std::process::exit(1);
+        }
+        return;
+    }
     let result = match cli.command {
         Command::Generate(arguments) => generate(&arguments.input, &arguments.output_dir),
         Command::Check(arguments) => check(&arguments.input, &arguments.output_dir),
+        Command::Feed { .. } => unreachable!(),
     };
     match result {
         Ok(compiled) => {

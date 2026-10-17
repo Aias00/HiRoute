@@ -26,6 +26,8 @@ use std::sync::{
 use tauri::{Manager, State, WebviewWindow};
 use tokio::sync::Mutex;
 mod model_connection_web;
+mod model_feed;
+use model_feed::*;
 mod model_connections;
 use model_connections::*;
 mod subscription_login;
@@ -1016,6 +1018,12 @@ pub fn run() {
             preview_restore_name,
             preview_price_change,
             model_reference_query,
+            model_feed_status,
+            model_feed_refresh,
+            model_feed_settings_apply,
+            model_feed_remove_preview,
+            model_feed_remove_apply,
+            model_availability,
             effective_price_query,
             compute_management_snapshot,
             compute_key_masks,

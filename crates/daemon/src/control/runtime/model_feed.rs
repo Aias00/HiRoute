@@ -16,11 +16,13 @@ impl LocalControlAdapter {
     }
 
     fn activate_feed_generation(&self, generation: u64) -> Result<(), String> {
-        self.stores_lock()
-            .map_err(|error| error.to_string())?
+        let stores = self.stores_lock().map_err(|error| error.to_string())?;
+        stores
             .control()
             .activate_model_feed_generation(&WorkspaceId::default(), generation)
-            .map_err(|error| error.to_string())
+            .map_err(|error| error.to_string())?;
+        self.price_snapshot.invalidate_current();
+        Ok(())
     }
 
     fn refresh_model_feed(&self) -> Result<(), String> {

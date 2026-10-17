@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 mod compute_discovery;
 mod delegation;
+mod model_feed;
 mod plan_authoring;
 mod subscription_login;
 mod worker;
@@ -543,6 +544,7 @@ pub fn generated_contract_files() -> Vec<GeneratedContractFile> {
 
     files.extend(plan_authoring::files());
     files.extend(compute_discovery::files());
+    files.extend(model_feed::files());
     let file_digests = files
         .iter()
         .map(|(path, contents)| {
