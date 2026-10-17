@@ -84,6 +84,7 @@ def run(product, plan):
     historical = product.cli('value', 'show', '--routing', plan)['data']
     operation_ids = []
     previous_setting = None
+    frozen_summary = frozen_scope = None
     for setting in [
         {'kind': 'set', 'rates': {k: {'state': 'known', 'micros_per_million_tokens': 1000000}
           for k in ['input_uncached', 'output', 'cache_read', 'cache_write']}},
@@ -108,9 +109,50 @@ def run(product, plan):
             assert estimate['routed_estimate_micros'] > 0 and estimate['estimated_savings_micros'] == 0, estimate
             assert estimate['actual_cash_micros'] is None
 
+            summary = product.cli('value', 'show', '--view', 'summary', '--routing', plan,
+                                  '--currency', 'CNY')['data']
+            assert summary['schema'] == 'hiroute.observation.analysis/v1', summary
+            assert summary['status'] in ('ready', 'partial') and summary['savings'], summary
+            assert summary['savings']['coverage'] == 'complete', summary
+            assert summary['savings']['estimated_savings_micros'] == 0, summary
+            frozen_summary, frozen_scope = summary['savings'], summary['analysis_scope']
+            ranking = product.cli('value', 'show', '--group-by', 'session', '--order-by', 'cost-desc',
+                                  '--analysis-scope', frozen_scope, '--limit', '1')['data']
+            ranked = list(ranking['costs'])
+            while ranking.get('next_cursor'):
+                ranking = product.cli('value', 'show', '--group-by', 'session', '--order-by', 'cost-desc',
+                                      '--cursor', ranking['next_cursor'], '--limit', '1')['data']
+                ranked.extend(ranking['costs'])
+                assert len(ranked) < 100
+            assert sum(r['known_sum_micros'] for r in ranked) == frozen_summary['compared_routed_subtotal_micros'], ranked
+            assert all(r['coverage'] == 'complete' for r in ranked), ranked
+            assert [r['known_sum_micros'] for r in ranked] == sorted([r['known_sum_micros'] for r in ranked], reverse=True)
+            conversations = product.cli('sessions', 'list', '--view', 'conversations',
+                                        '--analysis-scope', frozen_scope)['data']
+            assert sum(c['request_count'] for c in conversations['conversations']) == frozen_summary['request_count'], conversations
+            matching = next(c for c in conversations['conversations']
+                            if any(m['session_id'] == session['session_id'] for m in c['members']))
+            anchor = matching['analysis_session_id']
+            routing = product.cli('sessions', 'show', anchor, '--view', 'routing',
+                                  '--analysis-scope', frozen_scope)['data']
+            assert routing['transitions'], routing
+            assert any(t['reason'] and t['reason']['selection'] for t in routing['transitions']), routing
+            detail = product.cli('sessions', 'show', anchor, '--view', 'conversation', '--request', request,
+                                 '--analysis-scope', frozen_scope)['data']
+            assert len(detail['requests']) == 1 and detail['requests'][0]['request']['request_id'] == request, detail
+            assert detail['requests'][0]['content'], detail
+            assert all(c['kind'] not in ('provider_state', 'reasoning_delta', 'reasoning_finished')
+                       for c in detail['requests'][0]['content']), detail
+            scoped_request = product.cli('value', 'show', '--group-by', 'request', '--order-by', 'cost-desc',
+                                         '--request', request, '--analysis-scope', frozen_scope)['data']
+            assert len(scoped_request['costs']) == 1, scoped_request
+            assert scoped_request['costs'][0]['request_id'] == request, scoped_request
+
         replay = product.cli('prices', 'override', 'apply', '--request-stdin', payload=apply)['data']
         assert replay['operation_id'] == applied['operation_id']
         previous_setting = setting
+    pinned = product.cli('value', 'show', '--view', 'summary', '--analysis-scope', frozen_scope)['data']
+    assert pinned['savings'] == frozen_summary, (pinned, frozen_summary)
     restored = product.cli('prices', 'effective', '--request-stdin', payload=price_request)['data']
     # Follow-catalog removes manual pricing. The missing-price reason can become more precise
     # once a revisioned target exists; it must never retain the former manual rates.
