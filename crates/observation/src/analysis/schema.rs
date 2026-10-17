@@ -200,6 +200,9 @@ CREATE TABLE IF NOT EXISTS observation_native_relations_v1(
  PRIMARY KEY(workspace_id,revision));
 CREATE INDEX IF NOT EXISTS native_relation_edge_v1 ON observation_native_relations_v1(workspace_id,parent_id,child_id,revision DESC);
 CREATE INDEX IF NOT EXISTS native_relation_child_v1 ON observation_native_relations_v1(workspace_id,child_id,revision DESC);
+CREATE TABLE IF NOT EXISTS observation_native_events_v1(
+ workspace_id TEXT NOT NULL,event_id TEXT NOT NULL,body TEXT NOT NULL,
+ PRIMARY KEY(workspace_id,event_id));
 CREATE TABLE IF NOT EXISTS observation_native_states_v1(
  workspace_id TEXT NOT NULL,session_id TEXT NOT NULL,state TEXT NOT NULL,
  observer_id TEXT NOT NULL,sequence TEXT NOT NULL,observed_ms INTEGER NOT NULL,

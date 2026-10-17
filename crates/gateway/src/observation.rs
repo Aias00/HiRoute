@@ -22,6 +22,8 @@ mod producer;
 #[path = "observation/provider.rs"]
 mod provider;
 pub(super) use provider::wire_diagnostic;
+#[path = "observation/native_continuation.rs"]
+mod native_continuation;
 #[path = "observation/request.rs"]
 mod request;
 #[path = "observation/schema.rs"]
@@ -75,6 +77,7 @@ struct ObservationChannels {
     execution: ChannelProducer,
     content: ChannelProducer,
     run_relation: ChannelProducer,
+    native_continuation: ChannelProducer,
     otel: ChannelProducer,
     response_capture: CanonicalCaptureProducer,
 }
@@ -425,6 +428,12 @@ impl GatewayObservation {
                     ObservationChannel::Facts,
                     sinks.run_relation,
                 ),
+                native_continuation: channel(
+                    "native_continuation",
+                    "gateway-native-continuation",
+                    ObservationChannel::Facts,
+                    sinks.native_continuation,
+                ),
                 otel: channel(
                     "otel",
                     "gateway-otel-mapper",
@@ -455,6 +464,7 @@ impl GatewayObservation {
         ingress: IngressProtocol,
         identity: &ContextIdentityFacts,
         capture_content: bool,
+        headers: Option<&http::HeaderMap>,
     ) -> RequestObservation {
         let ordinal = self.next_request.fetch_add(1, Ordering::Relaxed);
         let ordinal_bytes = ordinal.to_be_bytes();
@@ -522,6 +532,16 @@ impl GatewayObservation {
             b"request-scoped-turn",
             &[request_id.as_bytes()],
         );
+        if let Some(headers) = headers {
+            self.observe_native_continuation(
+                authorized,
+                ingress,
+                identity,
+                headers,
+                &conversation_id,
+                &request_id,
+            );
+        }
         if let Some(run) = authorized.verified_run_observation().cloned()
             && let (Ok(workspace_id), Ok(request_identity)) = (
                 WorkspaceId::parse(workspace_id.as_str()),

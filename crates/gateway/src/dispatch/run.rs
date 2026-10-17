@@ -489,6 +489,7 @@ mod tests {
                 IngressProtocol::Responses,
                 &crate::context_hold::ContextIdentityFacts::request_scoped(),
                 true,
+                None,
             );
             let link: RunObservationLink =
                 serde_json::from_slice(&receiver.recv_timeout(Duration::from_secs(1)).unwrap())

@@ -12,7 +12,7 @@ mod runtime_state;
 pub use credential::GatewayCredentialResolver;
 pub use observation::{
     GatewayConversationContentSink, GatewayExecutionFactSink, GatewayLifecycleTelemetrySink,
-    GatewayRunRelationSink,
+    GatewayNativeContinuationSink, GatewayRunRelationSink,
 };
 pub use pricing::GatewayRequestPriceSource;
 pub use publication::GatewayPublicationAdapter;

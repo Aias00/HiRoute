@@ -196,6 +196,7 @@ impl LocalObservationStore {
         if q.view.content() {
             views::content(self, &db, reader, &mut page.requests, now)?;
         }
+        scope::check_live(&db, &s)?;
         reader.check(now, q.view.content(), q.query.is_some())?;
         Ok(page)
     }

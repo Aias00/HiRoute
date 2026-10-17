@@ -37,8 +37,8 @@ use crate::control::{
 };
 use crate::gateway_ports::{
     GatewayConversationContentSink, GatewayCredentialResolver, GatewayExecutionFactSink,
-    GatewayLifecycleTelemetrySink, GatewayPublicationAdapter, GatewayRequestPriceSource,
-    GatewayRunRelationSink, GatewayRuntimeStateStore,
+    GatewayLifecycleTelemetrySink, GatewayNativeContinuationSink, GatewayPublicationAdapter,
+    GatewayRequestPriceSource, GatewayRunRelationSink, GatewayRuntimeStateStore,
 };
 
 #[cfg(test)]
@@ -378,6 +378,9 @@ fn start_role_all_with_runtime(
     let content_sink = Arc::new(GatewayConversationContentSink::new(Arc::clone(
         &observation_store,
     )));
+    let native_continuation_sink = Arc::new(GatewayNativeContinuationSink::new(Arc::clone(
+        &observation_store,
+    )));
     let run_relation_sink = Arc::new(GatewayRunRelationSink::new(observation_store));
     let otel_sink = GatewayObservationSinks::discard().otel;
     // Consume the same instance installed by the price control writer/recovery.
@@ -393,6 +396,7 @@ fn start_role_all_with_runtime(
                 execution_fact: Arc::clone(&execution_sink) as _,
                 conversation_content: Arc::clone(&content_sink) as _,
                 run_relation: run_relation_sink,
+                native_continuation: native_continuation_sink,
                 otel: otel_sink,
             },
             OtelContentPolicy::Disabled,

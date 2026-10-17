@@ -200,7 +200,7 @@ pub(super) fn transitions(rows: &[Row]) -> Vec<AnalysisTransitionV1> {
             AnalysisTransitionKindV1::ContinuationBoundary
         } else if !r.terminal {
             AnalysisTransitionKindV1::Unknown
-        } else if prev.is_none() && r.ordinal == Some(0) && !r.turn_partial {
+        } else if prev.is_none() && r.ordinal == Some(1) && !r.turn_partial {
             AnalysisTransitionKindV1::InitialSelection
         } else if adjacent && changed == Some(true) {
             AnalysisTransitionKindV1::BetweenTurnChange

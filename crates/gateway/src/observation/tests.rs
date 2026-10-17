@@ -675,6 +675,7 @@ fn observation_channels_keep_small_bursts_contiguous_during_sink_backpressure() 
             execution_fact: discard.execution_fact,
             conversation_content: discard.conversation_content,
             run_relation: discard.run_relation,
+            native_continuation: discard.native_continuation,
             otel: discard.otel,
         };
         let selected = match channel {
@@ -749,6 +750,7 @@ fn channel_loss_and_sink_nack_are_projected_without_record_payloads() {
             execution_fact: Arc::new(RejectingSink),
             conversation_content: GatewayObservationSinks::discard().conversation_content,
             run_relation: GatewayObservationSinks::discard().run_relation,
+            native_continuation: GatewayObservationSinks::discard().native_continuation,
             otel: GatewayObservationSinks::discard().otel,
         },
         OtelContentPolicy::Disabled,

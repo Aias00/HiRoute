@@ -643,6 +643,7 @@ impl ProductionGatewayRuntime {
                 protocol,
                 &identity,
                 self.capture_observation_content,
+                Some(&request.headers),
             );
             let _observation_guard = ObservationRequestGuard(request_observation.clone());
             request_observation.record_pipeline_stages(

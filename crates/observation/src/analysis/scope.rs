@@ -181,7 +181,7 @@ pub(super) fn create(
     if range.effective_from_ms >= range.effective_to_ms {
         return Err(Error::Invalid);
     }
-    let r = schema::get(db, "relation_revision")?;
+    let r = schema::get(db, &format!("relation_revision/{}", reader.workspace()))?;
     let e = schema::get(db, "numeric_revision")?;
     let binding = reader.analysis_scope_binding()?;
     let nonce = schema::advance(db, "scope_sequence")?;
@@ -201,7 +201,10 @@ pub(super) fn create(
             |r| r.get::<_, String>(0),
         )?
         .collect::<Result<BTreeSet<_>, _>>()?;
-    let (all, _) = members::resolve(db, reader.workspace().as_str(), r, &physical)?;
+    let stable_from = expiry
+        .saturating_sub(crate::managed_text::RETENTION_MS)
+        .saturating_add(1);
+    let (all, _) = members::resolve(db, reader.workspace().as_str(), r, &physical, stable_from)?;
     let matching = if q.query.is_some() {
         Some(crate::query_v2::analysis_matching_sessions(
             db, reader, q, &range,
@@ -292,8 +295,24 @@ pub(super) fn source_count(db: &Connection, s: &Scope) -> Result<u64, Error> {
       WHERE r.workspace_id=?2 AND r.started_at_ms>=?3 AND r.started_at_ms<?4 AND (?5 IS NULL OR v.plan_id=?5) AND (?6 IS NULL OR sessions.agent_id=?6)
         AND (?7 IS NULL OR r.request_id=?7) AND r.rowid<=?8",params![s.id,s.workspace,s.range.effective_from_ms,s.range.effective_to_ms,s.plan,s.agent,s.initial_request,s.source_watermark],|r|r.get(0))?)
 }
-fn check_live(db: &Connection, s: &Scope) -> Result<(), Error> {
+pub(super) fn check_live(db: &Connection, s: &Scope) -> Result<(), Error> {
     for rev in &s.used_edges {
+        let edge:Option<(String,String,String)>=db.query_row("SELECT parent_id,child_id,request_id FROM observation_native_relations_v1 WHERE workspace_id=?1 AND revision=?2",params![s.workspace,rev],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional()?;
+        let Some((parent, child, request)) = edge else {
+            return Err(Error::Stale);
+        };
+        if !members::edge_usable(
+            db,
+            &s.workspace,
+            &parent,
+            &child,
+            &request,
+            s.expires_ms
+                .saturating_sub(crate::managed_text::RETENTION_MS)
+                .saturating_add(1),
+        )? {
+            return Err(Error::Stale);
+        }
         let invalid:bool=db.query_row("SELECT EXISTS(SELECT 1 FROM observation_native_relations_v1 e JOIN observation_native_relations_v1 old
           ON old.workspace_id=e.workspace_id AND old.parent_id=e.parent_id AND old.child_id=e.child_id
           WHERE old.workspace_id=?1 AND old.revision=?2 AND e.revision>?2 AND e.active=0)",params![s.workspace,rev],|r|r.get(0))?;
