@@ -1,6 +1,6 @@
 use super::*;
 impl ApplicationService {
-    fn test_classifier_decision_c(
+    pub(super) fn test_classifier_decision_c(
         &self,
         request: LocalControlRequestV2,
     ) -> MachineEnvelopeV2<Value> {

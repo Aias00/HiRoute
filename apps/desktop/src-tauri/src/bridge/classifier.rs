@@ -1,5 +1,5 @@
 use super::{DesktopFailure, DesktopState, main_window};
-use hiroute_application_api::{ApplyResultV1, ClassifierDecisionTestResultV1};
+use hiroute_application_api::ApplyResultV1;
 use hiroute_domain::ComplexityClassifierModeV1;
 use tauri::{State, WebviewWindow};
 use tauri_plugin_dialog::DialogExt;
@@ -11,7 +11,10 @@ const CLASSIFIER_OPENAPI: &str =
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct ClassifierDecisionTestInput {
-    classifier: ComplexityClassifierModeV1,
+    #[serde(default)]
+    classifier: Option<ComplexityClassifierModeV1>,
+    #[serde(default)]
+    request: Option<hiroute_application_api::ClassifierDecisionTestRequestV2>,
 }
 
 #[derive(serde::Deserialize)]
@@ -79,16 +82,19 @@ pub(super) async fn test_classifier_decision(
     window: WebviewWindow,
     state: State<'_, DesktopState>,
     input: ClassifierDecisionTestInput,
-) -> Result<ClassifierDecisionTestResultV1, DesktopFailure> {
+) -> Result<serde_json::Value, DesktopFailure> {
     main_window(&window)?;
-    state
-        .0
-        .lock()
-        .await
-        .as_mut()
-        .ok_or("RESIDENT_UNAVAILABLE")?
-        .test_classifier_decision(input.classifier)
-        .await
+    let mut guard = state.0.lock().await;
+    let session = guard.as_mut().ok_or("RESIDENT_UNAVAILABLE")?;
+    match (input.classifier, input.request) {
+        (Some(classifier), None) => {
+            serde_json::to_value(session.test_classifier_decision(classifier).await?)
+                .map_err(|_| "RESPONSE_DATA_INVALID".into())
+        }
+        (None, Some(request)) => serde_json::to_value(session.test_classifier_c(request).await?)
+            .map_err(|_| "RESPONSE_DATA_INVALID".into()),
+        _ => Err("CLASSIFIER_TEST_INVALID".into()),
+    }
 }
 
 #[tauri::command]

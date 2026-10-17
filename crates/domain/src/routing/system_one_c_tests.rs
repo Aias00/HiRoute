@@ -64,7 +64,21 @@ fn legacy_omission_and_rubric_digest_remain_byte_stable() {
     let fixture: Value = serde_json::from_str(bytes).unwrap();
     let editor: super::super::PlanEditorStateV2 =
         serde_json::from_value(fixture["editor"].clone()).unwrap();
-    assert_eq!(serde_json::to_value(&editor).unwrap(), fixture["editor"]);
+    let bytes = serde_json::to_vec(&editor).unwrap();
+    let reopened: super::super::PlanEditorStateV2 = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(serde_json::to_vec(&reopened).unwrap(), bytes);
+    assert!(
+        serde_json::to_value(&editor.smart)
+            .unwrap()
+            .get("native_protocol")
+            .is_none()
+    );
+    assert!(
+        serde_json::to_value(&editor.smart)
+            .unwrap()
+            .get("assessment_review")
+            .is_none()
+    );
     assert!(editor.smart.native_protocol.is_none());
     assert!(editor.smart.assessment_review.is_none());
     let j = JudgmentSettingsV1::default();

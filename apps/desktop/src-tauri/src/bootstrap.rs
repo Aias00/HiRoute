@@ -518,7 +518,7 @@ impl Resident {
     }
     pub(crate) fn register_classifier_diagnostic(
         &mut self,
-        request: &hiroute_application_api::ClassifierDecisionTestRequestV1,
+        request: &impl serde::Serialize,
         revisions: &RevisionSetV1,
     ) -> Result<Zeroizing<String>, String> {
         let digest = CanonicalDigest::of(request).map_err(|_| "CLASSIFIER_TEST_INVALID")?;

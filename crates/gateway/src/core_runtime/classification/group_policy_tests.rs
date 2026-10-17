@@ -23,7 +23,12 @@ fn outcome(
     let MaterializedRouteV1::Branches { branches, .. } = &input.policy.route else {
         unreachable!()
     };
-    let policy = branches[0].execution_policy();
+    let policy = execution_policy(
+        input,
+        &branches[0].id,
+        &branches[0].judgment,
+        &branches[0].name,
+    );
     ClassificationOutcome {
         diagnostic_failure: None,
         decision,
@@ -166,4 +171,188 @@ fn single_group_and_inherited_turn_have_no_new_group_decision() {
     let before = result.decision.clone();
     apply(&input, &history(), &mut result);
     assert_eq!(result.decision, before);
+}
+
+fn c_input() -> PlannerInputV1 {
+    let mut input = fixture();
+    let MaterializedRouteV1::Branches {
+        branches,
+        native_protocol,
+        default_branch_id,
+        ..
+    } = &mut input.policy.route
+    else {
+        unreachable!()
+    };
+    let protocol = hiroute_domain::NativeProtocolV1::default();
+    for branch in branches.iter_mut() {
+        protocol.stock_assessment(&mut branch.judgment);
+    }
+    *native_protocol = Some(
+        hiroute_domain::FrozenNativeProtocolV1::freeze(
+            &protocol,
+            hiroute_domain::branch_decision_definition(branches, default_branch_id),
+            branches.iter().map(|b| (b.id.clone(), b.judgment.clone())),
+        )
+        .unwrap(),
+    );
+    input
+}
+fn with_applicability(
+    input: &PlannerInputV1,
+    p: Option<f64>,
+    score: Option<f64>,
+    requested: bool,
+    a: Option<f64>,
+) -> ClassificationOutcome {
+    let mut result = outcome(input, p, score);
+    let protocol = native_protocol(input).unwrap();
+    let mut observation = hiroute_domain::RoutingObservationV1::not_dispatched(protocol, "code");
+    observation.target_segment = Some("stage-1".into());
+    observation.target_complete = true;
+    observation.applicability_requested = requested;
+    observation.applicability_probability = a.and_then(serde_json::Number::from_f64);
+    observation.applicability_state = if a.is_some() {
+        hiroute_domain::ApplicabilityStateV1::Valid
+    } else if requested {
+        hiroute_domain::ApplicabilityStateV1::Unavailable
+    } else {
+        hiroute_domain::ApplicabilityStateV1::NotRequested
+    };
+    observation.applicability_reason = if a.is_some() {
+        hiroute_domain::ApplicabilityReasonV1::Answered
+    } else {
+        hiroute_domain::ApplicabilityReasonV1::InvalidOutput
+    };
+    result.decision.routing_observation = Some(observation);
+    result
+}
+#[test]
+fn c_gate_boundaries_and_missing_required_question_preserve_independent_signals() {
+    use hiroute_domain::{ApplicabilityReasonV1 as R, HistoricalProtectionActionV1 as A};
+    let input = c_input();
+    for (p, s, requested, a, group, action) in [
+        (
+            Some(0.8),
+            Some(0.499),
+            true,
+            Some(0.499),
+            ExecutionGroupV1::Regular,
+            A::Suppressed,
+        ),
+        (
+            Some(0.8),
+            Some(0.499),
+            true,
+            Some(0.5),
+            ExecutionGroupV1::Primary,
+            A::Applied,
+        ),
+        (
+            Some(0.8),
+            Some(0.499),
+            true,
+            Some(0.501),
+            ExecutionGroupV1::Primary,
+            A::Applied,
+        ),
+        (
+            Some(0.8),
+            Some(0.5),
+            true,
+            Some(1.0),
+            ExecutionGroupV1::Regular,
+            A::NotNeeded,
+        ),
+        (
+            Some(0.799),
+            Some(0.1),
+            true,
+            Some(0.1),
+            ExecutionGroupV1::Primary,
+            A::NotNeeded,
+        ),
+        (
+            Some(0.9),
+            Some(0.1),
+            true,
+            None,
+            ExecutionGroupV1::Primary,
+            A::RetainedUnavailable,
+        ),
+        (
+            Some(0.9),
+            Some(0.1),
+            false,
+            None,
+            ExecutionGroupV1::Primary,
+            A::RetainedUnavailable,
+        ),
+        (
+            None,
+            Some(0.1),
+            true,
+            Some(0.0),
+            ExecutionGroupV1::Primary,
+            A::NotNeeded,
+        ),
+    ] {
+        let mut result = with_applicability(&input, p, s, requested, a);
+        apply(&input, &history(), &mut result);
+        assert_eq!(result.decision.execution_group, group);
+        let o = result.decision.routing_observation.as_ref().unwrap();
+        assert_eq!(o.protection_action, action);
+        assert!(o.validate(), "{o:?}");
+        if !requested {
+            assert_eq!(o.applicability_reason, R::RequiredQuestionMissing);
+            assert!(!o.applicability_requested);
+        }
+    }
+}
+#[test]
+fn c_applicability_never_overrides_attribution_or_a_partial_target() {
+    let input = c_input();
+    for variant in 0..5 {
+        let mut result = with_applicability(&input, Some(0.9), Some(0.1), true, Some(1.0));
+        let a = result.assessment.as_mut().unwrap();
+        match variant {
+            0 => {
+                a.partial = true;
+                result
+                    .decision
+                    .routing_observation
+                    .as_mut()
+                    .unwrap()
+                    .target_complete = false;
+            }
+            1 => a.target.plan.plan_revision = 6,
+            2 => {
+                a.target
+                    .branch_execution
+                    .as_mut()
+                    .unwrap()
+                    .policy
+                    .criteria_digest = None
+            }
+            3 => a.target.attribution = ExecutionAttribution::Mixed,
+            _ => {
+                if let ExecutionAttribution::Single {
+                    executed_branch_id, ..
+                } = &mut a.target.attribution
+                {
+                    *executed_branch_id = "docs".into();
+                }
+            }
+        }
+        apply(&input, &history(), &mut result);
+        assert_eq!(result.decision.execution_group, ExecutionGroupV1::Regular);
+        assert_eq!(
+            result
+                .decision
+                .routing_observation
+                .unwrap()
+                .protection_action,
+            hiroute_domain::HistoricalProtectionActionV1::NotConsidered
+        );
+    }
 }
