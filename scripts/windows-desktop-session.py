@@ -5,10 +5,42 @@ Uses the installed NSIS product, Windows UI Automation and window screenshots.
 It never injects browser scripts, creates a login or changes native data roots.
 """
 import json
+import ctypes
 import os
 from pathlib import Path
 import subprocess
 import time
+
+
+def desktop_state():
+    """Read the input desktop in the selected user's actual session; never unlock it."""
+    user = ctypes.WinDLL('user32', use_last_error=True)
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    user.OpenInputDesktop.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
+    user.OpenInputDesktop.restype = ctypes.c_void_p
+    user.GetThreadDesktop.argtypes = [ctypes.c_ulong]
+    user.GetThreadDesktop.restype = ctypes.c_void_p
+    user.GetUserObjectInformationW.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p,
+                                              ctypes.c_ulong, ctypes.POINTER(ctypes.c_ulong)]
+    user.CloseDesktop.argtypes = [ctypes.c_void_p]
+    user.GetForegroundWindow.restype = ctypes.c_void_p
+    def name(handle):
+        text = ctypes.create_unicode_buffer(256)
+        size = ctypes.c_ulong()
+        if not user.GetUserObjectInformationW(handle, 2, text, ctypes.sizeof(text), ctypes.byref(size)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        return text.value
+    current = name(user.GetThreadDesktop(kernel.GetCurrentThreadId()))
+    input_desktop = user.OpenInputDesktop(0, False, 1)
+    if not input_desktop:
+        return dict(thread_desktop=current, input_desktop=None, interactive=False,
+                    win32_error=ctypes.get_last_error(), foreground=user.GetForegroundWindow())
+    try:
+        actual = name(input_desktop)
+        return dict(thread_desktop=current, input_desktop=actual, interactive=actual == current == 'Default',
+                    foreground=user.GetForegroundWindow())
+    finally:
+        user.CloseDesktop(input_desktop)
 
 
 UI = r'''
@@ -268,6 +300,10 @@ def installed(helper, product, pm):
 
 
 def ui_action(run, request, shell, pid, element=None, observed=None):
+    state = desktop_state()
+    (run / 'desktop-state.json').write_text(json.dumps(state, indent=2), encoding='utf-8')
+    if not state['interactive']:
+        raise RuntimeError('The existing session input desktop is unavailable; unlock it before native UI acceptance')
     query = dict(pid=pid, image=str(shell), action=request['desktop_action'], element=element,
                  text=request.get('text'))
     if request['desktop_action'] == 'click':
@@ -290,8 +326,10 @@ def execute(request, run, product, pm, helper, activity, manifest, root):
     if activity.get('administrator_groups') is not False:
         raise ValueError('Native Desktop evidence requires a standard account, not a filtered administrator')
     action = request['desktop_action']
-    if action not in ('install', 'launch', 'snapshot', 'invoke', 'text', 'click', 'close', 'quit', 'tray-observe', 'cli', 'native-files'):
+    if action not in ('install', 'launch', 'snapshot', 'invoke', 'text', 'click', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files'):
         raise ValueError('Unknown native Desktop action')
+    if action == 'desktop-state':
+        return dict(native_entry='read-only input desktop inspection', state=desktop_state())
     if action == 'native-files':
         files = {}
         for relative in ('.codex/config.toml', '.claude/settings.json',

@@ -143,6 +143,13 @@ class Runner(unittest.TestCase):
             with self.assertRaises(ValueError):
                 host.nsis_uninstall_command('uninstaller.exe', invalid)
 
+    def test_locked_input_desktop_refuses_before_any_native_ui_process(self):
+        with patch.object(desktop, 'desktop_state', return_value={'interactive':False,'input_desktop':None}), \
+             patch.object(desktop.subprocess, 'run') as run, self.assertRaisesRegex(RuntimeError, 'unlock'):
+            desktop.ui_action(self.root, {'desktop_action':'snapshot'}, Path('shell.exe'), 42)
+        run.assert_not_called()
+        self.assertFalse(json.loads((self.root / 'desktop-state.json').read_text())['interactive'])
+
     def test_archive_traversal_and_unmanifested_entries_fail(self):
         for name in ('../escape', '/absolute', 'C:/absolute', 'dir\\file.exe', 'other.exe'):
             with self.subTest(name=name):
