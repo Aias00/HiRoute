@@ -37,3 +37,7 @@ A manually downloaded newer installer uses the same drain and transaction path. 
 ## Uninstall
 
 Use **Installed apps → HiRoute → Uninstall**. Before removing the service, HiRoute restores its supported Agent configuration. If restoration needs a decision, uninstall stops and reports the Agent IDs; resolve them in HiRoute and retry. It removes only its recorded application files, Task, shell login entry and any CLI PATH entry it added. Data is retained unless you explicitly select its removal. The separate headless state directory is never used as the NSIS install directory.
+
+If the service is unavailable, interactive recovery or uninstall offers a separate confirmation with **No** selected by default. Continuing may interrupt active work and leave configured Agents needing manual restoration; all HiRoute data is kept. Unattended mode refuses this exception, and a known restoration conflict still blocks removal. A failed first install with no Agent data can roll back without starting the service.
+
+After an upgrade commits, obsolete verified package files are removed. Uninstall removes the current verified package too; changed or foreign files are preserved.
