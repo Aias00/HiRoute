@@ -17,6 +17,7 @@ mod observation;
 mod protected_prompt;
 mod quickstart;
 mod request_input;
+mod routing_timeline;
 mod service;
 mod trust;
 mod worker;
@@ -146,6 +147,9 @@ where
     if let Some(execution) = quickstart::preview_command(&descriptor.command_id, options, &globals)
     {
         return execution;
+    }
+    if descriptor.command_id == "sessions.timeline" && options.iter().any(|o| o == "--follow") {
+        return routing_timeline::follow(options, globals);
     }
     match descriptor.command_id.as_str() {
         "schema.list" => execute_schema_list(options, globals.request_id),
@@ -384,6 +388,7 @@ fn command_payload(command_id: &str, options: &[String]) -> Result<Value, ErrorC
         "agents.check" => agent_check(options),
         "sessions.list" => observation::sessions_list(options),
         "sessions.show" => observation::session_show(options),
+        "sessions.timeline" => routing_timeline::payload(options),
         "sessions.receipt" => observation::session_receipt(options),
         "value.show" => observation::value_show(options),
         "observation.plan-quality.samples" => observation::plan_quality_samples(options),

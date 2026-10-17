@@ -310,6 +310,7 @@ impl LocalControlDaemon {
                 | "GetObservationStatus"
                 | "GetValue"
                 | "GetPlanQualitySamples"
+                | "GetRoutingTimeline"
                 | "GetPlanTrust"
                 | "GetPlanTrustReplay"
                 | "GetPlanTrustSuggestions"

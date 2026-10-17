@@ -1,7 +1,7 @@
 //! CLI input only; evidence and recommendation policy stay in Application.
 use crate::request_input::{MAX_REQUEST_BYTES, RequestInput};
 use hiroute_application_api::{ErrorCode, ObservationReadIntentV2, ObservationReadRequestV2};
-use hiroute_domain::{
+use hiroute_application_api::{
     PlanTrustQueryV1, PlanTrustReplayQueryV1, TrustGroupByV1, TrustRevisionNameV1, TrustRevisionV1,
 };
 use serde_json::Value;

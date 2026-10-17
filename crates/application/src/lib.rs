@@ -211,6 +211,9 @@ impl ApplicationService {
             "GetObservationStatus" => self.observation(request, ObservationOperation::Status),
             "GetValue" => self.observation(request, ObservationOperation::Value),
             "GetPlanQualitySamples" => self.observation(request, ObservationOperation::PlanQuality),
+            "GetRoutingTimeline" => {
+                self.observation(request, ObservationOperation::Trust("GetRoutingTimeline"))
+            }
             "GetPlanTrust" => {
                 self.observation(request, ObservationOperation::Trust("GetPlanTrust"))
             }

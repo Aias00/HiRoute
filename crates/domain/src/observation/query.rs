@@ -383,6 +383,15 @@ pub trait ObservationQueryPort: Send + Sync {
         Err(ObservationQueryError::Unavailable)
     }
 
+    fn observed_routing_timeline(
+        &self,
+        _reader: &super::ObservationReaderContext,
+        _query: &super::RoutingTimelineQueryV1,
+        _now_ms: i64,
+    ) -> Result<super::RoutingTimelinePageV1, ObservationQueryError> {
+        Err(ObservationQueryError::Unavailable)
+    }
+
     fn observed_trust_population(
         &self,
         _reader: &super::ObservationReaderContext,

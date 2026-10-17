@@ -891,6 +891,7 @@ pub(crate) fn command_request_schema(command_id: &str) -> &'static str {
         "sessions.receipt" => "hiroute.session-receipt-request/union",
         "value.show" => "hiroute.observation.query/v2",
         "observation.plan-quality.samples"
+        | "sessions.timeline"
         | "observation.plan-trust"
         | "observation.plan-trust.replay"
         | "observation.plan-trust.suggestions" => "hiroute.observation.query/v2",
@@ -969,6 +970,7 @@ pub(crate) fn command_response_schema(command_id: &str) -> &'static str {
         "sessions.status" => "hiroute.session-store-status/v1",
         "value.show" => "hiroute.observation.value-report/v2",
         "observation.plan-quality.samples" => "hiroute.plan-quality-samples-page/v1",
+        "sessions.timeline" => "hiroute.routing-timeline/v1",
         "observation.plan-trust" => "hiroute.plan-trust/v1",
         "observation.plan-trust.suggestions" => "hiroute.plan-trust-suggestions/v1",
         "observation.plan-trust.replay" => "hiroute.plan-trust-replay/v1",
@@ -1038,6 +1040,7 @@ pub(crate) fn command_stdin_channels(command_id: &str) -> &'static [&'static str
         | "sessions.receipt"
         | "value.show"
         | "observation.plan-quality.samples"
+        | "sessions.timeline"
         | "observation.plan-trust"
         | "observation.plan-trust.replay"
         | "observation.plan-trust.suggestions" => {
@@ -1153,6 +1156,7 @@ pub(crate) fn command_usage(command_id: &str, joined_path: &str) -> String {
         "sessions.list" | "value.show" | "observation.plan-quality.samples" | "observation.plan-trust" | "observation.plan-trust.replay" | "observation.plan-trust.suggestions" => {
             format!("hiroute {joined_path} ([OPTIONS] | --request-stdin) [--capability-fd <FD>] --non-interactive --output json")
         }
+        "sessions.timeline" => "hiroute sessions timeline <SESSION_ID> [--follow] [--after-watermark <WATERMARK>] [--limit <1..200>] --output json".to_owned(),
         "sessions.show" => "hiroute sessions show (<SESSION_ID> [--content <none|messages|messages-and-tools>] | --request-stdin) [--capability-fd <FD>] --non-interactive --output json".to_owned(),
         "agents.scan" => "hiroute agents scan [--request-stdin | --request-file <PATH>] --non-interactive --output json".to_owned(),
         "system.status" | "agents.list" | "sessions.status" => {
@@ -1213,6 +1217,7 @@ pub(crate) fn command_arguments(command_id: &str) -> String {
         "routing.preview" | "routing.apply" => "--request-stdin accepts only the existing strict draft, content, or lifecycle schema. Apply must reproduce Preview and carry its exact revisions, digest, and idempotency key; publication remains one recoverable Operation.".to_owned(),
         "agents.connect.preview" | "agents.connect.apply" | "agents.restore.preview" | "agents.restore.apply" => "--request-stdin accepts only the strict v1 connection or v2 managed-settings request. Model, management_skill and collaboration each support independent keep/configure/restore, including both Skills in one request. Omitted facets keep their state. Apply uses local OS socket access and is revision-checked and idempotent; it and writes only owned Agent fields; restore refuses concurrent ownership drift.".to_owned(),
         "sessions.list" => "Human options retain the v1 query. Fact-only listing is available to the same-UID Local Control peer; --query searches retained text and therefore still requires a separately delivered protected capability. --request-stdin accepts only a strict v2 sessions intent.".to_owned(),
+        "sessions.timeline" => "Required SESSION_ID; optional --after-watermark and --limit 1..200 (default 50). --follow streams one NDJSON change event per new or updated agent turn every two seconds, until interrupted. A watermark is opaque and scoped to this session and page size. No configuration is changed.".to_owned(),
         "observation.plan-trust.suggestions" => "No options. Lists optional suggestions for every active published Plan. Failed reads remain retryable errors, never an empty success. No configuration is changed.".to_owned(),
         "agents.previous-routing.preview" => "Accepts --request-stdin or --request-file with {agent,presets?}. Claude presets: opus, sonnet, haiku; Codex: default; additional-model Agents: models. Returns a draft for the ordinary settings Preview/Apply. Missing history never implies native routing.".to_owned(),
         "observation.plan-trust" | "observation.plan-trust.replay" => "Required --plan-id; optional --branch-id, --revision active|all|N, --from-ms, --to-ms, --group-by model|executor. Replay requires --thresholds-millis with 1–8 comma-separated values from 0 to 1000. A complete population above 50,000 stages or a query deadline returns retryable scope_too_large; reduce the scope where possible. Suggestions use the full retained active revision, with a post-announcement upward cohort. No settings change automatically.".to_owned(),

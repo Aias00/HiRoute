@@ -615,3 +615,5 @@ fn request_retention_drops_expired_score_and_marks_a_continuing_segment_partial(
     assert!(!sample.execution_evidence_available);
     assert!(sample.assessment.is_none());
 }
+
+mod routing_timeline;

@@ -1066,6 +1066,15 @@ const COMMANDS: &[StaticCommandDescriptor] = &[
         "Read recorded token, cache and valuation totals with coverage."
     ),
     command!(
+        "sessions.timeline",
+        ["sessions", "timeline"],
+        "GetRoutingTimeline",
+        ["CLI-069", "APP-069"],
+        Released,
+        Query,
+        "Read agent turns with selection, score, requests and costs; --follow streams changed turns."
+    ),
+    command!(
         "observation.plan-trust",
         ["observation", "plan-trust"],
         "GetPlanTrust",

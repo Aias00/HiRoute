@@ -136,6 +136,17 @@ impl ObservationQueryPort for LocalObservationStore {
             .map_err(crate::query_v2::ObservationV2Error::into_domain)
     }
 
+    fn observed_routing_timeline(
+        &self,
+        reader: &hiroute_domain::ObservationReaderContext,
+        query: &hiroute_domain::RoutingTimelineQueryV1,
+        now_ms: i64,
+    ) -> Result<hiroute_domain::RoutingTimelinePageV1, ObservationQueryError> {
+        reader.check(now_ms, false, false)?;
+        self.observed_routing_timeline(reader, query, now_ms)
+            .map_err(|error| error.into_domain())
+    }
+
     fn observed_trust_population(
         &self,
         reader: &hiroute_domain::ObservationReaderContext,

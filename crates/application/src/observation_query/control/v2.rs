@@ -157,6 +157,9 @@ impl ObservationControl {
             ObservationReadIntentV2::Sessions(q) => {
                 serde_json::to_value(self.service.observed_sessions(&reader, &q, now)?)
             }
+            ObservationReadIntentV2::RoutingTimeline(q) => {
+                serde_json::to_value(self.service.observed_routing_timeline(&reader, &q, now)?)
+            }
             ObservationReadIntentV2::Timeline(q) => {
                 serde_json::to_value(self.service.observed_timeline(&reader, &q, now)?)
             }
