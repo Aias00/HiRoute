@@ -281,7 +281,11 @@ export function fixturePlanAuthoring(plan?: Plan): AuthoringOptions {
   if (plan) {
     const { strategy, ...desired } = structuredClone(plan.desired);
     Object.assign(editor, desired, { custom_alias: plan.model_alias });
-    if (desired.mode === 'smart_saving') Object.assign(editor.smart, strategy);
+    if (desired.mode === 'smart_saving') {
+      Object.assign(editor.smart, strategy);
+      // The current options response is authoritative, including an omitted optional field.
+      if (!Object.hasOwn(strategy, 'reselect_on_user_message')) delete editor.smart.reselect_on_user_message;
+    }
     else if (desired.mode === 'free_first') Object.assign(editor.free, strategy);
     else if (desired.mode === 'custom_branches') editor.branch_routing = strategy.routing;
     else editor.candidates = strategy.candidates ?? [];
