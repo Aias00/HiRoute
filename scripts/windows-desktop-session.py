@@ -143,6 +143,17 @@ if($p.MainWindowHandle -eq 0){throw 'No visible native Desktop window'}
 [void][DesktopWindow]::ShowWindow($p.MainWindowHandle,9)
 [void][DesktopWindow]::SetForegroundWindow($p.MainWindowHandle)
 Start-Sleep -Milliseconds 500
+if([DesktopWindow]::GetForegroundWindow() -ne $p.MainWindowHandle) {
+ # Windows may deny a background observer foreground activation. Use the
+ # actual taskbar button for this installed AppUserModelID, without attaching
+ # another application's input queue or sending it keyboard events.
+ $desktop=[Windows.Automation.AutomationElement]::RootElement
+ $bar=$desktop.FindFirst([Windows.Automation.TreeScope]::Children,[Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ClassNameProperty,'Shell_TrayWnd'))
+ if($null -ne $bar) {
+  $buttons=@($bar.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::AutomationIdProperty,'Appid: ai.hiroute.desktop')) | Where-Object {-not $_.Current.IsOffscreen -and $_.Current.Name.StartsWith('HiRoute')})
+  if($buttons.Count -eq 1){$buttons[0].GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke();Start-Sleep -Milliseconds 500}
+ }
+}
 if([DesktopWindow]::GetForegroundWindow() -ne $p.MainWindowHandle){throw 'Native Desktop is not foreground; preserve observation'}
 $root=[Windows.Automation.AutomationElement]::FromHandle($p.MainWindowHandle)
 function Observe($root) {
