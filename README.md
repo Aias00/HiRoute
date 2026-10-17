@@ -43,7 +43,9 @@ previous decision. Choosing again can also keep the same model; cache reuse depe
 ## News
 
 - **Latest stable release** — macOS Desktop and Linux headless packages for x86_64 and ARM64. [Release notes](https://github.com/higress-group/HiRoute/releases/latest) · [Download](https://hiroute.ai/en/download/)
+- **2026-10-14** — [Switching Models Loses Cache, Not the Savings](news/2026-10-14-routing-cache-cost.en.md). [Website article](https://hiroute.ai/en/news/routing-cache-cost/)
 - **2026-10-04** — [GPT-6 Astra × Qwen-3.8 Flash: same quality at 90% lower cost](news/2026-10-04-astra-qwen.en.md). [Website article](https://hiroute.ai/en/news/astra-qwen-smart-routing/) · [Experiments](experiments/README.md)
+- [HiRoute Is Open Source: Help Your Agents Do More and Your Subscriptions Go Further](news/hiroute-open-source.en.md). [Website article](https://hiroute.ai/en/news/hiroute-open-source/)
 - [All news](news/README.md)
 
 ## Why HiRoute
