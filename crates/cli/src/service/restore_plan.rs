@@ -14,6 +14,15 @@ pub(super) struct Context {
     pub collaboration: bool,
 }
 
+pub(super) fn decision(mut agents: Vec<String>) -> io::Error {
+    agents.sort_unstable();
+    agents.dedup();
+    io::Error::other(format!(
+        "AGENT_RESTORE_REQUIRED:{}",
+        serde_json::to_string(&agents).unwrap_or_default()
+    ))
+}
+
 pub(super) fn contexts(list: &Value) -> io::Result<Vec<Context>> {
     let unavailable = || io::Error::other("AGENT_RESTORE_UNAVAILABLE");
     let agents = list["agents"].as_array().ok_or_else(unavailable)?;
@@ -153,6 +162,26 @@ mod tests {
             spec(root, &status("root", "not_configured", "configured"))
                 .unwrap()
                 .is_restore_only()
+        );
+    }
+
+    #[test]
+    fn blocked_codex_contexts_report_one_agent_without_hiding_other_agents() {
+        let mut blocked: Vec<_> = contexts(&codex("profile"))
+            .unwrap()
+            .into_iter()
+            .map(|context| context.agent)
+            .collect();
+        blocked.insert(1, "agent_claude_default".into());
+        let error = decision(blocked);
+        assert_eq!(error.kind(), io::ErrorKind::Other);
+        let message = error.to_string();
+        let agents: Vec<String> =
+            serde_json::from_str(message.strip_prefix("AGENT_RESTORE_REQUIRED:").unwrap()).unwrap();
+        assert_eq!(agents, ["agent_claude_default", "agent_codex_default"]);
+        assert_eq!(
+            decision(vec!["agent_codex_default".into()]).to_string(),
+            "AGENT_RESTORE_REQUIRED:[\"agent_codex_default\"]"
         );
     }
 

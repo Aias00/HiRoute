@@ -30,12 +30,6 @@ fn call(client: &LocalControlClient, operation: &str, payload: Value) -> io::Res
         .data
         .ok_or_else(|| io::Error::other("AGENT_RESTORE_UNAVAILABLE"))
 }
-fn decision(agents: Vec<String>) -> io::Error {
-    io::Error::other(format!(
-        "AGENT_RESTORE_REQUIRED:{}",
-        serde_json::to_string(&agents).unwrap_or_default()
-    ))
-}
 fn preview(client: &LocalControlClient, spec: &AgentSettingsSpecV2) -> io::Result<Value> {
     let value = call(
         client,
@@ -106,7 +100,7 @@ pub(super) fn restore(layout: &hiroute_host_runtime::StandaloneLayout) -> io::Re
         }
     }
     if !blocked.is_empty() {
-        return Err(decision(blocked));
+        return Err(restore_plan::decision(blocked));
     }
     // Refresh Preview before every Apply because prior restores may advance shared revisions.
     for (name, spec) in specs {
@@ -139,7 +133,7 @@ pub(super) fn restore(layout: &hiroute_host_runtime::StandaloneLayout) -> io::Re
             }
         })();
         if result.is_err() {
-            return Err(decision(vec![name]));
+            return Err(restore_plan::decision(vec![name]));
         }
     }
     Ok(())
