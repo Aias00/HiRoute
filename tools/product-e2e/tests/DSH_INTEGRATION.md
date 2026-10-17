@@ -38,6 +38,9 @@ configure and read back the real HiRoute UI and observe a real delegated task.
 Native project journeys initialize their owned project as a Git repository.
 DSH discovers project Skills from the nearest Git root, so an ancestor repository
 must not determine the fixture's project scope.
+The controlled main-Agent journey explicitly selects DSH's `danger-full-access`
+mode for its fixture-owned commands, matching the Worker journey's `approve-all`
+policy. It does not establish `workspace-write` sandbox support on the host.
 
 The initial research/acceptance installation is `0.2.0-rc.2`. Record the actual
 CLI version and full HiRoute SHA in each run. Production checks required public
