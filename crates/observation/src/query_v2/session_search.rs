@@ -114,6 +114,50 @@ pub(super) fn candidate_sql(only_switch: bool, exact_gram: bool) -> String {
     )
 }
 
+fn candidates_for(
+    db: &Connection,
+    only_switch: bool,
+    needle: &str,
+    expression: &str,
+    workspace: &str,
+) -> Result<String, ObservationV2Error> {
+    let cardinality:u64=db.query_row("SELECT COUNT(*) FROM (SELECT b.rowid FROM observation_text_lookup_v1 CROSS JOIN observation_text_blocks_v2 b ON b.rowid=observation_text_lookup_v1.rowid WHERE observation_text_lookup_v1 MATCH ?1 AND b.workspace=?2 LIMIT 257)",params![expression,workspace],|r|r.get(0))?;
+    if cardinality <= 256 {
+        return Ok(candidate_sql(only_switch, needle.chars().count() <= 3));
+    }
+    // Common grams should not multiply every repeated occurrence before
+    // authorizing a request. A request-indexed existential read can stop at its
+    // first verified match; sparse terms keep the source-driven existing path.
+    let old = candidate_sql(only_switch, needle.chars().count() <= 3);
+    let tail = old
+        .split_once("), ranked AS (")
+        .ok_or(ObservationV2Error::Unavailable)?
+        .1;
+    let with = if only_switch {
+        format!("{}, ", prefix(true))
+    } else {
+        "WITH ".into()
+    };
+    let exact = if needle.chars().count() <= 3 {
+        ""
+    } else {
+        " AND instr(b.folded,?10)>0"
+    };
+    Ok(format!("{with} matched_requests AS (
+       SELECT r.session_id,r.request_id,r.started_at_ms AS last_at,
+        (SELECT c.rowid FROM content_instances_v2 c INDEXED BY content_instances_v2_request
+         WHERE c.request_id=r.request_id AND {CONTENT_FILTERS}
+          AND EXISTS(SELECT 1 FROM observation_text_blocks_v2 b INDEXED BY observation_text_blocks_source
+            WHERE b.workspace=c.workspace_id AND b.digest=c.content_blob_digest
+              AND b.rowid IN(SELECT rowid FROM observation_text_lookup_v1 WHERE observation_text_lookup_v1 MATCH ?11){exact})
+          AND EXISTS(SELECT 1 FROM observation_text_index_v2 i JOIN observation_text_lookup_sources_v1 k ON k.workspace=i.workspace AND k.digest=i.digest
+            WHERE i.workspace=c.workspace_id AND i.digest=c.content_blob_digest AND i.state='ready') LIMIT 1) AS content_rowid
+       FROM logical_requests r JOIN sessions s ON s.workspace_id=r.workspace_id AND s.session_id=r.session_id
+       LEFT JOIN observation_run_links l ON l.workspace_id=r.workspace_id AND l.request_id=r.request_id
+       WHERE r.workspace_id=?1 AND {REQUEST_FILTERS}{} AND content_rowid IS NOT NULL
+      ), ranked AS ({tail}",switch_filter(only_switch)))
+}
+
 pub(super) fn index_partial_sql(only_switch: bool) -> String {
     // The uncorrelated, workspace-local ready set is built once. Check the
     // digest index before loading content metadata or authorizing a gap; ready
@@ -160,7 +204,7 @@ pub(crate) fn analysis_matching_sessions(
     )
     .0;
     let expression = crate::text_index::lookup::expression(&needle);
-    let candidate = candidate_sql(false, needle.chars().count() <= 3);
+    let candidate = candidates_for(db, false, &needle, &expression, reader.workspace().as_str())?;
     let prefix = candidate
         .split_once("), ranked AS (")
         .ok_or(ObservationV2Error::Unavailable)?
@@ -273,10 +317,13 @@ impl crate::LocalObservationStore {
         let mut hits = Vec::new();
         let mut last_at = 0;
         {
-            let mut stmt = tx.prepare(&candidate_sql(
+            let mut stmt = tx.prepare(&candidates_for(
+                &tx,
                 query.only_model_switch,
-                needle.chars().count() <= 3,
-            ))?;
+                &needle,
+                &expression,
+                reader.workspace().as_str(),
+            )?)?;
             let mut rows = stmt.query(params![
                 reader.workspace().as_str(),
                 from,

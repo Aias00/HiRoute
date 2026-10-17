@@ -201,7 +201,7 @@ fn search_scale(distinct: usize, occurrences: usize) {
     assert!(last.next_cursor.is_none() && !last.index_partial);
     // A common one-character keyword exercises nearly every distinct block,
     // including the final current-visibility read under the same 500 ms budget.
-    for word in ["e", "ch", "o"] {
+    for word in ["e", "ch", "o", "中文"] {
         let common = store
             .search_observed_sessions(&reader(true), &query(word, 200), 500)
             .unwrap_or_else(|error| panic!("common keyword {word} failed: {error:?}"));
