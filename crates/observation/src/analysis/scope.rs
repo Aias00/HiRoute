@@ -75,6 +75,19 @@ pub(super) fn load(
         .or(q.analysis_scope.as_ref())
         .ok_or(Error::Invalid)?;
     let decoded: Token = store.decode_observation_cursor(encoded)?;
+    if q.cursor.is_some() != decoded.page.is_some() {
+        return Err(Error::Invalid);
+    }
+    if let Some(encoded_scope) = &q.analysis_scope {
+        let scope: Token = store.decode_observation_cursor(encoded_scope)?;
+        if scope.schema != decoded.schema
+            || scope.scope != decoded.scope
+            || scope.binding != decoded.binding
+            || scope.page.is_some()
+        {
+            return Err(Error::Invalid);
+        }
+    }
     if decoded.schema != "analysis-scope/v1"
         || decoded.binding != reader.analysis_scope_binding()?
     {

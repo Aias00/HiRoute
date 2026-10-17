@@ -5,19 +5,7 @@ pub fn value_attempt(
     quote: &FrozenPriceQuoteV1,
     usage: &UsageBucketsV2,
 ) -> Result<AttemptValuationV2, ValuationError> {
-    quote
-        .verify_digest()
-        .map_err(|_| ValuationError::InvalidEvidence)?;
-    quote
-        .exact_target
-        .validate()
-        .map_err(|_| ValuationError::InvalidEvidence)?;
-    if quote.currency != quote.exact_target.currency
-        || quote.valuation_kind != quote.exact_target.valuation_kind
-        || quote.actual_source_ref != quote.exact_target.source_id
-    {
-        return Err(ValuationError::InvalidEvidence);
-    }
+    validate_quote(quote)?;
     let amount = amount_only(quote, usage);
     let components = [
         ("input_uncached", usage.input_uncached),
@@ -42,6 +30,23 @@ pub fn value_attempt(
         coverage: amount.coverage,
         components,
     })
+}
+
+pub(crate) fn validate_quote(quote: &FrozenPriceQuoteV1) -> Result<(), ValuationError> {
+    quote
+        .verify_digest()
+        .map_err(|_| ValuationError::InvalidEvidence)?;
+    quote
+        .exact_target
+        .validate()
+        .map_err(|_| ValuationError::InvalidEvidence)?;
+    if quote.currency != quote.exact_target.currency
+        || quote.valuation_kind != quote.exact_target.valuation_kind
+        || quote.actual_source_ref != quote.exact_target.source_id
+    {
+        return Err(ValuationError::InvalidEvidence);
+    }
+    Ok(())
 }
 
 /// Shared integer evaluator for already validated quotes. Query captures verify

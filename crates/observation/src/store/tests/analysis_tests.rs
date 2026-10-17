@@ -236,7 +236,9 @@ fn a_recorded_stage_is_evidence_for_a_selected_transition_not_a_switch() {
                     selected_branch_id: "economy".into(),
                     executed_branch_id: Some("economy".into()),
                     model_configuration_id: Some("model-a".into()),
-                    profile_digest: Some(CanonicalDigest::of(&"profile").unwrap()),
+                    profile_digest: Some(ObservedProfileDigestV1::from(CanonicalDigest::of_bytes(
+                        b"profile",
+                    ))),
                     attribution: AgentTurnAttributionV1::Single,
                     started_at_ms: 100,
                     finished_at_ms: 110,
@@ -260,4 +262,41 @@ fn a_recorded_stage_is_evidence_for_a_selected_transition_not_a_switch() {
     assert_eq!(t.kind, AnalysisTransitionKindV1::InitialSelection);
     assert_eq!(t.reason.as_ref().unwrap().segment_id, "stage-1");
     assert!(!page.transition_counts.contains_key("between_turn_change"));
+}
+
+#[test]
+fn numeric_legacy_comparison_preserves_the_original_reader_output() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    for suffix in ["legacy-numeric-a", "legacy-numeric-b", "legacy-numeric-c"] {
+        ingest(&store, suffix);
+    }
+    let q = ObservationValueQueryV2 {
+        from_ms: 0,
+        to_ms: 1000,
+        session_id: None,
+        plan_id: None,
+        currency: Some("USD".into()),
+    };
+    let prices = vec![current_price("actual", "model-a", 350_001)];
+    let reference = current_price("reference", "another-model", 1_675_531);
+    let projected = store
+        .observed_api_equivalent_value(&reader(), &q, &reference, &prices, 1000)
+        .unwrap();
+    store
+        .connection
+        .lock()
+        .execute(
+            "UPDATE observation_analysis_meta_v1 SET value='future' WHERE key='format'",
+            [],
+        )
+        .unwrap();
+    let original = store
+        .observed_api_equivalent_value(&reader(), &q, &reference, &prices, 1000)
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(&projected).unwrap(),
+        serde_json::to_value(&original).unwrap()
+    );
+    assert_eq!(projected.compared_request_count, 3);
 }

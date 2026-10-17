@@ -1,6 +1,9 @@
 //! Shared retained analysis. These tables are projections of existing source
 //! facts, never session identity, billing or routing authority.
+mod comparison;
 mod cost;
+mod legacy;
+pub(crate) use legacy::projected_comparison;
 mod members;
 mod metadata;
 mod native;

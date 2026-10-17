@@ -21,8 +21,8 @@ mod tests;
 use hiroute_domain::{FrozenPriceQuoteV1, PriceValuationKindV1};
 use serde::{Deserialize, Serialize};
 
-pub(crate) use arithmetic::amount_only;
 pub use arithmetic::value_attempt;
+pub(crate) use arithmetic::{amount_only, validate_quote};
 pub const VALUATION_ALGORITHM: &str = "hiroute.valuation/2-micros-half-up-per-attempt";
 
 pub(crate) const CACHE_HIT_ARCHIVE_SCHEMA: &str = "cache_hit_schema_v1";

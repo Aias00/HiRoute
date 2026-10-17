@@ -25,6 +25,7 @@ pub(super) fn capture(
             || p.quote.valuation_kind != PriceValuationKindV1::ApiEquivalent
             || p.quote.verify_digest().is_err()
             || p.quote.exact_target.validate().is_err()
+            || crate::valuation::validate_quote(&p.quote).is_err()
         {
             return Err(Error::Invalid);
         }

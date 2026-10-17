@@ -1,33 +1,10 @@
 //! Aggregate the complete retained input before ranking. Parsing numeric token
 //! columns never reparses per-attempt quote graphs or changes their rounding.
-use super::{
-    projection::{PricingIdentity, model_key},
-    scope::Scope,
-    selection,
-};
-use crate::{
-    query_v2::ObservationV2Error as Error,
-    valuation::{
-        MetricCoverage, RawUsage, ValuationMissingReason, amount_only, reference_usage_semantics,
-    },
-};
+use super::{comparison::RequestCost, scope::Scope, selection};
+use crate::query_v2::ObservationV2Error as Error;
 use hiroute_domain::*;
 use rusqlite::Connection;
-use std::collections::{BTreeMap, HashMap};
-
-#[derive(Default)]
-struct RequestCost {
-    id: String,
-    anchor: String,
-    attempts: u64,
-    complete: bool,
-    known: Option<u64>,
-    known_seen: bool,
-    missing_price: u64,
-    missing_usage: u64,
-    pending: bool,
-    reference: Option<u64>,
-}
+use std::collections::BTreeMap;
 
 pub(super) struct Report {
     pub rows: Vec<AnalysisCostRowV1>,
@@ -162,7 +139,6 @@ pub(super) fn evaluate(
         }
     } else {
         let prices = prices.ok_or(Error::Unavailable)?;
-        let index = price_index(prices, &currency);
         let reference = s.reference.as_ref().and_then(|id| {
             prices
                 .prices
@@ -185,121 +161,18 @@ pub(super) fn evaluate(
                 }],
             });
         }
-        let identities = {
-            let mut stmt = db.prepare("SELECT key,body FROM observation_analysis_pricing_v1")?;
-            let mut map = HashMap::new();
-            for row in
-                stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
-            {
-                let (k, v) = row?;
-                if let Ok(v) = serde_json::from_str::<PricingIdentity>(&v) {
-                    map.insert(k, v);
-                }
-            }
-            map
-        };
-        let matches: HashMap<_, _> = identities
-            .iter()
-            .map(|(key, id)| {
-                let p = if id.standard_tokens {
-                    index
-                        .get(&(
-                            id.source_id.as_str(),
-                            id.source_digest.as_str(),
-                            id.model_id.as_str(),
-                        ))
-                        .copied()
-                } else {
-                    None
-                };
-                (key.as_str(), p)
-            })
-            .collect();
-        let sql=format!("{} SELECT a.request_id,a.anchor_id,a.terminal,a.partial,a.accepted_ordinal,a.traffic,i.ordinal,i.pricing_key,i.input_tokens,i.output_tokens,i.cache_read,i.cache_write,i.reasoning
-          FROM selected a LEFT JOIN observation_analysis_attempts_v1 i ON i.workspace_id=a.workspace_id AND i.request_id=a.request_id AND i.revision=a.revision ORDER BY a.request_id,i.ordinal",selection::CTE);
-        let mut stmt = db.prepare(&sql)?;
-        let mut rows = stmt.query(&selection::params(s, q)[..])?;
-        let mut n = 0u64;
-        let mut last_excluded = String::new();
-        while let Some(r) = rows.next()? {
-            n += 1;
-            if n % 512 == 0 {
-                reader.check(now, false, false)?;
-            }
-            let id: String = r.get(0)?;
-            if r.get::<_, String>(5)? != "normal" {
-                if last_excluded != id {
-                    excluded += 1;
-                    last_excluded = id
-                }
-                continue;
-            }
-            let c = requests.entry(id.clone()).or_insert(RequestCost {
-                id,
-                anchor: r.get(1)?,
-                complete: r.get::<_, bool>(2)? && !r.get::<_, bool>(3)?,
-                known: Some(0),
-                ..Default::default()
-            });
-            let ordinal: Option<u64> = r.get(6)?;
-            c.attempts += u64::from(ordinal.is_some());
-            let key: Option<String> = r.get(7)?;
-            let identity = key.as_ref().and_then(|k| identities.get(k));
-            let price = key
-                .as_deref()
-                .and_then(|k| matches.get(k).copied().flatten());
-            let number = |column| -> rusqlite::Result<Option<u64>> {
-                Ok(r.get::<_, Option<String>>(column)?
-                    .and_then(|s| s.parse().ok()))
-            };
-            let raw = RawUsage {
-                input: number(8)?,
-                output: number(9)?,
-                read: number(10)?,
-                write: number(11)?,
-                reasoning: number(12)?,
-            };
-            if let Some((p, i)) = price.zip(identity) {
-                let amount = amount_only(
-                    &p.quote,
-                    &reference_usage_semantics(i.semantics, &raw, &p.quote),
-                );
-                if amount.coverage != MetricCoverage::Complete {
-                    c.complete = false;
-                    c.missing_usage += u64::from(
-                        amount
-                            .missing
-                            .contains(&Some(ValuationMissingReason::UsageUnknown)),
-                    );
-                    c.missing_price += u64::from(
-                        amount
-                            .missing
-                            .contains(&Some(ValuationMissingReason::PriceUnknown)),
-                    );
-                }
-                if let Some(v) = amount.known_sum_micros {
-                    c.known_seen = true;
-                    c.known = c.known.and_then(|sum| sum.checked_add(v));
-                } else {
-                    c.complete = false;
-                }
-            } else {
-                c.complete = false;
-                c.missing_price += 1;
-            }
-            let accepted: Option<u64> = r.get(4)?;
-            if ordinal.is_some() && ordinal == accepted {
-                c.reference = reference.zip(identity).and_then(|(p, i)| {
-                    let a = amount_only(
-                        &p.quote,
-                        &reference_usage_semantics(i.semantics, &raw, &p.quote),
-                    );
-                    (a.coverage == MetricCoverage::Complete)
-                        .then_some(a.known_sum_micros)
-                        .flatten()
-                });
-            }
-        }
+        let result = super::comparison::evaluate(
+            db,
+            selection::CTE,
+            &selection::params(s, q),
+            &prices.prices,
+            reference,
+            &currency,
+            reader,
+            now,
+        )?;
+        requests = result.requests;
+        excluded = result.excluded;
     }
     let group = q.group_by.unwrap_or_default();
     let count = requests.len() as u64;
@@ -414,31 +287,4 @@ fn parse_kind(s: &str) -> Option<PriceValuationKindV1> {
         "api_equivalent" => Some(PriceValuationKindV1::ApiEquivalent),
         _ => None,
     }
-}
-fn price_index<'a>(
-    p: &'a AnalysisPricesV1,
-    currency: &str,
-) -> HashMap<(&'a str, &'a str, &'a str), &'a ApiEquivalentPriceV1> {
-    let mut map = HashMap::new();
-    for p in &p.prices {
-        if p.quote.currency != currency {
-            continue;
-        }
-        let target = &p.quote.exact_target;
-        map.entry((
-            target.source_id.as_str(),
-            target.source_identity_digest.as_str(),
-            model_key(&target.model_identity),
-        ))
-        .or_insert(p);
-        if let Some(id) = &p.execution_model_configuration_id {
-            map.entry((
-                target.source_id.as_str(),
-                target.source_identity_digest.as_str(),
-                id.as_str(),
-            ))
-            .or_insert(p);
-        }
-    }
-    map
 }

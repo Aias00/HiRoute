@@ -60,53 +60,68 @@ impl crate::LocalObservationStore {
         let retained = now_ms
             .saturating_sub(crate::managed_text::RETENTION_MS)
             .saturating_add(1);
-        let args = params![
-            reader.workspace().as_str(),
-            q.from_ms.max(retained),
-            q.to_ms,
-            q.session_id,
-            q.plan_id
-        ];
-        let scope = "WITH selected AS (SELECT r.* FROM logical_requests r JOIN sessions s ON s.workspace_id=r.workspace_id AND s.session_id=r.session_id WHERE r.workspace_id=?1 AND r.started_at_ms>=?2 AND r.started_at_ms<?3 AND (?4 IS NULL OR r.session_id=?4) AND (?5 IS NULL OR EXISTS(SELECT 1 FROM valuation_requests_v2 v WHERE v.workspace_id=r.workspace_id AND v.request_id=r.request_id AND v.plan_id=?5)) AND (s.tombstone_reason IS NULL OR s.content_completeness='deleted'))";
-        let excluded: u64 = tx.query_row(
-            &format!("{scope} SELECT COUNT(*) FROM selected WHERE traffic_kind!='normal'"),
-            args,
-            |r| r.get(0),
-        )?;
-        let mut statement = tx.prepare(&format!("{scope} SELECT r.request_id,COALESCE(v.terminal,0),COALESCE(v.partial,1),v.accepted_ordinal,i.ordinal,CASE WHEN length(i.pricing_json)<=65536 THEN i.pricing_json ELSE NULL END,CASE WHEN length(i.usage_json)<=65536 THEN i.usage_json ELSE NULL END FROM selected r LEFT JOIN valuation_requests_v2 v ON v.workspace_id=r.workspace_id AND v.request_id=r.request_id LEFT JOIN valuation_attempt_inputs_v2 i ON i.workspace_id=r.workspace_id AND i.request_id=r.request_id WHERE r.traffic_kind='normal' ORDER BY r.request_id,i.ordinal LIMIT 10001"))?;
-        let mut requests = BTreeMap::<String, Comparison>::new();
-        let mut used = std::collections::BTreeSet::new();
-        let mut rows = statement.query(args)?;
-        let mut count = 0;
-        while let Some(row) = rows.next()? {
-            count += 1;
-            if count > 10000 {
-                return Err(ObservationV2Error::Unavailable);
-            }
-            let (id, terminal, partial, accepted, ordinal, pricing, usage): Input = (
-                row.get(0)?,
-                row.get(1)?,
-                row.get(2)?,
-                row.get(3)?,
-                row.get(4)?,
-                row.get(5)?,
-                row.get(6)?,
-            );
-            let comparison = requests.entry(id).or_insert_with(|| Comparison {
-                complete: terminal && !partial,
-                ..Default::default()
-            });
-            let parsed = pricing
-                .as_deref()
-                .and_then(|p| serde_json::from_str::<ExecutionPricingEvidenceV1>(p).ok());
-            let raw = usage
-                .as_deref()
-                .and_then(|u| serde_json::from_str::<RawUsage>(u).ok());
-            let Some((pricing, raw)) = parsed.zip(raw).filter(|(p, _)| p.validate().is_ok()) else {
-                comparison.complete = false;
-                continue;
-            };
-            let price = pricing.quote.as_ref().and_then(|old| {
+        let (total, compared, actual, baseline, used, excluded) = if let Some(projected) =
+            crate::analysis::projected_comparison(
+                &tx,
+                reader,
+                q,
+                reference,
+                prices,
+                q.from_ms.max(retained),
+                now_ms,
+            )? {
+            (
+                projected.total,
+                projected.compared,
+                projected.actual,
+                projected.baseline,
+                projected.used,
+                projected.excluded,
+            )
+        } else {
+            let args = params![
+                reader.workspace().as_str(),
+                q.from_ms.max(retained),
+                q.to_ms,
+                q.session_id,
+                q.plan_id
+            ];
+            let scope = "WITH selected AS (SELECT r.* FROM logical_requests r JOIN sessions s ON s.workspace_id=r.workspace_id AND s.session_id=r.session_id WHERE r.workspace_id=?1 AND r.started_at_ms>=?2 AND r.started_at_ms<?3 AND (?4 IS NULL OR r.session_id=?4) AND (?5 IS NULL OR EXISTS(SELECT 1 FROM valuation_requests_v2 v WHERE v.workspace_id=r.workspace_id AND v.request_id=r.request_id AND v.plan_id=?5)) AND (s.tombstone_reason IS NULL OR s.content_completeness='deleted'))";
+            let excluded: u64 = tx.query_row(
+                &format!("{scope} SELECT COUNT(*) FROM selected WHERE traffic_kind!='normal'"),
+                args,
+                |r| r.get(0),
+            )?;
+            let mut statement = tx.prepare(&format!("{scope} SELECT r.request_id,COALESCE(v.terminal,0),COALESCE(v.partial,1),v.accepted_ordinal,i.ordinal,CASE WHEN length(i.pricing_json)<=65536 THEN i.pricing_json ELSE NULL END,CASE WHEN length(i.usage_json)<=65536 THEN i.usage_json ELSE NULL END FROM selected r LEFT JOIN valuation_requests_v2 v ON v.workspace_id=r.workspace_id AND v.request_id=r.request_id LEFT JOIN valuation_attempt_inputs_v2 i ON i.workspace_id=r.workspace_id AND i.request_id=r.request_id WHERE r.traffic_kind='normal' ORDER BY r.request_id,i.ordinal"))?;
+            let mut requests = BTreeMap::<String, Comparison>::new();
+            let mut used = std::collections::BTreeSet::new();
+            let mut rows = statement.query(args)?;
+            while let Some(row) = rows.next()? {
+                let (id, terminal, partial, accepted, ordinal, pricing, usage): Input = (
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                );
+                let comparison = requests.entry(id).or_insert_with(|| Comparison {
+                    complete: terminal && !partial,
+                    ..Default::default()
+                });
+                let parsed = pricing
+                    .as_deref()
+                    .and_then(|p| serde_json::from_str::<ExecutionPricingEvidenceV1>(p).ok());
+                let raw = usage
+                    .as_deref()
+                    .and_then(|u| serde_json::from_str::<RawUsage>(u).ok());
+                let Some((pricing, raw)) = parsed.zip(raw).filter(|(p, _)| p.validate().is_ok())
+                else {
+                    comparison.complete = false;
+                    continue;
+                };
+                let price = pricing.quote.as_ref().and_then(|old| {
                 prices.iter().find(|p| {
                     old.billing_context == hiroute_domain::PriceBillingContextV1::StandardTokens
                         && p.quote.exact_target.source_id == old.exact_target.source_id
@@ -118,54 +133,56 @@ impl crate::LocalObservationStore {
                             || p.execution_model_configuration_id.as_deref() == Some(model_key(&old.exact_target.model_identity)))
                 })
             });
-            if let Some(price) = price {
-                used.insert(price.binding_id.clone());
-                let amount =
-                    value_attempt(&price.quote, &reference_usage(&pricing, &raw, &price.quote))
-                        .map_err(|_| ObservationV2Error::Invalid)?;
-                if amount.coverage != MetricCoverage::Complete {
+                if let Some(price) = price {
+                    used.insert(price.binding_id.clone());
+                    let amount =
+                        value_attempt(&price.quote, &reference_usage(&pricing, &raw, &price.quote))
+                            .map_err(|_| ObservationV2Error::Invalid)?;
+                    if amount.coverage != MetricCoverage::Complete {
+                        comparison.complete = false;
+                    }
+                    comparison.actual = comparison
+                        .actual
+                        .and_then(|s| s.checked_add(amount.known_sum_micros?));
+                } else {
                     comparison.complete = false;
                 }
-                comparison.actual = comparison
-                    .actual
-                    .and_then(|s| s.checked_add(amount.known_sum_micros?));
-            } else {
-                comparison.complete = false;
+                if ordinal.is_some() && accepted == ordinal {
+                    comparison.accepted = Some((pricing, raw));
+                }
             }
-            if ordinal.is_some() && accepted == ordinal {
-                comparison.accepted = Some((pricing, raw));
-            }
-        }
-        drop(rows);
-        drop(statement);
-        let total = requests.len() as u64;
-        let mut compared = 0;
-        let mut actual = Some(0u64);
-        let mut baseline = Some(0u64);
-        for (_, comparison) in requests {
-            let reference_amount = comparison
-                .accepted
-                .as_ref()
-                .map(|(pricing, raw)| {
-                    value_attempt(
-                        &reference.quote,
-                        &reference_usage(pricing, raw, &reference.quote),
-                    )
-                })
-                .transpose()
-                .map_err(|_| ObservationV2Error::Invalid)?;
-            if comparison.complete
-                && reference_amount
+            drop(rows);
+            drop(statement);
+            let total = requests.len() as u64;
+            let mut compared = 0;
+            let mut actual = Some(0u64);
+            let mut baseline = Some(0u64);
+            for (_, comparison) in requests {
+                let reference_amount = comparison
+                    .accepted
                     .as_ref()
-                    .is_some_and(|a| a.coverage == MetricCoverage::Complete)
-                && comparison.actual.is_some()
-            {
-                compared += 1;
-                actual = actual.and_then(|s| s.checked_add(comparison.actual?));
-                baseline =
-                    baseline.and_then(|s| s.checked_add(reference_amount?.known_sum_micros?));
+                    .map(|(pricing, raw)| {
+                        value_attempt(
+                            &reference.quote,
+                            &reference_usage(pricing, raw, &reference.quote),
+                        )
+                    })
+                    .transpose()
+                    .map_err(|_| ObservationV2Error::Invalid)?;
+                if comparison.complete
+                    && reference_amount
+                        .as_ref()
+                        .is_some_and(|a| a.coverage == MetricCoverage::Complete)
+                    && comparison.actual.is_some()
+                {
+                    compared += 1;
+                    actual = actual.and_then(|s| s.checked_add(comparison.actual?));
+                    baseline =
+                        baseline.and_then(|s| s.checked_add(reference_amount?.known_sum_micros?));
+                }
             }
-        }
+            (total, compared, actual, baseline, used, excluded)
+        };
         tx.commit()?;
         check_visibility(&db, visibility)?;
         reader.check(now_ms, false, false)?;
