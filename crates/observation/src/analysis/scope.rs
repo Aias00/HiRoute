@@ -74,7 +74,9 @@ pub(super) fn load(
         .or(q.analysis_scope.as_ref())
         .ok_or(Error::Invalid)?;
     let decoded: Token = store.decode_observation_cursor(encoded)?;
-    if decoded.schema != "analysis-scope/v1" || decoded.binding != reader.live_scope_binding()? {
+    if decoded.schema != "analysis-scope/v1"
+        || decoded.binding != reader.analysis_scope_binding()?
+    {
         return Err(Error::Stale);
     }
     let body: Option<String> = db
@@ -181,7 +183,7 @@ pub(super) fn create(
     }
     let r = schema::get(db, "relation_revision")?;
     let e = schema::get(db, "numeric_revision")?;
-    let binding = reader.live_scope_binding()?;
+    let binding = reader.analysis_scope_binding()?;
     let nonce = schema::advance(db, "scope_sequence")?;
     let id = digest(&("analysis-scope/v1", &binding, now, &range, r, e, q, nonce))?;
     let mut stmt=db.prepare("SELECT DISTINCT r.session_id FROM logical_requests r JOIN sessions s ON s.workspace_id=r.workspace_id AND s.session_id=r.session_id
@@ -199,7 +201,20 @@ pub(super) fn create(
             |r| r.get::<_, String>(0),
         )?
         .collect::<Result<BTreeSet<_>, _>>()?;
-    let (all, used_edges) = members::resolve(db, reader.workspace().as_str(), r, &physical)?;
+    let (all, _) = members::resolve(db, reader.workspace().as_str(), r, &physical)?;
+    let matching = if q.query.is_some() {
+        Some(crate::query_v2::analysis_matching_sessions(
+            db, reader, q, &range,
+        )?)
+    } else {
+        None
+    };
+    let matching_anchors: Option<BTreeSet<_>> = matching.as_ref().map(|(ids, _)| {
+        all.iter()
+            .filter(|m| ids.contains(&m.id))
+            .map(|m| m.anchor.clone())
+            .collect()
+    });
     let anchor = q
         .session_id
         .as_ref()
@@ -210,10 +225,22 @@ pub(super) fn create(
                 .ok_or(Error::Invalid)
         })
         .transpose()?;
-    for m in all
+    let selected: Vec<_> = all
         .into_iter()
         .filter(|m| anchor.as_ref().is_none_or(|a| a == &m.anchor))
-    {
+        .filter(|m| {
+            matching_anchors
+                .as_ref()
+                .is_none_or(|ids| ids.contains(&m.anchor))
+        })
+        .collect();
+    let used_edges = selected
+        .iter()
+        .flat_map(|m| m.edge_versions.iter().copied())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    for m in selected {
         db.execute(
             "INSERT INTO observation_analysis_members_v1 VALUES(?1,?2,?3,?4,?5)",
             params![id, m.id, m.anchor, m.predecessor, m.gap],
@@ -250,7 +277,7 @@ pub(super) fn create(
         used_edges,
         source_count: 0,
         source_watermark,
-        index_partial: false,
+        index_partial: matching.is_some_and(|(_, partial)| partial),
     };
     s.source_count = source_count(db, &s)?;
     save(db, &s)?;

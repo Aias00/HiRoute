@@ -143,6 +143,66 @@ fn native_turn(body: Option<String>) -> Option<String> {
         .and_then(|link| link.native_turn_id)
 }
 
+/// Freeze matching physical members using this same verified literal-search
+/// pipeline. No occurrence cursor, replacement text index or second search
+/// semantics is introduced by the grouped analysis consumer.
+pub(crate) fn analysis_matching_sessions(
+    db: &Connection,
+    reader: &ObservationReaderContext,
+    q: &hiroute_domain::ObservationAnalysisQueryV1,
+    range: &hiroute_domain::AnalysisTimeRangeV1,
+) -> Result<(std::collections::BTreeSet<String>, bool), ObservationV2Error> {
+    let needle = crate::text_index::fold(
+        q.query
+            .as_deref()
+            .ok_or(ObservationV2Error::Invalid)?
+            .trim(),
+    )
+    .0;
+    let expression = crate::text_index::lookup::expression(&needle);
+    let candidate = candidate_sql(false, needle.chars().count() <= 3);
+    let prefix = candidate
+        .split_once("), ranked AS (")
+        .ok_or(ObservationV2Error::Unavailable)?
+        .0;
+    let sql = format!("{prefix}) SELECT DISTINCT session_id FROM matched_requests");
+    let runs: Option<String> = None;
+    let optional: Option<String> = None;
+    let args = params![
+        reader.workspace().as_str(),
+        range.effective_from_ms,
+        range.effective_to_ms,
+        runs,
+        optional,
+        q.agent_id,
+        q.plan_id,
+        optional,
+        optional,
+        needle,
+        expression
+    ];
+    let sessions = db
+        .prepare(&sql)?
+        .query_map(args, |r| r.get(0))?
+        .collect::<Result<_, _>>()?;
+    let partial = db.query_row(
+        &index_partial_sql(false),
+        params![
+            reader.workspace().as_str(),
+            range.effective_from_ms,
+            range.effective_to_ms,
+            runs,
+            optional,
+            q.agent_id,
+            q.plan_id,
+            optional,
+            optional
+        ],
+        |r| r.get(0),
+    )?;
+    Ok((sessions, partial))
+}
+
 impl crate::LocalObservationStore {
     pub fn search_observed_sessions(
         &self,

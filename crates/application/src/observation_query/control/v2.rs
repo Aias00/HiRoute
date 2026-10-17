@@ -1,3 +1,4 @@
+mod analysis;
 mod api_equivalent;
 use super::*;
 use hiroute_application_api::{ObservationReadIntentV2, ObservationReadRequestV2};
@@ -67,13 +68,7 @@ impl ObservationControl {
                         now,
                     )?)
                 };
-                serde_json::to_value(self.service.observation_analysis(
-                    &reader,
-                    &q,
-                    range.as_ref(),
-                    None,
-                    now,
-                )?)
+                serde_json::to_value(self.analysis_read(&reader, q, range.as_ref(), now)?)
             }
             ObservationReadIntentV2::Status(_) => {
                 serde_json::to_value(self.service.observed_maintenance_status(&reader, now)?)

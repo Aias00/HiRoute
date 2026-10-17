@@ -262,7 +262,7 @@ pub(super) fn content(
     rows: &mut [AnalysisRequestV1],
     now: i64,
 ) -> Result<(), Error> {
-    let mut remaining = 128 * 1024;
+    let mut remaining: usize = 128 * 1024;
     for r in rows {
         let mut stmt=db.prepare("SELECT content_id,message_instance_id,direction,content_kind,canonical_media_type,state FROM content_instances_v2 WHERE workspace_id=?1 AND request_id=?2 AND content_kind NOT IN('provider_state','reasoning_delta','reasoning_finished') ORDER BY rowid LIMIT 17")?;
         let parts = stmt

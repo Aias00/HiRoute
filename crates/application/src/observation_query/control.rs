@@ -30,6 +30,7 @@ pub(crate) struct ObservationControl {
     value_scope: Arc<dyn ValueScopePort>,
     workspace_id: WorkspaceId,
     prices: Option<Arc<dyn crate::prices::SourcePriceControlPort>>,
+    routing: Option<Arc<dyn crate::control::RoutingFactsPort>>,
 }
 
 impl ObservationControl {
@@ -46,6 +47,7 @@ impl ObservationControl {
             value_scope,
             workspace_id: WorkspaceId::default(),
             prices: None,
+            routing: None,
         }
     }
 
@@ -54,6 +56,14 @@ impl ObservationControl {
         prices: Option<Arc<dyn crate::prices::SourcePriceControlPort>>,
     ) -> Self {
         self.prices = prices;
+        self
+    }
+
+    pub(crate) fn with_routing(
+        mut self,
+        routing: Option<Arc<dyn crate::control::RoutingFactsPort>>,
+    ) -> Self {
+        self.routing = routing;
         self
     }
 

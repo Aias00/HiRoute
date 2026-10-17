@@ -669,7 +669,8 @@ impl ApplicationService {
             ports.clock.clone(),
             ports.value_scope.clone(),
         )
-        .with_prices(ports.prices.clone());
+        .with_prices(ports.prices.clone())
+        .with_routing(ports.routing.clone());
         let analysis_details = request
             .payload
             .get("intent")

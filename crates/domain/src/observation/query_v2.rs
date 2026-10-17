@@ -152,6 +152,15 @@ impl ObservationReaderContext {
         .map(|digest| digest.to_string())
         .map_err(|_| ObservationQueryError::InvalidQuery)
     }
+
+    /// Analysis facets share an admitted same-user population. Each facet still
+    /// checks its current content/search capability and supplied grant; flags
+    /// describing this particular read are not the population's identity.
+    pub fn analysis_scope_binding(&self) -> Result<String, ObservationQueryError> {
+        crate::CanonicalDigest::of(&(&self.workspace, &self.subject, &self.allowed_runs))
+            .map(|d| d.to_string())
+            .map_err(|_| ObservationQueryError::InvalidQuery)
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

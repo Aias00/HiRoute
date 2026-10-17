@@ -97,10 +97,10 @@ impl LocalObservationStore {
             if s.basis == Some(AnalysisCostBasisV1::ApiEquivalent) && s.p.is_none() {
                 let Some(capture) = capture else {
                     page.status = AnalysisStatusV1::ChoicesRequired;
-                    page.choices.push(AnalysisChoiceV1 {
-                        field: "price_capture".into(),
-                        values: vec![],
-                        reason: "application_prices_required".into(),
+                    page.price_capture_request = Some(AnalysisPriceCaptureRequestV1 {
+                        currency: s.currency.clone(),
+                        plan_id: s.plan.clone(),
+                        reference_binding_id: s.reference.clone(),
                     });
                     scope::save(&tx, &s)?;
                     tx.commit()?;

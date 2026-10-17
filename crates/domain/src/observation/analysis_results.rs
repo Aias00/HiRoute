@@ -159,6 +159,11 @@ pub struct AnalysisSavingsV1 {
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ObservationAnalysisPageV1 {
+    /// Internal Application/Observation continuation. Never a public option or
+    /// a source of price authority supplied by a client.
+    #[serde(skip)]
+    #[schemars(skip)]
+    pub price_capture_request: Option<AnalysisPriceCaptureRequestV1>,
     pub schema: String,
     pub status: AnalysisStatusV1,
     pub analysis_scope: Option<String>,
@@ -183,6 +188,7 @@ pub struct ObservationAnalysisPageV1 {
 impl Default for ObservationAnalysisPageV1 {
     fn default() -> Self {
         Self {
+            price_capture_request: None,
             schema: "hiroute.observation.analysis/v1".into(),
             status: AnalysisStatusV1::Ready,
             analysis_scope: None,
@@ -204,4 +210,11 @@ impl Default for ObservationAnalysisPageV1 {
             next_cursor: None,
         }
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct AnalysisPriceCaptureRequestV1 {
+    pub currency: Option<String>,
+    pub plan_id: Option<String>,
+    pub reference_binding_id: Option<String>,
 }

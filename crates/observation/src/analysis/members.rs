@@ -10,6 +10,7 @@ pub(super) struct Member {
     pub anchor: String,
     pub predecessor: Option<String>,
     pub gap: Option<String>,
+    pub edge_versions: Vec<u64>,
 }
 
 pub(super) fn resolve(
@@ -88,7 +89,7 @@ pub(super) fn resolve(
             node = id.clone();
             path.clear()
         }
-        used.extend(path);
+        used.extend(path.iter().copied());
         let predecessor = if gaps.contains_key(id) {
             None
         } else {
@@ -99,6 +100,7 @@ pub(super) fn resolve(
             anchor: node,
             predecessor,
             gap: gap.or_else(|| gaps.get(id).cloned()),
+            edge_versions: path,
         });
     }
     let _ = schema::FORMAT;

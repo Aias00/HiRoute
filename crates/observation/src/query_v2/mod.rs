@@ -16,6 +16,7 @@ mod search_tests;
 #[cfg(test)]
 mod search_window_tests;
 mod session_search;
+pub(crate) use session_search::analysis_matching_sessions;
 #[cfg(test)]
 mod session_search_tests;
 mod sessions;
