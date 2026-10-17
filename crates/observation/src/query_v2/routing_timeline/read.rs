@@ -38,11 +38,12 @@ pub(super) fn read(
         .saturating_add(1)
         .max(0);
     let mut requests = BTreeMap::new();
-    let mut statement = tx.prepare("SELECT r.request_id,r.started_at_ms,r.finished_at_ms,r.outcome,l.body_json,l.conflicted,
+    let mut statement = tx.prepare("SELECT r.request_id,r.started_at_ms,r.finished_at_ms,r.outcome,CASE WHEN length(CAST(l.body_json AS BLOB))<=1048576 THEN l.body_json END,l.conflicted,
         COALESCE((SELECT MAX(e.rowid) FROM observation_link_events e WHERE e.workspace_id=r.workspace_id AND e.request_id=r.request_id AND e.rowid<=:links),0),
-        (SELECT v.body_json FROM valuation_records_v2 v WHERE v.workspace_id=r.workspace_id AND v.request_id=r.request_id AND v.rowid<=:values ORDER BY v.revision DESC LIMIT 1),
+        (SELECT CASE WHEN length(CAST(v.body_json AS BLOB))<=1048576 THEN v.body_json END FROM valuation_records_v2 v WHERE v.workspace_id=r.workspace_id AND v.request_id=r.request_id AND v.rowid<=:values ORDER BY v.revision DESC LIMIT 1),
         COALESCE((SELECT MAX(v.rowid) FROM valuation_records_v2 v WHERE v.workspace_id=r.workspace_id AND v.request_id=r.request_id AND v.rowid<=:values),0),
-        r.traffic_kind, l.run_id
+        r.traffic_kind, l.run_id,
+        COALESCE(length(CAST(l.body_json AS BLOB)),0)>1048576 OR COALESCE((SELECT length(CAST(v.body_json AS BLOB)) FROM valuation_records_v2 v WHERE v.workspace_id=r.workspace_id AND v.request_id=r.request_id AND v.rowid<=:values ORDER BY v.revision DESC LIMIT 1),0)>1048576
         FROM logical_requests r JOIN sessions s ON s.workspace_id=r.workspace_id AND s.session_id=r.session_id
         LEFT JOIN observation_run_links l ON l.workspace_id=r.workspace_id AND l.request_id=r.request_id
         WHERE r.workspace_id=:workspace AND r.session_id=:session AND r.started_at_ms>=:retained
@@ -51,7 +52,7 @@ pub(super) fn read(
           AND EXISTS(SELECT 1 FROM execution_fact_events e WHERE e.workspace_id=r.workspace_id AND e.request_id=r.request_id AND e.rowid<=:facts)
         ORDER BY r.started_at_ms,r.request_id LIMIT 10001")?;
     let mut bytes = 0usize;
-    let rows = statement.query_map(named_params! { ":workspace":reader.workspace().as_str(), ":session":session, ":retained":retained, ":runs":runs, ":facts":target.facts, ":values":target.values, ":links":target.links }, |r| Ok((r.get::<_,String>(0)?,r.get::<_,i64>(1)?,r.get::<_,Option<i64>>(2)?,r.get::<_,Option<String>>(3)?,r.get::<_,Option<String>>(4)?,r.get::<_,Option<bool>>(5)?,r.get::<_,i64>(6)?,r.get::<_,Option<String>>(7)?,r.get::<_,i64>(8)?,r.get::<_,String>(9)?,r.get::<_,Option<String>>(10)?)))?;
+    let rows = statement.query_map(named_params! { ":workspace":reader.workspace().as_str(), ":session":session, ":retained":retained, ":runs":runs, ":facts":target.facts, ":values":target.values, ":links":target.links }, |r| Ok((r.get::<_,String>(0)?,r.get::<_,i64>(1)?,r.get::<_,Option<i64>>(2)?,r.get::<_,Option<String>>(3)?,r.get::<_,Option<String>>(4)?,r.get::<_,Option<bool>>(5)?,r.get::<_,i64>(6)?,r.get::<_,Option<String>>(7)?,r.get::<_,i64>(8)?,r.get::<_,String>(9)?,r.get::<_,Option<String>>(10)?,r.get::<_,bool>(11)?)))?;
     for row in rows {
         let (
             id,
@@ -65,7 +66,11 @@ pub(super) fn read(
             value_position,
             traffic,
             recorded_run,
+            oversized,
         ) = row?;
+        if oversized {
+            return Err(ObservationV2Error::ScopeTooLarge);
+        }
         bytes += link.as_ref().map_or(0, String::len) + valuation.as_ref().map_or(0, String::len);
         if bytes > 16 * 1024 * 1024 || requests.len() >= 10_000 {
             return Err(ObservationV2Error::ScopeTooLarge);
@@ -120,7 +125,7 @@ pub(super) fn read(
             },
         );
     }
-    let mut statement = tx.prepare("SELECT e.rowid,e.request_id,e.event_id,json_extract(p.body_json,'$.fact')
+    let mut statement = tx.prepare("SELECT e.rowid,e.request_id,e.event_id,CASE WHEN length(CAST(p.body_json AS BLOB))<=1048576 THEN json_extract(p.body_json,'$.fact') END,COALESCE(length(CAST(p.body_json AS BLOB)),0)>1048576
         FROM execution_fact_events e LEFT JOIN observation_sensitive_payloads_v2 p ON p.id='fact:'||e.envelope_digest
         WHERE e.workspace_id=?1 AND e.session_id=?2 AND e.rowid<=?3 ORDER BY e.rowid LIMIT 50001")?;
     let rows = statement.query_map(
@@ -131,18 +136,22 @@ pub(super) fn read(
                 r.get::<_, String>(1)?,
                 r.get::<_, String>(2)?,
                 r.get::<_, Option<String>>(3)?,
+                r.get::<_, bool>(4)?,
             ))
         },
     )?;
     let mut facts = Vec::new();
     for (index, row) in rows.enumerate() {
-        let (position, request_id, event_id, value) = row?;
+        let (position, request_id, event_id, value, oversized) = row?;
         if index >= 50_000 {
             return Err(ObservationV2Error::ScopeTooLarge);
         }
         let Some(request) = requests.get_mut(&request_id) else {
             continue;
         };
+        if oversized {
+            return Err(ObservationV2Error::ScopeTooLarge);
+        }
         request.position.facts = position;
         request.first_fact = request.first_fact.min(position);
         let Some(value) = value else {
@@ -162,19 +171,28 @@ pub(super) fn read(
     }
     // Reuse the valuation owner's cumulative/delta normalization. Unknown usage
     // remains unknown rather than silently turning a partial sum into a total.
-    let mut statement = tx.prepare("SELECT i.request_id,i.usage_json FROM valuation_attempt_inputs_v2 i JOIN logical_requests r ON r.workspace_id=i.workspace_id AND r.request_id=i.request_id WHERE r.workspace_id=?1 AND r.session_id=?2 ORDER BY i.request_id,i.ordinal LIMIT 50001")?;
+    let mut statement = tx.prepare("SELECT i.request_id,CASE WHEN length(CAST(i.usage_json AS BLOB))<=65536 THEN i.usage_json END,COALESCE(length(CAST(i.usage_json AS BLOB)),0)>65536 FROM valuation_attempt_inputs_v2 i JOIN logical_requests r ON r.workspace_id=i.workspace_id AND r.request_id=i.request_id WHERE r.workspace_id=?1 AND r.session_id=?2 ORDER BY i.request_id,i.ordinal LIMIT 50001")?;
     let rows = statement.query_map(
         rusqlite::params![reader.workspace().as_str(), session],
-        |r| Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?)),
+        |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, Option<String>>(1)?,
+                r.get::<_, bool>(2)?,
+            ))
+        },
     )?;
     let mut usage: BTreeMap<String, [Option<u64>; 3]> = BTreeMap::new();
     for (index, row) in rows.enumerate() {
         if index >= 50_000 {
             return Err(ObservationV2Error::ScopeTooLarge);
         }
-        let (id, body) = row?;
+        let (id, body, oversized) = row?;
         if !requests.contains_key(&id) {
             continue;
+        }
+        if oversized {
+            return Err(ObservationV2Error::ScopeTooLarge);
         }
         bytes += body.as_ref().map_or(0, String::len);
         if bytes > 32 * 1024 * 1024 {

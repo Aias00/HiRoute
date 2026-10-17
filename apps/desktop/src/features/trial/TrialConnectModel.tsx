@@ -30,7 +30,7 @@ export function TrialConnectModel({ model, language, management, mutable, onSave
       },
       checkRegisteredModelConnection: async request => {
         const result = await owner.checkRegisteredModelConnection(request);
-        observed.current.set(result.candidate.candidate.candidate_ref, new Set(result.candidate.models.filter(m => m.selectable).map(m => m.model_ref)));
+        observed.current.set(result.candidate.candidate.candidate_ref, new Set(result.candidate.models.filter(m => m.selectable && (result.observed_model_ids?.includes(m.upstream_model_id) || (result.inference === 'verified' && result.inference_model_id === m.upstream_model_id))).map(m => m.model_ref)));
         return result;
       },
       // This flow is for the selected registered identity, with the same protected

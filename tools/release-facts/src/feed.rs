@@ -39,6 +39,10 @@ pub struct SupportedFeedClient {
 }
 
 pub fn build(root: &Path, check: bool) -> Result<(), String> {
+    build_against(root, check, None)
+}
+
+pub fn build_against(root: &Path, check: bool, base: Option<&str>) -> Result<(), String> {
     let read =
         |path: &str| std::fs::read(root.join(path)).map_err(|_| format!("cannot read {path}"));
     let policy: Policy = serde_json::from_slice(&read("assets/model-feed/policy.json")?)
@@ -51,6 +55,17 @@ pub fn build(root: &Path, check: bool) -> Result<(), String> {
     let featured: Vec<FeaturedModel> =
         serde_json::from_slice(&read("assets/model-feed/featured.json")?)
             .map_err(|_| "invalid featured entries")?;
+    // Bootstrap still validates maintained editorial/publication inputs with the client schema.
+    FeedPayload {
+        schema: MODEL_FEED_SCHEMA.into(),
+        sequence: publication.sequence,
+        issued_at: publication.issued_at.clone(),
+        source_revision: "0".repeat(40),
+        records: vec![],
+        featured: featured.clone(),
+    }
+    .validate()
+    .map_err(|e| e.to_string())?;
     let index: ReleaseIndex = serde_json::from_slice(&read("contracts/releases/index.v1.json")?)
         .map_err(|_| "invalid release index")?;
     if index.schema != "hiroute.release-contract-index/v1" {
@@ -110,9 +125,11 @@ pub fn build(root: &Path, check: bool) -> Result<(), String> {
     }
     clients
         .sort_by_key(|client| semver::Version::parse(&client.version).expect("validated release"));
-    let previous: Option<FeedPayload> =
-        serde_json::from_slice(&read("assets/model-feed/payload.json")?)
-            .map_err(|_| "invalid previous payload")?;
+    let previous: Option<FeedPayload> = serde_json::from_slice(&git_bytes(
+        root,
+        &["show", "HEAD:assets/model-feed/payload.json"],
+    )?)
+    .map_err(|_| "invalid previous payload")?;
     if let Some(previous) = &previous {
         previous.validate().map_err(|e| e.to_string())?;
     }
@@ -166,10 +183,36 @@ pub fn build(root: &Path, check: bool) -> Result<(), String> {
             previous.as_ref(),
         )?;
         if let Some(previous) = &previous {
-            if payload.sequence < previous.sequence
-                || payload.sequence == previous.sequence && payload != *previous
-            {
-                return Err("changed publication requires a higher sequence".into());
+            validate_transition(previous, &payload)?;
+        }
+        if let Some(base) = base {
+            let reference = git(
+                root,
+                &["rev-parse", "--verify", &format!("{base}^{{commit}}")],
+            )?;
+            let reference = reference.trim();
+            let exists = git(
+                root,
+                &[
+                    "ls-tree",
+                    "--name-only",
+                    reference,
+                    "--",
+                    "assets/model-feed/payload.json",
+                ],
+            )?;
+            if !exists.trim().is_empty() {
+                let baseline: Option<FeedPayload> = serde_json::from_slice(&git_bytes(
+                    root,
+                    &[
+                        "show",
+                        &format!("{reference}:assets/model-feed/payload.json"),
+                    ],
+                )?)
+                .map_err(|_| "invalid baseline payload")?;
+                if let Some(baseline) = baseline {
+                    validate_transition(&baseline, &payload)?;
+                }
             }
         }
         let bytes = super::canonical_sorted_json_line(&payload).map_err(|e| e.to_string())?;
@@ -194,6 +237,30 @@ pub fn build(root: &Path, check: bool) -> Result<(), String> {
             "validated against recorded clients"
         }
     );
+    Ok(())
+}
+
+fn validate_transition(previous: &FeedPayload, next: &FeedPayload) -> Result<(), String> {
+    previous.validate().map_err(|e| e.to_string())?;
+    if next.sequence < previous.sequence || (next.sequence == previous.sequence && next != previous)
+    {
+        return Err("changed publication requires a higher sequence".into());
+    }
+    for record in &next.records {
+        if let Some(old) = previous
+            .records
+            .iter()
+            .find(|r| r.kind() == record.kind() && r.id() == record.id())
+        {
+            if old.included_on() != record.included_on() {
+                return Err(format!(
+                    "first inclusion date changed for {} {}",
+                    record.kind(),
+                    record.id()
+                ));
+            }
+        }
+    }
     Ok(())
 }
 
@@ -346,10 +413,38 @@ pub fn project(
     }
     // A model must have a legal capability + paid/subscription offer on at least one client.
     // Registry/adapters are never filled in by the feed to force admission.
+    let mut executable_minimums: BTreeMap<String, String> = BTreeMap::new();
     let mut minimums: BTreeMap<(String, String), String> = BTreeMap::new();
     for client in clients {
         let admission = admit(&client.catalog, &payload, &client.version)
             .map_err(|e| format!("feed admission failed for {}: {e}", client.version))?;
+        let effective = client
+            .catalog
+            .with_feed(&admission)
+            .map_err(|e| e.to_string())?;
+        for id in &ids {
+            let executable = effective
+                .model_data()
+                .model_endpoint_capabilities
+                .iter()
+                .any(|cap| {
+                    cap.model_configuration_id == *id
+                        && effective.model_data().offers.iter().any(|offer| {
+                            offer.endpoint_profile_id == cap.endpoint_profile_id
+                                && offer.endpoint_profile_revision == cap.endpoint_profile_revision
+                                && offer.billing_class != hiroute_domain::BillingClass::Free
+                                && offer
+                                    .model_configuration_ids
+                                    .iter()
+                                    .any(|member| member.as_str() == *id)
+                        })
+                });
+            if executable && client.catalog.model_data().model(id).is_none() {
+                executable_minimums
+                    .entry((*id).to_owned())
+                    .or_insert_with(|| client.version.clone());
+            }
+        }
         for record in &admission.records {
             if record.outcome == RecordAdmission::Applied {
                 minimums
@@ -358,7 +453,37 @@ pub fn project(
             }
         }
     }
-    let eligible=ids.into_iter().filter(|id|minimums.contains_key(&("model".into(),(*id).into())) && payload.records.iter().any(|r|matches!(r,FeedRecord::ModelEndpointCapability{record,..} if record.model_configuration_id==*id) && minimums.contains_key(&(r.kind().into(),r.id().into()))) && payload.records.iter().any(|r|matches!(r,FeedRecord::Offer{record,..} if record.model_configuration_ids.iter().any(|model|model==id)) && minimums.contains_key(&(r.kind().into(),r.id().into())))).map(str::to_owned).collect::<BTreeSet<_>>();
+    let eligible = executable_minimums.keys().cloned().collect::<BTreeSet<_>>();
+    for id in &ids {
+        if !eligible.contains(*id) {
+            println!("model feed: {id} waits for a compatible supported release");
+        }
+    }
+    for (id, minimum) in executable_minimums {
+        minimums.insert(("model".into(), id), minimum);
+    }
+    // Dependent rows advertise the same usable floor as their model/offer, even when
+    // their own scalar facts could be parsed by an earlier registry.
+    for record in &payload.records {
+        let key = (record.kind().to_owned(), record.id().to_owned());
+        let mut dependencies = Vec::new();
+        if let Some(id) = record.model_id() {
+            dependencies.push(("model".to_owned(), id.to_owned()));
+        }
+        if let FeedRecord::PriceRate { record, .. } = record {
+            dependencies.push(("offer".to_owned(), record.offer_ref.clone()));
+        }
+        let required = dependencies
+            .iter()
+            .filter_map(|key| minimums.get(key))
+            .filter_map(|v| semver::Version::parse(v).ok())
+            .max();
+        if let (Some(minimum), Some(required)) = (minimums.get_mut(&key), required) {
+            if semver::Version::parse(minimum).map_err(|_| "invalid client minimum")? < required {
+                *minimum = required.to_string();
+            }
+        }
+    }
     payload.records.retain_mut(|record| {
         let Some(minimum) = minimums.get(&(record.kind().into(), record.id().into())) else {
             return false;

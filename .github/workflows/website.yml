@@ -91,7 +91,12 @@ jobs:
           cache-dependency-path: apps/website/package-lock.json
       - uses: ./.github/actions/ci-setup
       - name: Validate model feed with the client admission code
-        run: cargo run -p hiroute-release-facts -- feed build --check
+        env:
+          MODEL_FEED_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          feed_args=()
+          if [[ -n "$MODEL_FEED_BASE" && "$MODEL_FEED_BASE" != "0000000000000000000000000000000000000000" ]]; then feed_args=(--base "$MODEL_FEED_BASE"); fi
+          cargo run -p hiroute-release-facts -- feed build --check "${feed_args[@]}"
       - name: Check unsigned feed structure
         run: node apps/website/scripts/model-feed.mjs check
       - uses: actions/upload-artifact@v4

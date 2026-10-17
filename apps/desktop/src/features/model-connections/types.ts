@@ -260,6 +260,7 @@ export type ComputeCandidateView = {
 };
 
 export type ModelConnectionCheckView = {
+  observed_model_ids?: string[];
   inference_model_id?: string | null;
   candidate: ComputeCandidateView;
   target: {

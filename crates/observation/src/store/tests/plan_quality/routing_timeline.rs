@@ -104,3 +104,43 @@ fn timeline_pages_replay_late_scores_without_losing_or_repeating_changes() {
         Err(crate::query_v2::ObservationV2Error::Stale)
     ));
 }
+
+#[test]
+fn timeline_refuses_oversized_stored_fact_before_deserializing_it() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = open_store(directory.path());
+    let fixture = Fixture::new("timeline-bounded");
+    let channel = fact_channel(&fixture, 256 * 1024);
+    assert!(matches!(
+        offer_fact(
+            &writer(&store),
+            &channel,
+            fixture.fact(
+                1,
+                finished(&fixture, "segment", "turn", 1, "smart_saving", 1000),
+                1010
+            )
+        ),
+        WriterCycleOutcome::Ack(_)
+    ));
+    store
+        .connection
+        .lock()
+        .execute(
+            "UPDATE observation_sensitive_payloads_v2 SET body_json=?1",
+            ["x".repeat(1024 * 1024 + 1)],
+        )
+        .unwrap();
+    assert!(matches!(
+        store.observed_routing_timeline(
+            &reader(),
+            &RoutingTimelineQueryV1 {
+                session_id: fixture.session.to_string(),
+                after_watermark: None,
+                limit: 100,
+            },
+            5000
+        ),
+        Err(crate::query_v2::ObservationV2Error::ScopeTooLarge)
+    ));
+}

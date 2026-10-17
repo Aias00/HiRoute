@@ -138,6 +138,8 @@ jobs:
         working-directory: apps/desktop
       - uses: ./.github/actions/ci-setup
       - name: Current metadata generation
+        env:
+          MODEL_FEED_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           python3 tools/model-metadata/close_model_metadata.py --check
           python3 tools/model-metadata/validate_catalog.py
@@ -146,7 +148,9 @@ jobs:
           python3 assets/model-data/current/generate.py --check
           python3 assets/release-facts/current/prepare-bundle.py
           python3 assets/release-facts/current/prepare-bundle.py --check
-          cargo run -p hiroute-release-facts -- feed build --check
+          feed_args=()
+          if [[ -n "$MODEL_FEED_BASE" && "$MODEL_FEED_BASE" != "0000000000000000000000000000000000000000" ]]; then feed_args=(--base "$MODEL_FEED_BASE"); fi
+          cargo run -p hiroute-release-facts -- feed build --check "${feed_args[@]}"
           git diff --exit-code
       - name: Subscription acceptance harness safety
         run: |
