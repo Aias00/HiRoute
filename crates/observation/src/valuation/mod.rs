@@ -5,7 +5,7 @@ mod arithmetic;
 mod comparison;
 mod reference_usage;
 pub use comparison::{ReferenceComparisonV2, compare_reference};
-pub(crate) use reference_usage::reference_usage;
+pub(crate) use reference_usage::{reference_usage, reference_usage_semantics};
 mod ingest;
 mod retention;
 mod schema;
@@ -22,6 +22,7 @@ mod tests;
 use hiroute_domain::{FrozenPriceQuoteV1, PriceValuationKindV1};
 use serde::{Deserialize, Serialize};
 
+pub(crate) use arithmetic::amount_only;
 pub use arithmetic::value_attempt;
 pub const VALUATION_ALGORITHM: &str = "hiroute.valuation/2-micros-half-up-per-attempt";
 

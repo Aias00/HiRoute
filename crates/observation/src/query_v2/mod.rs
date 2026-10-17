@@ -105,6 +105,8 @@ impl From<hiroute_domain::ObservationQueryError> for ObservationV2Error {
         match error {
             hiroute_domain::ObservationQueryError::Unauthorized => Self::Unauthorized,
             hiroute_domain::ObservationQueryError::InvalidQuery => Self::Invalid,
+            hiroute_domain::ObservationQueryError::ReadTimeout => Self::Timeout,
+            hiroute_domain::ObservationQueryError::ReaderBusy => Self::Busy,
             _ => Self::Unavailable,
         }
     }

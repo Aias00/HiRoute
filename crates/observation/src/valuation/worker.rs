@@ -58,6 +58,12 @@ impl LocalObservationStore {
                 params![workspace, request],
             )?;
         }
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()
+            .and_then(|n| i64::try_from(n.as_millis()).ok())
+            .unwrap_or(0);
+        crate::analysis::sync(&transaction, 200, now_ms)?;
         transaction.commit()?;
         Ok(pending.len())
     }
@@ -226,7 +232,12 @@ pub(super) fn settle_one(
 }
 
 pub(crate) fn normalize(pricing: &ExecutionPricingEvidenceV1, raw: &RawUsage) -> UsageBucketsV2 {
-    let semantics = pricing.usage_semantics;
+    normalize_semantics(pricing.usage_semantics, raw)
+}
+pub(crate) fn normalize_semantics(
+    semantics: hiroute_domain::UsageSemanticsV1,
+    raw: &RawUsage,
+) -> UsageBucketsV2 {
     if semantics.frame_kind == UsageFrameKindV1::Unknown {
         return UsageBucketsV2::default();
     }

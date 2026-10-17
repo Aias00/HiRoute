@@ -1,6 +1,6 @@
 //! Amount-only normalization for an explicitly selected current-price comparison.
 //! Equal-rate buckets can be combined algebraically; stored usage is never filled in.
-use super::{RawUsage, UsageBucketsV2, normalize};
+use super::{RawUsage, UsageBucketsV2};
 use hiroute_domain::{
     ExecutionPricingEvidenceV1, FrozenPriceQuoteV1, InputUsageMeaningV1, TokenRateV1,
     UsageFrameKindV1,
@@ -11,8 +11,15 @@ pub(crate) fn reference_usage(
     raw: &RawUsage,
     quote: &FrozenPriceQuoteV1,
 ) -> UsageBucketsV2 {
-    let mut usage = normalize(pricing, raw);
-    let semantics = pricing.usage_semantics;
+    reference_usage_semantics(pricing.usage_semantics, raw, quote)
+}
+
+pub(crate) fn reference_usage_semantics(
+    semantics: hiroute_domain::UsageSemanticsV1,
+    raw: &RawUsage,
+    quote: &FrozenPriceQuoteV1,
+) -> UsageBucketsV2 {
+    let mut usage = super::worker::normalize_semantics(semantics, raw);
     if semantics.frame_kind == UsageFrameKindV1::Unknown
         || semantics.input != InputUsageMeaningV1::IncludesExclusiveCache
         || !semantics.cache_buckets_exclusive

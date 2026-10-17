@@ -92,6 +92,22 @@ fn run(
             .duration_since(std::time::UNIX_EPOCH)
             .ok()
             .and_then(|time| i64::try_from(time.as_millis()).ok());
+        // Reuse this lifecycle without limiting catch-up to the settlement
+        // tick's sixteen requests. Release the writer after each <=200 batch.
+        let analysis_start = Instant::now();
+        let mut analysis_failed = false;
+        if let Some(now) = now_ms {
+            while analysis_start.elapsed() < Duration::from_millis(50) {
+                match store.reconcile_analysis_batch(now) {
+                    Ok(0) => break,
+                    Ok(_) => std::thread::yield_now(),
+                    Err(_) => {
+                        analysis_failed = true;
+                        break;
+                    }
+                }
+            }
+        }
         let retention_failed = now_ms
             .map(|now| {
                 store.managed_text_expire_pending(now, 16).is_err()
@@ -123,6 +139,7 @@ fn run(
             || gc_failed
             || hook_failed
             || index_failed
+            || analysis_failed
         {
             store
                 .maintenance_errors

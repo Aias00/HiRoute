@@ -25,6 +25,17 @@ use crate::value::aggregate_entries;
 use filters::{matches_switch, validate_list_query};
 
 impl ObservationQueryPort for LocalObservationStore {
+    fn observation_analysis(
+        &self,
+        reader: &hiroute_domain::ObservationReaderContext,
+        query: &hiroute_domain::ObservationAnalysisQueryV1,
+        range: Option<&hiroute_domain::AnalysisTimeRangeV1>,
+        prices: Option<&hiroute_domain::AnalysisPricesV1>,
+        now_ms: i64,
+    ) -> Result<hiroute_domain::ObservationAnalysisPageV1, ObservationQueryError> {
+        self.observed_analysis(reader, query, range, prices, now_ms)
+            .map_err(crate::query_v2::ObservationV2Error::into_domain)
+    }
     fn observed_maintenance_status(
         &self,
         reader: &hiroute_domain::ObservationReaderContext,
