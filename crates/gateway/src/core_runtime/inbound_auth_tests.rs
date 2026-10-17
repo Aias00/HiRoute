@@ -121,6 +121,23 @@ fn native_messages_api_key_carrier_is_limited_to_run_model_authority() {
 }
 
 #[test]
+fn auxiliary_chat_uses_the_existing_model_bearer_without_changing_responses_admission() {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        AUTHORIZATION,
+        HeaderValue::from_static("Bearer local-model-grant"),
+    );
+    assert_eq!(
+        inbound_authorization("/v1/chat/completions", &headers).as_deref(),
+        Some("Bearer local-model-grant")
+    );
+    assert!(inbound_authorization("/v1/responses", &headers).is_none());
+    headers.remove(AUTHORIZATION);
+    headers.insert("x-api-key", HeaderValue::from_static("local-model-grant"));
+    assert!(inbound_authorization("/v1/messages", &headers).is_none());
+}
+
+#[test]
 fn model_entry_uses_independent_grant_without_native_bearer_fallback() {
     let mut headers = HeaderMap::new();
     headers.insert(

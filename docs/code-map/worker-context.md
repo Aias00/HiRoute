@@ -32,7 +32,9 @@ select another through the same target-read flow before settings become availabl
 The common [discovery preference](../../apps/desktop/src/features/agents/discovery.ts)
 remembers explicit targets as hints, with backend revalidation and per-profile failure isolation.
 Its bundled native middleware carries the real
-session into trusted Gateway correlation. All six supported Agents have independent management and collaboration Skills;
+session into trusted Gateway correlation. The managed provider also uses the same
+scoped model grant as its native API key for auxiliary Chat requests; global model
+headers are not a credential carrier. All six supported Agents have independent management and collaboration Skills;
 [shared Skill facts](../../crates/daemon/src/control/runtime/settings_facts/skills.rs)
 resolve their native roots through the existing ownership/Operation engine. Legacy
 primary roles retain their original resource meanings; the second Skill has a separate

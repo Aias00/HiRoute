@@ -73,12 +73,24 @@ to adopt the managed default. Static channel selections are reported without
 exposing channel IDs; unobserved live session selection remains unknown. Auxiliary
 model slots stay under native control.
 
+The managed provider's API key contains the same scoped local model grant as its
+`X-HiRoute-Token` header. Hermes auxiliary Chat calls bypass request middleware;
+the existing Chat bearer channel lets them authenticate without changing Gateway
+admission. Keep this credential in that provider, never global model headers that
+can reach another auxiliary provider. Existing Responses/Messages header rules
+remain unchanged. Protected restore records retain their exact prior provider
+values, including older placeholder keys.
+
 The plugin matches the exact saved provider definition, alias, native address and
 transport; it carries the token and the actual native session ID through existing
 SDK headers. It preserves unrelated request parameters and headers. Invalid or
 missing IDs do not remove authorization. Gateway treats identity as Hermes only
 for a digest-bound managed consumer, then scopes it to that connection; equal
 content never supplies missing Hermes identity.
+Optional compression ancestry comes from the selected profile's read-only native
+SessionDB interfaces. Missing or unsupported evidence leaves a continuation gap;
+it never blocks the model call. Observation owns the verified relation and scoped
+analysis, preserving each physical session and its receipts.
 
 Source import is separate from model connection. The shared V2 scan/prepare flow
 groups equal native scope/provider/address/protocol/authentication branches, then

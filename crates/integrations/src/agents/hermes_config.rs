@@ -146,8 +146,11 @@ pub fn hermes_configure(
         vec!["model".into(), "context_length".into()],
         Some(json!(model.context_window_tokens)),
     );
+    // Hermes auxiliary Chat calls bypass request middleware and use this
+    // provider's standard API key. Reuse the same scoped model grant; global
+    // model headers could send it to an unrelated auxiliary provider.
     changes.insert(vec!["providers".into(),concrete_provider.clone()],Some(json!({
-        "name":"HiRoute","api":base,"transport":mode,"api_key":"hiroute-local-placeholder",
+        "name":"HiRoute","api":base,"transport":mode,"api_key":token,
         "default_model":model.alias,"models":{&model.alias:{"context_length":model.context_window_tokens}},
         "extra_headers":{"X-HiRoute-Token":token}
     })));
@@ -419,6 +422,10 @@ mod tests {
         assert_eq!(provider.len(), 25);
         assert_eq!(provider, native_provider_id(&model.alias));
         assert_eq!(doc.value["providers"][provider]["name"], "HiRoute");
+        assert_eq!(
+            doc.value["providers"][provider]["api_key"],
+            "synthetic-local-grant-token"
+        );
         assert_eq!(doc.value["providers"].as_object().unwrap().len(), 1);
         let reopened = HermesConfigRestoreV1::decode(&updated.encode().unwrap()).unwrap();
         assert!(reopened.applied(&compact).unwrap());
@@ -437,6 +444,51 @@ mod tests {
             provider
         );
         assert_eq!(next.restore(&again).unwrap().as_slice(), original);
+    }
+
+    #[test]
+    fn chat_auxiliary_key_is_provider_scoped_and_the_complete_before_image_survives() {
+        let original = br#"model:
+  default: user-model
+  provider: user-provider
+  default_headers: {X-User-Header: preserve}
+providers:
+  user-provider: {api: 'https://user.invalid/v1', api_key: unrelated-user-key}
+auxiliary:
+  title: {provider: user-provider, model: user-title-model}
+"#;
+        let mut model = fixture_model("hiroute-auxiliary-chat");
+        model.protocol = hiroute_domain::AgentIngressProtocolV1::ChatCompletions;
+        let (managed, record) = hermes_configure(
+            original,
+            None,
+            "hiroute-main-owner",
+            "http://127.0.0.1:8317/v1",
+            &model,
+            "synthetic-local-grant-token",
+        )
+        .unwrap();
+        let doc = HermesDocument::parse(&managed).unwrap();
+        let provider = doc.value["model"]["provider"].as_str().unwrap();
+        assert_eq!(
+            doc.value["providers"][provider]["api_key"],
+            "synthetic-local-grant-token"
+        );
+        assert_eq!(
+            doc.value["providers"][provider]["extra_headers"]["X-HiRoute-Token"],
+            "synthetic-local-grant-token"
+        );
+        assert!(doc.value.pointer("/model/extra_headers").is_none());
+        let prior = HermesDocument::parse(original).unwrap();
+        for path in [
+            "/model/default_headers",
+            "/providers/user-provider",
+            "/auxiliary",
+        ] {
+            assert_eq!(doc.value.pointer(path), prior.value.pointer(path));
+        }
+        let reopened = HermesConfigRestoreV1::decode(&record.encode().unwrap()).unwrap();
+        assert_eq!(reopened.restore(&managed).unwrap().as_slice(), original);
     }
 
     #[test]
