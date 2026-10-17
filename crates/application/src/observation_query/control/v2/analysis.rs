@@ -106,6 +106,7 @@ impl ObservationControl {
         let bindings: BTreeSet<_> = plans[0]
             .body
             .materialized
+            .attempt_owned
             .groups
             .iter()
             .filter(|g| g.group_id == MaterializedGroupId::Primary)

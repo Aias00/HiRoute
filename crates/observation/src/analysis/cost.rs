@@ -22,20 +22,11 @@ struct RequestCost {
     attempts: u64,
     complete: bool,
     known: Option<u64>,
+    known_seen: bool,
     missing_price: u64,
     missing_usage: u64,
     pending: bool,
     reference: Option<u64>,
-}
-impl RequestCost {
-    fn add(&mut self, amount: Option<u64>) {
-        if let Some(n) = amount {
-            self.known = match self.known {
-                Some(sum) => sum.checked_add(n),
-                None => Some(n),
-            }
-        }
-    }
 }
 
 pub(super) struct Report {
@@ -159,6 +150,7 @@ pub(super) fn evaluate(
                         && coverage.as_deref() == Some("complete")
                         && amount.is_some(),
                     known: amount,
+                    known_seen: amount.is_some(),
                     pending,
                     missing_price: u64::from(coverage.is_none()),
                     ..Default::default()
@@ -286,6 +278,7 @@ pub(super) fn evaluate(
                     );
                 }
                 if let Some(v) = amount.known_sum_micros {
+                    c.known_seen = true;
                     c.known = c.known.and_then(|sum| sum.checked_add(v));
                 } else {
                     c.complete = false;
@@ -314,7 +307,11 @@ pub(super) fn evaluate(
     let mut actual = Some(0u64);
     let mut baseline = Some(0u64);
     let mut groups = BTreeMap::<String, AnalysisCostRowV1>::new();
-    for c in requests.into_values() {
+    let mut known_groups = std::collections::BTreeSet::new();
+    for mut c in requests.into_values() {
+        if !c.known_seen {
+            c.known = None;
+        }
         if c.complete && c.reference.is_some() && c.known.is_some() {
             compared += 1;
             actual = actual.and_then(|sum| sum.checked_add(c.known?));
@@ -325,6 +322,9 @@ pub(super) fn evaluate(
         } else {
             c.id.clone()
         };
+        if c.known.is_some() {
+            known_groups.insert(id.clone());
+        }
         let row = groups.entry(id.clone()).or_insert(AnalysisCostRowV1 {
             id,
             session_id: Some(c.anchor.clone()),
@@ -362,7 +362,18 @@ pub(super) fn evaluate(
             row.highest_known_only = true;
         }
     }
-    let mut rows: Vec<_> = groups.into_values().collect();
+    let mut rows: Vec<_> = groups
+        .into_values()
+        .map(|mut r| {
+            if !known_groups.contains(&r.id) {
+                r.known_sum_micros = None;
+                r.amount_micros = None;
+                r.coverage = ObservationMetricCoverageV2::Unknown;
+                r.highest_known_only = true;
+            }
+            r
+        })
+        .collect();
     rows.sort_by(|a, b| {
         b.known_sum_micros
             .cmp(&a.known_sum_micros)
