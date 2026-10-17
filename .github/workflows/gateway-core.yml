@@ -121,11 +121,12 @@ jobs:
     needs: selection
     if: needs.selection.outputs.frontend == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -135,6 +136,7 @@ jobs:
         working-directory: apps/desktop
       - run: npm run build && npm test
         working-directory: apps/desktop
+      - uses: ./.github/actions/ci-setup
       - name: Current metadata generation
         run: |
           python3 tools/model-metadata/close_model_metadata.py --check
@@ -144,6 +146,7 @@ jobs:
           python3 assets/model-data/current/generate.py --check
           python3 assets/release-facts/current/prepare-bundle.py
           python3 assets/release-facts/current/prepare-bundle.py --check
+          cargo run -p hiroute-release-facts -- feed build --check
           git diff --exit-code
       - name: Subscription acceptance harness safety
         run: |

@@ -129,10 +129,25 @@ and delegates installation to the canonical `scripts/install-standalone.py`. Wit
 no stable package for the host architecture it fails closed; it never selects a
 preview or unlisted candidate and never starts the service automatically.
 
+## Model feed
+
+The website build validates the generated model feed with the shared Rust admission
+code and Node structural checks. The unsigned payload travels in its own artifact,
+outside `dist`. Only the production deploy signs it, verifies the served publication
+and its own signatures, and writes `/model-feed/v1.json` before any upload. PR builds
+need no signing secrets. An unchanged payload writes no feed file, so the currently
+served object stays intact. Before the first feed-capable release, the JSON null
+payload skips publication and ordinary website deployment continues.
+
+See the [feed maintainer guide](../../assets/model-feed/README.md) for regeneration,
+sequence rules, exact `MODEL_FEED_SIGNING_KEYS` encoding, rotation and release gates.
+That secret is separate from the OSS upload credentials below. The production public
+key must be compiled into the first feed-capable client before release.
+
 ## OSS deployment
 
 The `website` workflow builds on pull requests. Pushes to `main` and explicit
-dispatches deploy through the `website-production` GitHub environment. Configure
+dispatches on `main` deploy through the `website-production` GitHub environment. Configure
 the same secret names as the Higress website:
 
 - `ACCESS_KEYID`
@@ -152,5 +167,5 @@ referenced release object exists with matching size and SHA metadata; broken lin
 therefore fail deployment without replacing the currently served site.
 
 DNS, HTTPS, custom-domain routing, bucket read policy, and the rule that missing
-`/releases/*` objects return a real 404 remain infrastructure configuration outside
-this repository. Verify those once `hiroute.ai` is connected to the bucket.
+`/releases/*` and `/model-feed/*` objects return a real 404 without redirects remain
+infrastructure configuration outside this repository. Verify those once `hiroute.ai` is connected to the bucket.

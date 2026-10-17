@@ -36,7 +36,7 @@ test('guides cover Desktop, Linux headless, and the released management CLI', as
   assert.match(linuxEn, /compute connection options\/test\/preview\/apply/);
   assert.match(linuxEn, /<code>authorize<\/code>/);
   assert.match(routing, /固定模型/);
-  assert.match(routing, /智能省钱/);
+  assert.match(routing, /按难度分流/);
   assert.match(routing, /自定义分支/);
   assert.match(routing, /免费优先/);
   assert.match(worker, /hiroute worker exec/);
@@ -58,8 +58,8 @@ test('decision guidance exposes current routing choices and released CLI paths i
   for (const language of ['zh', 'en']) {
     const routing = await renderUserGuide('model-routing', language);
     const modes = language === 'zh'
-      ? ['固定模型', '智能省钱', '自定义分支', '免费优先']
-      : ['Fixed model', 'Smart saving', 'Custom branches', 'Free first'];
+      ? ['固定模型', '按难度分流', '自定义分支', '免费优先']
+      : ['Fixed model', 'Difficulty routing', 'Custom branches', 'Free first'];
     for (const mode of modes) assert.ok(routing.includes(`<td>${mode}</td>`), `${language} routing table is missing ${mode}`);
 
     const cli = await renderUserGuide('cli', language);

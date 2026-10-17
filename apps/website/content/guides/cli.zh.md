@@ -181,7 +181,7 @@ hiroute decision services test --request-stdin --output json < decision-test-req
 
 | 配置 | 字段 |
 | --- | --- |
-| 智能省钱的连接与判断设置 | `smart.classifier`、`smart.judgment` |
+| 按难度分流的连接与判断设置 | `smart.classifier`、`smart.judgment` |
 | 自定义分支的连接与计划默认判断设置 | `branch_routing.classifier`、`branch_routing.judgment` |
 | 分支的常规与主力候选 | `candidates`、`primary_candidates`；没有主力组时后者为空数组 |
 | 分支独立判断设置 | 可选的完整 `judgment`；省略时跟随计划，设置后独立，移除后恢复跟随计划 |
