@@ -221,11 +221,19 @@ fn request_filter_applies_before_conversation_counts_and_member_previews() {
 fn a_recorded_stage_is_evidence_for_a_selected_transition_not_a_switch() {
     let dir = tempfile::tempdir().unwrap();
     let store = open_store(dir.path());
-    let f = ingest(&store, "recorded-reason");
-    store
+    let f = Fixture::new("recorded-reason");
+    let mut execution = facts(&f, UsageFrameKindV1::Cumulative);
+    let mut finished = execution.pop().unwrap();
+    for e in execution {
+        assert!(matches!(
+            store.ingest_fact(&e, &[]).unwrap(),
+            IngestOutcome::Ack(_)
+        ));
+    }
+    let outcome = store
         .ingest_fact(
             &f.fact(
-                11,
+                10,
                 ExecutionFactV1::AgentTurnFinished {
                     branch_execution: None,
                     agent_turn_id: "native-turn-1".into(),
@@ -247,11 +255,20 @@ fn a_recorded_stage_is_evidence_for_a_selected_transition_not_a_switch() {
                     first_request_id: Some(f.request.clone()),
                     last_request_id: Some(f.request.clone()),
                 },
-                120,
+                110,
             ),
             &[],
         )
         .unwrap();
+    assert!(matches!(outcome, IngestOutcome::Ack(_)), "{outcome:?}");
+    finished.sequence = 11;
+    finished.event_id = EventId::parse("fact-event-11").unwrap();
+    finished.occurred_at_unix_nanos = 111_000_000;
+    assert!(matches!(
+        store.ingest_fact(&finished, &[]).unwrap(),
+        IngestOutcome::Ack(_)
+    ));
+    store.settle_pending_valuations(16).unwrap();
     let mut q = ObservationAnalysisQueryV1::new(AnalysisViewV1::Routing);
     q.session_id = Some(f.session.to_string());
     let page = store
