@@ -486,4 +486,32 @@ mod classifier_codec_tests {
         unknown["schema"] = json!("unknown");
         assert_eq!(classifier_value(unknown), Err(ErrorCode::InvalidArguments));
     }
+
+    #[test]
+    fn maximum_c_shape_preserves_all_nested_degree_definitions() {
+        let protocol = NativeProtocolV1::default();
+        let mut judgment = JudgmentSettingsV1::default();
+        protocol.stock_assessment(&mut judgment);
+        let options = (0..16)
+            .map(|i| CategoryOptionV1 {
+                id: format!("category-{i}"),
+                criterion: format!("Synthetic category {i}"),
+                refinement: Some(judgment.degree.definition()),
+            })
+            .collect::<Vec<_>>();
+        let frozen = FrozenNativeProtocolV1::freeze(
+            &protocol,
+            DecisionDefinitionV1::Categorical {
+                instructions: "Select the current task category".into(),
+                options: options.clone(),
+            },
+            options.into_iter().map(|o| (o.id, judgment.clone())),
+        )
+        .unwrap();
+        let request = json!({"schema":"hiroute.classifier-decision-test/v2","service_id":"saved-fixture","service_revision":7,"shape":"max_branches","protocol":frozen});
+        let decoded: hiroute_application_api::ClassifierDecisionTestRequestV2 =
+            serde_json::from_value(request.clone()).unwrap();
+        assert!(decoded.validate());
+        assert_eq!(classifier_value(request.clone()).unwrap(), request);
+    }
 }
