@@ -1,0 +1,140 @@
+#!/usr/bin/env python3
+"""Inspect and reversibly archive orphaned HiRoute data for native validation."""
+import hashlib
+import json
+import os
+from pathlib import Path
+import stat
+
+
+def digest(path):
+    value = hashlib.sha256()
+    with Path(path).open('rb') as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b''):
+            value.update(block)
+    return value.hexdigest()
+
+
+def plain(path):
+    path = Path(path)
+    for entry in (path, *path.parents):
+        try:
+            info = entry.lstat()
+        except FileNotFoundError:
+            continue
+        if stat.S_ISLNK(info.st_mode) or getattr(info, 'st_file_attributes', 0) & 1024:
+            raise ValueError('Reparse paths cannot be inspected or archived')
+    return path
+
+
+def locations(native_home, local_app_data):
+    return {'data': native_home / '.local/share/hiroute',
+            'state': local_app_data / 'HiRoute/cli',
+            'programs': local_app_data / 'Programs/HiRoute',
+            'stable_cli': native_home / '.local/bin/hiroute.exe'}
+
+
+def inspect_installation(native_home, local_app_data):
+    """Read this account's installation facts without starting the product."""
+    paths, facts = locations(native_home, local_app_data), {}
+    for name, path in paths.items():
+        plain(path)
+        facts[name] = dict(path=str(path), exists=path.exists())
+        if path.is_dir():
+            facts[name]['entries'] = sorted(p.name for p in path.iterdir())[:50]
+        elif path.is_file():
+            facts[name].update(sha256=digest(path), bytes=path.stat().st_size)
+    marker = plain(paths['data'] / 'standalone.json')
+    if marker.is_file():
+        if marker.stat().st_size > 64 * 1024:
+            raise ValueError('Installation marker exceeds its format bound')
+        record = json.loads(marker.read_text(encoding='utf-8'))
+        facts['marker'] = dict(path=str(marker), sha256=digest(marker), record=record)
+        for name, path in [('installed_cli', Path(record['install_root']) / 'hiroute.exe'),
+                           ('definition', Path(record['service_definition']))]:
+            plain(path)
+            facts[name] = dict(path=str(path), exists=path.exists())
+            if path.is_file():
+                facts[name].update(sha256=digest(path), bytes=path.stat().st_size)
+                if name == 'definition' and path.stat().st_size <= 64 * 1024:
+                    facts[name]['text'] = path.read_text(encoding='utf-8', errors='replace')
+    for name in ('shell-package.json', 'shell-install.json', 'uninstall.exe'):
+        path = plain(paths['programs'] / name)
+        if path.is_file():
+            facts[name] = dict(path=str(path), sha256=digest(path), bytes=path.stat().st_size)
+            if name.endswith('.json') and path.stat().st_size <= 64 * 1024:
+                facts[name]['record'] = json.loads(path.read_text(encoding='utf-8'))
+    return facts
+
+
+def inventory(root):
+    """Reject links/special entries before walking or hashing any child."""
+    def fail(error):
+        raise error
+    rows = {}
+    for directory, children, files in os.walk(plain(root), followlinks=False, onerror=fail):
+        for path in (Path(directory), *(Path(directory) / n for n in children + files)):
+            plain(path)
+            info = path.lstat()
+            key = str(path.relative_to(root))
+            if stat.S_ISDIR(info.st_mode):
+                rows[key] = {'kind': 'directory'}
+            elif stat.S_ISREG(info.st_mode):
+                rows[key] = dict(kind='file', bytes=info.st_size, sha256=digest(path))
+            else:
+                raise ValueError('Unknown filesystem entry; retain the original data')
+    return rows
+
+
+def archive_orphaned_data(native_home, local_app_data, destination, inspected, activity):
+    """Preserve every byte; installed products and live/managed data are refused."""
+    if activity.get('administrator_groups') is not False:
+        raise ValueError('A standard account without Administrators membership is required')
+    if activity.get('processes') or activity.get('tasks'):
+        raise ValueError('HiRoute activity remains; use the owning product stop/uninstall entry')
+    current = inspect_installation(native_home, local_app_data)
+    if current != inspected:
+        raise ValueError('Installation facts changed since inspection; inspect again')
+    if 'marker' in current or current['programs']['exists'] or current['stable_cli']['exists']:
+        raise ValueError('An installed product remains; use its normal uninstall entry first')
+    paths = locations(native_home, local_app_data)
+    # Moving a managed artifact would invalidate its native Agent reference.
+    roots = [str(paths[n]).replace('/', '\\').casefold() for n in ('data', 'state')]
+    for name in ('.codex/config.toml', '.claude/settings.json',
+                 '.agents/skills/hiroute-collaboration/SKILL.md'):
+        path = plain(native_home / name)
+        if path.is_file():
+            if path.stat().st_size > 4 * 1024 * 1024:
+                raise ValueError('Native configuration needs manual inspection')
+            text = path.read_text(encoding='utf-8').replace('\\\\', '\\').replace('/', '\\').casefold()
+            if any(root in text for root in roots):
+                raise ValueError('Native Agent configuration still references the old data; restore it first')
+    plans = []
+    for name in ('data', 'state'):
+        source, target = paths[name], plain(destination / ('previous-' + name))
+        if not source.exists():
+            continue
+        if not source.is_dir():
+            raise ValueError('Unexpected installation data entry; preserve it')
+        if target.exists() or source.stat().st_dev != destination.stat().st_dev:
+            raise ValueError('Backup needs an unused location on the same volume')
+        plans.append((source, target, inventory(source)))
+    record = dict(operation='archive_orphaned_installation_data', native_configuration='unchanged',
+                  paths=[dict(source=str(s), backup=str(t), inventory=rows) for s, t, rows in plans])
+    (destination / 'profile-backup.json').write_text(json.dumps(record, indent=2), encoding='utf-8')
+    moved = []
+    try:
+        for source, target, expected in plans:
+            if inventory(source) != expected:
+                raise ValueError('Data changed before archival; preserve it')
+            source.rename(target)
+            moved.append((source, target))
+            if inventory(target) != expected:
+                raise ValueError('Archived data differs; restore the preserved directory')
+    except Exception:
+        for source, target in reversed(moved):
+            if not source.exists():
+                target.rename(source)
+        raise
+    return dict(archived=[str(t) for _, t in moved], backup_manifest='profile-backup.json',
+                native_configuration='unchanged', assessment='preparation_only')

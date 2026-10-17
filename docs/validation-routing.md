@@ -158,6 +158,17 @@ without the selected passing case is failure. Archive entries must be flat,
 manifested x64 executables with matching size/hash; partial stages cannot be reused.
 Cross-built artifacts never become native CI producers.
 
+`inspect-installation` runs a read-only inventory in the configured account. Collect
+and finish it normally; its success is inspection evidence, not a product scenario.
+When the user explicitly authorizes clearing old validation data, use
+`windows archive-installation-data INSPECTION_RUN_ID --product PRODUCT_BUNDLE_ID`.
+It requires a recent matching standard-account inspection, no installed product,
+no product processes/tasks and no native Agent references to the old data. It moves
+only the two fixed HiRoute data/state directories into private run evidence, with
+complete before/after hashes; native settings remain unchanged. Installed products
+must use their normal uninstall entry first. This reversible preparation creates
+no account and establishes no upgrade, restoration or migration acceptance.
+
 For the NSIS candidate, manually dispatch `build-release-platform.yml` with its
 default x64 Windows/Desktop options. Its `artifacts/windows-desktop` upload
 contains a `development-bundle.zip` made from the measured installer, embedded

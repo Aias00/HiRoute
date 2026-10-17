@@ -126,15 +126,21 @@ class Remote:
         self.driver_hash = digest(source)
         self.driver = root + '/driver-' + self.driver_hash + '.py'
         self.upload(source, self.driver)
+        profile = REPO / 'scripts/windows-dev-profile.py'
+        self.profile_hash = digest(profile)
+        self.profile_helper = root + '/profile-' + self.profile_hash + '.py'
+        self.upload(profile, self.profile_helper)
 
     def call(self, action, **arguments):
-        paths = ['scripts/windows-dev.py', 'scripts/windows-dev-host.py', 'scripts/validation.py']
+        paths = ['scripts/windows-dev.py', 'scripts/windows-dev-host.py',
+                 'scripts/windows-dev-profile.py', 'scripts/validation.py']
         if action == 'run':
             subprocess.run(['git', 'ls-files', '--error-unmatch', *paths], cwd=REPO,
                            stdout=subprocess.DEVNULL, check=True)
             if subprocess.check_output(['git', 'status', '--porcelain', '--', *paths], cwd=REPO):
                 raise ValueError('Commit the runner before native product execution')
         request = dict(action=action, config=self.config, driver_sha256=self.driver_hash,
+                       profile_helper_path=self.profile_helper, profile_helper_sha256=self.profile_hash,
                        driver_revision=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=REPO, text=True).strip(),
                        driver_path=self.driver, **arguments)
         # SSH identity and host never need to reach the Windows execution process.
@@ -260,6 +266,9 @@ def main():
     stage.add_argument('archive', type=Path)
     inspect = commands.add_parser('inspect-installation')
     inspect.add_argument('--product', required=True)
+    archive = commands.add_parser('archive-installation-data')
+    archive.add_argument('inspection_run')
+    archive.add_argument('--product', required=True)
     run = commands.add_parser('run')
     run.add_argument('--harness', required=True)
     run.add_argument('--product', required=True)
@@ -305,6 +314,12 @@ def main():
             values = dict(run_id=uuid.uuid4().hex, harness=args.product, product=args.product,
                           binary='hiroute.exe', case='installation_profile_inspection',
                           operation='inspect', ignored=False, timeout=120)
+            args.action = 'run'
+        elif args.action == 'archive-installation-data':
+            values = dict(run_id=uuid.uuid4().hex, harness=args.product, product=args.product,
+                          binary='hiroute.exe', case='orphaned_installation_data_archival',
+                          operation='archive', inspection_run=args.inspection_run,
+                          ignored=False, timeout=300)
             args.action = 'run'
         elif args.action == 'run':
             values['run_id'] = uuid.uuid4().hex

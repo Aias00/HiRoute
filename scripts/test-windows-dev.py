@@ -23,6 +23,7 @@ def load(name):
 
 controller, host = load('windows-dev'), load('windows-dev-host')
 images = load('test-windows-native-runtime-audit')
+profiles = load('windows-dev-profile')
 
 
 class Runner(unittest.TestCase):
@@ -174,7 +175,7 @@ class Runner(unittest.TestCase):
         definition.write_text('{"manager":"task"}')
         marker = data / 'standalone.json'
         marker.write_text(json.dumps(dict(install_root=str(install), service_definition=str(definition))))
-        facts = host.installation_profile(native_home, local)
+        facts = profiles.inspect_installation(native_home, local)
         self.assertTrue(facts['data']['exists'])
         self.assertFalse(facts['state']['exists'])
         self.assertEqual(facts['installed_cli']['sha256'], controller.digest(install / 'hiroute.exe'))
@@ -186,7 +187,7 @@ class Runner(unittest.TestCase):
         (local / 'Programs').mkdir(parents=True)
         (local / 'Programs/HiRoute').symlink_to(foreign, target_is_directory=True)
         with self.assertRaisesRegex(ValueError, 'Reparse'):
-            host.installation_profile(native_home, local)
+            profiles.inspect_installation(native_home, local)
 
     def test_symlink_and_multiple_links_are_not_runner_storage(self):
         archive = self.archive()
@@ -198,6 +199,80 @@ class Runner(unittest.TestCase):
         (self.root / 'linked').symlink_to(directory, target_is_directory=True)
         with self.assertRaises(ValueError):
             host.plain(self.root / 'linked/sample.exe')
+
+    def orphaned_profile(self):
+        native_home, local = self.root / 'native', self.root / 'appdata'
+        roots = profiles.locations(native_home, local)
+        for name in ('data', 'state'):
+            roots[name].mkdir(parents=True)
+            (roots[name] / 'retained.txt').write_bytes(name.encode())
+        evidence = self.root / 'private-evidence'
+        evidence.mkdir()
+        return native_home, local, roots, evidence
+
+    def test_orphaned_data_is_archived_with_complete_hashes_and_native_files_untouched(self):
+        native_home, local, roots, evidence = self.orphaned_profile()
+        native = native_home / '.codex/config.toml'
+        native.parent.mkdir()
+        native.write_text('model="unrelated"')
+        inspected = profiles.inspect_installation(native_home, local)
+        result = profiles.archive_orphaned_data(native_home, local, evidence, inspected,
+                    dict(administrator_groups=False, processes=[], tasks=[]))
+        self.assertEqual(result['assessment'], 'preparation_only')
+        for name in ('data', 'state'):
+            self.assertFalse(roots[name].exists())
+            self.assertEqual((evidence / ('previous-' + name) / 'retained.txt').read_bytes(), name.encode())
+        manifest = json.loads((evidence / 'profile-backup.json').read_text())
+        self.assertEqual(manifest['paths'][0]['inventory']['retained.txt']['sha256'],
+                         hashlib.sha256(b'data').hexdigest())
+        self.assertEqual(native.read_text(), 'model="unrelated"')
+
+    def test_live_installation_activity_and_agent_references_prevent_archival(self):
+        native_home, local, roots, evidence = self.orphaned_profile()
+        inspected = profiles.inspect_installation(native_home, local)
+        for activity in [dict(administrator_groups=True),
+                         dict(administrator_groups=False, processes=[123]),
+                         dict(administrator_groups=False, tasks=['HiRoute-task'])]:
+            with self.assertRaises(ValueError):
+                profiles.archive_orphaned_data(native_home, local, evidence, inspected, activity)
+            self.assertTrue(roots['state'].exists())
+        native = native_home / '.codex/config.toml'
+        native.parent.mkdir()
+        native.write_text(str(roots['state']))
+        with self.assertRaisesRegex(ValueError, 'Native Agent configuration'):
+            profiles.archive_orphaned_data(native_home, local, evidence, inspected,
+                                          dict(administrator_groups=False))
+        self.assertFalse((evidence / 'profile-backup.json').exists())
+
+    def test_changed_or_linked_orphaned_data_is_preserved_before_any_move(self):
+        native_home, local, roots, evidence = self.orphaned_profile()
+        inspected = profiles.inspect_installation(native_home, local)
+        (roots['state'] / 'new.txt').touch()
+        with self.assertRaisesRegex(ValueError, 'changed since inspection'):
+            profiles.archive_orphaned_data(native_home, local, evidence, inspected,
+                                          dict(administrator_groups=False))
+        (roots['state'] / 'dangling').symlink_to(self.root / 'missing')
+        inspected = profiles.inspect_installation(native_home, local)
+        with self.assertRaisesRegex(ValueError, 'Reparse'):
+            profiles.archive_orphaned_data(native_home, local, evidence, inspected,
+                                          dict(administrator_groups=False))
+        self.assertTrue(roots['data'].exists())
+        self.assertFalse((evidence / 'previous-data').exists())
+
+    def test_failed_second_archive_move_restores_the_first_directory(self):
+        native_home, local, roots, evidence = self.orphaned_profile()
+        inspected = profiles.inspect_installation(native_home, local)
+        rename = Path.rename
+        def fail_second(source, target):
+            if source == roots['state']:
+                raise PermissionError('fixture file lock')
+            return rename(source, target)
+        with patch.object(Path, 'rename', fail_second), self.assertRaises(PermissionError):
+            profiles.archive_orphaned_data(native_home, local, evidence, inspected,
+                                          dict(administrator_groups=False))
+        self.assertEqual((roots['data'] / 'retained.txt').read_bytes(), b'data')
+        self.assertEqual((roots['state'] / 'retained.txt').read_bytes(), b'state')
+        self.assertFalse((evidence / 'previous-data').exists())
 
     def test_config_contains_paths_not_tokens_and_lives_in_home(self):
         identity = self.root / 'key'

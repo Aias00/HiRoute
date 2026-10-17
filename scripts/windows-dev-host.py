@@ -221,41 +221,43 @@ def start(root, request):
     return dict(run_id=run_id, state='submitted', task=task_name(run_id))
 
 
-def installation_profile(native_home, local_app_data):
-    """Read only this account's installation facts, without starting the product."""
-    paths = {'data': native_home / '.local/share/hiroute',
-             'state': local_app_data / 'HiRoute/cli',
-             'programs': local_app_data / 'Programs/HiRoute',
-             'stable_cli': native_home / '.local/bin/hiroute.exe'}
-    facts = {}
-    for name, path in paths.items():
-        plain(path)
-        facts[name] = dict(path=str(path), exists=path.exists())
-        if path.is_dir():
-            facts[name]['entries'] = sorted(p.name for p in path.iterdir())[:50]
-        elif path.is_file():
-            facts[name].update(sha256=digest(path), bytes=path.stat().st_size)
-    marker = plain(paths['data'] / 'standalone.json')
-    if marker.is_file():
-        if marker.stat().st_size > 64 * 1024:
-            raise ValueError('Installation marker exceeds its format bound')
-        record = json.loads(marker.read_text(encoding='utf-8'))
-        facts['marker'] = dict(path=str(marker), sha256=digest(marker), record=record)
-        for name, path in [('installed_cli', Path(record['install_root']) / 'hiroute.exe'),
-                           ('definition', Path(record['service_definition']))]:
-            plain(path)
-            facts[name] = dict(path=str(path), exists=path.exists())
-            if path.is_file():
-                facts[name].update(sha256=digest(path), bytes=path.stat().st_size)
-                if name == 'definition' and path.stat().st_size <= 64 * 1024:
-                    facts[name]['text'] = path.read_text(encoding='utf-8', errors='replace')
-    for name in ('shell-package.json', 'shell-install.json', 'uninstall.exe'):
-        path = plain(paths['programs'] / name)
-        if path.is_file():
-            facts[name] = dict(path=str(path), sha256=digest(path), bytes=path.stat().st_size)
-            if name.endswith('.json') and path.stat().st_size <= 64 * 1024:
-                facts[name]['record'] = json.loads(path.read_text(encoding='utf-8'))
-    return facts
+def profile_helper(request):
+    import importlib.util
+    path = plain(request['profile_helper_path'])
+    if digest(path) != request['profile_helper_sha256']:
+        raise ValueError('Profile helper differs from the committed request')
+    spec = importlib.util.spec_from_file_location('windows_dev_profile', path)
+    helper = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(helper)
+    return helper
+
+
+def profile_activity(config, run_id):
+    native_home = Path.home()
+    roots = [native_home / '.local/share/hiroute', Path(os.environ['LOCALAPPDATA']) / 'HiRoute/cli',
+             Path(os.environ['LOCALAPPDATA']) / 'Programs/HiRoute']
+    script = "$ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue';"
+    script += '$roots=@(' + ','.join(literal(p) for p in roots) + ');'
+    script += '$session=' + str(config['session_id']) + ';$ownTask=' + literal(task_name(run_id)) + ';'
+    script += r"""
+$identity=[Security.Principal.WindowsIdentity]::GetCurrent()
+function InProductPath($value) {
+ if(-not $value){return $false}
+ foreach($root in $roots){if($value.StartsWith($root+'\',[StringComparison]::OrdinalIgnoreCase)){return $true}}
+ return $false
+}
+$processes=@(Get-CimInstance Win32_Process | Where-Object {
+ (InProductPath $_.ExecutablePath) -or ($_.SessionId -eq $session -and $_.Name -in @('hiroute.exe','hirouted.exe','hiroute-shell.exe'))
+} | Select-Object ProcessId,Name,ExecutablePath)
+$tasks=@(Get-ScheduledTask | Where-Object {
+ $principal=$_.Principal.UserId
+ $ours=$principal -eq $identity.User.Value -or $principal -eq $identity.Name -or $principal -eq $env:USERNAME
+ $_.TaskName -ne $ownTask -and $ours -and $_.TaskName -like 'HiRoute*' -and
+ ($_.TaskName -notlike 'HiRoute-Dev-*' -or $_.State -eq 'Running')
+} | Select-Object TaskName,State)
+@{administrator_groups=($identity.Groups.Value -contains 'S-1-5-32-544');processes=$processes;tasks=$tasks}|ConvertTo-Json -Depth 5 -Compress
+"""
+    return json.loads(ps(script))
 
 
 def worker(request):
@@ -286,7 +288,25 @@ def worker(request):
             raise ValueError('The selected manifests do not include required binaries')
         if request.get('operation') == 'inspect':
             result.update(passed=True, assessment='inspection_only',
-                          installation=installation_profile(Path.home(), Path(os.environ['LOCALAPPDATA'])))
+                          installation=profile_helper(request).inspect_installation(Path.home(), Path(os.environ['LOCALAPPDATA'])))
+            return 0
+        if request.get('operation') == 'archive':
+            parent = directory(root, request['inspection_run'])
+            inspected = json.loads((parent / 'result.json').read_text(encoding='utf-8'))
+            original = json.loads((parent / 'request.json').read_text(encoding='utf-8'))
+            if (not inspected.get('passed') or inspected.get('assessment') != 'inspection_only'
+                    or original.get('operation') != 'inspect'
+                    or original['config']['user'] != config['user']
+                    or original['config']['session_id'] != config['session_id']
+                    or original['product'] != request['product']
+                    or inspected.get('administrator') is not False
+                    or time.time() - (parent / 'result.json').stat().st_mtime > 3600):
+                raise ValueError('A recent inspection of this standard account and product is required')
+            archived = profile_helper(request).archive_orphaned_data(
+                Path.home(), Path(os.environ['LOCALAPPDATA']), run,
+                inspected['installation'], profile_activity(config, request['run_id']))
+            result.update(passed=True, assessment='preparation_only', archival=archived,
+                          inspection_sha256=digest(parent / 'result.json'))
             return 0
         # Never manufacture HOME or remove an existing installation to make a gate pass.
         home = Path.home()
