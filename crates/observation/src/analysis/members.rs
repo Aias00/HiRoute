@@ -75,12 +75,11 @@ pub(super) fn resolve(
     let mut connected = physical.clone();
     let mut queue: std::collections::VecDeque<_> = physical.iter().cloned().collect();
     while let Some(id) = queue.pop_front() {
-        if !gaps.contains_key(&id) {
-            if let Some((parent, _)) = parents.get(&id) {
-                if connected.insert(parent.clone()) {
-                    queue.push_back(parent.clone());
-                }
-            }
+        if !gaps.contains_key(&id)
+            && let Some((parent, _)) = parents.get(&id)
+            && connected.insert(parent.clone())
+        {
+            queue.push_back(parent.clone());
         }
         for child in successors.get(&id).into_iter().flatten() {
             if !gaps.contains_key(child) && connected.insert(child.clone()) {

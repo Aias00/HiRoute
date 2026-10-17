@@ -148,17 +148,17 @@ pub(super) fn load(
     {
         return Err(Error::Invalid);
     }
-    if let Some(keyword) = &q.query {
-        if Some(digest(&crate::text_index::fold(keyword.trim()).0)?) != s.keyword_digest {
-            return Err(Error::Invalid);
-        }
+    if let Some(keyword) = &q.query
+        && Some(digest(&crate::text_index::fold(keyword.trim()).0)?) != s.keyword_digest
+    {
+        return Err(Error::Invalid);
     }
-    if let Some(selected) = &s.initial_session {
-        if let Some(requested) = &q.session_id {
-            let same:bool=db.query_row("SELECT EXISTS(SELECT 1 FROM observation_analysis_members_v1 a JOIN observation_analysis_members_v1 b ON b.scope_id=a.scope_id AND b.anchor_id=a.anchor_id WHERE a.scope_id=?1 AND a.session_id=?2 AND (b.session_id=?3 OR b.anchor_id=?3))",params![s.id,selected,requested],|r|r.get(0))?;
-            if !same {
-                return Err(Error::Invalid);
-            }
+    if let Some(selected) = &s.initial_session
+        && let Some(requested) = &q.session_id
+    {
+        let same:bool=db.query_row("SELECT EXISTS(SELECT 1 FROM observation_analysis_members_v1 a JOIN observation_analysis_members_v1 b ON b.scope_id=a.scope_id AND b.anchor_id=a.anchor_id WHERE a.scope_id=?1 AND a.session_id=?2 AND (b.session_id=?3 OR b.anchor_id=?3))",params![s.id,selected,requested],|r|r.get(0))?;
+        if !same {
+            return Err(Error::Invalid);
         }
     }
     if q.request_id

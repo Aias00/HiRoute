@@ -40,7 +40,7 @@ pub(crate) fn projected_comparison(
     if pending {
         return Ok(None);
     }
-    let cte=format!("WITH selected AS (SELECT a.*,r.session_id AS anchor_id
+    let cte="WITH selected AS (SELECT a.*,r.session_id AS anchor_id
       FROM logical_requests r CROSS JOIN observation_analysis_requests_v1 a
       JOIN sessions s ON s.workspace_id=r.workspace_id AND s.session_id=r.session_id
       LEFT JOIN valuation_requests_v2 v ON v.workspace_id=r.workspace_id AND v.request_id=r.request_id
@@ -49,10 +49,10 @@ pub(crate) fn projected_comparison(
         AND (s.tombstone_reason IS NULL OR s.content_completeness='deleted')
         AND a.workspace_id=r.workspace_id AND a.request_id=r.request_id
         AND a.revision=(SELECT MAX(revision) FROM observation_analysis_requests_v1 latest
-            WHERE latest.workspace_id=r.workspace_id AND latest.request_id=r.request_id))");
+            WHERE latest.workspace_id=r.workspace_id AND latest.request_id=r.request_id))";
     let data = comparison::evaluate(
         db,
-        &cte,
+        cte,
         args,
         prices,
         Some(reference),

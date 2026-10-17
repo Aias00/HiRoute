@@ -31,6 +31,7 @@ pub(super) struct Comparison {
     pub used: BTreeSet<String>,
 }
 
+#[allow(clippy::too_many_arguments)] // Keep SQL scope, price authority and read deadline explicit.
 pub(super) fn evaluate(
     db: &Connection,
     selected: &str,
@@ -63,7 +64,7 @@ pub(super) fn evaluate(
     let mut validated_reference = false;
     while let Some(r) = rows.next()? {
         n += 1;
-        if n % 512 == 0 {
+        if n.is_multiple_of(512) {
             reader.check(now, false, false)?;
         }
         let id: String = r.get(0)?;
@@ -84,28 +85,27 @@ pub(super) fn evaluate(
         let ordinal: Option<u64> = r.get(6)?;
         c.attempts += u64::from(ordinal.is_some());
         let key: Option<String> = r.get(7)?;
-        if let Some(key) = &key {
-            if !identities.contains_key(key) {
-                let body: Option<String> =
-                    identity_stmt.query_row([key], |r| r.get(0)).optional()?;
-                let found = body
-                    .and_then(|v| serde_json::from_str::<PricingIdentity>(&v).ok())
-                    .map(|id| {
-                        let price = if id.standard_tokens {
-                            index
-                                .get(&(
-                                    id.source_id.as_str(),
-                                    id.source_digest.as_str(),
-                                    id.model_id.as_str(),
-                                ))
-                                .copied()
-                        } else {
-                            None
-                        };
-                        (id, price)
-                    });
-                identities.insert(key.clone(), found);
-            }
+        if let Some(key) = &key
+            && !identities.contains_key(key)
+        {
+            let body: Option<String> = identity_stmt.query_row([key], |r| r.get(0)).optional()?;
+            let found = body
+                .and_then(|v| serde_json::from_str::<PricingIdentity>(&v).ok())
+                .map(|id| {
+                    let price = if id.standard_tokens {
+                        index
+                            .get(&(
+                                id.source_id.as_str(),
+                                id.source_digest.as_str(),
+                                id.model_id.as_str(),
+                            ))
+                            .copied()
+                    } else {
+                        None
+                    };
+                    (id, price)
+                });
+            identities.insert(key.clone(), found);
         }
         let identity = key
             .as_ref()

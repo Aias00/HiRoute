@@ -133,7 +133,7 @@ pub(super) fn evaluate(
                     ..Default::default()
                 },
             );
-            if requests.len() % 512 == 0 {
+            if requests.len().is_multiple_of(512) {
                 reader.check(now, false, false)?;
             }
         }

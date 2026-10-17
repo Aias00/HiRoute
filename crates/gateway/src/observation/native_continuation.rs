@@ -7,7 +7,7 @@ use http::HeaderMap;
 use std::collections::BTreeSet;
 
 fn identifier(s: &str) -> bool {
-    !s.is_empty() && s.len() <= 128 && s.bytes().all(|b| b.is_ascii() && !(b < 32 || b >= 127))
+    !s.is_empty() && s.len() <= 128 && s.bytes().all(|b| b.is_ascii() && (32..127).contains(&b))
 }
 fn stamp(s: &NativeProofObservationV1) -> bool {
     identifier(&s.observer_id) && s.sequence > 0 && s.observed_at_ms >= 0 && s.age_ms <= 3_600_000
@@ -41,10 +41,10 @@ fn read(headers: &HeaderMap, current: &str) -> Option<HermesCompressionLineageV1
             return None;
         }
     }
-    if let Some(state) = &proof.current_state {
-        if !stamp(&state.observation) || state.observation.age_ms > 1000 {
-            return None;
-        }
+    if let Some(state) = &proof.current_state
+        && (!stamp(&state.observation) || state.observation.age_ms > 1000)
+    {
+        return None;
     }
     if let Some(negative) = &proof.invalid_edges {
         if negative.edges.len() > 31 || !stamp(&negative.observation) {

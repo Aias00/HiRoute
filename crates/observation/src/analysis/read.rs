@@ -258,15 +258,14 @@ impl LocalObservationStore {
                 page.status = AnalysisStatusV1::Partial;
             }
         }
-        if page.requests.iter().any(|r| r.content_partial)
+        if (page.requests.iter().any(|r| r.content_partial)
             || page
                 .costs
                 .iter()
-                .any(|r| r.coverage != ObservationMetricCoverageV2::Complete)
+                .any(|r| r.coverage != ObservationMetricCoverageV2::Complete))
+            && page.status == AnalysisStatusV1::Ready
         {
-            if page.status == AnalysisStatusV1::Ready {
-                page.status = AnalysisStatusV1::Partial;
-            }
+            page.status = AnalysisStatusV1::Partial;
         }
         scope::check_live(&db, &s)?;
         reader.check(now, q.view.content(), q.query.is_some())?;
