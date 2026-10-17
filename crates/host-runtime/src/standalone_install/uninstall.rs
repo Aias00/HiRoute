@@ -10,6 +10,26 @@ pub(super) enum Restoration {
 }
 
 fn present(path: &Path) -> io::Result<bool> {
+    // A dangling ancestor must not turn unknown/restorable state into proof
+    // that this is a pristine installation. Do not follow links or junctions.
+    for ancestor in path.ancestors() {
+        match fs::symlink_metadata(ancestor) {
+            Ok(metadata) => {
+                if metadata.file_type().is_symlink() {
+                    return Err(super::invalid());
+                }
+                #[cfg(windows)]
+                {
+                    use std::os::windows::fs::MetadataExt;
+                    if metadata.file_attributes() & 0x400 != 0 {
+                        return Err(super::invalid());
+                    }
+                }
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
+    }
     match fs::symlink_metadata(path) {
         Ok(_) => Ok(true),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
@@ -66,6 +86,29 @@ mod tests {
             Restoration::NotNeeded
         );
         assert!(!layout.state_root.exists());
+    }
+    #[cfg(unix)]
+    #[test]
+    fn a_dangling_state_ancestor_is_not_evidence_of_an_empty_installation() {
+        let (_temp, layout) = layout();
+        fs::create_dir_all(layout.state_root.parent().unwrap()).unwrap();
+        std::os::unix::fs::symlink(layout.home.join("missing"), &layout.state_root).unwrap();
+        assert!(
+            restore(
+                &layout,
+                false,
+                false,
+                || panic!("start"),
+                || panic!("restore")
+            )
+            .is_err()
+        );
+        assert!(
+            fs::symlink_metadata(&layout.state_root)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
     }
     #[test]
     fn unavailable_service_requires_consent_and_preserves_all_recovery_material() {
