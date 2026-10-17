@@ -296,34 +296,3 @@ impl Drop for SessionAuthority {
         }
     }
 }
-
-/// Closed authority for read-only component scenarios; never used by a production host.
-#[cfg(test)]
-pub(crate) struct UnavailableAuthority;
-#[cfg(test)]
-impl HostAuthority for UnavailableAuthority {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-    fn has_authority(&self) -> bool {
-        false
-    }
-    fn register_operation(
-        &self,
-        _: &CanonicalDigest,
-        _: &RevisionSetV1,
-        _: &'static str,
-    ) -> Result<Zeroizing<String>, String> {
-        Err("TRUSTED_AUTHORITY_UNAVAILABLE".into())
-    }
-    fn register_input(
-        &self,
-        _: &ComputeCandidateRefV2,
-        _: Zeroizing<String>,
-    ) -> Result<(), String> {
-        Err("TRUSTED_AUTHORITY_UNAVAILABLE".into())
-    }
-    fn release_model_input(&self, _: &ComputeCandidateRefV2) -> Result<(), String> {
-        Err("TRUSTED_AUTHORITY_UNAVAILABLE".into())
-    }
-}
