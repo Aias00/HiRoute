@@ -205,6 +205,129 @@ HiRoute SHALL support an explicitly selected API-equivalent cost view for record
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/125#issuecomment-6220387895
 
+### Requirement: The website model feed is verified before use
+
+HiRoute SHALL retrieve the model feed only from a fixed hiroute.ai location derived by the client build. It SHALL refuse redirects, any location supplied through IPC, CLI arguments, environment or configuration in production builds, and responses larger than 2 MiB, and it SHALL apply a 10-second connection timeout and a 30-second total deadline. Each feed publication SHALL carry a schema version, a monotonically increasing sequence, an issue time and a signature over its exact bytes. The daemon SHALL apply a publication only when all of these hold: the signature verifies against a public key compiled into that client build, the schema version is one the client implements, the whole publication is well formed, and its sequence is greater than the highest sequence this service has accepted. A client build MAY trust more than one public key so that keys can be rotated through releases. A rejected publication SHALL leave the held verified copy in effect and SHALL record a classified reason: network, size, signature, schema, validation or older sequence. The daemon SHALL persist the last verified copy with its digest, re-verify it at startup and discard a copy that fails verification, with a reason, instead of partially using it. The daemon SHALL retain the highest accepted sequence and the digest of that publication independently of the held copy, so that removing or discarding the copy never lowers it. A publication whose sequence equals the retained highest sequence SHALL be accepted only to restore a missing held copy and only when its digest equals the retained digest; a lower sequence SHALL never be accepted. Retrieval and verification SHALL run in the daemon, so that every product UI host (macOS Desktop, the Windows shell and the web console), the public CLI and standalone services share one verified state, and SHALL NOT delay startup, Gateway admission or routing. The request SHALL carry no account, installation, model, credential, session or usage identifier beyond a product user agent with the client version. Automatic retrieval SHALL be enabled by default for every service, whether it runs under macOS Desktop, the Windows shell or the web console, or as a standalone service. It SHALL run after a randomized 2–10 minute startup delay and then every six hours with 30 minutes of jitter in either direction, using bounded retry backoff after failure. An explicit refresh SHALL be available in every product UI host and in the public CLI. One service-owned setting SHALL turn automatic retrieval off and back on. Every product UI host and the public CLI SHALL read and change that same setting, and it SHALL survive restart and upgrade. The first time feed content is shown in a product UI host, the host SHALL state that the content comes from hiroute.ai and how to turn retrieval off.
+
+#### Scenario: Tampered publication
+
+- **WHEN** the served feed bytes do not match a signature from a trusted public key
+- **THEN** the publication is not applied, the held verified copy stays in effect, and feed status reports a signature failure.
+
+#### Scenario: Older or repeated publication
+
+- **WHEN** the service holds a verified copy and the served sequence is lower than or equal to the highest accepted sequence
+- **THEN** a lower sequence is rejected, equal sequence with the same payload digest is already current, and equal sequence with different content is rejected; restoration of a missing copy follows the retained-digest rule above.
+
+#### Scenario: Offline start
+
+- **WHEN** the service starts without network access while it holds a verified copy
+- **THEN** the copy is re-verified and used, startup is not delayed by retrieval, and status shows the time of the last successful retrieval.
+
+#### Scenario: Newer schema
+
+- **WHEN** a publication declares a schema version the client does not implement
+- **THEN** the client keeps the embedded catalog and the held copy, and status states that a newer HiRoute is needed to read feed updates.
+
+#### Scenario: Redirect
+
+- **WHEN** the feed location answers with a redirect
+- **THEN** the redirect is not followed and no request is sent to the redirect target.
+
+#### Scenario: Default on a standalone service
+
+- **WHEN** a standalone Linux service starts after an upgrade and no product UI is open
+- **THEN** it retrieves the feed automatically after the bounded startup delay, and the public CLI status shows the result and the setting that turns retrieval off.
+
+#### Scenario: One setting across hosts
+
+- **WHEN** automatic retrieval is turned off in the web console of a service
+- **THEN** the public CLI and any other product UI host of that service report retrieval as off, and no automatic request is made until it is turned back on from any of them.
+
+#### Scenario: No rollback after removal
+
+- **WHEN** the service has accepted publication 43, which withdraws a model that publication 42 listed, and the user removes the held copy, restarts the service and is then served the still validly signed publication 42
+- **THEN** publication 42 is rejected as an older sequence, the withdrawn model stays unavailable, and serving publication 43 with the retained digest, or a newer publication, restores a held copy.
+
+#### Scenario: Conflicting content at the retained sequence
+
+- **WHEN** after the held copy was removed, a validly signed publication with the retained highest sequence but a different digest is served
+- **THEN** it is rejected with a validation reason, no held copy is restored, and the retained sequence and digest are unchanged.
+
+#### Scenario: Interrupted cache replacement
+
+- **WHEN** the service stops while replacing its held publication
+- **THEN** restart uses the last atomically committed accepted sequence and its matching verified content; an uncommitted blob cannot advance acceptance or destroy the previously committed offline copy.
+
+#### Scenario: Restore after conditional retrieval
+
+- **WHEN** a cached publication previously had an HTTP ETag and its held copy is removed or discarded
+- **THEN** the next refresh obtains full verified content before reporting restoration; an HTTP not-modified response alone cannot restore a missing copy.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/142#issuecomment-6236433837
+
+### Requirement: Feed records add facts only for models absent from the embedded catalog
+
+A verified model feed MAY contain model, model endpoint capability, offer and price-rate records that use the same record contracts as the embedded model data, plus featured entries. It SHALL NOT contain connector, endpoint profile, connection option, free-offer or rating records, and a publication that contains one is invalid as a whole. Each record SHALL declare the minimum client version able to use it and its inclusion date. A model record SHALL carry the same identity-stability fact as embedded model metadata: provider-stable, rolling alias, dynamic route or unknown. Provider-scoped fields SHALL follow the maintained closure rule: an observed or retrieved fact, a marked conservative inference with per-field evidence, or unsupported/not applicable. For any model configuration identity, upstream model binding or price-rate key that the embedded catalog contains, the embedded facts SHALL win. A conflicting feed record SHALL be ignored and counted in feed status. A feed default price SHALL be presented with its origin and inclusion date; a manual price override SHALL continue to win, and restoring the default SHALL use the current embedded or feed default, or unknown. A featured entry SHALL declare whether it announces a new model or an update of a model that HiRoute already describes, SHALL reference a model identity from the embedded catalog or the same publication, and SHALL carry a localized plain-text headline and note, an inclusion date and optional links whose targets are restricted to https://hiroute.ai/. An entry whose reference does not resolve in the client SHALL NOT be shown. Featured entries SHALL NOT affect qualification, candidate order or routing. An update entry SHALL be presented as an announcement together with the referenced model's current fact origin. It SHALL NOT create a second model identity or imply that the feed changed that model's facts, which remain owned by the embedded catalog and later client releases. Feed sequence, source revision and inclusion date identify the facts HiRoute received; they SHALL NOT be presented as identifying the model version that a provider executes. A model without a feed record keeps the existing bounded text-only handling of an unknown upstream ID.
+
+#### Scenario: Forbidden record kind
+
+- **WHEN** a publication contains a free offer or a rating record
+- **THEN** the whole publication is rejected as invalid and the held verified copy stays in effect.
+
+#### Scenario: Embedded identity wins
+
+- **WHEN** the feed carries capabilities for a model configuration identity that the embedded catalog also defines
+- **THEN** the embedded facts are used, the feed record is ignored, and feed status counts one ignored record.
+
+#### Scenario: Price override survives a feed update
+
+- **WHEN** a user overrode the default price of a feed-supplied model and a later publication changes that default
+- **THEN** the override remains in effect; restoring the default afterwards uses the new feed default.
+
+#### Scenario: Unresolved featured entry
+
+- **WHEN** a featured entry references a model that neither the embedded catalog nor the publication defines for this client
+- **THEN** the entry is not shown, and no placeholder model is created.
+
+#### Scenario: Announced update of an embedded model
+
+- **WHEN** a publication features an update of an embedded model whose upstream ID is unchanged
+- **THEN** the entry is shown as an announcement with the model's embedded origin, no second model identity is created, the embedded facts are used unchanged, and earlier competence evidence is not presented as validation of the announced version.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/142#issuecomment-6236435011
+
+### Requirement: Feed publications are reviewed, validated and signed by the website deployment
+
+Model feed sources SHALL be maintained in this repository and changed only through reviewed pull requests. Validation SHALL run in CI for every change and again before publication. It SHALL reject schema violations, forbidden record kinds, unclosed provider-scoped fields or missing evidence, references that resolve in no supported release's embedded registry, a declared minimum client version lower than the earliest supported release whose registry and adapters resolve the record, featured links outside https://hiroute.ai/, and a sequence that is not greater than the last published sequence. Only the production website deployment SHALL sign and publish the feed. The signing key SHALL be held as a deployment secret and SHALL never be committed or exposed to pull-request builds. If validation or signing fails, the previously published feed SHALL remain in place, and no unsigned or partially signed feed SHALL be served. Each publication SHALL be reproducible from its reviewed source revision except for its signature, and the deployment SHALL record the published sequence, digest and source revision.
+
+Before a feed-capable supported client release is recorded, the generated payload SHALL remain null and deployment SHALL skip signing and publication. Bootstrap checks still validate maintained publication and editorial inputs. Generation SHALL use committed first-inclusion dates, the exact supported release catalogs, and the earliest release admitting each model together with its executable capability and offer. PR validation SHALL compare the publication to its exact base, and deployment SHALL compare it to the verified served publication; identical content may be a no-op, while changed content requires a higher sequence.
+
+#### Scenario: Unresolvable reference
+
+- **WHEN** a pull request adds a record bound to an endpoint profile that no supported release's registry contains
+- **THEN** CI fails and names the record and the unresolved reference.
+
+#### Scenario: Understated minimum version
+
+- **WHEN** a record requires an adapter revision first shipped in 0.3.3 but declares 0.3.1 as its minimum client version
+- **THEN** validation fails and states the earliest compatible version.
+
+#### Scenario: Signing failure
+
+- **WHEN** the production deployment cannot sign a validated publication
+- **THEN** the previously published feed remains served, and no new feed bytes are published.
+
+#### Scenario: Pull-request build
+
+- **WHEN** a pull-request build validates feed changes
+- **THEN** validation results are reported, and the build has no access to the signing key and publishes nothing.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/142#issuecomment-6236438296
+
 ## Implementation references
 
 - [Metadata records](../../../crates/domain/src/compute/model_metadata_records.rs) and
