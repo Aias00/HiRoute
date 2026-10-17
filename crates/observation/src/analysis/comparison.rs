@@ -50,7 +50,7 @@ pub(super) fn evaluate(
     let sql=format!("{selected} SELECT a.request_id,a.anchor_id,a.terminal,a.partial,a.accepted_ordinal,a.traffic,
         i.ordinal,i.pricing_key,i.input_tokens,i.output_tokens,i.cache_read,i.cache_write,i.reasoning
         FROM selected a LEFT JOIN observation_analysis_attempts_v1 i ON i.workspace_id=a.workspace_id
-          AND i.request_id=a.request_id AND i.revision=a.revision ORDER BY a.request_id,i.ordinal");
+          AND i.request_id=a.request_id AND i.revision=a.revision");
     let mut stmt = db.prepare(&sql)?;
     let mut rows = stmt.query(args)?;
     let mut result = Comparison {
@@ -58,7 +58,9 @@ pub(super) fn evaluate(
         excluded: 0,
         used: BTreeSet::new(),
     };
-    let mut last_excluded = String::new();
+    // Aggregation is keyed by request, so sorting every attempt is unnecessary.
+    // Keep exclusion deduplication independent of the database's visit order too.
+    let mut excluded_requests = BTreeSet::new();
     let mut n = 0u64;
     let mut validated_prices = BTreeSet::new();
     let mut validated_reference = false;
@@ -69,9 +71,8 @@ pub(super) fn evaluate(
         }
         let id: String = r.get(0)?;
         if r.get::<_, String>(5)? != "normal" {
-            if last_excluded != id {
+            if excluded_requests.insert(id) {
                 result.excluded += 1;
-                last_excluded = id;
             }
             continue;
         }

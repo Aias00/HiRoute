@@ -3,6 +3,11 @@ use hiroute_application_api::PriceTargetLocatorV1;
 use hiroute_domain::*;
 use std::collections::BTreeSet;
 
+enum AnalysisPriceCapture {
+    Ready(AnalysisPricesV1, String),
+    CurrencyChoices(Vec<String>),
+}
+
 impl ObservationControl {
     pub(super) fn analysis_read(
         &self,
@@ -11,12 +16,75 @@ impl ObservationControl {
         range: Option<&AnalysisTimeRangeV1>,
         now: i64,
     ) -> Result<ObservationAnalysisPageV1, ObservationQueryError> {
+        let default_basis = if q.view == AnalysisViewV1::SavingsSummary {
+            AnalysisCostBasisV1::ApiEquivalent
+        } else {
+            AnalysisCostBasisV1::Recorded
+        };
+        // A fresh current-price query already supplies its capture intent. Keep
+        // scope creation and evaluation in one reader/transaction, rather than
+        // opening a second cold reader within the same total 500 ms budget.
+        if q.analysis_scope.is_none()
+            && q.cursor.is_none()
+            && q.view.monetary()
+            && q.basis.unwrap_or(default_basis) == AnalysisCostBasisV1::ApiEquivalent
+            && reader.allowed_runs().is_none()
+        {
+            let required = AnalysisPriceCaptureRequestV1 {
+                currency: q.currency.clone(),
+                plan_id: q.plan_id.clone(),
+                reference_binding_id: q.reference_binding_id.clone(),
+            };
+            return match self.analysis_prices(reader, required, now)? {
+                AnalysisPriceCapture::Ready(capture, currency) => {
+                    q.currency = Some(currency);
+                    self.service
+                        .observation_analysis(reader, &q, range, Some(&capture), now)
+                }
+                AnalysisPriceCapture::CurrencyChoices(currencies) => {
+                    let mut page = self
+                        .service
+                        .observation_analysis(reader, &q, range, None, now)?;
+                    if page.price_capture_request.take().is_some() {
+                        page.choices.push(AnalysisChoiceV1 {
+                            field: "currency".into(), values: currencies,
+                            reason: "Choose a saved API-equivalent currency; add source-specific API prices first if no currency is available.".into(),
+                        });
+                    }
+                    Ok(page)
+                }
+            };
+        }
         let mut page = self
             .service
             .observation_analysis(reader, &q, range, None, now)?;
         let Some(required) = page.price_capture_request.take() else {
             return Ok(page);
         };
+        let (capture, currency) = match self.analysis_prices(reader, required, now)? {
+            AnalysisPriceCapture::Ready(capture, currency) => (capture, currency),
+            AnalysisPriceCapture::CurrencyChoices(currencies) => {
+                page.choices.push(AnalysisChoiceV1 {
+                    field: "currency".into(), values: currencies,
+                    reason: "Choose a saved API-equivalent currency; add source-specific API prices first if no currency is available.".into(),
+                });
+                return Ok(page);
+            }
+        };
+        q.analysis_scope = page.analysis_scope;
+        q.cursor = None;
+        q.time = Default::default();
+        q.currency = Some(currency);
+        self.service
+            .observation_analysis(reader, &q, None, Some(&capture), now)
+    }
+
+    fn analysis_prices(
+        &self,
+        reader: &ObservationReaderContext,
+        required: AnalysisPriceCaptureRequestV1,
+        now: i64,
+    ) -> Result<AnalysisPriceCapture, ObservationQueryError> {
         reader.check(now, false, false)?;
         let deadline = reader
             .query_deadline()
@@ -48,8 +116,9 @@ impl ObservationControl {
                 .flatten()
         });
         let Some(currency) = currency else {
-            page.choices.push(AnalysisChoiceV1{field:"currency".into(),values:currencies.into_iter().collect(),reason:"Choose a saved API-equivalent currency; add source-specific API prices first if no currency is available.".into()});
-            return Ok(page);
+            return Ok(AnalysisPriceCapture::CurrencyChoices(
+                currencies.into_iter().collect(),
+            ));
         };
         let mut prices = Vec::with_capacity(facts.source_bindings.len());
         for binding in &facts.source_bindings {
@@ -92,12 +161,7 @@ impl ObservationControl {
             prices,
             reference_binding_id: reference,
         };
-        q.analysis_scope = page.analysis_scope;
-        q.cursor = None;
-        q.time = Default::default();
-        q.currency = Some(currency);
-        self.service
-            .observation_analysis(reader, &q, None, Some(&capture), now)
+        Ok(AnalysisPriceCapture::Ready(capture, currency))
     }
 
     fn sole_primary(
