@@ -28,7 +28,7 @@ class FeedUpstream:
         cert, key = root / 'ca.pem', root / 'key.pem'
         result = subprocess.run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes',
             '-keyout', str(key), '-out', str(cert), '-days', '1', '-subj', '/CN=dashscope.aliyuncs.com',
-            '-addext', 'subjectAltName=DNS:dashscope.aliyuncs.com'], capture_output=True, timeout=30)
+            '-addext', 'basicConstraints=critical,CA:FALSE', '-addext', 'subjectAltName=DNS:dashscope.aliyuncs.com'], capture_output=True, timeout=30)
         assert result.returncode == 0, 'test TLS certificate generation failed'
         owner = self
 

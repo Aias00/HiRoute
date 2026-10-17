@@ -6,9 +6,11 @@ license.workspace = true
 rust-version.workspace = true
 
 [features]
-integration-test-hooks = ["hiroute-gateway/e2e-test-control"]
+integration-test-hooks = ["dep:base64", "dep:ring", "hiroute-gateway/e2e-test-control"]
 
 [dependencies]
+base64 = { workspace = true, optional = true }
+ring = { version = "0.17.14", optional = true }
 hiroute-platform = { path = "../platform" }
 agent-client-protocol = "=2.1.0"
 arc-swap.workspace = true
