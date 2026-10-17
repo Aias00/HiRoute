@@ -227,6 +227,47 @@ fn ready_reopen_keeps_checkpoint_and_scopes_do_not_follow_later_insertions() {
 }
 
 #[test]
+fn revision_cache_revalidates_prior_scopes_and_sql_notified_source_deletion() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    let f = ingest(&store, "source-revision-cache");
+    let q = ObservationAnalysisQueryV1::new(AnalysisViewV1::Conversations);
+    let page = store
+        .observed_analysis(&reader(), &q, Some(&range()), None, 1000)
+        .unwrap();
+    {
+        let db = store.connection.lock();
+        // A retained scope need not contain this optional derived cache.
+        db.execute(
+            "UPDATE observation_analysis_scopes_v1 SET body=json_remove(body,'$.source_revision')",
+            [],
+        )
+        .unwrap();
+    }
+    let mut follow = ObservationAnalysisQueryV1::new(AnalysisViewV1::CostRanking);
+    follow.analysis_scope = page.analysis_scope;
+    follow.currency = Some("USD".into());
+    let reused = store
+        .observed_analysis(&reader(), &follow, None, None, 1001)
+        .unwrap();
+    assert_eq!(reused.costs.len(), 1);
+    {
+        let db = store.connection.lock();
+        // Component source-guard fixture: even without the normal public
+        // deletion's core revision bump, SQL notifications invalidate the cache.
+        db.execute(
+            "DELETE FROM logical_requests WHERE workspace_id=?1 AND request_id=?2",
+            rusqlite::params![f.workspace.as_str(), f.request.as_str()],
+        )
+        .unwrap();
+    }
+    assert!(matches!(
+        store.observed_analysis(&reader(), &follow, None, None, 1002),
+        Err(crate::query_v2::ObservationV2Error::Stale)
+    ));
+}
+
+#[test]
 fn unknown_analysis_format_does_not_reject_core_facts() {
     let dir = tempfile::tempdir().unwrap();
     let store = open_store(dir.path());

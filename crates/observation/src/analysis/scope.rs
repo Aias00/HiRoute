@@ -55,6 +55,10 @@ pub(super) struct Scope {
     pub source_count: u64,
     pub source_digest: String,
     pub source_watermark: i64,
+    /// Core revision plus the existing SQL-only source notifications. A missing
+    /// cache is validated from live rows; relation validity is never cached here.
+    #[serde(default)]
+    pub source_revision: Option<(i64, u64)>,
     pub index_partial: bool,
 }
 
@@ -124,7 +128,7 @@ pub(super) fn load(
             |r| r.get(0),
         )
         .optional()?;
-    let s: Scope =
+    let mut s: Scope =
         serde_json::from_str(&body.ok_or(Error::Stale)?).map_err(|_| Error::Unavailable)?;
     if s.expires_ms <= now || s.binding != decoded.binding {
         return Err(Error::Stale);
@@ -176,6 +180,12 @@ pub(super) fn load(
         0
     };
     check_relations(db, &s)?;
+    let revision = population_revision(db)?;
+    if s.source_revision != Some(revision) {
+        check_population(db, &s)?;
+        s.source_revision = Some(revision);
+        save(db, &s)?;
+    }
     Ok((s, offset))
 }
 pub(super) fn digest(value: &impl Serialize) -> Result<String, Error> {
@@ -379,9 +389,11 @@ pub(super) fn create(
         source_count: 0,
         source_digest: String::new(),
         source_watermark,
+        source_revision: None,
         index_partial: matching.is_some_and(|(_, partial)| partial),
     };
     (s.source_count, s.source_digest) = source_population(db, &s)?;
+    s.source_revision = Some(population_revision(db)?);
     save(db, &s)?;
     Ok(s)
 }
@@ -421,6 +433,20 @@ fn source_population(db: &Connection, s: &Scope) -> Result<(u64, String), Error>
 }
 pub(super) fn check_live(db: &Connection, s: &Scope) -> Result<(), Error> {
     check_relations(db, s)?;
+    if s.source_revision == Some(population_revision(db)?) {
+        return Ok(());
+    }
+    check_population(db, s)
+}
+
+fn population_revision(db: &Connection) -> Result<(i64, u64), Error> {
+    Ok((
+        schema::checkpoint(db)?.0,
+        schema::get(db, "dirty_sequence")?,
+    ))
+}
+
+fn check_population(db: &Connection, s: &Scope) -> Result<(), Error> {
     if source_population(db, s)? != (s.source_count, s.source_digest.clone()) {
         return Err(Error::Stale);
     }

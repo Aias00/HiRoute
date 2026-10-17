@@ -267,7 +267,12 @@ impl LocalObservationStore {
         {
             page.status = AnalysisStatusV1::Partial;
         }
-        scope::check_live(&db, &s)?;
+        // The final visibility check observes one current snapshot. Unchanged
+        // core population revisions need no second full population hash, while
+        // relation withdrawal is checked even without a core revision change.
+        let visibility = db.unchecked_transaction()?;
+        scope::check_live(&visibility, &s)?;
+        visibility.commit()?;
         reader.check(now, q.view.content(), q.query.is_some())?;
         Ok(page)
     }
