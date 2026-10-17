@@ -3,6 +3,7 @@
 from contextlib import nullcontext, redirect_stdout
 import importlib.util
 import io
+import hashlib
 import json
 import os
 import re
@@ -255,7 +256,7 @@ class CandidateTests(unittest.TestCase):
             packager.stage(manifest, archive, destination)
         self.assertEqual((destination / "hiroute.exe").read_bytes(), b"changed owned entry")
 
-    def test_windows_shell_identity_measures_post_bundle_bytes_and_crt_imports(self):
+    def test_windows_shell_identity_measures_actual_nsis_member_and_crt_imports(self):
         result = self.build_windows_candidate()
         payloads = Path(result["internal_payloads"])
         files = [next(payloads.glob("*.tar.gz")), next(payloads.glob("*.json"))]
@@ -266,21 +267,44 @@ class CandidateTests(unittest.TestCase):
             if "--no-bundle" in args:
                 pe(executable, 0x8664)
             if "bundle" in args:
-                pe(executable, 0x8664, delayed)
-                executable.write_bytes(executable.read_bytes() + b"final PE resources")
+                pe(executable, 0x8664)
+                executable.write_bytes(executable.read_bytes() + b"workspace PE resources")
                 installer = executable.parent / "bundle/nsis" / f"HiRoute_{self.version}_x64-setup.exe"
                 installer.parent.mkdir(parents=True, exist_ok=True)
                 installer.write_bytes(b"fixture NSIS package")
+            if args[0] == "7z-fixture":
+                directory = Path(next(a[2:] for a in args if a.startswith("-o")))
+                pe(directory / "hiroute-shell.exe", 0x8664, delayed)
+                image = directory / "hiroute-shell.exe"
+                image.write_bytes(image.read_bytes() + b"actual NSIS member")
             return ""
 
         with patch.object(self.candidate, "standalone", return_value=(None, files)), \
-                patch.object(self.candidate, "run", side_effect=command):
+                patch.object(self.candidate, "run", side_effect=command), \
+                patch.object(MODULES["package-windows-shell"].shutil, "which", return_value="7z-fixture"):
             self.candidate.desktop_windows()
             identity = self.candidate.result["desktop_result"]
-            self.assertEqual(identity["shell_image"]["sha256"], MODULES["package-windows-shell"].digest(executable))
+            self.assertEqual(identity["shell_image"]["sha256"], hashlib.sha256(PE_FIXTURES.image() + b"actual NSIS member").hexdigest())
+            self.assertNotEqual(identity["shell_image"]["sha256"], MODULES["package-windows-shell"].digest(executable))
             delayed.append("VCRUNTIME140_1.dll")
-            with self.assertRaisesRegex(ValueError, "unexpected CRT dependency"):
+            with self.assertRaisesRegex(ValueError, "CRT dependency"):
                 self.candidate.desktop_windows()
+
+    def test_nsis_shell_audit_rejects_missing_tool_or_ambiguous_members(self):
+        packager = MODULES["package-windows-shell"]
+        installer = self.root / "fixture.exe"
+        installer.write_bytes(b"fixture NSIS package")
+        with patch.object(packager.shutil, "which", return_value=None):
+            with self.assertRaisesRegex(ValueError, "7-Zip is required"):
+                packager.shell_image(installer)
+        for count in (0, 2):
+            def extract(*args):
+                directory = Path(next(a[2:] for a in args if a.startswith("-o")))
+                for i in range(count):
+                    pe(directory / str(i) / "hiroute-shell.exe", 0x8664)
+            with patch.object(packager.shutil, "which", return_value="7z-fixture"):
+                with self.assertRaisesRegex(ValueError, "exactly one shell image"):
+                    packager.shell_image(installer, extract)
 
     def test_desktop_publication_rejects_partial_or_misbound_native_attestation(self):
         # Verifier-shape regression only; fabricated JSON is never installation evidence.

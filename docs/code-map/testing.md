@@ -82,9 +82,13 @@ the native installer candidate build runs it before exporting the measured bundl
 The [bounded NSIS journey](../../crates/daemon/tests/windows_desktop.rs) uses the
 verified development bundle and configured existing standard session to check
 silent defaults, repeat install, console/Gateway readiness and uninstall with
-data retained. It verifies the installed shell against the post-bundle image hash
+data retained. It verifies the installed shell against the NSIS member image hash
 after install, repeat and passive update. Its result does not establish WebView, Agent restore or upgrade
 recovery acceptance; see the [execution entry](../validation-routing.md#windows-iteration-and-release-validation).
+The [Windows package inspector](../../scripts/package-windows-shell.py) extracts the
+actual NSIS shell member with 7-Zip for its SHA-256 and CRT audit. The native case
+compares that measurement with installed bytes; the workspace executable is not
+the artifact identity source.
 
 Keep borrowed user resources, writable native acceptance configuration, fresh
 product storage and per-run materials separate. Each product instance needs a

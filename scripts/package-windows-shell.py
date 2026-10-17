@@ -6,7 +6,10 @@ import importlib.util
 import json
 from pathlib import Path, PurePosixPath
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parent.parent
@@ -83,6 +86,31 @@ def safe_name(name):
         part not in ("", ".", "..") and re.fullmatch(r"[A-Za-z0-9_.@-]+", part) for part in name.split("/"))
 
 
+def shell_image(installer, run=None):
+    """Audit the actual NSIS member, without executing the installer."""
+    regular(installer)
+    extractor = shutil.which("7z") or shutil.which("7zz")
+    if not extractor:
+        raise ValueError("7-Zip is required to audit the embedded NSIS shell")
+    with tempfile.TemporaryDirectory(prefix="nsis-shell-", dir=installer.parent) as temporary:
+        args = (extractor, "x", "-y", "-bd", "-r", "-o" + temporary,
+                str(installer.resolve()), "hiroute-shell.exe")
+        if run:
+            run(*args)
+        else:
+            subprocess.run(args, check=True, capture_output=True, text=True)
+        images = list(Path(temporary).rglob("hiroute-shell.exe"))
+        if len(images) != 1:
+            raise ValueError("NSIS must contain exactly one shell image")
+        regular(images[0])
+        image = module("windows-native-runtime-audit").image_record(
+            images[0].read_bytes(), "hiroute-shell.exe", "windows-desktop-release")
+        if (image["pe_machine"] != 0x8664 or image["imports"]["debug_crt"]
+                or image["imports"]["release_vc_runtime"]):
+            raise ValueError("Windows Desktop has an unexpected architecture or CRT dependency")
+        return image
+
+
 def verify(installer, identity, revision):
     if not isinstance(identity, dict):
         raise ValueError("Windows Desktop identity must be an object")
@@ -121,9 +149,15 @@ def main():
     p.add_argument("--installer", type=Path, required=True)
     p.add_argument("--identity", type=Path, required=True)
     p.add_argument("--revision", required=True)
+    p = sub.add_parser("image")
+    p.add_argument("--installer", type=Path, required=True)
     args = parser.parse_args()
-    result = stage(args.manifest, args.archive, args.destination) if args.action == "stage" else verify(
-        args.installer, json.loads(args.identity.read_text()), args.revision)
+    if args.action == "image":
+        result = shell_image(args.installer)
+    elif args.action == "stage":
+        result = stage(args.manifest, args.archive, args.destination)
+    else:
+        result = verify(args.installer, json.loads(args.identity.read_text()), args.revision)
     print(json.dumps(result, indent=2))
 
 

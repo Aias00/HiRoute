@@ -67,7 +67,10 @@ static-CRT/image checks. It stages the verified standalone archive, including
 console assets, under the shell's ignored resources, builds the pinned Tauri shell,
 and bundles NSIS in `currentUser` mode without code signing. The output name is
 `HiRoute-VERSION-REV12-windows-x86_64-setup.exe`. This stays separate from the
-headless archive jobs. Its identity sidecar remains `awaiting_runtime` until the
+headless archive jobs. 7-Zip (`7z` or `7zz`) is required to extract and audit the
+actual embedded shell image for its SHA-256, architecture and CRT imports. The
+read-only `package-windows-shell.py image --installer INSTALLER.exe` entry repeats
+that measurement for an existing immutable artifact. Its identity sidecar remains `awaiting_runtime` until the
 required Windows 11 x64 and Server standard-user selections pass for that exact
 installer. See the [native acceptance boundaries](windows-desktop-installation.md#evidence-and-release-claims).
 

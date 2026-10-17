@@ -255,14 +255,8 @@ class Candidate:
         self.run("npm.cmd", "ci", cwd=shell)
         self.run("npm.cmd", "run", "tauri", "--", "build", "--ci", "--target", self.target,
                  "--features", "shell-runtime", "--no-bundle", "--", "--locked", cwd=shell, env=environment)
-        executable = REPO / "target" / self.target / "release/hiroute-shell.exe"
         self.run("npm.cmd", "run", "tauri", "--", "bundle", "--ci", "--target", self.target,
                  "--features", "shell-runtime", "--bundles", "nsis", "--no-sign", cwd=shell, env=environment)
-        # Bundling can rewrite PE resources. Bind the final embedded image,
-        # including its CRT audit, rather than the pre-bundle executable.
-        image = module("windows-native-runtime-audit").image_record(executable.read_bytes(), "hiroute-shell.exe", "windows-desktop-release")
-        if image["imports"]["debug_crt"] or image["imports"]["release_vc_runtime"]:
-            raise ValueError("Windows Desktop has an unexpected CRT dependency")
         # Tauri CLI 2.11.4 uses product_version_arch-setup.exe. Select that
         # exact candidate path; retained installers from other versions are irrelevant.
         produced = REPO / "target" / self.target / "release/bundle/nsis" / f"HiRoute_{self.version}_x64-setup.exe"
@@ -271,6 +265,9 @@ class Candidate:
         name = f"HiRoute-{self.version}-{self.revision[:12]}-windows-x86_64-setup.exe"
         installer = self.output / name
         shutil.copyfile(produced, installer)
+        # The bundler's NSIS input can differ from the workspace executable.
+        # Measure and audit the immutable artifact that users actually install.
+        image = packager.shell_image(installer, self.run)
         identity = {"schema": packager.SCHEMA, "version": self.version, "revision": self.revision,
                     "architecture": "x86_64", "distribution": "unsigned", "installer_sha256": packager.digest(installer),
                     "installer_size": installer.stat().st_size, "integrity": "green", "embedded_components": "awaiting_runtime",
