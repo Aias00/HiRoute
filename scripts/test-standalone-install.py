@@ -129,6 +129,9 @@ class PackageTests(StandaloneFixture):
         (assets / "assets").mkdir(parents=True)
         (assets / "index.html").write_text('<script src="/assets/app.js"></script>')
         (assets / "assets/app.js").write_text('console.info("test")')
+        for path in assets.rglob("*"):
+            if path.is_file():
+                path.chmod(0o644)
         manifest, archive = self.build(console_assets=assets)
         verified = package.verify(manifest, archive)
         self.assertEqual(verified["files"]["console/index.html"]["sha256"], package.digest(assets / "index.html"))
