@@ -109,6 +109,49 @@ fn analysis_freezes_prices_and_attempt_inputs_and_uses_the_existing_arithmetic()
 }
 
 #[test]
+fn retained_attempt_metadata_is_rebuilt_from_bounded_verified_original_facts() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    let f = ingest(&store, "metadata-backfill");
+    {
+        let db = store.connection.lock();
+        // Component admission fixture, not released-writer acceptance. Retain
+        // the original serialized facts and remove only the derived metadata.
+        for table in [
+            "observation_analysis_models_v1",
+            "observation_analysis_reasoning_v1",
+        ] {
+            db.execute(&format!("DELETE FROM {table}"), []).unwrap();
+        }
+        db.execute(
+            "INSERT OR REPLACE INTO observation_analysis_dirty_v1 VALUES(?1,?2,1)",
+            rusqlite::params![f.workspace.as_str(), f.request.as_str()],
+        )
+        .unwrap();
+    }
+    store.reconcile_analysis_batch(1000).unwrap();
+    {
+        let db = store.connection.lock();
+        let models: u64 = db
+            .query_row(
+                "SELECT COUNT(*) FROM observation_analysis_models_v1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(models, 1);
+        let credential: String = db
+            .query_row(
+                "SELECT credential_digest FROM observation_analysis_models_v1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(!credential.is_empty());
+    }
+}
+
+#[test]
 fn ready_reopen_keeps_checkpoint_and_scopes_do_not_follow_later_insertions() {
     let dir = tempfile::tempdir().unwrap();
     let store = open_store(dir.path());

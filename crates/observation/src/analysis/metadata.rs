@@ -53,3 +53,35 @@ pub(crate) fn project(db: &Connection, e: &ExecutionFactEnvelopeV1) -> rusqlite:
     }
     Ok(())
 }
+
+/// Use the released small, non-text event catalog before opening original
+/// payloads. A retained prompt/response in another fact must never be parsed
+/// just to find a model or turn boundary.
+pub(super) fn backfill(db: &Connection, w: &str, request: &str) -> rusqlite::Result<()> {
+    let events = {
+        let mut stmt = db.prepare("SELECT f.original_digest,p.body_json FROM observation_safe_facts_v2 f
+            JOIN execution_fact_events e ON e.workspace_id=f.workspace_id AND e.request_id=f.request_id AND e.envelope_digest=f.original_digest
+            JOIN observation_sensitive_payloads_v2 p ON p.id='fact:'||f.original_digest
+            WHERE f.workspace_id=?1 AND f.request_id=?2
+              AND json_extract(f.body_json,'$.event_kind') IN ('attempt_started','candidate_decision','agent_turn_finished')
+              AND octet_length(p.body_json)<=65536 ORDER BY e.sequence LIMIT 2048")?;
+        stmt.query_map(params![w, request], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+        })?
+        .collect::<Result<Vec<_>, _>>()?
+    };
+    for (digest, body) in events {
+        let Ok(e) = serde_json::from_str::<ExecutionFactEnvelopeV1>(&body) else {
+            continue;
+        };
+        if e.correlation.workspace_id.as_str() != w
+            || e.correlation.request_id.as_str() != request
+            || e.validate_persisted_contract().is_err()
+            || !CanonicalDigest::of(&e).is_ok_and(|d| d.as_str() == digest)
+        {
+            continue;
+        }
+        project(db, &e)?;
+    }
+    Ok(())
+}

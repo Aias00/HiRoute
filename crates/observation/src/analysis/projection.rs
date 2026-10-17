@@ -140,23 +140,10 @@ fn project_request(db: &Connection, w: &str, id: &str, rev: u64) -> rusqlite::Re
         }
         return Ok(());
     }
-    super::turns::backfill(db, w, id)?;
+    super::metadata::backfill(db, w, id)?;
     // Bounded, request-indexed metadata extraction also supports admission of
     // older stores. Deleted payloads leave explicitly unknown fields.
-    let direct:Option<(String,String,Option<String>)>=db.query_row("SELECT m.native_model,m.model_id,reason.reasoning_profile_id FROM observation_analysis_models_v1 m JOIN valuation_requests_v2 v ON v.workspace_id=m.workspace_id AND v.request_id=m.request_id AND v.accepted_ordinal=m.ordinal LEFT JOIN observation_analysis_reasoning_v1 reason ON reason.workspace_id=m.workspace_id AND reason.request_id=m.request_id AND reason.model_id=m.model_id AND reason.profile_digest=m.profile_digest WHERE m.workspace_id=?1 AND m.request_id=?2",params![w,id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional()?;
-    let model: Option<(String, String, Option<String>)> = if direct.is_some() {
-        direct
-    } else {
-        db.query_row(
-        "SELECT json_extract(p.body_json,'$.fact.request_model'),json_extract(p.body_json,'$.fact.model_configuration_id'),
-          (SELECT json_extract(cp.body_json,'$.fact.reasoning_profile_id') FROM execution_fact_events ce JOIN observation_sensitive_payloads_v2 cp ON cp.id='fact:'||ce.envelope_digest
-           WHERE ce.workspace_id=e.workspace_id AND ce.request_id=e.request_id AND json_extract(cp.body_json,'$.fact.kind')='candidate_decision'
-             AND json_extract(cp.body_json,'$.fact.model_configuration_id')=json_extract(p.body_json,'$.fact.model_configuration_id') ORDER BY ce.sequence DESC LIMIT 1)
-         FROM execution_fact_events e JOIN observation_sensitive_payloads_v2 p ON p.id='fact:'||e.envelope_digest
-         JOIN valuation_requests_v2 v ON v.workspace_id=e.workspace_id AND v.request_id=e.request_id
-         WHERE e.workspace_id=?1 AND e.request_id=?2 AND json_extract(p.body_json,'$.fact.kind')='attempt_started'
-           AND json_extract(p.body_json,'$.fact.ordinal')=v.accepted_ordinal ORDER BY e.sequence DESC LIMIT 1",params![w,id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional()?
-    };
+    let model:Option<(String,String,Option<String>)>=db.query_row("SELECT m.native_model,m.model_id,reason.reasoning_profile_id FROM observation_analysis_models_v1 m JOIN valuation_requests_v2 v ON v.workspace_id=m.workspace_id AND v.request_id=m.request_id AND v.accepted_ordinal=m.ordinal LEFT JOIN observation_analysis_reasoning_v1 reason ON reason.workspace_id=m.workspace_id AND reason.request_id=m.request_id AND reason.model_id=m.model_id AND reason.profile_digest=m.profile_digest WHERE m.workspace_id=?1 AND m.request_id=?2",params![w,id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional()?;
     let (native, model, reason) = model
         .map(|(n, m, r)| (Some(n), Some(m), r))
         .unwrap_or_default();

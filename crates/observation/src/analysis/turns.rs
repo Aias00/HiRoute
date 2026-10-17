@@ -48,23 +48,3 @@ pub(crate) fn project(db: &Connection, e: &ExecutionFactEnvelopeV1) -> rusqlite:
     }
     Ok(())
 }
-
-pub(super) fn backfill(db: &Connection, w: &str, request: &str) -> rusqlite::Result<()> {
-    let covered:bool=db.query_row("SELECT EXISTS(SELECT 1 FROM observation_analysis_turns_v1 WHERE workspace_id=?1 AND request_id=?2 AND segment_id IS NOT NULL)",params![w,request],|r|r.get(0))?;
-    if covered {
-        return Ok(());
-    }
-    let events = {
-        let mut stmt=db.prepare("SELECT p.body_json FROM execution_fact_events e JOIN observation_sensitive_payloads_v2 p ON p.id='fact:'||e.envelope_digest
-            WHERE e.workspace_id=?1 AND e.request_id=?2 AND length(p.body_json)<=65536
-              AND json_extract(p.body_json,'$.fact.kind')='agent_turn_finished' ORDER BY e.sequence LIMIT 64")?;
-        stmt.query_map(params![w, request], |r| r.get::<_, String>(0))?
-            .collect::<Result<Vec<_>, _>>()?
-    };
-    for event in events {
-        if let Ok(e) = serde_json::from_str::<ExecutionFactEnvelopeV1>(&event) {
-            project(db, &e)?;
-        }
-    }
-    Ok(())
-}

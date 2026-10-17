@@ -110,18 +110,27 @@ fn released_worker_dependency_selection_declares_both_json_sources() {
 #[test]
 fn packaged_management_skill_explains_discovery_dependency_selection_and_recovery() {
     let skill = include_str!("../../../assets/skills/hiroute-management/SKILL.md");
+    assert!(
+        skill.len() <= 15_360,
+        "leave room within the unchanged 16 KiB installer limit"
+    );
     for required in [
-        "hiroute --help",
-        "hiroute service --help",
-        "hiroute gateway --help",
-        "hiroute protected-input --help",
-        "Application/Local Control commands",
+        "family/leaf --help",
+        "schema show --command-id",
         "worker dependencies discover --harness",
-        "--output json",
         "selection_revisions[].revision",
         "expected_selection_revision",
-        "replay that exact JSON unchanged",
         "not a CLI/package version",
+        "identical request/key",
+        "hiroute value show --view summary",
+        "--order-by cost-desc",
+        "--view routing --analysis-scope",
+        "--view conversation --analysis-scope",
+        "continuation_boundary",
+        "turn_context_reset",
+        "--restore-from",
+        "complete baseline",
+        "outside chat",
     ] {
         assert!(
             skill.contains(required),

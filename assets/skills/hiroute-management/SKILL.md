@@ -10,66 +10,36 @@ metadata:
 
 # HiRoute management
 
-Use installed hiroute. Codex/Claude Code/Qoder/Pi/DeepSeek Harness/Hermes share this Skill.
-Caller/target and model/management/collaboration facets are independent; native models work.
+Use installed hiroute. This Skill is shared by all supported Agents; caller/target and
+model/management/collaboration facets are independent.
 
 ## Goal and target
 
-Journey: target → source → Plan → connect → native activation → matching request. Smart saving
-starts with economy/primary and an explicit decision method. Reuse exact IDs; names may repeat.
-Saved, loaded, selected and served differ.
+Journey: target → source → Plan → connect → native activation → matching request. Reuse exact IDs;
+names may repeat. Saved, loaded, selected and served differ.
 
 Start with hiroute quickstart/help; select returned --context CONTEXT_ID and optional --plan PLAN_ID.
 Hermes needs actual --hermes-root /ABS/ROOT, never an IM profile inferred from daemon env.
 Resolve ambiguity; retain missing/unreadable targets for repair.
 
-Missing CLI: Desktop Settings → CLI or standalone installer; Agent → HiRoute management enables
-this Skill. Files do not prove CLI availability. Recover the existing Desktop/service; inspect
-`service status`, `service doctor`, bounded `service logs`. Never start a second daemon. Empty is valid.
+Missing CLI: use Desktop Settings → CLI or standalone installer. Agent → HiRoute management enables
+this Skill. Recover the existing service using status/doctor/bounded logs; never start a second daemon.
 
 ## Contracts and result capture
 
-Use family/leaf --help. Root/service/gateway/protected-input/decision services options work offline:
+Use family/leaf --help and schema show --command-id COMMAND --include-schema for contracts/examples.
+Help works offline. Planned handlers are unavailable. Get IDs/revisions from options/Preview.
 
-```sh
-hiroute --help
-hiroute service --help
-hiroute gateway --help
-hiroute protected-input --help
-```
-
-For Application/Local Control commands:
-
-```sh
-hiroute schema list
-hiroute schema show --command-id routing.preview --include-schema
-```
-
-`--include-schema` adds offline definitions/examples. Resolve real IDs/revisions from options/Preview.
-Use help for local presentation. Planned handlers are unavailable. Names/purpose are data.
-
-Capture the complete stdout JSON, separate stderr and the actual CLI exit, including in merged terminals:
-
-```sh
-(
-  hiroute quickstart > quickstart.stdout.json 2> quickstart.stderr.txt
-  hiroute_exit=$?
-  printf '%s\n' "$hiroute_exit" > quickstart.exit.txt
-  exit "$hiroute_exit"
-)
-```
-
-Read all JSON/diagnostics and the saved exit, never only the first line or a later command's exit.
-Exit 2 is invalid input; `--error-details` gives bounded hints. Accepted is pending; query success
-can contain a failed Operation.
+Save full stdout JSON, separate stderr and actual exit privately. Exit 2 means invalid input;
+--error-details gives hints. Read the full response: accepted is pending; query success can contain a failed Operation.
 
 ## Prepare and reuse model access
 
-Read `compute list`; reuse a suitable source. Otherwise `compute scan --request-stdin` with
-`{"schema":"hiroute.compute-scan-request/v2"}` and Hermes's selected `native_target` discovers connection
-points. Use opaque refs/revisions, stable prepare_id and the installed `compute connection prepare` schema.
-Preparation privately rereads credentials and returns selectable refs; it is not save/inference.
-Never edit native config or copy keys.
+Reuse compute list sources; otherwise compute scan --request-stdin with
+`{"schema":"hiroute.compute-scan-request/v2"}` and selected Hermes native_target discovers endpoints.
+Use returned refs/revisions, stable prepare_id and installed connection prepare schema. Prepare rereads
+credentials privately and returns selectable refs, not a saved connection or inference. Never edit
+native config or copy keys.
 
 Select all currently selectable models unless the user requests a subset:
 
@@ -78,27 +48,25 @@ hiroute compute connection preview --candidate CANDIDATE_REF --candidate-revisio
 hiroute compute connection apply --request-file source-apply.json
 ```
 
-Use repeated `--model-ref REF` for a subset. Freeze a nonempty current selection, never a future
-wildcard. Catalogs do not prove entitlement/inference; drift needs fresh preparation. New APIs use
-`compute connection test --help`/schema. Secrets use protected FD/candidate channels, never argv/env/
-ordinary JSON/files/output/chat. Endpoint, inventory and inference are separate effects. Release unused
-refs. Subscription options use login/check/authorize; retain refs, never retry a one-use callback after
-uncertain delivery.
+Use --model-ref for a subset; freeze a nonempty current selection, never a future wildcard. Catalogs
+prove no entitlement/inference; drift needs fresh preparation. New APIs use connection test help/schema.
+Secrets use protected FD/candidates, never argv/env/ordinary JSON/files/output/chat. Endpoint/inventory/
+inference are separate. Release unused refs. Subscription login/check/authorize retains refs; never
+replay a one-use callback after uncertain delivery.
 
 ## Create a route or change one choice
 
-Use `routing options --request-stdin` with `{}` for current binding IDs and shared backend defaults.
-A fixed Plan uses `--mode fixed_model --model BINDING_ID`. Smart saving can start directly:
+routing options --request-stdin with `{}` supplies IDs/defaults. Fixed uses --mode fixed_model
+--model BINDING_ID. Smart saving:
 
 ```sh
 hiroute routing preview --name 'Economy work' --purpose 'Routine and complex development' --mode smart_saving --economy ECONOMY_BINDING --primary PRIMARY_BINDING --decision local_rules --apply-file route-apply.json
 hiroute routing apply --request-file route-apply.json
 ```
 
-Repeat group flags for order. Select local_rules or saved `--decision-service ID@REVISION` explicitly;
-ordinary Chat is not the decision protocol. Edit with `routing preview --plan PLAN_ID` and requested
-changes/new file; omitted settings remain. Use returned choices/defaults, never invent editors.
-Advanced typed JSON and convenience flags are alternatives.
+Repeat group flags for order. Explicitly select local_rules or saved --decision-service ID@REVISION;
+ordinary Chat is not the decision protocol. Edit with --plan PLAN_ID and requested changes/new file;
+omissions remain. Use returned choices/defaults; typed JSON and flags are alternatives.
 
 ### Complete modification and recovery
 
@@ -118,11 +86,10 @@ hiroute routing apply --request-file /ABS/restore-apply.json
 hiroute routing show PLAN_ID --output json
 ```
 
-Restore-from uses the current head revision; review Preview, Apply and inspect the Operation. Compare
-**all desired fields**: order/reasoning, classifier/judgment, context/limits, requirements, mode,
-delegation/work and alias. Revisions advance. Never mix restore with edits, copy revisions or replace
-missing refs. Uncertainty reuses exact Apply; confirmed stale needs a fresh Preview/file. Source,
-credentials and native facets have separate owners; this is not a whole-installation backup.
+Review restore Preview/Operation and compare **all desired fields**: order/reasoning, classifier/
+judgment, context/limits, requirements, mode, delegation/work and alias. Restore uses the current head;
+revisions advance. Never mix edits with restore, copy revisions or replace missing refs. Reuse exact
+Apply after uncertainty; confirmed stale needs fresh Preview. Source/credentials/facets have separate owners.
 
 For facets retain the owned restore ref; provide filled restore commands below with actual root/
 selection flags and native follow-up. Arrange continuation before revocation. Do not overwrite native
@@ -130,10 +97,8 @@ files from backup or mistake saved recovery material for restoration.
 
 ### Decision-service onboarding
 
-Read `decision services options` first and reuse an explicitly selected suitable `ID@REVISION`.
-Saved does not mean tested. Otherwise show installed Bailian Token Plan/workspace, OpenRouter,
-TypeSafe, System One compatible and custom choices. Presets do not prove entitlement/availability/price.
-Use `decision services apply --help` for required endpoint/model inputs.
+Read decision services options; reuse an explicitly selected ID@REVISION or show its installed
+provider/custom choices. Saved/presets prove neither testing nor entitlement/availability/price.
 
 Credentials are a **human handoff outside chat**. Give the user a fresh non-secret candidate ref and
 this command to run in their own terminal on the HiRoute host (for example a separate SSH session):
@@ -142,28 +107,20 @@ this command to run in their own terminal on the HiRoute host (for example a sep
 hiroute protected-input register --candidate CANDIDATE_REF --prompt --format bearer
 ```
 
-Never run the prompt in an Agent tool or capture keys in chat. The user's terminal reads a bare key
-without echo and adds Bearer; the Agent receives status/ref only. Custom full headers use `--format
-raw`, or explicit custom `--no-auth`. Cancel/missing terminal saves nothing. Continue on success;
-missing registration/restart needs a fresh human input/ref. Never substitute argv/env/ordinary JSON
-or files. Follow installed host help: unavailable terminal prompts need Desktop or an operator's
-protected input handle, never chat.
+Never run the prompt in an Agent tool. The human terminal reads a bare key without echo and adds
+Bearer; the Agent gets status/ref only. Custom full headers use --format raw or explicit --no-auth.
+Cancel/missing terminal saves nothing; restart/missing registration needs fresh human input/ref.
+Never substitute chat/argv/env/ordinary JSON/files. Without a terminal use Desktop/protected handles.
 
-After registration, choose the actual preset, fill required endpoint/model inputs, review each
-Preview and inspect Operations. Use actual saved revisions:
+After registration, use `decision services apply --help` to fill the actual provider/endpoint/model
+and registered candidate. First prepare --apply-file, review it, then apply --request-file. Inspect
+Operations, run `decision services test --service ID@SAVED_REVISION`, and explicitly select that
+saved revision with `routing preview --plan PLAN_ID --decision-service ID@REVISION --apply-file PATH`
+and `routing apply --request-file PATH`.
 
-```sh
-hiroute decision services apply --id daily-decision --name 'Daily decisions' --provider typesafe --candidate CANDIDATE_REF --apply-file decision-apply.json
-hiroute decision services apply --request-file decision-apply.json
-hiroute decision services test --service daily-decision@SAVED_REVISION
-hiroute routing preview --plan PLAN_ID --decision-service daily-decision@SAVED_REVISION --apply-file decision-route-apply.json
-hiroute routing apply --request-file decision-route-apply.json
-```
-
-The apply verb handles Preview and Apply; no separate preview subcommand. Edit --id/requested fields;
-omissions remain. Endpoint changes need explicit credentials/custom no-auth. Retain exact retry files;
-release unused refs. Inspect billed tests' data.outcome/failure_code, not only exit; a probe proves no quality/native loading. Report failures; local rules are explicit,
-never silent model-decision success.
+The apply verb handles Preview/Apply; edit --id/requested fields, preserving omissions. Endpoint
+changes need explicit credentials/no-auth. Keep retry files, release unused refs, inspect billed tests
+data.outcome/failure_code. A probe proves no quality/native loading. Local rules require explicit choice.
 
 Verify decision source, group, model, publication, reasoning and each request outcome. Model swaps
 are not complex-branch proof. Empty keywords retain built-in rules. Report natural misses without
@@ -171,10 +128,9 @@ manufacturing coverage. Include cancelled/timeouts; transport failure is not com
 
 ## Connect or restore facets
 
-Before model restore/reconnect/grant changes, check whether the caller depends on that connection.
-A running process may retain a revoked grant. Establish independent native access/operator continuation
-**before** the effect; unknown dependency leaves it pending while independent preparation continues.
-Do not strand the caller or bypass self-restart protection.
+Before model restore/reconnect/grant changes, check caller dependency; running processes can retain
+a revoked grant. Establish independent native/operator continuation **before** effects. If unknown,
+leave the effect pending and continue preparation. Never strand the caller or bypass self-restart protection.
 
 Unknown Codex/Claude Skill loading needs `agents check AGENT_ID --scope collaboration`, then fresh
 Preview. This isolated native/local read challenge makes no upstream call. Missing/failed capability
@@ -185,13 +141,11 @@ Use `agents connect preview --context CONTEXT_ID --apply-file PATH` with request
 for tasks. Omissions remain. Skill-only needs no model Plan/plugin. Delegation still requires
 collaboration policy/user intent. Native help supplies choices:
 
-- Hermes: exact root, --protocol chat_completions|responses|messages. Preserve Responses reasoning
-  requirements. Recommend >=0.21.7 for reasoning replay; compatible older versions remain allowed,
-  required plugin/SDK interfaces may block. No unsolicited upgrade/patch/thinking disable.
-- Codex: exact root/profile, `--native-models preserve_available|hiroute_only` and
-  `--native-default preserve_native|plan`; root Skill scope differs from model-profile scope.
-- Claude Code: select intended `--preset opus|sonnet|haiku`; preserve other presets.
-- Qoder/Pi/DSH: explicit `--protocol` adds supported entries, not a claimed global default.
+Select native options from installed help. Hermes uses exact root/protocol; preserve Responses
+reasoning. Recommend >=0.21.7 for replay; compatible older versions remain allowed, while required
+plugin/SDK interfaces may block. No unsolicited upgrade/patch/thinking disable. Codex needs exact
+root/profile and native/default model choice; Claude uses the intended preset, preserving others.
+Qoder/Pi/DSH entries do not claim a global default.
 
 Honor blockers/Desktop service prerequisites; never forge evidence. After Apply query its Operation and:
 
@@ -199,10 +153,9 @@ Honor blockers/Desktop service prerequisites; never forge evidence. After Apply 
 hiroute agents connect status --effective --context CONTEXT_ID --plan PLAN_ID
 ```
 
-Follow returned native actions, actor and prerequisites; no arbitrary restart/self-protection bypass
-or promise that all IM sessions switched. Session selection may override config. Match actual target,
-request, publication, model and outcome. Saved is not loaded; absent loading evidence stays unknown,
-not inferred from missing counters. Without model-call consent leave verification pending.
+Follow native actions/prerequisites; no arbitrary restart/self-protection bypass or promise that all
+IM sessions switched. Session selection may override config. Match target/request/publication/model/
+outcome. Absent loading evidence stays unknown. Without model-call consent verification stays pending.
 
 Restore one selected facet through existing ownership:
 
@@ -220,73 +173,89 @@ Use same-OS-user CLI access; explicit content/search needs no GUI read ticket. D
 `--agent` for management: that selects the separate sealed collaboration channel. A supplied grant
 is still checked; model Gateway keys cannot authorize management.
 
-Start with `sessions list --include-unlinked --limit 50`, optionally `--query TEXT`. Read the actual
-`sessions show SESSION_ID --content messages-and-tools`; use `sessions receipt RECEIPT_ID` for its
-immutable routing evidence. For bounded details, read `schema show --command-id sessions.show
---include-schema`: V2 timeline → request catalog → content, retaining scope and next_cursor. V2
-`sessions list` accepts search/session_search; `sessions receipt` accepts request facts. Use
-`observation plan-quality samples --help` for linked competence assessments. Missing/expired/partial
-capture or pending index is a coverage gap, not proof of wrong routing. Read relevant content locally;
-report minimal excerpts and linked IDs rather than copying whole conversations into chat.
-
-Compare task intent and answer/tool history with decision source/probability/threshold, group,
-competence, model/reasoning and publication. Show evidence/uncertainty before recommending keywords,
-thresholds or competence criteria. Never auto-tune, treat manual model swaps as classification proof,
-or infer quality from cost. Authorized edits need complete recovery above.
-
-For subscription/Coding Plan, keep actual billing independent from API-equivalent estimates:
+Choose the user's goal: switch explanation, conversation, expense ranking or savings. Start one scope:
 
 ```sh
-hiroute value show --routing PLAN_ID --period 7d --basis api-equivalent --reference-binding PRIMARY_BINDING --currency CNY --output json
+hiroute value show --view summary --period 7d
+hiroute value show --group-by session --order-by cost-desc --period 7d
+hiroute sessions list --view switches --period 7d
+hiroute sessions list --view conversations --period 7d --query TEXT
 ```
 
-Resolve the reference Binding (normally primary) and currency with the user. Read value show --help
-for the current-price basis, retries, paired coverage and signed estimates. This proves neither cash
-savings nor equal output. Incomplete totals stay null; narrow unavailable intervals.
+Use sessions/value help for schemas/choices. Report requested/effective bounds, offsets and retention
+clipping. Civil days are service-local; never mix period/day/absolute modes. New views reject --model-switch.
 
-Missing prices: use installed `prices effective` schema with exact Binding locators, currency and
-`valuation_kind=api_equivalent`. Use returned edit_context revisions with `prices override preview`,
-then exact `prices override apply`/Operation. Set input/output per-million-token rates and separately
-supported cache rates; never invent rates/FX or usage counts. A cache-creation rate equal to ordinary
-input makes an unreported creation split irrelevant to the estimate; it does not create measured usage. Retain the prior
-setting from Preview's spec.desired_state.before.setting (if present) and give complete price-restore Preview/Apply commands; follow_catalog
-removes the manual setting. Re-run the explicit estimate. This never changes entitlement. Ordinary
-`value show` keeps frozen historical valuation; free, subscription, paid and unknown remain distinct.
+Retain returned analysis_scope. Use it for the other paths and narrower session/request drill-downs,
+without a new time selector. Follow next_cursor with the same view/filters/limit; collect every page
+before calling a ranking complete. A page length/member preview is not a total. Exact commands:
+
+```sh
+hiroute sessions show SESSION_ID --view routing --analysis-scope TOKEN
+hiroute sessions show SESSION_ID --view conversation --analysis-scope TOKEN
+hiroute value show --group-by request --order-by cost-desc --session SESSION_ID --analysis-scope TOKEN
+hiroute sessions show SESSION_ID --view conversation --request REQUEST_ID --analysis-scope TOKEN
+```
+
+Carry scope through your own new requests/compaction, pagination and follow-up questions. Fresh
+requests, settlement or prices do not change its pinned relations/numbers/prices. Only narrow it;
+never silently replace the scope or compare totals across refreshed scopes. Expiry, withdrawn proof,
+affected deletion or authority change requires an explicit fresh initial query; give its filled command.
+
+Explain recorded decisions, served model/reasoning/publication. Stages are not switches. between_turn
+requires proven adjacent completed user turns. continuation_boundary is compression, possibly mid-turn;
+turn_context_reset/pending/unknown prove no adjacency. Missing lineage keeps members separate; matching
+text/time proves no link. Credential relay/fallback differ from user-turn changes. Count each request/attempt once.
+
+For reference_only/partial content use returned content_id/request_id and sessions.show schema for
+V2 catalog/content pages. Keep cursor/scope; report minimal linked excerpts, never private provider
+state. sessions receipt opens immutable evidence; plan-quality samples explain stages. Legacy list
+--include-unlinked --query and show --content messages-and-tools remain available. Use public reads,
+not repository inspection/manual joins.
+
+Ranking needs no reference. Choose one currency and recorded valuation kind, or --basis api-equivalent
+for current-price estimates. Summary normally uses that estimate and an unambiguous primary model;
+resolve returned reference/currency choices using real binding IDs. Do not mix recorded estimates
+with current-price recalculation, currencies or valuation kinds. Unknown is not free/zero. Report
+highest-known-only rankings, signed paired savings and missing/excluded coverage; zero denominator
+has no percentage. Decision overhead is unmeasured. Coding Plan estimates are API-equivalent, not a
+cash bill or proof of equal quality. Ordinary value show preserves historical valuation.
+
+For pending/index_unavailable report missing coverage, progress/last-progress/stall and retry guidance.
+timeout/reader_busy are retryable, not empty. Missing/deleted/expired capture proves no routing error.
+Compare task/answer/tools with decision source/group/probability/threshold/competence/reasoning before
+proposing changes. No auto-tuning, quality inference from cost or manual-swap classification proof.
+Explain uncertainty; authorized edits need a fresh complete baseline and filled recovery commands.
+
+Missing prices: use prices effective schema with exact Binding/currency/valuation_kind=api_equivalent.
+Use returned edit_context in prices override preview, then exact apply/Operation. Set per-million-token
+input/output and supported cache rates; invent no prices/FX/usage. Equal cache-creation/input rates
+remove that split's estimate sensitivity, not its measurement gap. Retain Preview's complete before.setting;
+give filled price-restore Preview/Apply commands (follow_catalog removes the override). Re-run the
+estimate without changing entitlement. Free, subscription, paid and unknown remain distinct.
 
 ## Exact submission and scope
 
-`--apply-file` exclusively creates a private regular file containing the exact request/key, no secrets
-or Apply capability. Review effects, submit submission.arguments and retain file/operation_lookup.
-Use the OS socket, never mint capabilities. After uncertainty use `operations find --request-stdin`,
-`operations get OPERATION_ID` or replay the **identical file**; never regenerate a possibly accepted
-key. Confirmed unaccepted stale input needs a new Preview/file. Reuse completed steps/IDs.
+--apply-file exclusively creates a private exact request/key file, without secrets/capabilities. Review
+effects; submit submission.arguments and retain file/operation_lookup. Use the OS socket, never mint
+capabilities. After uncertainty use operations find/get or replay the **identical file**; never replace
+a possibly accepted key. Confirmed unaccepted stale input needs fresh Preview. Reuse completed IDs.
 
-Keep personal notes/config/logs outside this managed Skill. Use existing drift ownership. Effects,
-provider calls, unrelated-content reads and cancellation require user scope; existing authorization
-persists without repeated confirmation. Explain quota before inference; Quickstart/status never call models.
+Keep notes outside this managed Skill. Honor ownership/user scope for effects, models, unrelated
+content and cancellation. Authorization persists. Explain quota. Quickstart/status never call models.
 
 ## Worker
 
-Use `worker dependencies discover --harness codex_cli --output json`, then
-`worker dependencies select --request-stdin`. Select a complete found tuple and its Harness's
-selection_revisions[].revision as expected_selection_revision (not a CLI/package version).
-After uncertainty replay that exact JSON unchanged. Selection installs nothing. Inspect worker
-executors/plans; ready permits an attempt, not guaranteed success.
-
-worker exec requires a published delegation-enabled Plan, absolute cwd, explicit text source and
-stable key. Read installed help. Inspect status/wait/result/list:
-
-```sh
-hiroute worker status --submission ORIGINAL_KEY --operation start --output json
-hiroute worker wait --run RUN_ID --wait-timeout 30 --output json
-hiroute worker result --run RUN_ID --output json
-```
-
-Wait timeout is pending; uncertainty reuses the original submission/key. Report query and run states.
-Cancel only on request. Management grants no delegation, recursive or coordination/status/result-summary delegation.
+Use worker help. `worker dependencies discover --harness codex_cli` and
+`worker dependencies select --request-stdin` select a found complete tuple; use its Harness
+selection_revisions[].revision as expected_selection_revision, not a CLI/package version.
+Selection installs nothing. Read executors/plans.
+worker exec needs a published delegation-enabled Plan, absolute cwd, explicit text source and stable
+key. Status/wait/result/list use the original submission or run ID; wait timeout remains pending.
+After uncertainty replay the identical request/key. Cancel only on request. Management grants no
+recursive or coordination/status/result-summary delegation; readiness is not guaranteed success.
 
 ## Listener and service changes
 
-Read gateway show before gateway set. Non-loopback/wildcard needs explicit remote-risk acknowledgement.
-Report applied and ready; firewall/TLS/remote Agents are separate. gateway recover restores the last
-applied listener/safe default. service start/restart require Local Control readiness; start is not autostart.
+Read gateway show before set; remote/wildcard needs explicit risk acknowledgement. Report applied/
+ready separately from firewall/TLS. gateway recover restores the applied/safe listener. Check Local
+Control readiness after service start/restart; start is not autostart.

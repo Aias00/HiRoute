@@ -210,6 +210,23 @@ fn search_scale(distinct: usize, occurrences: usize) {
             common.next_cursor.is_none() && !common.index_partial,
             "{word}"
         );
+        let mut analysis = ObservationAnalysisQueryV1::new(AnalysisViewV1::Conversations);
+        analysis.query = Some(word.into());
+        analysis.limit = 200;
+        let range = AnalysisTimeRangeV1 {
+            requested_from_ms: 0,
+            requested_to_ms: 1000,
+            effective_from_ms: 0,
+            effective_to_ms: 1000,
+            from_utc_offset_seconds: 0,
+            to_utc_offset_seconds: 0,
+            clipped_for_retention: false,
+        };
+        let analyzed = store
+            .observed_analysis(&reader(true), &analysis, Some(&range), None, 500)
+            .unwrap_or_else(|error| panic!("analysis keyword {word} failed: {error:?}"));
+        assert_eq!(analyzed.conversations.len(), 111, "{word}");
+        assert!(analyzed.next_cursor.is_none(), "{word}");
     }
     let mut short = query("o", 200);
     short.limit = 50;
