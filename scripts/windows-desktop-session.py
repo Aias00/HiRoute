@@ -60,6 +60,11 @@ if($q.action -eq 'quit') {
  if($null -eq $bar){throw 'No native notification area'}
  $find=[Windows.Automation.PropertyCondition]::new($name,'HiRoute')
  $icons=@($bar.FindAll($descendants,$find) | Where-Object {-not $_.Current.IsOffscreen})
+ $overflowClasses=@('NotifyIconOverflowWindow','TopLevelWindowForOverflowXamlIsland')
+ foreach($className in $overflowClasses) {
+  $overflow=$desktop.FindFirst($children,[Windows.Automation.PropertyCondition]::new($class,$className))
+  if($null -ne $overflow -and -not $overflow.Current.IsOffscreen){$icons+=@($overflow.FindAll($descendants,$find) | Where-Object {-not $_.Current.IsOffscreen})}
+ }
  if($icons.Count -eq 0) {
   $chevrons=@($bar.FindAll($descendants,[Windows.Automation.Condition]::TrueCondition) | Where-Object {
    $_.Current.AutomationId -eq 'SystemTrayIcon' -and $_.Current.Name -in @('Show hidden icons','显示隐藏的图标')
@@ -67,8 +72,10 @@ if($q.action -eq 'quit') {
   if($chevrons.Count -ne 1){throw 'Observe the notification area before continuing; icon is unavailable'}
   $chevrons[0].GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
   Start-Sleep -Milliseconds 500
-  $overflow=$desktop.FindFirst($children,[Windows.Automation.PropertyCondition]::new($class,'NotifyIconOverflowWindow'))
-  if($null -ne $overflow){$icons=@($overflow.FindAll($descendants,$find) | Where-Object {-not $_.Current.IsOffscreen})}
+  foreach($className in $overflowClasses) {
+   $overflow=$desktop.FindFirst($children,[Windows.Automation.PropertyCondition]::new($class,$className))
+   if($null -ne $overflow -and -not $overflow.Current.IsOffscreen){$icons+=@($overflow.FindAll($descendants,$find) | Where-Object {-not $_.Current.IsOffscreen})}
+  }
  }
  if($icons.Count -ne 1){throw 'Exactly one visible HiRoute notification icon is required'}
  $icons[0].GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
