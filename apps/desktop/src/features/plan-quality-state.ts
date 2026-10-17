@@ -92,7 +92,7 @@ export function qualityModelRows(configured: readonly PlanQualityModel[], summar
 
 export function qualityBranchLabel(branch: string, language: 'zh' | 'en'): string {
   const labels: Record<string, [string, string]> = {
-    smart_saving: ['智能省钱', 'Smart saving'],
+    smart_saving: ['按难度分流', 'Difficulty routing'],
     fixed: ['固定候选', 'Fixed candidates'],
     fixed_model: ['固定候选', 'Fixed candidates'],
     free: ['免费候选', 'Free candidates'],
@@ -123,7 +123,7 @@ export function qualityNativeModelName(nativeModel: string): string {
 export function qualityGroupLabel(branch: string, group: 'regular' | 'primary' | null | undefined, language: 'zh' | 'en'): string {
   if (!group) return language === 'zh' ? '模型组未记录' : 'Model group unrecorded';
   return group === 'primary' ? (language === 'zh' ? '主力' : 'Primary')
-    : branch === 'smart_saving' ? (language === 'zh' ? '省钱' : 'Economy') : (language === 'zh' ? '常规' : 'Regular');
+    : branch === 'smart_saving' ? (language === 'zh' ? '常规' : 'Regular') : (language === 'zh' ? '常规' : 'Regular');
 }
 export function qualityRowSection(row: QualityModelRow): string {
   return JSON.stringify([row.branch, row.summary?.execution.group ?? row.configured?.group ?? null]);

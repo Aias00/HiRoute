@@ -1,0 +1,6 @@
+.trust-control { display: grid; gap: 10px; min-width: 0; }
+.trust-control .editor-section-heading { flex-wrap: wrap; gap: 8px; }
+.trust-levels { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.trust-levels .btn { display: flex; flex-direction: column; white-space: normal; min-width: 0; overflow-wrap: anywhere; }
+.trust-levels .btn[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+@media (max-width: 480px) { .trust-levels { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

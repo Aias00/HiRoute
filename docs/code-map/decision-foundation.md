@@ -4,7 +4,7 @@
 [Gateway map](../../crates/gateway/README.md) · [Decision API v1](../../decision-extensions/api/README.md)
 
 Built-in decision models and custom extensions supply judgments. HiRoute owns
-routing policy and execution. Smart saving uses one task scope and economy/primary
+routing policy and execution. Difficulty routing uses one task scope and regular/primary
 groups; custom routing first selects a task category, then its regular/optional
 primary group. Tool selection is [protocol documentation only](../../decision-extensions/api/decision-design.md),
 with no current runtime or product entry.

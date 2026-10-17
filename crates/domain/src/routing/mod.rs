@@ -38,3 +38,6 @@ pub const AGENT_PLAN_COMPILER_REVISION_V1: &str = "agent-plan-compiler/v1";
 
 pub const AGENT_PLAN_COMPILED_SCHEMA_V3: &str = "hiroute.compiled-agent-plan/v3";
 pub const AGENT_PLAN_COMPILER_REVISION_V3: &str = "agent-plan-compiler/v3";
+
+mod trust_level;
+pub use trust_level::*;

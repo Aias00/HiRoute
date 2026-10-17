@@ -43,7 +43,7 @@ provider quality, persistence, evidence navigation or native window acceptance.
 | View | English | Chinese | What it shows |
 | --- | --- | --- | --- |
 | Decision models | [English](decision-models-en.png) | [中文](decision-models-zh-CN.png) | Two-pane model page, provider logos, Bailian connection form |
-| Smart saving | [English](config-en.png) | [中文](config-zh-CN.png) | Decision method, economy/primary candidates, collapsed judgment settings |
+| Difficulty routing | [English](config-en.png) | [中文](config-zh-CN.png) | Decision method, regular/primary candidates, collapsed judgment settings |
 | Custom branches | [English](custom-branches-en.png) | [中文](custom-branches-zh-CN.png) | Writing/review conditions, regular/primary groups and branch settings |
 | Plan performance | [English](quality-en.png) | [中文](quality-zh-CN.png) | One row per configured execution slot; stage counts and averages |
 | Session detail excerpt | [English](session-en.png) | [中文](session-zh-CN.png) | Actual stage selection, frozen threshold and later assessment coverage |

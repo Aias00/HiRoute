@@ -1,3 +1,4 @@
+import { TrustLevelControl } from '../trust/TrustLevelControl';
 import { DecisionSelector } from './DecisionSelector';
 import type { OpenDecisionConnection } from './presentation';
 import { useState, type ReactNode } from 'react';
@@ -27,9 +28,10 @@ export function BranchRoutingEditor({ routing, services, language, onChange, onO
           {group(t('主力模型', 'Primary models'), t('任务复杂或上一阶段不胜任时使用，按顺序尝试。', 'Used for complex tasks or low competence, tried in this order.'), branch.primary_candidates, primary_candidates => put(branch, { primary_candidates }), { groupId: branch.id + '-primary', preferred: 'high' })}
           <button className="btn btn-quiet" type="button" onClick={() => { put(branch, { primary_candidates: [] }); setPrimaryEditors(ids => ids.filter(id => id !== branch.id)); }}>{t('仅使用常规模型', 'Use regular models only')}</button>
         </> : <button className="btn" type="button" onClick={() => setPrimaryEditors(ids => [...ids, branch.id])}><UiIcon name="plus" />{t('添加主力模型（可选）', 'Add primary models (optional)')}</button>}
+        {dual && <TrustLevelControl value={judgment} onChange={judgment => put(branch, { judgment })} id={`branch-${index}`} language={language} />}
         <Disclosure label={t(`判断设置 · ${branch.judgment ? '单独调整' : '使用计划默认'} · ${judgmentSummary(judgment, dual, language)}`, `Judgment settings · ${branch.judgment ? 'Customized' : 'Plan defaults'} · ${judgmentSummary(judgment, dual, language)}`)} language={language}>
           <div className="field-actions"><p className="field-help">{branch.judgment ? t('本分支使用独立的完整判断设置。', 'This branch uses its own complete judgment settings.') : t('跟随计划默认，单独调整后整套设置独立生效。', 'Follows plan defaults. Customize to make all settings independent.')}</p><button className="btn" type="button" onClick={() => put(branch, { judgment: branch.judgment ? null : structuredClone(routing.judgment) })}>{branch.judgment ? t('恢复计划默认', 'Restore plan defaults') : t('单独调整', 'Customize')}</button></div>
-          <JudgmentFields value={judgment} onChange={judgment => put(branch, { judgment })} id={`branch-${index}`} dual={dual} disabled={!branch.judgment} language={language} />
+          <JudgmentFields value={judgment} onChange={judgment => put(branch, { judgment })} id={`branch-${index}`} dual={dual} hideThreshold={dual} disabled={!branch.judgment} language={language} />
         </Disclosure>
       </section>;
     })}

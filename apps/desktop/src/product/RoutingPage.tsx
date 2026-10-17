@@ -1,3 +1,4 @@
+import { trustLevelLabel } from '../features/trust/levels';
 import type { OpenDecisionConnection } from '../features/decision-services/presentation';
 import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
@@ -36,7 +37,7 @@ export function RoutingPage({ language, active = true, refreshVersion = 0, snaps
   const plans = snapshot?.catalog.plans ?? [];
   const drafts = snapshot?.catalog.drafts ?? [];
   const mutable = !!snapshot?.trusted_authority && snapshot.service.mutation_available;
-  const modes = { custom_branches: text('自定义分支', 'Custom branches'), fixed_model: text('固定模型', 'Fixed model'), smart_saving: text('智能省钱', 'Smart saving'), free_first: text('免费优先', 'Free first') };
+  const modes = { custom_branches: text('自定义分支', 'Custom branches'), fixed_model: text('固定模型', 'Fixed model'), smart_saving: text('按难度分流', 'Difficulty routing'), free_first: text('免费优先', 'Free first') };
   const entries: RoutingEditorIntent[] = routingEditorEntries(plans, drafts);
   const creating = Boolean(editor && !editor.plan && !editor.draft);
   useEffect(() => {
@@ -159,9 +160,12 @@ export function RoutingPage({ language, active = true, refreshVersion = 0, snaps
         {entries.map(item => {
           const mode = item.draft?.editor.mode ?? item.plan?.desired.mode;
           const active = editor?.key === item.key;
+          const published = item.plan?.desired;
+          const threshold = published?.mode === 'smart_saving' && published.strategy?.classifier?.kind !== 'local_rules' ? published.strategy?.judgment?.degree.simple_threshold_millis : undefined;
           return <button className={`list-row${active ? ' active' : ''}`} key={item.key} aria-current={active ? 'page' : undefined} onClick={event => void choose(item, event.currentTarget)}>
             <span className="route-avatar" data-mode={mode} aria-hidden="true">{mode === 'smart_saving' ? 'S' : mode === 'free_first' ? 'F' : 'M'}</span>
             <span className="row-main"><span className="row-title">{item.draft?.editor.display_name || item.plan?.desired.display_name || text('未命名草稿', 'Untitled draft')}{item.staleDraft ? ` · ${text('过期草稿', 'Outdated draft')}` : ''}</span><span className="row-meta">{modes[mode!]} · {item.draft?.editor.purpose ?? item.plan?.desired.purpose}</span></span>
+            {threshold !== undefined && <span className="badge no-dot">{trustLevelLabel(threshold, language)}</span>}
             <UiIcon name="chevronRight" />
           </button>;
         })}
