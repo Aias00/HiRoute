@@ -7,12 +7,51 @@ use std::os::unix::fs::PermissionsExt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixListener;
+use zeroize::Zeroizing;
+
+const RELEASE_GRANT: &str = "completion-release-grant";
+
+struct CompletionAuthority(Arc<AtomicUsize>);
+impl HostAuthority for CompletionAuthority {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    fn has_authority(&self) -> bool {
+        true
+    }
+    fn register_operation(
+        &self,
+        digest: &CanonicalDigest,
+        revisions: &RevisionSetV1,
+        operation: &'static str,
+    ) -> Result<Zeroizing<String>, String> {
+        let validation: ComputeValidationRefV2 =
+            serde_json::from_value(result(false)["validation"].clone()).unwrap();
+        assert_eq!(operation, RELEASE_SUBSCRIPTION_CHECK_OPERATION_V2);
+        assert_eq!(digest, &CanonicalDigest::of(&validation).unwrap());
+        assert_eq!(revisions.target, 1);
+        assert!(revisions.dependencies.is_empty());
+        self.0.fetch_add(1, Ordering::SeqCst);
+        Ok(Zeroizing::new(RELEASE_GRANT.into()))
+    }
+    fn register_input(
+        &self,
+        _: &ComputeCandidateRefV2,
+        _: Zeroizing<String>,
+    ) -> Result<(), String> {
+        panic!("completion must not register a new protected input")
+    }
+    fn release_model_input(&self, _: &ComputeCandidateRefV2) -> Result<(), String> {
+        panic!("completion must not release an unrelated protected input")
+    }
+}
 
 struct Fixture {
-    root: tempfile::TempDir,
+    _root: tempfile::TempDir,
     client: Client,
     calls: Arc<AtomicUsize>,
     releases: Arc<AtomicUsize>,
+    registrations: Arc<AtomicUsize>,
     created: Arc<AtomicBool>,
     server: tokio::task::JoinHandle<()>,
 }
@@ -71,7 +110,9 @@ impl Fixture {
                     }),
                     RELEASE_SUBSCRIPTION_CHECK_OPERATION_V2 => {
                         assert_eq!(request.payload["validation_ref"], "validation-a");
-                        assert!(request.protected_grant.is_some());
+                        let grant = request.protected_grant.as_ref().unwrap();
+                        assert_eq!(grant.principal_kind, PrincipalKind::Desktop);
+                        assert_eq!(grant.capability, RELEASE_GRANT);
                         server_releases.fetch_add(1, Ordering::SeqCst);
                         result(true)
                     }
@@ -89,10 +130,11 @@ impl Fixture {
             }
         });
         Self {
-            root,
+            _root: root,
             client,
             calls,
             releases,
+            registrations: Arc::new(AtomicUsize::new(0)),
             created,
             server,
         }
@@ -100,7 +142,7 @@ impl Fixture {
     fn session(&self) -> Session {
         Session::new(
             self.client.clone(),
-            Arc::new(crate::authority::UnavailableAuthority),
+            Arc::new(CompletionAuthority(self.registrations.clone())),
         )
     }
 }
@@ -175,6 +217,7 @@ async fn close_before_operation_record_releases_late_completed_validation() {
     session.invalidate_confirmation();
     session.close_subscription_check().await.unwrap();
     assert_eq!(fixture.releases.load(Ordering::SeqCst), 0);
+    assert_eq!(fixture.registrations.load(Ordering::SeqCst), 0);
     assert!(session.subscription_hint.is_some());
     fixture.created.store(true, Ordering::SeqCst);
     let sessions = tokio::sync::Mutex::new(Some(session));
@@ -182,6 +225,7 @@ async fn close_before_operation_record_releases_late_completed_validation() {
         .await
         .unwrap();
     assert_eq!(fixture.releases.load(Ordering::SeqCst), 1);
+    assert_eq!(fixture.registrations.load(Ordering::SeqCst), 1);
     assert!(
         sessions
             .lock()
@@ -213,6 +257,7 @@ async fn replacement_session_rejects_completion_before_queries_or_hint_changes()
     assert!(matches!(failure, DesktopFailure::Native { code } if code == "CONFIRMATION_STALE"));
     assert_eq!(fixture.calls.load(Ordering::SeqCst), 0);
     assert_eq!(fixture.releases.load(Ordering::SeqCst), 0);
+    assert_eq!(fixture.registrations.load(Ordering::SeqCst), 0);
     assert_eq!(
         sessions
             .lock()
