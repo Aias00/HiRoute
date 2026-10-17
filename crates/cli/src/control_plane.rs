@@ -56,6 +56,9 @@ pub(crate) fn accepts_capability(command_id: &str) -> bool {
             | "sessions.status"
             | "value.show"
             | "observation.plan-quality.samples"
+            | "observation.plan-trust"
+            | "observation.plan-trust.replay"
+            | "observation.plan-trust.suggestions"
     )
 }
 

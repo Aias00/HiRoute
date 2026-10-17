@@ -93,6 +93,21 @@ pub trait ControlStatePort: Send + Sync {
     ) -> Result<ControlReadAttempt<u64>, ControlReadError> {
         Err(ControlReadError::Unavailable)
     }
+    fn trust_context(
+        &self,
+        _workspace: &WorkspaceId,
+        _plan_id: &str,
+    ) -> Result<crate::trust::context::TrustContextV1, ControlReadError> {
+        Err(ControlReadError::Unavailable)
+    }
+    fn trust_runs(
+        &self,
+        _workspace: &WorkspaceId,
+        _ids: &[String],
+    ) -> Result<BTreeMap<String, crate::trust::context::TrustRunV1>, ControlReadError> {
+        Err(ControlReadError::Unavailable)
+    }
+
     fn snapshot(
         &self,
         workspace_id: &WorkspaceId,

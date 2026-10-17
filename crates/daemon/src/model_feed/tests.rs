@@ -28,6 +28,7 @@ fn open(path: &Path, min: u64) -> ModelFeedService {
         path,
         crate::release_catalog::current_fixture_catalog(),
         min,
+        0,
         verify_fixture,
     )
     .unwrap()
@@ -40,7 +41,7 @@ fn fetch(service: &ModelFeedService, sequence: u64) -> Result<(), String> {
                 etag: Some("test-etag".into()),
             })
         },
-        |_| Ok(()),
+        |_, _| Ok(()),
     )
 }
 
@@ -51,11 +52,13 @@ fn model_feed_delete_preserves_high_water_and_identical_publication_restores_aft
     fetch(&service, 10).unwrap();
     let old = service.current();
     service
-        .remove(&service.removal_digest().unwrap(), true, |_| Ok(()))
+        .remove(&service.removal_digest().unwrap(), true, |_, _| Ok(()))
         .unwrap();
     assert!(!service.status().unwrap().retrieval_enabled);
     assert!(service.status().unwrap().held.is_none());
     assert_eq!(old.generation, 1);
+    assert_eq!(old.accepted_sequence, 10);
+    assert_eq!(service.current().accepted_sequence, 10);
     let restarted = open(root.path(), 2);
     assert_eq!(
         restarted.status().unwrap().highest_accepted_sequence,
@@ -77,7 +80,7 @@ fn model_feed_cacheless_304_retries_without_conditional_header() {
     let service = open(root.path(), 0);
     fetch(&service, 10).unwrap();
     service
-        .remove(&service.removal_digest().unwrap(), false, |_| Ok(()))
+        .remove(&service.removal_digest().unwrap(), false, |_, _| Ok(()))
         .unwrap();
     let mut calls = 0;
     service
@@ -94,7 +97,7 @@ fn model_feed_cacheless_304_retries_without_conditional_header() {
                     })
                 }
             },
-            |_| Ok(()),
+            |_, _| Ok(()),
         )
         .unwrap();
     assert_eq!(calls, 2);
@@ -143,7 +146,7 @@ fn model_feed_crash_after_commit_recovers_catalog_and_generation() {
                     bytes: payload(6),
                     etag: None
                 }),
-                |_| Err("injected activation interruption".into())
+                |_, _| Err("injected activation interruption".into())
             )
             .is_err()
     );
@@ -167,7 +170,8 @@ fn model_feed_generation_is_captured_with_catalog_before_dependency_activation()
                     etag: None,
                 })
             },
-            |generation| {
+            |generation, sequence| {
+                assert_eq!(sequence, 1);
                 assert_eq!(generation, 1);
                 assert_eq!(service.current().generation, 0);
                 assert!(service.available_catalog().is_none());
@@ -192,7 +196,7 @@ fn model_feed_disabling_then_reenabling_invalidates_in_flight_retrieval() {
                 etag: None,
             })
         },
-        |_| panic!("superseded retrieval cannot activate"),
+        |_, _| panic!("superseded retrieval cannot activate"),
     );
     assert!(result.is_err());
     assert!(service.status().unwrap().held.is_none());

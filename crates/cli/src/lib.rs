@@ -18,6 +18,7 @@ mod protected_prompt;
 mod quickstart;
 mod request_input;
 mod service;
+mod trust;
 mod worker;
 
 use std::ffi::OsString;
@@ -386,6 +387,9 @@ fn command_payload(command_id: &str, options: &[String]) -> Result<Value, ErrorC
         "sessions.receipt" => observation::session_receipt(options),
         "value.show" => observation::value_show(options),
         "observation.plan-quality.samples" => observation::plan_quality_samples(options),
+        "observation.plan-trust"
+        | "observation.plan-trust.replay"
+        | "observation.plan-trust.suggestions" => trust::payload(command_id, options),
         _ => control_plane::command_payload(command_id, options)
             .unwrap_or(Err(ErrorCode::UnknownCommand)),
     }

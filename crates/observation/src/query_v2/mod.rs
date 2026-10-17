@@ -26,6 +26,7 @@ mod sessions_tests;
 #[cfg(test)]
 mod tests;
 mod totals;
+mod trust;
 mod turns;
 mod valuation;
 
@@ -41,6 +42,8 @@ pub(crate) use schema::migrate;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum ObservationV2Error {
+    #[error("observation scope is too large; narrow the time window")]
+    ScopeTooLarge,
     #[error("observation scope is not authorized")]
     Unauthorized,
     #[error("observation query is invalid")]
@@ -125,6 +128,7 @@ impl ObservationV2Error {
         match self {
             Self::Unauthorized => E::Unauthorized,
             Self::Invalid => E::InvalidQuery,
+            Self::ScopeTooLarge => E::ScopeTooLarge,
             Self::Stale => E::StalePreview,
             Self::RelationshipConflict => E::RevisionConflict,
             Self::Busy => E::ReaderBusy,

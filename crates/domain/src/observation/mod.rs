@@ -46,3 +46,6 @@ pub use retention_v2::*;
 
 mod value_summary;
 pub use value_summary::*;
+
+mod trust;
+pub use trust::*;

@@ -10,6 +10,7 @@ use crate::query_v2::ObservationReaderContext;
 use super::support::{Fixture, fact_channel, offer_fact, open_store, writer};
 
 mod summary;
+mod trust;
 
 const PLAN: &str = "plan/codex-daily";
 const MODEL: &str = "model/config-a";

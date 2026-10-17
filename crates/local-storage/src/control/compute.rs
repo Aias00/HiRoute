@@ -146,12 +146,19 @@ impl ControlStore {
         &self,
         workspace: &WorkspaceId,
         generation: u64,
+        accepted_sequence: u64,
     ) -> PortResult<()> {
         let mut connection = self.connection.borrow_mut();
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|_| port("compute.feed.begin"))?;
         install_dependency_revision_in(&transaction, workspace, "feed.model_data", generation)?;
+        install_dependency_revision_in(
+            &transaction,
+            workspace,
+            "feed.sequence",
+            accepted_sequence,
+        )?;
         transaction
             .commit()
             .map_err(|_| port("compute.feed.commit"))

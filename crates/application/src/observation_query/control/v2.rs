@@ -4,7 +4,7 @@ use super::*;
 use hiroute_application_api::{ObservationReadIntentV2, ObservationReadRequestV2};
 use hiroute_domain::ObservationReaderContext;
 impl ObservationControl {
-    pub(super) fn read_v2(
+    pub(crate) fn read_v2(
         &self,
         grant: Option<&ProtectedClientGrantV2>,
         payload: Value,
@@ -100,6 +100,19 @@ impl ObservationControl {
                     )?)
                 };
                 serde_json::to_value(self.analysis_read(&reader, q, range.as_ref(), now)?)
+            }
+            ObservationReadIntentV2::PlanTrust(q)
+            | ObservationReadIntentV2::PlanTrustSuggestions(q) => {
+                Ok(self.trust_result(&reader, &q, None, now)?)
+            }
+            ObservationReadIntentV2::PlanTrustReplay(q) => {
+                if q.thresholds_millis.is_empty()
+                    || q.thresholds_millis.len() > 8
+                    || q.thresholds_millis.iter().any(|t| *t > 1000)
+                {
+                    return Err(ObservationQueryError::InvalidQuery);
+                }
+                Ok(self.trust_result(&reader, &q.scope, Some(&q.thresholds_millis), now)?)
             }
             ObservationReadIntentV2::Status(_) => {
                 serde_json::to_value(self.service.observed_maintenance_status(&reader, now)?)

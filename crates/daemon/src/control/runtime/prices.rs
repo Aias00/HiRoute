@@ -111,6 +111,9 @@ impl LocalControlAdapter {
         revisions
             .dependencies
             .insert("feed.model_data".into(), catalog.generation);
+        revisions
+            .dependencies
+            .insert("feed.sequence".into(), catalog.accepted_sequence);
         let (_, sequence, digest) = catalog.model_data_provenance();
         let catalog_refs = vec![PriceFactRefV1 {
             id: catalog.model_data().bundle_version.clone(),

@@ -124,6 +124,16 @@ impl ObservationQueryService {
         self.port.observed_sessions(reader, query, now_ms)
     }
 
+    pub fn observed_trust_population(
+        &self,
+        reader: &hiroute_domain::ObservationReaderContext,
+        query: &hiroute_domain::TrustPopulationQueryV1,
+        now_ms: i64,
+    ) -> Result<hiroute_domain::TrustPopulationV1, ObservationQueryError> {
+        reader.check(now_ms, false, false)?;
+        self.port.observed_trust_population(reader, query, now_ms)
+    }
+
     pub fn observed_plan_quality_samples(
         &self,
         reader: &hiroute_domain::ObservationReaderContext,

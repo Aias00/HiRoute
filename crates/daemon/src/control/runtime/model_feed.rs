@@ -10,16 +10,17 @@ impl LocalControlAdapter {
                 Arc::new(ReleaseCatalogSnapshot {
                     catalog: catalog.clone(),
                     generation: 0,
+                    accepted_sequence: 0,
                 })
             }),
         }
     }
 
-    fn activate_feed_generation(&self, generation: u64) -> Result<(), String> {
+    fn activate_feed_generation(&self, generation: u64, sequence: u64) -> Result<(), String> {
         let stores = self.stores_lock().map_err(|error| error.to_string())?;
         stores
             .control()
-            .activate_model_feed_generation(&WorkspaceId::default(), generation)
+            .activate_model_feed_generation(&WorkspaceId::default(), generation, sequence)
             .map_err(|error| error.to_string())?;
         self.price_snapshot.invalidate_current();
         Ok(())
@@ -27,7 +28,8 @@ impl LocalControlAdapter {
 
     fn refresh_model_feed(&self) -> Result<(), String> {
         let feed = self.model_feed.as_ref().ok_or("feed_unavailable")?;
-        let result = feed.refresh(|generation| self.activate_feed_generation(generation));
+        let result = feed
+            .refresh(|generation, sequence| self.activate_feed_generation(generation, sequence));
         // Catalog activation and default price projection use the same captured generation.
         // A failed projection does not authorize a stale price override or change frozen ledgers.
         let _ = self.rebuild_price_snapshot();
@@ -143,7 +145,7 @@ impl ModelFeedPort for LocalControlAdapter {
             .remove(
                 &state_digest,
                 request.also_disable_retrieval,
-                |generation| self.activate_feed_generation(generation),
+                |generation, sequence| self.activate_feed_generation(generation, sequence),
             )
             .map_err(feed_error)?;
         let _ = self.rebuild_price_snapshot();

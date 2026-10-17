@@ -1057,6 +1057,33 @@ const COMMANDS: &[StaticCommandDescriptor] = &[
         "Read recorded token, cache and valuation totals with coverage."
     ),
     command!(
+        "observation.plan-trust",
+        ["observation", "plan-trust"],
+        "GetPlanTrust",
+        ["CLI-065", "APP-065"],
+        Released,
+        Query,
+        "Read complete-scoring coverage and competence for a Plan revision."
+    ),
+    command!(
+        "observation.plan-trust.replay",
+        ["observation", "plan-trust", "replay"],
+        "GetPlanTrustReplay",
+        ["CLI-066", "APP-066"],
+        Released,
+        Query,
+        "Replay exact thresholds over a complete retained population; estimates are not predictions."
+    ),
+    command!(
+        "observation.plan-trust.suggestions",
+        ["observation", "plan-trust", "suggestions"],
+        "GetPlanTrustSuggestions",
+        ["CLI-067", "APP-067"],
+        Released,
+        Query,
+        "Read optional evidence-based trust suggestions without changing a Plan."
+    ),
+    command!(
         "observation.plan-quality.samples",
         ["observation", "plan-quality", "samples"],
         "GetPlanQualitySamples",

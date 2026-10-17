@@ -81,6 +81,7 @@ mod native_claude_model;
 mod native_hermes;
 mod native_model;
 mod observation_key;
+mod trust;
 use observation_key::observation_workspace_key;
 mod plan_content;
 mod plan_content_snapshot;
@@ -346,24 +347,25 @@ impl ProductionControlRuntime {
             .begin_plan_version_recovery()
             .map_err(|error| error.to_string())?;
         release_install::activate_release_catalog_revisions(&stores, &release_catalog)?;
-        let feed_generation = stores
+        let feed_revisions = stores
             .control()
             .current_revisions(&WorkspaceId::default())
             .map_err(|error| error.to_string())?
-            .dependencies
-            .get("feed.model_data")
-            .copied()
-            .unwrap_or(0);
+            .dependencies;
+        let feed_generation = feed_revisions.get("feed.model_data").copied().unwrap_or(0);
+        let feed_sequence = feed_revisions.get("feed.sequence").copied().unwrap_or(0);
         let model_feed = Arc::new(crate::model_feed::ModelFeedService::open(
             storage_root,
             release_catalog.clone(),
             feed_generation,
+            feed_sequence,
         )?);
         stores
             .control()
             .activate_model_feed_generation(
                 &WorkspaceId::default(),
                 model_feed.current().generation,
+                model_feed.current().accepted_sequence,
             )
             .map_err(|error| error.to_string())?;
         let home = native_agent_home()?;
@@ -1171,6 +1173,23 @@ impl ControlStatePort for LocalControlAdapter {
             )
             .map_err(map_port)?;
         Ok(ControlReadAttempt::Ready(revisions.target))
+    }
+    fn trust_context(
+        &self,
+        workspace: &WorkspaceId,
+        plan_id: &str,
+    ) -> Result<hiroute_application::trust::context::TrustContextV1, ControlReadError> {
+        self.read_trust_context(workspace, plan_id)
+    }
+    fn trust_runs(
+        &self,
+        workspace: &WorkspaceId,
+        ids: &[String],
+    ) -> Result<
+        std::collections::BTreeMap<String, hiroute_application::trust::context::TrustRunV1>,
+        ControlReadError,
+    > {
+        self.read_trust_runs(workspace, ids)
     }
 
     fn snapshot(

@@ -1,3 +1,4 @@
+mod trust;
 mod v2;
 
 use std::sync::Arc;

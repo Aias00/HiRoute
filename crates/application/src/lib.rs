@@ -29,6 +29,7 @@ pub mod prices;
 pub mod publication;
 pub mod routing;
 pub mod subscriptions;
+pub mod trust;
 
 pub use change::{
     ChangePreparationError, ConnectionOptionAuthorizationPort, ConnectionOptionAuthorizationV1,
@@ -207,6 +208,16 @@ impl ApplicationService {
             "GetObservationStatus" => self.observation(request, ObservationOperation::Status),
             "GetValue" => self.observation(request, ObservationOperation::Value),
             "GetPlanQualitySamples" => self.observation(request, ObservationOperation::PlanQuality),
+            "GetPlanTrust" => {
+                self.observation(request, ObservationOperation::Trust("GetPlanTrust"))
+            }
+            "GetPlanTrustReplay" => {
+                self.observation(request, ObservationOperation::Trust("GetPlanTrustReplay"))
+            }
+            "GetPlanTrustSuggestions" => self.observation(
+                request,
+                ObservationOperation::Trust("GetPlanTrustSuggestions"),
+            ),
             "PreviewSessionDeletion" => {
                 self.observation(request, ObservationOperation::DeletePreview)
             }
@@ -708,6 +719,9 @@ impl ApplicationService {
             ObservationOperation::Value => {
                 control.value(request.protected_grant.as_ref(), request.payload)
             }
+            ObservationOperation::Trust(operation) => {
+                control.read_v2(request.protected_grant.as_ref(), request.payload, operation)
+            }
             ObservationOperation::PlanQuality => {
                 control.plan_quality(request.protected_grant.as_ref(), request.payload)
             }
@@ -747,6 +761,7 @@ impl ApplicationService {
 
 #[derive(Clone, Copy)]
 enum ObservationOperation {
+    Trust(&'static str),
     DeletePreview,
     DeleteApply,
     List,
@@ -791,6 +806,7 @@ fn map_control_error(error: control::ControlReadError) -> ErrorCode {
 fn map_observation_error(error: ObservationQueryError) -> ErrorCode {
     match error {
         ObservationQueryError::Unauthorized => ErrorCode::CapabilityDenied,
+        ObservationQueryError::ScopeTooLarge => ErrorCode::ScopeTooLarge,
         ObservationQueryError::NotFound => ErrorCode::ResourceNotFound,
         ObservationQueryError::InvalidQuery => ErrorCode::InvalidArguments,
         ObservationQueryError::Unavailable

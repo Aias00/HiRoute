@@ -8,7 +8,8 @@ pub use hiroute_domain::{
     ObservationSearchPageV2, ObservationSearchQueryV2, ObservationSessionCorrelationKindV1,
     ObservationSessionPageV2, ObservationSessionSearchPageV1, ObservationSessionSummaryV2,
     ObservationValueQueryV2, ObservationValueSummaryV2, PlanCompetenceFilter,
-    PlanQualitySamplesPage, PlanQualitySamplesQuery, PriceValuationKindV1,
+    PlanQualitySamplesPage, PlanQualitySamplesQuery, PlanTrustQueryV1, PlanTrustReplayQueryV1,
+    PriceValuationKindV1,
 };
 use serde::{Deserialize, Serialize};
 #[derive(schemars::JsonSchema, Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -61,6 +62,9 @@ pub enum ObservationReadIntentV2 {
     ValueReport(ObservationValueReportOptionsV2),
     ApiEquivalentValue(ApiEquivalentValueOptionsV1),
     PlanQuality(PlanQualitySamplesQuery),
+    PlanTrust(PlanTrustQueryV1),
+    PlanTrustReplay(PlanTrustReplayQueryV1),
+    PlanTrustSuggestions(PlanTrustQueryV1),
 }
 impl ObservationReadRequestV2 {
     pub fn new(intent: ObservationReadIntentV2) -> Self {
@@ -81,6 +85,9 @@ impl ObservationReadRequestV2 {
             | ObservationReadIntentV2::Search(_)
             | ObservationReadIntentV2::SessionSearch(_) => "ListSessions",
             ObservationReadIntentV2::PlanQuality(_) => "GetPlanQualitySamples",
+            ObservationReadIntentV2::PlanTrust(_) => "GetPlanTrust",
+            ObservationReadIntentV2::PlanTrustReplay(_) => "GetPlanTrustReplay",
+            ObservationReadIntentV2::PlanTrustSuggestions(_) => "GetPlanTrustSuggestions",
             ObservationReadIntentV2::Facts(_) => "GetRoutingReceipt",
             ObservationReadIntentV2::Value(_)
             | ObservationReadIntentV2::HomeValue(_)
@@ -112,6 +119,9 @@ impl ObservationReadRequestV2 {
             | ObservationReadIntentV2::ValueReport(_)
             | ObservationReadIntentV2::ApiEquivalentValue(_) => "GetValueV2",
             ObservationReadIntentV2::PlanQuality(_) => "ReadPlanQualitySamplesV1",
+            ObservationReadIntentV2::PlanTrust(_) => "ReadPlanTrustV1",
+            ObservationReadIntentV2::PlanTrustReplay(_) => "ReadPlanTrustReplayV1",
+            ObservationReadIntentV2::PlanTrustSuggestions(_) => "ReadPlanTrustSuggestionsV1",
         }
     }
 }

@@ -24,6 +24,7 @@ use std::{
 pub(crate) struct ReleaseCatalogSnapshot {
     pub catalog: TrustedReleaseCatalog,
     pub generation: u64,
+    pub accepted_sequence: u64,
 }
 impl Deref for ReleaseCatalogSnapshot {
     type Target = TrustedReleaseCatalog;
@@ -74,13 +75,21 @@ impl ModelFeedService {
         root: &Path,
         embedded: TrustedReleaseCatalog,
         minimum_generation: u64,
+        minimum_sequence: u64,
     ) -> Result<Self, String> {
-        Self::open_with_verifier(root, embedded, minimum_generation, verify_envelope)
+        Self::open_with_verifier(
+            root,
+            embedded,
+            minimum_generation,
+            minimum_sequence,
+            verify_envelope,
+        )
     }
     fn open_with_verifier(
         root: &Path,
         embedded: TrustedReleaseCatalog,
         minimum_generation: u64,
+        minimum_sequence: u64,
         verify: FeedVerifier,
     ) -> Result<Self, String> {
         let store = FeedStore::open(root)?;
@@ -139,7 +148,9 @@ impl ModelFeedService {
                 }
             }
         }
-        if state.generation < minimum_generation {
+        if state.generation < minimum_generation
+            || state.highest_accepted.as_ref().map_or(0, |h| h.sequence) < minimum_sequence
+        {
             // A lost/rolled-back commit record cannot reset acceptance, nor block frozen Plans.
             // Preserve the directory and use embedded facts with feed mutations refused.
             effective = embedded.clone();
@@ -162,6 +173,11 @@ impl ModelFeedService {
             current: ArcSwap::from_pointee(ReleaseCatalogSnapshot {
                 catalog: effective,
                 generation,
+                accepted_sequence: state
+                    .highest_accepted
+                    .as_ref()
+                    .map_or(0, |h| h.sequence)
+                    .max(minimum_sequence),
             }),
             store,
             mutable: Mutex::new(MutableFeed {
@@ -245,7 +261,7 @@ impl ModelFeedService {
         &self,
         expected: &CanonicalDigest,
         disable: bool,
-        install: impl FnOnce(u64) -> Result<(), String>,
+        install: impl FnOnce(u64, u64) -> Result<(), String>,
     ) -> Result<(), String> {
         let mut guard = self.mutable.lock().map_err(|_| "feed_lock")?;
         check_mutable(&guard)?;
@@ -270,19 +286,34 @@ impl ModelFeedService {
             .retrieval_enabled
             .then(|| now_ms() + startup_delay_ms());
         self.active.store(false, Ordering::Release);
-        if let Err(error) = install(guard.state.generation) {
+        if let Err(error) = install(
+            guard.state.generation,
+            guard
+                .state
+                .highest_accepted
+                .as_ref()
+                .map_or(0, |h| h.sequence),
+        ) {
             guard.refused = Some("feed_activation_requires_restart".into());
             return Err(error);
         }
         self.current.store(Arc::new(ReleaseCatalogSnapshot {
             catalog: (*self.embedded).clone(),
             generation: guard.state.generation,
+            accepted_sequence: guard
+                .state
+                .highest_accepted
+                .as_ref()
+                .map_or(0, |h| h.sequence),
         }));
         self.active.store(true, Ordering::Release);
         self.store.retire_unreferenced(None);
         Ok(())
     }
-    pub fn refresh(&self, install: impl FnOnce(u64) -> Result<(), String>) -> Result<(), String> {
+    pub fn refresh(
+        &self,
+        install: impl FnOnce(u64, u64) -> Result<(), String>,
+    ) -> Result<(), String> {
         self.refresh_using(|etag| retrieve_feed(&self.client_version, etag), install)
     }
     fn refresh_using(
@@ -291,7 +322,7 @@ impl ModelFeedService {
             Option<&str>,
         )
             -> Result<FeedDownload, hiroute_integrations::model_feed::FeedError>,
-        install: impl FnOnce(u64) -> Result<(), String>,
+        install: impl FnOnce(u64, u64) -> Result<(), String>,
     ) -> Result<(), String> {
         let (generation, epoch, etag) = {
             let mut guard = self.mutable.lock().map_err(|_| "feed_lock")?;
@@ -363,7 +394,7 @@ impl ModelFeedService {
         verified: VerifiedFeed,
         bytes: &[u8],
         etag: Option<String>,
-        install: impl FnOnce(u64) -> Result<(), String>,
+        install: impl FnOnce(u64, u64) -> Result<(), String>,
     ) -> Result<&'static str, String> {
         if let Some(high) = &guard.state.highest_accepted {
             if verified.payload.sequence < high.sequence {
@@ -407,13 +438,25 @@ impl ModelFeedService {
         guard.state = next;
         guard.counts = admission.counts;
         self.active.store(false, Ordering::Release);
-        if let Err(error) = install(guard.state.generation) {
+        if let Err(error) = install(
+            guard.state.generation,
+            guard
+                .state
+                .highest_accepted
+                .as_ref()
+                .map_or(0, |h| h.sequence),
+        ) {
             guard.refused = Some("feed_activation_requires_restart".into());
             return Err(error);
         }
         self.current.store(Arc::new(ReleaseCatalogSnapshot {
             catalog,
             generation: guard.state.generation,
+            accepted_sequence: guard
+                .state
+                .highest_accepted
+                .as_ref()
+                .map_or(0, |h| h.sequence),
         }));
         self.active.store(true, Ordering::Release);
         self.store.retire_unreferenced(guard.state.held.as_ref());

@@ -11,7 +11,7 @@ use crate::LocalObservationStore;
 
 /// Both projections share the same scope and transaction. Detail filters never
 /// enter this CTE, so pagination and drill-down cannot change the full-scope mean.
-const SCOPE: &str = "
+pub(super) const SCOPE: &str = "
     SELECT q.*,
       json_extract(q.branch_execution_json,'$.group') AS execution_group,
       json_extract(q.branch_execution_json,'$.candidate_index') AS candidate_index,
@@ -60,7 +60,7 @@ const SCOPE: &str = "
           AND t.delete_scope='content_only'))
 ";
 
-const SAMPLE_SELECT: &str = "SELECT q.segment_id,q.session_id,q.plan_id,q.plan_revision,
+pub(super) const SAMPLE_SELECT: &str = "SELECT q.segment_id,q.session_id,q.plan_id,q.plan_revision,
                         q.selected_branch_id,q.executed_branch_id,q.model_configuration_id,
                         q.profile_digest,q.attribution,q.first_turn_id,q.first_turn_ordinal,
                         q.last_observed_turn_id,q.last_observed_turn_ordinal,q.first_at_ms,
@@ -362,7 +362,7 @@ pub(crate) fn routing_reason(
         .optional()?)
 }
 
-fn sample(row: &rusqlite::Row<'_>) -> rusqlite::Result<PlanQualitySample> {
+pub(super) fn sample(row: &rusqlite::Row<'_>) -> rusqlite::Result<PlanQualitySample> {
     let assessment_event_id: Option<String> = row.get(21)?;
     let assessment = assessment_event_id
         .map(|event_id| {

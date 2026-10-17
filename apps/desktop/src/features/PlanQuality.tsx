@@ -1,3 +1,4 @@
+import { TrustEvidencePanel } from './trust/TrustEvidencePanel';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { UiIcon } from '../ui';
 import { safeDiagnosticCode } from '../error-code';
@@ -16,7 +17,7 @@ const EMPTY_SUMMARY: QualitySummary = { models: [], scored_stage_count: 0, unrat
 
 export function PlanQuality({
   planId, sessionId, planRevision, currentModels = [], language, compact = false,
-  active = true, refreshVersion = 0, onOpenEvidence,
+  active = true, refreshVersion = 0, onOpenEvidence, onThreshold, onDivision,
 }: {
   planId?: string | null;
   sessionId?: string | null;
@@ -26,6 +27,8 @@ export function PlanQuality({
   compact?: boolean;
   active?: boolean;
   refreshVersion?: number;
+  onThreshold?: (branch: string, threshold: number) => void;
+  onDivision?: (branch: string) => void;
   onOpenEvidence?: (sessionId: string, requestId: string) => void;
 }) {
   const text = (zh: string, en: string) => language === 'zh' ? zh : en;
@@ -131,6 +134,10 @@ export function PlanQuality({
         <button className="btn btn-quiet quality-refresh" type="button" disabled={busy} onClick={() => setReload(value => value + 1)}><UiIcon name="refresh" />{text('刷新', 'Refresh')}</button>
       </div>
     </div>
+    {!compact && planId && !sessionId && <TrustEvidencePanel planId={planId} revision={version === 'current' ? 'active' : version === 'all' ? 'all' : Number(version)} fromMs={window.from} toMs={window.to} active={active} language={language} names={modelNames} onThreshold={onThreshold} onDivision={onDivision} onSelect={row => {
+      const match = rows.find(candidate => candidate.summary?.execution.model_configuration_id === row.model_configuration_id && candidate.summary.execution.group === row.group && candidate.summary.reasoning_profile_id === row.reasoning_profile_id && candidate.summary.execution.attribution === row.attribution && (candidate.summary.execution.executed_branch_id ?? candidate.summary.execution.selected_branch_id) === row.branch_id);
+      if (match?.summary) { setSelected({ key: match.key, execution: match.summary.execution }); setScore('all'); }
+    }} />}
     {error && <div className="callout bad" role="alert" data-error-code={error}><UiIcon name="warning" /><span>{text('模型表现暂时无法读取。', 'Model performance is temporarily unavailable.')}</span><button className="btn" type="button" onClick={() => setReload(value => value + 1)}>{text('重试', 'Retry')}</button></div>}
     {!loaded && busy && <div className="oc-status-row" role="status"><span className="oc-spinner" /><p>{text('正在读取模型表现…', 'Reading model performance…')}</p></div>}
     {!compact && <div className="quality-model-scope">{groups.map(branch => <section className="quality-group" key={branch} data-execution-group={branch}>
