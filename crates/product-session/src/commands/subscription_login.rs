@@ -21,7 +21,7 @@ pub async fn manage_subscription_login(
     state: &CommandState<'_>,
     request: ComputeSubscriptionLoginRequestV1,
 ) -> Result<ComputeSubscriptionLoginResultV1, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     if !request.valid() {
         return Err("REQUEST_INVALID".into());
     }
@@ -47,7 +47,7 @@ pub async fn submit_subscription_login_callback(
     callback: String,
 ) -> Result<ComputeSubscriptionLoginResultV1, DesktopFailure> {
     let callback = zeroize::Zeroizing::new(callback);
-    main_window(&window)?;
+    main_window(window)?;
     let client = state
         .0
         .lock()

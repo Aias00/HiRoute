@@ -26,7 +26,7 @@ pub async fn decision_services(
     window: &ClientContext<'_>,
     state: &CommandState<'_>,
 ) -> Result<crate::session::DecisionServiceList, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     state
         .0
         .lock()
@@ -42,7 +42,7 @@ pub async fn save_decision_service(
     state: &CommandState<'_>,
     input: DecisionServiceSaveInput,
 ) -> Result<ApplyResultV1, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     state
         .0
         .lock()
@@ -60,7 +60,7 @@ pub async fn test_classifier_decision(
     state: &CommandState<'_>,
     input: ClassifierDecisionTestInput,
 ) -> Result<ClassifierDecisionTestResultV1, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     state
         .0
         .lock()
@@ -76,7 +76,7 @@ pub async fn save_classifier_header_secret(
     state: &CommandState<'_>,
     input: ClassifierHeaderSecretSaveInput,
 ) -> Result<ApplyResultV1, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     state
         .0
         .lock()

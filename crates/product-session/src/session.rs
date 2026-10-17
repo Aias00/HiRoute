@@ -799,6 +799,8 @@ fn accepted_operation_view(
     })
 }
 
+pub type Session = ProductSession;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -869,5 +871,3 @@ mod tests {
         assert!(serde_json::from_value::<RestoreInput>(serde_json::json!({"plan_id":"plan/test", "language":"en", "previous_name":"forged"})).is_err());
     }
 }
-
-pub type Session = ProductSession;

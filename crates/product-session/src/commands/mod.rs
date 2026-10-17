@@ -39,7 +39,7 @@ async fn confirmation_session<'a>(
     state: &'a CommandState<'_>,
     epoch: u64,
 ) -> Result<tokio::sync::MutexGuard<'a, Option<Session>>, DesktopFailure> {
-    crate::confirmation::lock_current_session(&state.0, &state.2, epoch)
+    crate::confirmation::lock_current_session(state.0, state.2, epoch)
         .await
         .map_err(Into::into)
 }
@@ -196,7 +196,7 @@ pub async fn desktop_snapshot(
     window: &ClientContext<'_>,
     state: &CommandState<'_>,
 ) -> Result<DesktopSnapshot, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     let mut guard = state.0.lock().await;
     let session = guard.as_mut().ok_or_else(|| {
         state
@@ -213,11 +213,11 @@ pub async fn refresh_route_references(
     state: &CommandState<'_>,
     language: String,
 ) -> Result<MutationOutcome, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     let epoch = state.2.load(Ordering::SeqCst);
-    let action = ActionDiagnostics::begin(&state.3, ActionOperation::PlanEditor);
+    let action = ActionDiagnostics::begin(state.3, ActionOperation::PlanEditor);
     action.preview(PreviewPhase::Begin, None);
-    let context = confirmation_session(&state, epoch)
+    let context = confirmation_session(state, epoch)
         .await?
         .as_mut()
         .ok_or("RESIDENT_UNAVAILABLE")?
@@ -225,8 +225,8 @@ pub async fn refresh_route_references(
         .await?;
     action.preview(PreviewPhase::End, Some(context.revision()));
     confirm(
-        &window,
-        &state,
+        window,
+        state,
         ActionOperation::PlanEditor,
         NativeConfirmation::Rename(Box::new(context)),
         epoch,
@@ -239,11 +239,11 @@ pub async fn preview_plan_editor(
     state: &CommandState<'_>,
     input: EditorInput,
 ) -> Result<MutationOutcome, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     let epoch = state.2.load(Ordering::SeqCst);
-    let action = ActionDiagnostics::begin(&state.3, ActionOperation::PlanEditor);
+    let action = ActionDiagnostics::begin(state.3, ActionOperation::PlanEditor);
     action.preview(PreviewPhase::Begin, None);
-    let context = confirmation_session(&state, epoch)
+    let context = confirmation_session(state, epoch)
         .await?
         .as_mut()
         .ok_or("RESIDENT_UNAVAILABLE")?
@@ -251,8 +251,8 @@ pub async fn preview_plan_editor(
         .await?;
     action.preview(PreviewPhase::End, Some(context.revision()));
     confirm(
-        &window,
-        &state,
+        window,
+        state,
         ActionOperation::PlanEditor,
         NativeConfirmation::Rename(Box::new(context)),
         epoch,
@@ -265,7 +265,7 @@ pub async fn plan_editor_options(
     state: &CommandState<'_>,
     input: hiroute_application_api::PlanEditorOptionsRequestV1,
 ) -> Result<hiroute_application_api::PlanEditorOptionsV1, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     let guard = state.0.lock().await;
     let session = guard.as_ref().ok_or("RESIDENT_UNAVAILABLE")?;
     crate::session::query(&session.client, "GetPlanEditorOptions", &input).await
@@ -275,12 +275,12 @@ pub async fn preview_rename(
     state: &CommandState<'_>,
     input: RenameInput,
 ) -> Result<MutationOutcome, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     let epoch = state.2.load(Ordering::SeqCst);
-    let action = ActionDiagnostics::begin(&state.3, ActionOperation::Rename);
+    let action = ActionDiagnostics::begin(state.3, ActionOperation::Rename);
     action.preview(PreviewPhase::Begin, None);
     let context = {
-        let mut guard = confirmation_session(&state, epoch).await?;
+        let mut guard = confirmation_session(state, epoch).await?;
         guard
             .as_mut()
             .ok_or("RESIDENT_UNAVAILABLE")?
@@ -289,8 +289,8 @@ pub async fn preview_rename(
     };
     action.preview(PreviewPhase::End, Some(context.revision()));
     confirm(
-        &window,
-        &state,
+        window,
+        state,
         ActionOperation::Rename,
         NativeConfirmation::Rename(Box::new(context)),
         epoch,
@@ -303,11 +303,11 @@ pub async fn preview_restore_name(
     state: &CommandState<'_>,
     input: RestoreInput,
 ) -> Result<MutationOutcome, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     let epoch = state.2.load(Ordering::SeqCst);
-    let action = ActionDiagnostics::begin(&state.3, ActionOperation::RestoreName);
+    let action = ActionDiagnostics::begin(state.3, ActionOperation::RestoreName);
     action.preview(PreviewPhase::Begin, None);
-    let context = confirmation_session(&state, epoch)
+    let context = confirmation_session(state, epoch)
         .await?
         .as_mut()
         .ok_or("RESIDENT_UNAVAILABLE")?
@@ -315,8 +315,8 @@ pub async fn preview_restore_name(
         .await?;
     action.preview(PreviewPhase::End, Some(context.revision()));
     confirm(
-        &window,
-        &state,
+        window,
+        state,
         ActionOperation::RestoreName,
         NativeConfirmation::Rename(Box::new(context)),
         epoch,
@@ -397,11 +397,11 @@ pub async fn preview_price_change(
     state: &CommandState<'_>,
     input: PriceEditInput,
 ) -> Result<MutationOutcome, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     let epoch = state.2.load(Ordering::SeqCst);
-    let action = ActionDiagnostics::begin(&state.3, ActionOperation::PriceChange);
+    let action = ActionDiagnostics::begin(state.3, ActionOperation::PriceChange);
     action.preview(PreviewPhase::Begin, None);
-    let context = confirmation_session(&state, epoch)
+    let context = confirmation_session(state, epoch)
         .await?
         .as_mut()
         .ok_or("RESIDENT_UNAVAILABLE")?
@@ -409,8 +409,8 @@ pub async fn preview_price_change(
         .await?;
     action.preview(PreviewPhase::End, Some(context.revision()));
     confirm(
-        &window,
-        &state,
+        window,
+        state,
         ActionOperation::PriceChange,
         NativeConfirmation::Price(Box::new(context)),
         epoch,
@@ -423,7 +423,7 @@ pub async fn model_reference_query(
     state: &CommandState<'_>,
     input: ModelCatalogQueryV1,
 ) -> Result<ModelCatalogResultV1, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     let guard = state.0.lock().await;
     let session = guard.as_ref().ok_or("RESIDENT_UNAVAILABLE")?;
     crate::session::query(&session.client, "ShowModel", &input).await
@@ -433,7 +433,7 @@ pub async fn effective_price_query(
     state: &CommandState<'_>,
     input: GetEffectivePricesV2,
 ) -> Result<PriceDisplayResult, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     let guard = state.0.lock().await;
     let session = guard.as_ref().ok_or("RESIDENT_UNAVAILABLE")?;
     Ok(PriceDisplayResult::new(
@@ -445,7 +445,7 @@ pub async fn agent_snapshot(
     window: &ClientContext<'_>,
     state: &CommandState<'_>,
 ) -> Result<AgentSnapshot, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     state
         .0
         .lock()
@@ -460,7 +460,7 @@ pub async fn retry_agent_settings(
     state: &CommandState<'_>,
     input: hiroute_application_api::AgentSettingsRetryV1,
 ) -> Result<Value, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     state
         .0
         .lock()
@@ -475,11 +475,11 @@ pub async fn preview_agent_settings(
     state: &CommandState<'_>,
     input: AgentSettingsInput,
 ) -> Result<AgentOutcome, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     let epoch = state.2.load(Ordering::SeqCst);
-    let action = ActionDiagnostics::begin(&state.3, ActionOperation::AgentSettings);
+    let action = ActionDiagnostics::begin(state.3, ActionOperation::AgentSettings);
     action.preview(PreviewPhase::Begin, None);
-    let prepared = confirmation_session(&state, epoch)
+    let prepared = confirmation_session(state, epoch)
         .await?
         .as_mut()
         .ok_or("RESIDENT_UNAVAILABLE")?
@@ -502,8 +502,8 @@ pub async fn preview_agent_settings(
         AgentPreparation::Ready(context) => {
             action.preview(PreviewPhase::End, Some(context.revision()));
             match confirm(
-                &window,
-                &state,
+                window,
+                state,
                 ActionOperation::AgentSettings,
                 NativeConfirmation::Agent(context),
                 epoch,
@@ -521,11 +521,11 @@ pub async fn check_agent_authentication(
     state: &CommandState<'_>,
     input: AgentCheckInput,
 ) -> Result<bool, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     let epoch = state.2.load(Ordering::SeqCst);
-    let action = ActionDiagnostics::begin(&state.3, ActionOperation::AgentCheck);
+    let action = ActionDiagnostics::begin(state.3, ActionOperation::AgentCheck);
     action.preview(PreviewPhase::Begin, None);
-    let context = confirmation_session(&state, epoch)
+    let context = confirmation_session(state, epoch)
         .await?
         .as_mut()
         .ok_or("RESIDENT_UNAVAILABLE")?
@@ -533,8 +533,8 @@ pub async fn check_agent_authentication(
         .await?;
     action.preview(PreviewPhase::End, Some(context.revision()));
     match confirm(
-        &window,
-        &state,
+        window,
+        state,
         ActionOperation::AgentCheck,
         NativeConfirmation::Check(Box::new(context)),
         epoch,
@@ -551,14 +551,14 @@ pub async fn check_agent_live(
     state: &CommandState<'_>,
     input: AgentCheckInput,
 ) -> Result<AgentCheckCompletion, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     if input.scope.as_deref() != Some("live") {
         return Err("AGENT_INPUT_INVALID".into());
     }
     let epoch = state.2.load(Ordering::SeqCst);
-    let action = ActionDiagnostics::begin(&state.3, ActionOperation::AgentCheck);
+    let action = ActionDiagnostics::begin(state.3, ActionOperation::AgentCheck);
     action.preview(PreviewPhase::Begin, None);
-    let context = confirmation_session(&state, epoch)
+    let context = confirmation_session(state, epoch)
         .await?
         .as_mut()
         .ok_or("RESIDENT_UNAVAILABLE")?
@@ -566,8 +566,8 @@ pub async fn check_agent_live(
         .await?;
     action.preview(PreviewPhase::End, Some(context.revision()));
     match confirm(
-        &window,
-        &state,
+        window,
+        state,
         ActionOperation::AgentCheck,
         NativeConfirmation::Check(Box::new(context)),
         epoch,
@@ -586,7 +586,7 @@ async fn confirm(
     context: NativeConfirmation,
     epoch: u64,
 ) -> Result<NativeOutcome, DesktopFailure> {
-    let action = ActionDiagnostics::begin(&state.3, operation);
+    let action = ActionDiagnostics::begin(state.3, operation);
     if state.2.load(Ordering::SeqCst) != epoch || !window.is_visible().unwrap_or(false) {
         let mut guard = state.0.lock().await;
         // Recovery may have installed another Session while this callback waited.
@@ -685,7 +685,7 @@ async fn confirm(
         let completion = pending.execute().await;
         // Completion belongs to the Session that submitted it, not the window's prompt epoch.
         // Window close must still release an A resource created after the close-time sweep.
-        crate::session::complete_subscription_check(&state.0, completion)
+        crate::session::complete_subscription_check(state.0, completion)
             .await
             .map(Box::new)
             .map(NativeOutcome::SubscriptionCheck)
@@ -748,7 +748,7 @@ pub async fn observe_operation(
     window: &ClientContext<'_>,
     state: &CommandState<'_>,
 ) -> Result<Option<ClientOperationViewV1>, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     state
         .0
         .lock()
@@ -762,7 +762,7 @@ pub async fn stop_observing(
     window: &ClientContext<'_>,
     state: &CommandState<'_>,
 ) -> Result<(), String> {
-    main_window(&window)?;
+    main_window(window)?;
     state
         .0
         .lock()
@@ -777,7 +777,7 @@ pub async fn observation_read(
     state: &CommandState<'_>,
     request: hiroute_application_api::ObservationReadRequestV2,
 ) -> Result<serde_json::Value, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     state
         .0
         .lock()

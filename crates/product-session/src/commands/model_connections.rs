@@ -51,7 +51,7 @@ pub async fn compute_subscriptions(
     window: &ClientContext<'_>,
     state: &CommandState<'_>,
 ) -> Result<WebComputeSubscriptionCandidatesV2, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     let client = state
         .0
         .lock()
@@ -69,10 +69,10 @@ pub async fn check_subscription(
     candidate: ComputeCandidateRefV2,
     language: String,
 ) -> Result<WebComputeSubscriptionCheckResultV2, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     let epoch = state.2.load(Ordering::SeqCst);
     let (client, close_requested) = {
-        let mut guard = super::confirmation_session(&state, epoch).await?;
+        let mut guard = super::confirmation_session(state, epoch).await?;
         let session = guard.as_mut().ok_or("RESIDENT_UNAVAILABLE")?;
         let close_requested = session.resume_subscription_interaction();
         (session.client.clone(), close_requested)
@@ -82,7 +82,7 @@ pub async fn check_subscription(
             .preview_subscription_check(&crate::random_id()?, candidate)
             .await?,
     )?;
-    let context = super::confirmation_session(&state, epoch)
+    let context = super::confirmation_session(state, epoch)
         .await?
         .as_mut()
         .ok_or("RESIDENT_UNAVAILABLE")?
@@ -93,8 +93,8 @@ pub async fn check_subscription(
             close_requested,
         )?;
     match confirm(
-        &window,
-        &state,
+        window,
+        state,
         ActionOperation::SubscriptionCheck,
         NativeConfirmation::SubscriptionCheck(Box::new(context)),
         epoch,
@@ -111,7 +111,7 @@ pub async fn get_subscription_check_result(
     state: &CommandState<'_>,
     operation: OperationReferenceV1,
 ) -> Result<WebComputeSubscriptionCheckResultV2, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     let client = state
         .0
         .lock()
@@ -132,7 +132,7 @@ pub async fn recover_subscription_check(
     window: &ClientContext<'_>,
     state: &CommandState<'_>,
 ) -> Result<Option<WebComputeSubscriptionCheckResultV2>, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     let result = state
         .0
         .lock()
@@ -148,7 +148,7 @@ pub async fn close_subscription_check(
     window: &ClientContext<'_>,
     state: &CommandState<'_>,
 ) -> Result<(), DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     state
         .0
         .lock()
@@ -164,7 +164,7 @@ pub async fn release_subscription_check(
     state: &CommandState<'_>,
     validation: WebValidationRefV2,
 ) -> Result<WebComputeSubscriptionCheckResultV2, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     state
         .0
         .lock()
@@ -181,7 +181,7 @@ pub async fn compute_key_masks(
     state: &CommandState<'_>,
     query: ComputeKeyMasksQueryV1,
 ) -> Result<ComputeKeyMasksViewV1, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     let client = state
         .0
         .lock()
@@ -197,7 +197,7 @@ pub async fn compute_management_snapshot(
     window: &ClientContext<'_>,
     state: &CommandState<'_>,
 ) -> Result<ComputeManagementSnapshotV3, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     let client = state
         .0
         .lock()
@@ -220,7 +220,7 @@ pub async fn compute_scan(
     window: &ClientContext<'_>,
     state: &CommandState<'_>,
 ) -> Result<WebComputeScanResultV1, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     let client = state
         .0
         .lock()
@@ -237,7 +237,7 @@ pub async fn prepare_discovered_model_connection(
     state: &CommandState<'_>,
     discovery: WebComputeDiscoveryRefV1,
 ) -> Result<WebComputeCandidateViewV2, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     let discovery: ComputeDiscoveryRefV1 = discovery.try_into().map_err(DesktopFailure::from)?;
     let digest_suffix = discovery
         .discovery_ref
@@ -285,7 +285,7 @@ pub async fn compute_connection_options(
     window: &ClientContext<'_>,
     state: &CommandState<'_>,
 ) -> Result<ComputeConnectionOptionsResultV1, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     let client = state
         .0
         .lock()
@@ -308,7 +308,7 @@ pub async fn register_protected_model_input(
     secret: String,
     source_id: Option<String>,
 ) -> Result<ProtectedModelInputRegistration, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     {
         let candidate = state
             .0
@@ -335,7 +335,7 @@ pub async fn release_protected_model_input(
     state: &CommandState<'_>,
     input: ComputeCandidateRefV2,
 ) -> Result<(), DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     {
         state
             .0
@@ -354,7 +354,7 @@ pub async fn check_model_connection(
     state: &CommandState<'_>,
     request: NativeModelConnectionCheckRequestV1,
 ) -> Result<ModelConnectionCheckViewV1, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     let client = state
         .0
         .lock()
@@ -397,7 +397,7 @@ pub async fn check_saved_model_connection(
     state: &CommandState<'_>,
     request: SavedModelConnectionCheckRequestV1,
 ) -> Result<ModelConnectionCheckViewV1, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     let client = state
         .0
         .lock()
@@ -440,7 +440,7 @@ pub async fn check_registered_model_connection(
     state: &CommandState<'_>,
     request: RegisteredModelConnectionCheckRequestV1,
 ) -> Result<ModelConnectionCheckViewV1, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     if request.display_name.is_none() {
         return Err("REQUEST_INVALID".into());
     }
@@ -486,7 +486,7 @@ pub async fn cancel_model_connection_check(
     state: &CommandState<'_>,
     check_id: String,
 ) -> Result<(), DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     let client = state
         .0
         .lock()
@@ -507,7 +507,7 @@ pub async fn preview_compute_save(
     state: &CommandState<'_>,
     change: WebComputeManagementChangeV2,
 ) -> Result<WebComputeSavePreviewV2, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     let client = state
         .0
         .lock()
@@ -531,19 +531,19 @@ pub async fn apply_compute_save(
     request: WebComputeConnectionApplyRequestV1,
     language: String,
 ) -> Result<ModelSaveAccepted, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     let request: ComputeConnectionApplyRequestV1 =
         request.try_into().map_err(DesktopFailure::from)?;
     let epoch = state.2.load(Ordering::SeqCst);
-    let context = super::confirmation_session(&state, epoch)
+    let context = super::confirmation_session(state, epoch)
         .await?
         .as_mut()
         .ok_or("RESIDENT_UNAVAILABLE")?
         .prepare_model_save_confirmation(request, language)
         .await?;
     match confirm(
-        &window,
-        &state,
+        window,
+        state,
         ActionOperation::ModelSave,
         NativeConfirmation::ModelSave(Box::new(context)),
         epoch,
@@ -560,7 +560,7 @@ pub async fn get_compute_save_result(
     state: &CommandState<'_>,
     operation: OperationReferenceV1,
 ) -> Result<WebComputeSaveResultV2, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     let client = state
         .0
         .lock()

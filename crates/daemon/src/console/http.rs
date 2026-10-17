@@ -46,18 +46,17 @@ pub(super) fn valid_origin(headers: &http::HeaderMap, local: SocketAddr) -> bool
         return false;
     }
     let mut origins = headers.get_all(header::ORIGIN).iter();
-    if let Some(origin) = origins.next() {
-        if origin.to_str().ok() != Some(format!("http://{host}").as_str())
-            || origins.next().is_some()
-        {
-            return false;
-        }
+    if let Some(origin) = origins.next()
+        && (origin.to_str().ok() != Some(format!("http://{host}").as_str())
+            || origins.next().is_some())
+    {
+        return false;
     }
     let mut sites = headers.get_all("sec-fetch-site").iter();
-    if let Some(site) = sites.next() {
-        if !matches!(site.to_str().ok(), Some("same-origin" | "none")) || sites.next().is_some() {
-            return false;
-        }
+    if let Some(site) = sites.next()
+        && (!matches!(site.to_str().ok(), Some("same-origin" | "none")) || sites.next().is_some())
+    {
+        return false;
     }
     true
 }
@@ -262,16 +261,14 @@ async fn checked(
     };
     match result {
         Ok(value) => {
-            if audited {
-                if let Some(operation) = operation_id(&value) {
-                    server
-                        .control
-                        .auth
-                        .lock()
-                        .map_err(|_| auth_failure(AuthError::Unavailable))?
-                        .audit_command(&identity, &context_id, name, Some(operation))
-                        .map_err(auth_failure)?;
-                }
+            if audited && let Some(operation) = operation_id(&value) {
+                server
+                    .control
+                    .auth
+                    .lock()
+                    .map_err(|_| auth_failure(AuthError::Unavailable))?
+                    .audit_command(&identity, &context_id, name, Some(operation))
+                    .map_err(auth_failure)?;
             }
             Ok(json_reply(StatusCode::OK, value))
         }

@@ -15,9 +15,7 @@ pub async fn dispatch(
             struct Arguments {}
             let _: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = compute_subscriptions(window, state)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = compute_subscriptions(window, state).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "check_subscription" => {
@@ -29,9 +27,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = check_subscription(window, state, input.candidate, input.language)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = check_subscription(window, state, input.candidate, input.language).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "get_subscription_check_result" => {
@@ -42,9 +38,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = get_subscription_check_result(window, state, input.operation)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = get_subscription_check_result(window, state, input.operation).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "recover_subscription_check" => {
@@ -53,9 +47,7 @@ pub async fn dispatch(
             struct Arguments {}
             let _: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = recover_subscription_check(window, state)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = recover_subscription_check(window, state).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "close_subscription_check" => {
@@ -64,10 +56,8 @@ pub async fn dispatch(
             struct Arguments {}
             let _: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = close_subscription_check(window, state)
-                .await
-                .map_err(DesktopFailure::from)?;
-            serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
+            close_subscription_check(window, state).await?;
+            serde_json::to_value(()).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "release_subscription_check" => {
             #[derive(Deserialize)]
@@ -77,9 +67,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = release_subscription_check(window, state, input.validation)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = release_subscription_check(window, state, input.validation).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "compute_key_masks" => {
@@ -90,9 +78,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = compute_key_masks(window, state, input.query)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = compute_key_masks(window, state, input.query).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "compute_management_snapshot" => {
@@ -101,9 +87,7 @@ pub async fn dispatch(
             struct Arguments {}
             let _: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = compute_management_snapshot(window, state)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = compute_management_snapshot(window, state).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "compute_scan" => {
@@ -112,9 +96,7 @@ pub async fn dispatch(
             struct Arguments {}
             let _: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = compute_scan(window, state)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = compute_scan(window, state).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "prepare_discovered_model_connection" => {
@@ -125,9 +107,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = prepare_discovered_model_connection(window, state, input.discovery)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = prepare_discovered_model_connection(window, state, input.discovery).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "compute_connection_options" => {
@@ -136,9 +116,7 @@ pub async fn dispatch(
             struct Arguments {}
             let _: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = compute_connection_options(window, state)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = compute_connection_options(window, state).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "register_protected_model_input" => {
@@ -152,8 +130,7 @@ pub async fn dispatch(
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
             let value =
                 register_protected_model_input(window, state, input.secret, input.source_id)
-                    .await
-                    .map_err(DesktopFailure::from)?;
+                    .await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "release_protected_model_input" => {
@@ -164,10 +141,8 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = release_protected_model_input(window, state, input.input)
-                .await
-                .map_err(DesktopFailure::from)?;
-            serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
+            release_protected_model_input(window, state, input.input).await?;
+            serde_json::to_value(()).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "check_model_connection" => {
             #[derive(Deserialize)]
@@ -177,9 +152,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = check_model_connection(window, state, input.request)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = check_model_connection(window, state, input.request).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "check_saved_model_connection" => {
@@ -190,9 +163,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = check_saved_model_connection(window, state, input.request)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = check_saved_model_connection(window, state, input.request).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "check_registered_model_connection" => {
@@ -203,9 +174,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = check_registered_model_connection(window, state, input.request)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = check_registered_model_connection(window, state, input.request).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "cancel_model_connection_check" => {
@@ -216,10 +185,8 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = cancel_model_connection_check(window, state, input.check_id)
-                .await
-                .map_err(DesktopFailure::from)?;
-            serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
+            cancel_model_connection_check(window, state, input.check_id).await?;
+            serde_json::to_value(()).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "preview_compute_save" => {
             #[derive(Deserialize)]
@@ -229,9 +196,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = preview_compute_save(window, state, input.change)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = preview_compute_save(window, state, input.change).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "apply_compute_save" => {
@@ -243,9 +208,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = apply_compute_save(window, state, input.request, input.language)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = apply_compute_save(window, state, input.request, input.language).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "get_compute_save_result" => {
@@ -256,9 +219,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = get_compute_save_result(window, state, input.operation)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = get_compute_save_result(window, state, input.operation).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "manage_subscription_login" => {
@@ -269,9 +230,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = manage_subscription_login(window, state, input.request)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = manage_subscription_login(window, state, input.request).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "submit_subscription_login_callback" => {
@@ -285,8 +244,7 @@ pub async fn dispatch(
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
             let value =
                 submit_subscription_login_callback(window, state, input.login_ref, input.callback)
-                    .await
-                    .map_err(DesktopFailure::from)?;
+                    .await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "observation_delete" => {
@@ -297,9 +255,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = observation_delete(window, state, input.input)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = observation_delete(window, state, input.input).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "worker_settings_get" => {
@@ -308,9 +264,7 @@ pub async fn dispatch(
             struct Arguments {}
             let _: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = worker_settings_get(window, state)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = worker_settings_get(window, state).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "worker_settings_set" => {
@@ -321,9 +275,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = worker_settings_set(window, state, input.input)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = worker_settings_set(window, state, input.input).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "worker_executor_availability" => {
@@ -332,9 +284,7 @@ pub async fn dispatch(
             struct Arguments {}
             let _: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = worker_executor_availability(window, state)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = worker_executor_availability(window, state).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "worker_task_plans" => {
@@ -345,9 +295,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = worker_task_plans(window, state, input.input)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = worker_task_plans(window, state, input.input).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "worker_dependencies_discover" => {
@@ -358,9 +306,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = worker_dependencies_discover(window, state, input.input)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = worker_dependencies_discover(window, state, input.input).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "worker_dependencies_select_prepare" => {
@@ -373,8 +319,7 @@ pub async fn dispatch(
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
             let value =
                 worker_dependencies_select_prepare(window, dependencies, state, input.input)
-                    .await
-                    .map_err(DesktopFailure::from)?;
+                    .await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "worker_dependencies_select_confirm" => {
@@ -387,8 +332,7 @@ pub async fn dispatch(
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
             let value =
                 worker_dependencies_select_confirm(window, state, dependencies, input.input)
-                    .await
-                    .map_err(DesktopFailure::from)?;
+                    .await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "worker_dependencies_select_cancel" => {
@@ -399,10 +343,8 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = worker_dependencies_select_cancel(window, dependencies, input.input)
-                .await
-                .map_err(DesktopFailure::from)?;
-            serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
+            worker_dependencies_select_cancel(window, dependencies, input.input).await?;
+            serde_json::to_value(()).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "worker_task_list" => {
             #[derive(Deserialize)]
@@ -412,9 +354,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = worker_task_list(window, state, input.input)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = worker_task_list(window, state, input.input).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "worker_task_status" => {
@@ -425,9 +365,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = worker_task_status(window, state, input.input)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = worker_task_status(window, state, input.input).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "worker_task_result" => {
@@ -438,9 +376,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = worker_task_result(window, state, input.input)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = worker_task_result(window, state, input.input).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "worker_task_read" => {
@@ -451,9 +387,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = worker_task_read(window, state, input.input)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = worker_task_read(window, state, input.input).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "worker_task_wait" => {
@@ -464,9 +398,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = worker_task_wait(window, state, input.input)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = worker_task_wait(window, state, input.input).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "worker_task_confirm_residual" => {
@@ -477,9 +409,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = worker_task_confirm_residual(window, state, input.input)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = worker_task_confirm_residual(window, state, input.input).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "worker_task_cancel" => {
@@ -490,9 +420,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = worker_task_cancel(window, state, input.input)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = worker_task_cancel(window, state, input.input).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "worker_task_continue" => {
@@ -503,9 +431,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = worker_task_continue(window, state, input.input)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = worker_task_continue(window, state, input.input).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "decision_services" => {
@@ -514,9 +440,7 @@ pub async fn dispatch(
             struct Arguments {}
             let _: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = decision_services(window, state)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = decision_services(window, state).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "save_decision_service" => {
@@ -527,9 +451,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = save_decision_service(window, state, input.input)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = save_decision_service(window, state, input.input).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "test_classifier_decision" => {
@@ -540,9 +462,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = test_classifier_decision(window, state, input.input)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = test_classifier_decision(window, state, input.input).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "save_classifier_header_secret" => {
@@ -553,9 +473,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = save_classifier_header_secret(window, state, input.input)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = save_classifier_header_secret(window, state, input.input).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "desktop_snapshot" => {
@@ -564,9 +482,7 @@ pub async fn dispatch(
             struct Arguments {}
             let _: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = desktop_snapshot(window, state)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = desktop_snapshot(window, state).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "refresh_route_references" => {
@@ -577,9 +493,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = refresh_route_references(window, state, input.language)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = refresh_route_references(window, state, input.language).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "preview_plan_editor" => {
@@ -590,9 +504,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = preview_plan_editor(window, state, input.input)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = preview_plan_editor(window, state, input.input).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "plan_editor_options" => {
@@ -603,9 +515,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = plan_editor_options(window, state, input.input)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = plan_editor_options(window, state, input.input).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "preview_rename" => {
@@ -616,9 +526,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = preview_rename(window, state, input.input)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = preview_rename(window, state, input.input).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "preview_restore_name" => {
@@ -629,9 +537,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = preview_restore_name(window, state, input.input)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = preview_restore_name(window, state, input.input).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "preview_price_change" => {
@@ -642,9 +548,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = preview_price_change(window, state, input.input)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = preview_price_change(window, state, input.input).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "model_reference_query" => {
@@ -655,9 +559,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = model_reference_query(window, state, input.input)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = model_reference_query(window, state, input.input).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "effective_price_query" => {
@@ -668,9 +570,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = effective_price_query(window, state, input.input)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = effective_price_query(window, state, input.input).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "agent_snapshot" => {
@@ -679,9 +579,7 @@ pub async fn dispatch(
             struct Arguments {}
             let _: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = agent_snapshot(window, state)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = agent_snapshot(window, state).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "retry_agent_settings" => {
@@ -692,9 +590,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = retry_agent_settings(window, state, input.input)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = retry_agent_settings(window, state, input.input).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "preview_agent_settings" => {
@@ -705,9 +601,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = preview_agent_settings(window, state, input.input)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = preview_agent_settings(window, state, input.input).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "check_agent_authentication" => {
@@ -718,9 +612,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = check_agent_authentication(window, state, input.input)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = check_agent_authentication(window, state, input.input).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "check_agent_live" => {
@@ -731,9 +623,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = check_agent_live(window, state, input.input)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = check_agent_live(window, state, input.input).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "observe_operation" => {
@@ -742,9 +632,7 @@ pub async fn dispatch(
             struct Arguments {}
             let _: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = observe_operation(window, state)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = observe_operation(window, state).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "stop_observing" => {
@@ -753,10 +641,10 @@ pub async fn dispatch(
             struct Arguments {}
             let _: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = stop_observing(window, state)
+            stop_observing(window, state)
                 .await
                 .map_err(DesktopFailure::from)?;
-            serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
+            serde_json::to_value(()).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "observation_read" => {
             #[derive(Deserialize)]
@@ -766,9 +654,7 @@ pub async fn dispatch(
             }
             let input: Arguments = serde_json::from_value(args)
                 .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
-            let value = observation_read(window, state, input.request)
-                .await
-                .map_err(DesktopFailure::from)?;
+            let value = observation_read(window, state, input.request).await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
         "web_confirmation_snapshot" => {

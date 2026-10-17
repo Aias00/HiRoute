@@ -245,7 +245,7 @@ pub async fn worker_settings_get(
     window: &ClientContext<'_>,
     state: &CommandState<'_>,
 ) -> Result<WorkerSettingsV1, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     let client = state
         .0
         .lock()
@@ -266,7 +266,7 @@ pub async fn worker_settings_set(
     state: &CommandState<'_>,
     input: WorkerSettingsV1,
 ) -> Result<WorkerSettingsV1, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     if !input.valid() {
         return Err("REQUEST_INVALID".into());
     }
@@ -293,7 +293,7 @@ pub async fn worker_executor_availability(
     window: &ClientContext<'_>,
     state: &CommandState<'_>,
 ) -> Result<WorkerExecutorAvailabilityListV1, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     let client = state
         .0
         .lock()
@@ -318,7 +318,7 @@ pub async fn worker_task_plans(
     state: &CommandState<'_>,
     input: WorkerPlansRequestV1,
 ) -> Result<MachineEnvelopeV2<WorkPlanListV1>, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     if !input.valid() {
         return Err("REQUEST_INVALID".into());
     }
@@ -338,7 +338,7 @@ pub async fn worker_dependencies_discover(
     state: &CommandState<'_>,
     input: WorkerDependenciesDiscoverRequestV1,
 ) -> Result<MachineEnvelopeV2<WorkerDependenciesViewV1>, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     if !input.valid() {
         return Err("REQUEST_INVALID".into());
     }
@@ -361,9 +361,9 @@ pub async fn worker_dependencies_select_prepare(
     desktop: &CommandState<'_>,
     input: WorkerDependenciesSelectRequestV1,
 ) -> Result<WorkerDependencyConfirmationV1, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     let epoch = desktop.2.load(std::sync::atomic::Ordering::SeqCst);
-    let session = super::confirmation_session(&desktop, epoch).await?;
+    let session = super::confirmation_session(desktop, epoch).await?;
     session.as_ref().ok_or("RESIDENT_UNAVAILABLE")?;
     let selection = normalize_worker_dependency_selection(&input)?;
     state.prepare(window.label(), selection, now_ms()?)
@@ -375,9 +375,9 @@ pub async fn worker_dependencies_select_confirm(
     confirmations: &WorkerDependencyConfirmationState,
     input: WorkerDependencyConfirmationInput,
 ) -> Result<MachineEnvelopeV2<WorkerDependenciesViewV1>, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     let epoch = state.2.load(std::sync::atomic::Ordering::SeqCst);
-    let mut session = super::confirmation_session(&state, epoch).await?;
+    let mut session = super::confirmation_session(state, epoch).await?;
     let selection = confirmations.take(window.label(), &input.confirmation_id, now_ms()?)?;
     session
         .as_mut()
@@ -391,7 +391,7 @@ pub async fn worker_dependencies_select_cancel(
     state: &WorkerDependencyConfirmationState,
     input: WorkerDependencyConfirmationInput,
 ) -> Result<(), DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     state.cancel(window.label(), &input.confirmation_id)
 }
 
@@ -400,7 +400,7 @@ pub async fn worker_task_list(
     state: &CommandState<'_>,
     input: WorkerListRequestV1,
 ) -> Result<MachineEnvelopeV2<DelegationListV1>, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     if !input.valid() {
         return Err("REQUEST_INVALID".into());
     }
@@ -420,7 +420,7 @@ pub async fn worker_task_status(
     state: &CommandState<'_>,
     input: WorkerStatusRequestV1,
 ) -> Result<MachineEnvelopeV2<DelegationGetV1>, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     if !input.valid() {
         return Err("REQUEST_INVALID".into());
     }
@@ -440,7 +440,7 @@ pub async fn worker_task_result(
     state: &CommandState<'_>,
     input: WorkerResultRequestV1,
 ) -> Result<MachineEnvelopeV2<DelegationResultV1>, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     if !input.valid() {
         return Err("REQUEST_INVALID".into());
     }
@@ -460,7 +460,7 @@ pub async fn worker_task_read(
     state: &CommandState<'_>,
     input: WorkerReadRequestV1,
 ) -> Result<MachineEnvelopeV2<WorkerReadDataV1>, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     if !input.valid() {
         return Err("REQUEST_INVALID".into());
     }
@@ -480,7 +480,7 @@ pub async fn worker_task_wait(
     state: &CommandState<'_>,
     input: WorkerWaitRequestV1,
 ) -> Result<MachineEnvelopeV2<DelegationWaitV1>, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     if !input.valid() {
         return Err("REQUEST_INVALID".into());
     }
@@ -500,7 +500,7 @@ pub async fn worker_task_confirm_residual(
     state: &CommandState<'_>,
     input: WorkerResidualConfirmRequestV1,
 ) -> Result<MachineEnvelopeV2<DelegationRunViewV1>, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     if !input.valid() {
         return Err("REQUEST_INVALID".into());
     }
@@ -522,7 +522,7 @@ pub async fn worker_task_cancel(
     state: &CommandState<'_>,
     input: WorkerCancelRequestV1,
 ) -> Result<MachineEnvelopeV2<DelegationCancelV1>, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     if !input.valid() {
         return Err("REQUEST_INVALID".into());
     }
@@ -542,7 +542,7 @@ pub async fn worker_task_continue(
     state: &CommandState<'_>,
     input: WorkerContinueRequestV1,
 ) -> Result<MachineEnvelopeV2<DelegationAcceptedV1>, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     if !input.valid() {
         return Err("REQUEST_INVALID".into());
     }

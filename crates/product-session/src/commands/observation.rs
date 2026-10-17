@@ -16,7 +16,7 @@ pub async fn observation_delete(
     state: &CommandState<'_>,
     input: ObservationDeleteInput,
 ) -> Result<serde_json::Value, DesktopFailure> {
-    main_window(&window)?;
+    main_window(window)?;
     {
         let epoch = state.2.load(Ordering::SeqCst);
         let spec = hiroute_application_api::SessionDeletionSpecV1 {
@@ -26,7 +26,7 @@ pub async fn observation_delete(
             data_class: input.data_class,
             delete_rollups: false,
         };
-        let preview = super::confirmation_session(&state, epoch)
+        let preview = super::confirmation_session(state, epoch)
             .await?
             .as_mut()
             .ok_or("RESIDENT_UNAVAILABLE")?
@@ -46,7 +46,7 @@ pub async fn observation_delete(
             task_refs,
         );
         if !request_web_confirmation(
-            &window,
+            window,
             WebConfirmationPrompt {
                 title: title.into(),
                 message,
@@ -61,7 +61,7 @@ pub async fn observation_delete(
         if state.2.load(Ordering::SeqCst) != epoch || !window.is_visible().unwrap_or(false) {
             return Err("CONFIRMATION_STALE".into());
         }
-        let outcome = super::confirmation_session(&state, epoch)
+        let outcome = super::confirmation_session(state, epoch)
             .await?
             .as_mut()
             .ok_or("RESIDENT_UNAVAILABLE")?

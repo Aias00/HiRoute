@@ -123,10 +123,10 @@ impl WebsiteReleasesV3 {
                 if !names.insert(filename) {
                     return Err(invalid());
                 }
-                if let Some(name) = value.get("manifest_filename") {
-                    if !names.insert(name.as_str().ok_or_else(invalid)?) {
-                        return Err(invalid());
-                    }
+                if let Some(name) = value.get("manifest_filename")
+                    && !names.insert(name.as_str().ok_or_else(invalid)?)
+                {
+                    return Err(invalid());
                 }
                 if value["platform"] != "Windows" {
                     continue;
