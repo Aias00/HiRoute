@@ -45,8 +45,29 @@ pub struct ConfirmationBroker {
     pending: Mutex<BTreeMap<String, PendingConfirmation>>,
     next_sequence: AtomicU64,
 }
+pub struct PendingConfirmationGuard<'a> {
+    broker: &'a ConfirmationBroker,
+    context: &'a str,
+    id: String,
+}
+impl Drop for PendingConfirmationGuard<'_> {
+    fn drop(&mut self) {
+        self.broker.cancel(self.context, &self.id);
+    }
+}
 
 impl ConfirmationBroker {
+    pub fn pending_guard<'a>(
+        &'a self,
+        context: &'a str,
+        request: &WebConfirmationRequest,
+    ) -> PendingConfirmationGuard<'a> {
+        PendingConfirmationGuard {
+            broker: self,
+            context,
+            id: request.confirmation_id.clone(),
+        }
+    }
     fn lock(&self) -> std::sync::MutexGuard<'_, BTreeMap<String, PendingConfirmation>> {
         self.pending
             .lock()
@@ -176,6 +197,7 @@ impl ConfirmationBroker {
         let Ok((request, receive)) = self.begin(context, prompt) else {
             return false;
         };
+        let _pending = self.pending_guard(context, &request);
         let decision = tokio::time::timeout(CONFIRMATION_TTL, receive).await;
         self.cancel(context, &request.confirmation_id);
         decision.ok().and_then(Result::ok).unwrap_or(false)
@@ -192,6 +214,27 @@ mod tests {
             confirm_label: "Apply change".to_owned(),
             cancel_label: "Cancel".to_owned(),
         }
+    }
+    #[tokio::test]
+    async fn aborting_a_request_removes_its_prompt_and_preserves_other_contexts() {
+        let broker = std::sync::Arc::new(ConfirmationBroker::default());
+        let (other, receive) = broker.begin("other", prompt("Other")).unwrap();
+        let caller = broker.clone();
+        let task = tokio::spawn(async move { caller.request("main", prompt("Abandoned")).await });
+        tokio::task::yield_now().await;
+        let abandoned = broker.snapshot("main").unwrap();
+        task.abort();
+        assert!(task.await.unwrap_err().is_cancelled());
+        assert!(broker.snapshot("main").is_none());
+        assert!(
+            broker
+                .resolve("main", &abandoned.confirmation_id, true)
+                .is_err()
+        );
+        broker
+            .resolve("other", &other.confirmation_id, true)
+            .unwrap();
+        assert!(receive.await.unwrap());
     }
 
     #[tokio::test]

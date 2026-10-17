@@ -9,6 +9,7 @@ pub(super) async fn request_web_confirmation(
     let Ok((request, receive)) = state.begin(window.label(), prompt) else {
         return false;
     };
+    let _pending = state.pending_guard(window.label(), &request);
     let id = request.confirmation_id.clone();
     if window
         .notify

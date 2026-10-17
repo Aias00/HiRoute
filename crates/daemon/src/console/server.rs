@@ -179,8 +179,11 @@ impl Server {
                 tokio::spawn(async move{
                     let _permit=permit;
                     let service=hyper::service::service_fn(move|request|super::http::handle(state.clone(),request,peer,local));
-                    let connection=hyper::server::conn::http1::Builder::new().max_buf_size(64*1024).serve_connection(hyper_util::rt::TokioIo::new(stream),service);
-                    let _=tokio::time::timeout(Duration::from_secs(100),connection).await;
+                    let connection=hyper::server::conn::http1::Builder::new()
+                        .timer(hyper_util::rt::TokioTimer::new())
+                        .header_read_timeout(Duration::from_secs(10))
+                        .max_buf_size(64*1024).serve_connection(hyper_util::rt::TokioIo::new(stream),service);
+                    let _=connection.await;
                 });
             }
         });

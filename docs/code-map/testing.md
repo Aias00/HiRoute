@@ -65,7 +65,9 @@ attached to an existing Desktop. Prepare that instance first, then use real UI
 mutations. Main-Agent delegation must separately invoke the actual public CLI.
 
 The [shared product session](../../crates/product-session/src) owns confirmation,
-exact-digest authority and command orchestration tests. The
+exact-digest authority and command orchestration tests. Its permit-drop and
+broker-abort cases verify that cancelled callers can retry, while stale permits
+cannot cancel a newer prompt or another context. The
 [console composition cases](../../crates/daemon/src/console/tests.rs) exercise the
 real role-all dispatcher while preserving the external Local Control Released
 gate. [Authentication cases](../../crates/daemon/src/console/auth/tests.rs) cover

@@ -25,17 +25,25 @@ pub async fn lock_current_session<'a, T>(
 
 #[derive(Default)]
 pub struct ConfirmationGate {
-    identity: Arc<()>,
+    identity: Arc<AtomicU64>,
     generation: u64,
-    open: bool,
 }
 pub struct ConfirmationPermit {
-    identity: Arc<()>,
+    identity: Arc<AtomicU64>,
     generation: u64,
     created: Instant,
 }
 /// Stable for the owning Session, including after its window confirmations expire.
-pub struct ConfirmationOwner(Arc<()>);
+pub struct ConfirmationOwner(Arc<AtomicU64>);
+impl Drop for ConfirmationPermit {
+    fn drop(&mut self) {
+        // A disconnected caller cannot strand its Session in an open preview.
+        // A stale permit must never cancel a newer confirmation.
+        let _ =
+            self.identity
+                .compare_exchange(self.generation, 0, Ordering::SeqCst, Ordering::SeqCst);
+    }
+}
 impl ConfirmationGate {
     pub fn owner(&self) -> ConfirmationOwner {
         ConfirmationOwner(self.identity.clone())
@@ -48,14 +56,17 @@ impl ConfirmationGate {
         }
     }
     pub fn is_open(&self) -> bool {
-        self.open
+        self.identity.load(Ordering::SeqCst) != 0
     }
     pub fn begin(&mut self) -> Result<ConfirmationPermit, &'static str> {
-        if self.open {
+        if self.is_open() {
             return Err("CONFIRMATION_ALREADY_OPEN");
         }
         self.generation = self.generation.wrapping_add(1);
-        self.open = true;
+        if self.generation == 0 {
+            self.generation = 1;
+        }
+        self.identity.store(self.generation, Ordering::SeqCst);
         Ok(ConfirmationPermit {
             identity: self.identity.clone(),
             generation: self.generation,
@@ -64,7 +75,7 @@ impl ConfirmationGate {
     }
     pub fn invalidate(&mut self) {
         self.generation = self.generation.wrapping_add(1);
-        self.open = false;
+        self.identity.store(0, Ordering::SeqCst);
     }
     pub fn finish(
         &mut self,
@@ -72,12 +83,14 @@ impl ConfirmationGate {
         accepted: bool,
     ) -> Result<bool, &'static str> {
         if !Arc::ptr_eq(&self.identity, &permit.identity)
-            || !self.open
             || permit.generation != self.generation
+            || self
+                .identity
+                .compare_exchange(permit.generation, 0, Ordering::SeqCst, Ordering::SeqCst)
+                .is_err()
         {
             return Err("CONFIRMATION_STALE");
         }
-        self.open = false;
         if accepted && permit.created.elapsed() > CONFIRMATION_TTL {
             return Err("CONFIRMATION_EXPIRED");
         }
@@ -87,6 +100,28 @@ impl ConfirmationGate {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn dropping_an_unfinished_permit_reopens_only_its_own_gate() {
+        let mut gate = ConfirmationGate::default();
+        let owner = gate.owner();
+        let abandoned = gate.begin().unwrap();
+        assert!(gate.is_open());
+        drop(abandoned);
+        assert!(!gate.is_open());
+        assert!(gate.check_owner(&owner).is_ok());
+        let fresh = gate.begin().unwrap();
+        assert!(gate.finish(&fresh, true).unwrap());
+    }
+    #[test]
+    fn dropping_a_stale_permit_preserves_the_new_confirmation() {
+        let mut gate = ConfirmationGate::default();
+        let old = gate.begin().unwrap();
+        gate.invalidate();
+        let fresh = gate.begin().unwrap();
+        drop(old);
+        assert!(gate.is_open());
+        assert!(gate.finish(&fresh, true).unwrap());
+    }
     #[tokio::test]
     async fn queued_preview_cannot_open_a_gate_in_the_replacement_session() {
         let epoch = AtomicU64::new(0);

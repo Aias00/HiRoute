@@ -6,7 +6,11 @@
 ## Web console and Windows host
 
 `crates/daemon/src/console` owns the separate HTTP listener, origin/asset admission,
-credential stores and per-client product contexts. Its private in-process Client
+credential stores and per-client product contexts.
+Request deadlines cover each request independently of connection age; incomplete
+headers and bodies have their own bounds. Shared confirmation permits and broker
+prompts release on caller cancellation, without approving or affecting another context.
+Its private in-process Client
 Core transport shares Local Control budgets, operation admission and upgrade
 drain; external Local Control retains its released-command gate. The frontend
 `apps/desktop/src/host` selects the Tauri, browser or Windows-shell transport and

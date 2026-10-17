@@ -19,9 +19,16 @@ pub(super) async fn handle(
     peer: SocketAddr,
     local: SocketAddr,
 ) -> Result<Reply, Infallible> {
-    let reply = match checked(&server, request, peer, local).await {
-        Ok(reply) => reply,
-        Err((status, code)) => failure(status, code),
+    // Each request gets the full confirmation window, even on an old keep-alive connection.
+    let reply = match tokio::time::timeout(
+        Duration::from_secs(100),
+        checked(&server, request, peer, local),
+    )
+    .await
+    {
+        Ok(Ok(reply)) => reply,
+        Ok(Err((status, code))) => failure(status, code),
+        Err(_) => failure(StatusCode::REQUEST_TIMEOUT, "CONSOLE_UNAVAILABLE"),
     };
     Ok(headers(reply))
 }
