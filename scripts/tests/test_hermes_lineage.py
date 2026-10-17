@@ -117,6 +117,27 @@ class LineageTests(unittest.TestCase):
         self.assertLessEqual(reader.get_calls, 64)
         self.assertLessEqual(reader.chain_calls, 2)
 
+    def test_observed_withdrawal_survives_generation_without_refreshing_its_stamp(self):
+        rows = {"parent": {"parent_session_id": None, "ended_at": None},
+                "child": {"parent_session_id": "parent", "ended_at": None}}
+        manager = self.manager(NativeReader(rows, ["parent"]))
+        self.warm(manager, "child")
+        with manager.lock:
+            manager.cache["child"]["sample"]["_monotonic"] -= 15
+            original = manager.cache["child"]["sample"]["sequence"]
+        gate = threading.Event()
+        manager.factory = lambda **_: NativeReader(rows, ["parent"], blocked=gate)
+        manager.schedule("child")
+        time.sleep(.01)
+        try:
+            header = json.loads(manager.header("child"))
+        finally:
+            gate.set()
+        self.assertEqual(header["invalid_edges"]["edges"], [["parent", "child"]])
+        self.assertEqual(header["invalid_edges"]["observation"]["sequence"], original)
+        self.assertGreaterEqual(header["invalid_edges"]["observation"]["age_ms"], 15000)
+        self.assertNotIn("current_state", header)
+
     def test_fork_does_not_withdraw_confirmed_ancestor_prefix(self):
         rows = {"a": {"id": "a", "parent_session_id": None, "ended_at": 1, "end_reason": "compression"},
                 "b": {"id": "b", "parent_session_id": "a", "ended_at": 2, "end_reason": "compression"},

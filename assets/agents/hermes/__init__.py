@@ -186,6 +186,11 @@ class _LineageReader:
                                      or pair[0] in canonical and pair not in canonical_pairs]
                 if ambiguous:
                     cached["invalid"].append(candidates[-2:])
+                # A verified withdrawal is dated evidence, not an unknown lookup.
+                # Keep it across model generation just like positive proof; its
+                # original stamp cannot override a newer successful verification.
+                if cached["invalid"]:
+                    cached["ttl"] = _PROOF_TTL
             with self.lock:
                 self.cache[current] = cached
                 self.cache.move_to_end(current)
