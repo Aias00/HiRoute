@@ -289,7 +289,10 @@ fn pinned_scope_reads_survive_an_unrelated_source_write_and_held_writer() {
         .unwrap();
     assert_eq!(repeated.analysis_scope, initial.analysis_scope);
     assert_eq!(repeated.conversations.len(), 1);
-    assert_eq!(repeated.conversations[0].analysis_session_id, first.session.to_string());
+    assert_eq!(
+        repeated.conversations[0].analysis_session_id,
+        first.session.to_string()
+    );
     transaction.rollback().unwrap();
 }
 
