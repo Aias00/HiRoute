@@ -102,6 +102,7 @@ fn reduce(
         return;
     };
     if assessment.partial
+        || assessment.target.target_partial
         || !assessment.score.is_finite()
         || assessment.score < 0.0
         || assessment.score >= f64::from(judgment.competence.floor_millis) / 1000.0
@@ -204,6 +205,10 @@ fn finalize_observation(input: &PlannerInputV1, outcome: &mut ClassificationOutc
     o.simple_probability = outcome.decision.simple_probability.clone();
     o.simple_threshold_millis = scope.simple_threshold_millis;
     o.competence_floor_millis = scope.competence_floor_millis;
+    o.score = outcome
+        .assessment
+        .as_ref()
+        .and_then(|a| serde_json::Number::from_f64(a.score));
     let dual = match &input.policy.route {
         MaterializedRouteV1::Branches { branches, .. } => branches
             .iter()
@@ -213,13 +218,20 @@ fn finalize_observation(input: &PlannerInputV1, outcome: &mut ClassificationOutc
     };
     o.eligibility = if !dual {
         E::SingleGroup
+    } else if !o.target_complete
+        && !matches!(o.eligibility, E::NoTarget | E::PartialTarget | E::Unrated)
+    {
+        o.eligibility
     } else if o.target_segment.is_none() {
         E::NoTarget
     } else if !o.target_complete {
         E::PartialTarget
     } else if let Some(a) = &outcome.assessment {
-        o.score = serde_json::Number::from_f64(a.score);
-        if a.partial || !a.score.is_finite() || !(0.0..=1.0).contains(&a.score) {
+        if a.partial
+            || a.target.target_partial
+            || !a.score.is_finite()
+            || !(0.0..=1.0).contains(&a.score)
+        {
             E::Unrated
         } else if !matches!(&input.policy.identity, PlannerRouteIdentityV2::Plan { plan_id, revision } if *plan_id == a.target.plan.plan_id && *revision == a.target.plan.plan_revision)
         {

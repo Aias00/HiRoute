@@ -12,15 +12,26 @@ use serde_json::Value;
 fn preview(
     port: &dyn RoutingFactsPort,
     change: &PlanContentChangeV2,
-) -> Result<PlanContentPreviewV2, ErrorCode> {
+) -> Result<PlanContentPreviewV2, (ErrorV1, Option<Value>)> {
     let state = port
         .plan_authoring_snapshot(&WorkspaceId::default(), change)
-        .map_err(map_control_error)?;
-    preview_plan_content(change, &state).map_err(map_preview_error)
+        .map_err(|e| (ErrorV1::new(map_control_error(e)), None))?;
+    preview_plan_content(change, &state).map_err(|e| {
+        if let PlanPreviewError::NativeProtocol(native) = e {
+            let mut error = ErrorV1::new(map_preview_error(PlanPreviewError::NativeProtocol(native.clone())));
+            error.message_key = native.diagnostic_key().into();
+            error.details_schema = "hiroute.native-protocol-diagnostic/v1".into();
+            let field = match &native { hiroute_domain::NativeProtocolError::StateReference(field) => Some(field), _ => None };
+            (error,Some(serde_json::json!({"schema":"hiroute.native-protocol-diagnostic/v1","reason":native.diagnostic_key(),"field":field})))
+        } else { (ErrorV1::new(map_preview_error(e)),None) }
+    })
 }
 fn map_preview_error(error: PlanPreviewError) -> ErrorCode {
     match error {
-        PlanPreviewError::Stale => ErrorCode::ChangePreviewStale,
+        PlanPreviewError::Stale
+        | PlanPreviewError::NativeProtocol(
+            hiroute_domain::NativeProtocolError::HistoricalUnavailable,
+        ) => ErrorCode::ChangePreviewStale,
         PlanPreviewError::Compiler(
             crate::compiler::AgentPlanCompilerError::CandidateNotRoutable(_),
         ) => ErrorCode::ActionRequired,
@@ -43,7 +54,10 @@ pub(super) fn dispatch_preview(
     };
     match preview(port, &payload.change) {
         Ok(result) => succeeded(result, request.request_id),
-        Err(error) => failed(error, request.request_id),
+        Err((error, Some(data))) => {
+            MachineEnvelopeV2::failed_with_data(error, data, Some(request.request_id))
+        }
+        Err((error, None)) => MachineEnvelopeV2::failed(error, Some(request.request_id)),
     }
 }
 pub(super) fn dispatch_apply(

@@ -199,19 +199,22 @@ pub fn validate_assessment_scope(
         return Err(NativeProtocolError::Review);
     }
     let texts = [
-        &judgment.degree.instructions,
-        &judgment.degree.simple,
-        &judgment.degree.complex,
-        &judgment.competence.instructions,
-        &judgment.competence.criteria[0],
-        &judgment.competence.criteria[1],
-        &judgment.competence.criteria[2],
+        ("degree.instructions", &judgment.degree.instructions),
+        ("degree.simple", &judgment.degree.simple),
+        ("degree.complex", &judgment.degree.complex),
+        ("competence.instructions", &judgment.competence.instructions),
+        ("competence.criteria.0", &judgment.competence.criteria[0]),
+        ("competence.criteria.1", &judgment.competence.criteria[1]),
+        ("competence.criteria.2", &judgment.competence.criteria[2]),
     ];
-    if texts
-        .iter()
-        .any(|t| incompatible_native_reference(protocol.is_some(), t))
+    if (protocol.is_some() || review.is_some())
+        && let Some((field, _)) = texts
+            .iter()
+            .find(|(_, t)| incompatible_native_reference(protocol.is_some(), t))
     {
-        return Err(NativeProtocolError::StateReference(scope.into()));
+        return Err(NativeProtocolError::StateReference(format!(
+            "{scope}.{field}"
+        )));
     }
     Ok(())
 }
@@ -220,7 +223,7 @@ pub fn incompatible_native_reference(c: bool, text: &str) -> bool {
     let paths: &[&str] = if c {
         &["visible_conversation", "assessment_from"]
     } else {
-        &["state.assessment_stage", "state.prior_context"]
+        &["assessment_stage", "prior_context"]
     };
     paths.iter().any(|p| text.contains(p))
 }
@@ -266,6 +269,14 @@ impl FrozenNativeProtocolV1 {
                     competence_floor_millis: judgment.competence.floor_millis,
                     standard: if judgment.competence.instructions == stock.competence.instructions
                         && judgment.competence.criteria == stock.competence.criteria
+                        && format!(
+                            "{} {}",
+                            protocol.fixed.degree_prefix, judgment.degree.instructions
+                        ) == stock_c_questions()["q0"]["instructions"].as_str().unwrap()
+                        && judgment.degree.simple
+                            == stock_c_questions()["q0"]["criteria"][0].as_str().unwrap()
+                        && judgment.degree.complex
+                            == stock_c_questions()["q0"]["criteria"][1].as_str().unwrap()
                     {
                         "stock"
                     } else {
@@ -444,3 +455,19 @@ pub enum NativeProtocolError {
 #[cfg(test)]
 #[path = "system_one_c_tests.rs"]
 mod tests;
+
+impl NativeProtocolError {
+    pub const fn diagnostic_key(&self) -> &'static str {
+        match self {
+            Self::Unsupported => "native.protocol.unsupported",
+            Self::FixedContent => "native.protocol.fixed_content_invalid",
+            Self::HistoryCap => "native.protocol.history_cap_invalid",
+            Self::Review => "native.assessment.review_required",
+            Self::HistoricalUnavailable => "native.assessment.source_unavailable",
+            Self::StateReference(_) => "native.protocol.state_reference_invalid",
+            Self::DigestMismatch => "native.protocol.digest_mismatch",
+            Self::ContentMismatch => "native.protocol.content_mismatch",
+            Self::Encoding => "native.protocol.encoding_failed",
+        }
+    }
+}

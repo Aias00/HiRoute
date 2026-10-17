@@ -268,7 +268,12 @@ impl BranchRoutingV1 {
                 b.judgment.is_none(),
                 self.judgment_for(b),
             )?;
-            if super::incompatible_native_reference(self.native_protocol.is_some(), &b.condition) {
+            if (self.native_protocol.is_some() || self.assessment_review.is_some())
+                && super::incompatible_native_reference(
+                    self.native_protocol.is_some(),
+                    &b.condition,
+                )
+            {
                 return Err(super::NativeProtocolError::StateReference(format!(
                     "{}.condition",
                     b.id
@@ -289,10 +294,11 @@ impl BranchRoutingV1 {
                         self.judgment_for(b),
                     )
                     .is_err()
-                        || super::incompatible_native_reference(
-                            self.native_protocol.is_some(),
-                            &b.condition,
-                        )
+                        || (self.native_protocol.is_some() || self.assessment_review.is_some())
+                            && super::incompatible_native_reference(
+                                self.native_protocol.is_some(),
+                                &b.condition,
+                            )
                 }))
         {
             return false;

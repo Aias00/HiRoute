@@ -73,22 +73,8 @@ fn definitions() -> Value {
             "candidates":reference("candidates"),"primary_candidates":reference("candidates"),"judgment":{"oneOf":[{"type":"null"},reference("judgment")]}
         }),
     );
-    let native = object(
-        &["schema", "fixed", "prior_context_max_turns"],
-        json!({
-            "schema":{"const":"hiroute.system-one-c/v1"}, "prior_context_max_turns":{"type":"integer","minimum":0,"maximum":8,"default":8},
-            "fixed":{"const":hiroute_domain::NativeFixedContentV1::c_v1()}
-        }),
-    );
-    let review = object(
-        &["protocol", "assessment_digest", "method"],
-        json!({
-            "protocol":{"enum":[hiroute_domain::SYSTEM_ONE_C_V1,hiroute_domain::SYSTEM_ONE_LEGACY]},
-            "assessment_digest":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"},"method":{"enum":["stock","reviewed_custom","historical"]},
-            "source":object(&["plan","scope"],json!({"plan":{"type":"object"},"scope":{"type":"string","maxLength":128}}))
-        }),
-    );
-    let reviews = json!({"type":"object","maxProperties":17,"additionalProperties":review});
+    let native = super::native_protocol::authoring();
+    let reviews = super::native_protocol::reviews();
     let routing = object(
         &["classifier", "branches", "default_branch_id", "judgment"],
         json!({

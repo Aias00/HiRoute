@@ -79,16 +79,38 @@ fn routing_stats_use_all_decisions_and_preserve_safe_evidence_after_content_dele
         c.complexity_score = None;
         c.threshold = None;
         c.classification_duration_micros = Some(1);
-        let envelope = fixture.fact(u64::from(variant) + 1, fact, 1000 + i64::from(variant));
-        assert!(matches!(
-            offer_fact(&writer, &channel, envelope.clone()),
-            WriterCycleOutcome::Ack(_)
-        ));
+        let mut request = fixture.clone();
+        if variant > 0 {
+            request.request =
+                LogicalRequestId::parse(format!("request-c-routing-{variant}")).unwrap();
+        }
+        let envelope = request.fact(u64::from(variant) + 1, fact, 1000 + i64::from(variant));
+        let verdict = offer_fact(&writer, &channel, envelope.clone());
+        assert!(
+            matches!(verdict, WriterCycleOutcome::Ack(_)),
+            "variant {variant}: {verdict:?}"
+        );
         assert!(matches!(
             offer_fact(&writer, &channel, envelope),
             WriterCycleOutcome::Ack(_)
         ));
     }
+    let final_stage = fixture.fact(
+        9,
+        finished(
+            &fixture,
+            "stage-only-one",
+            "turn-stage",
+            1,
+            SMART_SAVING_SCOPE_ID,
+            1500,
+        ),
+        1500,
+    );
+    assert!(matches!(
+        offer_fact(&writer, &channel, final_stage),
+        WriterCycleOutcome::Ack(_)
+    ));
     let mut q = query(Some(17));
     q.include_routing_observations = true;
     q.model_configuration_id = Some("does-not-match".into());

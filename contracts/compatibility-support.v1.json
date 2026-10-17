@@ -59,7 +59,9 @@
     "hiroute.change-preview-or-operation/v1",
     "hiroute.change-preview/v1",
     "hiroute.classifier-decision-test-result/v1",
+    "hiroute.classifier-decision-test-result/v2",
     "hiroute.classifier-decision-test/v1",
+    "hiroute.classifier-decision-test/v2",
     "hiroute.claude-native-layers/v1",
     "hiroute.claude-native-messages/v1",
     "hiroute.claude-subscription-candidate/v1",
@@ -240,6 +242,7 @@
     "hiroute.native-files/v1",
     "hiroute.native-launch/v1",
     "hiroute.native-observation/v2",
+    "hiroute.native-protocol-diagnostic/v1",
     "hiroute.native-restoration-ack/v1",
     "hiroute.observation-retention/v1",
     "hiroute.observation.ack/v2",
@@ -265,6 +268,7 @@
     "hiroute.operation-step/v1",
     "hiroute.operation-view/v1",
     "hiroute.otel.gen-ai-mapping/v1",
+    "hiroute.partitioned-history/v1",
     "hiroute.pi-additional-model/v1",
     "hiroute.pi-local-cli/v1",
     "hiroute.pi-native-resources/v1",
@@ -314,6 +318,7 @@
     "hiroute.release-model-data/v2",
     "hiroute.routing-control/v1",
     "hiroute.routing-control/v2",
+    "hiroute.routing-observations/v1",
     "hiroute.routing-publication-effect/v1",
     "hiroute.routing-publication-effect/v2",
     "hiroute.routing-receipt/v1",
@@ -366,6 +371,8 @@
     "hiroute.subscription-login-result/v1",
     "hiroute.subscription-maintenance/v2",
     "hiroute.subscription-proxy/v1",
+    "hiroute.system-one-c/v1",
+    "hiroute.system-one-legacy/v1",
     "hiroute.system-status/v1",
     "hiroute.upgrade-installer-decision/v1",
     "hiroute.upgrade-installer-started/v1",
@@ -1067,6 +1074,20 @@
         "hiroute.windows-managed-artifact-marker/v5"
       ],
       "legacy_support": []
+    },
+    {
+      "subject": "classifier_diagnostics",
+      "audited_prefixes": [
+        "hiroute.classifier-decision-test",
+        "hiroute.classifier-decision-test-result"
+      ],
+      "current_contracts": [
+        "hiroute.classifier-decision-test/v1",
+        "hiroute.classifier-decision-test/v2",
+        "hiroute.classifier-decision-test-result/v1",
+        "hiroute.classifier-decision-test-result/v2"
+      ],
+      "legacy_support": []
     }
   ],
   "forbidden_contracts": [
@@ -1142,7 +1163,7 @@
       "field": "context_window_tokens",
       "mode": "recovery_read_only",
       "owner": "agent-connections",
-      "reason": "A descriptor reconstructed from a pre-window immutable settings operation has no managed context policy. It retains that operation’s behavior until settings are saved again.",
+      "reason": "A descriptor reconstructed from a pre-window immutable settings operation has no managed context policy. It retains that operation\u2019s behavior until settings are saved again.",
       "removal_condition": "Retire with the pre-window settings operation recovery reader.",
       "allowed_paths": [
         "crates/domain/src/agents/managed_launch.rs",
@@ -1529,6 +1550,18 @@
       "allowed_paths": [
         "crates/domain/src/routing/authoring/fixtures/released-plan-editor.v2.json",
         "crates/domain/src/routing/authoring/tests.rs"
+      ]
+    },
+    {
+      "contract": "hiroute.observation.product-execution-envelope/v2",
+      "field": "schema_digest sha256:4f0dbcc9f7862133e73e451f64d7a6d6e5de146d958ac8bf3a4d1acc885b6b1d and omitted routing_observation",
+      "mode": "recovery_read_only",
+      "owner": "observation-storage",
+      "reason": "Authenticate retained pre-C Product v2 bytes from producer 2b547d52a35011638ba63f8e4e0fbf1b289f30df without rewriting immutable fields or event digests. Live ingestion requires the current descriptor; C detail is invalid under older descriptors. Existing released readers remain retained.",
+      "removal_condition": "Remove only after active stores and every supported retained backup contain no events with this exact pre-C descriptor.",
+      "allowed_paths": [
+        "crates/domain/src/observation/execution_validation.rs",
+        "crates/domain/src/observation/execution_tests.rs"
       ]
     }
   ]

@@ -39,7 +39,7 @@ pub(super) fn summarize(
         JOIN sessions s ON s.workspace_id=r.workspace_id AND s.session_id=r.session_id
         LEFT JOIN observation_run_links l ON l.workspace_id=r.workspace_id AND l.request_id=r.request_id
         WHERE f.workspace_id=:workspace AND json_extract(f.body_json,'$.event_kind')='route_decision'
-          AND json_extract(f.body_json,'$.occurred_at_ms')>=:from AND json_extract(f.body_json,'$.occurred_at_ms')<:to
+          AND COALESCE(json_extract(f.body_json,'$.occurred_at_ms'),r.started_at_ms)>=:from AND COALESCE(json_extract(f.body_json,'$.occurred_at_ms'),r.started_at_ms)<:to
           AND (:session IS NULL OR r.session_id=:session)
           AND (:plan IS NULL OR COALESCE(json_extract(f.body_json,'$.routing_observation.plan_id'),json_extract(f.body_json,'$.routing_context.plan_id'))=:plan
                OR COALESCE(json_extract(f.body_json,'$.routing_observation.plan_id'),json_extract(f.body_json,'$.routing_context.plan_id')) IS NULL)
@@ -99,6 +99,10 @@ pub(super) fn summarize(
             continue;
         }
         result.retained_decisions += 1;
+        if fact.occurred_at_ms.is_none() {
+            result.legacy_or_unknown_decisions += 1;
+            continue;
+        }
         let Some(record) = fact.routing_observation else {
             result.legacy_or_unknown_decisions += 1;
             continue;

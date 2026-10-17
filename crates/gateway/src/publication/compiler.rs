@@ -388,6 +388,20 @@ fn compile_classifier_authority(
         &classifier.mode,
         hiroute_domain::ComplexityClassifierModeV1::LocalRules
     ) {
+        if matches!(
+            &routing.request_owned,
+            AliasRequestOwnedRouteV1::Classified {
+                native_protocol: Some(_),
+                ..
+            } | AliasRequestOwnedRouteV1::Branches {
+                native_protocol: Some(_),
+                ..
+            }
+        ) {
+            return Err(PublicationInstallError::NativeProtocol(
+                hiroute_domain::NativeProtocolError::ContentMismatch,
+            ));
+        }
         return Ok(None);
     }
     let mut authority = compile_classifier_mode_authority(&classifier.mode, publication_revision)?;
@@ -400,7 +414,12 @@ fn compile_classifier_authority(
         } => {
             if let Some(p) = native_protocol {
                 p.validate_smart(judgment)
-                    .map_err(|_| PublicationInstallError::InvalidPlannerPolicy)?;
+                    .map_err(PublicationInstallError::NativeProtocol)?;
+                if value.system_one_model.is_none() {
+                    return Err(PublicationInstallError::NativeProtocol(
+                        hiroute_domain::NativeProtocolError::ContentMismatch,
+                    ));
+                }
             }
             value.native_protocol = native_protocol.clone();
             value.decision = judgment.degree.definition().into();
@@ -414,7 +433,12 @@ fn compile_classifier_authority(
         } => {
             if let Some(p) = native_protocol {
                 p.validate_branches(branches, default_branch_id)
-                    .map_err(|_| PublicationInstallError::InvalidPlannerPolicy)?;
+                    .map_err(PublicationInstallError::NativeProtocol)?;
+                if value.system_one_model.is_none() {
+                    return Err(PublicationInstallError::NativeProtocol(
+                        hiroute_domain::NativeProtocolError::ContentMismatch,
+                    ));
+                }
             }
             value.native_protocol = native_protocol.clone();
             value.decision = hiroute_domain::DecisionDefinitionV1::Categorical {

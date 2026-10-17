@@ -19,7 +19,7 @@ use super::{
 /// through `validate_persisted_contract`; they are never accepted by live ingestion.
 pub const EXECUTION_FACT_SCHEMA_V2: &str = "hiroute.observation.product-execution-envelope/v2";
 pub const EXECUTION_FACT_PORT_DIGEST_V2: &str =
-    "sha256:4f0dbcc9f7862133e73e451f64d7a6d6e5de146d958ac8bf3a4d1acc885b6b1d";
+    "sha256:96dd8ab8015702bb151143337b94381defffa169fa3dcdf8f0a44446c052224c";
 
 /// Gateway profile digests are canonical except on its explicit degraded-observation path.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

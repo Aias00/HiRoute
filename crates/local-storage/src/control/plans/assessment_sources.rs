@@ -16,7 +16,7 @@ impl ControlStore {
             .map(|k| (k.clone(), None))
             .collect();
         let connection = self.connection.borrow();
-        let mut statement = connection.prepare("SELECT content_digest,content_revision FROM plan_versions WHERE workspace_id=?1 AND plan_id=?2 AND content_revision<?3 AND state='published' ORDER BY content_revision DESC LIMIT 512").map_err(storage)?;
+        let mut statement = connection.prepare("SELECT content_digest,content_revision FROM plan_versions WHERE workspace_id=?1 AND plan_id=?2 AND content_revision<?3 AND state='published' ORDER BY content_revision DESC").map_err(storage)?;
         let rows = statement
             .query_map(
                 params![

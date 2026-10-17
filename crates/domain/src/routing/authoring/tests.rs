@@ -211,3 +211,98 @@ fn retired_follow_up_field_can_be_omitted_without_rewriting_legacy_values() {
     omitted["smart"]["reselect_on_user_message"] = serde_json::json!("true");
     assert!(serde_json::from_value::<PlanEditorStateV2>(omitted).is_err());
 }
+
+#[test]
+fn c_rollback_requires_destination_review_and_copied_history_does_not_depend_on_old_rows() {
+    use crate::*;
+    let mut draft = editor();
+    draft.mode = PlanEditorMode::SmartSaving;
+    draft.smart.economy = draft.candidates.clone();
+    draft.smart.primary = draft.candidates.clone();
+    draft.smart.classifier = ComplexityClassifierModeV1::DecisionService {
+        service: Box::new(DecisionServiceV1 {
+            id: "decision/transition".into(),
+            revision: 1,
+            name: "Transition fixture".into(),
+            connection: DecisionConnectionV1::SystemOne {
+                provider: "compatible".into(),
+                model: "fixture".into(),
+                endpoint: "https://decision.example/systemone".into(),
+                timeout_ms: 3000,
+                auth_header: ClassifierAuthHeaderV1 {
+                    name: "Authorization".into(),
+                    value_secret_ref: "decision/transition".into(),
+                },
+            },
+        }),
+    };
+    let p = NativeProtocolV1::default();
+    p.stock_assessment(&mut draft.smart.judgment);
+    draft.smart.judgment.degree.simple_threshold_millis = 913;
+    draft.smart.judgment.competence.floor_millis = 612;
+    draft.smart.native_protocol = Some(p.clone());
+    draft.smart.assessment_review = Some(std::collections::BTreeMap::from([(
+        SMART_SAVING_SCOPE_ID.into(),
+        AssessmentReviewV1::new(
+            Some(&p),
+            &draft.smart.judgment,
+            AssessmentAdoptionV1::Stock,
+            None,
+        )
+        .unwrap(),
+    )]));
+    let before = draft.effective().unwrap();
+    draft.smart.native_protocol = None;
+    assert!(
+        draft.effective().is_err(),
+        "C review cannot approve the legacy wrapper"
+    );
+    draft.smart.assessment_review = None;
+    let unreviewed = draft.effective().unwrap();
+    assert_eq!(
+        validate_assessment_transition(&unreviewed, Some(&before), None, &[]),
+        Err(NativeProtocolError::Review)
+    );
+    let source = AssessmentRollbackOptionV1 {
+        source: HistoricalAssessmentSourceV1 {
+            plan: PlanExecutionRef {
+                workspace_id: WorkspaceId::default(),
+                plan_id: AgentPlanId::parse("plan/transition").unwrap(),
+                content_revision: 1,
+                content_digest: CanonicalDigest::of_bytes(b"historical source"),
+            },
+            scope: SMART_SAVING_SCOPE_ID.into(),
+        },
+        instructions: "A retained pre-C custom assessment".into(),
+        criteria: ["Failed".into(), "Partial".into(), "Delivered".into()],
+    };
+    draft.smart.judgment.competence.instructions = source.instructions.clone();
+    draft.smart.judgment.competence.criteria = source.criteria.clone();
+    let review = AssessmentReviewV1::new(
+        None,
+        &draft.smart.judgment,
+        AssessmentAdoptionV1::Historical,
+        Some(source.source.clone()),
+    )
+    .unwrap();
+    draft.smart.assessment_review = Some(std::collections::BTreeMap::from([(
+        SMART_SAVING_SCOPE_ID.into(),
+        review,
+    )]));
+    let restored = draft.effective().unwrap();
+    assert_eq!(
+        validate_assessment_transition(&restored, Some(&before), None, &[]),
+        Err(NativeProtocolError::HistoricalUnavailable)
+    );
+    validate_assessment_transition(&restored, Some(&before), None, &[source]).unwrap();
+    validate_assessment_transition(&restored, Some(&restored), None, &[]).unwrap();
+    assert_eq!(draft.smart.judgment.degree.simple_threshold_millis, 913);
+    assert_eq!(draft.smart.judgment.competence.floor_millis, 612);
+    draft
+        .smart
+        .judgment
+        .competence
+        .instructions
+        .push_str(" edited");
+    assert!(draft.effective().is_err());
+}

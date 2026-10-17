@@ -215,6 +215,9 @@ fn c_stock_questions_exactly_match_the_appendix_and_isolate_invalid_q3() {
         r#"{"type":"choice","probabilities":{"applicable":-0.1,"not_established":1.1}}"#,
         r#"{"type":"choice","probabilities":{"other":0.2,"not_established":0.8}}"#,
         r#"{"type":"choice","probabilities":{"applicable":0.2,"not_established":0.2}}"#,
+        r#"{"type":"choice","probabilities":{"applicable":1e999,"not_established":0}}"#,
+        r#"{"type":"score","probabilities":{"applicable":0.5,"not_established":0.5}}"#,
+        r#"{"type":"choice","probabilities":{"applicable":0.5,"not_established":0.5,"other":0}}"#,
     ] {
         let mut body: Value = serde_json::from_str(valid).unwrap();
         body["answers"].as_object_mut().unwrap().remove("q2");
@@ -227,6 +230,20 @@ fn c_stock_questions_exactly_match_the_appendix_and_isolate_invalid_q3() {
         assert_eq!(response.assessment.unwrap().score, 0.1);
         assert_eq!(response.probabilities.unwrap()["simple"], 0.9);
     }
+}
+
+#[test]
+fn c_rejects_oversized_current_input_without_truncating_it() {
+    let a = c_authority();
+    let mut request = diagnostic_request();
+    request.messages[0].content = vec![crate::server::core_runtime::model_ir::ContentPart::Text {
+        // Escaping must count toward the actual wire budget too.
+        text: "\"".repeat(140_000),
+    }];
+    assert!(matches!(
+        request_template(&a, &request, &c_history(&a)),
+        Err(CallFailure::RejectedInput)
+    ));
 }
 #[test]
 fn c_partitions_cap_only_background_and_preserve_a_ten_turn_target() {

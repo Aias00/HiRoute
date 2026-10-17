@@ -93,7 +93,18 @@ pub fn validate_assessment_transition(
     let destination = configuration.native_protocol();
     for (scope, judgment) in configuration.assessment_scopes() {
         let review = configuration.review_for_scope(&scope);
-        if destination.is_some() || old_c {
+        let mut stock_c = JudgmentSettingsV1::default();
+        NativeProtocolV1::default().stock_assessment(&mut stock_c);
+        let dangling_c = destination.is_none()
+            && review.is_none()
+            && judgment.competence.instructions == stock_c.competence.instructions
+            && previous
+                .and_then(|p| p.assessment_scopes().get(&scope).copied())
+                .is_none_or(|j| {
+                    j.competence.instructions != judgment.competence.instructions
+                        || j.competence.criteria != judgment.competence.criteria
+                });
+        if destination.is_some() || old_c || dangling_c {
             review
                 .ok_or(NativeProtocolError::Review)?
                 .validate(destination, judgment)?;
@@ -101,6 +112,11 @@ pub fn validate_assessment_transition(
         if let Some(review) = review {
             review.validate(destination, judgment)?;
             if let Some(source) = &review.source {
+                // A copied, already-published rubric retains its trusted review even after
+                // the old source is reclaimed. Only a newly selected restoration reads it.
+                if previous.and_then(|c| c.review_for_scope(&scope)) == Some(review) {
+                    continue;
+                }
                 let inherited_review = configuration
                     .assessment_reviews()
                     .is_some_and(|r| !r.contains_key(&scope));

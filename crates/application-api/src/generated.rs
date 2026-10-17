@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 mod delegation;
+mod native_protocol;
 mod plan_authoring;
 mod subscription_login;
 mod worker;
@@ -525,6 +526,7 @@ pub fn generated_contract_files() -> Vec<GeneratedContractFile> {
     ]);
 
     files.extend(plan_authoring::files());
+    files.extend(native_protocol::files());
     let file_digests = files
         .iter()
         .map(|(path, contents)| {

@@ -151,7 +151,7 @@ fn add_degree(
     questions.insert(id.clone(), json!({"type":"score","instructions":format!("{prefix} {instructions}"),"criteria":levels.iter().map(|l| &l.criterion).collect::<Vec<_>>()}));
     id
 }
-struct ByteBudget(usize);
+pub(super) struct ByteBudget(pub(super) usize);
 impl std::io::Write for ByteBudget {
     fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
         if bytes.len() > self.0 {

@@ -121,6 +121,20 @@ pub(super) fn request_template(
         return Err(CallFailure::RejectedInput);
     }
     let requested = bindings.applicability.is_some();
+    let omitted_eligibility = if let Some(t) = &history.assessment_target {
+        if history
+            .assessment_from
+            .is_none_or(|i| i >= history.visible_conversation.len())
+        {
+            E::InvalidBoundary
+        } else if !matches!(t.attribution, ExecutionAttribution::Single { .. }) {
+            E::AmbiguousAttribution
+        } else {
+            E::DifferentPolicy
+        }
+    } else {
+        E::NoTarget
+    };
     let observation = RoutingObservationV1 {
         protocol: protocol.protocol.schema.clone(),
         content_digest: protocol.digest.clone(),
@@ -129,15 +143,13 @@ pub(super) fn request_template(
         provider: authority.decision_provider.clone(),
         model: authority.system_one_model.clone().unwrap_or_default(),
         standard: scope.map_or("custom", |s| s.standard.as_str()).into(),
-        target_segment: target.as_ref().and_then(|_| {
-            history
-                .assessment_target
-                .as_ref()
-                .map(|t| t.segment_id.clone())
-        }),
+        target_segment: history
+            .assessment_target
+            .as_ref()
+            .map(|t| t.segment_id.clone()),
         target_complete: target.is_some() && !target_partial && admitted_stage > 0,
         eligibility: if target.is_none() {
-            E::NoTarget
+            omitted_eligibility
         } else if target_partial {
             E::PartialTarget
         } else {
@@ -181,14 +193,17 @@ pub(super) fn request_template(
 fn admit_suffix(turns: &[Arc<VisibleAgentTurn>], budget: &mut usize) -> Result<usize, CallFailure> {
     let mut count = 0;
     for turn in turns.iter().rev() {
-        let bytes = serde_json::to_vec(turn)
-            .map_err(|_| CallFailure::RejectedInput)?
-            .len()
-            + usize::from(count > 0);
-        if bytes > *budget {
+        let Some(available) = budget.checked_sub(usize::from(count > 0)) else {
             break;
+        };
+        let mut writer = super::system_one::ByteBudget(available);
+        if let Err(error) = serde_json::to_writer(&mut writer, turn) {
+            if error.io_error_kind() == Some(std::io::ErrorKind::FileTooLarge) {
+                break;
+            }
+            return Err(CallFailure::RejectedInput);
         }
-        *budget -= bytes;
+        *budget = writer.0;
         count += 1;
     }
     Ok(count)

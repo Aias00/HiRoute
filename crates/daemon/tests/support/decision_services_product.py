@@ -12,12 +12,17 @@ from publication_process import bootstrap, plan_change, judgment_fixture
 
 class DecisionEndpoint(BaseHTTPRequestHandler):
     requests = []
+    c_vectors = False
 
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
         self.requests.append((self.headers.get('Authorization'), body))
         if 'questions' in body:
-            result = {'answers': {key: ({'type': 'choice', 'choice': next(iter(question['criteria']))}
+            result = {'answers': {key: ({'type': 'choice', 'probabilities': {'applicable': 0.75, 'not_established': 0.25}}
+                if self.c_vectors and question['type'] == 'choice' and set(question['criteria']) == {'applicable', 'not_established'}
+                else {'type': 'score', 'score': 1.0}
+                if self.c_vectors and question['type'] == 'score' and len(question['criteria']) == 3
+                else {'type': 'choice', 'choice': next(iter(question['criteria']))}
                 if question['type'] == 'choice' else {'type': 'score', 'probabilities': {'0': 0.9, '1': 0.1}})
                 for key, question in body['questions'].items()}}
         else:
@@ -192,6 +197,8 @@ def scenario(repository):
                 assert config['judgment'] == editor['branch_routing' if mode == 'custom_branches' else 'smart']['judgment']
         print(json.dumps({'scenario': 'retired-follow-up-legacy-and-omitted-real-cli-publication-restart',
                           'state': 'green', 'cases': 6}), flush=True)
+        from c_protocol_product import exercise
+        exercise(product, cli, service, DecisionEndpoint, selection)
         custom = {'id': 'custom-fixture', 'revision': 1, 'name': 'Custom decision', 'connection': {
             'kind': 'custom', 'endpoint': service['connection']['endpoint'], 'timeout_ms': 3000}}
         mutate({'id': custom['id'], 'expected_revision': 0, 'service': custom}, 'custom-create')

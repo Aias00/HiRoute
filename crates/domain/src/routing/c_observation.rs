@@ -39,6 +39,7 @@ pub enum HistoricalProtectionActionV1 {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProtectionEligibilityV1 {
+    InvalidBoundary,
     NoTarget,
     PartialTarget,
     Unrated,
