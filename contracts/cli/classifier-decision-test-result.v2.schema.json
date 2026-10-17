@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "duration_millis": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "endpoint_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "model": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "protocol_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "question_count": {
+      "maximum": 19,
+      "minimum": 3,
+      "type": "integer"
+    },
+    "reason": {
+      "maxLength": 128,
+      "type": "string"
+    },
+    "schema": {
+      "const": "hiroute.classifier-decision-test-result/v2"
+    },
+    "service_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "service_revision": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "shape": {
+      "enum": [
+        "standard",
+        "max_branches"
+      ]
+    },
+    "state": {
+      "enum": [
+        "verified",
+        "unsupported",
+        "not_tested",
+        "test_failed"
+      ]
+    },
+    "tested_at_unix_ms": {
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema",
+    "state",
+    "service_id",
+    "service_revision",
+    "endpoint_digest",
+    "model",
+    "protocol_digest",
+    "shape",
+    "question_count",
+    "tested_at_unix_ms",
+    "duration_millis",
+    "reason"
+  ],
+  "type": "object"
+}

@@ -638,6 +638,14 @@ from zero; a stage score does not rewrite its opening selection reason. Use the 
 cursor to read further pages. This facts-only query does not call a model or grant access
 to conversation bodies; discover its filters through the command's `--help` or `schema show`.
 
+Current normal-argument calls also opt into `routing_observations`: all retained
+matching C decisions, separate requested/unavailable/omitted/inherited/anomaly
+counts, historical protection opportunities and suppression, with exact cohorts
+and coverage. Zero denominators or coverage gaps have unavailable rates. Existing
+structured requests that omit `include_routing_observations` retain the prior
+response field set. Content-only deletion retains safe evidence; full fact deletion
+and retention remove it. These rates do not establish accuracy or model quality.
+
 ## Configure a Worker and delegate a task
 
 Worker reuses the existing commands. Discovery does not install or select software:
@@ -898,6 +906,29 @@ not only the CLI exit code. It tests that saved connection's transport and requi
 fields, reads no real conversation, runs no execution model and produces no competence sample.
 A pass is not a task-quality or continuing-health guarantee. Saving a connection and testing
 it are separate actions; neither publishes a route.
+
+Native C is an explicit route option. In `smart` or `branch_routing`,
+`native_protocol` contains the actual versioned fixed bundle and background cap;
+`assessment_review` separately binds each effective scope to its destination
+protocol and complete composed assessment digest. Use the generated
+[editor schema](../contracts/cli/plan-editor.v2.schema.json) and the
+[adoption/rollback guide](smart-saving-model-classification.md). Omitting both
+members preserves legacy behavior. A protocol name alone is insufficient.
+
+The existing test command also accepts
+[C capability V2](../contracts/cli/classifier-decision-test.v2.schema.json):
+`schema`, exact saved `service_id`/`service_revision`, the frozen `protocol` from
+`routing preview`'s `data.plan_version.compiled.request.native_protocol`, and
+`shape` (`standard` or `max_branches`). Maximum shape requires sixteen dual-group
+categories and tests nineteen questions. It sends one synthetic request through
+production construction/transport/parsing. Inspect `data.state`, content identity,
+shape and question count; V1 connectivity success does not establish C support.
+Results are evidence for that exact test, without persistence or implicit probes.
+
+`routing options` can explicitly request `assessment_review_plan: {plan_id,
+revision}` to return available exact historical rubric sources. The existing
+response omits `assessment_sources` unless requested. Selection pins the exact
+source in the reviewed change; Apply fails if it is no longer available.
 
 Plans use the existing `routing preview/apply` transaction with `hiroute.plan-editor/v2`:
 

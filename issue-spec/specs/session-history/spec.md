@@ -211,6 +211,63 @@ body stays unavailable and cannot be rebuilt from a score explanation. Public
 read-only facts, help/schema discovery, and cursor without content/model calls.
 Competence is stage performance, not task acceptance rate or universal model ranking.
 
+### Requirement: C observations cover all retained decisions
+
+C decision evidence MUST reuse existing route events, bounded safe-field storage
+and authorized query entrances, with no dedicated table, SQL migration, view or
+permission. Record protocol/full-content/bundle identities, standard, actual
+provider/model, target/completeness/eligibility, third-question requested/state/
+reason/probability, P/T, raw s/F, fixed 0.5 applicability boundary, protection action,
+request bytes, and retained/removed background/target counts. Existing selection
+and execution evidence preserve actual groups and relay separately. Never persist
+prompt, conversation, tool-result or credential text in this safe detail.
+
+Facts and plan-quality reads MUST add detail/summary only when the default-false
+include_routing_observations flag is true, including stripping nested selection
+detail by default for released strict readers. The flag binds continuation cursors
+without changing old omitted-call bindings. Current CLI/Desktop opt in through
+these existing reads. A stage-opening sample is not an all-decision denominator.
+
+In one authorized snapshot, summaries MUST cover every retained matching decision
+event for the requested Plan, optional revision/session and fixed time interval,
+deduplicated by producer/epoch/stream/event. Stage paging, selected model and score
+filters do not restrict that population. Keep protocol, exact content/bundle,
+scope/standard, provider/model, T and F in separate cohorts. Count fresh C decisions,
+actually requested third questions, requested-unavailable results, no-target and
+partial-target omissions, inherited decisions, internally missing required
+questions, eligible low-score protection opportunities and actual suppression.
+Whole-call failures after dispatch count as requested-unavailable. Inherited
+decisions create neither request nor protection opportunity. Internal missing
+questions are anomalies outside the provider denominator.
+
+Expose unavailable/requested, suppressed/opportunity and suppressed/fresh-C-decision
+ratios with raw counts. Zero denominators are unavailable, not zero. Declare query
+scope, covered time, retained population, legacy/unknown and unknown-scope records,
+missing safe projections and bounded-scan truncation. Gaps/limits invalidate rates
+rather than certifying complete coverage. These statistics describe routing
+behavior, not correctness, accuracy, quality gain or universal provider support.
+Content-only deletion MUST retain safe routing evidence under existing fact
+retention. Full fact deletion/expiry removes it and aggregates cannot reconstruct
+deleted bodies. Existing authorization, run-conflict and deletion rules still apply.
+
+#### Scenario: All decisions, not open stages
+
+- **WHEN** several C decisions occur inside one stage and a stage-score filter or page is selected
+- **THEN** Counts MUST include all matching retained decision events while keeping inherited and omitted cases out of the requested denominator.
+
+#### Scenario: Content deletion
+
+- **WHEN** only captured content is deleted and safe facts remain within retention
+- **THEN** Safe C detail/counts MUST remain queryable without restoring body content; full fact deletion removes them.
+
+#### Scenario: Released read
+
+- **WHEN** a facts or plan-quality request omits the new opt-in flag
+- **THEN** The response MUST preserve its prior field set, including nested stage selection.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/139#issuecomment-6235111513
+
 ## Implementation references
 
 - [Native identity resolver](../../../crates/gateway/src/context_hold/identity.rs) and

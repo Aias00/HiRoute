@@ -35,6 +35,40 @@ Category conditions, degree criteria and assessment criteria are separate inputs
 Existing plan/session views show actual group/model/profile, frozen thresholds and selection reasons
 separately from latest competence. Draft edits cannot reinterpret published evidence.
 
+For a built-in decision connection, **Decision protocol → C** explicitly enables
+historical-problem applicability on that route. Existing routes and global creation
+defaults retain their protocol. For each effective assessment scope, adopt the stock
+C assessment or retain/edit a custom standard, expand its complete composed question
+and three criteria, then confirm the review. Independent branch overrides are reviewed
+separately. Adoption preserves degree/category text, candidates and numeric thresholds.
+C still defaults to simple probability 0.8 and competence floor 0.5.
+
+C supplies separate `prior_context`, `assessment_stage` and `latest_user` sections.
+Background defaults to at most eight turns before the actual assessed stage; the
+complete stage can be longer. Zero background warns that earlier requirements and
+references are absent. If the wire budget trims the target, the third question is
+omitted and the partial score cannot trigger historical protection. Current input
+is never silently truncated. Tool-result bodies are not added.
+
+For an otherwise valid historical low-score protection opportunity, C retains that
+protection when applicability is at least 0.5, and suppresses it below 0.5. An
+unavailable answer retains protection conservatively. This does not override a
+complex current task, transfer old scores or change same-turn availability relay.
+
+**Test this route's C capability** sends one synthetic request using the exact saved
+connection and frozen route content. Connection details also offer the full
+nineteen-question shape. Missing evidence reads **Not tested in this session**;
+changing the connection/content/shape invalidates it. The existing connection test
+does not establish C support. Saving and publishing remain available without a
+test, and neither action probes a provider.
+
+Switching back requires a new assessment choice and review under the legacy wrapper:
+restore an available retained pre-C rubric from the same stable scope, adopt the
+legacy default, or review custom text. Unavailable/reclaimed history disables only
+historical restoration. Rollback publishes a new revision and preserves old C evidence.
+Plan/session quality includes opt-in C counts and coverage, using all retained matching
+decisions rather than stage-opening samples. These rates describe behavior, not quality.
+
 The CLI keeps `decision services list/apply/test` and the existing routing preview/apply workflow.
 Editor data uses `smart.judgment`, or `branch_routing.judgment` with branch `primary_candidates` and optional
 complete `judgment`. Custom extensions follow the supplied definition and rubric; their form provides
@@ -42,5 +76,6 @@ examples and the single current OpenAPI. No separate Secret-management UI is nee
 
 See [HiRoute extension API semantics](../decision-extensions/api/README.md), [optional self-hosted Jev deployment](../decision-extensions/extensions/jev-decider/README.md),
 [System One mapping](../decision-extensions/api/system-one-design.md) and [code owners](code-map/decision-foundation.md).
-Development v1 is replaced in place using fresh data, without migration or old-format compatibility.
+Earlier development-only custom-extension shapes have no negotiation path; supported
+released HiRoute data uses the registered admission/recovery readers.
 Tool selection is documentation-only.

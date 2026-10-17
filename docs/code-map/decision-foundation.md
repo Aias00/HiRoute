@@ -16,6 +16,8 @@ with no current runtime or product entry.
 | Connect, edit, test or delete a decision model/custom extension | [Connection UI](../../apps/desktop/src/features/decision-services/DecisionServicesPage.tsx), [native transaction](../../apps/desktop/src-tauri/src/session/decision_services.rs), [store](../../crates/local-storage/src/control/decision_services.rs) | [Desktop shell scenarios](../../apps/desktop/tests/v3/browser/product-shell-scenarios.mjs), [real CLI lifecycle](../../crates/daemon/tests/support/decision_services_product.py) |
 | Create a connection while editing a route | [DesktopApp](../../apps/desktop/src/product/DesktopApp.tsx), [selector](../../apps/desktop/src/features/decision-services/DecisionSelector.tsx) | Preserve route edits and select the exact saved revision without implicit publication |
 | Configure categories, degree and competence | [Plan editor](../../apps/desktop/src/plan-editor.tsx), [branch editor](../../apps/desktop/src/features/decision-services/BranchRoutingEditor.tsx), [judgment controls](../../apps/desktop/src/features/decision-services/JudgmentSettings.tsx), [domain](../../crates/domain/src/routing/decision.rs) | Existing model picker, collapsed advanced settings, complete overrides and publish validation |
+| Adopt or roll back native C by assessment scope | [Frozen protocol/review domain](../../crates/domain/src/routing/system_one_c.rs), [transition validation](../../crates/domain/src/routing/assessment_transition.rs), [retained sources](../../crates/local-storage/src/control/plans/assessment_sources.rs), [scope editor](../../apps/desktop/src/features/decision-services/NativeProtocolEditor.tsx) | [Real CLI adoption/restart/rollback](../../crates/daemon/tests/support/c_protocol_product.py), [Desktop interaction](../../apps/desktop/tests/v3/browser/c-protocol-scenarios.mjs) |
+| Explicitly test saved C capability | [V2 contract](../../crates/application-api/src/classifier_diagnostic_c.rs), [Application](../../crates/application/src/classifier_c.rs), [production diagnostic](../../crates/gateway/src/core_runtime/classification/c_capability.rs), [native session](../../apps/desktop/src-tauri/src/classifier_c_session.rs) | Standard and nineteen-question shapes through the existing protected command; no implicit provider call |
 | Freeze connection, definition and rubric | [Authoring snapshot](../../crates/daemon/src/control/runtime/plan_content_snapshot.rs), [Application compiler](../../crates/application/src/compiler), [Gateway compiler](../../crates/gateway/src/publication/compiler.rs) | [Decision publication contracts](../../crates/gateway/src/publication/tests/decision_contracts.rs), [real publication/restart](../../crates/daemon/tests/publication_process.rs) |
 | Judge the current task and preceding actual stage | [Call lifetime](../../crates/gateway/src/core_runtime/classification.rs), [safe transport diagnostics](../../crates/gateway/src/core_runtime/classification/diagnostic.rs), [System One adapter](../../crates/gateway/src/core_runtime/classification/system_one.rs), [custom codec](../../crates/gateway/src/core_runtime/classification/protocol.rs) | [Provider mapping](../../crates/gateway/src/core_runtime/classification/system_one_tests.rs), [protocol/replay tests](../../crates/gateway/src/core_runtime/classification/protocol_tests.rs) |
 | Select a group and execute candidates | [Group policy](../../crates/gateway/src/core_runtime/classification/group_policy.rs), [planner](../../crates/gateway/src/planner.rs), [history](../../crates/gateway/src/agent_turn_history/store.rs) | [Threshold/score isolation](../../crates/gateway/src/core_runtime/classification/group_policy_tests.rs), [group boundaries](../../crates/gateway/src/planning/branch_tests.rs), [multi-turn listener journey](../../tools/e2e-harness/tests/p0_gateway_runtime/decision_branches.rs) |
@@ -39,7 +41,15 @@ Desktop calls connections decision models or custom extensions; CLI retains
 `decision services list/apply/test`. Writes reuse Operations, protected input and
 existing Secret storage. Custom HTTP belongs to a saved connection, not inline
 `rest` authoring. Current development v1 replaces the earlier decision shape;
-there is no additional protocol version or old decision-format recovery reader.
+the custom-extension v1 shape has no old-format negotiation. Native C is a separate,
+explicit route semantic carried by the existing System One wire envelope.
+
+Native authoring and compiled routes carry optional protocol content. Omission
+preserves legacy encoding. The compiler freezes actual fixed questions, effective
+per-scope assessments, thresholds, history cap and digest. Protocol-bound reviews
+sit beside that object so rollback cannot discard its review obligation. Historical
+rollback copies only an exact retained rubric and adds no hold or execution-time
+dependency. Supported released inputs retain their existing admission adapters.
 
 ## Provider and routing policy
 
@@ -55,6 +65,14 @@ then reduces only the selected path. The extension owns provider integration and
 context trimming; HiRoute owns probability thresholds, competence protection and
 candidate selection. Trimming inside the assessment target marks that assessment
 partial; loss of an earlier prefix does not by itself invalidate the scored stage.
+
+[C allocation](../../crates/gateway/src/core_runtime/classification/c_request.rs)
+partitions prior context, actual assessed stage and latest user. It reserves the
+third question before target admission, removes optional background first and
+never refills history after a partial target frees question bytes. C applicability
+only gates an otherwise eligible low-score protection opportunity. Invalid or
+unavailable applicability retains that opportunity conservatively; category,
+degree, rubric validity, inheritance and relay retain their separate owners.
 
 `group_policy.rs` uses the current simple probability and applicable complete
 assessment for the same category, plan revision and rubric. Each new user turn
@@ -81,6 +99,14 @@ identity: actual category/group/candidate position, model/reasoning, plan revisi
 and frozen rubric. Opening selection probability/reason is distinct from a later
 competence score. Summary and drill-down use the same identity; missing or partial
 assessments do not enter averages.
+
+[All-decision C summaries](../../crates/observation/src/query_v2/routing_observations.rs)
+read the existing route events and safe-fact projection, independently of stage
+pages and score/model filters. The default-false `include_routing_observations`
+flag preserves released strict facts/quality responses, including nested selection.
+[Product presentation](../../apps/desktop/src/features/RoutingObservations.tsx)
+shows counts, denominators, cohorts and coverage; it does not infer accuracy.
+Content-only deletion retains safe evidence; full fact retention/deletion removes it.
 
 The [model row projection](../../apps/desktop/src/features/plan-quality-state.ts)
 associates configured candidates with retained execution by declared position and

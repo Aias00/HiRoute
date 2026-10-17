@@ -778,6 +778,12 @@ hiroute decision services test --request-stdin --output json < decision-test-req
 不读取真实会话、不运行业务模型、不产生胜任样本；通过不保证任务质量或持续健康。
 保存连接与测试是独立动作，两者都不会发布路由。
 
+C 需在路由中明确选择。`smart` 或 `branch_routing` 下的 `native_protocol` 保存实际固定内容与背景上限；独立的 `assessment_review` 按生效范围绑定目标协议和完整评分摘要。采用与回退都需审阅，省略这些字段保持旧行为。结构见[生成的编辑器 schema](../contracts/cli/plan-editor.v2.schema.json)和[使用说明](smart-saving-model-classification.zh-CN.md)。仅保存预设名称不够。
+
+现有测试命令也接受 [C 能力 V2](../contracts/cli/classifier-decision-test.v2.schema.json)：指定 `schema`、准确保存的 `service_id` / `service_revision`、`routing preview` 返回的 `data.plan_version.compiled.request.native_protocol` 冻结内容，以及 `standard` / `max_branches` 形状。最大形状要求 16 个双组分支，验证 19 问，整个测试只发送 1 次合成请求。检查 `data.state`、内容标识、形状和问题数；V1 连接测试通过不代表支持 C。保存和发布不会隐式测试。
+
+`routing options` 显式传入 `assessment_review_plan: {plan_id, revision}` 后才返回 `assessment_sources`。历史恢复在审阅内容中固定准确来源，Apply 时已不可用则失败，不自动替换其他版本。
+
 计划继续使用 `routing preview/apply`，编辑器 schema 为 `hiroute.plan-editor/v2`：
 
 | 模式 | 编辑字段 |

@@ -228,6 +228,60 @@ in current CLI schemas. Fixed-model, ordered and free-first behavior is unchange
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/133#issuecomment-6220134774
 
+### Requirement: Native protocol adoption and rollback require effective-scope review
+
+Native C MUST be an explicit route-level selection for smart-saving or custom
+branches, never a connection/branch-judgment setting or global creation default.
+Absent native_protocol means legacy. New optional protocol/review/detail members
+MUST default and skip omission, preserving supported legacy drafts, authoring,
+sealed identities and bytes without a bulk rewrite. C nested content requires
+matching current consumers; unsupported content fails explicitly rather than
+silently becoming legacy. Existing released admission/recovery adapters remain.
+
+Every effective assessment scope MUST explicitly adopt stock C suffix/three
+criteria or retain/edit a custom standard and review the full composed question.
+Bind review to destination protocol and composition digest outside the C object.
+Inherited branches may share their plan-default scope; independent whole-setting
+overrides retain stable branch identity. Adoption changes only selected assessment
+text/criteria and preserves degree/category text, numeric thresholds, candidate
+order, unselected overrides and parked modes. Reject known incompatible history
+field references with the affected scope/field. Save/publish freezes actual
+effective text, thresholds, content identity and context cap, not a preset name.
+Custom-extension/local effective modes omit parked native semantics; incompatible
+effective C objects fail rather than changing those codecs. Restoring native mode
+restores parked edits for review.
+
+Rollback MUST also select and review each effective scope under the legacy wrapper.
+A protocol toggle or C review cannot approve the C suffix under that wrapper.
+Choices are: restore the latest retained published non-C assessment from the same
+Plan before adoption, matched by stable scope; explicitly adopt the legacy default;
+or retain/edit custom text and review its new composition. Historical selection
+pins the exact source PlanExecutionRef/digest and scope in Preview/Apply; missing,
+reclaimed or mismatched sources fail stale rather than substituting. A route born
+in C, a new/removed scope or reclaimed history may have no source; disable that
+choice with explanation while keeping default/custom choices. Copy only accepted
+assessment instructions/criteria into a new current revision. No permanent hold,
+backup promise, whole-Plan restoration or runtime dependency on the source row is
+introduced. An already-published copied review remains usable after reclamation.
+
+#### Scenario: Bare rollback
+
+- **WHEN** a published C route switches to legacy without a new scope choice and review
+- **THEN** Preview/Apply MUST reject the transition while preserving editable input and the last effective publication.
+
+#### Scenario: Exact retained restoration
+
+- **WHEN** a user chooses a retained matching non-C source assessment and reviews its legacy composition
+- **THEN** The new revision MUST copy only that assessment while preserving thresholds and unrelated settings.
+
+#### Scenario: Reclaimed source
+
+- **WHEN** the selected historical source is removed before Apply
+- **THEN** Apply MUST fail stale/unavailable without substituting a different version or extending retention.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/139#issuecomment-6235110836
+
 ## Implementation references
 
 - [Plan domain](../../../crates/domain/src/routing/authoring.rs),

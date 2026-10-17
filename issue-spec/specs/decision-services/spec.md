@@ -67,8 +67,9 @@ resource/transport/provider limits remain enforced without silent prompt truncat
 
 ### Requirement: Group policy consumes only applicable current assessment
 
-For a dual-group category, regular requires current simple probability at least its
-threshold and no complete current assessment strictly below the competence floor.
+For a dual-group category under the legacy native or custom-extension v1 protocol,
+regular requires current simple probability at least its threshold and no applicable
+complete current assessment strictly below the competence floor.
 Defaults are 0.8 and 0.5; finite 0..1 values and equality behavior follow
 [smart saving](../smart-saving-routing/spec.md). Protection applies only to the
 preceding actual stage when category, plan revision, and frozen policy/rubric agree.
@@ -87,13 +88,36 @@ failed in the same relay are not attempted twice. Model/provider failures do not
 become competence scores. Actual category/group/index/Binding/profile identity is
 recorded directly, including a model configured in both groups.
 
-#### Scenario: A new user turn keeps the selected group
+For native C, applicability MUST gate only an otherwise eligible historical
+low-score protection opportunity. Preserve the existing exact Plan/revision,
+category, actual single-model attribution, rubric/policy and complete valid score
+guards. If P(simple) is below T, primary wins independently. With P(simple) at
+least T and eligible historical s below F, a valid applicability probability at
+least 0.5 retains primary protection; below 0.5 suppresses that historical trigger
+and allows regular. Missing/unavailable applicability conservatively retains the
+eligible trigger. A missing internally required question is separately reported,
+not counted as a provider request/failure. No score is rewritten or transferred,
+and applicability cannot rescue invalid/missing assessment or select a category.
+Same-turn inheritance, ContextHold, candidate ordering and availability relay
+retain their existing rules. C is inapplicable to custom-extension v1 and heuristics.
 
-- **WHEN** a custom-branch follow-up selects the same group and its held candidate remains valid
-- **THEN** the Gateway MUST prefer that candidate while retaining the fresh category/degree decision.
+#### Scenario: Unresolved problem remains relevant
+
+- **WHEN** P(simple) meets T, a complete eligible score is below F and applicability equals 0.5
+- **THEN** Primary protection MUST apply; equality does not suppress it.
+
+#### Scenario: Problem no longer governs current work
+
+- **WHEN** all historical protection guards hold and applicability is below 0.5
+- **THEN** The historical trigger MUST be suppressed and the regular group selected without altering the raw score.
+
+#### Scenario: Applicability is unavailable
+
+- **WHEN** a low-score protection opportunity has no valid applicability result
+- **THEN** Protection MUST be retained conservatively, with the unavailability reason recorded.
 
 Source SPEC comments:
-- https://github.com/higress-group/HiRoute/issues/133#issuecomment-6220133330
+- https://github.com/higress-group/HiRoute/issues/139#issuecomment-6235110154
 
 ### Requirement: System One compiles independent typed questions in one call
 
@@ -112,6 +136,39 @@ cannot be silently truncated. History trimming marks the affected evidence parti
 full-history gaps and assessed-stage gaps remain independent. Missing pre-integration
 prefix may set `history_partial` without making a completely captured target stage
 partial; missing target response or target trimming still invalidates protection.
+
+The explicitly selected native C protocol MUST freeze its actual fixed bundle,
+effective degree/category definitions, every composed per-scope assessment,
+thresholds, context cap and content digest in the published route. Execution uses
+that content without substituting binary defaults. Stock C_full questions and
+criteria MUST exactly reproduce routing/fixtures/system_one_c_v1.json in Domain,
+whose sorted-key compact UTF-8 checksum is
+4dbab2f53954eb2176b6aa8d31b97808c4fee15ebb2fae337012eba348aef3c7.
+The fixed assessment wrapper is its first three sentences; composition adds one
+ASCII space and the editable suffix. No threshold or prompt tuning is implicit.
+
+C adds one independent two-label Choice for applicability of an unresolved
+historical execution problem to latest_user. The exact labels are applicable and
+not_established. Only a finite 0..1 vector with exactly those labels and sum within
+1e-6 of one is valid; normalize accepted vectors. Choice text/confidence cannot
+substitute for probabilities. Missing, duplicate, extra, nonnumeric, nonfinite or
+out-of-range values invalidate only applicability while preserving valid selected
+degree and historical Score. Category plus sixteen independent degree questions,
+historical Score and applicability fit the supported nineteen-question shape in
+one call. Unused malformed degree answers do not poison the selected path.
+
+#### Scenario: Frozen C questions
+
+- **WHEN** a published native C route evaluates a complete prior stage
+- **THEN** The Gateway MUST use its frozen question content and separate current demand, historical performance and applicability without depending on another answer.
+
+#### Scenario: Invalid applicability only
+
+- **WHEN** the two-label applicability answer is invalid but selected degree and assessment are valid
+- **THEN** HiRoute MUST preserve those valid results and mark applicability unavailable.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/139#issuecomment-6235109346
 
 ### Requirement: Custom extensions have one constrained v1 request/response
 
@@ -162,6 +219,72 @@ another Secret-management surface. The first response need not contain assessmen
 later scoring remains attributed to the old stage. Plan/session presentation freezes
 probability, thresholds, selection/protection/relay reasons, and actual positions,
 using the same [quality queries](../session-history/spec.md).
+
+### Requirement: C context allocation protects the complete assessed stage
+
+C MUST partition safe supplied content into prior_context, assessment_stage and
+latest_user. Background defaults to at most eight completed/failed turns before
+the actual assessment target, configurable from zero through eight. Zero warns
+that prior requirements/references are unavailable. The complete actual target
+stage is not limited by that turn cap. Latest user input remains separately
+represented; tool-result bodies, goal parsing, semantic extraction and invented
+provider-only history are excluded.
+
+The native request MUST fit 262144 actual escaped wire bytes. Initially complete
+targets reserve all required question bytes, including applicability, before
+admitting a suffix of the target and then optional background. Remove background
+before losing target content. If that reserved allocation makes the target
+partial, omit applicability and never refill target or background with the freed
+bytes. Initially partial targets omit applicability from the start. No admitted
+target omits historical Score and applicability together. Latest user content and
+question text cannot be truncated; reject a final over-budget request. Repeated
+equal inputs and frozen content MUST yield identical prepared requests.
+
+#### Scenario: Reserved boundary
+
+- **WHEN** a complete target fits only if applicability bytes are reclaimed
+- **THEN** Preparation MUST mark the target partial, omit applicability and retain the original allocation without a refill pass.
+
+#### Scenario: Background cap
+
+- **WHEN** a ten-turn actual target follows earlier completed turns and the cap is eight
+- **THEN** All ten target turns MUST be retained when the byte budget allows, with at most eight background turns.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/139#issuecomment-6235109346
+
+### Requirement: C capability evidence is explicit and session scoped
+
+The existing protected TestClassifierDecision operation MUST retain V1 connectivity
+testing and accept explicit V2 C capability requests. V1 success is not C support.
+C tests resolve an exact saved service revision and bind service, endpoint/model,
+frozen protocol content/digest and standard or maximum-branch request shape. They
+use the production constructor, transport, parser and synthetic complete stage,
+checking every required binary degree vector, historical raw Score and two-label
+Choice vector without requiring a particular semantic answer. Maximum shape has
+sixteen dual-group categories and nineteen questions, never silently fewer.
+
+Results distinguish verified, unsupported, not tested and test failed. Desktop
+MUST show missing evidence as Not tested in this session and discard evidence for
+a changed connection revision, content or shape. Caller-supplied status cannot
+authorize publication. Missing evidence does not block saving/publishing. Each
+explicit test discloses its one synthetic request and possible quota consumption;
+ordinary navigation, save, adoption and publication MUST NOT probe. A test reads
+no real conversation, invokes no business model, creates no stage sample and
+cannot establish answer quality or universal provider capacity.
+
+#### Scenario: Only category Choice is returned
+
+- **WHEN** a provider returns a probability-free applicability Choice during a C test
+- **THEN** The result MUST be unsupported, while a separate V1 connectivity result retains its meaning.
+
+#### Scenario: Saved revision remains exact
+
+- **WHEN** the saved service has a newer current revision than the one selected for a test
+- **THEN** The test MUST use the exact selected retained revision and its credential.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/139#issuecomment-6235109346
 
 ## Implementation references
 

@@ -14,6 +14,16 @@
 
 现有会话与计划页面分别显示实际组别/模型/思考配置、当时阈值、选择原因及该阶段最新胜任度；修改草稿不重解释已发布证据。
 
+内置决策连接可在路由中明确选择“决策协议 → C”。现有路由和全局创建默认不会自动切换。每个生效评分范围需选择采用标准 C 评分，或保留、编辑自定义评分，再展开完整问题与三条标准进行审阅。分支独立覆盖需分别审阅；采用标准只替换所选范围的评分文字与标准，保留难度、分类条件、候选顺序和数值阈值。简单概率默认仍为 0.8，胜任下限仍为 0.5。
+
+C 将内容分成 `prior_context`、`assessment_stage` 和 `latest_user`。背景默认最多 8 轮，不限制完整实际目标阶段的轮数；设为 0 会提示无法提供更早的要求和引用。请求预算导致目标部分保留时省略第三问，部分评分不能触发历史保护；当前输入不静默截断，也不加入工具结果正文。
+
+只有历史低分已通过原有归因、计划版本、分支、评分标准和完整性约束时，第三问才影响保护：适用概率达到 0.5 保留保护，低于 0.5 抑制该历史触发；第三问不可用时保守保留保护。它不覆盖当前复杂任务，不转移旧分数，也不改变同轮继承和候选故障接力。
+
+“测试此路由的 C 能力”用准确保存的连接版本和冻结路由内容发送 1 次合成请求。连接详情另提供完整 19 问形状。缺少证据显示“本次打开尚未测试 C 能力”；连接、内容或形状变化后不沿用旧结果。现有连接测试通过不代表支持 C。没有本次能力证据仍可保存、发布，保存和发布本身不会探测供应商。
+
+切回现有协议同样需要逐范围选择并审阅：恢复同一稳定范围中可用的保留旧版本评分、采用旧默认评分，或审阅自定义文字。历史已回收时仅禁用历史恢复选项。回退会发布新版本，保留旧 C 观测。计划和会话中的 C 统计覆盖匹配范围内所有保留决策，明确分母与覆盖缺口，不把阶段开始样本当作全部决策，也不声称准确率或质量提升。
+
 CLI 沿用 `decision services list/apply/test` 和现有 routing 编辑、预览、应用流程。编辑结构使用 `smart.judgment`，自定义分支使用 `branch_routing.judgment`、分支 `primary_candidates` 和可选完整 `judgment`。扩展遵守传入的问题定义和评分标准，表单提供示例和唯一当前 OpenAPI。
 
-详见 [HiRoute 扩展 API 语义](../decision-extensions/api/README.zh-CN.md)、[可选的 Jev 自托管部署](../decision-extensions/extensions/jev-decider/README.zh-CN.md)、[System One 映射](../decision-extensions/api/system-one-design.md)与[代码职责](code-map/decision-foundation.md)。当前开发 v1 原位替换，使用全新数据，不做旧结构迁移或兼容。工具精选仅保留协议文档。
+详见 [HiRoute 扩展 API 语义](../decision-extensions/api/README.zh-CN.md)、[可选的 Jev 自托管部署](../decision-extensions/extensions/jev-decider/README.zh-CN.md)、[System One 映射](../decision-extensions/api/system-one-design.md)与[代码职责](code-map/decision-foundation.md)。早期开发期扩展结构不提供协商路径；受支持的已发布 HiRoute 数据继续使用登记的准入与恢复读取器。工具精选仅保留协议文档。
