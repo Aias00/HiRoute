@@ -159,6 +159,13 @@ screenshot. `invoke`/`text` require an exact Runtime ID from a recent successful
 Use the observed UI for product actions; this entry does not inject page scripts
 or replace the WebView with HTTP assertions. `close` uses the native window-close
 pattern. Collect and finish each bounded operation before the next one.
+Desktop operations use the configured Python runtime's `pythonw.exe` sibling and
+hidden console children so the observer cannot obscure the product window. A
+native accessibility hit test supplements incomplete WebView fragment traversal.
+If needed, `click` requires coordinates from a recent screenshot of that exact
+foreground window; it refuses changed geometry. `native-files` captures a bounded,
+read-only Codex/Claude configuration and collaboration Skill inventory for restore
+comparisons, including absence before a product-created file.
 
 `--action install` runs the measured NSIS `/S` entry. For a different installed
 candidate, `--from-product OLD_BUNDLE_ID` verifies the old images before invoking

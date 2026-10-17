@@ -106,6 +106,17 @@ class Runner(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'committed request'):
             host.desktop_helper(dict(desktop_helper_path=str(path), desktop_helper_sha256='0' * 64))
 
+    def test_missing_windowless_runtime_refuses_before_task_or_lock_creation(self):
+        request = dict(config=dict(python=str(self.root / 'python.exe')), run_id='a' * 32,
+                       harness='b' * 12 + '-' + 'c' * 12, product='d' * 12 + '-' + 'e' * 12,
+                       timeout=120, binary='hiroute.exe', case='native_desktop_snapshot', operation='desktop')
+        with patch.object(host, 'manifest', return_value={}), \
+             patch.object(host, 'pe', side_effect=FileNotFoundError('pythonw.exe')), \
+             patch.object(host, 'private_runs') as prepare, self.assertRaises(FileNotFoundError):
+            host.start(self.root, request)
+        prepare.assert_not_called()
+        self.assertFalse((self.root / 'active.json').exists())
+
     def test_archive_traversal_and_unmanifested_entries_fail(self):
         for name in ('../escape', '/absolute', 'C:/absolute', 'dir\\file.exe', 'other.exe'):
             with self.subTest(name=name):

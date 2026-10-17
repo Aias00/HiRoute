@@ -284,11 +284,13 @@ def main():
     desktop = commands.add_parser('desktop-session', help='Measured installed Desktop and native UI acceptance')
     desktop.add_argument('--product', required=True)
     desktop.add_argument('--action', dest='desktop_action', required=True,
-                         choices=('install', 'launch', 'snapshot', 'invoke', 'text', 'close', 'cli'))
+                         choices=('install', 'launch', 'snapshot', 'invoke', 'text', 'click', 'close', 'cli', 'native-files'))
     desktop.add_argument('--from-product', help='Exact installed bundle admitted before a cross-build upgrade')
     desktop.add_argument('--observation-run')
     desktop.add_argument('--element', help='Runtime ID from a recent native UI observation')
     desktop.add_argument('--text')
+    desktop.add_argument('--x', type=int)
+    desktop.add_argument('--y', type=int)
     desktop.add_argument('--cli-args', type=Path, help='Private JSON array of public CLI arguments')
     run = commands.add_parser('run')
     run.add_argument('--harness', required=True)
@@ -347,6 +349,10 @@ def main():
                     raise ValueError('Native interaction requires an observed Runtime ID and run')
             if args.desktop_action == 'text' and (args.text is None or len(args.text) > 4096):
                 raise ValueError('Native text input requires bounded text')
+            if args.desktop_action == 'click':
+                if (not args.observation_run or not re.fullmatch(r'[a-f0-9]{32}', args.observation_run)
+                        or args.x is None or args.y is None or not 0 <= args.x < 4096 or not 0 <= args.y < 4096):
+                    raise ValueError('A click requires a recent observed window and bounded coordinates')
             values.update(run_id=uuid.uuid4().hex, harness=args.product, binary='hiroute.exe',
                           case='native_desktop_' + args.desktop_action, operation='desktop', ignored=False, timeout=240)
             values.pop('cli_args')

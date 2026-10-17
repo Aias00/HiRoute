@@ -17,19 +17,59 @@ $ErrorActionPreference='Stop'
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName System.Drawing
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public class DesktopWindow {
+ [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
+ [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr window,int command);
+ [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+ [DllImport("user32.dll")] public static extern bool SetCursorPos(int x,int y);
+ [DllImport("user32.dll")] public static extern void mouse_event(uint flags,uint dx,uint dy,uint data,UIntPtr extra);
+}
+'@
 $q=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'ui-request.json') -Raw | ConvertFrom-Json
 $p=Get-Process -Id $q.pid -ErrorAction Stop
 if($p.Path -ne $q.image){throw 'Desktop image changed'}
 $p.Refresh()
 if($p.MainWindowHandle -eq 0){throw 'No visible native Desktop window'}
+[void][DesktopWindow]::ShowWindow($p.MainWindowHandle,9)
+[void][DesktopWindow]::SetForegroundWindow($p.MainWindowHandle)
+Start-Sleep -Milliseconds 500
+if([DesktopWindow]::GetForegroundWindow() -ne $p.MainWindowHandle){throw 'Native Desktop is not foreground; preserve observation'}
 $root=[Windows.Automation.AutomationElement]::FromHandle($p.MainWindowHandle)
-$all=$root.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.Condition]::TrueCondition)
+function Observe($root) {
+ $all=$root.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.Condition]::TrueCondition)
+ # Some WebView2 fragment roots are reachable by a native accessibility hit
+ # test before their host HWND exposes a complete descendant tree.
+ $r=$root.Current.BoundingRectangle
+ $hit=[Windows.Automation.AutomationElement]::FromPoint([Windows.Point]::new($r.X+80,$r.Y+160))
+ if($hit.Current.ProcessId -eq $q.pid -or $hit.Current.FrameworkId -eq 'Chrome') {
+  $top=$hit
+  for($i=0;$i -lt 40;$i++) {
+   if($top.Current.ControlType -eq [Windows.Automation.ControlType]::Document){
+    return @($all)+@($top)+@($top.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.Condition]::TrueCondition))
+   }
+   $top=[Windows.Automation.TreeWalker]::RawViewWalker.GetParent($top)
+   if($null -eq $top -or $top.Equals($root)){break}
+  }
+ }
+ return @($all)
+}
+$all=@(Observe $root)
 if($all.Count -gt 1600){throw 'UI Automation tree exceeds observation bound'}
-if($q.action -in @('invoke','text','close')) {
+if($q.action -in @('invoke','text','close','click')) {
  if($q.action -eq 'close') {
   $root.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern).Close()
+ } elseif($q.action -eq 'click') {
+  $r=$root.Current.BoundingRectangle
+  if($q.window -ne $p.MainWindowHandle.ToInt64() -or $q.width -ne $r.Width -or $q.height -ne $r.Height){throw 'Observed window geometry changed'}
+  if($q.x -lt 0 -or $q.y -lt 0 -or $q.x -ge $r.Width -or $q.y -ge $r.Height){throw 'Click is outside the observed window'}
+  [void][DesktopWindow]::SetCursorPos([int]($r.X+$q.x),[int]($r.Y+$q.y))
+  [DesktopWindow]::mouse_event(2,0,0,0,[UIntPtr]::Zero)
+  [DesktopWindow]::mouse_event(4,0,0,0,[UIntPtr]::Zero)
  } else {
-  $matches=@($all | Where-Object {($_.GetRuntimeId() -join '.') -eq $q.element.runtime_id})
+  $matches=@($all | Where-Object {($_.GetRuntimeId() -join '.') -eq $q.element.runtime_id} | Select-Object -First 1)
   if($matches.Count -ne 1){throw 'Observed element is no longer unique'}
   $e=$matches[0]
   if($e.Current.Name -ne $q.element.name -or $e.Current.ControlType.ProgrammaticName -ne $q.element.type){throw 'Observed element changed'}
@@ -49,7 +89,7 @@ if($q.action -in @('invoke','text','close')) {
  $p.Refresh()
  if($p.MainWindowHandle -eq 0){@{closed=$true;pid=$p.Id}|ConvertTo-Json -Compress;exit 0}
  $root=[Windows.Automation.AutomationElement]::FromHandle($p.MainWindowHandle)
- $all=$root.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.Condition]::TrueCondition)
+ $all=@(Observe $root)
 }
 $nodes=@(foreach($e in $all){
  $c=$e.Current
@@ -65,7 +105,7 @@ try {
  $graphics.CopyFromScreen([int]$r.X,[int]$r.Y,0,0,$bitmap.Size)
  $bitmap.Save((Join-Path $PSScriptRoot 'window.png'),[Drawing.Imaging.ImageFormat]::Png)
 } finally {$graphics.Dispose();$bitmap.Dispose()}
-@{pid=$p.Id;handle=$p.MainWindowHandle.ToInt64();window=$root.Current.Name;nodes=$nodes}|ConvertTo-Json -Depth 6 -Compress
+@{pid=$p.Id;handle=$p.MainWindowHandle.ToInt64();width=$r.Width;height=$r.Height;window=$root.Current.Name;nodes=$nodes}|ConvertTo-Json -Depth 6 -Compress
 '''
 
 
@@ -90,14 +130,17 @@ def installed(helper, product, pm):
     return roots, facts, shell
 
 
-def ui_action(run, request, shell, pid, element=None):
+def ui_action(run, request, shell, pid, element=None, observed=None):
     query = dict(pid=pid, image=str(shell), action=request['desktop_action'], element=element,
                  text=request.get('text'))
+    if request['desktop_action'] == 'click':
+        query.update(window=observed['handle'], width=observed['width'], height=observed['height'],
+                     x=request['x'], y=request['y'])
     (run / 'ui-request.json').write_text(json.dumps(query), encoding='utf-8')
     script = run / 'ui.ps1'
     script.write_text(UI, encoding='utf-8-sig')
     completed = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-File', str(script)],
-                               capture_output=True, timeout=60)
+                               capture_output=True, timeout=60, creationflags=0x08000000)
     (run / 'ui.stderr').write_bytes(completed.stderr)
     if completed.returncode:
         raise RuntimeError('Native UI Automation failed; inspect ui.stderr before retrying')
@@ -110,6 +153,25 @@ def execute(request, run, product, pm, helper, activity, manifest, root):
     if activity.get('administrator_groups') is not False:
         raise ValueError('Native Desktop evidence requires a standard account, not a filtered administrator')
     action = request['desktop_action']
+    if action not in ('install', 'launch', 'snapshot', 'invoke', 'text', 'click', 'close', 'cli', 'native-files'):
+        raise ValueError('Unknown native Desktop action')
+    if action == 'native-files':
+        files = {}
+        for relative in ('.codex/config.toml', '.claude/settings.json',
+                         '.agents/skills/hiroute-collaboration', '.claude/skills/hiroute-collaboration'):
+            path = helper.plain(Path.home() / relative)
+            if not path.exists():
+                files[relative] = dict(exists=False)
+            elif path.is_file():
+                if path.stat().st_size > 4 * 1024 * 1024:
+                    raise ValueError('Native configuration exceeds evidence bound')
+                name = 'native-' + relative.replace('/', '_').lstrip('.')
+                (run / name).write_bytes(path.read_bytes())
+                files[relative] = dict(exists=True, sha256=helper.digest(path), bytes=path.stat().st_size)
+            else:
+                files[relative] = dict(exists=True, inventory=helper.inventory(path))
+        (run / 'native-files.json').write_text(json.dumps(files, indent=2), encoding='utf-8')
+        return dict(native_entry='read-only native configuration inventory', files=files)
     if action == 'install':
         facts = helper.inspect_installation(Path.home(), Path(os.environ['LOCALAPPDATA']))
         previous = request.get('from_product')
@@ -144,7 +206,8 @@ def execute(request, run, product, pm, helper, activity, manifest, root):
         environment = os.environ.copy()
         environment.update(request['config']['environment'])
         environment['PATH'] = ';'.join(request['config']['path']) + ';' + environment['PATH']
-        done = subprocess.run([str(roots['stable_cli']), *args], capture_output=True, timeout=150, env=environment)
+        done = subprocess.run([str(roots['stable_cli']), *args], capture_output=True, timeout=150,
+                              env=environment, creationflags=0x08000000)
         (run / 'cli.stdout').write_bytes(done.stdout)
         (run / 'cli.stderr').write_bytes(done.stderr)
         return dict(native_entry='installed public CLI', exit_code=done.returncode)
@@ -153,7 +216,8 @@ def execute(request, run, product, pm, helper, activity, manifest, root):
         raise ValueError('Exactly one measured installed Desktop process is required')
     pid = candidates[0]['ProcessId']
     element = None
-    if action in ('invoke', 'text'):
+    observed = None
+    if action in ('invoke', 'text', 'click'):
         parent = root / 'runs' / request['observation_run']
         old_request = json.loads((parent / 'request.json').read_text(encoding='utf-8'))
         old_result = json.loads((parent / 'result.json').read_text(encoding='utf-8'))
@@ -162,9 +226,10 @@ def execute(request, run, product, pm, helper, activity, manifest, root):
                 or old_request['config']['session_id'] != request['config']['session_id']
                 or observed['pid'] != pid or time.time() - (parent / 'ui.json').stat().st_mtime > 600):
             raise ValueError('A recent observation of this exact Desktop process is required')
-        matches = [e for e in observed['nodes'] if e['runtime_id'] == request['element']]
-        if len(matches) != 1:
-            raise ValueError('Choose one observed native UI element')
-        element = matches[0]
-    return dict(native_entry='Windows UI Automation', observation=ui_action(run, request, shell, pid, element),
+        if action != 'click':
+            matches = [e for e in observed['nodes'] if e['runtime_id'] == request['element']]
+            if not matches:
+                raise ValueError('Choose one observed native UI element')
+            element = matches[0]
+    return dict(native_entry='Windows UI Automation', observation=ui_action(run, request, shell, pid, element, observed),
                 shell_sha256=helper.digest(shell))

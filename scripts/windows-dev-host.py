@@ -107,7 +107,8 @@ def stage(root, archive, checksum):
 def ps(script):
     result = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-EncodedCommand',
                              base64.b64encode(script.encode('utf-16le')).decode()],
-                            capture_output=True, text=True, errors='replace', timeout=30)
+                            capture_output=True, text=True, errors='replace', timeout=30,
+                            creationflags=0x08000000 if os.name == 'nt' else 0)
     if result.returncode:
         raise RuntimeError('Scheduled task operation failed: ' + result.stderr[-1800:])
     return result.stdout.strip()
@@ -200,6 +201,9 @@ def start(root, request):
         manifest(root / 'bundles' / request[field])
     identifier(request['binary'], r'[A-Za-z0-9_-]+\.exe')
     identifier(request['case'], r'[A-Za-z0-9_:]+')
+    worker_python = plain(Path(config['python']).with_name('pythonw.exe')) if request.get('operation') == 'desktop' else Path(config['python'])
+    if request.get('operation') == 'desktop':
+        pe(worker_python)
     private_runs(root, config['user'])
     lock = root / 'active.json'
     # A disconnected controller must not permit concurrent mutation of the same
@@ -213,7 +217,7 @@ def start(root, request):
     script = "$ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue';"
     script += '$name=' + literal(task_name(run_id)) + ';'
     script += "if(Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue){throw 'Task already exists'};"
-    script += '$a=New-ScheduledTaskAction -Execute ' + literal(config['python']) + ' -Argument ' + literal(arguments) + ';'
+    script += '$a=New-ScheduledTaskAction -Execute ' + literal(worker_python) + ' -Argument ' + literal(arguments) + ';'
     script += '$p=New-ScheduledTaskPrincipal -UserId ' + literal(config['user']) + ' -LogonType Interactive -RunLevel Limited;'
     script += '$s=New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Seconds ' + str(request['timeout'] + 90) + ') -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries;'
     script += 'Register-ScheduledTask -TaskName $name -Action $a -Principal $p -Settings $s|Out-Null;Start-ScheduledTask -TaskName $name'
