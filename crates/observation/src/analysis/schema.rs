@@ -26,6 +26,23 @@ pub(crate) fn migrate(db: &mut Connection) -> rusqlite::Result<()> {
           INSERT OR IGNORE INTO observation_analysis_dirty_v1(workspace_id,request_id,sequence)
             SELECT workspace_id,request_id,0 FROM observation_analysis_turns_v1 WHERE segment_id IS NULL;")?;
     }
+    let mut rebuild_turns = false;
+    for column in ["first_request_id", "last_request_id"] {
+        let present:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM pragma_table_info('observation_analysis_turns_v1') WHERE name=?1)",[column],|r|r.get(0))?;
+        if !present {
+            tx.execute_batch(&format!(
+                "ALTER TABLE observation_analysis_turns_v1 ADD COLUMN {column} TEXT;"
+            ))?;
+            rebuild_turns = true;
+        }
+    }
+    if rebuild_turns {
+        tx.execute_batch(
+            "INSERT OR IGNORE INTO observation_analysis_dirty_v1(workspace_id,request_id,sequence)
+            SELECT workspace_id,request_id,0 FROM observation_analysis_turns_v1;
+            DELETE FROM observation_analysis_turns_v1;",
+        )?;
+    }
     for key in [
         "dirty_sequence",
         "job_started_ms",
@@ -185,7 +202,7 @@ CREATE TABLE IF NOT EXISTS observation_analysis_pricing_v1(
  key TEXT PRIMARY KEY,body TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS observation_analysis_turns_v1(
  workspace_id TEXT NOT NULL,request_id TEXT NOT NULL,agent_turn_id TEXT NOT NULL,
- ordinal INTEGER NOT NULL,producer_epoch TEXT NOT NULL,partial INTEGER NOT NULL,segment_id TEXT,
+ ordinal INTEGER NOT NULL,producer_epoch TEXT NOT NULL,partial INTEGER NOT NULL,segment_id TEXT,first_request_id TEXT,last_request_id TEXT,
  PRIMARY KEY(workspace_id,request_id));
 CREATE TABLE IF NOT EXISTS observation_analysis_models_v1(
  workspace_id TEXT NOT NULL,request_id TEXT NOT NULL,ordinal INTEGER NOT NULL,

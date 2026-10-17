@@ -9,31 +9,64 @@ use std::collections::{BTreeMap, BTreeSet};
 pub(super) fn transitions(rows: &[Row]) -> Vec<AnalysisTransitionV1> {
     let mut previous_http = BTreeMap::<&str, &Row>::new();
     let mut previous_turn = BTreeMap::<&str, &Row>::new();
-    let mut last_by_turn = BTreeMap::new();
     let mut first_by_turn = BTreeMap::new();
-    let last_by_session: BTreeMap<_, _> = rows
-        .iter()
-        .map(|r| (r.request.request.session_id.as_str(), r))
-        .collect();
     for r in rows {
-        if let Some(turn) = r.turn.as_deref() {
-            first_by_turn
-                .entry((
-                    r.request.request.session_id.as_str(),
-                    r.epoch.as_deref(),
-                    turn,
-                ))
-                .or_insert(r.request.request.started_at_ms);
-            last_by_turn.insert(
+        if let Some(turn) = r.turn.as_deref()
+            && r.turn_first_request.as_deref() == Some(r.request.request.request_id.as_str())
+        {
+            first_by_turn.insert(
                 (
                     r.request.request.session_id.as_str(),
                     r.epoch.as_deref(),
                     turn,
                 ),
-                r,
+                r.request.request.started_at_ms,
             );
         }
     }
+    // Timestamp ties cannot choose an endpoint by lexical request ID. Native
+    // first/last references disambiguate a whole known turn; otherwise a tied
+    // physical-session endpoint remains unknown.
+    let mut last_groups = BTreeMap::<&str, Vec<&Row>>::new();
+    for r in rows {
+        let group = last_groups
+            .entry(r.request.request.session_id.as_str())
+            .or_default();
+        if group
+            .first()
+            .is_some_and(|p| p.request.request.started_at_ms < r.request.request.started_at_ms)
+        {
+            group.clear();
+        }
+        group.push(r);
+    }
+    let last_by_session: BTreeMap<_, _> = last_groups
+        .into_iter()
+        .filter_map(|(id, group)| {
+            if group.len() == 1 {
+                return Some((id, group[0]));
+            }
+            let first = group[0];
+            if first.turn.is_none()
+                || first.turn_partial
+                || group.iter().any(|r| {
+                    r.turn != first.turn
+                        || r.epoch != first.epoch
+                        || r.turn_partial
+                        || r.turn_last_request != first.turn_last_request
+                })
+            {
+                return None;
+            }
+            group
+                .iter()
+                .find(|r| {
+                    r.turn_last_request.as_deref() == Some(r.request.request.request_id.as_str())
+                })
+                .copied()
+                .map(|r| (id, r))
+        })
+        .collect();
     let mut seen = BTreeSet::new();
     let mut result = Vec::new();
     for r in rows {
@@ -44,9 +77,8 @@ pub(super) fn transitions(rows: &[Row]) -> Vec<AnalysisTransitionV1> {
                 .as_deref()
                 .is_some_and(|id| last_by_session.get(id).is_none_or(|p| p.anchor == r.anchor));
         let final_turn = r.turn.as_deref().is_some_and(|turn| {
-            last_by_turn
-                .get(&(own.session_id.as_str(), r.epoch.as_deref(), turn))
-                .is_some_and(|last| last.request.request.request_id == own.request_id)
+            r.turn_last_request.as_deref() == Some(own.request_id.as_str())
+                && first_by_turn.contains_key(&(own.session_id.as_str(), r.epoch.as_deref(), turn))
         });
         let prior_http = previous_http.get(own.session_id.as_str()).copied();
         let prev = if boundary {
@@ -245,19 +277,29 @@ mod tests {
             ordinal: Some(ordinal),
             epoch: Some("epoch-1".into()),
             turn_partial: false,
+            turn_first_request: Some(id.into()),
+            turn_last_request: Some(id.into()),
             terminal: true,
             credential_relay: false,
         }
     }
     #[test]
     fn stage_http_changes_do_not_replace_the_final_model_of_each_user_turn() {
-        let rows = vec![
+        let mut rows = vec![
             row("a", "turn-a", 1, "cheap", 10),
             row("b", "turn-b", 2, "primary", 20),
             row("c", "turn-b", 2, "cheap", 30),
             row("d", "turn-c", 3, "cheap", 40),
             row("e", "turn-c", 3, "primary", 50),
         ];
+        for (start, end) in [(1, 2), (3, 4)] {
+            let first = rows[start].request.request.request_id.clone();
+            let last = rows[end].request.request.request_id.clone();
+            for r in &mut rows[start..=end] {
+                r.turn_first_request = Some(first.clone());
+                r.turn_last_request = Some(last.clone());
+            }
+        }
         let values = transitions(&rows);
         let changed: Vec<_> = values
             .iter()
@@ -270,6 +312,27 @@ mod tests {
             values.iter().find(|v| v.request_id == "c").unwrap().kind,
             AnalysisTransitionKindV1::Unchanged
         );
+    }
+    #[test]
+    fn tied_request_timestamps_use_the_native_last_request_not_lexical_order() {
+        let mut rows = vec![
+            row("a", "one", 1, "primary", 10),
+            row("b", "two", 2, "primary", 20),
+            row("c", "two", 2, "cheap", 20),
+            row("d", "three", 3, "cheap", 40),
+        ];
+        for r in &mut rows[1..=2] {
+            r.turn_first_request = Some("c".into());
+            r.turn_last_request = Some("b".into());
+        }
+        let values = transitions(&rows);
+        let changed: Vec<_> = values
+            .iter()
+            .filter(|v| v.kind == AnalysisTransitionKindV1::BetweenTurnChange)
+            .collect();
+        assert_eq!(changed.len(), 1);
+        assert_eq!(changed[0].request_id, "d");
+        assert_eq!(changed[0].previous_request_id.as_deref(), Some("b"));
     }
     #[test]
     fn restarted_turn_order_does_not_prove_adjacent_user_turns() {

@@ -314,6 +314,13 @@ fn a_recorded_stage_is_evidence_for_a_selected_transition_not_a_switch() {
             IngestOutcome::Ack(_)
         ));
     }
+    // A different request can start in the same millisecond without belonging
+    // to this native turn. Only the recorded endpoint IDs prove membership.
+    let mut neighbor = Fixture::new("same-millisecond-neighbor");
+    neighbor.session = f.session.clone();
+    for e in facts(&neighbor, UsageFrameKindV1::Cumulative) {
+        store.ingest_fact(&e, &[]).unwrap();
+    }
     let outcome = store
         .ingest_fact(
             &f.fact(
@@ -345,6 +352,16 @@ fn a_recorded_stage_is_evidence_for_a_selected_transition_not_a_switch() {
         )
         .unwrap();
     assert!(matches!(outcome, IngestOutcome::Ack(_)), "{outcome:?}");
+    let neighbor_turns: u64 = store
+        .connection
+        .lock()
+        .query_row(
+            "SELECT COUNT(*) FROM observation_analysis_turns_v1 WHERE workspace_id=?1 AND request_id=?2",
+            rusqlite::params![neighbor.workspace.as_str(), neighbor.request.as_str()],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(neighbor_turns, 0);
     finished.sequence = 11;
     finished.event_id = EventId::parse("fact-event-11").unwrap();
     finished.occurred_at_unix_nanos = 111_000_000;
@@ -358,8 +375,12 @@ fn a_recorded_stage_is_evidence_for_a_selected_transition_not_a_switch() {
     let page = store
         .observed_analysis(&reader(), &q, Some(&range()), None, 1000)
         .unwrap();
-    assert_eq!(page.transitions.len(), 1);
-    let t = &page.transitions[0];
+    assert_eq!(page.transitions.len(), 2);
+    let t = page
+        .transitions
+        .iter()
+        .find(|t| t.request_id == f.request.as_str())
+        .unwrap();
     assert_eq!(t.kind, AnalysisTransitionKindV1::InitialSelection, "{t:?}");
     assert_eq!(t.reason.as_ref().unwrap().segment_id, "stage-1");
     assert!(!page.transition_counts.contains_key("between_turn_change"));

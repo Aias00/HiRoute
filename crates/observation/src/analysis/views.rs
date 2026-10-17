@@ -14,6 +14,8 @@ pub(super) struct Row {
     pub ordinal: Option<u64>,
     pub epoch: Option<String>,
     pub turn_partial: bool,
+    pub turn_first_request: Option<String>,
+    pub turn_last_request: Option<String>,
     pub terminal: bool,
     pub credential_relay: bool,
 }
@@ -43,7 +45,7 @@ pub(super) fn rows(
       a.model_id,a.reasoning_profile_id,COALESCE(v.terminal,0),
       (SELECT COUNT(DISTINCT model_id) FROM observation_attempt_models_v2 am WHERE am.workspace_id=r.workspace_id AND am.request_id=r.request_id),
       t.agent_turn_id,t.ordinal,t.producer_epoch,COALESCE(t.partial,1),
-      EXISTS(SELECT 1 FROM observation_analysis_models_v1 ma JOIN observation_analysis_models_v1 mb ON mb.workspace_id=ma.workspace_id AND mb.request_id=ma.request_id AND mb.ordinal=ma.ordinal+1 WHERE ma.workspace_id=r.workspace_id AND ma.request_id=r.request_id AND ma.native_model=mb.native_model AND ma.credential_digest!=mb.credential_digest)
+      EXISTS(SELECT 1 FROM observation_analysis_models_v1 ma JOIN observation_analysis_models_v1 mb ON mb.workspace_id=ma.workspace_id AND mb.request_id=ma.request_id AND mb.ordinal=ma.ordinal+1 WHERE ma.workspace_id=r.workspace_id AND ma.request_id=r.request_id AND ma.native_model=mb.native_model AND ma.credential_digest!=mb.credential_digest),t.first_request_id,t.last_request_id
       FROM logical_requests r JOIN sessions s ON s.workspace_id=r.workspace_id AND s.session_id=r.session_id
       JOIN observation_analysis_members_v1 m ON m.scope_id=?1 AND m.session_id=r.session_id
       LEFT JOIN valuation_requests_v2 v ON v.workspace_id=r.workspace_id AND v.request_id=r.request_id
@@ -114,6 +116,8 @@ pub(super) fn rows(
                     ordinal: r.get(16)?,
                     epoch: r.get(17)?,
                     turn_partial: r.get(18)?,
+                    turn_first_request: r.get(20)?,
+                    turn_last_request: r.get(21)?,
                     terminal: r.get(13)?,
                     credential_relay: r.get(19)?,
                 })
