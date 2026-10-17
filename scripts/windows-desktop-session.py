@@ -79,7 +79,7 @@ if($q.action -eq 'tray-observe') {
  $tops=@($desktop.FindAll([Windows.Automation.TreeScope]::Children,[Windows.Automation.Condition]::TrueCondition))
  $windows=@($tops | Where-Object {($_.Current.ClassName -in @('Shell_TrayWnd','NotifyIconOverflowWindow','TopLevelWindowForOverflowXamlIsland') -or ($_.Current.ClassName -eq '#32768' -and $_.Current.ProcessId -eq $q.pid)) -and -not $_.Current.IsOffscreen})
  $nodes=@(foreach($w in $windows){foreach($e in $w.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.Condition]::TrueCondition)){
-  @{name=$e.Current.Name;type=$e.Current.ControlType.ProgrammaticName;automation_id=$e.Current.AutomationId;offscreen=$e.Current.IsOffscreen;runtime_id=($e.GetRuntimeId() -join '.')}
+  @{name=$e.Current.Name;type=$e.Current.ControlType.ProgrammaticName;automation_id=$e.Current.AutomationId;offscreen=$e.Current.IsOffscreen;runtime_id=($e.GetRuntimeId() -join '.');rect=@($e.Current.BoundingRectangle.X,$e.Current.BoundingRectangle.Y,$e.Current.BoundingRectangle.Width,$e.Current.BoundingRectangle.Height)}
  }})
  if($nodes.Count -gt 1600){throw 'Notification observation exceeds its bound'}
  $rect=[Windows.Rect]::Empty
@@ -177,6 +177,18 @@ if($p.MainWindowHandle -eq 0){throw 'No visible native Desktop window'}
 [void][DesktopWindow]::SetForegroundWindow($p.MainWindowHandle)
 Start-Sleep -Milliseconds 500
 if([DesktopWindow]::GetForegroundWindow() -ne $p.MainWindowHandle) {
+ $r=[Windows.Automation.AutomationElement]::FromHandle($p.MainWindowHandle).Current.BoundingRectangle
+ $point=[DesktopWindow+Point]::new([int]($r.X+100),[int]($r.Y+14))
+ $owner=[uint32]0
+ [void][DesktopWindow]::GetWindowThreadProcessId([DesktopWindow]::WindowFromPoint($point),[ref]$owner)
+ if($owner -eq $q.pid) {
+  [void][DesktopWindow]::SetCursorPos($point.X,$point.Y)
+  [DesktopWindow]::mouse_event(2,0,0,0,[UIntPtr]::Zero)
+  [DesktopWindow]::mouse_event(4,0,0,0,[UIntPtr]::Zero)
+  Start-Sleep -Milliseconds 500
+ }
+}
+if([DesktopWindow]::GetForegroundWindow() -ne $p.MainWindowHandle) {
  # Windows may deny a background observer foreground activation. Use the
  # actual taskbar button for this installed AppUserModelID, without attaching
  # another application's input queue or sending it keyboard events.
@@ -185,11 +197,10 @@ if([DesktopWindow]::GetForegroundWindow() -ne $p.MainWindowHandle) {
  if($null -ne $bar) {
   $buttons=@($bar.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::AutomationIdProperty,'Appid: ai.hiroute.desktop')) | Where-Object {-not $_.Current.IsOffscreen -and $_.Current.Name.StartsWith('HiRoute')})
   if($buttons.Count -eq 1) {
-   $buttons[0].GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
-   Start-Sleep -Milliseconds 500
    if([DesktopWindow]::GetForegroundWindow() -ne $p.MainWindowHandle) {
-    $where=$buttons[0].GetClickablePoint()
-    $point=[DesktopWindow+Point]::new([int]$where.X,[int]$where.Y)
+    $r=$buttons[0].Current.BoundingRectangle
+    if($r.Width -lt 2 -or $r.Height -lt 2){throw 'The HiRoute taskbar button has no visible geometry'}
+    $point=[DesktopWindow+Point]::new([int]($r.X+$r.Width/2),[int]($r.Y+$r.Height/2))
     $owner=[uint32]0
     [void][DesktopWindow]::GetWindowThreadProcessId([DesktopWindow]::WindowFromPoint($point),[ref]$owner)
     if($owner -ne $bar.Current.ProcessId){throw 'The observed HiRoute taskbar button is obscured'}
