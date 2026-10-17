@@ -583,6 +583,11 @@ impl ProductionControlRuntime {
             model_connections: hiroute_integrations::NativeModelConnectionServiceV1::new(
                 hiroute_application::compute_management::TrustedComputeCandidateRegistry::new(),
                 overrides.model_transport.unwrap_or_else(|| {
+                    #[cfg(feature = "integration-test-hooks")]
+                    {
+                        crate::model_feed::product_fixture::directory_transport()
+                    }
+                    #[cfg(not(feature = "integration-test-hooks"))]
                     Arc::new(hiroute_integrations::ReqwestModelDirectoryTransportV1)
                 }),
             ),

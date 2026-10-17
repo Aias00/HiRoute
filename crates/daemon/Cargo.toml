@@ -6,7 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [features]
-integration-test-hooks = []
+integration-test-hooks = ["hiroute-gateway/e2e-test-control"]
 
 [dependencies]
 hiroute-platform = { path = "../platform" }

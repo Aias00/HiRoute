@@ -1,5 +1,7 @@
 //! Service-owned signed catalog state. A catalog and its admission generation travel together.
 
+#[cfg(feature = "integration-test-hooks")]
+pub(crate) mod product_fixture;
 mod store;
 pub(crate) use store::*;
 
@@ -77,6 +79,16 @@ impl ModelFeedService {
         minimum_generation: u64,
         minimum_sequence: u64,
     ) -> Result<Self, String> {
+        #[cfg(feature = "integration-test-hooks")]
+        if product_fixture::root().is_some() {
+            return Self::open_with_verifier(
+                root,
+                embedded,
+                minimum_generation,
+                minimum_sequence,
+                product_fixture::verify,
+            );
+        }
         Self::open_with_verifier(
             root,
             embedded,
@@ -314,6 +326,10 @@ impl ModelFeedService {
         &self,
         install: impl FnOnce(u64, u64) -> Result<(), String>,
     ) -> Result<(), String> {
+        #[cfg(feature = "integration-test-hooks")]
+        if let Some(root) = product_fixture::root() {
+            return self.refresh_using(|_| product_fixture::download(&root), install);
+        }
         self.refresh_using(|etag| retrieve_feed(&self.client_version, etag), install)
     }
     fn refresh_using(

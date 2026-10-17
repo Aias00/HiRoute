@@ -35,6 +35,12 @@ contains expected-red composition, [adapter contracts](../../tools/product-e2e/t
 are component evidence, and [oracle tests](../../tools/product-e2e/tests/product_oracle.rs)
 validate the oracle. The real installed management loop is in
 [publication_process.rs](../../crates/daemon/tests/publication_process.rs).
+Its [signed-feed lifecycle](../../crates/daemon/tests/support/model_feed_product.py)
+checks registered-source admission, published sessions, new Workers and exact Continue
+through withdrawal, cache removal, restart and later embedded absorption. The daemon's
+`integration-test-hooks` feature supplies only the external feed/inventory fixtures;
+Gateway calls reuse the existing TLS E2E dial map. Normal builds have no feed fixture
+trust root or transport override. The test does not establish live production signing.
 
 ## Reuse the fixture at the owning boundary
 

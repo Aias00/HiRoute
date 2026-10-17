@@ -1,0 +1,264 @@
+"""Installed CLI/daemon/Gateway lifecycle with signed feed and external provider/ACP fixtures.
+
+Only the integration-test-hooks binary accepts the private feed transport fixture. Product
+state is changed exclusively through released commands. TLS dialing uses the existing E2E map.
+"""
+import copy
+import http.server
+import json
+import os
+from pathlib import Path
+import ssl
+import subprocess
+import sys
+import threading
+import time
+
+from standalone_headless_product import InstalledProduct, apply_plan, plan_change, save_candidate, terminal, wire
+from publication_process import judgment_fixture
+
+MODEL = 'model.feed.regression'
+UPSTREAM = 'feed-regression'
+OPTION = 'bailian.payg.cn.v1'
+
+
+class FeedUpstream:
+    def __init__(self, root):
+        self.requests = []
+        cert, key = root / 'ca.pem', root / 'key.pem'
+        result = subprocess.run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes',
+            '-keyout', str(key), '-out', str(cert), '-days', '1', '-subj', '/CN=dashscope.aliyuncs.com',
+            '-addext', 'subjectAltName=DNS:dashscope.aliyuncs.com'], capture_output=True, timeout=30)
+        assert result.returncode == 0, 'test TLS certificate generation failed'
+        owner = self
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *_args):
+                pass
+
+            def do_POST(self):
+                body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+                assert body['model'] == UPSTREAM, body
+                owner.requests.append({'path': self.path, 'model': body['model']})
+                answer = 'native product answer'
+                if self.path.endswith('/responses'):
+                    value = {'id': 'resp_feed', 'object': 'response', 'status': 'completed', 'model': UPSTREAM,
+                        'output': [{'id': 'msg_feed', 'type': 'message', 'role': 'assistant', 'status': 'completed',
+                            'content': [{'type': 'output_text', 'text': answer, 'annotations': []}]}],
+                        'usage': {'input_tokens': 4, 'output_tokens': 3, 'total_tokens': 7}}
+                elif self.path.endswith('/messages'):
+                    value = {'id': 'msg_feed', 'type': 'message', 'role': 'assistant', 'model': UPSTREAM,
+                        'content': [{'type': 'text', 'text': answer}], 'stop_reason': 'end_turn',
+                        'usage': {'input_tokens': 4, 'output_tokens': 3}}
+                else:
+                    value = {'id': 'chatcmpl_feed', 'object': 'chat.completion', 'created': int(time.time()), 'model': UPSTREAM,
+                        'choices': [{'index': 0, 'message': {'role': 'assistant', 'content': answer}, 'finish_reason': 'stop'}],
+                        'usage': {'prompt_tokens': 4, 'completion_tokens': 3, 'total_tokens': 7}}
+                raw = wire(value)
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Content-Length', str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+
+        self.server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(cert, key)
+        self.server.socket = context.wrap_socket(self.server.socket, server_side=True)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.dial = root / 'dial.json'
+        self.dial.write_bytes(wire({'schema_version': 'hiroute.gateway.e2e-dial-map/v1', 'targets': [{
+            'authority': 'dashscope.aliyuncs.com',
+            'address': '127.0.0.1:' + str(self.server.server_port), 'ca_pem': cert.read_text()}]}))
+
+    def close(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=5)
+
+
+def publication(product, sequence, present=True):
+    bundle = json.loads((product.repo / 'assets/release-facts/current/bundle/model-data.json').read_text())
+    original = 'model.bailian.qwen3-max-2026-01-23'
+    definition = copy.deepcopy(next(x for x in bundle['data']['models'] if x['model_configuration_id'] == original))
+    definition.update(model_configuration_id=MODEL, display_name='Feed regression model')
+    canonical = copy.deepcopy(next(x for x in bundle['metadata_catalog']['canonical_models']
+                                  if 'qwen3-max-2026-01-23' in x['upstream_ids']))
+    canonical.update(model_key=UPSTREAM, upstream_ids=[UPSTREAM], display_name='Feed regression model')
+    record = {'definition': definition, 'canonical': canonical, 'native_reasoning': {
+        'model_configuration_id': MODEL, 'capability': {'kind': 'toggle', 'parameter': 'enable_thinking'}}}
+    records = [{'kind': 'model', 'record': record}]
+    for capability in bundle['data']['model_endpoint_capabilities']:
+        if capability['model_configuration_id'] != original:
+            continue
+        capability = copy.deepcopy(capability)
+        capability.update(model_configuration_id=MODEL, upstream_model_id=UPSTREAM,
+                          capability_id='capability.feed.' + str(len(records)))
+        records.append({'kind': 'model_endpoint_capability', 'record': capability})
+    offer = copy.deepcopy(next(x for x in bundle['data']['offers'] if x['offer_id'] == 'offer.bailian.payg.cn'))
+    offer['model_configuration_ids'].append(MODEL)
+    records.append({'kind': 'offer', 'record': offer})
+    for record in records:
+        record.update(min_client_version='0.1.0', included_on='2026-10-18')
+    return {'schema': 'hiroute.model-feed/v1', 'sequence': sequence, 'issued_at': '2026-10-18T00:00:00Z',
+            'source_revision': product.sha, 'records': records if present else [], 'featured': []}
+
+
+def restart(product):
+    product.daemon.terminate()
+    product.daemon.wait(timeout=30)
+    product.outputs.extend((product.daemon.stdout.read(), product.daemon.stderr.read()))
+    product.daemon = None
+    product.start()
+
+
+def raw(product, *arguments, payload):
+    result = subprocess.run([str(product.cli_path), *arguments, '--request-stdin', '--output', 'json'],
+        input=wire(payload), cwd=product.project, env=product.env, capture_output=True, timeout=45)
+    product.outputs.extend((result.stdout, result.stderr))
+    return json.loads(result.stdout)
+
+
+def worker(product, plan, key, previous=None):
+    args = ('worker', 'exec', '--plan', plan, '--cwd', str(product.project)) if previous is None else (
+        'worker', 'continue', '--task', previous['task_id'], '--expected-latest-run', previous['run_id'])
+    accepted = product.cli(*args, '--no-wait', '--submission-key', key, '--file', '-', payload='feed lifecycle work')['data']
+    product.cli('worker', 'wait', '--run', accepted['run_id'], '--wait-timeout', '30')
+    deadline = time.monotonic() + 30
+    while True:
+        result = product.cli('worker', 'result', '--run', accepted['run_id'])['data']
+        if terminal(result['run_state']):
+            assert result['run_state'] == 'succeeded' and 'native product answer' in result['result'], result
+            task = next(x for x in product.cli('worker', 'list')['data']['tasks'] if x['task_id'] == accepted['task_id'])
+            if task['run']['cleanup'] == 'complete' and task['resumable_until_ms'] is not None:
+                return accepted
+        assert time.monotonic() < deadline, result
+        time.sleep(.1)
+
+
+def main_session(product):
+    result = subprocess.run([str(product.codex), 'exec', 'new session after feed update'],
+        cwd=product.project, env=product.env, capture_output=True, timeout=45)
+    product.outputs.extend((result.stdout, result.stderr))
+    assert result.returncode == 0 and b'native product answer' in result.stdout, result
+
+
+def run(repository):
+    product = InstalledProduct(repository)
+    fixture = product.root / 'feed-fixture'
+    fixture.mkdir(mode=0o700)
+    upstream = FeedUpstream(fixture)
+    stage = 'install'
+    try:
+        product.env.update(HIROUTE_TEST_MODEL_FEED_ROOT=str(fixture), HIROUTE_E2E_DIAL_CONFIG=str(upstream.dial))
+        included = publication(product, 17)
+        (fixture / 'publication.json').write_bytes(wire(included))
+        product.install()
+        product.start()
+        assert product.cli('models', 'feed', 'status')['data']['retrieval_enabled']
+        status = product.cli('models', 'feed', 'refresh')['data']
+        assert status['held']['sequence'] == 17 and status['counts']['applied'] >= 3, status
+        stage = 'registered-check-save-publish'
+        candidate_ref = 'candidate/feed/product'
+        product.register_secret(candidate_ref, 'feed-product-key')
+        product.secrets.add('feed-product-key')
+        checked_request = {'kind': 'registered', 'request': {
+            'connection_option_id': OPTION, 'display_name': 'Feed product connection',
+            'expected_catalog': product.cli('compute', 'connection', 'options')['data']['catalog'],
+            'candidate_ref': candidate_ref, 'lineage_ref': 'lineage/feed/product', 'edit_revision': 1,
+            'check_id': 'check/feed/product', 'input_candidate': {'candidate_ref': candidate_ref, 'candidate_revision': 1}}}
+        checked = product.cli('compute', 'connection', 'test', payload=checked_request, *['--request-stdin'])['data']
+        save_candidate(product, checked['candidate'], None, 'feed-product-save')
+        source = next(x for x in product.cli('compute', 'list')['data']['sources'] if x['display_name'] == 'Feed product connection')
+        binding = source['models'][0]['binding_id']
+        editor = {'display_name': 'Feed product route', 'purpose': 'Frozen feed execution', 'custom_alias': 'feed-product',
+            'mode': 'fixed_model', 'candidates': [{'binding_id': binding, 'reasoning': {'kind': 'toggle', 'enabled': True}}],
+            'smart': {'economy': [], 'primary': [], 'judgment': judgment_fixture(), 'reselect_on_user_message': False,
+                      'classifier': {'kind': 'local_rules'}, 'complex_keywords': []},
+            'free': {'candidates': [], 'primary': [], 'primary_fallback': False}, 'requirements': {},
+            'delegation_enabled': True, 'work': {'harness': 'codex_cli', 'protocol': 'responses'},
+            'limits': {'maximum_attempts': 1, 'request_timeout_ms': 30000, 'attempt_timeout_ms': 30000}}
+        created, _, _ = apply_plan(product, plan_change('create', editor, creation_key='feed-product'), 'feed-publish')
+        plan = created['plan_head']['reference']['plan_id']
+        frozen = product.cli('routing', 'show', plan)['data']
+        discovered = product.cli('worker', 'dependencies', 'discover')['data']
+        revision = next(x['revision'] for x in discovered['selection_revisions'] if x['harness'] == 'codex_cli')
+        product.cli('worker', 'dependencies', 'select', '--request-stdin', payload={'harness': 'codex_cli',
+            'adapter_path': str(product.adapter), 'cli_path': str(product.codex), 'expected_selection_revision': revision})
+        codex = next(x for x in product.cli('agents', 'scan')['data']['agents'] if x['agent_id'] == 'agent_codex_default')
+        product.cli('agents', 'check', 'agent_codex_default', '--scope', 'native-authentication')
+        spec = {'schema_version': {'major': 2, 'minor': 0}, 'context_id': codex['codex_access']['root_context_id'],
+            'model': {'intent': 'configure', 'settings': {'mode': 'codex_default', 'native_model_mode': 'hiroute_only',
+                'fixed_models': [], 'allowed_plan_ids': [plan], 'default_selection': {'kind': 'plan', 'plan_id': plan}}}}
+        preview = product.cli('agents', 'connect', 'preview', '--request-stdin', payload={'spec': spec})['data']
+        applied = product.cli('agents', 'connect', 'apply', '--request-stdin', payload={
+            'spec': preview['spec'], 'accept_digest': preview['accept_digest'], 'dependency_digest': preview['dependency_digest'],
+            'expected_revisions': preview['expected_revisions'], 'idempotency_key': 'feed-agent'})
+        assert applied['operation']['state'] == 'succeeded', applied
+        main_session(product)
+        prior = worker(product, plan, 'feed-before')
+        prior = worker(product, plan, 'feed-before-continue', prior)
+        stage = 'withdraw-remove-restart'
+        withdrawn = publication(product, 18, False)
+        (fixture / 'publication.json').write_bytes(wire(withdrawn))
+        assert product.cli('models', 'feed', 'refresh')['data']['held']['sequence'] == 18
+        removal = product.cli('models', 'feed', 'remove', 'preview')['data']
+        product.cli('models', 'feed', 'remove', 'apply', '--request-stdin', payload={
+            'accepted_digest': removal['digest'], 'also_disable_retrieval': True})
+        restart(product)
+        assert product.cli('models', 'feed', 'status')['data']['highest_accepted_sequence'] == 18
+        stage = 'frozen-execution-after-withdrawal'
+        main_session(product)
+        worker(product, plan, 'feed-new-after')
+        worker(product, plan, 'feed-continue-after', prior)
+        retained = product.cli('routing', 'show', plan)['data']
+        assert retained['head'] == frozen['head'] and retained['desired'] == frozen['desired'], 'published route changed'
+        stage = 'new-admission-rejected'
+        available = product.cli('models', 'availability')['data']
+        assert MODEL not in wire(available).decode(), available
+        rejected = raw(product, 'routing', 'preview', payload={'change': plan_change('update', editor, plan, frozen['head']['head_revision'])})
+        assert rejected['status'] != 'succeeded', rejected
+        snapshot = product.cli('compute', 'list')['data']
+        saved = next(x for x in snapshot['sources'] if x['source_id'] == source['source_id'])
+        change = {'schema': 'hiroute.compute-management-change/v2', 'subject': {'kind': 'saved_source', 'source_id': source['source_id']},
+            'expected_revisions': snapshot['revisions'], 'selected_model_refs': [m['model_ref'] for m in saved['models']],
+            'intent': 'save_ready', 'key_edits': []}
+        rejected = raw(product, 'compute', 'connection', 'preview', payload={'change': change})
+        assert rejected['status'] != 'succeeded', rejected
+        recheck = copy.deepcopy(checked_request)
+        recheck['request'].update(expected_catalog=product.cli('compute', 'connection', 'options')['data']['catalog'],
+            existing_source_id=source['source_id'], expected_source_revision=saved['revision'], check_id='check/feed/withdrawn')
+        rejected = raw(product, 'compute', 'connection', 'test', payload=recheck)
+        assert rejected['status'] != 'succeeded' or not any(m['selectable'] for m in rejected['data']['candidate']['models']), rejected
+        stage = 'rollback-and-identical-restoration'
+        (fixture / 'publication.json').write_bytes(wire(included))
+        status = product.cli('models', 'feed', 'refresh')['data']
+        assert status['last_attempt']['reason'] == 'older_sequence' and status['held'] is None, status
+        (fixture / 'publication.json').write_bytes(wire(withdrawn))
+        assert product.cli('models', 'feed', 'refresh')['data']['held']['sequence'] == 18
+        conflicting = publication(product, 18)
+        (fixture / 'publication.json').write_bytes(wire(conflicting))
+        assert product.cli('models', 'feed', 'refresh')['data']['last_attempt']['reason'] == 'same_sequence_conflicting_digest'
+        stage = 'embedded-absorption'
+        restored = publication(product, 19)
+        (fixture / 'publication.json').write_bytes(wire(restored))
+        assert product.cli('models', 'feed', 'refresh')['data']['held']['sequence'] == 19
+        (fixture / 'absorbed.json').write_bytes(wire(restored))
+        restart(product)
+        assert product.cli('models', 'feed', 'status')['data']['counts']['ignored_embedded'] >= 3
+        main_session(product)
+        assert len(upstream.requests) >= 7 and all(x['model'] == UPSTREAM for x in upstream.requests)
+        print(json.dumps({'scenario': 'installed-signed-feed-lifecycle', 'state': 'green', 'candidate': product.sha,
+            'upstream_calls': len(upstream.requests), 'published_session_after_withdrawal': True,
+            'new_worker_after_withdrawal': True, 'continue_after_restart': True, 'new_admission_rejected': True,
+            'rollback_and_restore': True, 'embedded_absorption': True}))
+    except Exception as error:
+        raise AssertionError(('feed lifecycle stage', stage, error)) from error
+    finally:
+        upstream.close()
+        product.close()
+
+
+if __name__ == '__main__':
+    run(sys.argv[1])
