@@ -15,6 +15,14 @@ def digest(path):
     return value.hexdigest()
 
 
+def extended_windows_path(value):
+    if value.startswith('\\\\?\\'):
+        return value
+    if value.startswith('\\\\'):
+        return '\\\\?\\UNC\\' + value[2:]
+    return '\\\\?\\' + value
+
+
 def plain(path):
     path = Path(path)
     for entry in (path, *path.parents):
@@ -69,6 +77,8 @@ def inspect_installation(native_home, local_app_data):
 
 def inventory(root):
     """Reject links/special entries before walking or hashing any child."""
+    if os.name == 'nt':
+        root = Path(extended_windows_path(os.path.abspath(root)))
     def fail(error):
         raise error
     rows = {}
@@ -121,7 +131,11 @@ def archive_orphaned_data(native_home, local_app_data, destination, inspected, a
         plans.append((source, target, inventory(source)))
     record = dict(operation='archive_orphaned_installation_data', native_configuration='unchanged',
                   paths=[dict(source=str(s), backup=str(t), inventory=rows) for s, t, rows in plans])
-    (destination / 'profile-backup.json').write_text(json.dumps(record, indent=2), encoding='utf-8')
+    manifest = destination / 'profile-backup.json'
+    with manifest.open('x', encoding='utf-8') as stream:
+        stream.write(json.dumps(record, indent=2))
+        stream.flush()
+        os.fsync(stream.fileno())
     moved = []
     try:
         for source, target, expected in plans:
@@ -135,6 +149,10 @@ def archive_orphaned_data(native_home, local_app_data, destination, inspected, a
         for source, target in reversed(moved):
             if not source.exists():
                 target.rename(source)
+        (destination / 'profile-backup-outcome.json').write_text(json.dumps(dict(
+            outcome='restored_after_error', manifest_sha256=digest(manifest))), encoding='utf-8')
         raise
+    (destination / 'profile-backup-outcome.json').write_text(json.dumps(dict(
+        outcome='archived_and_verified', manifest_sha256=digest(manifest))), encoding='utf-8')
     return dict(archived=[str(t) for _, t in moved], backup_manifest='profile-backup.json',
                 native_configuration='unchanged', assessment='preparation_only')

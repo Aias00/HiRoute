@@ -247,7 +247,7 @@ function InProductPath($value) {
  return $false
 }
 $processes=@(Get-CimInstance Win32_Process | Where-Object {
- (InProductPath $_.ExecutablePath) -or ($_.SessionId -eq $session -and $_.Name -in @('hiroute.exe','hirouted.exe','hiroute-shell.exe'))
+ (InProductPath $_.ExecutablePath) -or ($_.SessionId -eq $session -and $_.Name -in @('hiroute.exe','hirouted.exe','hiroute-shell.exe','cliproxyapi.exe','windows_headless.exe','windows_desktop.exe'))
 } | Select-Object ProcessId,Name,ExecutablePath)
 $tasks=@(Get-ScheduledTask | Where-Object {
  $principal=$_.Principal.UserId
@@ -302,9 +302,11 @@ def worker(request):
                     or inspected.get('administrator') is not False
                     or time.time() - (parent / 'result.json').stat().st_mtime > 3600):
                 raise ValueError('A recent inspection of this standard account and product is required')
+            activity = profile_activity(config, request['run_id'])
+            result['profile_activity'] = activity
             archived = profile_helper(request).archive_orphaned_data(
                 Path.home(), Path(os.environ['LOCALAPPDATA']), run,
-                inspected['installation'], profile_activity(config, request['run_id']))
+                inspected['installation'], activity)
             result.update(passed=True, assessment='preparation_only', archival=archived,
                           inspection_sha256=digest(parent / 'result.json'))
             return 0

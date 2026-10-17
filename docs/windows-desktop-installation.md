@@ -41,6 +41,8 @@ version root and removes the verified current payload too. Cleanup resumes from
 the current manifest after interruption and preserves changed, foreign or linked
 entries. The shell records cleanup results in
 `%LOCALAPPDATA%\HiRoute\shell\package-cleanup.json` for diagnosis.
+After uninstall commits, package cleanup errors are reported without undoing the
+uninstall or skipping an explicitly requested removal of standalone data.
 
 The installer accepts `/S` for unattended installation with the default login-start
 and tray choices and no prompts. Failures return a nonzero process exit code.

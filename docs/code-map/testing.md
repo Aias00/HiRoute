@@ -10,6 +10,8 @@ Windows development execution is owned by [windows-dev.py](../../scripts/windows
 and its [native executor](../../scripts/windows-dev-host.py), reached through
 `validation.py windows`. HOME configuration owns machine/session/client locations;
 the project owns artifact admission, exact-case execution and revision-bound evidence.
+[Orphaned data preparation](../../scripts/windows-dev-profile.py) preserves complete
+backups after explicit user authorization; it does not establish a product scenario.
 
 Choose a user promise, then the layer that can observe its failure. Keep tests
 beside that owner and preserve independent assertions. A focused filesystem

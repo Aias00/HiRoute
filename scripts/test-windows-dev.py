@@ -210,6 +210,11 @@ class Runner(unittest.TestCase):
         evidence.mkdir()
         return native_home, local, roots, evidence
 
+    def test_archive_long_paths_use_extended_drive_and_unc_forms(self):
+        self.assertEqual(profiles.extended_windows_path(r'C:\account\data'), r'\\?\C:\account\data')
+        self.assertEqual(profiles.extended_windows_path(r'\\server\share\data'), r'\\?\UNC\server\share\data')
+        self.assertEqual(profiles.extended_windows_path(r'\\?\C:\data'), r'\\?\C:\data')
+
     def test_orphaned_data_is_archived_with_complete_hashes_and_native_files_untouched(self):
         native_home, local, roots, evidence = self.orphaned_profile()
         native = native_home / '.codex/config.toml'
@@ -273,6 +278,8 @@ class Runner(unittest.TestCase):
         self.assertEqual((roots['data'] / 'retained.txt').read_bytes(), b'data')
         self.assertEqual((roots['state'] / 'retained.txt').read_bytes(), b'state')
         self.assertFalse((evidence / 'previous-data').exists())
+        outcome = json.loads((evidence / 'profile-backup-outcome.json').read_text())
+        self.assertEqual(outcome['outcome'], 'restored_after_error')
 
     def test_config_contains_paths_not_tokens_and_lives_in_home(self):
         identity = self.root / 'key'
