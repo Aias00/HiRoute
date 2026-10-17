@@ -24,6 +24,7 @@ def load(name):
 controller, host = load('windows-dev'), load('windows-dev-host')
 images = load('test-windows-native-runtime-audit')
 profiles = load('windows-dev-profile')
+desktop = load('windows-desktop-session')
 
 
 class Runner(unittest.TestCase):
@@ -65,6 +66,45 @@ class Runner(unittest.TestCase):
         with self.assertRaises(ValueError):
             host.stage(self.root, archive, '0' * 64)
         self.assertFalse((self.root / 'bundles').exists())
+
+    def test_desktop_observation_admits_installed_bytes_and_rejects_changed_shell(self):
+        home = self.root / 'home'
+        programs = home / 'local/Programs/HiRoute'
+        package = home / '.local/lib/hiroute/0.3.1-aaaaaaaaaaaa'
+        data = home / '.local/share/hiroute'
+        for path in (programs, package, data):
+            path.mkdir(parents=True)
+        files = {}
+        for name in ('hiroute.exe', 'hirouted.exe'):
+            (package / name).write_bytes(name.encode())
+            files[name] = dict(sha256=profiles.digest(package / name))
+        shell = programs / 'hiroute-shell.exe'
+        shell.write_bytes(b'measured NSIS member')
+        checksum = profiles.digest(shell)
+        (programs / 'shell-package.json').write_text(json.dumps(dict(files={'hiroute-shell.exe': checksum})))
+        (data / 'standalone.json').write_text(json.dumps(dict(install_root=str(package),
+            service_definition=str(package / 'task.json'), target='x86_64-pc-windows-msvc')))
+        manifest = dict(source_revision='a' * 40, target='x86_64-pc-windows-msvc', files=files, shell_sha256=checksum)
+        with patch.object(desktop.Path, 'home', return_value=home), patch.dict(os.environ, LOCALAPPDATA=str(home / 'local')):
+            self.assertEqual(desktop.installed(profiles, self.root, manifest)[2], shell)
+            shell.write_bytes(b'changed')
+            with self.assertRaisesRegex(ValueError, 'shell differs'):
+                desktop.installed(profiles, self.root, manifest)
+            shell.write_bytes(b'measured NSIS member')
+            (package / 'hiroute.exe').write_bytes(b'changed')
+            with self.assertRaisesRegex(ValueError, 'binary changed'):
+                desktop.installed(profiles, self.root, manifest)
+
+    def test_desktop_refuses_filtered_administrator_before_native_actions(self):
+        with self.assertRaisesRegex(ValueError, 'filtered administrator'), patch.object(desktop.subprocess, 'run') as run:
+            desktop.execute({}, self.root, self.root, {}, profiles, {'administrator_groups': True}, host.manifest, self.root)
+        run.assert_not_called()
+
+    def test_desktop_helper_requires_the_exact_committed_hash(self):
+        path = self.root / 'desktop.py'
+        path.write_text('raise RuntimeError("must not import")')
+        with self.assertRaisesRegex(ValueError, 'committed request'):
+            host.desktop_helper(dict(desktop_helper_path=str(path), desktop_helper_sha256='0' * 64))
 
     def test_archive_traversal_and_unmanifested_entries_fail(self):
         for name in ('../escape', '/absolute', 'C:/absolute', 'dir\\file.exe', 'other.exe'):

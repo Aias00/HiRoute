@@ -103,6 +103,7 @@ HOSTED_BACKEND_EXECUTION = {
 }
 VALIDATION_TOOLING = {"scripts/validation.py", "scripts/validation-host.py", "scripts/test-validation.py",
                       "scripts/windows-dev.py", "scripts/windows-dev-host.py", "scripts/test-windows-dev.py",
+                      "scripts/windows-desktop-session.py", "scripts/windows-dev-profile.py",
                       "scripts/validation-report.py", "scripts/test-validation-report.py",
                       "scripts/ci-run.py", "scripts/test-ci-run.py",
                       "scripts/ci-shards.py", "scripts/test-ci-shards.py",

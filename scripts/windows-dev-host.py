@@ -232,6 +232,17 @@ def profile_helper(request):
     return helper
 
 
+def desktop_helper(request):
+    import importlib.util
+    path = plain(request['desktop_helper_path'])
+    if digest(path) != request['desktop_helper_sha256']:
+        raise ValueError('Desktop helper differs from the committed request')
+    spec = importlib.util.spec_from_file_location('windows_desktop_session', path)
+    helper = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(helper)
+    return helper
+
+
 def profile_activity(config, run_id):
     native_home = Path.home()
     roots = [native_home / '.local/share/hiroute', Path(os.environ['LOCALAPPDATA']) / 'HiRoute/cli',
@@ -288,6 +299,15 @@ def worker(request):
                       harness_files=hm['files'], product_files=pm['files'])
         if request['binary'] not in hm['files'] or not {'hiroute.exe', 'hirouted.exe'} <= set(pm['files']):
             raise ValueError('The selected manifests do not include required binaries')
+        if request.get('operation') == 'desktop':
+            if pm.get('installer_format') != 'nsis' or not re.fullmatch(r'[a-f0-9]{64}', pm.get('shell_sha256', '')):
+                raise ValueError('Desktop acceptance requires a measured NSIS bundle')
+            activity = profile_activity(config, request['run_id'])
+            result['profile_activity'] = activity
+            outcome = desktop_helper(request).execute(request, run, product, pm, profile_helper(request),
+                                                     activity, manifest, root)
+            result.update(passed=True, assessment='native_desktop_observation', desktop=outcome)
+            return 0
         if request.get('operation') == 'inspect':
             result.update(passed=True, assessment='inspection_only',
                           installation=profile_helper(request).inspect_installation(Path.home(), Path(os.environ['LOCALAPPDATA'])),

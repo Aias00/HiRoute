@@ -130,10 +130,14 @@ class Remote:
         self.profile_hash = digest(profile)
         self.profile_helper = root + '/profile-' + self.profile_hash + '.py'
         self.upload(profile, self.profile_helper)
+        desktop = REPO / 'scripts/windows-desktop-session.py'
+        self.desktop_hash = digest(desktop)
+        self.desktop_helper = root + '/desktop-' + self.desktop_hash + '.py'
+        self.upload(desktop, self.desktop_helper)
 
     def call(self, action, **arguments):
         paths = ['scripts/windows-dev.py', 'scripts/windows-dev-host.py',
-                 'scripts/windows-dev-profile.py', 'scripts/validation.py']
+                 'scripts/windows-dev-profile.py', 'scripts/windows-desktop-session.py', 'scripts/validation.py']
         if action == 'run':
             subprocess.run(['git', 'ls-files', '--error-unmatch', *paths], cwd=REPO,
                            stdout=subprocess.DEVNULL, check=True)
@@ -141,6 +145,7 @@ class Remote:
                 raise ValueError('Commit the runner before native product execution')
         request = dict(action=action, config=self.config, driver_sha256=self.driver_hash,
                        profile_helper_path=self.profile_helper, profile_helper_sha256=self.profile_hash,
+                       desktop_helper_path=self.desktop_helper, desktop_helper_sha256=self.desktop_hash,
                        driver_revision=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=REPO, text=True).strip(),
                        driver_path=self.driver, **arguments)
         # SSH identity and host never need to reach the Windows execution process.
@@ -276,6 +281,15 @@ def main():
     uninstall.add_argument('--product', required=True)
     uninstall.add_argument('--shell-sha256', required=True)
     uninstall.add_argument('--probe-only', action='store_true')
+    desktop = commands.add_parser('desktop-session', help='Measured installed Desktop and native UI acceptance')
+    desktop.add_argument('--product', required=True)
+    desktop.add_argument('--action', dest='desktop_action', required=True,
+                         choices=('install', 'launch', 'snapshot', 'invoke', 'text', 'close', 'cli'))
+    desktop.add_argument('--from-product', help='Exact installed bundle admitted before a cross-build upgrade')
+    desktop.add_argument('--observation-run')
+    desktop.add_argument('--element', help='Runtime ID from a recent native UI observation')
+    desktop.add_argument('--text')
+    desktop.add_argument('--cli-args', type=Path, help='Private JSON array of public CLI arguments')
     run = commands.add_parser('run')
     run.add_argument('--harness', required=True)
     run.add_argument('--product', required=True)
@@ -321,6 +335,25 @@ def main():
             values = dict(run_id=uuid.uuid4().hex, harness=args.product, product=args.product,
                           binary='hiroute.exe', case='installation_profile_inspection',
                           operation='inspect', ignored=False, timeout=120)
+            args.action = 'run'
+        elif args.action == 'desktop-session':
+            if args.from_product:
+                identifier = r'[a-f0-9]{12}-[a-f0-9]{12}'
+                if not re.fullmatch(identifier, args.from_product):
+                    raise ValueError('Expected an explicit prior product bundle')
+            if args.desktop_action in ('invoke', 'text'):
+                if (not args.observation_run or not re.fullmatch(r'[a-f0-9]{32}', args.observation_run)
+                        or not args.element or not re.fullmatch(r'[0-9.]+', args.element)):
+                    raise ValueError('Native interaction requires an observed Runtime ID and run')
+            if args.desktop_action == 'text' and (args.text is None or len(args.text) > 4096):
+                raise ValueError('Native text input requires bounded text')
+            values.update(run_id=uuid.uuid4().hex, harness=args.product, binary='hiroute.exe',
+                          case='native_desktop_' + args.desktop_action, operation='desktop', ignored=False, timeout=240)
+            values.pop('cli_args')
+            if args.desktop_action == 'cli':
+                if args.cli_args is None:
+                    raise ValueError('Public CLI acceptance requires a private argument file')
+                values['cli_args'] = json.loads(args.cli_args.read_text(encoding='utf-8'))
             args.action = 'run'
         elif args.action in ('archive-installation-data', 'uninstall-candidate'):
             uninstall = args.action == 'uninstall-candidate'

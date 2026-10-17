@@ -151,6 +151,26 @@ python3 scripts/validation.py windows collect RUN_ID --output artifacts/windows-
 python3 scripts/validation.py windows finish RUN_ID
 ```
 
+For an installed NSIS candidate, `windows desktop-session --product BUNDLE_ID
+--action launch` opens the measured installed shell in that same session.
+`--action snapshot` collects its native Windows UI Automation tree and a window
+screenshot. `invoke`/`text` require an exact Runtime ID from a recent successful
+`--observation-run`; changed processes, elements and image digests are refused.
+Use the observed UI for product actions; this entry does not inject page scripts
+or replace the WebView with HTTP assertions. `close` uses the native window-close
+pattern. Collect and finish each bounded operation before the next one.
+
+`--action install` runs the measured NSIS `/S` entry. For a different installed
+candidate, `--from-product OLD_BUNDLE_ID` verifies the old images before invoking
+the new installer. Preserve existing data and identify both packages in the
+result. Different source revisions carrying the same semantic version prove a
+cross-build replacement, not a newer-version catalog selection or N-to-N+1 update.
+`--action cli --cli-args PRIVATE_JSON_FILE` executes a bounded argument array
+through the installed public CLI for preparation and effect readback; it does
+not establish a UI action. The selected standard account must have no
+Administrators SID, including deny-only membership. All native observations and
+screenshots remain in ignored, private evidence.
+
 Stage separate product and harness bundles when reusing an unchanged product for
 a test-only repair. Results record both full revisions, binary hashes, driver hash,
 client hashes, actual OS/session/elevation and exactly one test outcome. Zero exit

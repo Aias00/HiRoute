@@ -12,6 +12,10 @@ and its [native executor](../../scripts/windows-dev-host.py), reached through
 the project owns artifact admission, exact-case execution and revision-bound evidence.
 [Orphaned data preparation](../../scripts/windows-dev-profile.py) preserves complete
 backups after explicit user authorization; it does not establish a product scenario.
+[Native Desktop session actions](../../scripts/windows-desktop-session.py) admit
+the installed NSIS member and collect actual Windows UI Automation/screenshot
+evidence. Public CLI readback is distinguished from a UI action, and a cross-build
+replacement is distinguished from a newer-version update.
 
 Choose a user promise, then the layer that can observe its failure. Keep tests
 beside that owner and preserve independent assertions. A focused filesystem
