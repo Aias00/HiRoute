@@ -165,6 +165,33 @@ def scenario(repository):
         plan = cli('routing show ' + product.plan_id)['data']
         assert plan['desired']['strategy']['routing']['classifier']['service'] == service
         assert plan['desired']['strategy']['routing']['judgment'] == routing['judgment'], 'long prompts were changed'
+        # The same released v2 codecs accept both saved values and current omitted input.
+        # Exercise real preview/apply/publication/restart, not only deserialization.
+        for mode in ['smart_saving', 'custom_branches']:
+            for legacy in [False, True, None]:
+                editor = copy.deepcopy(product.editor)
+                editor['mode'] = mode
+                editor['smart'].update(economy=[selection], primary=[selection])
+                editor['branch_routing'] = copy.deepcopy(routing)
+                for config in [editor['smart'], editor['branch_routing']]:
+                    if legacy is None:
+                        config.pop('reselect_on_user_message', None)
+                    else:
+                        config['reselect_on_user_message'] = legacy
+                compatible = plan_change(product, 'update', **editor)
+                preview = product.preview('routing preview', {'change': compatible})
+                product.apply('routing apply', 'ApplyAgentPlanChange', preview,
+                              {'change': compatible}, f'follow-up-{mode}-{legacy}')
+                product.stop()
+                product.start()
+                saved = cli('routing show ' + product.plan_id)['data']
+                strategy = saved['desired']['strategy']
+                config = strategy['routing'] if mode == 'custom_branches' else strategy
+                assert config['reselect_on_user_message'] == bool(legacy), saved
+                assert saved['desired']['mode'] == mode
+                assert config['judgment'] == editor['branch_routing' if mode == 'custom_branches' else 'smart']['judgment']
+        print(json.dumps({'scenario': 'retired-follow-up-legacy-and-omitted-real-cli-publication-restart',
+                          'state': 'green', 'cases': 6}), flush=True)
         custom = {'id': 'custom-fixture', 'revision': 1, 'name': 'Custom decision', 'connection': {
             'kind': 'custom', 'endpoint': service['connection']['endpoint'], 'timeout_ms': 3000}}
         mutate({'id': custom['id'], 'expected_revision': 0, 'service': custom}, 'custom-create')

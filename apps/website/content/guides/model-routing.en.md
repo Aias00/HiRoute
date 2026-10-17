@@ -2,6 +2,8 @@
 
 Smart model routing selects and executes models according to the published configuration. Fixed model and Free first follow candidate order. Smart saving and Custom branches judge the task to select a model group and judge again for every new user message. For these two routing types, tool continuations reuse the frozen decision when HiRoute can identify the same turn, history is continuous, and the choice remains reusable.
 
+When a new judgment selects the same group, HiRoute prefers the model from the previous turn if the conversation still matches and the model can serve the request. This includes a backup selected after another model failed, and helps reuse model context and prompt caches. If the group changes or the previous model cannot be reused, normal selection and automatic relay apply. This happens automatically, with no follow-up switching setting.
+
 This guide shows Desktop. Linux headless exposes the same production paths through `routing options/list/show/preview/apply` and `decision services list/apply/test`. Start with [Run HiRoute headless on Linux](/en/docs/install-linux/) and [HiRoute CLI](/en/docs/cli/); obtain request fields from the installed schema. For a first connection, follow [Quickstart](/en/docs/) to create a fixed route, then add decision models when needed.
 
 ## Choose a routing type
@@ -64,7 +66,7 @@ Select Custom branches to assign different models to tasks such as writing and r
 
 Customize copies the complete effective settings and makes the whole set independent, including thresholds, degree prompts, and competence criteria. Restore plan defaults removes the complete override and immediately follows the plan again, preserving the branch name, task condition, and models. A branch without primary models shows competence settings only; degree settings appear after primary models are added.
 
-Each decision selects one task branch. Overlapping conditions follow the current main intent. If none matches, use the default branch under Follow-up preference and failure handling, then apply that branch's degree result. A low writing score remains attached to the writing stage; it cannot trigger primary review models merely because this turn asks for a review.
+Each decision selects one task branch. Overlapping conditions follow the current main intent. If none matches, use the separately configured Default branch, then apply that branch's degree result. A low writing score remains attached to the writing stage; it cannot trigger primary review models merely because this turn asks for a review.
 
 ## Understand turn selection and failures
 

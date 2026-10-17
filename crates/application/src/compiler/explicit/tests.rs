@@ -330,7 +330,7 @@ fn saved_classifier_is_preserved_in_the_materialized_route() {
 }
 
 #[test]
-fn follow_up_reselection_is_published_and_changes_route_digest() {
+fn retired_follow_up_values_preserve_sealed_plan_and_route_digests() {
     let mut desired = desired();
     desired.mode = PlanEditorMode::SmartSaving;
     desired.strategy = AgentPlanStrategyV2::SmartSaving {

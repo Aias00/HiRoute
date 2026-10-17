@@ -264,23 +264,6 @@ fn apply_context_hold(
     let Some(hold) = &input.context_hold else {
         return Ok(());
     };
-    if matches!(
-        input.policy.route,
-        MaterializedRouteV1::Branches {
-            reselect_on_user_message: true,
-            ..
-        } | MaterializedRouteV1::SmartSaving {
-            reselect_on_user_message: true,
-            ..
-        }
-    ) && input
-        .classification_decision
-        .as_ref()
-        .is_some_and(|d| d.decision_source != ComplexityDecisionSourceV1::Inherited)
-    {
-        return Ok(());
-    }
-
     let Some(candidate) = candidate_by_id.get(hold.candidate_id.as_str()).copied() else {
         reason_ledger.push(reason(LedgerReasonCodeV1::ContextHoldInvalidated, None));
         return Ok(());

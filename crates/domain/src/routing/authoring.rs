@@ -34,6 +34,8 @@ pub struct SmartEditorV2 {
     pub economy: Vec<CandidateSelectionV1>,
     pub primary: Vec<CandidateSelectionV1>,
     pub judgment: super::JudgmentSettingsV1,
+    /// Retained for serialized compatibility only; candidate continuity is unconditional.
+    #[serde(default)]
     pub reselect_on_user_message: bool,
     pub classifier: ComplexityClassifierModeV1,
     pub complex_keywords: Vec<String>,
@@ -202,6 +204,8 @@ pub enum AgentPlanStrategyV2 {
         economy: Vec<CandidateSelectionV1>,
         primary: Vec<CandidateSelectionV1>,
         judgment: super::JudgmentSettingsV1,
+        /// Retain the original value for sealed Plan/materialized consistency, never policy.
+        #[serde(default)]
         reselect_on_user_message: bool,
         classifier: ComplexityClassifierModeV1,
         complex_keywords: Vec<String>,

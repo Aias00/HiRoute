@@ -441,7 +441,6 @@ printf '{}\n' | hiroute routing options --request-stdin --output json > routing-
             "criteria": ["未取得有用进展，或需要大量纠正。", "取得有用但不完整或不稳定的进展。", "可靠推进，且无需重大纠正。"]
           }
         },
-        "reselect_on_user_message": false,
         "classifier": {"kind": "local_rules"}, "complex_keywords": []
       },
       "free": {"candidates": [], "primary": [], "primary_fallback": false},
@@ -874,7 +873,12 @@ hiroute decision services test --request-stdin --output json < decision-test-req
 | 模式 | 编辑字段 |
 | --- | --- |
 | `smart_saving` | `smart.classifier`、`smart.economy`、`smart.primary` 与 `smart.judgment` |
-| `custom_branches` | `branch_routing.classifier`、`branch_routing.branches`、`branch_routing.default_branch_id`、`branch_routing.judgment` 与 `branch_routing.reselect_on_user_message` |
+| `custom_branches` | `branch_routing.classifier`、`branch_routing.branches`、`branch_routing.default_branch_id` 与 `branch_routing.judgment` |
+
+智能省钱和自定义分支会在每条新用户消息到来时重新判断模型组，然后只在选中的组内
+优先沿用仍有效的上一轮模型。这个行为自动生效。可选字段 `reselect_on_user_message`
+已废弃；为兼容受支持的旧版调用方，仍接受该字段，但它不影响路由，新请求可以省略。
+读取结果中可能仍包含旧值，以保持密封 Plan 和发布数据的一致性。
 
 决策模型和自定义扩展都使用 `classifier: {kind: "decision_service", service: <完整已保存连接版本>}`。
 只有智能省钱可改用 `{kind: "local_rules"}`。发布按连接 ID、revision 和完整内容核对
@@ -906,7 +910,7 @@ hiroute decision services test --request-stdin --output json < decision-test-req
 
 `hiroute subscription-proxy show --output json` 查看订阅代理设置与应用状态。
 `hiroute subscription-proxy set --mode manual --url http://127.0.0.1:1187 --output json`
-保存 HTTP/HTTPS 代理；可加 `--no-proxy example.com,203.0.113.0/24`。本机地址自动绕过。
+保存 HTTP/HTTPS 代理；可加 `--no-proxy example.com,192.0.2.0/24`。本机地址自动绕过。
 使用 `--mode direct` 直接连接，或 `--mode inherit` 恢复既有服务启动环境策略。
 保存后运行 `hiroute service restart --output json` 应用；重启可能中断正在执行的任务和请求。
 手动代理作用于全部受管订阅及 Claude 订阅检查，不作用于 Worker 工具或 Native API。

@@ -472,6 +472,8 @@
                   "$ref": "#/$defs/judgment"
                 },
                 "reselect_on_user_message": {
+                  "deprecated": true,
+                  "description": "Compatibility-only no-op. Follow-ups always prefer a valid held candidate within the newly selected group.",
                   "type": "boolean"
                 }
               },
@@ -479,8 +481,7 @@
                 "classifier",
                 "branches",
                 "default_branch_id",
-                "judgment",
-                "reselect_on_user_message"
+                "judgment"
               ],
               "type": "object"
             }
@@ -774,6 +775,8 @@
               "$ref": "#/$defs/candidates"
             },
             "reselect_on_user_message": {
+              "deprecated": true,
+              "description": "Compatibility-only no-op. Follow-ups always prefer a valid held candidate within the newly selected group.",
               "type": "boolean"
             }
           },
@@ -781,7 +784,6 @@
             "economy",
             "primary",
             "judgment",
-            "reselect_on_user_message",
             "classifier",
             "complex_keywords"
           ],

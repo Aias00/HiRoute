@@ -65,7 +65,9 @@ continuations reuse the frozen decision only while history and authority permit.
 version, protocol, authorization and session; unrelated plan publication does not
 invalidate that route, and each request still reauthorizes.
 
-The planner reuses eligibility, protocol projection and bounded relay. Regular
+The planner always prefers a valid held candidate within the newly selected group,
+including an in-group backup; retired follow-up fields survive only at serialized
+compatibility boundaries. It reuses eligibility, protocol projection and bounded relay. Regular
 candidates may relay to the same category's primary group; primary exhaustion
 fails. Duplicate candidate identities are tried once. Same-turn continuations can
 retain an actual primary availability relay, but that fact neither rewrites the

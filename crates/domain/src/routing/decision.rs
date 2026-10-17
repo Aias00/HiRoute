@@ -259,7 +259,8 @@ pub struct BranchRoutingV1 {
     pub branches: Vec<RouteBranchV1>,
     pub default_branch_id: String,
     pub judgment: JudgmentSettingsV1,
-    /// A candidate preference within the freshly selected group, never a decision cache.
+    /// Retained for serialized compatibility only; candidate continuity is unconditional.
+    #[serde(default)]
     pub reselect_on_user_message: bool,
 }
 impl BranchRoutingV1 {

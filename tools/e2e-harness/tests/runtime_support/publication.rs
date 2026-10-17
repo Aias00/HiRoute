@@ -128,9 +128,8 @@ pub(super) fn snapshot(
         (
             AliasRequestOwnedRouteV1::Classified {
                 judgment: Default::default(),
-                // These classified-route fixtures explicitly exercise branch
-                // changes on a new user turn; the product authoring default
-                // remains false.
+                // Retained legacy value has no effect on fresh group judgment
+                // or candidate continuity within the selected group.
                 reselect_on_user_message: true,
                 classifier: AliasComplexityClassifierV1 {
                     revision: "runtime-complexity/v1".into(),

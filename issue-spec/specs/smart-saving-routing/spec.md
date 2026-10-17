@@ -48,8 +48,17 @@ New user input MUST receive a new judgment, potentially assessing the preceding
 actual execution stage. No cross-turn one-way upgrade cursor survives. A previous
 primary outcome does not prevent economy on a later qualifying turn, and old
 observed low scores cannot be repeatedly reapplied. Tool continuations/replays in
-one continuous turn inherit the frozen decision. A model-hold preference acts only
-inside the newly selected group.
+one continuous turn inherit the frozen decision. A valid ContextHold MUST always prefer the
+previously successful candidate inside the newly selected group, independently of
+any saved follow-up field; it cannot preserve a candidate across a group change.
+
+#### Scenario: A primary turn is followed by an economy turn
+
+- **WHEN** a new user message qualifies for economy after an actual primary execution
+- **THEN** the Gateway MUST select economy and cannot reuse the primary candidate through its hold.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/133#issuecomment-6220133330
 
 ### Requirement: Decision failure and candidate failure have different effects
 
