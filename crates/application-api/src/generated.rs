@@ -581,6 +581,8 @@ mod tests {
                 "agent-check-request.v1.schema.json",
                 "agent-launch-descriptor-request.v1.schema.json",
                 "agent-plan-catalog-query.v2.schema.json",
+                "console-token-create.v1.schema.json",
+                "console-token-revoke.v1.schema.json",
                 "contract-set.v1.json",
                 "coverage-manifest.v1.json",
                 "delegation-cancel-request.v1.schema.json",

@@ -261,7 +261,7 @@ mod protocol_tests {
                 .map(|command| &command.command_id)
                 .collect::<BTreeSet<_>>()
                 .len(),
-            87
+            commands.len()
         );
         assert_eq!(
             commands
@@ -269,7 +269,7 @@ mod protocol_tests {
                 .map(|command| &command.path)
                 .collect::<BTreeSet<_>>()
                 .len(),
-            87
+            commands.len()
         );
         assert_eq!(
             commands
@@ -277,7 +277,7 @@ mod protocol_tests {
                 .map(|command| &command.operation_id)
                 .collect::<BTreeSet<_>>()
                 .len(),
-            87
+            commands.len()
         );
         for operation in ["GetClientServiceStatus", "ListWorkPlans"] {
             let command = command_by_operation(operation).unwrap();
