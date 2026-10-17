@@ -232,6 +232,10 @@ retains an explicit manual entry for diagnosis. PR and main pushes retain their
 ordinary Linux/frontend selection without automatically starting that matrix.
 Affected PRs also run one cached Windows headless compile check; it runs no
 business or account acceptance.
+That job also runs only the filtered package/journal/restoration-policy component
+fixtures from `hiroute-host-runtime`. It records OS/build, architecture and token
+elevation; fixture success never satisfies native installation or standard-user
+acceptance. The full native matrix remains release/manual-only.
 
 1. Record the comparison base, committed candidate, affected consumers and native
    cases from `test-plan.py --integration`. Run affected Linux tests as selected;

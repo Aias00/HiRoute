@@ -141,7 +141,7 @@ mod tests {
         assert!(report.removed.is_empty());
         assert!(root.join("hirouted.exe").exists());
         let report = prune_packages(&base, "x86_64-pc-windows-msvc", &[]).unwrap();
-        assert_eq!(report.removed, [root.clone()]);
+        assert_eq!(report.removed.as_slice(), std::slice::from_ref(&root));
         assert!(!root.exists());
         assert!(
             prune_packages(&base, "x86_64-pc-windows-msvc", &[])
@@ -157,8 +157,9 @@ mod tests {
         assert_eq!(
             prune_packages(&base, "x86_64-pc-windows-msvc", &[])
                 .unwrap()
-                .removed,
-            [root.clone()]
+                .removed
+                .as_slice(),
+            std::slice::from_ref(&root)
         );
         assert!(!root.exists());
     }
@@ -178,7 +179,7 @@ mod tests {
                 _ => {}
             }
             let report = prune_packages(&base, target, &[]).unwrap();
-            assert_eq!(report.preserved, [root.clone()]);
+            assert_eq!(report.preserved.as_slice(), std::slice::from_ref(&root));
             assert!(root.join("hiroute.exe").exists());
             assert!(root.join("package-manifest.json").exists());
         }

@@ -463,7 +463,16 @@ class HostedReleasePolicyTests(unittest.TestCase):
                       '-p hiroute-cli -p hiroute-daemon -p hiroute-platform '
                       '-p hiroute-local-storage --all-targets', workflow)
         self.assertIn("if ($LASTEXITCODE -ne 0) { throw", workflow)
-        self.assertNotIn('cargo test', workflow)
+        component_tests = [line.strip() for line in workflow.splitlines()
+                           if line.strip().startswith('cargo test ')]
+        self.assertEqual(component_tests, [
+            'cargo test --locked --target x86_64-pc-windows-msvc '
+            '-p hiroute-host-runtime --lib standalone_install::'])
+        self.assertIn("throw 'Windows installation component regressions failed'", workflow)
+        self.assertIn('component fixtures, not standard-user installation acceptance', workflow)
+        self.assertNotIn('--ignored', workflow)
+        self.assertNotIn('--test windows_headless', workflow)
+        self.assertNotIn('--test windows_desktop', workflow)
         self.assertNotIn('windows-headless-ci.ps1', workflow)
 
 
