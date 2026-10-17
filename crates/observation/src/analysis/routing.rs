@@ -192,7 +192,6 @@ pub(super) fn reasons(
                     &t.session_id,
                     &t.request_id,
                     t.model.model_configuration_id.as_deref(),
-                    t.at_ms,
                 )?,
             );
         }

@@ -109,8 +109,11 @@ def run(product, plan):
             assert estimate['routed_estimate_micros'] > 0 and estimate['estimated_savings_micros'] == 0, estimate
             assert estimate['actual_cash_micros'] is None
 
+            recent = product.cli('value', 'show', '--view', 'summary', '--routing', plan,
+                                 '--currency', 'CNY')['data']
+            assert recent['time']['clipped_for_retention'] and 'retention_prefix_clipped' in recent['gaps'], recent
             summary = product.cli('value', 'show', '--view', 'summary', '--routing', plan,
-                                  '--currency', 'CNY')['data']
+                                  '--period', 'today', '--currency', 'CNY')['data']
             assert summary['schema'] == 'hiroute.observation.analysis/v1', summary
             assert summary['status'] in ('ready', 'partial') and summary['savings'], summary
             assert summary['savings']['coverage'] == 'complete', summary

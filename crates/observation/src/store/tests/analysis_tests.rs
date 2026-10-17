@@ -248,7 +248,7 @@ fn a_recorded_stage_is_evidence_for_a_selected_transition_not_a_switch() {
                         b"profile",
                     ))),
                     attribution: AgentTurnAttributionV1::Single,
-                    started_at_ms: 100,
+                    started_at_ms: 101,
                     finished_at_ms: 110,
                     status: AgentTurnStatusV1::Completed,
                     history_partial: false,

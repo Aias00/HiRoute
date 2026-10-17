@@ -97,6 +97,7 @@ impl LocalObservationStore {
                 }
                 s.e = Some(schema::get(&tx, "numeric_revision")?);
             }
+            page.numeric_watermark = s.e;
             if s.basis == Some(AnalysisCostBasisV1::ApiEquivalent) && s.p.is_none() {
                 let Some(capture) = capture else {
                     page.status = AnalysisStatusV1::ChoicesRequired;
@@ -190,6 +191,18 @@ impl LocalObservationStore {
                     let (values, next) = views::paginate(self, &s, q, &values, offset)?;
                     page.transitions = values;
                     routing::reasons(&tx, reader, &mut page.transitions)?;
+                    if page.transitions.iter().any(|t| t.reason.is_none()) {
+                        page.gaps.push("recorded_reason_unavailable".into());
+                        page.status = AnalysisStatusV1::Partial;
+                    }
+                    if page
+                        .transitions
+                        .iter()
+                        .any(|t| t.completeness != "complete")
+                    {
+                        page.gaps.push("routing_evidence_partial".into());
+                        page.status = AnalysisStatusV1::Partial;
+                    }
                     page.next_cursor = next;
                 }
                 _ => return Err(Error::Invalid),

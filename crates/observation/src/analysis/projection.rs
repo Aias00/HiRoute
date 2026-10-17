@@ -140,6 +140,7 @@ fn project_request(db: &Connection, w: &str, id: &str, rev: u64) -> rusqlite::Re
         }
         return Ok(());
     }
+    super::turns::backfill(db, w, id)?;
     // Bounded, request-indexed metadata extraction also supports admission of
     // older stores. Deleted payloads leave explicitly unknown fields.
     let direct:Option<(String,String,Option<String>)>=db.query_row("SELECT m.native_model,m.model_id,reason.reasoning_profile_id FROM observation_analysis_models_v1 m JOIN valuation_requests_v2 v ON v.workspace_id=m.workspace_id AND v.request_id=m.request_id AND v.accepted_ordinal=m.ordinal LEFT JOIN observation_analysis_reasoning_v1 reason ON reason.workspace_id=m.workspace_id AND reason.request_id=m.request_id AND reason.model_id=m.model_id AND reason.profile_digest=m.profile_digest WHERE m.workspace_id=?1 AND m.request_id=?2",params![w,id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional()?;

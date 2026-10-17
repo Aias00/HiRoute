@@ -20,6 +20,12 @@ pub(crate) fn migrate(db: &mut Connection) -> rusqlite::Result<()> {
     }
     let tx = db.transaction()?;
     tx.execute_batch(DDL)?;
+    let segment_column:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM pragma_table_info('observation_analysis_turns_v1') WHERE name='segment_id')",[],|r|r.get(0))?;
+    if !segment_column {
+        tx.execute_batch("ALTER TABLE observation_analysis_turns_v1 ADD COLUMN segment_id TEXT;
+          INSERT OR IGNORE INTO observation_analysis_dirty_v1(workspace_id,request_id,sequence)
+            SELECT workspace_id,request_id,0 FROM observation_analysis_turns_v1 WHERE segment_id IS NULL;")?;
+    }
     for key in [
         "dirty_sequence",
         "job_started_ms",
@@ -179,7 +185,7 @@ CREATE TABLE IF NOT EXISTS observation_analysis_pricing_v1(
  key TEXT PRIMARY KEY,body TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS observation_analysis_turns_v1(
  workspace_id TEXT NOT NULL,request_id TEXT NOT NULL,agent_turn_id TEXT NOT NULL,
- ordinal INTEGER NOT NULL,producer_epoch TEXT NOT NULL,partial INTEGER NOT NULL,
+ ordinal INTEGER NOT NULL,producer_epoch TEXT NOT NULL,partial INTEGER NOT NULL,segment_id TEXT,
  PRIMARY KEY(workspace_id,request_id));
 CREATE TABLE IF NOT EXISTS observation_analysis_models_v1(
  workspace_id TEXT NOT NULL,request_id TEXT NOT NULL,ordinal INTEGER NOT NULL,
