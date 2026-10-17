@@ -66,3 +66,31 @@ fn simultaneous_sessions_release_only_their_own_inputs_including_pending_prompts
     drop(second);
     assert!(host.0.lock().unwrap().is_empty());
 }
+
+#[test]
+fn checked_model_input_releases_after_revision_advances_without_releasing_another_session() {
+    let host = Arc::new(Host::default());
+    let client = || Client::new("test", LocalEndpoint::from_runtime_root("unused"));
+    let first = crate::ProductSession::new(client(), host.clone());
+    let second = crate::ProductSession::new(client(), host.clone());
+    let mut checked = first
+        .authority
+        .register_model_input(Zeroizing::new("first".into()))
+        .unwrap();
+    let foreign = second
+        .authority
+        .register_model_input(Zeroizing::new("second".into()))
+        .unwrap();
+    checked.candidate_revision += 1;
+    first.authority.release_model_input(&foreign).unwrap();
+    assert_eq!(host.0.lock().unwrap().len(), 2);
+    first.authority.release_model_input(&checked).unwrap();
+    assert!(!host.0.lock().unwrap().contains_key(&checked.candidate_ref));
+    assert!(host.0.lock().unwrap().contains_key(&foreign.candidate_ref));
+    // Terminal operation polling and session shutdown may both request release.
+    first.authority.release_model_input(&checked).unwrap();
+    drop(first);
+    assert!(host.0.lock().unwrap().contains_key(&foreign.candidate_ref));
+    drop(second);
+    assert!(host.0.lock().unwrap().is_empty());
+}

@@ -270,10 +270,10 @@ impl HostAuthority for SessionAuthority {
             .lock()
             .map_err(|_| "PROTECTED_INPUT_UNAVAILABLE")?;
         if let Some(owned) = inputs.get(&candidate.candidate_ref) {
-            if owned.candidate_revision != candidate.candidate_revision {
-                return Err("PROTECTED_INPUT_INVALID".into());
-            }
-            self.host.release_model_input(candidate)?;
+            // Preparation/checking advances the candidate revision without changing
+            // ownership of the protected input. Release the registered input by its
+            // session-owned identity, just as the host's release protocol does.
+            self.host.release_model_input(owned)?;
             inputs.remove(&candidate.candidate_ref);
         }
         Ok(())
