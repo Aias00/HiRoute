@@ -195,7 +195,6 @@ pub(super) fn reasons(
                     reader.workspace().as_str(),
                     &t.session_id,
                     &t.request_id,
-                    t.model.model_configuration_id.as_deref(),
                 )?,
             );
         }

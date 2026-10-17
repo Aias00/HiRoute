@@ -340,7 +340,6 @@ pub(crate) fn routing_reason(
     workspace: &str,
     session: &str,
     request: &str,
-    model: Option<&str>,
 ) -> Result<Option<PlanQualitySample>, ObservationV2Error> {
     use rusqlite::OptionalExtension;
     Ok(db
@@ -351,14 +350,13 @@ pub(crate) fn routing_reason(
         AND (q.first_request_id=:request OR q.last_request_id=:request OR q.segment_id=(
           SELECT t.segment_id FROM observation_analysis_turns_v1 t WHERE t.workspace_id=q.workspace_id
             AND t.request_id=:request AND t.partial=0))
-        AND (:model IS NULL OR q.model_configuration_id IS NULL OR q.model_configuration_id=:model)
         AND EXISTS(SELECT 1 FROM logical_requests request WHERE request.workspace_id=q.workspace_id
           AND request.session_id=q.session_id AND request.request_id=:request)
       ORDER BY q.first_at_ms DESC,q.segment_id LIMIT 1"
             ),
             named_params! {":workspace":workspace,":from":0i64,":to":i64::MAX,
             ":plan":Option::<String>::None,":session":session,":revision":Option::<u64>::None,
-            ":runs":Option::<String>::None,":model":model,":request":request},
+            ":runs":Option::<String>::None,":request":request},
             sample,
         )
         .optional()?)
