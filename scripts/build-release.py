@@ -208,7 +208,8 @@ class Candidate:
                 inspect_elf(binary, self.target)
         notices = self.output / "notices"
         self.script("collect-third-party-licenses", "--cargo-target", self.target,
-                    "--cpa-source-repo", self.source_repo, "--output", notices)
+                    "--cpa-source-repo", self.source_repo,
+                    "--npm-root", frontend, "--output", notices)
         packaged = json.loads(self.script(
             "package-standalone", "build", "--version", self.version, "--revision", self.revision,
             "--target", self.target, "--hiroute", binaries / ("hiroute" + suffix), "--hirouted", binaries / ("hirouted" + suffix),
