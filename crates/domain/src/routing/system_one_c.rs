@@ -30,7 +30,27 @@ pub fn native_mode(mode: &super::ComplexityClassifierModeV1) -> bool {
 pub struct NativeFixedContentV1 {
     pub degree_prefix: String,
     pub assessment_wrapper: String,
+    #[serde(
+        serialize_with = "serialize_canonical_json",
+        deserialize_with = "deserialize_canonical_json"
+    )]
     pub applicability: Value,
+}
+
+// Publication digests preserve typed field order. Canonicalize only the generic
+// JSON inside C so senders/receivers with different serde_json map features agree,
+// without changing the serialization or digest algorithm of legacy publications.
+fn serialize_canonical_json<S: serde::Serializer>(
+    value: &Value,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    crate::canonicalize_json(value.clone()).serialize(serializer)
+}
+
+fn deserialize_canonical_json<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Value, D::Error> {
+    Value::deserialize(deserializer).map(crate::canonicalize_json)
 }
 
 impl NativeFixedContentV1 {
@@ -43,7 +63,7 @@ impl NativeFixedContentV1 {
         Self {
             degree_prefix: "Assess state.latest_user only, not historical competence.".into(),
             assessment_wrapper: wrapper.into(),
-            applicability: stock["q2"].clone(),
+            applicability: crate::canonicalize_json(stock["q2"].clone()),
         }
     }
 }
@@ -231,6 +251,10 @@ pub fn incompatible_native_reference(c: bool, text: &str) -> bool {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct FrozenAssessmentScopeV1 {
+    #[serde(
+        serialize_with = "serialize_canonical_json",
+        deserialize_with = "deserialize_canonical_json"
+    )]
     pub assessment: Value,
     pub simple_threshold_millis: u16,
     pub competence_floor_millis: u16,
@@ -264,7 +288,10 @@ impl FrozenNativeProtocolV1 {
             scopes.insert(
                 id,
                 FrozenAssessmentScopeV1 {
-                    assessment: composed_assessment(Some(protocol), &judgment),
+                    assessment: crate::canonicalize_json(composed_assessment(
+                        Some(protocol),
+                        &judgment,
+                    )),
                     simple_threshold_millis: judgment.degree.simple_threshold_millis,
                     competence_floor_millis: judgment.competence.floor_millis,
                     standard: if judgment.competence.instructions == stock.competence.instructions
