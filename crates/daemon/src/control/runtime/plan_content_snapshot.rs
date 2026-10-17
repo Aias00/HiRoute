@@ -61,9 +61,43 @@ impl LocalControlAdapter {
                         })
                         .transpose()?
                         .flatten();
-                    Ok::<_, ControlReadError>((head, draft, heads, decision_service))
+                    let previous = head
+                        .as_ref()
+                        .map(|h| {
+                            stores
+                                .control()
+                                .lookup_exact_plan_version(&h.reference)
+                                .map(|v| v.configuration)
+                                .map_err(|_| ControlReadError::Corrupt)
+                        })
+                        .transpose()?;
+                    let sources = head
+                        .as_ref()
+                        .map(|h| {
+                            stores
+                                .control()
+                                .assessment_rollback_sources(&h.reference)
+                                .map_err(|_| ControlReadError::Corrupt)
+                        })
+                        .transpose()?
+                        .unwrap_or_default();
+                    Ok::<_, ControlReadError>((
+                        head,
+                        draft,
+                        heads,
+                        decision_service,
+                        previous,
+                        sources,
+                    ))
                 };
-                let (mut current_head, draft, mut heads, decision_service) = read_rows()?;
+                let (
+                    mut current_head,
+                    draft,
+                    mut heads,
+                    decision_service,
+                    previous_configuration,
+                    assessment_sources,
+                ) = read_rows()?;
                 let after = self.routing_compilation_snapshot(workspace)?;
                 let repeated = read_rows()?;
                 if before.facts != after.facts
@@ -75,6 +109,8 @@ impl LocalControlAdapter {
                             draft.clone(),
                             heads.clone(),
                             decision_service.clone(),
+                            previous_configuration.clone(),
+                            assessment_sources.clone(),
                         )
                 {
                     return Err(ControlReadError::SnapshotChanged);
@@ -139,6 +175,8 @@ impl LocalControlAdapter {
                     None
                 };
                 Ok(PlanAuthoringSnapshotV2 {
+                    previous_configuration,
+                    assessment_sources,
                     workspace: workspace.clone(),
                     aliases: after
                         .active_publication

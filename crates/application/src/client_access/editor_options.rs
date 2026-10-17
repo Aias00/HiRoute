@@ -128,6 +128,14 @@ pub(super) fn dispatch(
             && state.unavailable_candidates.len() > MAX_RATING_QUERY_ITEMS)
             .then_some(state.unavailable_candidates.len());
         Ok(PlanEditorOptionsV1 {
+            assessment_sources: payload
+                .assessment_review_plan
+                .as_ref()
+                .map(|p| {
+                    port.assessment_rollback_sources(&WorkspaceId::default(), p)
+                        .map_err(map_control_error)
+                })
+                .transpose()?,
             unavailable_candidate_count,
             unavailable_candidates: if payload.include_unavailable {
                 state

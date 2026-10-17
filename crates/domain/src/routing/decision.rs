@@ -256,6 +256,27 @@ pub struct BranchRoutingV1 {
     pub reselect_on_user_message: bool,
 }
 impl BranchRoutingV1 {
+    pub fn validate_native_protocol(&self) -> Result<(), super::NativeProtocolError> {
+        if self.native_protocol.is_some() && !super::native_mode(&self.classifier) {
+            return Err(super::NativeProtocolError::ContentMismatch);
+        }
+        for b in &self.branches {
+            super::validate_assessment_scope(
+                self.native_protocol.as_ref(),
+                self.assessment_review.as_ref(),
+                &b.id,
+                b.judgment.is_none(),
+                self.judgment_for(b),
+            )?;
+            if super::incompatible_native_reference(self.native_protocol.is_some(), &b.condition) {
+                return Err(super::NativeProtocolError::StateReference(format!(
+                    "{}.condition",
+                    b.id
+                )));
+            }
+        }
+        Ok(())
+    }
     pub fn validate(&self, draft: bool) -> bool {
         if !draft
             && (self.native_protocol.is_some() && !super::native_mode(&self.classifier)

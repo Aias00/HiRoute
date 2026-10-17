@@ -146,6 +146,25 @@ impl RoutingFactsPort for LocalControlAdapter {
             .decision_services(workspace)
             .map_err(super::map_port)
     }
+    fn assessment_rollback_sources(
+        &self,
+        workspace: &WorkspaceId,
+        plan: &hiroute_application_api::PublishedPlanCapabilityRequestV1,
+    ) -> Result<Vec<hiroute_domain::AssessmentRollbackOptionV1>, ControlReadError> {
+        let stores = self.stores_lock().map_err(super::map_port)?;
+        let head = stores
+            .control()
+            .plan_head(workspace, &plan.plan_id)
+            .map_err(|_| ControlReadError::Corrupt)?
+            .ok_or(ControlReadError::NotFound)?;
+        if head.reference.content_revision != plan.revision {
+            return Err(ControlReadError::SnapshotChanged);
+        }
+        stores
+            .control()
+            .assessment_rollback_sources(&head.reference)
+            .map_err(|_| ControlReadError::Corrupt)
+    }
     fn decision_service(
         &self,
         workspace: &WorkspaceId,

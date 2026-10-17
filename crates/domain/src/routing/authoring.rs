@@ -138,12 +138,17 @@ impl PlanEditorStateV2 {
     pub fn effective(&self) -> Result<AgentPlanAuthoringV2, PlanAuthoringError> {
         self.validate_draft()?;
         let strategy = match self.mode {
-            PlanEditorMode::CustomBranches => AgentPlanStrategyV2::Branches {
-                routing: self
+            PlanEditorMode::CustomBranches => {
+                let mut routing = self
                     .branch_routing
                     .clone()
-                    .ok_or(PlanAuthoringError::InvalidStrategy)?,
-            },
+                    .ok_or(PlanAuthoringError::InvalidStrategy)?;
+                if !super::native_mode(&routing.classifier) {
+                    routing.native_protocol = None;
+                    routing.assessment_review = None;
+                }
+                AgentPlanStrategyV2::Branches { routing }
+            }
             PlanEditorMode::FixedModel => AgentPlanStrategyV2::Custom {
                 candidates: self.candidates.clone(),
             },
@@ -276,6 +281,9 @@ impl AgentPlanAuthoringV2 {
         };
         match (&self.mode, &self.strategy) {
             (PlanEditorMode::CustomBranches, AgentPlanStrategyV2::Branches { routing }) => {
+                routing
+                    .validate_native_protocol()
+                    .map_err(PlanAuthoringError::NativeProtocol)?;
                 if !routing.validate(false) {
                     return Err(PlanAuthoringError::InvalidStrategy);
                 }

@@ -364,6 +364,10 @@ pub fn branch_decision_definition(
 
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum NativeProtocolError {
+    #[error(
+        "selected historical assessment is stale, unavailable, or does not match the selected scope"
+    )]
+    HistoricalUnavailable,
     #[error("native protocol semantic version is unsupported")]
     Unsupported,
     #[error("native protocol fixed bundle is unsupported; select a supported bundle")]

@@ -345,6 +345,15 @@ impl ProductionGatewayRuntime {
                     Err(error) => Err(error),
                     Ok(prepared) => {
                         routing_observation = prepared.routing_observation.clone();
+                        if let Some(o) = routing_observation.as_mut()
+                            && o.applicability_requested
+                        {
+                            o.applicability_requested = false;
+                            o.applicability_state =
+                                hiroute_domain::ApplicabilityStateV1::NotRequested;
+                            o.applicability_reason =
+                                hiroute_domain::ApplicabilityReasonV1::DispatchNotStarted;
+                        }
                         let target_trimmed = prepared.target_partial;
                         match ensure_call_active(
                             call_deadline,
@@ -356,6 +365,7 @@ impl ProductionGatewayRuntime {
                                     .call_classifier(
                                         classifier,
                                         prepared,
+                                        &mut routing_observation,
                                         request.replay,
                                         request.publication_revision,
                                         call_deadline,
@@ -485,6 +495,7 @@ impl ProductionGatewayRuntime {
         &self,
         classifier: &RestBranchClassifierAuthorityV1,
         prepared: PreparedDecisionRequest,
+        routing_observation: &mut Option<hiroute_domain::RoutingObservationV1>,
         replay: &ReplayStore,
         publication_revision: u64,
         call_deadline: Instant,
@@ -620,6 +631,16 @@ impl ProductionGatewayRuntime {
             .budget()
             .reserve(MemoryRole::ResponsePrefix, CLASSIFIER_RESPONSE_BYTES)
             .map_err(|_| ClassificationError::Resource)?;
+        if prepared
+            .bindings
+            .as_ref()
+            .is_some_and(|b| b.applicability.is_some())
+            && let Some(o) = routing_observation.as_mut()
+        {
+            o.applicability_requested = true;
+            o.applicability_state = hiroute_domain::ApplicabilityStateV1::Unavailable;
+            o.applicability_reason = hiroute_domain::ApplicabilityReasonV1::Pending;
+        }
         let exchange_result = collect_response(&mut exchange, call_deadline, &mut diagnostic).await;
         diagnostic.protocol(exchange.transport_facts().upstream_protocol);
         let (status, body) = match exchange_result {

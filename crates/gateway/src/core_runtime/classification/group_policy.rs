@@ -12,6 +12,18 @@ pub(in crate::server::core_runtime) fn apply(
     history: &AgentTurnHistorySnapshot,
     outcome: &mut ClassificationOutcome,
 ) {
+    if outcome.decision.decision_source != ComplexityDecisionSourceV1::Inherited
+        && outcome.decision.routing_observation.is_none()
+        && let Some(p) = native_protocol(input)
+    {
+        let mut o =
+            hiroute_domain::RoutingObservationV1::not_dispatched(p, &outcome.decision.branch_id);
+        if let Some(a) = &outcome.assessment {
+            o.target_segment = Some(a.target.segment_id.clone());
+            o.target_complete = !a.partial;
+        }
+        outcome.decision.routing_observation = Some(o);
+    }
     reduce(input, history, outcome);
     finalize_observation(input, outcome);
 }

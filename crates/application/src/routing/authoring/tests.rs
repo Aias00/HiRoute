@@ -16,6 +16,8 @@ fn change() -> PlanContentChangeV2 {
 }
 fn state() -> PlanAuthoringSnapshotV2 {
     PlanAuthoringSnapshotV2 {
+        previous_configuration: None,
+        assessment_sources: vec![],
         workspace: WorkspaceId::default(),
         aliases: AliasRegistryV1::default(),
         active_publication: None,

@@ -156,6 +156,7 @@ impl ProductionGatewayRuntime {
             .call_classifier(
                 &classifier,
                 prepared,
+                &mut None,
                 &replay,
                 1,
                 deadline,

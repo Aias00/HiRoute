@@ -16,6 +16,7 @@ pub enum ApplicabilityReasonV1 {
     NoTarget,
     PartialTarget,
     Pending,
+    DispatchNotStarted,
     Answered,
     InvalidOutput,
     Timeout,
@@ -79,6 +80,35 @@ pub struct RoutingObservationV1 {
 }
 
 impl RoutingObservationV1 {
+    pub fn not_dispatched(p: &super::FrozenNativeProtocolV1, scope: &str) -> Self {
+        let settings = p.scopes.get(scope);
+        Self {
+            protocol: p.protocol.schema.clone(),
+            content_digest: p.digest.clone(),
+            bundle_digest: CanonicalDigest::of(&p.protocol.fixed).expect("validated bundle"),
+            provider: "unknown".into(),
+            model: "unknown".into(),
+            standard: settings.map_or("custom", |s| s.standard.as_str()).into(),
+            target_segment: None,
+            target_complete: false,
+            eligibility: ProtectionEligibilityV1::Unrated,
+            applicability_requested: false,
+            applicability_state: ApplicabilityStateV1::NotRequested,
+            applicability_reason: ApplicabilityReasonV1::DispatchNotStarted,
+            applicability_probability: None,
+            protection_action: HistoricalProtectionActionV1::NotConsidered,
+            simple_probability: None,
+            simple_threshold_millis: settings.map_or(800, |s| s.simple_threshold_millis),
+            score: None,
+            competence_floor_millis: settings.map_or(500, |s| s.competence_floor_millis),
+            applicability_boundary_millis: 500,
+            request_bytes: 0,
+            prior_retained: 0,
+            prior_removed: 0,
+            stage_retained: 0,
+            stage_removed: 0,
+        }
+    }
     pub fn validate(&self) -> bool {
         let probability = |p: &Number| {
             p.as_f64()

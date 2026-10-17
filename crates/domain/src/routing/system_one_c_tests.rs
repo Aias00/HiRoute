@@ -61,11 +61,10 @@ fn frozen_content_and_effective_authoring_must_both_agree() {
 #[test]
 fn legacy_omission_and_rubric_digest_remain_byte_stable() {
     let bytes = include_str!("authoring/fixtures/released-plan-editor.v2.json");
-    let editor: super::super::PlanEditorStateV2 = serde_json::from_str(bytes).unwrap();
-    assert_eq!(
-        serde_json::to_value(&editor).unwrap(),
-        serde_json::from_str::<Value>(bytes).unwrap()
-    );
+    let fixture: Value = serde_json::from_str(bytes).unwrap();
+    let editor: super::super::PlanEditorStateV2 =
+        serde_json::from_value(fixture["editor"].clone()).unwrap();
+    assert_eq!(serde_json::to_value(&editor).unwrap(), fixture["editor"]);
     assert!(editor.smart.native_protocol.is_none());
     assert!(editor.smart.assessment_review.is_none());
     let j = JudgmentSettingsV1::default();

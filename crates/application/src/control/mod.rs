@@ -554,6 +554,13 @@ pub trait ComputeManagementControlPort: Send + Sync {
 }
 
 pub trait RoutingFactsPort: Send + Sync {
+    fn assessment_rollback_sources(
+        &self,
+        _workspace: &WorkspaceId,
+        _plan: &hiroute_application_api::PublishedPlanCapabilityRequestV1,
+    ) -> Result<Vec<hiroute_domain::AssessmentRollbackOptionV1>, ControlReadError> {
+        Err(ControlReadError::Unavailable)
+    }
     fn decision_service(
         &self,
         _workspace: &WorkspaceId,

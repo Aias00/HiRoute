@@ -6,6 +6,8 @@ use thiserror::Error;
 use crate::compiler::{AgentPlanCompilationFactsV1, AgentPlanCompilerError, compile_agent_plan_v2};
 
 pub struct PlanAuthoringSnapshotV2 {
+    pub previous_configuration: Option<AgentPlanAuthoringV2>,
+    pub assessment_sources: Vec<AssessmentRollbackOptionV1>,
     pub workspace: WorkspaceId,
     pub aliases: AliasRegistryV1,
     pub active_publication: Option<GatewayPublicationV1>,
@@ -59,6 +61,13 @@ pub fn preview_plan_content(
         .editor
         .effective()
         .map_err(|_| PlanPreviewError::Invalid)?;
+    validate_assessment_transition(
+        &configuration,
+        state.previous_configuration.as_ref(),
+        state.draft.as_ref().map(|d| &d.editor),
+        &state.assessment_sources,
+    )
+    .map_err(PlanPreviewError::NativeProtocol)?;
     if let Some(service) = configuration.decision_service()
         && state.decision_service.as_ref() != Some(service)
     {
@@ -181,6 +190,8 @@ pub fn preview_plan_content(
 
 #[derive(Debug, Error, Eq, PartialEq)]
 pub enum PlanPreviewError {
+    #[error(transparent)]
+    NativeProtocol(NativeProtocolError),
     #[error("plan is referenced by Agent settings or retained execution versions")]
     Referenced,
     #[error("invalid plan content")]
