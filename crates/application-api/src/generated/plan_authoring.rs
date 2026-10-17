@@ -74,15 +74,9 @@ fn definitions() -> Value {
         }),
     );
     let routing = object(
-        &[
-            "classifier",
-            "branches",
-            "default_branch_id",
-            "judgment",
-            "reselect_on_user_message",
-        ],
+        &["classifier", "branches", "default_branch_id", "judgment"],
         json!({
-            "classifier":classifier,"branches":{"type":"array","maxItems":16,"items":branch},"default_branch_id":{"type":"string","maxLength":128},"judgment":reference("judgment"),"reselect_on_user_message":{"type":"boolean"}
+            "classifier":classifier,"branches":{"type":"array","maxItems":16,"items":branch},"default_branch_id":{"type":"string","maxLength":128},"judgment":reference("judgment"),"reselect_on_user_message":{"type":"boolean","deprecated":true,"description":"Compatibility-only no-op. Follow-ups always prefer a valid held candidate within the newly selected group."}
         }),
     );
     let smart = object(
@@ -90,11 +84,10 @@ fn definitions() -> Value {
             "economy",
             "primary",
             "judgment",
-            "reselect_on_user_message",
             "classifier",
             "complex_keywords",
         ],
-        json!({"economy":reference("candidates"),"primary":reference("candidates"),"judgment":reference("judgment"),"reselect_on_user_message":{"type":"boolean"},"classifier":classifier,"complex_keywords":{"type":"array","maxItems":64,"items":{"type":"string","maxLength":64}}}),
+        json!({"economy":reference("candidates"),"primary":reference("candidates"),"judgment":reference("judgment"),"reselect_on_user_message":{"type":"boolean","deprecated":true,"description":"Compatibility-only no-op. Follow-ups always prefer a valid held candidate within the newly selected group."},"classifier":classifier,"complex_keywords":{"type":"array","maxItems":64,"items":{"type":"string","maxLength":64}}}),
     );
     let free = object(
         &["candidates", "primary", "primary_fallback"],

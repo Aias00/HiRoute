@@ -162,3 +162,52 @@ fn context_window_round_trips_without_changing_omitted_legacy_limits() {
         assert!(serde_json::from_value::<PlanEditorStateV2>(wire).is_err());
     }
 }
+
+#[test]
+fn retired_follow_up_field_can_be_omitted_without_rewriting_legacy_values() {
+    let released: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/released-plan-editor.v2.json")).unwrap();
+    let mut draft: PlanEditorStateV2 = serde_json::from_value(released["editor"].clone()).unwrap();
+    draft.validate_draft().unwrap();
+    draft.mode = PlanEditorMode::SmartSaving;
+    draft.smart.economy = draft.candidates.clone();
+    draft.smart.primary = draft.candidates.clone();
+    for legacy in [false, true] {
+        draft.smart.reselect_on_user_message = legacy;
+        let bytes = serde_json::to_vec(&draft).unwrap();
+        let reopened: PlanEditorStateV2 = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(serde_json::to_vec(&reopened).unwrap(), bytes);
+        let authored = reopened.effective().unwrap();
+        assert_eq!(
+            authored
+                .editor(None)
+                .unwrap()
+                .smart
+                .reselect_on_user_message,
+            legacy
+        );
+    }
+    let mut omitted = serde_json::to_value(&draft).unwrap();
+    omitted["smart"]
+        .as_object_mut()
+        .unwrap()
+        .remove("reselect_on_user_message");
+    let current: PlanEditorStateV2 = serde_json::from_value(omitted.clone()).unwrap();
+    assert!(!current.smart.reselect_on_user_message);
+    let mut authoring = serde_json::to_value(current.effective().unwrap()).unwrap();
+    authoring["strategy"]
+        .as_object_mut()
+        .unwrap()
+        .remove("reselect_on_user_message");
+    let authoring: AgentPlanAuthoringV2 = serde_json::from_value(authoring).unwrap();
+    authoring.validate().unwrap();
+    assert!(
+        !authoring
+            .editor(None)
+            .unwrap()
+            .smart
+            .reselect_on_user_message
+    );
+    omitted["smart"]["reselect_on_user_message"] = serde_json::json!("true");
+    assert!(serde_json::from_value::<PlanEditorStateV2>(omitted).is_err());
+}
