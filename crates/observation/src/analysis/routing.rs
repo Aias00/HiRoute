@@ -154,17 +154,21 @@ pub(super) fn transitions(rows: &[Row]) -> Vec<AnalysisTransitionV1> {
             reason: None,
         };
         result.push(transition.clone());
-        if own.within_request_fallback == Some(true) || r.credential_relay {
-            let mut within = transition;
-            within.kind = if own.within_request_fallback == Some(true) {
-                AnalysisTransitionKindV1::WithinRequestFallback
-            } else {
-                AnalysisTransitionKindV1::CredentialRelay
-            };
+        for kind in [
+            (own.within_request_fallback == Some(true))
+                .then_some(AnalysisTransitionKindV1::WithinRequestFallback),
+            r.credential_relay
+                .then_some(AnalysisTransitionKindV1::CredentialRelay),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            let mut within = transition.clone();
+            within.kind = kind;
             within.previous_session_id = None;
             within.previous_request_id = None;
             within.previous_model = None;
-            within.model_changed = Some(own.within_request_fallback == Some(true));
+            within.model_changed = Some(kind == AnalysisTransitionKindV1::WithinRequestFallback);
             within.reasoning_changed = None;
             result.push(within);
         }
