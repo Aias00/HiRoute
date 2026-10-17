@@ -44,6 +44,14 @@ try {
   await shot(`timeline-${lang}-${theme}-${width}`);
   results.push({id:`timeline.late-score-and-request-selection.${lang}.${theme}.${width}`,status:'passed'});
  }
+ await open('lang=en&view=timeline&stale-timeline=1');
+ await waitFor(client,`document.querySelectorAll('.routing-turn').length===2`);
+ await waitFor(client,`document.querySelectorAll('.routing-turn').length===3`);
+ assert.equal(await evaluate(client,`document.querySelector('.routing-timeline [role=alert]')`),null);
+ assert.ok(await evaluate(client,`document.querySelector('.routing-turn').textContent.includes('0.40')`));
+ assert.equal(await evaluate(client,`trialTrace.filter(x=>x.command==='observation_read'&&x.payload.request.intent.view==='routing_timeline')[2].payload.request.intent.query.after_watermark`),null);
+ await shot('timeline-stale-cursor-recovered-en-755');
+ results.push({id:'timeline.stale-cursor.rebuilds-and-appends-without-manual-refresh',status:'passed'});
  await open('lang=en&view=editor&division=1',755,600);
  await click('[role="tab"]','Model performance');await waitFor(client,`!!document.querySelector('.trust-evidence-row')`);await click('summary','Level suggestions');await click('button','Review division draft');
  await waitFor(client,`!!document.querySelector('.division-draft-form') && document.querySelector('.division-draft-form').textContent.includes('DeepSeek trial')`);

@@ -49,8 +49,9 @@ export function RoutingTimeline({ session, language, active, refreshVersion, req
       } catch (e) {
         if (controller.signal.aborted) return;
         const code = safeDiagnosticCode(e, 'OBSERVATION_UNAVAILABLE');
-        if (code.includes('STALE')) { watermark.current = null; stored.current.clear(); setTurns([]); }
-        setError(code); schedule(2000);
+        const stale = code.toLowerCase().includes('stale') && watermark.current !== null;
+        if (stale) { watermark.current = null; stored.current.clear(); setTurns([]); setLoaded(false); }
+        setError(code); schedule(stale ? 0 : 2000);
       } finally { inFlight = false; }
     }
     const visible = () => { if (document.visibilityState === 'visible') void load(); else window.clearTimeout(timer); };
@@ -67,7 +68,7 @@ export function RoutingTimeline({ session, language, active, refreshVersion, req
   const amount = (cost: Cost) => cost.known_micros === null || !cost.currency ? text('金额未知', 'Amount unknown') : `${formatMoney(cost.currency, (cost.known_micros / 1_000_000).toFixed(4))}${cost.unknown_contributions ? text(' + 未知部分', ' + unknown portion') : ''}`;
   return <section className="routing-timeline" aria-label={text('路由时间线', 'Routing timeline')}>
     <header className="routing-timeline-heading"><h3>{text('路由时间线', 'Routing timeline')}</h3><span className="muted">{text('可见时每 2 秒更新', 'Updates every 2 s while visible')}</span></header>
-    {error && <div className="callout warn" role="alert" data-error-code={error}><span>{error.includes('SCOPE_TOO_LARGE') ? text('这条会话超出完整读取范围，暂时无法显示时间线。', 'This session exceeds the complete-read limit; its timeline is unavailable.') : text('更新暂时不可用，已读取内容保留。', 'Updates are temporarily unavailable. Loaded records are retained.')}</span><button className="btn" onClick={() => setRetry(n => n + 1)}>{text('重试', 'Retry')}</button></div>}
+    {error && <div className="callout warn" role="alert" data-error-code={error}><span>{error.toLowerCase().includes('scope_too_large') ? text('这条会话超出完整读取范围，暂时无法显示时间线。', 'This session exceeds the complete-read limit; its timeline is unavailable.') : text('更新暂时不可用，已读取内容保留。', 'Updates are temporarily unavailable. Loaded records are retained.')}</span><button className="btn" onClick={() => setRetry(n => n + 1)}>{text('重试', 'Retry')}</button></div>}
     {!loaded && !error && <p role="status">{text('正在读取轮次…', 'Reading turns…')}</p>}
     {loaded && !turns.length && <p className="muted">{text('还没有可显示的轮次。', 'No recorded turns yet.')}</p>}
     <div className="routing-turn-list" aria-label={text('Agent 轮次', 'Agent turns')}>
