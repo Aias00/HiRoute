@@ -341,6 +341,9 @@ def worker(request):
                      home / '.local/share/hiroute/standalone.json', home / '.local/bin/hiroute.exe'):
             if path.exists():
                 raise ValueError('Disposable installed-product gate found an existing installation')
+        if (request['binary'] == 'windows_desktop.exe' and
+                request['case'] == 'actual_nsis_silent_install_repeat_console_and_uninstall_preserve_data'):
+            profile_helper(request).require_fresh_nsis_packages(home)
         environment = os.environ.copy()
         environment.update(config['environment'])
         for path in config['environment'].values():

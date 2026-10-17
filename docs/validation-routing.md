@@ -188,7 +188,9 @@ python3 scripts/validation.py windows run --harness BUNDLE_ID --product BUNDLE_I
 ```
 
 This bounded case requires a fresh profile in the configured existing standard
-session, rejects even deny-only Administrators membership, and uses the actual
+session, including an absent or empty versioned-package base. Retained payloads
+are refused before installer invocation so backlog cleanup cannot consume the
+bounded fresh-install scenario. It rejects even deny-only Administrators membership, and uses the actual
 NSIS `/S` entry for installation, repeat installation and uninstall. It verifies
 default login/tray choices, production Control/Gateway and packaged console
 readiness, and data preservation. Its result explicitly leaves WebView interaction,

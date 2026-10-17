@@ -138,6 +138,12 @@ def candidate_uninstaller(native_home, local_app_data, inspected, product, shell
     return uninstaller, install
 
 
+def require_fresh_nsis_packages(native_home):
+    packages = plain(native_home / '.local/lib/hiroute')
+    if packages.exists() and (not packages.is_dir() or next(packages.iterdir(), None) is not None):
+        raise ValueError('Fresh NSIS acceptance requires no retained package roots; use the Rust cleanup entry first')
+
+
 def archive_orphaned_data(native_home, local_app_data, destination, inspected, activity):
     """Preserve every byte; installed products and live/managed data are refused."""
     if activity.get('administrator_groups') is not False:

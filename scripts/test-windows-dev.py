@@ -248,6 +248,18 @@ class Runner(unittest.TestCase):
         self.assertEqual(profiles.extended_windows_path(r'\\server\share\data'), r'\\?\UNC\server\share\data')
         self.assertEqual(profiles.extended_windows_path(r'\\?\C:\data'), r'\\?\C:\data')
 
+    def test_fresh_nsis_case_rejects_old_payloads_before_installation(self):
+        native_home = self.root / 'account'
+        profiles.require_fresh_nsis_packages(native_home)
+        packages = native_home / '.local/lib/hiroute'
+        packages.mkdir(parents=True)
+        profiles.require_fresh_nsis_packages(native_home)
+        old = packages / 'old-version'
+        old.mkdir()
+        with self.assertRaisesRegex(ValueError, 'retained package roots'):
+            profiles.require_fresh_nsis_packages(native_home)
+        self.assertTrue(old.exists())
+
     def test_orphaned_data_is_archived_with_complete_hashes_and_native_files_untouched(self):
         native_home, local, roots, evidence = self.orphaned_profile()
         native = native_home / '.codex/config.toml'
