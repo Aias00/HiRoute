@@ -256,11 +256,13 @@ class Candidate:
         self.run("npm.cmd", "run", "tauri", "--", "build", "--ci", "--target", self.target,
                  "--features", "shell-runtime", "--no-bundle", "--", "--locked", cwd=shell, env=environment)
         executable = REPO / "target" / self.target / "release/hiroute-shell.exe"
+        self.run("npm.cmd", "run", "tauri", "--", "bundle", "--ci", "--target", self.target,
+                 "--features", "shell-runtime", "--bundles", "nsis", "--no-sign", cwd=shell, env=environment)
+        # Bundling can rewrite PE resources. Bind the final embedded image,
+        # including its CRT audit, rather than the pre-bundle executable.
         image = module("windows-native-runtime-audit").image_record(executable.read_bytes(), "hiroute-shell.exe", "windows-desktop-release")
         if image["imports"]["debug_crt"] or image["imports"]["release_vc_runtime"]:
             raise ValueError("Windows Desktop has an unexpected CRT dependency")
-        self.run("npm.cmd", "run", "tauri", "--", "bundle", "--ci", "--target", self.target,
-                 "--features", "shell-runtime", "--bundles", "nsis", "--no-sign", cwd=shell, env=environment)
         # Tauri CLI 2.11.4 uses product_version_arch-setup.exe. Select that
         # exact candidate path; retained installers from other versions are irrelevant.
         produced = REPO / "target" / self.target / "release/bundle/nsis" / f"HiRoute_{self.version}_x64-setup.exe"

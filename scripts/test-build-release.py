@@ -255,6 +255,33 @@ class CandidateTests(unittest.TestCase):
             packager.stage(manifest, archive, destination)
         self.assertEqual((destination / "hiroute.exe").read_bytes(), b"changed owned entry")
 
+    def test_windows_shell_identity_measures_post_bundle_bytes_and_crt_imports(self):
+        result = self.build_windows_candidate()
+        payloads = Path(result["internal_payloads"])
+        files = [next(payloads.glob("*.tar.gz")), next(payloads.glob("*.json"))]
+        executable = self.root / "target" / self.target / "release/hiroute-shell.exe"
+        delayed = []
+
+        def command(*args, **kwargs):
+            if "--no-bundle" in args:
+                pe(executable, 0x8664)
+            if "bundle" in args:
+                pe(executable, 0x8664, delayed)
+                executable.write_bytes(executable.read_bytes() + b"final PE resources")
+                installer = executable.parent / "bundle/nsis" / f"HiRoute_{self.version}_x64-setup.exe"
+                installer.parent.mkdir(parents=True, exist_ok=True)
+                installer.write_bytes(b"fixture NSIS package")
+            return ""
+
+        with patch.object(self.candidate, "standalone", return_value=(None, files)), \
+                patch.object(self.candidate, "run", side_effect=command):
+            self.candidate.desktop_windows()
+            identity = self.candidate.result["desktop_result"]
+            self.assertEqual(identity["shell_image"]["sha256"], MODULES["package-windows-shell"].digest(executable))
+            delayed.append("VCRUNTIME140_1.dll")
+            with self.assertRaisesRegex(ValueError, "unexpected CRT dependency"):
+                self.candidate.desktop_windows()
+
     def test_desktop_publication_rejects_partial_or_misbound_native_attestation(self):
         # Verifier-shape regression only; fabricated JSON is never installation evidence.
         packager = MODULES["package-windows-shell"]

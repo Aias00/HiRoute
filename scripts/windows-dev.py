@@ -202,10 +202,12 @@ def bundle_desktop(result_path, log_path, output):
     result = json.loads(result_path.read_text())
     sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=REPO, text=True).strip()
     identity = result.get('desktop_result', {})
+    shell_sha256 = identity.get('shell_image', {}).get('sha256', '')
     artifact = result.get('website_artifact', {})
     if (result.get('revision') != sha or result.get('target') != 'x86_64-pc-windows-msvc'
             or result.get('status') != 'awaiting_runtime' or result.get('package_integrity') != 'green'
             or identity.get('revision') != sha or identity.get('native_runtime') != 'not_executed'
+            or not re.fullmatch('[a-f0-9]{64}', shell_sha256)
             or artifact.get('kind') != 'desktop' or artifact.get('format') != 'nsis'
             or artifact.get('platform') != 'Windows' or artifact.get('architecture') != 'x86_64'):
         raise ValueError('A matching unassessed native x64 NSIS candidate is required')
@@ -247,7 +249,7 @@ def bundle_desktop(result_path, log_path, output):
     files = {'installer.exe': installer, 'windows_desktop.exe': harness,
              **{name: payload / name for name in ('hiroute.exe', 'hirouted.exe')}}
     manifest = dict(source_revision=sha, target='x86_64-pc-windows-msvc', installer_format='nsis',
-                    native_ci_assessment='not_assessed', files={})
+                    shell_sha256=shell_sha256, native_ci_assessment='not_assessed', files={})
     with zipfile.ZipFile(output, 'x', compression=zipfile.ZIP_DEFLATED, compresslevel=1) as archive:
         for name, path in files.items():
             manifest['files'][name] = dict(sha256=digest(path), bytes=path.stat().st_size)

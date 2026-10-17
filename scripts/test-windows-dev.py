@@ -133,6 +133,7 @@ class Runner(unittest.TestCase):
         result = dict(revision=sha, target='x86_64-pc-windows-msvc', status='awaiting_runtime',
                       package_integrity='green', assets=str(assets),
                       desktop_result=dict(revision=sha, native_runtime='not_executed',
+                                          shell_image=dict(sha256='c' * 64),
                                           installer_sha256=controller.digest(installer), installer_size=installer.stat().st_size,
                                           standalone_manifest_sha256=controller.digest(payload / 'package-manifest.json')),
                       website_artifact=dict(kind='desktop', format='nsis', platform='Windows', architecture='x86_64',
@@ -150,6 +151,7 @@ class Runner(unittest.TestCase):
             with zipfile.ZipFile(output) as archive:
                 manifest = json.loads(archive.read('manifest.json'))
                 self.assertEqual(manifest['installer_format'], 'nsis')
+                self.assertEqual(manifest['shell_sha256'], 'c' * 64)
                 self.assertEqual(archive.read('hirouted.exe'), b'embedded-hirouted.exe')
             harness.write_bytes(images.image(('KERNEL32.dll', 'VCRUNTIME140.dll')))
             with self.assertRaisesRegex(ValueError, 'static CRT'):

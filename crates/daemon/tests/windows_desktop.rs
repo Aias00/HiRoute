@@ -181,9 +181,12 @@ fn actual_nsis_silent_install_repeat_console_and_uninstall_preserve_data() {
     );
     let revision = manifest["source_revision"].as_str().unwrap();
     assert_eq!(Some(revision), option_env!("HIROUTE_BUILD_SOURCE_SHA"));
+    let shell_sha256 = manifest["shell_sha256"].as_str().unwrap();
+    assert_eq!(shell_sha256.len(), 64);
 
     run(&installer, &["/S"], &evidence, "install");
     assert!(programs.join("hiroute-shell.exe").is_file());
+    assert_eq!(hash(&programs.join("hiroute-shell.exe")), shell_sha256);
     assert!(!programs.starts_with(&layout.state_root));
     assert!(!layout.state_root.starts_with(&programs));
     let cli_path = layout.home.join(".local/bin/hiroute.exe");
@@ -218,6 +221,7 @@ fn actual_nsis_silent_install_repeat_console_and_uninstall_preserve_data() {
     assert_eq!(preferences["tray_enabled"], true);
     console_ready(&cli_path, &evidence, "fresh");
     run(&installer, &["/S"], &evidence, "repeat");
+    assert_eq!(hash(&programs.join("hiroute-shell.exe")), shell_sha256);
     console_ready(&cli_path, &evidence, "repeated");
     hiroute_platform::windows::lifecycle::drain(
         &layout.lifecycle_endpoint(),
@@ -226,6 +230,7 @@ fn actual_nsis_silent_install_repeat_console_and_uninstall_preserve_data() {
     )
     .unwrap();
     run(&installer, &["/P", "/UPDATE"], &evidence, "passive-update");
+    assert_eq!(hash(&programs.join("hiroute-shell.exe")), shell_sha256);
     console_ready(&cli_path, &evidence, "passive-updated");
 
     let sentinel = layout.state_root.join("nsis-preserved-data.txt");

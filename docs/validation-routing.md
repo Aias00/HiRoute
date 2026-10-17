@@ -176,7 +176,7 @@ no account and establishes no upgrade, restoration or migration acceptance.
 
 For the NSIS candidate, manually dispatch `build-release-platform.yml` with its
 default x64 Windows/Desktop options. Its `artifacts/windows-desktop` upload
-contains a `development-bundle.zip` made from the measured installer, embedded
+contains a `development-bundle.zip` made from the measured installer, final shell image hash, embedded
 product binaries and exact compiled installer test. The explicitly declared NSIS
 entry has an x86 bootstrap stub; ordinary product and test images remain x64.
 Stage this bundle with the same `windows stage` entry, then select:
