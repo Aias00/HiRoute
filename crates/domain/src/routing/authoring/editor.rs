@@ -15,6 +15,8 @@ impl AgentPlanAuthoringV2 {
             branch_routing: None,
             candidates: vec![],
             smart: SmartEditorV2 {
+                native_protocol: None,
+                assessment_review: None,
                 economy: vec![],
                 primary: vec![],
                 judgment: Default::default(),
@@ -40,6 +42,8 @@ impl AgentPlanAuthoringV2 {
                 editor.candidates = candidates.clone();
             }
             AgentPlanStrategyV2::SmartSaving {
+                native_protocol,
+                assessment_review,
                 economy,
                 primary,
                 judgment,
@@ -48,6 +52,8 @@ impl AgentPlanAuthoringV2 {
                 complex_keywords,
             } => {
                 editor.smart = SmartEditorV2 {
+                    native_protocol: native_protocol.clone(),
+                    assessment_review: assessment_review.clone(),
                     economy: economy.clone(),
                     primary: primary.clone(),
                     judgment: judgment.clone(),

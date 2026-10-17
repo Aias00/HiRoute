@@ -103,6 +103,7 @@ pub(crate) enum ClassifierAuthenticationAuthorityV1 {
 /// It contains no secret material and cannot authorize an ordinary model route.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct RestBranchClassifierAuthorityV1 {
+    pub(crate) native_protocol: Option<hiroute_domain::FrozenNativeProtocolV1>,
     pub(crate) endpoint: Arc<str>,
     pub(crate) http_authority: Arc<str>,
     pub(crate) request_path: Arc<str>,

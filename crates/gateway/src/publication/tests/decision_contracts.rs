@@ -21,6 +21,7 @@ fn branch_snapshot() -> GatewayPublicationSnapshotV3 {
         })
         .collect();
     routing.request_owned = AliasRequestOwnedRouteV1::Branches {
+        native_protocol: None,
         classifier: classifier.clone(),
         branches,
         default_branch_id: "review".into(),
@@ -103,6 +104,7 @@ fn custom_extension_snapshot() -> GatewayPublicationSnapshotV3 {
                 agent_plan_id: "legacy/smart".into(),
                 plan_display_name: Some("Smart".into()),
                 request_owned: AliasRequestOwnedRouteV1::Classified {
+                    native_protocol: None,
                     judgment: Default::default(),
                     reselect_on_user_message: false,
                     classifier: AliasComplexityClassifierV1 {

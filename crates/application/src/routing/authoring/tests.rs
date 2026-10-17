@@ -55,6 +55,8 @@ fn publication_requires_the_exact_saved_decision_revision_for_both_modes() {
         change.editor.smart.primary = change.editor.candidates.clone();
         change.editor.smart.classifier = classifier.clone();
         change.editor.branch_routing = Some(BranchRoutingV1 {
+            native_protocol: None,
+            assessment_review: None,
             classifier,
             branches: ["writing", "review"]
                 .map(|id| RouteBranchV1 {

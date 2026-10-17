@@ -72,6 +72,8 @@ fn branches_publish_distinct_reasoning_and_freeze_whole_judgment_overrides() {
     desired.mode = PlanEditorMode::CustomBranches;
     desired.strategy = AgentPlanStrategyV2::Branches {
         routing: BranchRoutingV1 {
+            native_protocol: None,
+            assessment_review: None,
             classifier: ComplexityClassifierModeV1::DecisionService {
                 service: Box::new(hiroute_domain::DecisionServiceV1 {
                     id: "decision-fixture".into(),
@@ -243,6 +245,8 @@ fn smart_regular_failover_always_includes_primary_group() {
     let mut desired = desired();
     desired.mode = PlanEditorMode::SmartSaving;
     desired.strategy = AgentPlanStrategyV2::SmartSaving {
+        native_protocol: None,
+        assessment_review: None,
         economy: vec![selection("economy-b"), selection("economy-a")],
         primary: vec![selection("primary-b"), selection("primary-a")],
         judgment: JudgmentSettingsV1::default(),
@@ -272,6 +276,8 @@ fn saved_classifier_is_preserved_in_the_materialized_route() {
     let mut desired = desired();
     desired.mode = PlanEditorMode::SmartSaving;
     desired.strategy = AgentPlanStrategyV2::SmartSaving {
+        native_protocol: None,
+        assessment_review: None,
         economy: vec![selection("economy-a")],
         primary: vec![selection("primary-a")],
         judgment: JudgmentSettingsV1::default(),
@@ -311,6 +317,8 @@ fn retired_follow_up_values_preserve_sealed_plan_and_route_digests() {
     let mut desired = desired();
     desired.mode = PlanEditorMode::SmartSaving;
     desired.strategy = AgentPlanStrategyV2::SmartSaving {
+        native_protocol: None,
+        assessment_review: None,
         economy: vec![selection("economy-a")],
         primary: vec![selection("primary-a")],
         judgment: JudgmentSettingsV1::default(),

@@ -166,11 +166,15 @@ pub struct MaterializedModelGroupV1 {
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum MaterializedRouteV1 {
     Branches {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        native_protocol: Option<hiroute_domain::FrozenNativeProtocolV1>,
         branches: Vec<hiroute_domain::MaterializedBranchV1>,
         default_branch_id: String,
         reselect_on_user_message: bool,
     },
     SmartSaving {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        native_protocol: Option<hiroute_domain::FrozenNativeProtocolV1>,
         judgment: Box<hiroute_domain::JudgmentSettingsV1>,
         simple_group_id: String,
         simple_fallback_group_ids: Vec<String>,

@@ -73,12 +73,16 @@ pub struct AliasComplexityClassifierV1 {
 #[serde(tag = "strategy", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AliasRequestOwnedRouteV1 {
     Branches {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        native_protocol: Option<hiroute_domain::FrozenNativeProtocolV1>,
         classifier: AliasComplexityClassifierV1,
         branches: Vec<hiroute_domain::MaterializedBranchV1>,
         default_branch_id: String,
         reselect_on_user_message: bool,
     },
     Classified {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        native_protocol: Option<hiroute_domain::FrozenNativeProtocolV1>,
         classifier: AliasComplexityClassifierV1,
         judgment: hiroute_domain::JudgmentSettingsV1,
         reselect_on_user_message: bool,

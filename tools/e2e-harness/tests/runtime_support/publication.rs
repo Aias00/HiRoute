@@ -127,6 +127,7 @@ pub(super) fn snapshot(
         );
         (
             AliasRequestOwnedRouteV1::Classified {
+                native_protocol: None,
                 judgment: Default::default(),
                 // Retained legacy value has no effect on fresh group judgment
                 // or candidate continuity within the selected group.
@@ -418,6 +419,7 @@ pub(super) fn use_builtin_branch_decision(
     };
     if smart {
         routing.request_owned = AliasRequestOwnedRouteV1::Classified {
+            native_protocol: None,
             classifier,
             judgment: judgment(hiroute_domain::SMART_SAVING_SCOPE_ID),
             reselect_on_user_message: false,
@@ -444,6 +446,7 @@ pub(super) fn use_builtin_branch_decision(
         },
     ];
     routing.request_owned = AliasRequestOwnedRouteV1::Branches {
+        native_protocol: None,
         classifier,
         branches: ids
             .into_iter()

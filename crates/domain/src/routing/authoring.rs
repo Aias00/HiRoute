@@ -31,6 +31,10 @@ pub struct WorkerPlanV1 {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct SmartEditorV2 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_protocol: Option<super::NativeProtocolV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assessment_review: Option<super::AssessmentReviewsV1>,
     pub economy: Vec<CandidateSelectionV1>,
     pub primary: Vec<CandidateSelectionV1>,
     pub judgment: super::JudgmentSettingsV1,
@@ -144,6 +148,16 @@ impl PlanEditorStateV2 {
                 candidates: self.candidates.clone(),
             },
             PlanEditorMode::SmartSaving => AgentPlanStrategyV2::SmartSaving {
+                native_protocol: if super::native_mode(&self.smart.classifier) {
+                    self.smart.native_protocol.clone()
+                } else {
+                    None
+                },
+                assessment_review: if super::native_mode(&self.smart.classifier) {
+                    self.smart.assessment_review.clone()
+                } else {
+                    None
+                },
                 economy: self.smart.economy.clone(),
                 primary: self.smart.primary.clone(),
                 judgment: self.smart.judgment.clone(),
@@ -201,6 +215,10 @@ pub enum AgentPlanStrategyV2 {
         routing: super::BranchRoutingV1,
     },
     SmartSaving {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        native_protocol: Option<super::NativeProtocolV1>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        assessment_review: Option<super::AssessmentReviewsV1>,
         economy: Vec<CandidateSelectionV1>,
         primary: Vec<CandidateSelectionV1>,
         judgment: super::JudgmentSettingsV1,
@@ -270,12 +288,25 @@ impl AgentPlanAuthoringV2 {
                     classifier,
                     complex_keywords,
                     judgment,
+                    native_protocol,
+                    assessment_review,
                     ..
                 },
             ) => {
                 if !judgment.validate() {
                     return Err(PlanAuthoringError::InvalidStrategy);
                 }
+                if native_protocol.is_some() && !super::native_mode(classifier) {
+                    return Err(PlanAuthoringError::InvalidStrategy);
+                }
+                super::validate_assessment_scope(
+                    native_protocol.as_ref(),
+                    assessment_review.as_ref(),
+                    super::SMART_SAVING_SCOPE_ID,
+                    false,
+                    judgment,
+                )
+                .map_err(PlanAuthoringError::NativeProtocol)?;
                 validate(economy)?;
                 validate(primary)?;
                 classifier
@@ -310,6 +341,8 @@ impl AgentPlanAuthoringV2 {
 
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum PlanAuthoringError {
+    #[error(transparent)]
+    NativeProtocol(super::NativeProtocolError),
     #[error("plan authoring schema is unsupported")]
     UnsupportedSchema,
     #[error("plan draft exceeds bounds or contains unsafe metadata")]

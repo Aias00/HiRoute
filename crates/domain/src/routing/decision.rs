@@ -243,6 +243,10 @@ pub struct RouteBranchV1 {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct BranchRoutingV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_protocol: Option<super::NativeProtocolV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assessment_review: Option<super::AssessmentReviewsV1>,
     pub classifier: ComplexityClassifierModeV1,
     pub branches: Vec<RouteBranchV1>,
     pub default_branch_id: String,
@@ -253,6 +257,25 @@ pub struct BranchRoutingV1 {
 }
 impl BranchRoutingV1 {
     pub fn validate(&self, draft: bool) -> bool {
+        if !draft
+            && (self.native_protocol.is_some() && !super::native_mode(&self.classifier)
+                || self.branches.iter().any(|b| {
+                    super::validate_assessment_scope(
+                        self.native_protocol.as_ref(),
+                        self.assessment_review.as_ref(),
+                        &b.id,
+                        b.judgment.is_none(),
+                        self.judgment_for(b),
+                    )
+                    .is_err()
+                        || super::incompatible_native_reference(
+                            self.native_protocol.is_some(),
+                            &b.condition,
+                        )
+                }))
+        {
+            return false;
+        }
         if self.branches.len() > 16
             || (!draft && self.branches.len() < 2)
             || !(if draft {
