@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Development-runner admission regressions, not native product evidence."""
 import base64
+import contextlib
+import io
 import hashlib
 import importlib.util
 import json
@@ -149,6 +151,36 @@ class Runner(unittest.TestCase):
             desktop.ui_action(self.root, {'desktop_action':'snapshot'}, Path('shell.exe'), 42)
         run.assert_not_called()
         self.assertFalse(json.loads((self.root / 'desktop-state.json').read_text())['interactive'])
+
+    def test_bootstrap_publishes_once_and_preserves_changed_content(self):
+        destination = self.root / 'helper.py'
+        temporary = self.root / 'upload'
+        payload = b'validated helper'
+        checksum = hashlib.sha256(payload).hexdigest()
+        entries = [dict(path=str(destination),sha256=checksum)]
+        def execute(publication=None):
+            output=io.StringIO()
+            with contextlib.redirect_stdout(output):
+                exec(controller.bootstrap_code(str(self.root), entries, publication), {})
+            return json.loads(output.getvalue())
+        self.assertEqual(execute(), [])
+        temporary.write_bytes(payload)
+        self.assertEqual(execute(dict(path=str(destination),temporary=str(temporary),sha256=checksum)),[checksum])
+        before=destination.stat().st_mtime_ns
+        self.assertEqual(execute(), [checksum])
+        self.assertEqual(destination.stat().st_mtime_ns,before)
+        destination.write_bytes(b'changed')
+        with self.assertRaisesRegex(ValueError,'identity changed'):
+            execute()
+        self.assertEqual(destination.read_bytes(),b'changed')
+
+    def test_wait_bootstrap_does_not_upload_over_live_helpers(self):
+        remote=controller.Remote(dict(root=str(self.root),python='python.exe',identity_file='key'))
+        checksums=[controller.digest(Path(__file__).with_name(name)) for name in
+                   ('windows-dev-host.py','windows-dev-profile.py','windows-desktop-session.py')]
+        with patch.object(remote,'execute',return_value=json.dumps(checksums)),patch.object(remote,'upload') as upload:
+            remote.bootstrap()
+        upload.assert_not_called()
 
     def test_archive_traversal_and_unmanifested_entries_fail(self):
         for name in ('../escape', '/absolute', 'C:/absolute', 'dir\\file.exe', 'other.exe'):

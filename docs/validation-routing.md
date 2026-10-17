@@ -181,6 +181,13 @@ through the installed public CLI for preparation and effect readback; it does
 not establish a UI action. The selected standard account must have no
 Administrators SID, including deny-only membership. All native observations and
 screenshots remain in ignored, private evidence.
+Before native input, the runner checks that the existing session's input desktop
+is accessible and matches its ordinary desktop. `--action desktop-state` reads
+that prerequisite without unlocking or creating a login. UI observations require
+the measured window to be foreground and use only its visible native controls.
+Content-addressed validator helpers are verified and published once by atomic
+rename. Wait/status/collection never overwrite helper files that a running
+standard-user task may be importing.
 
 Stage separate product and harness bundles when reusing an unchanged product for
 a test-only repair. Results record both full revisions, binary hashes, driver hash,

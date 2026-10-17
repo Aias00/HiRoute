@@ -95,6 +95,39 @@ def python_command(binary, code):
             encoded + '\'))"; exit $LASTEXITCODE')
 
 
+def bootstrap_code(root, entries, publish=None):
+    """Publish a content-addressed helper once; wait/status never rewrite it."""
+    return ('bootstrap_root=' + repr(root) + '\nbootstrap_entries=' + repr(entries) +
+            '\nbootstrap_publication=' + repr(publish) + '\n') + '''from pathlib import Path
+import hashlib,json,stat
+def plain(value):
+ p=Path(value)
+ for entry in [p,*p.parents]:
+  try: info=entry.lstat()
+  except FileNotFoundError: continue
+  if stat.S_ISLNK(info.st_mode) or getattr(info,'st_file_attributes',0)&1024: raise ValueError('Reparse bootstrap path')
+ return p
+root=plain(bootstrap_root)
+root.mkdir(parents=True,exist_ok=True)
+def verify(value,checksum):
+ p=plain(value)
+ if not p.is_file() or p.stat().st_nlink!=1 or hashlib.sha256(p.read_bytes()).hexdigest()!=checksum: raise ValueError('Bootstrap helper identity changed')
+if bootstrap_publication:
+ source=plain(bootstrap_publication['temporary']);target=plain(bootstrap_publication['path']);checksum=bootstrap_publication['sha256']
+ verify(source,checksum)
+ if target.exists():
+  verify(target,checksum)
+  source.unlink()
+ else: source.rename(target)
+present=[]
+for entry in bootstrap_entries:
+ p=plain(entry['path'])
+ if p.exists():
+  verify(p,entry['sha256']);present.append(entry['sha256'])
+print(json.dumps(present))
+'''
+
+
 class Remote:
     def __init__(self, config):
         self.config = config
@@ -118,22 +151,26 @@ class Remote:
         # Uploading source avoids Windows command-line length limits. Only a small
         # bootstrap enters argv; request data is a separately hashed JSON file.
         root = self.config['root']
-        code = "from pathlib import Path; import os; p=Path(" + repr(root) + "); " + (
-            "assert all(not x.exists() or not (x.lstat().st_file_attributes & 1024) "
-            "for x in [p,*p.parents]); p.mkdir(parents=True,exist_ok=True)")
-        self.execute(python_command(self.config['python'], code))
         source = REPO / 'scripts/windows-dev-host.py'
         self.driver_hash = digest(source)
         self.driver = root + '/driver-' + self.driver_hash + '.py'
-        self.upload(source, self.driver)
         profile = REPO / 'scripts/windows-dev-profile.py'
         self.profile_hash = digest(profile)
         self.profile_helper = root + '/profile-' + self.profile_hash + '.py'
-        self.upload(profile, self.profile_helper)
         desktop = REPO / 'scripts/windows-desktop-session.py'
         self.desktop_hash = digest(desktop)
         self.desktop_helper = root + '/desktop-' + self.desktop_hash + '.py'
-        self.upload(desktop, self.desktop_helper)
+        sources = [(source,self.driver,self.driver_hash),(profile,self.profile_helper,self.profile_hash),
+                   (desktop,self.desktop_helper,self.desktop_hash)]
+        entries = [dict(path=path,sha256=checksum) for _,path,checksum in sources]
+        present = json.loads(self.execute(python_command(self.config['python'], bootstrap_code(root, entries))))
+        for local,path,checksum in sources:
+            if checksum in present:
+                continue
+            temporary = path + '.upload-' + uuid.uuid4().hex
+            self.upload(local, temporary)
+            publication = dict(path=path,temporary=temporary,sha256=checksum)
+            self.execute(python_command(self.config['python'], bootstrap_code(root, entries, publication)))
 
     def call(self, action, **arguments):
         paths = ['scripts/windows-dev.py', 'scripts/windows-dev-host.py',
