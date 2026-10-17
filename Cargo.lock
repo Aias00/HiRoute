@@ -2502,6 +2502,7 @@ dependencies = [
 name = "hiroute-integrations"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "getrandom 0.3.4",
  "hiroute-application",
  "hiroute-application-api",
@@ -2512,7 +2513,9 @@ dependencies = [
  "http",
  "nix",
  "reqwest",
+ "ring",
  "rustix",
+ "semver",
  "serde",
  "serde_json",
  "serde_yaml",

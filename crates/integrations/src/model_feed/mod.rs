@@ -1,0 +1,50 @@
+//! Signed, non-executable model facts. Registry authority always stays in the client.
+
+mod admission;
+mod contract;
+mod verification;
+
+pub use admission::*;
+pub use contract::*;
+pub use verification::{VerifiedFeed, verify_envelope};
+
+#[cfg(any(test, feature = "test-support"))]
+pub use verification::verify_envelope_with_keys;
+
+use serde::{Deserialize, Serialize};
+
+pub const MODEL_FEED_URL: &str = "https://hiroute.ai/model-feed/v1.json";
+pub const MAX_MODEL_FEED_BYTES: usize = 2 * 1024 * 1024;
+pub const MODEL_FEED_SCHEMA: &str = "hiroute.model-feed/v1";
+pub const MODEL_FEED_ENVELOPE_SCHEMA: &str = "hiroute.model-feed.envelope/v1";
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FeedFailureKind {
+    Network,
+    Size,
+    Signature,
+    Schema,
+    Validation,
+    OlderSequence,
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("{kind:?}: {message}")]
+pub struct FeedError {
+    pub kind: FeedFailureKind,
+    pub message: &'static str,
+}
+
+impl FeedError {
+    pub fn new(kind: FeedFailureKind, message: &'static str) -> Self {
+        Self { kind, message }
+    }
+
+    pub(crate) fn validation(message: &'static str) -> Self {
+        Self::new(FeedFailureKind::Validation, message)
+    }
+}
+
+#[cfg(test)]
+mod tests;

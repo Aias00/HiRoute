@@ -6,6 +6,9 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+base64.workspace = true
+semver.workspace = true
+ring = "0.17.14"
 getrandom.workspace = true
 hiroute-domain = { path = "../domain" }
 hiroute-application = { path = "../application" }
@@ -21,6 +24,9 @@ thiserror.workspace = true
 toml_edit = "=0.25.13"
 zeroize.workspace = true
 tempfile.workspace = true
+
+[features]
+test-support = []
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = ["process", "signal"] }
