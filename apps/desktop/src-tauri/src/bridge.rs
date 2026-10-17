@@ -614,6 +614,11 @@ impl LaunchPresentation {
             && !window.is_visible().unwrap_or(false)
         {
             let _ = window.show();
+            // Bare Pilot launches need foreground presentation for WebView polling.
+            #[cfg(all(feature = "desktop-pilot", debug_assertions))]
+            if std::env::var_os("HIROUTE_DESKTOP_TEST_ROOT").is_some() {
+                let _ = window.set_focus();
+            }
         }
     }
 }
