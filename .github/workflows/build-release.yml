@@ -28,6 +28,7 @@ jobs:
       target: ${{ matrix.target }}
       runner: ${{ matrix.runner }}
 
+  # Headless archives are internal test/installer payloads, never public assets.
   build-windows:
     needs: windows-validation
     strategy:

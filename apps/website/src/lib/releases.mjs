@@ -10,7 +10,6 @@ const REVISION = /^[0-9a-f]{40}$/;
 const FILENAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,239}$/;
 const STANDALONE_TARGETS = {
   Linux: { x86_64: 'x86_64-unknown-linux-gnu', aarch64: 'aarch64-unknown-linux-gnu' },
-  Windows: { x86_64: 'x86_64-pc-windows-msvc', aarch64: 'aarch64-pc-windows-msvc' },
 };
 
 function requiredText(value, field) {

@@ -70,19 +70,6 @@ enum WindowsArtifact {
         sha256: String,
         size: u64,
     },
-    Standalone {
-        platform: String,
-        architecture: String,
-        target: String,
-        format: String,
-        distribution: String,
-        filename: String,
-        sha256: String,
-        size: u64,
-        manifest_filename: String,
-        manifest_sha256: String,
-        manifest_size: u64,
-    },
 }
 fn facts(name: &str, sha: &str, size: u64) -> bool {
     !name.is_empty()
@@ -171,41 +158,6 @@ impl WebsiteReleasesV3 {
                         .revision_prefix()
                         .map_err(|_| invalid())?;
                     }
-                    WindowsArtifact::Standalone {
-                        platform,
-                        architecture,
-                        target,
-                        format,
-                        distribution,
-                        filename,
-                        sha256,
-                        size,
-                        manifest_filename,
-                        manifest_sha256,
-                        manifest_size,
-                    } => {
-                        let expected = match architecture.as_str() {
-                            "x86_64" => "x86_64-pc-windows-msvc",
-                            "aarch64" => "aarch64-pc-windows-msvc",
-                            _ => return Err(invalid()),
-                        };
-                        let prefix = format!("hiroute-{}-", release.version);
-                        let suffix = format!("-{target}.tar.gz");
-                        if platform != "Windows"
-                            || target != expected
-                            || format != "tar.gz"
-                            || distribution != "unsigned"
-                            || !facts(&filename, &sha256, size)
-                            || !facts(&manifest_filename, &manifest_sha256, manifest_size)
-                            || manifest_filename != format!("{filename}.json")
-                            || !filename
-                                .strip_prefix(&prefix)
-                                .and_then(|s| s.strip_suffix(&suffix))
-                                .is_some_and(revision_id)
-                        {
-                            return Err(invalid());
-                        }
-                    }
                 }
             }
         }
@@ -251,28 +203,26 @@ impl WebsiteReleasesV3 {
             if let Some(value) = candidates.first() {
                 let artifact: WindowsArtifact = serde_json::from_value((*value).clone())
                     .map_err(|_| "UPGRADE_CATALOG_INVALID")?;
-                if let WindowsArtifact::Desktop {
+                let WindowsArtifact::Desktop {
                     architecture,
                     distribution,
                     filename,
                     sha256,
                     size,
                     ..
-                } = artifact
-                {
-                    selected = Some((
-                        version,
-                        WindowsDesktopRelease {
-                            version: release.version.clone(),
-                            notes: release.notes.clone(),
-                            architecture,
-                            distribution,
-                            filename,
-                            sha256,
-                            size,
-                        },
-                    ));
-                }
+                } = artifact;
+                selected = Some((
+                    version,
+                    WindowsDesktopRelease {
+                        version: release.version.clone(),
+                        notes: release.notes.clone(),
+                        architecture,
+                        distribution,
+                        filename,
+                        sha256,
+                        size,
+                    },
+                ));
             }
         }
         Ok(selected.map(|(_, value)| value))
@@ -297,6 +247,19 @@ mod tests {
                 .starts_with("https://hiroute.ai/releases/0.4.0/")
         );
         assert!(catalog.windows_update("0.4.0").unwrap().is_none());
+    }
+    #[test]
+    fn windows_standalone_archives_of_either_architecture_are_never_public() {
+        for architecture in ["x86_64", "aarch64"] {
+            let mut value = fixture();
+            let target = format!("{architecture}-pc-windows-msvc");
+            let name = format!("hiroute-0.4.0-aaaaaaaaaaaa-{target}.tar.gz");
+            value["releases"][0]["artifacts"][0] = json!({"kind":"standalone","platform":"Windows",
+                "architecture":architecture,"target":target,"format":"tar.gz","distribution":"unsigned",
+                "filename":name,"sha256":"a".repeat(64),"size":100,
+                "manifest_filename":format!("{name}.json"),"manifest_sha256":"b".repeat(64),"manifest_size":200});
+            assert!(WebsiteReleasesV3::parse(&serde_json::to_vec(&value).unwrap()).is_err());
+        }
     }
     #[test]
     fn invalid_windows_artifacts_cannot_be_selected_or_smuggled_into_a_catalog() {

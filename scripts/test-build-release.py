@@ -210,23 +210,16 @@ class CandidateTests(unittest.TestCase):
     def test_windows_candidate_is_verified_as_native_pe_and_consumed_by_release_verifier(self):
         result = self.build_windows_candidate()
         self.assertEqual(result["status"], "awaiting_runtime")
-        self.assertEqual(result["website_artifact"]["platform"], "Windows")
-        self.assertEqual(result["website_artifact"]["target"], self.target)
+        self.assertNotIn("website_artifact", result)
+        self.assertNotIn("assets", result)
+        self.assertEqual(result["publication"], "internal-only")
+        self.assertEqual(result["internal_payload"]["target"], self.target)
+        self.assertEqual(len(list(Path(result["internal_payloads"]).iterdir())), 2)
         self.assertNotIn("linux_abi", result)
         crt = result["windows_crt_build"]
         self.assertEqual(crt["dependency_gate"], "green")
         self.assertEqual({image["path"] for image in crt["images"]},
                          {"bin/hiroute.exe", "bin/hirouted.exe", "libexec/cliproxyapi.exe"})
-        catalog = self.root / "releases.json"
-        catalog.write_text(json.dumps({"schema": "hiroute.website.releases/v2", "releases": [{
-            "version": self.version, "channel": "stable", "published_at": "2026-10-08T00:00:00Z",
-            "notes": {"zh": "测试", "en": "Fixture"}, "artifacts": [result["website_artifact"]],
-        }]}))
-        verified = subprocess.run(["node", str(REPO / "apps/website/scripts/release-manifest.mjs"),
-            "verify-assets", str(catalog), "--tag", f"v{self.version}", "--revision", "a" * 40,
-            "--asset-dir", result["assets"]], text=True, capture_output=True)
-        self.assertEqual(verified.returncode, 0, verified.stderr)
-        self.assertIn("2 release asset(s) verified", verified.stdout)
 
     def test_release_vc_dependency_in_delayed_daemon_import_cannot_publish_assets(self):
         with self.assertRaisesRegex(ValueError, "unexpected CRT dependency"):
@@ -238,7 +231,7 @@ class CandidateTests(unittest.TestCase):
 
     def test_windows_shell_stage_uses_verified_package_bytes_and_preserves_foreign_files(self):
         result = self.build_windows_candidate()
-        assets = Path(result["assets"])
+        assets = Path(result["internal_payloads"])
         archive = next(assets.glob("*.tar.gz"))
         manifest = next(assets.glob("*.json"))
         destination = self.root / "shell-resources/standalone"

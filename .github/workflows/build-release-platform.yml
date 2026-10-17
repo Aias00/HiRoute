@@ -102,6 +102,7 @@ jobs:
           name: release-${{ inputs.target }}${{ inputs.windows_desktop && '-desktop' || '' }}-${{ github.sha }}-${{ github.run_attempt }}
           path: |
             target/release-candidate/**/assets/*
+            target/release-candidate/**/internal-payloads/*
             target/release-candidate/**/result.json
             target/release-candidate/**/build.log
             target/release-candidate/**/linux-abi.json

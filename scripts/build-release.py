@@ -239,6 +239,9 @@ class Candidate:
                     "target": self.target, "format": "tar.gz", "distribution": "unsigned",
                     **verified["archive"], "manifest_filename": manifest.name,
                     "manifest_sha256": packager.digest(manifest), "manifest_size": manifest.stat().st_size}
+        if windows:
+            self.result["internal_payload"] = {"target": self.target, "archive": archive.name, "manifest": manifest.name}
+            artifact = None
         return artifact, [archive, manifest]
 
     def desktop_windows(self):
@@ -287,13 +290,16 @@ class Candidate:
                 lock = windows_build_lock() if self.target.endswith("-pc-windows-msvc") else module("local-rust").Store().locked(REPO)
                 with lock:
                     artifact, files = self.desktop_windows() if self.windows_desktop else self.standalone()
-            assets = self.output / "assets"
+            assets = self.output / ("internal-payloads" if artifact is None else "assets")
             assets.mkdir()
             for path in files:
                 shutil.copyfile(path, assets / path.name)
             status = "completed" if self.target.endswith("apple-darwin") else "awaiting_runtime"
-            self.result.update(status=status, package_integrity="green",
-                               website_artifact=artifact, assets=str(assets))
+            self.result.update(status=status, package_integrity="green")
+            if artifact is None:
+                self.result.update(publication="internal-only", internal_payloads=str(assets))
+            else:
+                self.result.update(website_artifact=artifact, assets=str(assets))
             return self.result
         except Exception as error:
             self.result["error"] = str(error)
