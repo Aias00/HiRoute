@@ -1,5 +1,6 @@
 import { scenario, scenarioCatalog, runScenarios } from './scenario-selection.mjs';
 import { productShellRequired } from './scenario-requirements.mjs';
+import { cProtocolScenarios } from './c-protocol-scenarios.mjs';
 const c = () => window.productShell;
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const assert = (condition, message) => { if (!condition) throw new Error(message); };
@@ -55,6 +56,7 @@ async function routing() {
   await until(() => document.querySelector('.plan-identity-fields input'), 'route editor');
 }
 const scenarios = [
+  ...cProtocolScenarios({ fresh, routing, click, until, all, text, calls, setInput, control: c }),
   scenario('desktop.models.subscription-scan.append-to-login', ['subscription-proxy', 'subscription-login'], 'Independent sign-in from an append scan creates a new connection instead of retaining the previous append target', async () => {
     let previous;
     await fresh(() => {

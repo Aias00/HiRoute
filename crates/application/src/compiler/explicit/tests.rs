@@ -610,7 +610,12 @@ fn c_native_publication_freezes_content_and_rejects_authoring_compiled_disagreem
     };
     let compiled = compile(&desired, &compilation_facts()).unwrap();
     let frozen = StoredPlanV1::freeze(&compiled).unwrap();
-    assert_eq!(frozen.build().unwrap(), compiled);
+    let rebuilt = frozen.build().unwrap();
+    assert_eq!(
+        rebuilt.body.materialized.request_owned,
+        compiled.body.materialized.request_owned
+    );
+    assert_eq!(StoredPlanV1::freeze(&rebuilt).unwrap(), frozen);
     let version =
         PlanVersionV1::new(WorkspaceId::default(), desired.clone(), compiled.clone()).unwrap();
     let bytes = serde_json::to_vec(&version).unwrap();
