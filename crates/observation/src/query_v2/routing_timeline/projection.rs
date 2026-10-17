@@ -119,7 +119,7 @@ pub(super) fn project(
             i64::try_from(*started_at_ms).map_err(|_| ObservationV2Error::Unavailable)?;
         turn.view.finished_at_ms =
             Some(i64::try_from(*finished_at_ms).map_err(|_| ObservationV2Error::Unavailable)?);
-        turn.view.plan_id = Some(plan_id.to_string());
+        turn.view.plan_id = Some(plan_id.as_str().to_owned());
         turn.view.plan_revision = Some(*plan_revision);
         turn.view.branch_id = executed_branch_id
             .clone()
@@ -341,7 +341,7 @@ fn make_turn(members: &[&Request]) -> Result<Projected, ObservationV2Error> {
             started_at_ms: first.view.started_at_ms,
             finished_at_ms: None,
             boundary: RoutingTurnBoundaryV1::Unknown,
-            plan_id: decision.and_then(|d| d.plan_id.as_ref().map(ToString::to_string)),
+            plan_id: decision.and_then(|d| d.plan_id.as_ref().map(|id| id.as_str().to_owned())),
             plan_revision: decision.and_then(|d| d.route.plan_revision()),
             branch_id: selection.as_ref().map(|s| s.branch_id.clone()),
             model_configuration_id: first.candidate.as_ref().map(|c| c.0.clone()),

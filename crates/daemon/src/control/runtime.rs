@@ -1183,7 +1183,7 @@ impl ControlStatePort for LocalControlAdapter {
         Ok(heads
             .into_iter()
             .filter(|h| h.status == hiroute_domain::PlanLifecycleV1::Enabled)
-            .map(|h| h.reference.plan_id.to_string())
+            .map(|h| h.reference.plan_id.as_str().to_owned())
             .collect())
     }
 
