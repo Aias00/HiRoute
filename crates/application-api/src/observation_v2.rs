@@ -53,7 +53,7 @@ pub enum ObservationReadIntentV2 {
     HomeValue(ObservationHomeValueQueryV2),
     ValueReport(ObservationValueReportOptionsV2),
     ApiEquivalentValue(ApiEquivalentValueOptionsV1),
-    PlanQuality(PlanQualitySamplesQuery),
+    PlanQuality(Box<PlanQualitySamplesQuery>),
     PlanTrust(PlanTrustQueryV1),
     PlanTrustReplay(PlanTrustReplayQueryV1),
     PlanTrustSuggestions(ObservationStatusQueryV2),

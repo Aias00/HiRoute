@@ -13,7 +13,7 @@ pub struct AgentPreviousRoutingQueryV1 {
 #[serde(tag = "status", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AgentPreviousRoutingPreviewV1 {
     Available {
-        spec: crate::AgentSettingsSpecV2,
+        spec: Box<crate::AgentSettingsSpecV2>,
         current_operation: hiroute_domain::OperationId,
         restored_from: std::collections::BTreeMap<String, hiroute_domain::OperationId>,
     },

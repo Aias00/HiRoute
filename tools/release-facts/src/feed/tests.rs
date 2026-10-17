@@ -101,6 +101,8 @@ fn without_model(id: &str) -> TrustedReleaseCatalog {
     for offer in &mut data.offers {
         offer.model_configuration_ids.retain(|member| member != id);
     }
+    data.offers
+        .retain(|offer| !offer.model_configuration_ids.is_empty());
     let ratings = &mut input.model_data.rating_snapshot;
     ratings.models.retain(|m| m.model_configuration_id != id);
     ratings.records.retain(|r| r.model_configuration_id != id);
@@ -115,19 +117,11 @@ fn model_feed_projection_closes_a_real_model_graph_and_preserves_first_inclusion
     let current = current();
     let id = current
         .model_data()
-        .price_rates
+        .offers
         .iter()
-        .find(|rate| {
-            current
-                .model_data()
-                .offer(&rate.offer_ref)
-                .is_some_and(|offer| {
-                    offer.billing_class != hiroute_domain::BillingClass::Free
-                        && offer.model_configuration_ids.len() > 1
-                })
-        })
-        .expect("current catalog has a paid model in a shared offer")
-        .model_configuration_id
+        .find(|offer| offer.billing_class == hiroute_domain::BillingClass::Paid)
+        .expect("current catalog has a paid offer")
+        .model_configuration_ids[0]
         .clone();
     let clients = vec![
         SupportedFeedClient {
@@ -155,7 +149,13 @@ fn model_feed_projection_closes_a_real_model_graph_and_preserves_first_inclusion
             .iter()
             .any(|r| r.kind() == "model" && r.id() == id)
     );
-    assert!(first.records.iter().any(|r| r.kind() == "price_rate"));
+    assert!(
+        first
+            .records
+            .iter()
+            .any(|r| r.kind() == "model_endpoint_capability")
+    );
+    assert!(first.records.iter().any(|r| r.kind() == "offer"));
     let admission = admit(&clients[0].catalog, &first, "0.3.2").unwrap();
     assert_eq!(admission.counts.unresolved, 0);
     let effective = clients[0].catalog.with_feed(&admission).unwrap();

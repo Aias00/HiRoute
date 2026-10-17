@@ -97,7 +97,7 @@ pub(super) fn plan_quality_samples(options: &[String]) -> Result<Value, ErrorCod
         return Err(ErrorCode::InvalidArguments);
     }
     serde_json::to_value(ObservationReadRequestV2::new(
-        ObservationReadIntentV2::PlanQuality(query),
+        ObservationReadIntentV2::PlanQuality(Box::new(query)),
     ))
     .map_err(|_| ErrorCode::Internal)
 }

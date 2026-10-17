@@ -289,10 +289,8 @@ pub(super) fn project(
 fn make_turn(members: &[&Request]) -> Result<Projected, ObservationV2Error> {
     let first = members.first().ok_or(ObservationV2Error::Unavailable)?;
     let mut position = Position::default();
-    let mut costs: BTreeMap<
-        (Option<String>, Option<String>, Option<String>),
-        RoutingTimelineCostV1,
-    > = BTreeMap::new();
+    type CostIdentity = (Option<String>, Option<String>, Option<String>);
+    let mut costs: BTreeMap<CostIdentity, RoutingTimelineCostV1> = BTreeMap::new();
     let mut relays = Vec::new();
     for member in members {
         position.include(member.position);

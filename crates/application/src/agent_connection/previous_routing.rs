@@ -147,7 +147,7 @@ fn recover(
             spec.access_token = AgentAccessTokenIntentV1::Keep;
             spec.restore_native_model = None;
             return Preview::Available {
-                spec,
+                spec: Box::new(spec),
                 current_operation,
                 restored_from,
             };
