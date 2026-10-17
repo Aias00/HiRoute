@@ -24,14 +24,16 @@ pub(super) fn evaluate(
     let mut choices = Vec::new();
     let mut currency = s.currency.clone();
     let mut kind = s.valuation_kind;
-    if basis == AnalysisCostBasisV1::Recorded {
-        let mut stmt=db.prepare(&format!("{} SELECT DISTINCT v.currency,v.valuation_kind FROM selected a
-          JOIN observation_analysis_recorded_v1 v ON v.workspace_id=a.workspace_id AND v.request_id=a.request_id AND v.revision=a.revision ORDER BY v.currency,v.valuation_kind",selection::CTE))?;
-        let values = stmt
-            .query_map(&selection::params(s, q)[..], |r| {
-                Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
+    let recorded = if basis == AnalysisCostBasisV1::Recorded {
+        Some(recorded_rows(db, s, q, reader, now)?)
+    } else {
+        None
+    };
+    if let Some(recorded) = &recorded {
+        let values = recorded
+            .iter()
+            .filter_map(|r| Some((r.currency.as_ref()?.clone(), r.kind.as_ref()?.clone())))
+            .collect::<std::collections::BTreeSet<_>>();
         let currencies = values
             .iter()
             .filter(|(_, k)| kind.is_none_or(|v| kind_name(v) == k))
@@ -91,51 +93,34 @@ pub(super) fn evaluate(
     let kind = kind.unwrap_or(PriceValuationKindV1::UsageEstimate);
     let mut requests = BTreeMap::<String, RequestCost>::new();
     let mut excluded = 0;
-    if basis == AnalysisCostBasisV1::Recorded {
-        let sql=format!("{} SELECT a.request_id,a.anchor_id,a.terminal,a.partial,a.recorded_pending,a.traffic,v.amount,v.coverage,
-          (SELECT COUNT(*) FROM observation_analysis_attempts_v1 i WHERE i.workspace_id=a.workspace_id AND i.request_id=a.request_id AND i.revision=a.revision)
-          FROM selected a LEFT JOIN observation_analysis_recorded_v1 v ON v.workspace_id=a.workspace_id AND v.request_id=a.request_id AND v.revision=a.revision AND v.currency=:currency AND v.valuation_kind=:kind ORDER BY a.request_id",selection::CTE);
-        let name = kind_name(kind);
-        let mut args = selection::params(s, q);
-        args.extend([
-            (":currency", &currency as &dyn rusqlite::ToSql),
-            (":kind", &name),
-        ]);
-        let mut stmt = db.prepare(&sql)?;
-        let mut rows = stmt.query(&args[..])?;
-        while let Some(r) = rows.next()? {
-            if r.get::<_, String>(5)? != "normal" {
+    if let Some(recorded) = recorded {
+        for r in recorded {
+            if r.traffic != "normal" {
                 excluded += 1;
                 continue;
             }
-            let id: String = r.get(0)?;
-            let terminal: bool = r.get(2)?;
-            let partial: bool = r.get(3)?;
-            let pending: bool = r.get(4)?;
-            let amount: Option<String> = r.get(6)?;
-            let coverage: Option<String> = r.get(7)?;
-            let amount = amount.and_then(|v| v.parse::<u64>().ok());
+            let matched = r.currency.as_deref() == Some(&currency)
+                && r.kind.as_deref() == Some(kind_name(kind));
+            let amount = matched.then_some(r.amount).flatten();
+            let coverage = matched.then_some(r.coverage).flatten();
             requests.insert(
-                id.clone(),
+                r.id.clone(),
                 RequestCost {
-                    id,
-                    anchor: r.get(1)?,
-                    attempts: r.get(8)?,
-                    complete: terminal
-                        && !partial
-                        && !pending
+                    id: r.id,
+                    anchor: r.anchor,
+                    attempts: r.attempts,
+                    complete: r.terminal
+                        && !r.partial
+                        && !r.pending
                         && coverage.as_deref() == Some("complete")
                         && amount.is_some(),
                     known: amount,
                     known_seen: amount.is_some(),
-                    pending,
+                    pending: r.pending,
                     missing_price: u64::from(coverage.is_none()),
                     ..Default::default()
                 },
             );
-            if requests.len().is_multiple_of(512) {
-                reader.check(now, false, false)?;
-            }
         }
     } else {
         let prices = prices.ok_or(Error::Unavailable)?;
@@ -287,4 +272,63 @@ fn parse_kind(s: &str) -> Option<PriceValuationKindV1> {
         "api_equivalent" => Some(PriceValuationKindV1::ApiEquivalent),
         _ => None,
     }
+}
+
+struct RecordedRow {
+    id: String,
+    anchor: String,
+    terminal: bool,
+    partial: bool,
+    pending: bool,
+    traffic: String,
+    currency: Option<String>,
+    kind: Option<String>,
+    amount: Option<u64>,
+    coverage: Option<String>,
+    attempts: u64,
+}
+
+/// Resolve kinds and amounts in the same pass through the scoped source join.
+/// Choice discovery must not spend the read budget evaluating that join twice.
+fn recorded_rows(
+    db: &Connection,
+    s: &Scope,
+    q: &ObservationAnalysisQueryV1,
+    reader: &ObservationReaderContext,
+    now: i64,
+) -> Result<Vec<RecordedRow>, Error> {
+    let sql = format!("{} SELECT a.request_id,a.anchor_id,a.terminal,a.partial,a.recorded_pending,a.traffic,
+        v.currency,v.valuation_kind,v.amount,v.coverage,
+        (SELECT COUNT(*) FROM observation_analysis_attempts_v1 i WHERE i.workspace_id=a.workspace_id AND i.request_id=a.request_id AND i.revision=a.revision)
+        FROM selected a LEFT JOIN observation_analysis_recorded_v1 v ON v.workspace_id=a.workspace_id AND v.request_id=a.request_id AND v.revision=a.revision
+          AND (:currency IS NULL OR v.currency=:currency) AND (:kind IS NULL OR v.valuation_kind=:kind)
+        ORDER BY a.request_id", selection::CTE);
+    let kind = s.valuation_kind.map(kind_name);
+    let mut args = selection::params(s, q);
+    args.extend([
+        (":currency", &s.currency as &dyn rusqlite::ToSql),
+        (":kind", &kind),
+    ]);
+    let mut stmt = db.prepare(&sql)?;
+    let mut rows = stmt.query(&args[..])?;
+    let mut result = Vec::new();
+    while let Some(r) = rows.next()? {
+        result.push(RecordedRow {
+            id: r.get(0)?,
+            anchor: r.get(1)?,
+            terminal: r.get(2)?,
+            partial: r.get(3)?,
+            pending: r.get(4)?,
+            traffic: r.get(5)?,
+            currency: r.get(6)?,
+            kind: r.get(7)?,
+            amount: r.get::<_, Option<String>>(8)?.and_then(|s| s.parse().ok()),
+            coverage: r.get(9)?,
+            attempts: r.get(10)?,
+        });
+        if result.len().is_multiple_of(512) {
+            reader.check(now, false, false)?;
+        }
+    }
+    Ok(result)
 }

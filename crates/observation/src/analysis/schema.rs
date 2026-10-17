@@ -177,6 +177,7 @@ pub(super) fn save_checkpoint(db: &Connection) -> rusqlite::Result<()> {
 }
 
 const DDL: &str = r#"
+CREATE INDEX IF NOT EXISTS analysis_source_guard_v1 ON logical_requests(workspace_id,request_id,session_id,started_at_ms);
 CREATE TABLE IF NOT EXISTS observation_analysis_meta_v1(key TEXT PRIMARY KEY,value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS observation_analysis_dirty_v1(
  workspace_id TEXT NOT NULL,request_id TEXT NOT NULL,sequence INTEGER NOT NULL,

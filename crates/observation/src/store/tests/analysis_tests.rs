@@ -283,6 +283,75 @@ fn auto_selected_price_options_survive_pagination_without_repeating_flags() {
 }
 
 #[test]
+fn recorded_basis_choices_and_missing_rows_use_the_same_filtered_population() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    let mut fixtures = Vec::new();
+    for (suffix, currency, kind) in [
+        ("basis-usd", "USD", PriceValuationKindV1::UsageEstimate),
+        ("basis-usd-api", "USD", PriceValuationKindV1::ApiEquivalent),
+        ("basis-cny", "CNY", PriceValuationKindV1::UsageEstimate),
+        ("basis-missing", "", PriceValuationKindV1::UsageEstimate),
+    ] {
+        let f = Fixture::new(suffix);
+        for mut event in facts(&f, UsageFrameKindV1::Cumulative) {
+            if currency.is_empty() {
+                event.pricing = None;
+            } else if let Some(quote) = event.pricing.as_mut().and_then(|p| p.quote.as_mut()) {
+                quote.currency = currency.into();
+                quote.exact_target.currency = currency.into();
+                quote.valuation_kind = kind;
+                quote.exact_target.valuation_kind = kind;
+                quote.quote_digest = quote.computed_digest().unwrap();
+            }
+            store.ingest_fact(&event, &[]).unwrap();
+        }
+        fixtures.push(f);
+    }
+    store.settle_pending_valuations(16).unwrap();
+    let read = |q: &ObservationAnalysisQueryV1| {
+        store
+            .observed_analysis(&reader(), q, Some(&range()), None, 1000)
+            .unwrap()
+    };
+    let mut q = ObservationAnalysisQueryV1::new(AnalysisViewV1::CostRanking);
+    let ambiguous = read(&q);
+    assert_eq!(ambiguous.status, AnalysisStatusV1::ChoicesRequired);
+    assert!(ambiguous.choices.iter().any(|c| c.field == "currency"));
+    q.currency = Some("USD".into());
+    assert!(read(&q).choices.iter().any(|c| c.field == "valuation_kind"));
+    q.valuation_kind = Some(PriceValuationKindV1::UsageEstimate);
+    let selected = read(&q);
+    assert!(selected.choices.is_empty());
+    assert_eq!(
+        selected.costs.iter().map(|r| r.request_count).sum::<u64>(),
+        4
+    );
+    assert_eq!(
+        selected.costs.iter().map(|r| r.attempt_count).sum::<u64>(),
+        4
+    );
+    assert_eq!(
+        selected
+            .costs
+            .iter()
+            .filter(|r| r.amount_micros.is_some())
+            .count(),
+        1
+    );
+    assert!(selected.costs.iter().all(|r| r.currency == "USD"
+        && r.valuation_kind == PriceValuationKindV1::UsageEstimate));
+    q.currency = None;
+    q.valuation_kind = None;
+    q.request_id = Some(fixtures[0].request.to_string());
+    let narrowed = read(&q);
+    assert!(narrowed.choices.is_empty());
+    assert_eq!(narrowed.costs.len(), 1);
+    assert!(narrowed.costs[0].amount_micros.is_some());
+    assert_eq!(narrowed.costs[0].currency, "USD");
+}
+
+#[test]
 fn request_filter_applies_before_conversation_counts_and_member_previews() {
     let dir = tempfile::tempdir().unwrap();
     let store = open_store(dir.path());
