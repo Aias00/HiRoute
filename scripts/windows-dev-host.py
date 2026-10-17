@@ -293,7 +293,7 @@ def worker(request):
                           installation=profile_helper(request).inspect_installation(Path.home(), Path(os.environ['LOCALAPPDATA'])),
                           profile_activity=profile_activity(config, request['run_id']))
             return 0
-        if request.get('operation') == 'archive':
+        if request.get('operation') in ('archive', 'uninstall'):
             parent = directory(root, request['inspection_run'])
             inspected = json.loads((parent / 'result.json').read_text(encoding='utf-8'))
             original = json.loads((parent / 'request.json').read_text(encoding='utf-8'))
@@ -307,6 +307,28 @@ def worker(request):
                 raise ValueError('A recent inspection of this standard account and product is required')
             activity = profile_activity(config, request['run_id'])
             result['profile_activity'] = activity
+            if request['operation'] == 'uninstall':
+                helper = profile_helper(request)
+                uninstaller, installed = helper.candidate_uninstaller(
+                    Path.home(), Path(os.environ['LOCALAPPDATA']), inspected['installation'],
+                    pm, request['shell_sha256'], activity)
+                before = helper.locations(Path.home(), Path(os.environ['LOCALAPPDATA']))
+                deadline = time.monotonic() + request['timeout']
+                with (run / 'uninstall.stdout').open('xb') as out, (run / 'uninstall.stderr').open('xb') as err:
+                    completed = subprocess.run([str(uninstaller), '/S'], stdin=subprocess.DEVNULL,
+                                               stdout=out, stderr=err, timeout=request['timeout'], check=True)
+                removed = [Path(inspected['installation']['marker']['path']), installed,
+                           before['stable_cli'], before['programs'] / 'hiroute-shell.exe',
+                           Path(inspected['installation']['definition']['path'])]
+                while any(path.exists() for path in removed):
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError('Candidate uninstall did not remove its owned installation')
+                    time.sleep(0.2)
+                result.update(passed=True, assessment='preparation_only', native_entry='NSIS /S',
+                              exit_code=completed.returncode, versioned_package_removed=True,
+                              state_preserved=before['state'].exists(),
+                              inspection_sha256=digest(parent / 'result.json'))
+                return 0
             archived = profile_helper(request).archive_orphaned_data(
                 Path.home(), Path(os.environ['LOCALAPPDATA']), run,
                 inspected['installation'], activity)

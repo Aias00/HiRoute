@@ -166,7 +166,12 @@ It requires a recent matching standard-account inspection, no installed product,
 no product processes/tasks and no native Agent references to the old data. It moves
 only the two fixed HiRoute data/state directories into private run evidence, with
 complete before/after hashes; native settings remain unchanged. Installed products
-must use their normal uninstall entry first. This reversible preparation creates
+must use their normal uninstall entry first. For the exact measured candidate,
+`windows uninstall-candidate INSPECTION_RUN_ID --product PRODUCT_BUNDLE_ID
+--shell-sha256 MEASURED_SHELL_SHA` invokes its actual NSIS `/S` entry, preserving
+data. It pins the installed CLI/daemon, shell and uninstaller inventory, rejects
+other active work, and waits for the owned installation to disappear. It cannot
+force an unavailable restore or remove business data. This reversible preparation creates
 no account and establishes no upgrade, restoration or migration acceptance.
 
 For the NSIS candidate, manually dispatch `build-release-platform.yml` with its

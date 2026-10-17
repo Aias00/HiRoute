@@ -210,6 +210,39 @@ class Runner(unittest.TestCase):
         evidence.mkdir()
         return native_home, local, roots, evidence
 
+    def test_candidate_uninstall_requires_measured_images_and_rejects_other_active_work(self):
+        native_home, local, roots, _ = self.orphaned_profile()
+        sha = 'a' * 40
+        installed = native_home / '.local/lib/hiroute' / ('0.3.1-' + sha[:12])
+        installed.mkdir(parents=True)
+        files = {}
+        for name in ('hiroute.exe', 'hirouted.exe'):
+            (installed / name).write_bytes(name.encode())
+            files[name] = dict(sha256=controller.digest(installed / name))
+        definition = roots['data'] / 'task.json'
+        definition.write_text(json.dumps(dict(manager='task', name='HiRoute-candidate')))
+        marker = dict(schema_version='hiroute.standalone-install/v1', target='x86_64-pc-windows-msvc',
+                      install_root=str(installed), service_definition=str(definition))
+        (roots['data'] / 'standalone.json').write_text(json.dumps(marker))
+        roots['programs'].mkdir(parents=True)
+        for name in ('hiroute-shell.exe', 'uninstall.exe'):
+            (roots['programs'] / name).write_bytes(name.encode())
+        inventory = {n: controller.digest(roots['programs'] / n) for n in ('hiroute-shell.exe', 'uninstall.exe')}
+        (roots['programs'] / 'shell-package.json').write_text(json.dumps(dict(files=inventory)))
+        inspected = profiles.inspect_installation(native_home, local)
+        product = dict(source_revision=sha, target=marker['target'], files=files)
+        activity = dict(administrator_groups=False, processes=[], tasks=[])
+        result = profiles.candidate_uninstaller(native_home, local, inspected, product,
+                                               inventory['hiroute-shell.exe'], activity)
+        self.assertEqual(result, (roots['programs'] / 'uninstall.exe', installed))
+        with self.assertRaisesRegex(ValueError, 'measured inventory'):
+            profiles.candidate_uninstaller(native_home, local, inspected, product, 'f' * 64, activity)
+        activity['processes'] = [dict(ExecutablePath=str(roots['programs'] / 'hiroute-shell.exe'))]
+        with self.assertRaisesRegex(ValueError, 'Another product or installer'):
+            profiles.candidate_uninstaller(native_home, local, inspected, product,
+                                           inventory['hiroute-shell.exe'], activity)
+        self.assertTrue((installed / 'hirouted.exe').exists())
+
     def test_archive_long_paths_use_extended_drive_and_unc_forms(self):
         self.assertEqual(profiles.extended_windows_path(r'C:\account\data'), r'\\?\C:\account\data')
         self.assertEqual(profiles.extended_windows_path(r'\\server\share\data'), r'\\?\UNC\server\share\data')

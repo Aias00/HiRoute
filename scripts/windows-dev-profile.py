@@ -103,6 +103,41 @@ def inventory(root):
     return rows
 
 
+def candidate_uninstaller(native_home, local_app_data, inspected, product, shell_sha256, activity):
+    """Admit only the measured candidate's normal, data-preserving NSIS entry."""
+    if activity.get('administrator_groups') is not False:
+        raise ValueError('Candidate cleanup requires a standard account')
+    current = inspect_installation(native_home, local_app_data)
+    if current != inspected:
+        raise ValueError('Installation changed since inspection')
+    marker = current.get('marker', {}).get('record', {})
+    install = Path(marker.get('install_root', ''))
+    roots = locations(native_home, local_app_data)
+    if (marker.get('schema_version') != 'hiroute.standalone-install/v1'
+            or marker.get('target') != product['target']
+            or install.parent != native_home / '.local/lib/hiroute'
+            or not install.name.endswith('-' + product['source_revision'][:12])):
+        raise ValueError('Installed product differs from the selected candidate')
+    for name in ('hiroute.exe', 'hirouted.exe'):
+        if digest(plain(install / name)) != product['files'][name]['sha256']:
+            raise ValueError('Installed binary differs from the selected candidate')
+    shell = plain(roots['programs'] / 'hiroute-shell.exe')
+    uninstaller = plain(roots['programs'] / 'uninstall.exe')
+    expected = current.get('shell-package.json', {}).get('record', {}).get('files', {})
+    if (digest(shell) != shell_sha256 or expected.get('hiroute-shell.exe') != shell_sha256
+            or digest(uninstaller) != expected.get('uninstall.exe')):
+        raise ValueError('Uninstaller or shell differs from its measured inventory')
+    definition = json.loads(current['definition']['text'])
+    if definition.get('manager') != 'task':
+        raise ValueError('Only the owned Task candidate can be removed')
+    if any(Path(p.get('ExecutablePath') or '') != install / 'hirouted.exe'
+           for p in activity.get('processes', [])):
+        raise ValueError('Another product or installer is active; preserve it')
+    if any(t.get('TaskName') != definition['name'] for t in activity.get('tasks', [])):
+        raise ValueError('Another validation or product Task is active; preserve it')
+    return uninstaller, install
+
+
 def archive_orphaned_data(native_home, local_app_data, destination, inspected, activity):
     """Preserve every byte; installed products and live/managed data are refused."""
     if activity.get('administrator_groups') is not False:

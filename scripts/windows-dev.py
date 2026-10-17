@@ -269,6 +269,10 @@ def main():
     archive = commands.add_parser('archive-installation-data')
     archive.add_argument('inspection_run')
     archive.add_argument('--product', required=True)
+    uninstall = commands.add_parser('uninstall-candidate')
+    uninstall.add_argument('inspection_run')
+    uninstall.add_argument('--product', required=True)
+    uninstall.add_argument('--shell-sha256', required=True)
     run = commands.add_parser('run')
     run.add_argument('--harness', required=True)
     run.add_argument('--product', required=True)
@@ -315,11 +319,16 @@ def main():
                           binary='hiroute.exe', case='installation_profile_inspection',
                           operation='inspect', ignored=False, timeout=120)
             args.action = 'run'
-        elif args.action == 'archive-installation-data':
+        elif args.action in ('archive-installation-data', 'uninstall-candidate'):
+            uninstall = args.action == 'uninstall-candidate'
             values = dict(run_id=uuid.uuid4().hex, harness=args.product, product=args.product,
-                          binary='hiroute.exe', case='orphaned_installation_data_archival',
-                          operation='archive', inspection_run=args.inspection_run,
-                          ignored=False, timeout=300)
+                          binary='hiroute.exe', case='candidate_uninstallation' if uninstall else 'orphaned_installation_data_archival',
+                          operation='uninstall' if uninstall else 'archive', inspection_run=args.inspection_run,
+                          ignored=False, timeout=600 if uninstall else 300)
+            if uninstall:
+                if not re.fullmatch(r'[a-f0-9]{64}', args.shell_sha256):
+                    raise ValueError('Expected the measured shell SHA-256')
+                values['shell_sha256'] = args.shell_sha256
             args.action = 'run'
         elif args.action == 'run':
             values['run_id'] = uuid.uuid4().hex
