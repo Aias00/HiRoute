@@ -247,8 +247,8 @@ pub(super) fn create(
     let binding = reader.analysis_scope_binding()?;
     let nonce = schema::advance(db, "scope_sequence")?;
     let id = digest(&("analysis-scope/v1", &binding, now, &range, r, e, q, nonce))?;
-    let mut stmt=db.prepare("SELECT DISTINCT r.session_id FROM logical_requests r INDEXED BY analysis_source_guard_v1 JOIN sessions s ON s.workspace_id=r.workspace_id AND s.session_id=r.session_id
-      LEFT JOIN valuation_requests_v2 v ON v.workspace_id=r.workspace_id AND v.request_id=r.request_id
+    let mut stmt=db.prepare("SELECT DISTINCT r.session_id FROM logical_requests r INDEXED BY analysis_source_guard_v1 JOIN sessions s INDEXED BY analysis_source_agent_v1 ON s.workspace_id=r.workspace_id AND s.session_id=r.session_id
+      LEFT JOIN valuation_requests_v2 v INDEXED BY analysis_source_plan_v1 ON v.workspace_id=r.workspace_id AND v.request_id=r.request_id
       WHERE r.workspace_id=?1 AND r.started_at_ms>=?2 AND r.started_at_ms<?3 AND (?4 IS NULL OR v.plan_id=?4) AND (?5 IS NULL OR s.agent_id=?5) AND (?6 IS NULL OR r.request_id=?6)")?;
     let mut physical = stmt
         .query_map(
@@ -401,9 +401,9 @@ pub(super) fn create(
 fn source_population(db: &Connection, s: &Scope) -> Result<(u64, String), Error> {
     use sha2::{Digest, Sha256};
     let mut statement=db.prepare("SELECT r.request_id,r.session_id,r.started_at_ms FROM logical_requests r INDEXED BY analysis_source_guard_v1
-      JOIN sessions sessions ON sessions.workspace_id=r.workspace_id AND sessions.session_id=r.session_id
+      JOIN sessions sessions INDEXED BY analysis_source_agent_v1 ON sessions.workspace_id=r.workspace_id AND sessions.session_id=r.session_id
       JOIN observation_analysis_members_v1 m ON m.scope_id=?1 AND m.session_id=r.session_id
-      LEFT JOIN valuation_requests_v2 v ON v.workspace_id=r.workspace_id AND v.request_id=r.request_id
+      LEFT JOIN valuation_requests_v2 v INDEXED BY analysis_source_plan_v1 ON v.workspace_id=r.workspace_id AND v.request_id=r.request_id
       WHERE r.workspace_id=?2 AND r.started_at_ms>=?3 AND r.started_at_ms<?4 AND (?5 IS NULL OR v.plan_id=?5) AND (?6 IS NULL OR sessions.agent_id=?6)
         AND (?7 IS NULL OR r.request_id=?7) AND r.rowid<=?8 ORDER BY r.request_id")?;
     let mut rows = statement.query(params![

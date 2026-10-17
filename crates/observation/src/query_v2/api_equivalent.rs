@@ -55,6 +55,10 @@ impl crate::LocalObservationStore {
         let mut db =
             Connection::open_with_flags(&self.activity_path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
         let _deadline = QueryDeadline::start_for(&db, reader)?;
+        // Four existing read permits bound page-cache memory to 64 MiB. Keeping
+        // narrow numeric/source indexes resident avoids repeated large-row reads
+        // without extending the shared deadline or retaining query results.
+        db.pragma_update(None, "cache_size", -16_384)?;
         let tx = db.transaction()?;
         let visibility: u64 = tx.query_row("SELECT CAST(value AS INTEGER) FROM observation_meta WHERE key='query_visibility_generation'", [], |r| r.get(0))?;
         let retained = now_ms

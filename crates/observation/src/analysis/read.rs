@@ -43,6 +43,10 @@ impl LocalObservationStore {
         let _permit = self.query_permit()?;
         let mut db = Connection::open(&self.activity_path)?;
         let _deadline = QueryDeadline::start_for(&db, reader)?;
+        // Four existing read permits bound page-cache memory to 64 MiB. Keeping
+        // narrow numeric/source indexes resident avoids repeated large-row reads
+        // without extending the shared deadline or retaining query results.
+        db.pragma_update(None, "cache_size", -16_384)?;
         if !schema::available(&db) {
             return Err(Error::Unavailable);
         }
