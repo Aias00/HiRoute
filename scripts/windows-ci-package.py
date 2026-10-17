@@ -114,16 +114,20 @@ def prepare(args):
             passed.append(event["Test"])
     if sorted(passed) != ["TestLocalMachinePasswordPreservesRemotePolicy", "TestLocalManagementPasswordPipeBounds"]:
         raise ValueError("Original CPA native build lacks the required bootstrap security cases")
+    frontend = ROOT / "apps/desktop"
+    command("npm.cmd", "ci", "--prefix", frontend)
+    command("npm.cmd", "run", "build", "--prefix", frontend)
     notices = output / "notices"
     command(sys.executable, ROOT / "scripts/collect-third-party-licenses.py", "--cargo-target", target,
-            "--cpa-source-repo", args.source_repo.resolve(strict=True), "--output", notices)
+            "--cpa-source-repo", args.source_repo.resolve(strict=True),
+            "--npm-root", frontend, "--output", notices)
     version = json.loads((ROOT / "apps/desktop/src-tauri/tauri.conf.json").read_text())["version"]
     base = [sys.executable, ROOT / "scripts/package-standalone.py", "build",
             "--version", version, "--revision", revision, "--target", target,
             "--hiroute", ROOT / "target/debug/hiroute.exe",
             "--hirouted", ROOT / "target/debug/hirouted.exe", "--cpa-binary", cpa,
             "--cpa-version", pin["version"], "--cpa-license", previous / "CPA.LICENSE",
-            "--notices", notices]
+            "--notices", notices, "--console-assets", frontend / "dist"]
     first = json.loads(command(*base, "--output", output / "package"))
     second = json.loads(command(*base, "--output", output / "repeated-package"))
     archive, manifest = Path(first["archive"]), Path(first["manifest"])
