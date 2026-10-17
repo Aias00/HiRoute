@@ -32,6 +32,41 @@ $q=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'ui-request.json') -Raw | C
 $p=Get-Process -Id $q.pid -ErrorAction Stop
 if($p.Path -ne $q.image){throw 'Desktop image changed'}
 $p.Refresh()
+if($q.action -eq 'quit') {
+ $desktop=[Windows.Automation.AutomationElement]::RootElement
+ $class=[Windows.Automation.AutomationElement]::ClassNameProperty
+ $name=[Windows.Automation.AutomationElement]::NameProperty
+ $children=[Windows.Automation.TreeScope]::Children
+ $descendants=[Windows.Automation.TreeScope]::Descendants
+ $bar=$desktop.FindFirst($children,[Windows.Automation.PropertyCondition]::new($class,'Shell_TrayWnd'))
+ if($null -eq $bar){throw 'No native notification area'}
+ $find=[Windows.Automation.PropertyCondition]::new($name,'HiRoute')
+ $icons=@($bar.FindAll($descendants,$find) | Where-Object {-not $_.Current.IsOffscreen})
+ if($icons.Count -eq 0) {
+  $chevrons=@($bar.FindAll($descendants,[Windows.Automation.Condition]::TrueCondition) | Where-Object {
+   $_.Current.AutomationId -eq 'SystemTrayIcon' -and $_.Current.Name -in @('Show hidden icons','显示隐藏的图标')
+  })
+  if($chevrons.Count -ne 1){throw 'Observe the notification area before continuing; icon is unavailable'}
+  $chevrons[0].GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+  Start-Sleep -Milliseconds 500
+  $overflow=$desktop.FindFirst($children,[Windows.Automation.PropertyCondition]::new($class,'NotifyIconOverflowWindow'))
+  if($null -ne $overflow){$icons=@($overflow.FindAll($descendants,$find) | Where-Object {-not $_.Current.IsOffscreen})}
+ }
+ if($icons.Count -ne 1){throw 'Exactly one visible HiRoute notification icon is required'}
+ $icons[0].GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+ Start-Sleep -Milliseconds 500
+ $windows=$desktop.FindAll($children,[Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ProcessIdProperty,[int]$q.pid))
+ $quit=@()
+ foreach($w in $windows){$quit+=@($w.FindAll($descendants,[Windows.Automation.PropertyCondition]::new($name,'Quit')))}
+ $quit=@($quit | Where-Object {
+  $_.Current.ControlType -eq [Windows.Automation.ControlType]::MenuItem -and -not $_.Current.IsOffscreen
+ })
+ if($quit.Count -ne 1){throw 'The measured Desktop did not expose one native Quit menu item'}
+ $quit[0].GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+ if(-not $p.WaitForExit(10000)){throw 'Native Quit did not exit the measured Desktop'}
+ @{quit=$true;pid=$p.Id;menu_item='Quit'}|ConvertTo-Json -Compress
+ exit 0
+}
 if($p.MainWindowHandle -eq 0){throw 'No visible native Desktop window'}
 [void][DesktopWindow]::ShowWindow($p.MainWindowHandle,9)
 [void][DesktopWindow]::SetForegroundWindow($p.MainWindowHandle)
@@ -153,7 +188,7 @@ def execute(request, run, product, pm, helper, activity, manifest, root):
     if activity.get('administrator_groups') is not False:
         raise ValueError('Native Desktop evidence requires a standard account, not a filtered administrator')
     action = request['desktop_action']
-    if action not in ('install', 'launch', 'snapshot', 'invoke', 'text', 'click', 'close', 'cli', 'native-files'):
+    if action not in ('install', 'launch', 'snapshot', 'invoke', 'text', 'click', 'close', 'quit', 'cli', 'native-files'):
         raise ValueError('Unknown native Desktop action')
     if action == 'native-files':
         files = {}

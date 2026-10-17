@@ -166,6 +166,10 @@ If needed, `click` requires coordinates from a recent screenshot of that exact
 foreground window; it refuses changed geometry. `native-files` captures a bounded,
 read-only Codex/Claude configuration and collaboration Skill inventory for restore
 comparisons, including absence before a product-created file.
+`quit` uses the visible HiRoute notification icon and the measured process's
+native Quit menu item, then requires that process to exit. It does not kill a
+process or stop the background service; an unavailable or ambiguous icon/menu
+is an observation failure that must be inspected before retrying.
 
 `--action install` runs the measured NSIS `/S` entry. For a different installed
 candidate, `--from-product OLD_BUNDLE_ID` verifies the old images before invoking
