@@ -127,6 +127,98 @@ fn group_choice_constrains_hold_and_never_revives_a_regular_model() {
 }
 
 #[test]
+fn fresh_decisions_keep_valid_in_group_holds_for_both_retired_values() {
+    for smart in [false, true] {
+        for legacy_value in [false, true] {
+            let mut input = fixture();
+            if smart {
+                input.policy.route = MaterializedRouteV1::SmartSaving {
+                    judgment: Default::default(),
+                    simple_group_id: "branch_0".into(),
+                    simple_fallback_group_ids: vec!["branch_primary_0".into()],
+                    complex_group_id: "branch_primary_0".into(),
+                    reselect_on_user_message: legacy_value,
+                };
+                input.policy.groups.pop();
+            } else if let MaterializedRouteV1::Branches {
+                reselect_on_user_message,
+                ..
+            } = &mut input.policy.route
+            {
+                *reselect_on_user_message = legacy_value;
+            }
+            input.policy = input.policy.seal().unwrap();
+            input
+                .classification_decision
+                .as_mut()
+                .unwrap()
+                .execution_group = hiroute_domain::ExecutionGroupV1::Primary;
+            assert_eq!(
+                Planner.plan(&input).unwrap().ledger.ordered_candidates[0].candidate_id,
+                "primary"
+            );
+            let backup = &input.candidates[2];
+            input.context_hold = Some(HoldPreferenceV1 {
+                stable_binding_id: backup.stable_binding_id.clone(),
+                candidate_id: backup.candidate_id.clone(),
+                profile_digest: backup.profile_digest.clone(),
+                reasoning_profile_id: "fixed".into(),
+                origin_group_id: "branch_primary_0".into(),
+            });
+            let held = Planner.plan(&input).unwrap();
+            assert_eq!(held.ledger.ordered_candidates[0].candidate_id, "expert");
+            assert!(
+                held.reason_ledger
+                    .iter()
+                    .any(|r| r.code == LedgerReasonCodeV1::ContextHoldApplied)
+            );
+
+            // A new group wins even when the old candidate remains a permitted fallback.
+            input
+                .classification_decision
+                .as_mut()
+                .unwrap()
+                .execution_group = hiroute_domain::ExecutionGroupV1::Regular;
+            let changed_group = Planner.plan(&input).unwrap();
+            assert_eq!(
+                changed_group.ledger.ordered_candidates[0].candidate_id,
+                "economy"
+            );
+            assert!(
+                changed_group
+                    .reason_ledger
+                    .iter()
+                    .any(|r| r.code == LedgerReasonCodeV1::ContextHoldInvalidated)
+            );
+
+            input
+                .classification_decision
+                .as_mut()
+                .unwrap()
+                .execution_group = hiroute_domain::ExecutionGroupV1::Primary;
+            input.context_hold.as_mut().unwrap().reasoning_profile_id = "changed".into();
+            assert_eq!(
+                Planner.plan(&input).unwrap().ledger.ordered_candidates[0].candidate_id,
+                "primary"
+            );
+            input.context_hold.as_mut().unwrap().reasoning_profile_id = "fixed".into();
+            input.candidates[2].statically_enabled = false;
+            let unavailable = Planner.plan(&input).unwrap();
+            assert_eq!(
+                unavailable.ledger.ordered_candidates[0].candidate_id,
+                "primary"
+            );
+            assert!(
+                unavailable
+                    .reason_ledger
+                    .iter()
+                    .any(|r| r.code == LedgerReasonCodeV1::ContextHoldInvalidated)
+            );
+        }
+    }
+}
+
+#[test]
 fn same_candidate_in_two_groups_keeps_selected_position_and_is_only_tried_once() {
     let mut input = fixture();
     input.policy.groups[1]

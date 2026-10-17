@@ -429,7 +429,6 @@ model is a valid minimal plan:
             "criteria": ["No useful progress or substantial correction needed.", "Useful but incomplete or uneven progress.", "Reliable progress with no material correction."]
           }
         },
-        "reselect_on_user_message": false,
         "classifier": {"kind": "local_rules"}, "complex_keywords": []
       },
       "free": {"candidates": [], "primary": [], "primary_fallback": false},
@@ -913,7 +912,13 @@ Plans use the existing `routing preview/apply` transaction with `hiroute.plan-ed
 | Mode | Editor fields |
 | --- | --- |
 | `smart_saving` | `smart.classifier`, `smart.economy`, `smart.primary` and `smart.judgment` |
-| `custom_branches` | `branch_routing.classifier`, `branch_routing.branches`, `branch_routing.default_branch_id`, `branch_routing.judgment` and `branch_routing.reselect_on_user_message` |
+| `custom_branches` | `branch_routing.classifier`, `branch_routing.branches`, `branch_routing.default_branch_id` and `branch_routing.judgment` |
+
+Smart saving and custom branches judge the group again for each new user message,
+then prefer a valid held candidate only within that group. This is automatic.
+The optional deprecated `reselect_on_user_message` field is accepted as a no-op
+for supported older callers; new requests can omit it. Serialized legacy values
+may remain in readback to preserve sealed Plan and publication consistency.
 
 `classifier` is `{kind: "decision_service", service: <complete saved connection revision>}`
 for a decision model or custom extension. Only Smart saving may instead use
@@ -960,7 +965,7 @@ hiroute subscription-proxy set --mode manual --url http://127.0.0.1:1187 --outpu
 hiroute service restart --output json
 ```
 
-An optional `--no-proxy example.com,198.51.100.0/24` adds bypass entries; local
+An optional `--no-proxy example.com,192.0.2.0/24` adds bypass entries; local
 addresses always bypass. Use `--mode direct` to clear inherited proxies, or
 `--mode inherit` to retain the existing service launch-environment policy.
 Saving does not interrupt the service; an explicit restart applies it and may

@@ -1504,6 +1504,78 @@
         "crates/gateway/src/publication/mod.rs",
         "crates/application/src/compiler/explicit/tests.rs"
       ]
+    },
+    {
+      "contract": "hiroute.plan-editor/v2",
+      "field": "reselect_on_user_message",
+      "mode": "recovery_read_only",
+      "owner": "routing-plans",
+      "reason": "Accept and preserve released true/false values as a no-op. Keeping serialized values protects sealed Plan digests and materialized consistency while fresh user turns always prefer valid held candidates inside the newly selected group. Editor and authoring inputs may omit the field.",
+      "removal_condition": "Remove only with an explicit supported-source retirement or versioned adapter that preserves released drafts, sealed Plans, publications and CLI callers.",
+      "allowed_paths": [
+        "crates/domain/src/routing/authoring.rs",
+        "crates/domain/src/routing/authoring/editor.rs",
+        "crates/domain/src/routing/decision.rs",
+        "crates/domain/src/routing/materialized.rs",
+        "crates/domain/src/agent_plan/version_consistency.rs",
+        "crates/application/src/compiler/explicit.rs",
+        "crates/application-api/src/generated/plan_authoring.rs",
+        "crates/gateway/src/publication/schema.rs",
+        "crates/gateway/src/publication/compiler.rs",
+        "crates/gateway/src/planning/types.rs"
+      ]
+    },
+    {
+      "contract": "hiroute.plan-authoring/v2",
+      "field": "reselect_on_user_message",
+      "mode": "recovery_read_only",
+      "owner": "routing-plans",
+      "reason": "Accept and preserve released true/false values as a no-op. Keeping serialized values protects sealed Plan digests and materialized consistency while fresh user turns always prefer valid held candidates inside the newly selected group. Editor and authoring inputs may omit the field.",
+      "removal_condition": "Remove only with an explicit supported-source retirement or versioned adapter that preserves released drafts, sealed Plans, publications and CLI callers.",
+      "allowed_paths": [
+        "crates/domain/src/routing/authoring.rs",
+        "crates/domain/src/routing/authoring/editor.rs",
+        "crates/domain/src/routing/decision.rs",
+        "crates/domain/src/routing/materialized.rs",
+        "crates/domain/src/agent_plan/version_consistency.rs",
+        "crates/application/src/compiler/explicit.rs",
+        "crates/application-api/src/generated/plan_authoring.rs",
+        "crates/gateway/src/publication/schema.rs",
+        "crates/gateway/src/publication/compiler.rs",
+        "crates/gateway/src/planning/types.rs"
+      ]
+    },
+    {
+      "contract": "hiroute.gateway-publication/v3",
+      "field": "reselect_on_user_message",
+      "mode": "recovery_read_only",
+      "owner": "routing-plans",
+      "reason": "Accept and preserve released true/false values as a no-op. Keeping serialized values protects sealed Plan digests and materialized consistency while fresh user turns always prefer valid held candidates inside the newly selected group. Editor and authoring inputs may omit the field.",
+      "removal_condition": "Remove only with an explicit supported-source retirement or versioned adapter that preserves released drafts, sealed Plans, publications and CLI callers.",
+      "allowed_paths": [
+        "crates/domain/src/routing/authoring.rs",
+        "crates/domain/src/routing/authoring/editor.rs",
+        "crates/domain/src/routing/decision.rs",
+        "crates/domain/src/routing/materialized.rs",
+        "crates/domain/src/agent_plan/version_consistency.rs",
+        "crates/application/src/compiler/explicit.rs",
+        "crates/application-api/src/generated/plan_authoring.rs",
+        "crates/gateway/src/publication/schema.rs",
+        "crates/gateway/src/publication/compiler.rs",
+        "crates/gateway/src/planning/types.rs"
+      ]
+    },
+    {
+      "contract": "hiroute.plan-editor/v2",
+      "field": "released v0.3.1 CLI editor template",
+      "mode": "frozen_fixture",
+      "owner": "routing-plans",
+      "reason": "Freeze the released CLI bootstrap payload and released judgment text before current authoring defaults change; source provenance and digest are embedded with an opaque synthetic binding.",
+      "removal_condition": "Remove only when the corresponding supported released editor reader and regression are explicitly retired.",
+      "allowed_paths": [
+        "crates/domain/src/routing/authoring/fixtures/released-plan-editor.v2.json",
+        "crates/domain/src/routing/authoring/tests.rs"
+      ]
     }
   ]
 }

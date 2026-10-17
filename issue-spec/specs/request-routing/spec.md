@@ -188,8 +188,9 @@ The default process-local budget is 50,000,000 bytes with one-hour idle TTL, ref
 on valid entry but not on completion; no fixed count or absolute TTL substitutes.
 Restart/expiry/eviction/unavailable cache returns to normal routing without blocking.
 
-A retained candidate is prioritized only within the selected/inherited group; the
-remaining published order is unchanged. Availability relay from regular to primary
+For smart-saving and custom-branch Plans, a valid retained candidate MUST be
+prioritized whenever its origin group is the freshly selected or inherited group,
+regardless of any retired follow-up field. The remaining published order is unchanged. Availability relay from regular to primary
 persists through that turn's tool continuations, even if weaker candidate preference
 is invalidated, and records relay separately from the opening selection. New user
 input rejudges and may return to regular. Old provider state/holds cannot resurrect
@@ -201,6 +202,19 @@ another category, FreeOnly-forbidden group, or old authorization.
 - **THEN** the next request MUST use current authorization and inherit the same
   category/group without another decision call; actual route/grant/epoch changes
   require fresh judgment and eligibility.
+
+#### Scenario: A fresh user judgment selects the same group
+
+- **WHEN** a continuous follow-up selects the held candidate's origin group and that candidate remains eligible
+- **THEN** the Gateway MUST prefer that candidate, including an in-group backup, even if normal group ranking prefers another candidate.
+
+#### Scenario: A fresh user judgment changes the group
+
+- **WHEN** the new user turn selects a different group or the held candidate is no longer eligible
+- **THEN** the Gateway MUST use the newly selected group's normal eligible order and bounded relay; the hold cannot carry a candidate across groups.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/133#issuecomment-6220133330
 
 ### Requirement: Relay is bounded and cannot mix delivered answers
 

@@ -1,0 +1,58 @@
+{
+  "provenance": {
+    "tag": "v0.3.1",
+    "revision": "13856abd873da5b4373d39322493b4cc105c4867",
+    "source": "crates/daemon/tests/support/publication_process.py",
+    "source_sha256": "cbeba002bab8c39e5bdb77dc5c227e58e9e54315a69341ab76f0a2be4c29b14d",
+    "extraction": "Frozen bootstrap CLI editor payload; the opaque runtime-created binding is replaced with a public synthetic identity. Judgment text comes from this exact released source, not current defaults."
+  },
+  "editor": {
+    "schema": "hiroute.plan-editor/v2",
+    "display_name": "日常编码",
+    "purpose": "Production recovery",
+    "mode": "fixed_model",
+    "candidates": [
+      {
+        "binding_id": "binding/released-fixture"
+      }
+    ],
+    "smart": {
+      "economy": [],
+      "primary": [],
+      "judgment": {
+        "degree": {
+          "simple_threshold_millis": 800,
+          "instructions": "Assess the current task.",
+          "simple": "Routine bounded work",
+          "complex": "Uncertain intricate work"
+        },
+        "competence": {
+          "floor_millis": 500,
+          "instructions": "Assess the completed stage.",
+          "criteria": [
+            "Failed",
+            "Partly competent",
+            "Competent"
+          ]
+        }
+      },
+      "reselect_on_user_message": false,
+      "classifier": {
+        "kind": "local_rules"
+      },
+      "complex_keywords": []
+    },
+    "free": {
+      "candidates": [],
+      "primary": [],
+      "primary_fallback": false
+    },
+    "delegation_enabled": false,
+    "requirements": {},
+    "limits": {
+      "maximum_attempts": 1,
+      "request_timeout_ms": 30000,
+      "attempt_timeout_ms": 30000
+    }
+  }
+}

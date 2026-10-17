@@ -497,43 +497,59 @@ const scenarios = [
     assert(calls('preview_compute_save').at(-1).payload.change.expected_revisions.target === c().management.revisions.target, 'Credential change reused the revision from before the decision save');
     await until(() => text().includes('接入凭据已保存'), 'credential save completed');
   }),
-  scenario('desktop.routing.follow-up-preference', ['routing-editor', 'decision-services'], 'New routes allow model switching; each mode retains the choice in its saved draft', async () => {
+  scenario('desktop.routing.follow-up-preference', ['routing-editor', 'decision-services'], 'New routes omit the retired setting; both editors preserve saved legacy values without exposing a control', async () => {
     await fresh(); await routing(); await click('新建智能路由');
     const fields = all('.plan-identity-fields input');
-    setInput(fields[0], 'Follow-up preference'); setInput(fields[1], 'Check new route defaults');
-    const mode = async label => {
+    setInput(fields[0], 'Continuous routing'); setInput(fields[1], 'Check routing without a follow-up setting');
+    for (const label of ['智能省钱', '自定义分支', '智能省钱', '自定义分支']) {
       all('.mode-card').find(item => item.querySelector('strong')?.textContent === label).click();
       await pause(40);
-      const details = [...document.querySelectorAll('.plan-editor details')].find(item => item.querySelector('summary')?.textContent.includes('追问设置'));
-      assert(details, 'Follow-up settings are missing');
-      if (!details.open) { details.querySelector('summary').click(); await pause(40); }
-      assert(details.textContent.includes('模型不可用时仍会自动切换'), 'Automatic switching caveat is missing');
-      assert(!details.querySelector('select'), 'Default branch selection is mixed into follow-up settings');
-      return details.querySelector('input[type="checkbox"]');
-    };
-    const smart = await mode('智能省钱');
-    assert(smart.checked && smart.closest('label').textContent.includes('追问时允许换模型'), 'New smart route does not enable the positive switching preference');
-    smart.click(); await pause(40);
-    const branch = await mode('自定义分支');
-    assert(branch.checked, 'New custom routing does not allow model switching');
-    branch.click(); await pause(40);
-    assert(!(await mode('智能省钱')).checked, 'Changing modes lost the smart preference');
-    await mode('自定义分支'); await click('保存草稿');
-    await until(() => calls('preview_plan_editor').length > 0, 'follow-up draft request');
+      assert(!all('.plan-editor details').some(item => /追问设置|Follow-up settings/.test(item.textContent)), 'An empty retired follow-up section remains');
+      assert(!all('.plan-editor label').some(item => /追问时允许换模型|Allow model switching on follow-up/.test(item.textContent)), 'The retired control is still offered');
+    }
+    const defaultBranch = all('.plan-editor details').find(item => item.querySelector('summary')?.textContent.includes('默认分支'));
+    assert(defaultBranch, 'Default branch control was removed with the preference');
+    defaultBranch.querySelector('summary').click(); await pause(40);
+    assert(defaultBranch.querySelector('select')?.options.length === 2, 'Default branches are not editable');
+    await click('保存草稿');
+    await until(() => calls('preview_plan_editor').length > 0, 'draft without follow-up setting');
     const editor = calls('preview_plan_editor').at(-1).payload.input.editor;
-    assert(editor.smart.reselect_on_user_message === false && editor.branch_routing.reselect_on_user_message === false, 'Unchecked preferences were inverted or reset when saving');
-    await until(() => !button('保存草稿').disabled, 'follow-up save finished');
-    (await mode('智能省钱')).click(); await pause(40);
-    (await mode('自定义分支')).click(); await pause(40); await click('保存草稿');
-    await until(() => calls('preview_plan_editor').length === 2, 'enabled follow-up draft request');
-    const enabled = calls('preview_plan_editor').at(-1).payload.input.editor;
-    assert(enabled.smart.reselect_on_user_message === true && enabled.branch_routing.reselect_on_user_message === true, 'Checked preferences were inverted when saving');
+    assert(!('reselect_on_user_message' in editor.smart) && !('reselect_on_user_message' in editor.branch_routing), 'New frontend drafts still generate the retired setting');
+    for (const mode of ['smart_saving', 'custom_branches']) {
+      for (const legacy of [true, false, undefined]) {
+        const label = `${mode}, legacy=${legacy}`;
+        await fresh(() => {
+          const plan = c().desktop.catalog.plans[0];
+          if (mode === 'custom_branches') {
+            const smart = plan.desired.strategy;
+            plan.desired.mode = mode;
+            plan.desired.strategy = { mode: 'branches', routing: {
+              classifier: { kind: 'decision_service', service: { id: 'decision/fixture', revision: 1, name: 'Fixture extension', connection: { kind: 'custom', endpoint: 'https://example.test/decision', timeout_ms: 10000 } } },
+              default_branch_id: 'primary', judgment: structuredClone(smart.judgment),
+              branches: [
+                { id: 'economy', name: 'Economy', condition: 'Simple', judgment: null, candidates: structuredClone(smart.economy), primary_candidates: [] },
+                { id: 'primary', name: 'Primary', condition: 'Complex', judgment: null, candidates: structuredClone(smart.primary), primary_candidates: [] },
+              ],
+            } };
+          }
+          const settings = mode === 'custom_branches' ? plan.desired.strategy.routing : plan.desired.strategy;
+          if (legacy === undefined) delete settings.reselect_on_user_message;
+          else settings.reselect_on_user_message = legacy;
+        });
+        await routing();
+        setInput(all('.plan-identity-fields input')[1], `Edit saved route: ${label}`);
+        await click('保存草稿');
+        await until(() => calls('preview_plan_editor').length > 0 && !button('保存草稿').disabled, `saved draft: ${label}`);
+        const saved = calls('preview_plan_editor').at(-1).payload.input.editor;
+        const settings = mode === 'custom_branches' ? saved.branch_routing : saved.smart;
+        assert(settings.reselect_on_user_message === legacy && Object.hasOwn(settings, 'reselect_on_user_message') === (legacy !== undefined), `Editing changed the retired value: ${label}`);
+        assert(!all('.plan-editor label').some(item => /追问时允许换模型|Allow model switching on follow-up/.test(item.textContent)), `A saved route exposes the retired control: ${label}`);
+      }
+    }
   }),
   scenario('desktop.routing.judgment-settings', ['routing-editor', 'decision-services'], 'Advanced judgment starts collapsed; branch copy/reset stays independent and draft payload retains settings', async () => {
     await fresh(); await routing();
-    const followUp = [...document.querySelectorAll('.plan-editor details')].find(item => item.querySelector('summary')?.textContent.includes('追问设置'));
-    followUp.querySelector('summary').click(); await pause(40);
-    assert(!followUp.querySelector('input').checked, 'Opening a saved false preference applied the new default');
+    assert(!all('.plan-editor details').some(item => item.querySelector('summary')?.textContent.includes('追问设置')), 'A saved legacy plan exposes the retired preference');
     await click('决策模型');
     const field = id => document.querySelector(`[data-decision-field="${id}"]`);
     const smartDetails = field('smart-simple-threshold').closest('details');
@@ -545,7 +561,6 @@ const scenarios = [
     await click('保存草稿');
     await until(() => calls('preview_plan_editor').length > 0 && !button('保存草稿').disabled, 'smart draft request');
     const smart = calls('preview_plan_editor').at(-1).payload.input.editor.smart;
-    assert(smart.reselect_on_user_message === false, 'Saving unrelated edits changed the saved follow-up preference');
     assert(smart.judgment.degree.simple_threshold_millis === 700 && !('branch_routing' in calls('preview_plan_editor').at(-1).payload.input.editor), 'Smart saving was serialized as task branches');
     all('.mode-card').find(item => item.querySelector('strong')?.textContent === '自定义分支').click();
     await until(() => all('.branch-routing-card').length === 2, 'custom branch editor');
