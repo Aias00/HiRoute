@@ -49,7 +49,17 @@ pub enum ModelFactOrigin {
 }
 
 #[derive(Clone, Debug)]
+pub struct NewerFeedModel {
+    pub model_configuration_id: String,
+    pub display_name: String,
+    pub minimum_client: String,
+    pub included_on: String,
+    pub identity_stability: String,
+    pub sequence: u64,
+}
+#[derive(Clone, Debug)]
 pub(crate) struct FeedCatalogFacts {
+    pub newer_models: Vec<NewerFeedModel>,
     pub origins: BTreeMap<String, ModelFactOrigin>,
     pub canonical: BTreeMap<String, MetadataCanonicalModelV1>,
     pub native_reasoning: Vec<ModelNativeReasoningV1>,
@@ -267,6 +277,37 @@ impl TrustedReleaseCatalog {
         }
         let mut effective = self.clone();
         let mut facts = FeedCatalogFacts {
+            newer_models: admission
+                .payload
+                .records
+                .iter()
+                .zip(&admission.records)
+                .filter_map(|(record, outcome)| {
+                    if let (
+                        FeedRecord::Model {
+                            record,
+                            included_on,
+                            ..
+                        },
+                        RecordAdmission::NewerClient { min_client_version },
+                    ) = (record, &outcome.outcome)
+                    {
+                        Some(NewerFeedModel {
+                            model_configuration_id: record
+                                .definition
+                                .model_configuration_id
+                                .clone(),
+                            display_name: record.definition.display_name.clone(),
+                            minimum_client: min_client_version.clone(),
+                            included_on: included_on.clone(),
+                            identity_stability: record.canonical.identity_stability.clone(),
+                            sequence: admission.payload.sequence,
+                        })
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
             origins: BTreeMap::new(),
             canonical: BTreeMap::new(),
             native_reasoning: self.native_reasoning().to_vec(),
@@ -435,6 +476,11 @@ impl TrustedReleaseCatalog {
             .map(String::as_str)
     }
 
+    pub fn newer_feed_models(&self) -> &[NewerFeedModel] {
+        self.feed_facts
+            .as_ref()
+            .map_or(&[], |facts| facts.newer_models.as_slice())
+    }
     pub fn featured_models(&self) -> &[FeaturedModel] {
         self.feed_facts
             .as_ref()

@@ -159,7 +159,7 @@ impl LocalControlAdapter {
             .ok_or(ControlReadError::Unavailable)?;
         let mut matched = false;
         for discovery in self.scanner.scan() {
-            let Some(authorized) = authorized_compute_discovery(catalog, &discovery)? else {
+            let Some(authorized) = authorized_compute_discovery(&catalog, &discovery)? else {
                 continue;
             };
             if authorized.credential == descriptor
@@ -360,7 +360,7 @@ impl ComputeFactsPort for LocalControlAdapter {
             .map_err(|_| ControlReadError::Unavailable)?;
         let mut items = discoveries
             .iter()
-            .map(|discovery| scan_item(catalog, discovery))
+            .map(|discovery| scan_item(&catalog, discovery))
             .collect::<Result<Vec<_>, _>>()?;
         items.extend(self.native_compute_scan_items(false)?);
         items.extend(self.native_compute_scan_items(true)?);
@@ -590,7 +590,7 @@ fn scan_item(
                 display_path: finding.display_path.clone(),
                 required_mode: finding.required_mode,
             });
-    let authorized = authorized_compute_discovery(catalog, discovery)?;
+    let authorized = authorized_compute_discovery(&catalog, discovery)?;
     let protected_prepare = authorized.as_ref().is_some_and(|authorized| {
         authorized.fact.connection_option_id == PROTECTED_PREPARE_CONNECTION_OPTION_ID
             && authorized.fact.model_configuration_id == PROTECTED_PREPARE_MODEL_CONFIGURATION_ID

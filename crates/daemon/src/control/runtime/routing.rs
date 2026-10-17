@@ -362,7 +362,7 @@ impl LocalControlAdapter {
                     )
                 };
                 let mut diagnostics =
-                    CandidateDiagnostics::new(&management.sources, &rows, catalog);
+                    CandidateDiagnostics::new(&management.sources, &rows, &catalog);
                 let needs_cpa = rows
                     .iter()
                     .any(|(source, _, _)| source.origin == SourceOrigin::Cpa)
@@ -686,7 +686,7 @@ impl LocalControlAdapter {
                             super::candidate_execution::materialize_connector_management_candidate(
                                 fact,
                                 registered,
-                                catalog,
+                                &catalog,
                                 cpa_targets,
                             )
                         }),
@@ -696,18 +696,18 @@ impl LocalControlAdapter {
                         {
                             super::candidate_execution::materialize_management_candidate(
                                 fact,
-                                Some(catalog),
+                                Some(&catalog),
                             )
                         } else {
                             super::candidate_execution::materialize_registered_management_candidate(
-                                fact, catalog,
+                                fact, &catalog,
                             )
                         }
                     }
                     hiroute_domain::ComputeManagementProvenanceV2::UserConfigured { .. } => {
                         super::candidate_execution::materialize_management_candidate(
                             fact,
-                            Some(catalog),
+                            Some(&catalog),
                         )
                     }
                 };

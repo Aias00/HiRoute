@@ -700,6 +700,7 @@ impl ProductionControlRuntime {
         .with_mutation(self.adapter.clone())
         .with_prices(self.adapter.clone())
         .with_model_catalog(self.adapter.clone())
+        .with_model_feed(self.adapter.clone())
         .with_compute_management(self.adapter.clone())
         .with_compute_routing(self.adapter.clone())
         .with_agent_connection(self.adapter.clone())

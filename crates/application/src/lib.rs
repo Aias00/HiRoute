@@ -23,6 +23,7 @@ pub mod control;
 mod control_plane;
 pub mod delegation;
 pub mod model_catalog;
+pub mod model_feed;
 pub mod observation_query;
 pub mod prices;
 pub mod publication;
@@ -97,6 +98,12 @@ impl ApplicationService {
             "GetEffectivePrices" | "PreviewPriceOverrideChange" | "ApplyPriceOverrideChange" => {
                 prices::dispatch(self, request)
             }
+            "GetModelFeedStatus"
+            | "RefreshModelFeed"
+            | "ApplyModelFeedSettings"
+            | "PreviewModelFeedRemoval"
+            | "ApplyModelFeedRemoval"
+            | "GetModelAvailability" => model_feed::dispatch(self, request),
             "ShowModel" => model_catalog::dispatch(self, request),
             "ListWorkPlans" => delegation::work_plans::dispatch(self, request),
             "SelectWorkerDependencies" => delegation::tasks::dispatch(self, request),

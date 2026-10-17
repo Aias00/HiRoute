@@ -115,7 +115,7 @@ impl LocalControlAdapter {
                 && (discovery.claude_configuration.is_some()
                     || discovery.configuration_issue.is_some()
                     || discovery.discovered_credential.is_some());
-            match authorized_compute_discovery(catalog, discovery) {
+            match authorized_compute_discovery(&catalog, discovery) {
                 Ok(Some(candidate)) => authorized.push(candidate),
                 Ok(None) => {}
                 Err(ControlReadError::Corrupt) => {
@@ -363,7 +363,7 @@ impl LocalControlAdapter {
                 evidence_ref: None,
             },
             runtime_fallback_denied_model_ids: super::runtime_fallback_denied_model_ids(Some(
-                catalog,
+                &catalog,
             )),
             models: vec![NativeModelDeclarationV1 {
                 upstream_model_id: UPSTREAM_MODEL_ID.into(),

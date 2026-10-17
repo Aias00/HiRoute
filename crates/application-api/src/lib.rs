@@ -42,6 +42,8 @@ mod compute_management_view;
 pub use compute_key_masks::*;
 mod generated;
 mod model_catalog;
+mod model_feed;
+pub use model_feed::*;
 mod model_connections;
 mod observation_v2;
 pub use model_catalog::*;

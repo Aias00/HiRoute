@@ -71,6 +71,16 @@ pub(crate) fn command_payload(
         "decision.services.test" => Some(request::<
             hiroute_application_api::ClassifierDecisionTestRequestV1,
         >(options)),
+        "models.feed.status"
+        | "models.feed.refresh"
+        | "models.feed.remove.preview"
+        | "models.availability" => Some(empty::<hiroute_application_api::ClientEmptyRequestV1>(
+            options,
+        )),
+        "models.feed.settings.apply" => Some(feed_settings(options)),
+        "models.feed.remove.apply" => {
+            Some(request::<hiroute_application_api::ModelFeedRemoveRequestV1>(options))
+        }
         "models.show" => Some(request::<hiroute_application_api::ModelCatalogQueryV1>(
             options,
         )),
@@ -305,6 +315,22 @@ where
         return Err(ErrorCode::InvalidArguments);
     }
     serde_json::to_value(build(value.clone())).map_err(|_| ErrorCode::Internal)
+}
+
+fn feed_settings(options: &[String]) -> Result<Value, ErrorCode> {
+    if options.len() == 2 && options[0] == "--retrieval" {
+        let enabled = match options[1].as_str() {
+            "on" => true,
+            "off" => false,
+            _ => return Err(ErrorCode::InvalidArguments),
+        };
+        return serde_json::to_value(hiroute_application_api::ModelFeedSettingsRequestV1 {
+            retrieval_enabled: Some(enabled),
+            acknowledge_disclosure: None,
+        })
+        .map_err(|_| ErrorCode::Internal);
+    }
+    request::<hiroute_application_api::ModelFeedSettingsRequestV1>(options)
 }
 
 fn empty<T>(options: &[String]) -> Result<Value, ErrorCode>

@@ -567,6 +567,7 @@ pub struct ApplicationPorts {
     /// True only after the daemon has composed the Gateway and the combined role is ready.
     pub role_all_ready: bool,
     pub model_catalog: Option<Arc<dyn crate::model_catalog::ModelCatalogPort>>,
+    pub model_feed: Option<Arc<dyn crate::model_feed::ModelFeedPort>>,
     pub prices: Option<Arc<dyn crate::prices::SourcePriceControlPort>>,
     pub work_plans: Option<Arc<crate::delegation::work_plans::WorkPlanDirectory>>,
     pub delegation_tasks: Option<Arc<crate::delegation::tasks::DelegationTasks>>,
@@ -619,6 +620,7 @@ impl ApplicationPorts {
         Self {
             role_all_ready: false,
             model_catalog: None,
+            model_feed: None,
             prices: None,
             client_access: None,
             work_plans: None,
@@ -642,6 +644,10 @@ impl ApplicationPorts {
         self
     }
 
+    pub fn with_model_feed(mut self, port: Arc<dyn crate::model_feed::ModelFeedPort>) -> Self {
+        self.model_feed = Some(port);
+        self
+    }
     pub fn with_model_catalog(
         mut self,
         port: Arc<dyn crate::model_catalog::ModelCatalogPort>,

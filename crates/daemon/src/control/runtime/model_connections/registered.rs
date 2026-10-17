@@ -187,7 +187,7 @@ impl LocalControlAdapter {
                 evidence_ref: None,
             },
             runtime_fallback_denied_model_ids: super::runtime_fallback_denied_model_ids(Some(
-                catalog,
+                &catalog,
             )),
             models,
         })

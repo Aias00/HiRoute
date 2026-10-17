@@ -877,6 +877,8 @@ pub(crate) fn command_request_schema(command_id: &str) -> &'static str {
         "compute.connection.authorize" => "hiroute.compute-connection-authorization-request/v1",
         "compute.connection.login" => "hiroute.subscription-login-request/v1",
         "compute.connection.test" => "hiroute.compute-connection-test-request/v1",
+        "models.feed.settings.apply" => "hiroute.model-feed-settings/v1",
+        "models.feed.remove.apply" => "hiroute.model-feed-remove/v1",
         "models.show" => "hiroute.model-catalog-query/v1",
         "sessions.list" => "hiroute.session-list-query/v1",
         "sessions.show" => "hiroute.session-lookup/v1",
@@ -944,6 +946,12 @@ pub(crate) fn command_response_schema(command_id: &str) -> &'static str {
         "compute.connection.authorize" => "hiroute.compute-subscription-check-result/v2",
         "compute.connection.login" => "hiroute.subscription-login-result/v1",
         "compute.connection.test" => "hiroute.model-connection-check/union",
+        "models.feed.status"
+        | "models.feed.refresh"
+        | "models.feed.settings.apply"
+        | "models.feed.remove.apply" => "hiroute.model-feed-status/v1",
+        "models.feed.remove.preview" => "hiroute.model-feed-removal-preview/v1",
+        "models.availability" => "hiroute.model-availability/v1",
         "models.show" => "hiroute.model-catalog-view/v1",
         "sessions.list" => "hiroute.session-list/v1",
         "sessions.show" => "hiroute.session-detail/v1",
@@ -995,6 +1003,8 @@ pub(crate) fn command_stdin_channels(command_id: &str) -> &'static [&'static str
         | "agents.scan"
         | "compute.connection.prepare"
         | "compute.connection.options"
+        | "models.feed.settings.apply"
+        | "models.feed.remove.apply"
         | "compute.connection.preview"
         | "compute.connection.apply"
         | "compute.connection.authorize"
