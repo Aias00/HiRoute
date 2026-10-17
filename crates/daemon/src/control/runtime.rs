@@ -1174,12 +1174,38 @@ impl ControlStatePort for LocalControlAdapter {
             .map_err(map_port)?;
         Ok(ControlReadAttempt::Ready(revisions.target))
     }
+    fn trust_plan_ids(&self, workspace: &WorkspaceId) -> Result<Vec<String>, ControlReadError> {
+        let stores = self.stores_lock().map_err(map_port)?;
+        let heads = stores
+            .control()
+            .plan_heads(workspace)
+            .map_err(|_| ControlReadError::Unavailable)?;
+        Ok(heads
+            .into_iter()
+            .filter(|h| h.status == hiroute_domain::PlanLifecycleV1::Enabled)
+            .map(|h| h.reference.plan_id.to_string())
+            .collect())
+    }
+
     fn trust_context(
         &self,
         workspace: &WorkspaceId,
         plan_id: &str,
     ) -> Result<hiroute_application::trust::context::TrustContextV1, ControlReadError> {
         self.read_trust_context(workspace, plan_id)
+    }
+    fn trust_task_population(
+        &self,
+        workspace: &WorkspaceId,
+        query: &hiroute_domain::TrustPopulationQueryV1,
+        from_ms: i64,
+        to_ms: i64,
+    ) -> Result<hiroute_domain::TrustTaskPopulationV1, ControlReadError> {
+        let stores = self.stores_lock().map_err(map_port)?;
+        stores
+            .runtime()
+            .trust_task_population(workspace, &query.plan_id, query.revision, from_ms, to_ms)
+            .map_err(|_| ControlReadError::Unavailable)
     }
     fn trust_runs(
         &self,

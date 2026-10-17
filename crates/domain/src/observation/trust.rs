@@ -77,6 +77,22 @@ pub struct TrustPopulationV1 {
     pub from_ms: i64,
     pub to_ms: i64,
 }
+
+/// Latest status of each submitted task in a Plan/revision/creation-time scope.
+/// Tasks that produced no model stages still belong to this population.
+#[derive(Clone, Debug)]
+pub struct TrustTaskOutcomeV1 {
+    pub task_id: String,
+    pub executor: String,
+    pub ordinal: u64,
+    pub state: crate::delegation::RunStateV1,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct TrustTaskPopulationV1 {
+    pub tasks: Vec<TrustTaskOutcomeV1>,
+    pub over_limit: bool,
+}
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TrustCountsV1 {

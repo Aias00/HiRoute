@@ -1,6 +1,7 @@
 import { TrustEvidencePanel } from './trust/TrustEvidencePanel';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { UiIcon } from '../ui';
+import type { TrustRow } from './trust/types';
+import { Disclosure, UiIcon } from '../ui';
 import { safeDiagnosticCode } from '../error-code';
 import { observationRead } from './observation-client';
 import { qualityExecutionModels } from './plan-quality-models';
@@ -39,7 +40,7 @@ export function PlanQuality({
   const [score, setScore] = useState<ScoreFilter>('all');
   const [period, setPeriod] = useState<Period>(compact ? 'all' : 'seven_days');
   const [version, setVersion] = useState('current');
-  const [selected, setSelected] = useState<{ key: string; execution: QualityExecution | null } | null>(null);
+  const [selected, setSelected] = useState<{ key: string; execution: QualityExecution | null; trustRow?: { branch_id: string; group: TrustRow["group"]; model_configuration_id: string | null; reasoning_profile_id: string | null; attribution: TrustRow["attribution"]; executor: string | null; group_by_executor: boolean }; label?: string } | null>(null);
   const [reload, setReload] = useState(0);
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -60,15 +61,16 @@ export function PlanQuality({
       const page = await observationRead<Page>('plan_quality', {
         plan_id: planId || null, session_id: sessionId || null, plan_revision: revision,
         execution: selected?.execution ?? null,
+        trust_row: selected?.trustRow ?? null,
         from_ms: window.from, to_ms: window.to,
         competence: score === 'high' ? 'meets_floor' : score === 'low' ? 'below_floor' : null,
         unrated_only: score === 'unrated', limit: 20, cursor: next,
       });
       if (epoch !== generation.current) return;
       setSummary(page.summary);
-      const stages = selected && !selected.execution ? [] : page.samples;
+      const stages = selected && !selected.execution && !selected.trustRow ? [] : page.samples;
       setSamples(current => next ? [...current, ...stages] : stages);
-      setCursor(selected && !selected.execution ? null : page.next_cursor ?? null);
+      setCursor(selected && !selected.execution && !selected.trustRow ? null : page.next_cursor ?? null);
       setLoaded(true);
       // Historical records can lack the native-name projection. Recover only
       // from an exact request in the same session, never a neighbouring request.
@@ -134,13 +136,13 @@ export function PlanQuality({
         <button className="btn btn-quiet quality-refresh" type="button" disabled={busy} onClick={() => setReload(value => value + 1)}><UiIcon name="refresh" />{text('刷新', 'Refresh')}</button>
       </div>
     </div>
-    {!compact && planId && !sessionId && <TrustEvidencePanel planId={planId} revision={version === 'current' ? 'active' : version === 'all' ? 'all' : Number(version)} fromMs={window.from} toMs={window.to} active={active} language={language} names={modelNames} onThreshold={onThreshold} onDivision={onDivision} onSelect={row => {
-      const match = rows.find(candidate => candidate.summary?.execution.model_configuration_id === row.model_configuration_id && candidate.summary.execution.group === row.group && candidate.summary.reasoning_profile_id === row.reasoning_profile_id && candidate.summary.execution.attribution === row.attribution && (candidate.summary.execution.executed_branch_id ?? candidate.summary.execution.selected_branch_id) === row.branch_id);
-      if (match?.summary) { setSelected({ key: match.key, execution: match.summary.execution }); setScore('all'); }
+    {!compact && planId && !sessionId && <TrustEvidencePanel planId={planId} revision={version === 'current' ? 'active' : version === 'all' ? 'all' : Number(version)} fromMs={window.from} toMs={window.to} active={active} language={language} names={modelNames} onThreshold={onThreshold} onDivision={onDivision} onSelect={(row, groupByExecutor) => {
+      const trustRow = { branch_id: row.branch_id, group: row.group, model_configuration_id: row.model_configuration_id, reasoning_profile_id: row.reasoning_profile_id, attribution: row.attribution, executor: row.executor, group_by_executor: groupByExecutor };
+      setSelected({ key: JSON.stringify(trustRow), execution: null, trustRow, label: modelNames.get(row.model_configuration_id ?? '') ?? text('所选执行组', 'Selected execution group') }); setScore('all');
     }} />}
     {error && <div className="callout bad" role="alert" data-error-code={error}><UiIcon name="warning" /><span>{text('模型表现暂时无法读取。', 'Model performance is temporarily unavailable.')}</span><button className="btn" type="button" onClick={() => setReload(value => value + 1)}>{text('重试', 'Retry')}</button></div>}
     {!loaded && busy && <div className="oc-status-row" role="status"><span className="oc-spinner" /><p>{text('正在读取模型表现…', 'Reading model performance…')}</p></div>}
-    {!compact && <div className="quality-model-scope">{groups.map(branch => <section className="quality-group" key={branch} data-execution-group={branch}>
+    {!compact && <Disclosure label={text('各模型的平均阶段评分', 'Average stage scores by model')} language={language}><div className="quality-model-scope">{groups.map(branch => <section className="quality-group" key={branch} data-execution-group={branch}>
       <header className="quality-group-heading"><h4>{qualityRowSectionLabel(rows.find(row => qualityRowSection(row) === branch)!, language)}</h4><span>{text(rows.filter(row => qualityRowSection(row) === branch).length + ' 个模型配置', rows.filter(row => qualityRowSection(row) === branch).length + (rows.filter(row => qualityRowSection(row) === branch).length === 1 ? ' model configuration' : ' model configurations'))}</span></header>
       <div className="quality-model-columns" aria-hidden="true"><span>{text('模型 / 思考设置', 'Model / Reasoning')}</span><span>{text('平均阶段胜任度', 'Average stage competence')}</span><span>{text('阶段样本', 'Stage samples')}</span><span /></div>
       {rows.filter(row => qualityRowSection(row) === branch).map(row => <div className={'quality-model-row' + (selected?.key === row.key ? ' selected' : '')} key={row.key} data-model-configuration={row.configured?.model_configuration_id ?? row.summary?.execution.model_configuration_id ?? ''}>
@@ -149,7 +151,7 @@ export function PlanQuality({
         <div className="quality-model-counts"><span>{text((row.summary?.scored_stage_count ?? 0) + ' 已评分', (row.summary?.scored_stage_count ?? 0) + ' scored')}</span><span>{text((row.summary?.unrated_stage_count ?? 0) + ' 未评分', (row.summary?.unrated_stage_count ?? 0) + ' unrated')}</span></div>
         <button type="button" className="btn btn-quiet quality-view-stages" aria-expanded={selected?.key === row.key} onClick={() => { setScore('all'); setSelected(selected?.key === row.key ? null : { key: row.key, execution: row.summary?.execution ?? null }); }}>{selected?.key === row.key ? text('收起阶段', 'Hide stages') : text('查看阶段', 'View stages')}<UiIcon name="chevronRight" /></button>
       </div>)}
-    </section>)}</div>}
+    </section>)}</div></Disclosure>}
     {!compact && loaded && groups.length > 0 && <p className="quality-average-note">{text('平均值使用当前范围内各已评分阶段的最新原始评分，未评分阶段不计入平均。', 'Averages use the latest raw assessment of every scored stage in this scope. Unrated stages are excluded.')}</p>}
     {!compact && loaded && !error && groups.length === 0 && <p className="oc-meta">{text('当前范围还没有模型阶段记录。', 'No model-stage records are available for this scope yet.')}</p>}
     {(compact || selected) && <section className="quality-stage-section">

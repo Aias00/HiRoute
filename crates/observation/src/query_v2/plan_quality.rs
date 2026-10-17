@@ -175,12 +175,24 @@ impl LocalObservationStore {
             .map(serde_json::to_string)
             .transpose()
             .map_err(|_| ObservationV2Error::Invalid)?;
+        let detail = SAMPLE_SELECT.replace("ORDER BY chosen.sequence DESC LIMIT 1)", "ORDER BY chosen.sequence DESC LIMIT 1) AS selection").replace("FROM quality q", ", CASE WHEN l.conflicted=0 THEN json_extract(l.body_json,'$.harness_id') WHEN l.request_id IS NULL THEN (SELECT s.agent_id FROM sessions s WHERE s.workspace_id=q.workspace_id AND s.session_id=q.session_id) END AS executor FROM quality q");
         let mut rows = {
             let sql = format!(
                 "WITH quality AS ({SCOPE})
-                 {SAMPLE_SELECT}
+                 {detail}
                  WHERE (:segment IS NULL OR q.segment_id=:segment)
                    AND (:model IS NULL OR q.model_configuration_id=:model)
+                   AND (:execution_group IS NULL OR q.execution_group=:execution_group)
+                   AND (:selection_reason IS NULL OR json_extract(selection,'$.selection_reason')=:selection_reason)
+                   AND (json_array_length(:segments)=0 OR q.segment_id IN (SELECT value FROM json_each(:segments)))
+                   AND (:executor IS NULL OR executor=:executor)
+                   AND (:trust_row IS NULL OR (
+                     COALESCE(q.executed_branch_id,q.selected_branch_id)=json_extract(:trust_row,'$.branch_id')
+                     AND q.execution_group IS json_extract(:trust_row,'$.group')
+                     AND q.model_configuration_id IS json_extract(:trust_row,'$.model_configuration_id')
+                     AND q.reasoning_profile_id IS json_extract(:trust_row,'$.reasoning_profile_id')
+                     AND q.attribution=json_extract(:trust_row,'$.attribution')
+                     AND (json_extract(:trust_row,'$.group_by_executor')=0 OR executor IS json_extract(:trust_row,'$.executor'))))
                    AND (:unrated=0 OR q.reliable_score IS NULL)
                    AND (:gt IS NULL OR q.reliable_score>:gt)
                    AND (:lt IS NULL OR q.reliable_score<:lt)
@@ -210,6 +222,11 @@ impl LocalObservationStore {
                         ":plan": query.plan_id, ":session": query.session_id,
                         ":revision": query.plan_revision.and_then(|v| i64::try_from(v).ok()),
                         ":runs": runs, ":segment": query.segment_id,
+                        ":execution_group": query.execution_group.map(|g| match g { hiroute_domain::ExecutionGroupV1::Regular => "regular", hiroute_domain::ExecutionGroupV1::Primary => "primary" }),
+                        ":selection_reason": query.selection_reason.map(|r| serde_json::to_value(r).expect("enum").as_str().expect("enum string").to_owned()),
+                        ":segments": serde_json::to_string(&query.segment_ids).map_err(|_| ObservationV2Error::Invalid)?,
+                        ":executor": query.executor,
+                        ":trust_row": query.trust_row.as_ref().map(serde_json::to_string).transpose().map_err(|_| ObservationV2Error::Invalid)?,
                         ":model": query.model_configuration_id, ":unrated": query.unrated_only,
                         ":gt": query.score_gt, ":lt": query.score_lt,
                         ":competence": query.competence.map(|v| match v { hiroute_domain::PlanCompetenceFilter::BelowFloor => "below_floor", hiroute_domain::PlanCompetenceFilter::MeetsFloor => "meets_floor" }),
@@ -430,7 +447,22 @@ fn validate(query: &PlanQualitySamplesQuery) -> Result<(), ObservationV2Error> {
                 .plan_revision
                 .is_some_and(|revision| revision != e.plan_revision)
     });
-    if query.plan_id.is_none() && query.session_id.is_none()
+    let trust_invalid = query.trust_row.as_ref().is_some_and(|row| {
+        !identifier(&row.branch_id)
+            || [
+                &row.model_configuration_id,
+                &row.reasoning_profile_id,
+                &row.executor,
+            ]
+            .into_iter()
+            .flatten()
+            .any(|v| !identifier(v))
+    });
+    if trust_invalid
+        || query.segment_ids.len() > 200
+        || query.segment_ids.iter().any(|id| !identifier(id))
+        || query.executor.as_ref().is_some_and(|id| !identifier(id))
+        || query.plan_id.is_none() && query.session_id.is_none()
         || query.limit == 0
         || query.limit > 200
         || query.plan_revision == Some(0)

@@ -2,6 +2,96 @@ use super::*;
 use hiroute_domain::TrustPopulationQueryV1;
 
 #[test]
+fn trust_drilldown_filters_exact_identity_without_changing_scope_summary() {
+    use hiroute_domain::{
+        BranchExecutionPolicyV1, BranchExecutionV1, ExecutionGroupV1, PlanTrustRowFilterV1,
+    };
+    let directory = tempfile::tempdir().unwrap();
+    let store = open_store(directory.path());
+    let fixture = Fixture::new("trust-detail");
+    let channel = fact_channel(&fixture, 256 * 1024);
+    let writer = writer(&store);
+    for (i, group) in [ExecutionGroupV1::Regular, ExecutionGroupV1::Primary]
+        .into_iter()
+        .enumerate()
+    {
+        let mut fact = finished(
+            &fixture,
+            &format!("stage-{i}"),
+            &format!("turn-{i}"),
+            i as u64 + 1,
+            "smart_saving",
+            1000 + i as u64 * 100,
+        );
+        if let ExecutionFactV1::AgentTurnFinished {
+            branch_execution, ..
+        } = &mut fact
+        {
+            *branch_execution = Some(BranchExecutionV1 {
+                policy: BranchExecutionPolicyV1 {
+                    name: "Trial".into(),
+                    floor_millis: 500,
+                    criteria_digest: None,
+                },
+                group,
+                candidate_index: 0,
+            });
+        }
+        assert!(matches!(
+            offer_fact(
+                &writer,
+                &channel,
+                fixture.fact(i as u64 + 1, fact, 1100 + i as i64)
+            ),
+            WriterCycleOutcome::Ack(_)
+        ));
+    }
+    let mut q = query(None);
+    q.trust_row = Some(PlanTrustRowFilterV1 {
+        branch_id: "smart_saving".into(),
+        group: Some(ExecutionGroupV1::Regular),
+        model_configuration_id: Some(MODEL.into()),
+        reasoning_profile_id: None,
+        attribution: AgentTurnAttributionV1::Single,
+        group_by_executor: false,
+        executor: None,
+    });
+    let page = store
+        .observed_plan_quality_samples(&reader(), &q, 5000)
+        .unwrap();
+    assert_eq!(page.samples.len(), 1);
+    assert_eq!(page.samples[0].segment_id, "stage-0");
+    assert_eq!(page.summary.unrated_stage_count, 2);
+    q.trust_row.as_mut().unwrap().reasoning_profile_id = Some("high".into());
+    assert!(
+        store
+            .observed_plan_quality_samples(&reader(), &q, 5000)
+            .unwrap()
+            .samples
+            .is_empty()
+    );
+    q.trust_row = None;
+    q.segment_ids = vec!["stage-1".into()];
+    q.execution_group = Some(ExecutionGroupV1::Primary);
+    assert_eq!(
+        store
+            .observed_plan_quality_samples(&reader(), &q, 5000)
+            .unwrap()
+            .samples[0]
+            .segment_id,
+        "stage-1"
+    );
+    q.executor = Some("not-this-executor".into());
+    assert!(
+        store
+            .observed_plan_quality_samples(&reader(), &q, 5000)
+            .unwrap()
+            .samples
+            .is_empty()
+    );
+}
+
+#[test]
 fn trust_population_keeps_full_active_history_beside_the_selected_window() {
     let directory = tempfile::tempdir().unwrap();
     let store = open_store(directory.path());

@@ -29,6 +29,17 @@ pub(super) fn payload(command: &str, options: &[String]) -> Result<Value, ErrorC
         }
         return serde_json::to_value(request).map_err(|_| ErrorCode::Internal);
     }
+    if command == "observation.plan-trust.suggestions" {
+        if !options.is_empty() {
+            return Err(ErrorCode::InvalidArguments);
+        }
+        return serde_json::to_value(ObservationReadRequestV2::new(
+            ObservationReadIntentV2::PlanTrustSuggestions(
+                hiroute_application_api::ObservationStatusQueryV2 {},
+            ),
+        ))
+        .map_err(|_| ErrorCode::Internal);
+    }
     let mut query = PlanTrustQueryV1 {
         plan_id: String::new(),
         branch_id: None,
@@ -88,9 +99,6 @@ pub(super) fn payload(command: &str, options: &[String]) -> Result<Value, ErrorC
     }
     let intent = match command {
         "observation.plan-trust" => ObservationReadIntentV2::PlanTrust(query),
-        "observation.plan-trust.suggestions" => {
-            ObservationReadIntentV2::PlanTrustSuggestions(query)
-        }
         "observation.plan-trust.replay"
             if !thresholds.is_empty()
                 && thresholds.len() <= 8

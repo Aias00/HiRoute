@@ -41,11 +41,7 @@ pub fn suggest(
             Some(level) => TrustSuggestionV1::StepUp {
                 threshold_millis: level.threshold_millis,
             },
-            None if TrustLevelV1::from_threshold(threshold)
-                .is_some_and(|level| level.id == "hands_off") =>
-            {
-                TrustSuggestionV1::ExploreDivision
-            }
+            None if threshold <= 500 => TrustSuggestionV1::ExploreDivision,
             None => TrustSuggestionV1::Keep {
                 missing: Vec::new(),
             },
@@ -113,7 +109,7 @@ mod tests {
         );
         assert_eq!(
             suggest(400, &eligible, &eligible, false),
-            TrustSuggestionV1::Keep { missing: vec![] }
+            TrustSuggestionV1::ExploreDivision
         );
         let at_floor = counts(30, 30, 21, 1);
         assert!(matches!(

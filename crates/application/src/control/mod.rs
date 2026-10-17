@@ -93,11 +93,24 @@ pub trait ControlStatePort: Send + Sync {
     ) -> Result<ControlReadAttempt<u64>, ControlReadError> {
         Err(ControlReadError::Unavailable)
     }
+    fn trust_plan_ids(&self, _workspace: &WorkspaceId) -> Result<Vec<String>, ControlReadError> {
+        Err(ControlReadError::Unavailable)
+    }
+
     fn trust_context(
         &self,
         _workspace: &WorkspaceId,
         _plan_id: &str,
     ) -> Result<crate::trust::context::TrustContextV1, ControlReadError> {
+        Err(ControlReadError::Unavailable)
+    }
+    fn trust_task_population(
+        &self,
+        _workspace: &WorkspaceId,
+        _query: &hiroute_domain::TrustPopulationQueryV1,
+        _from_ms: i64,
+        _to_ms: i64,
+    ) -> Result<hiroute_domain::TrustTaskPopulationV1, ControlReadError> {
         Err(ControlReadError::Unavailable)
     }
     fn trust_runs(

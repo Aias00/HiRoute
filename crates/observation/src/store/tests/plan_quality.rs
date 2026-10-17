@@ -129,6 +129,11 @@ fn assessment_for_model(
 
 fn query(plan_revision: Option<u64>) -> PlanQualitySamplesQuery {
     PlanQualitySamplesQuery {
+        execution_group: None,
+        selection_reason: None,
+        segment_ids: Vec::new(),
+        executor: None,
+        trust_row: None,
         competence: None,
         plan_id: Some(PLAN.into()),
         session_id: None,

@@ -2,6 +2,30 @@ use super::*;
 use hiroute_domain::delegation::RunStateV1;
 use serde_json::json;
 
+#[test]
+fn executor_task_outcomes_do_not_depend_on_recorded_model_stages() {
+    let tasks = [
+        TrustTaskOutcomeV1 {
+            task_id: "task/empty".into(),
+            executor: "dsh".into(),
+            ordinal: 1,
+            state: RunStateV1::Accepted,
+        },
+        TrustTaskOutcomeV1 {
+            task_id: "task/continued".into(),
+            executor: "dsh".into(),
+            ordinal: 2,
+            state: RunStateV1::Succeeded,
+        },
+    ];
+    let groups = executor_outcomes(&tasks);
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0].task_outcomes["submitted"], 2);
+    assert_eq!(groups[0].task_outcomes["running"], 1);
+    assert_eq!(groups[0].task_outcomes["succeeded"], 1);
+    assert_eq!(groups[0].task_outcomes["continued"], 1);
+}
+
 fn stage(id: &str, assessment: Option<(f64, bool)>, later: bool) -> TrustObservedStageV1 {
     let sample = serde_json::from_value(json!({
         "selection": null, "branch_execution": {"policy":{"name":"Trial", "floor_millis":500, "criteria_digest":null}, "group":"regular", "candidate_index":0}, "upgrade":null,

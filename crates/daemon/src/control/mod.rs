@@ -310,6 +310,9 @@ impl LocalControlDaemon {
                 | "GetObservationStatus"
                 | "GetValue"
                 | "GetPlanQualitySamples"
+                | "GetPlanTrust"
+                | "GetPlanTrustReplay"
+                | "GetPlanTrustSuggestions"
         );
         if request.operation_id.starts_with("Worker") && request.protected_grant.is_some() {
             return MachineEnvelopeV2::failed(

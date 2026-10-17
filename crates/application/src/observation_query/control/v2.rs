@@ -80,6 +80,12 @@ impl ObservationControl {
             content,
             search,
         )?;
+        let trust_read = matches!(
+            &request.intent,
+            ObservationReadIntentV2::PlanTrust(_)
+                | ObservationReadIntentV2::PlanTrustReplay(_)
+                | ObservationReadIntentV2::PlanTrustSuggestions(_)
+        );
         let reader = if matches!(&request.intent, ObservationReadIntentV2::Analysis(_)) {
             reader.with_query_deadline(started + std::time::Duration::from_millis(500))
         } else {
@@ -101,10 +107,10 @@ impl ObservationControl {
                 };
                 serde_json::to_value(self.analysis_read(&reader, q, range.as_ref(), now)?)
             }
-            ObservationReadIntentV2::PlanTrust(q)
-            | ObservationReadIntentV2::PlanTrustSuggestions(q) => {
-                Ok(self.trust_result(&reader, &q, None, now)?)
+            ObservationReadIntentV2::PlanTrustSuggestions(_) => {
+                Ok(self.trust_suggestions(&reader, now)?)
             }
+            ObservationReadIntentV2::PlanTrust(q) => Ok(self.trust_result(&reader, &q, None, now)?),
             ObservationReadIntentV2::PlanTrustReplay(q) => {
                 if q.thresholds_millis.is_empty()
                     || q.thresholds_millis.len() > 8
@@ -227,7 +233,14 @@ impl ObservationControl {
             .len()
             > 1024 * 1024
         {
-            return Err(ObservationQueryError::Unavailable);
+            return Err(if trust_read {
+                ObservationQueryError::ScopeTooLarge
+            } else {
+                ObservationQueryError::Unavailable
+            });
+        }
+        if trust_read && started.elapsed() > std::time::Duration::from_secs(1) {
+            return Err(ObservationQueryError::ScopeTooLarge);
         }
         Ok(result)
     }

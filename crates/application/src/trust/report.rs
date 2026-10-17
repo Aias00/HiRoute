@@ -18,6 +18,7 @@ pub struct PlanTrustReportV1 {
     pub sessions: Vec<TrustSessionV1>,
     pub session_total: usize,
     pub announcements: Vec<TrustAnnouncementCountV1>,
+    pub executors: Vec<TrustExecutorV1>,
     pub cost: serde_json::Value,
     pub suggestion_rules: serde_json::Value,
 }
@@ -39,7 +40,36 @@ pub struct TrustRowV1 {
     pub duration_p50_ms: Option<u64>,
     pub duration_p90_ms: Option<u64>,
     pub output_tokens_per_second: Option<f64>,
+}
+#[derive(Clone, Debug, Serialize)]
+pub struct TrustExecutorV1 {
+    pub executor: String,
     pub task_outcomes: BTreeMap<String, u64>,
+}
+fn executor_outcomes(tasks: &[TrustTaskOutcomeV1]) -> Vec<TrustExecutorV1> {
+    let mut groups: BTreeMap<String, BTreeMap<String, u64>> = BTreeMap::new();
+    for task in tasks {
+        let outcomes = groups.entry(task.executor.clone()).or_default();
+        *outcomes.entry("submitted".into()).or_default() += 1;
+        let state = match task.state {
+            delegation::RunStateV1::Succeeded => "succeeded",
+            delegation::RunStateV1::Failed => "failed",
+            delegation::RunStateV1::Cancelled => "cancelled",
+            delegation::RunStateV1::Unknown => "unknown",
+            _ => "running",
+        };
+        *outcomes.entry(state.into()).or_default() += 1;
+        if task.ordinal > 1 {
+            *outcomes.entry("continued".into()).or_default() += 1;
+        }
+    }
+    groups
+        .into_iter()
+        .map(|(executor, task_outcomes)| TrustExecutorV1 {
+            executor,
+            task_outcomes,
+        })
+        .collect()
 }
 #[derive(Clone, Debug, Serialize)]
 pub struct TrustProtectionV1 {
@@ -140,6 +170,7 @@ pub fn report(
     context: &TrustContextV1,
     population: &TrustPopulationV1,
     runs: &BTreeMap<String, TrustRunV1>,
+    tasks: &[TrustTaskOutcomeV1],
 ) -> PlanTrustReportV1 {
     let mut grouped: BTreeMap<String, Vec<&TrustObservedStageV1>> = BTreeMap::new();
     let mut sessions: BTreeMap<String, u64> = BTreeMap::new();
@@ -171,36 +202,6 @@ pub fn report(
                 .iter()
                 .flat_map(|s| s.output_tokens_per_second.iter().copied())
                 .collect();
-            let mut outcomes = BTreeMap::new();
-            let task_runs: BTreeSet<_> = stages
-                .iter()
-                .filter_map(|s| s.sample.run_id.as_ref())
-                .collect();
-            let mut latest: BTreeMap<&str, &TrustRunV1> = BTreeMap::new();
-            for id in task_runs {
-                if let Some(run) = runs.get(id) {
-                    if latest
-                        .get(run.task_id.as_str())
-                        .is_none_or(|old| old.ordinal < run.ordinal)
-                    {
-                        latest.insert(&run.task_id, run);
-                    }
-                }
-            }
-            for run in latest.values() {
-                *outcomes.entry("submitted".into()).or_default() += 1;
-                let state = match run.state {
-                    delegation::RunStateV1::Succeeded => "succeeded",
-                    delegation::RunStateV1::Failed => "failed",
-                    delegation::RunStateV1::Cancelled => "cancelled",
-                    delegation::RunStateV1::Unknown => "unknown",
-                    _ => "running",
-                };
-                *outcomes.entry(state.into()).or_default() += 1;
-                if run.ordinal > 1 {
-                    *outcomes.entry("continued".into()).or_default() += 1;
-                }
-            }
             TrustRowV1 {
                 branch_id: branch(first).into(),
                 group: sample.branch_execution.as_ref().map(|e| e.group),
@@ -253,7 +254,6 @@ pub fn report(
                 duration_p90_ms: percentile(&mut durations, 90),
                 output_tokens_per_second: (!throughput.is_empty())
                     .then(|| throughput.iter().sum::<f64>() / throughput.len() as f64),
-                task_outcomes: outcomes,
             }
         })
         .collect();
@@ -299,7 +299,7 @@ pub fn report(
                 }
             };
             let branch_stages: Vec<_> = population
-                .stages
+                .active_stages
                 .iter()
                 .filter(|s| {
                     s.sample.plan_revision == context.active.content_revision && branch(s) == id
@@ -367,6 +367,7 @@ pub fn report(
             .map(|(session_id, stages)| TrustSessionV1 { session_id, stages })
             .collect(),
         announcements,
+        executors: executor_outcomes(tasks),
         cost: serde_json::json!({"kind":"unavailable", "reason":"comparison basis not available"}),
         suggestion_rules: serde_json::json!({"min_scored":30,"upper_rate":0.85,"lower_rate":0.70,"min_coverage":0.60,"min_sessions":3}),
     }

@@ -5,6 +5,58 @@ use hiroute_domain::{
 };
 
 impl ObservationControl {
+    pub(super) fn trust_suggestions(
+        &self,
+        reader: &ObservationReaderContext,
+        now: i64,
+    ) -> Result<Value, ObservationQueryError> {
+        let started = std::time::Instant::now();
+        let generation = self
+            .state
+            .snapshot(&self.workspace_id)
+            .map_err(map_control)?
+            .revisions;
+        let ids = self
+            .state
+            .trust_plan_ids(&self.workspace_id)
+            .map_err(map_control)?;
+        let mut suggestions = Vec::new();
+        for plan_id in ids {
+            if started.elapsed() > std::time::Duration::from_secs(1) {
+                return Err(ObservationQueryError::ScopeTooLarge);
+            }
+            let query = PlanTrustQueryV1 {
+                plan_id: plan_id.clone(),
+                branch_id: None,
+                revision: Default::default(),
+                from_ms: None,
+                to_ms: None,
+                group_by: Default::default(),
+            };
+            let report = self.trust_result(reader, &query, None, now)?;
+            let branches: Vec<_> = report["branches"]
+                .as_array()
+                .ok_or(ObservationQueryError::Corrupt)?
+                .iter()
+                .filter(|b| b["suggestion"]["kind"] != "keep")
+                .cloned()
+                .collect();
+            if !branches.is_empty() {
+                suggestions.push(json!({"plan_id":plan_id,"active_revision":report["active_revision"],"branches":branches,"announcements":report["announcements"],"rows":report["rows"]}));
+            }
+        }
+        if self
+            .state
+            .snapshot(&self.workspace_id)
+            .map_err(map_control)?
+            .revisions
+            != generation
+        {
+            return Err(ObservationQueryError::StalePreview);
+        }
+        Ok(json!({"suggestions":suggestions}))
+    }
+
     pub(super) fn trust_result(
         &self,
         reader: &ObservationReaderContext,
@@ -61,11 +113,34 @@ impl ObservationControl {
             .state
             .trust_runs(&self.workspace_id, &ids)
             .map_err(map_control)?;
+        let tasks = if query.branch_id.is_none() {
+            self.state
+                .trust_task_population(
+                    &self.workspace_id,
+                    &TrustPopulationQueryV1 {
+                        active_revision: context.active.content_revision,
+                        plan_id: query.plan_id.clone(),
+                        branch_id: None,
+                        revision,
+                        from_ms: Some(population.from_ms),
+                        to_ms: Some(population.to_ms),
+                    },
+                    population.from_ms,
+                    population.to_ms,
+                )
+                .map_err(map_control)?
+        } else {
+            Default::default()
+        };
+        if tasks.over_limit {
+            return Err(ObservationQueryError::ScopeTooLarge);
+        }
         serde_json::to_value(crate::trust::report::report(
             query,
             &context,
             &population,
             &runs,
+            &tasks.tasks,
         ))
         .map_err(|_| ObservationQueryError::Corrupt)
     }

@@ -64,7 +64,7 @@ pub enum ObservationReadIntentV2 {
     PlanQuality(PlanQualitySamplesQuery),
     PlanTrust(PlanTrustQueryV1),
     PlanTrustReplay(PlanTrustReplayQueryV1),
-    PlanTrustSuggestions(PlanTrustQueryV1),
+    PlanTrustSuggestions(ObservationStatusQueryV2),
 }
 impl ObservationReadRequestV2 {
     pub fn new(intent: ObservationReadIntentV2) -> Self {

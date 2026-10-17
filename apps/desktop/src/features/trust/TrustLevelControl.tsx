@@ -11,7 +11,7 @@ export function TrustLevelControl({ value, onChange, language, id, complete, evi
   const threshold = value.degree.simple_threshold_millis;
   const change = (simple_threshold_millis: number) => onChange({ ...value, degree: { ...value.degree, simple_threshold_millis } });
   return <div className="trust-control" data-trust-control={id}>
-    <div className="editor-section-heading"><h3>{t('信任档位', 'Trust level')}</h3><span>{trustLevelLabel(threshold, language)} · {Number.isFinite(threshold) ? threshold / 1000 : '—'}</span></div>
+    <div className="editor-section-heading"><h3>{t('信任档位', 'Trust level')}</h3><span>{trustLevelLabel(threshold, language)}{trustLevels.some(level => level.threshold_millis === threshold) ? ` · ${threshold / 1000}` : ''}</span></div>
     <div className="trust-levels" role="group" aria-label={t('信任档位', 'Trust level')}>
       {trustLevels.map(level => <button key={level.id} type="button" className={`btn${threshold === level.threshold_millis ? ' selected' : ''}`} aria-pressed={threshold === level.threshold_millis} onClick={() => change(level.threshold_millis)}><strong>{level.label[language]}</strong><span>{level.threshold_millis / 1000}</span></button>)}
     </div>
