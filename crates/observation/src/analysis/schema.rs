@@ -214,6 +214,12 @@ CREATE INDEX IF NOT EXISTS native_relation_child_v1 ON observation_native_relati
 CREATE TABLE IF NOT EXISTS observation_native_events_v1(
  workspace_id TEXT NOT NULL,event_id TEXT NOT NULL,body TEXT NOT NULL,
  PRIMARY KEY(workspace_id,event_id));
+CREATE TABLE IF NOT EXISTS observation_native_presence_v1(
+ workspace_id TEXT NOT NULL,session_id TEXT NOT NULL,PRIMARY KEY(workspace_id,session_id));
+CREATE TABLE IF NOT EXISTS observation_native_roots_v1(
+ workspace_id TEXT NOT NULL,session_id TEXT NOT NULL,proof_id TEXT NOT NULL,request_id TEXT NOT NULL,observed_ms INTEGER NOT NULL,
+ PRIMARY KEY(workspace_id,session_id,proof_id));
+CREATE INDEX IF NOT EXISTS native_roots_time_v1 ON observation_native_roots_v1(workspace_id,session_id,observed_ms DESC,proof_id);
 CREATE TABLE IF NOT EXISTS observation_native_event_members_v1(
  workspace_id TEXT NOT NULL,session_id TEXT NOT NULL,event_id TEXT NOT NULL,
  PRIMARY KEY(workspace_id,session_id,event_id));

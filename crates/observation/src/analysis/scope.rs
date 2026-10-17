@@ -28,6 +28,7 @@ pub(super) struct Scope {
     pub initial_request: Option<String>,
     pub keyword_digest: Option<String>,
     pub used_edges: Vec<u64>,
+    pub used_roots: Vec<(String, String)>,
     pub source_count: u64,
     pub source_watermark: i64,
     pub index_partial: bool,
@@ -204,7 +205,36 @@ pub(super) fn create(
     let stable_from = expiry
         .saturating_sub(crate::managed_text::RETENTION_MS)
         .saturating_add(1);
-    let (all, _) = members::resolve(db, reader.workspace().as_str(), r, &physical, stable_from)?;
+    let (mut all, _) =
+        members::resolve(db, reader.workspace().as_str(), r, &physical, stable_from)?;
+    let anchors = all
+        .iter()
+        .map(|m| m.anchor.clone())
+        .collect::<BTreeSet<_>>();
+    let encoded = serde_json::to_string(&anchors).map_err(|_| Error::Invalid)?;
+    let mut stmt=db.prepare("SELECT p.session_id,(SELECT root.proof_id FROM observation_native_roots_v1 root
+       JOIN logical_requests source ON source.workspace_id=root.workspace_id AND source.request_id=root.request_id
+       WHERE root.workspace_id=p.workspace_id AND root.session_id=p.session_id AND source.started_at_ms>=?3
+       ORDER BY root.observed_ms DESC,root.proof_id LIMIT 1)
+      FROM observation_native_presence_v1 p WHERE p.workspace_id=?1 AND p.session_id IN(SELECT value FROM json_each(?2))")?;
+    let roots = stmt
+        .query_map(
+            params![reader.workspace().as_str(), encoded, stable_from],
+            |r| Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?)),
+        )?
+        .collect::<Result<std::collections::BTreeMap<_, _>, _>>()?;
+    for m in &mut all {
+        if m.gap.is_none() && roots.get(&m.anchor) == Some(&None) {
+            m.gap = Some(
+                if m.predecessor.is_some() {
+                    "ancestor_predecessor_unknown"
+                } else {
+                    "predecessor_unknown"
+                }
+                .into(),
+            );
+        }
+    }
     let matching = if q.query.is_some() {
         Some(crate::query_v2::analysis_matching_sessions(
             db, reader, q, &range,
@@ -243,6 +273,15 @@ pub(super) fn create(
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect();
+    let selected_anchors = selected
+        .iter()
+        .map(|m| m.anchor.as_str())
+        .collect::<BTreeSet<_>>();
+    let used_roots = roots
+        .into_iter()
+        .filter(|(root, _)| selected_anchors.contains(root.as_str()))
+        .filter_map(|(root, proof)| proof.map(|proof| (root, proof)))
+        .collect();
     for m in selected {
         db.execute(
             "INSERT INTO observation_analysis_members_v1 VALUES(?1,?2,?3,?4,?5)",
@@ -278,6 +317,7 @@ pub(super) fn create(
             .map(|k| digest(&crate::text_index::fold(k.trim()).0))
             .transpose()?,
         used_edges,
+        used_roots,
         source_count: 0,
         source_watermark,
         index_partial: matching.is_some_and(|(_, partial)| partial),
@@ -296,6 +336,12 @@ pub(super) fn source_count(db: &Connection, s: &Scope) -> Result<u64, Error> {
         AND (?7 IS NULL OR r.request_id=?7) AND r.rowid<=?8",params![s.id,s.workspace,s.range.effective_from_ms,s.range.effective_to_ms,s.plan,s.agent,s.initial_request,s.source_watermark],|r|r.get(0))?)
 }
 pub(super) fn check_live(db: &Connection, s: &Scope) -> Result<(), Error> {
+    for (root, proof) in &s.used_roots {
+        let present:bool=db.query_row("SELECT EXISTS(SELECT 1 FROM observation_native_roots_v1 p JOIN logical_requests source ON source.workspace_id=p.workspace_id AND source.request_id=p.request_id WHERE p.workspace_id=?1 AND p.session_id=?2 AND p.proof_id=?3)",params![s.workspace,root,proof],|r|r.get(0))?;
+        if !present {
+            return Err(Error::Stale);
+        }
+    }
     for rev in &s.used_edges {
         let edge:Option<(String,String,String)>=db.query_row("SELECT parent_id,child_id,request_id FROM observation_native_relations_v1 WHERE workspace_id=?1 AND revision=?2",params![s.workspace,rev],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional()?;
         let Some((parent, child, request)) = edge else {

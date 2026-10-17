@@ -15,12 +15,12 @@ fn event(f: &Fixture, ids: Vec<String>, seq: u64) -> NativeContinuationEvidenceV
         current_session_id: f.session.to_string(),
         ids,
         complete: true,
-        proof_observation: NativeProofObservationV1 {
+        proof_observation: Some(NativeProofObservationV1 {
             observer_id: "native-observer".into(),
             sequence: seq,
             observed_at_ms: seq as i64,
             age_ms: 0,
-        },
+        }),
         current_state: None,
         invalid_edges: None,
         ingress_at_ms: 1000,
@@ -73,7 +73,7 @@ fn cached_ancestor_proof_cannot_override_parent_reopen_but_fresh_verification_ca
     let mut reopened = event(&a, vec![a.session.to_string()], 2);
     reopened.current_state = Some(NativeCurrentStateV1 {
         value: NativeSessionStateV1::Open,
-        observation: reopened.proof_observation.clone(),
+        observation: reopened.proof_observation.clone().unwrap(),
     });
     store.ingest_native_continuation(&reopened).unwrap();
     assert_eq!(page(&store).conversations.len(), 2);
@@ -81,7 +81,7 @@ fn cached_ancestor_proof_cannot_override_parent_reopen_but_fresh_verification_ca
     cached.event_id = "another-http-request".into();
     cached.sequence = 3;
     cached.ingress_at_ms = 2000;
-    cached.proof_observation.age_ms = 5000;
+    cached.proof_observation.as_mut().unwrap().age_ms = 5000;
     store.ingest_native_continuation(&cached).unwrap();
     assert_eq!(page(&store).conversations.len(), 2);
     let verified = event(&b, proof.ids, 4);
@@ -107,7 +107,7 @@ fn edge_ordering_is_independent_of_unrelated_observer_sequences_and_cached_repla
     let mut stale = event(&a, vec![a.session.to_string()], 150);
     stale.invalid_edges = Some(NativeInvalidEdgesV1 {
         edges: vec![[a.session.to_string(), b.session.to_string()]],
-        observation: stale.proof_observation.clone(),
+        observation: stale.proof_observation.clone().unwrap(),
     });
     store.ingest_native_continuation(&stale).unwrap();
     assert_eq!(
@@ -159,4 +159,26 @@ fn a_deleted_middle_member_cannot_join_ancestors_and_descendants_before_cleanup(
             .iter()
             .any(|m| m.gap_before.as_deref() == Some("predecessor_unavailable"))
     }));
+}
+
+#[test]
+fn missing_native_proof_is_a_gap_and_does_not_prevent_requests_or_fee_queries() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    let a = native(&store, "native-unobserved");
+    let mut missing = event(&a, vec![a.session.to_string()], 1);
+    missing.complete = false;
+    missing.proof_observation = None;
+    store.ingest_native_continuation(&missing).unwrap();
+    let before = page(&store);
+    assert_eq!(before.conversations.len(), 1);
+    assert!(before.conversations[0].lineage_partial);
+    assert_eq!(
+        before.conversations[0].members[0].gap_before.as_deref(),
+        Some("predecessor_unknown")
+    );
+    store
+        .ingest_native_continuation(&event(&a, vec![a.session.to_string()], 2))
+        .unwrap();
+    assert!(!page(&store).conversations[0].lineage_partial);
 }

@@ -70,7 +70,7 @@ fn local_day(
     ).map_err(|_| ControlReadError::Unavailable)
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     #[test]

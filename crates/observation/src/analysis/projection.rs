@@ -121,6 +121,10 @@ fn project_request(db: &Connection, w: &str, id: &str, rev: u64) -> rusqlite::Re
         |r| r.get(0),
     )?;
     if !exists {
+        db.execute(
+            "DELETE FROM observation_native_roots_v1 WHERE workspace_id=?1 AND request_id=?2",
+            params![w, id],
+        )?;
         for table in [
             "observation_analysis_attempts_v1",
             "observation_analysis_recorded_v1",

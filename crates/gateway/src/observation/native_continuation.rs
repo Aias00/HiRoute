@@ -77,14 +77,11 @@ impl GatewayObservation {
         if !self.enabled || !authorized.is_hermes_consumer() {
             return;
         }
-        let Some(("hermes_session", native)) = identity.observation_identity() else {
-            return;
-        };
-        let Some(current) = native.first() else {
-            return;
-        };
-        let Some(proof) = read(headers, current) else {
-            return;
+        let proof = match identity.observation_identity() {
+            Some(("hermes_session", native)) => {
+                native.first().and_then(|current| read(headers, current))
+            }
+            _ => None,
         };
         let receipt = authorized.receipt();
         let route = match &authorized.planner_policy().identity {
@@ -113,11 +110,22 @@ impl GatewayObservation {
                 &[id],
             )
         };
-        if hmac(current) != current_hmac {
+        if proof
+            .as_ref()
+            .and_then(|p| p.ids.last())
+            .is_some_and(|current| hmac(current) != current_hmac)
+        {
             return;
         }
-        let ids = proof.ids.iter().map(|id| hmac(id)).collect();
-        let negative = proof.invalid_edges.map(|mut n| {
+        let ids = proof
+            .as_ref()
+            .map(|p| p.ids.iter().map(|id| hmac(id)).collect())
+            .unwrap_or_else(|| vec![current_hmac.to_owned()]);
+        let complete = proof.as_ref().is_some_and(|p| p.complete);
+        let (proof_observation, current_state, negative) = proof
+            .map(|p| (Some(p.proof_observation), p.current_state, p.invalid_edges))
+            .unwrap_or_default();
+        let negative = negative.map(|mut n| {
             n.edges = n
                 .edges
                 .into_iter()
@@ -139,9 +147,9 @@ impl GatewayObservation {
                     request_id: request.clone(),
                     current_session_id: current,
                     ids,
-                    complete: proof.complete,
-                    proof_observation: proof.proof_observation,
-                    current_state: proof.current_state,
+                    complete,
+                    proof_observation,
+                    current_state,
                     invalid_edges: negative,
                     ingress_at_ms,
                     producer_id: producer.producer_id,

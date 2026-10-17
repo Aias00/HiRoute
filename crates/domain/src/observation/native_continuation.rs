@@ -53,7 +53,7 @@ pub struct NativeContinuationEvidenceV1 {
     pub current_session_id: String,
     pub ids: Vec<String>,
     pub complete: bool,
-    pub proof_observation: NativeProofObservationV1,
+    pub proof_observation: Option<NativeProofObservationV1>,
     pub current_state: Option<NativeCurrentStateV1>,
     pub invalid_edges: Option<NativeInvalidEdgesV1>,
     pub ingress_at_ms: i64,

@@ -178,7 +178,9 @@ fn state_allows(
         observed_at_ms: at,
         age_ms: 0,
     };
-    Ok(order(&e.proof_observation, &stamp) == Some(Ordering::Greater))
+    Ok(e.proof_observation
+        .as_ref()
+        .is_some_and(|p| order(p, &stamp) == Some(Ordering::Greater)))
 }
 
 fn retained(
@@ -256,7 +258,14 @@ impl LocalObservationStore {
             || e.ids.is_empty()
             || e.ids.len() > 32
             || e.ids.last() != Some(&e.current_session_id)
-            || !valid_stamp(&e.proof_observation)
+            || e.proof_observation
+                .as_ref()
+                .is_some_and(|p| !valid_stamp(p))
+            || e.proof_observation.is_none()
+                && (e.ids.len() != 1
+                    || e.complete
+                    || e.current_state.is_some()
+                    || e.invalid_edges.is_some())
             || e.ingress_at_ms < 0
             || e.ids.iter().any(|id| SessionId::parse(id).is_err())
             || e.ids
@@ -304,7 +313,34 @@ impl LocalObservationStore {
                 put_edge(&tx, e, parent, child, false, &negative.observation)?;
             }
         }
+        for id in &e.ids {
+            tx.execute(
+                "INSERT OR IGNORE INTO observation_native_presence_v1 VALUES(?1,?2)",
+                params![e.workspace_id, id],
+            )?;
+        }
+        if e.complete
+            && let Some(stamp) = &e.proof_observation
+        {
+            let proof_id =
+                CanonicalDigest::of(&(&stamp.observer_id, stamp.sequence, stamp.observed_at_ms))
+                    .map_err(|_| Error::Invalid)?
+                    .to_string();
+            tx.execute(
+                "INSERT OR IGNORE INTO observation_native_roots_v1 VALUES(?1,?2,?3,?4,?5)",
+                params![
+                    e.workspace_id,
+                    e.ids[0],
+                    proof_id,
+                    e.request_id,
+                    stamp.observed_at_ms
+                ],
+            )?;
+        }
         for pair in e.ids.windows(2) {
+            let Some(proof) = &e.proof_observation else {
+                continue;
+            };
             let (parent, child) = (&pair[0], &pair[1]);
             if !state_allows(&tx, e, parent)? {
                 continue;
@@ -318,11 +354,11 @@ impl LocalObservationStore {
             competitors.retain(|(p, c)| p != parent || c != child);
             if !competitors.is_empty() {
                 for (p, c) in competitors {
-                    put_edge(&tx, e, &p, &c, false, &e.proof_observation)?;
+                    put_edge(&tx, e, &p, &c, false, proof)?;
                 }
-                put_edge(&tx, e, parent, child, false, &e.proof_observation)?;
+                put_edge(&tx, e, parent, child, false, proof)?;
             } else {
-                put_edge(&tx, e, parent, child, true, &e.proof_observation)?;
+                put_edge(&tx, e, parent, child, true, proof)?;
             }
         }
         store_event(&tx, e, &body)?;
@@ -350,6 +386,11 @@ pub(crate) fn full_delete(
     ] {
         db.execute(&format!("DELETE FROM {table} WHERE workspace_id=?1 AND request_id IN(SELECT request_id FROM logical_requests WHERE workspace_id=?1 AND session_id=?2)"),params![w,session])?;
     }
+    db.execute("DELETE FROM observation_native_roots_v1 WHERE workspace_id=?1 AND (session_id=?2 OR request_id IN(SELECT request_id FROM logical_requests WHERE workspace_id=?1 AND session_id=?2))",params![w,session])?;
+    db.execute(
+        "DELETE FROM observation_native_presence_v1 WHERE workspace_id=?1 AND session_id=?2",
+        params![w, session],
+    )?;
     db.execute("INSERT INTO observation_analysis_cuts_v1 VALUES(?1,?2,?3,'full') ON CONFLICT(workspace_id,session_id,kind) DO UPDATE SET through_ms=MAX(through_ms,excluded.through_ms)",params![w,session,through])?;
     let removed=db.execute("DELETE FROM observation_native_relations_v1 WHERE workspace_id=?1 AND (parent_id=?2 OR child_id=?2)",params![w,session])?;
     if removed > 0 {
