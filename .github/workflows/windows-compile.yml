@@ -57,6 +57,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Windows headless compilation failed' }
       - name: Check Windows console shell and its restricted host commands
         shell: pwsh
+        env:
+          # Compile the host without release payloads; build-release.py stages
+          # and validates those before packaging with the production config.
+          TAURI_CONFIG: '{"bundle":{"resources":[]}}'
         run: |
           npm ci --prefix apps/shell
           if ($LASTEXITCODE -ne 0) { throw 'Shell frontend dependencies failed' }

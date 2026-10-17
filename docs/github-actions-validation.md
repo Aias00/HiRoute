@@ -13,7 +13,7 @@ native Windows acceptance uses `scripts/windows-headless-ci.ps1`.
 | `p0-gateway-final-gates.yml` | Manual | Aggregate the three current hosted workflows |
 | `build-release.yml` | Manual, exact dispatch SHA | Builds macOS/Linux candidates independently; only Windows archives require the reusable Windows validation gate; uploads candidate assets and integrity evidence for the existing release publisher |
 | `build-release-platform.yml` | Reusable, exact caller SHA | Shared per-target candidate build and evidence upload |
-| `windows-compile.yml` | Path-filtered PR | One cached x64 MSVC check of CLI, daemon, platform and local-storage, including their test targets and transitive production libraries; no runtime tests |
+| `windows-compile.yml` | Path-filtered PR or manual | One cached x64 MSVC check of CLI, daemon, platform, local-storage and the console shell, including test targets and transitive production libraries. The shell compile excludes release payload resources; packaging validates the real payload separately. No runtime tests. |
 | `windows-headless.yml` | Release-candidate call, explicit manual diagnosis | Native MSVC primitives, shared business libraries, foreground control/Gateway and fixed upstream clients; complete background artifacts with explicit deferred Task acceptance; x64 artifact replay on Windows 11 ARM64 |
 
 PR and main pushes do not automatically run the Windows matrix. During normal
