@@ -125,6 +125,7 @@ price revisions, or publication, and restart preserves the committed choice.
 ### Requirement: Compare routed usage using an explicit API-equivalent price basis
 
 HiRoute SHALL support an explicitly selected API-equivalent cost view for recorded routed usage, including subscription/Coding Plan traffic, against an explicitly identified reference model and currency. It SHALL reuse source-scoped current API-reference prices or user-provided revisioned prices, expose the chosen price/time basis, routed estimate, reference estimate and signed estimated savings, and include observed retry usage. This current-price comparison SHALL NOT rewrite immutable historical receipts or be represented as a subscription bill or realized cash savings. Missing or incompatible usage/price facts SHALL remain unknown or partial, with counted coverage and no fabricated savings. Correct supply classification SHALL distinguish free, subscription, paid and unknown independently from the selected estimate basis. The common management Skill SHALL guide price completion, comparison and evidence-based optimization through installed public CLI capabilities.
+ A recent-summary path SHALL default to a disclosed rolling seven-day scope and resolve the selected Plan's sole primary candidate as the exact reference when no explicit override is supplied; nonunique or unavailable references/currencies SHALL require a bounded explicit choice. Saved applicable rates SHALL be reused. The summary SHALL expose a signed saving and percentage for a complete paired set, or clearly labeled compared-subset amounts/difference/percentage and missing/pending/excluded counts when incomplete. A zero reference denominator leaves percentage unavailable. It SHALL disclose unmeasured decision-service or other overhead and SHALL NOT label an incomplete-overhead comparison as net total savings. Existing retention boundaries apply and expired detail cannot be reconstructed for a new reference calculation. The comparison SHALL evaluate the complete retained in-scope population at observed workload scale within the existing query limits, or return a classified retryable failure; it SHALL NOT fail solely because the scope exceeds a fixed row count, and SHALL NOT present a partially evaluated population as complete. Current-price estimates SHALL be labeled distinctly from API-equivalent amounts frozen at request time. When scoped to a verified continuation conversation, the summary SHALL use the same session-history membership as conversation and ranking views, counting each in-scope request/attempt once; unproven or expired members remain coverage gaps. Related summary, ranking and monetary drill-down SHALL expose a reusable analysis scope fixing the relation watermark, resolved bounds, usage/evaluation revisions and price basis, so live usage settlement or price changes cannot silently alter the compared population or arithmetic. A fresh analysis can include later evidence; deleted or withdrawn used evidence requires an explicit refresh, while routine retention is accounted for in the upfront scope. A new analysis scope SHALL disclose requested and retention-safe effective bounds and its lifetime before pagination. Within that lifetime, routine retention cleanup SHALL NOT change its selected population, grouping, coverage or monetary totals. Any clipped interval SHALL be explicit; complete results apply only to the effective interval, never an omitted part of the requested period. This SHALL NOT extend original evidence retention. Explicit deletion, proof withdrawal and authorization changes still apply, while token expiry has a distinct refresh action. A normal reopen with already aligned retained projections SHALL reuse them without introducing reconciliation pending. Only views requiring known missing or stale retained projections may report catch-up pending, with scoped progress and a supported retry action; ready reads and valid scopes SHALL remain usable under current source/visibility checks. Interrupted catch-up SHALL resume without restarting for unrelated aware traffic, and stalled work SHALL report its reason rather than remain indefinitely plain pending. Missing historical evidence is an explicit gap, not unfinished reconciliation.
 
 #### Scenario: Estimate a Coding Plan combination
 
@@ -150,6 +151,56 @@ HiRoute SHALL support an explicitly selected API-equivalent cost view for record
 
 - **WHEN** the user later edits API-equivalent prices
 - **THEN** a new selected current-price estimate may change, but stored receipts and ordinary historical value queries retain their original meanings.
+
+#### Scenario: Ask for recent savings without internal identifiers
+
+- **WHEN** the user selects a smart-saving Plan with one primary candidate and asks for recent savings
+- **THEN** the installed summary resolves and names that exact reference, fixes the default seven-day range and currency/price basis, and reports routed/reference amounts and signed saving/percentage without manual Binding lookup.
+
+#### Scenario: Report the known paired subset
+
+- **WHEN** some requests are priceable on both sides while others lack usage, price, terminal or retention evidence
+- **THEN** full-period totals remain incomplete, but the same paired subset has inspectable routed/reference subtotals and signed difference with compared/missing counts; those values are not labeled the whole period.
+
+#### Scenario: Keep percentage and overhead honest
+
+- **WHEN** the reference cost is zero, routed cost is larger, or decision-service charges are unmeasured
+- **THEN** percentage is unavailable for zero denominator, a valid loss remains negative and missing overhead is disclosed rather than silently included in a net-savings claim.
+
+#### Scenario: Reuse rates without rewriting history
+
+- **WHEN** the user completes missing API-equivalent rates through the existing source-specific override flow and asks again
+- **THEN** the next current-price summary uses those exact saved rates and shows its evaluation basis; ordinary frozen historical amounts and actual subscription payments retain their meaning.
+
+#### Scenario: Summarize a high-volume week
+
+- **WHEN** the selected seven days contain far more retained requests and attempts than one result page
+- **THEN** the summary evaluates the whole retained scope under the existing query deadline and reports its coverage, or returns a classified retryable failure with a supported narrowing action; scope size alone never produces a generic outage or a partial total labeled complete.
+
+#### Scenario: Distinguish current-price and recorded estimates
+
+- **WHEN** the same requests have frozen API-equivalent amounts and the user asks for a current-price comparison
+- **THEN** each figure names its basis and price time, and neither is presented as the other.
+
+#### Scenario: Reconcile a summary during live activity
+
+- **WHEN** additional compression links, usage settlement or price edits arrive between summary, ranking and request drill-down
+- **THEN** the reused analysis scope preserves its relation watermark and monetary evidence/price basis; later additions are excluded without invalidating it merely for arriving, and retained covered totals reconcile.
+
+#### Scenario: Keep recent savings stable through housekeeping
+
+- **WHEN** a requested seven-day summary and its drill-down are reused while routine retention runs
+- **THEN** the result discloses its upfront effective interval and omitted bounds and preserves covered amounts under the same valid scope; it never claims full requested-week savings from a clipped interval.
+
+#### Scenario: Reuse aligned history after an ordinary restart
+
+- **WHEN** HiRoute reopens already aligned retained data without an intervening unaware writer or interrupted catch-up
+- **THEN** new analysis reads reuse the saved projections without a new reconciliation-pending period; actual source gaps, unsettled usage and turn incompleteness keep their distinct meanings.
+
+#### Scenario: Expose genuine catch-up without blocking ready reads
+
+- **WHEN** retained data needed by one view is missing from derived projections after compatible writer mutations
+- **THEN** only the affected view reports scoped progress and retry guidance; ready reads continue, interrupted work resumes, and stalled or unavailable work has an explicit reason instead of endless plain pending.
 
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/125#issuecomment-6220387895

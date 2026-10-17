@@ -6,6 +6,29 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
 const LIFETIME_MS: i64 = 3_600_000;
+
+/// Expired scopes retain neither membership maps nor captured price leases.
+/// The ordinary bounded writer cycle owns cleanup, outside read deadlines.
+pub(super) fn expire(db: &Connection, now: i64) -> rusqlite::Result<usize> {
+    let ids = {
+        let mut stmt = db.prepare("SELECT id FROM observation_analysis_scopes_v1 WHERE expires_ms<=?1 ORDER BY expires_ms LIMIT 8")?;
+        stmt.query_map([now], |r| r.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?
+    };
+    for id in &ids {
+        db.execute(
+            "DELETE FROM observation_analysis_members_v1 WHERE scope_id=?1",
+            [id],
+        )?;
+        db.execute(
+            "DELETE FROM observation_analysis_scopes_v1 WHERE id=?1",
+            [id],
+        )?;
+    }
+    db.execute("DELETE FROM observation_analysis_prices_v1 WHERE id IN (SELECT id FROM observation_analysis_prices_v1 WHERE expires_ms<=?1 ORDER BY expires_ms LIMIT 8)",[now])?;
+    Ok(ids.len())
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct Scope {

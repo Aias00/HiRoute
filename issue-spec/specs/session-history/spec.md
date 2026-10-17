@@ -239,6 +239,73 @@ HiRoute SHALL expose the managed Hermes profile's saved connection scope/Plan/pr
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/119#issuecomment-6165297426
 
+### Requirement: Verified native compaction links preserve session identity
+
+HiRoute SHALL retain the physical identity and exact request/receipt attribution of each native session while exposing a verified compression-continuation chain as one navigable conversation in opt-in analysis views. A managed native adapter SHALL obtain explicit compression lineage from its selected native profile through the native read-only interface; generic root affinity, equal content, timing and arbitrary parent headers are not proof. HiRoute SHALL admit a relation only within the same authenticated managed consumer, workspace and existing native-identity namespace. Only scoped HMAC identities and provenance are retained, never raw native IDs. Branches, delegates, explicit resets and unrelated sessions SHALL remain independent. Missing, malformed, conflicting, cyclic, ambiguous, truncated or unavailable lineage SHALL disclose the unproven boundary and SHALL NOT merge it, invent an origin or block otherwise valid model access. Provenance and retained visibility SHALL be rechecked on queries, including across restart; old records without evidence remain separate. The declared chain is navigable only through proven links and never rewrites physical sessions, immutable receipts, Worker identity, ContextHold or routing history. A verified session relation alone does not prove adjacent user turns. Conversation, search and cost results SHALL disclose and reuse one relation watermark across pagination and related drill-down, preserve member references, apply time/Plan/visibility filters to each request, and count each request/attempt once. Later relation additions SHALL NOT silently regroup a pinned result or invalidate it merely by advancing the live watermark. A used relation that is genuinely withdrawn or deleted SHALL cause explicit stale/refresh rather than silent regrouping. Scope creation SHALL select evidence stable through its declared lifetime so ordinary expiry does not invalidate an otherwise valid scope; upfront clipping and token expiry remain explicit. Current authorization and visibility always apply. Retained relation evidence SHALL survive reopening without making released physical-session/fact readers reject otherwise supported data. Missing or expired members stay explicit; legacy unflagged calls retain their physical-session meanings. Compatible released-writer mutations SHALL be reconciled from current retained source facts when HiRoute reopens: fully deleted or archived sources cannot remain charged, linked or recoverable through auxiliary projections, and retained newly ingested facts cannot be omitted indefinitely. Content-only deletion SHALL preserve its existing retained-fact/monetary meaning. Historical archives SHALL NOT recreate deleted detail. A normal reopen with already aligned retained projections SHALL reuse them without introducing reconciliation pending. Only views requiring known missing or stale retained projections may report catch-up pending, with scoped progress and a supported retry action; ready reads and valid scopes SHALL remain usable under current source/visibility checks. Interrupted catch-up SHALL resume without restarting for unrelated aware traffic, and stalled work SHALL report its reason rather than remain indefinitely plain pending. Missing historical evidence is an explicit gap, not unfinished reconciliation. Full facts-and-content deletion of a middle member SHALL withdraw its incident continuation edges and split the surviving chain at an explicit gap; queries SHALL neither traverse the deleted member nor synthesize a shortcut. Re-observing deleted historical lineage SHALL NOT undo deletion. Content-only deletion retains existing fact/grouping meaning, and genuinely new post-cutoff evidence follows existing revival rules without restoring deleted history.
+
+#### Scenario: Read a verified compaction continuation
+
+- **WHEN** a managed native request has valid compression ancestry in the same authenticated identity scope
+- **THEN** analysis follows only proven compression edges, preserves physical identities and original receipts, and can navigate the retained conversation across the boundary.
+
+#### Scenario: Keep forks and unproven ancestry independent
+
+- **WHEN** lineage is absent, conflicting, unsupported, ambiguous, cyclic, incomplete, or describes a reset, branch, delegate or another authorization scope
+- **THEN** no unproven edge is used; ordinary model access continues and the result discloses separate or partially linked members with the missing boundary.
+
+#### Scenario: Read and value a chain once
+
+- **WHEN** conversation/search/cost views select the same proven continuation chain
+- **THEN** they reuse one disclosed relation watermark across pages and drill-down, preserve visible member references and resolved time bounds, and count each request and consuming attempt once; repeated captured input is not new usage.
+
+#### Scenario: Preserve history through reopen and visibility changes
+
+- **WHEN** HiRoute restarts, content expires or is deleted, old records lack lineage, or a relation changes during pagination
+- **THEN** retained proven relations remain queryable subject to current visibility; unavailable members and unproven old relations stay explicit, and continuation cannot silently change its grouping or rewrite receipts.
+
+#### Scenario: Analyze while new continuations arrive
+
+- **WHEN** a ranking or conversation result is paged and opened in another supported view while later compression relations are admitted, including from the querying Agent itself
+- **THEN** the caller can reuse the original relation watermark; additions after it neither rebucket its rows nor invalidate its continuation, while a fresh analysis may include them.
+
+#### Scenario: Withdraw invalid pinned proof
+
+- **WHEN** a previously used relation is genuinely contradicted or explicitly deleted during a valid scope
+- **THEN** the result reports stale proof and a refresh action; routine expiry was excluded by the upfront retained scope and unrelated changes do not invalidate it.
+
+#### Scenario: Preserve compatible released readers
+
+- **WHEN** verified continuation evidence is retained alongside otherwise supported physical-session and request facts
+- **THEN** its presence alone does not make a released physical-session/fact reader reject the page or storage; existing supported upgrade and complete-backup recovery contracts still apply.
+
+#### Scenario: Keep retained analysis stable during ordinary expiry
+
+- **WHEN** new analysis near the retention boundary is paged while normal expiry runs
+- **THEN** requested versus effective bounds, clipping and lifetime were disclosed at creation and the selected proof/population remain stable through that lifetime, without extending retention or exposing deleted data.
+
+#### Scenario: Reconcile after compatible released-writer mutations
+
+- **WHEN** a compatible released writer deletes facts, expires requests or ingests retained traffic while unaware of auxiliary tables, then the current reader reopens
+- **THEN** queries use live sources and precise deletion scope, purging stale associations and deriving missing retained inputs without duplicate charges, archived reverse lookup or resurrection; content-only deletion retains its lawful monetary facts.
+
+#### Scenario: Reopen an already aligned store promptly
+
+- **WHEN** HiRoute restarts over compatible retained data whose derived projections are already aligned
+- **THEN** it reuses them immediately rather than putting all analysis views into reconciliation pending; missing historical lineage still remains a gap.
+
+#### Scenario: Report and resume only real projection catch-up
+
+- **WHEN** a compatible writer leaves retained inputs missing or stale, or catch-up is interrupted
+- **THEN** affected reads expose scoped progress and retry guidance while ready reads remain usable; catch-up resumes rather than restarting for unrelated current writes, and stalled work exposes its reason.
+
+#### Scenario: Delete the middle of a continuation
+
+- **WHEN** A to B to C is a proven continuation and B is fully deleted
+- **THEN** the adjacent A to B and B to C edges are withdrawn, A and C remain separately readable with a gap, no A to C shortcut or transit through B is invented, and old lineage cannot re-create the deleted edges; content-only deletion instead preserves grouping and retained money.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/125#issuecomment-6229104803
+
 ## Implementation references
 
 - [Native identity resolver](../../../crates/gateway/src/context_hold/identity.rs) and

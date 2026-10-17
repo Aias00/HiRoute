@@ -224,6 +224,9 @@ impl LocalObservationStore {
         };
         let tx = db.transaction()?;
         let n = sync(&tx, 200, now_ms)?;
+        if schema::available(&tx) {
+            super::scope::expire(&tx, now_ms)?;
+        }
         let workspaces = {
             let mut stmt=tx.prepare("SELECT DISTINCT c.workspace_id FROM observation_analysis_cuts_v1 c JOIN observation_native_event_members_v1 m ON m.workspace_id=c.workspace_id AND m.session_id=c.session_id LIMIT 200")?;
             stmt.query_map([], |r| r.get::<_, String>(0))?

@@ -72,6 +72,88 @@ unsettled/unrecorded history remains unknown. A query crossing the detail bounda
 must expose its available scope, and new-session default views use the bounded
 seven-day window without extending detail retention.
 
+### Requirement: Rank session spending and drill down through the same cost basis
+
+HiRoute SHALL provide bounded backend-ranked session and request spending queries for a selected interval, scope, currency and disclosed recorded or API-equivalent valuation basis, with stable ordering and continuation. Ranking and drill-down SHALL aggregate actual recorded attempt usage and matching amounts before page limits and SHALL reuse existing valuation/price evidence without reading every conversation body. Results SHALL expose known amounts, usage/model breakdown, request/attempt counts, covered/missing/pending/excluded populations and exact evidence references. Unknown amounts SHALL NOT become zero or participate as fully known totals; incomplete results SHALL be labeled highest known costs rather than a definitive full-population ranking. Session/request details and covered aggregates SHALL reconcile under one reusable analysis scope with a disclosed relation watermark, fixed interval, monetary evidence revisions and price basis. Retried/failed attempts with known consumption count once, and retained aggregate data cannot recreate expired session/request detail. A recorded basis SHALL rank one currency and one recorded valuation kind; when the admitted scope contains several kinds or currencies without a selection, the query SHALL return bounded choices instead of summing different measures. An API-equivalent ranking SHALL be labeled a current-price estimate, distinct from amounts frozen at request time. Calendar-day scopes such as yesterday SHALL use one disclosed local timezone and absolute half-open bounds shared by ranking and drill-down. Ranking SHALL cover the complete retained scope at observed workload scale within the existing query limits or return a classified retryable failure, never a fixed-row-count outage or a partial evaluation labeled complete. In the opt-in session ranking, proven compression-continuation members form one conversation row under session-history's "Verified native compaction links preserve session identity". Rows retain member identities, disclose partial linkage and reconcile with member/request drill-down; an unproven boundary is not silently grouped. Ordinary legacy outputs remain unchanged. Pagination and related drill-down SHALL accept that scope. Later relation/evidence additions SHALL NOT silently regroup or revalue it, or invalidate it merely by arriving. Genuinely withdrawn or deleted used proof/evidence SHALL produce explicit stale/refresh, while current visibility is always enforced. Routine retention is accounted for in the upfront effective interval instead of silently changing totals or repeatedly invalidating valid scopes. A new analysis scope SHALL disclose requested and retention-safe effective bounds and its lifetime before pagination. Within that lifetime, routine retention cleanup SHALL NOT change its selected population, grouping, coverage or monetary totals. Any clipped interval SHALL be explicit; complete results apply only to the effective interval, never an omitted part of the requested period. This SHALL NOT extend original evidence retention. Explicit deletion, proof withdrawal and authorization changes still apply, while token expiry has a distinct refresh action. Derived values SHALL be checked against current retained source facts and the actual deletion class, including after compatible released-writer mutations and reopen; fully deleted or archived requests cannot be charged through stale auxiliary rows, while content-only deletion preserves retained monetary facts. A normal reopen with already aligned retained projections SHALL reuse them without introducing reconciliation pending. Only views requiring known missing or stale retained projections may report catch-up pending, with scoped progress and a supported retry action; ready reads and valid scopes SHALL remain usable under current source/visibility checks. Interrupted catch-up SHALL resume without restarting for unrelated aware traffic, and stalled work SHALL report its reason rather than remain indefinitely plain pending. Missing historical evidence is an explicit gap, not unfinished reconciliation.
+
+#### Scenario: Find expensive sessions and their requests
+
+- **WHEN** the user asks for the most expensive sessions in a selected day and opens the highest known-cost one
+- **THEN** the backend returns correctly ordered bounded sessions, then its expensive requests with the same range/currency/basis and reconciling covered amounts plus actual model/usage/evidence references.
+
+#### Scenario: Rank before taking a page
+
+- **WHEN** an expensive session lies outside the first chronological page and ties or concurrent activity exist
+- **THEN** the cost query ranks the full admitted scope before LIMIT, orders ties deterministically and binds continuation to its evaluated scope/price basis instead of sorting only a client-downloaded sample.
+
+#### Scenario: Handle missing price and retry usage
+
+- **WHEN** one session has missing monetary facts and another contains a consuming failed attempt followed by success
+- **THEN** the incomplete session is reported in coverage rather than counted as free, all known attempt consumption is included once and the displayed ranking clearly states its known-cost coverage.
+
+#### Scenario: Keep costs readable without body access
+
+- **WHEN** message content or text indexes are missing or pending while monetary/usage facts remain available
+- **THEN** cost summary/ranking and same-basis request drill-down remain available, with unavailable body and unknown monetary components independently described.
+
+#### Scenario: Preserve price, currency and retention meaning
+
+- **WHEN** a price generation/currency changes or requested detail predates retention
+- **THEN** the caller starts an appropriately scoped comparison or receives explicit missing/retention coverage; the query does not mix currencies, silently revalue historical recorded costs or invent expired detail.
+
+#### Scenario: Choose between different measures
+
+- **WHEN** the selected scope contains requests whose recorded values are of different valuation kinds or currencies
+- **THEN** the ranking asks for one currency/kind or the API-equivalent basis through bounded choices and never adds different measures into one cost.
+
+#### Scenario: Rank yesterday in the user's local day
+
+- **WHEN** the user asks for yesterday's most expensive sessions
+- **THEN** the query resolves one local calendar day, discloses its timezone and absolute bounds, and the request drill-down uses exactly the same bounds.
+
+#### Scenario: Rank a high-volume week
+
+- **WHEN** the selected scope contains far more requests and attempts than one result page
+- **THEN** the backend ranks the complete retained scope within the existing query deadline, or returns a classified retryable failure with a supported narrowing action; scope size alone never yields a generic outage.
+
+#### Scenario: Rank a proven compression conversation once
+
+- **WHEN** one retained conversation spans several physical sessions with verified compression links
+- **THEN** the opt-in session ranking groups its in-scope requests once and reconciles chain, member and request totals under the same basis; unproven sessions remain separate with explicit coverage.
+
+#### Scenario: Page and drill down while the querying Agent compacts
+
+- **WHEN** the analyzing Agent is itself in scope and records another compaction, request or settlement after the first ranking page
+- **THEN** continuation and conversation/member/request drill-down reuse the returned relation watermark and monetary basis with identical covered totals; new rows/links wait for a fresh analysis and do not by themselves invalidate the existing cursor.
+
+#### Scenario: Page a default ranking during retention
+
+- **WHEN** a default retained ranking is created near the oldest retained millisecond and maintenance runs before its next page and request drill-down
+- **THEN** requested/effective bounds and clipping were disclosed and covered totals/order remain identical throughout its valid lifetime; unrelated expiry does not globally invalidate it.
+
+#### Scenario: Re-upgrade after a compatible writer changes history
+
+- **WHEN** a compatible released writer deletes a session, expires requests and records new retained traffic before current HiRoute reopens
+- **THEN** fully deleted/archived requests and stale reverse links are absent, new live traffic is derived once, content-only deletions preserve applicable costs and no detail is reconstructed from archives.
+
+#### Scenario: Reuse aligned history after an ordinary restart
+
+- **WHEN** HiRoute reopens already aligned retained data without an intervening unaware writer or interrupted catch-up
+- **THEN** new analysis reads reuse the saved projections without a new reconciliation-pending period; actual source gaps, unsettled usage and turn incompleteness keep their distinct meanings.
+
+#### Scenario: Expose genuine catch-up without blocking ready reads
+
+- **WHEN** retained data needed by one view is missing from derived projections after compatible writer mutations
+- **THEN** only the affected view reports scoped progress and retry guidance; ready reads continue, interrupted work resumes, and stalled or unavailable work has an explicit reason instead of endless plain pending.
+
+#### Scenario: Do not rank through a fully deleted middle member
+
+- **WHEN** a ranked continuation A to B to C loses B through full deletion
+- **THEN** a fresh ranking separates surviving components with a linkage gap and excludes B's deleted details/amounts; a prior scope using those edges is stale, never silently regrouped. Content-only deletion keeps retained costs and grouping.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/125#issuecomment-6229105150
+
 ## Implementation references
 
 - [Value projection](../../../crates/observation/src/value/mod.rs),

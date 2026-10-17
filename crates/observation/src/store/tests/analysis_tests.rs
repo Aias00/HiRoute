@@ -152,6 +152,47 @@ fn retained_attempt_metadata_is_rebuilt_from_bounded_verified_original_facts() {
 }
 
 #[test]
+fn expired_scope_cleanup_preserves_a_newer_pinned_membership() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    ingest(&store, "scope-lease");
+    let q = ObservationAnalysisQueryV1::new(AnalysisViewV1::Conversations);
+    let first = store
+        .observed_analysis(&reader(), &q, Some(&range()), None, 1000)
+        .unwrap();
+    let second = store
+        .observed_analysis(&reader(), &q, Some(&range()), None, 2000)
+        .unwrap();
+    store
+        .reconcile_analysis_batch(first.expires_at_ms.unwrap())
+        .unwrap();
+    let mut follow = q.clone();
+    follow.analysis_scope = second.analysis_scope;
+    assert_eq!(
+        store
+            .observed_analysis(&reader(), &follow, None, None, 2001)
+            .unwrap()
+            .conversations
+            .len(),
+        1
+    );
+    follow.analysis_scope = first.analysis_scope;
+    assert!(matches!(
+        store.observed_analysis(&reader(), &follow, None, None, 2001),
+        Err(crate::query_v2::ObservationV2Error::Stale)
+    ));
+    let db = store.connection.lock();
+    let maps: u64 = db
+        .query_row(
+            "SELECT COUNT(DISTINCT scope_id) FROM observation_analysis_members_v1",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(maps, 1);
+}
+
+#[test]
 fn ready_reopen_keeps_checkpoint_and_scopes_do_not_follow_later_insertions() {
     let dir = tempfile::tempdir().unwrap();
     let store = open_store(dir.path());

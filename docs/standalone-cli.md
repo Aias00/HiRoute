@@ -1158,24 +1158,71 @@ can revoke the caller's grant. Native loading/selection remains a separate repor
 
 ## Analyze historical conversations and estimated API savings
 
-The installed CLI uses the authenticated same-OS-user Local Control socket. Explicit content and search reads do not need a separate Desktop-created read grant. A supplied grant is still validated; a model Gateway key grants no management access. Start with:
+The installed CLI uses authenticated same-OS-user Local Control. Explicit content/search needs no
+Desktop-created read grant; supplied grants are still validated. Gateway model keys grant no management access.
+Use the installed management Skill and command help to choose a path:
+
+| Goal | Initial command |
+| --- | --- |
+| Recent estimated savings | `hiroute value show --view summary --period 7d` |
+| Most expensive sessions | `hiroute value show --group-by session --order-by cost-desc --period 7d` |
+| Actual model transitions and reasons | `hiroute sessions list --view switches --period 7d` |
+| Find conversations by content | `hiroute sessions list --view conversations --period 7d --query TEXT` |
+
+Keep the returned `analysis_scope` for related views and narrower drill-downs:
 
 ```sh
-hiroute sessions list --include-unlinked --limit 50 --output json
-hiroute sessions show SESSION_ID --content messages-and-tools --output json
-hiroute sessions receipt RECEIPT_ID --output json
-hiroute observation plan-quality samples --plan-id PLAN_ID --output json
+hiroute sessions show SESSION_ID --view routing --analysis-scope TOKEN
+hiroute sessions show SESSION_ID --view conversation --analysis-scope TOKEN
+hiroute value show --group-by request --order-by cost-desc --session SESSION_ID --analysis-scope TOKEN
+hiroute sessions show SESSION_ID --view conversation --request REQUEST_ID --analysis-scope TOKEN
 ```
 
-Use returned IDs. For bounded request details, `schema show --command-id sessions.show --include-schema` describes the existing V2 timeline, catalog, ancestry and content queries. `sessions list --request-file QUERY_JSON` supports V2 search/session_search; `sessions receipt --request-file QUERY_JSON` supports request facts. Follow `next_cursor` with the same time/filter scope. Correlate task text and tool/answer history with decision source, simple probability/threshold, selected group, competence assessment, actual model/reasoning and publication. Missing capture, expired data and pending indexes are coverage gaps. Review proposed policy changes and retain the complete recovery commands above before applying them.
+Choose one time mode: `--period today|yesterday|7d|30d`, `--day YYYY-MM-DD`, or `--from-ms N --to-ms N`.
+Civil dates follow the service host's local day; absolute bounds are UTC milliseconds and half-open.
+Report both returned requested/effective bounds and boundary offsets. Retention can clip the start to keep
+covered evidence available for the scope's lifetime; a range without retained evidence is not complete coverage.
+Follow `next_cursor` with the same view, filters and limit, without a new time selector. Page lengths and
+bounded member previews are not totals. Follow-ups inherit the relation/numeric/price watermarks and can only
+narrow the initial scope. New requests, settlement, unrelated compaction and price edits do not silently
+change its totals. Explicit affected deletion, proof withdrawal, authority change or expiry requires a fresh
+initial query; keep the old and refreshed results distinct.
 
-Coding Plan/subscription payments are separate from API-equivalent value. Choose an actual reference Binding, normally the Plan primary model, and a currency:
+Selection and competence stages explain decisions, but stage boundaries are not switches. `between_turn`
+requires proven adjacent completed user turns. `continuation_boundary` describes verified native compression,
+including compression within a turn; it carries `turn_context_reset` and is not an adjacent-turn change.
+Missing proof leaves physical sessions separate. Credential relay and within-request fallback are separate
+kinds. Compare actual accepted endpoints and explicit reasoning settings, not whole-profile digests. Open
+linked physical members, request IDs and receipts; count each request and attempt once.
+
+Conversation pages return bounded messages/tools. For `reference_only` or partial entries, the installed
+`sessions.show` schema describes V2 catalog/content pagination using their returned IDs. `sessions receipt`
+opens immutable facts and `observation plan-quality samples` opens recorded stages. Legacy `sessions list
+--include-unlinked --query/--model-switch` and `sessions show --content messages-and-tools` keep their meanings;
+`--model-switch` is invalid for the new views. No analysis read calls a model or changes routing.
+
+Cost ranking needs no reference model. Select one currency and recorded valuation kind, or choose
+`--basis api-equivalent` to recalculate recorded attempts with current source-specific prices. Summary defaults
+to that estimate and an unambiguous primary binding; resolve returned reference/currency choices explicitly.
+Do not mix recorded estimates, current-price recalculation, currencies or valuation kinds. Full-scope totals
+are computed before pagination. Missing usage/prices are unknown, not free/zero; incomplete rankings are
+`highest_known_only`. Savings reports signed paired subtotals and missing/excluded coverage, with no percentage
+for a zero denominator. Decision overhead remains unmeasured. Coding Plan API-equivalent estimates prove
+neither cash savings nor equal output quality, and do not rewrite frozen receipts or subscription billing.
+
+A pending index, missing capture or deleted/expired content is a coverage gap. `pending` reconciliation reports
+progress, last-progress and stall information. Retryable read errors distinguish `timeout`, `reader_busy`,
+`index_unavailable` and `storage_unavailable`; they are not empty results. Inspect task/answer/tool evidence,
+decision source/group/probability/threshold, competence and reasoning before proposing policy changes. Keep a
+fresh complete before-image and fully populated recovery commands before applying an authorized change.
+
+The legacy explicit-reference report remains available with its original response/time semantics:
 
 ```sh
 hiroute value show --routing PLAN_ID --period 7d --basis api-equivalent --reference-binding PRIMARY_BINDING --currency CNY --output json
 ```
 
-This opt-in view values recorded usage with **current source-specific API-equivalent prices**, including observed retry attempts. It reports the reference and price provenance, evaluation time, routed/reference estimates and signed estimated savings. It does not rewrite frozen historical receipts or establish equal output/quality, a subscription bill or cash savings. Partial/unknown totals stay null; paired subtotals explicitly count their complete comparable requests. Negative savings remain negative. Retention and unpriced/missing usage reduce coverage; narrow a large interval if the bounded query is unavailable. Day grouping is unavailable in this view. Ordinary `value show` retains its historical meaning.
+It has no day grouping. Ordinary `value show` retains its historical valuation meaning.
 
 For missing rates, read the installed `prices.effective` and `prices.override.preview` schemas. Query the exact Binding locator with currency and `valuation_kind: "api_equivalent"`; copy the returned `edit_context` revisions into a price Preview. Manual `rates` use integer currency micros per million tokens, with separate input/output/cache rates. Use verified prices or ask for these non-secret values; do not invent them. Apply the exact returned spec/digest/revisions with one retained key. Before changing a price, retain its prior setting and give fully populated price-restore Preview/Apply commands; `follow_catalog` restores catalog lookup when no manual override existed. API-equivalent prices can be set for subscriptions without changing their entitlement or ordinary billing class. Free, subscription, paid and unknown remain distinct.
 
