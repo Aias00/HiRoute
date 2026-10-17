@@ -670,6 +670,12 @@ impl ApplicationService {
             ports.value_scope.clone(),
         )
         .with_prices(ports.prices.clone());
+        let analysis_details = request
+            .payload
+            .get("intent")
+            .and_then(|intent| intent.get("view"))
+            .and_then(Value::as_str)
+            == Some("analysis");
         let result = match operation {
             ObservationOperation::List => control.list(
                 request.principal.kind,
@@ -700,7 +706,21 @@ impl ApplicationService {
         };
         match result {
             Ok(value) => succeeded(value, request.request_id),
-            Err(error) => failed(map_observation_error(error), request.request_id),
+            Err(error) => {
+                let details = if analysis_details {
+                    observation_read_failure(&error)
+                } else {
+                    None
+                };
+                let retryable = !matches!(error, ObservationQueryError::Corrupt);
+                let mut reply = failed(map_observation_error(error), request.request_id);
+                if let (Some(error), Some(details)) = (reply.error.as_mut(), details) {
+                    error.retryable = retryable;
+                    error.details_schema = "hiroute.observation.read-failure/v1".into();
+                    error.observation_read = Some(details);
+                }
+                reply
+            }
         }
     }
 
@@ -773,6 +793,28 @@ fn map_observation_error(error: ObservationQueryError) -> ErrorCode {
         ObservationQueryError::StalePreview => ErrorCode::ChangePreviewStale,
         ObservationQueryError::RevisionConflict => ErrorCode::RevisionConflict,
     }
+}
+
+fn observation_read_failure(
+    error: &ObservationQueryError,
+) -> Option<hiroute_application_api::ObservationReadFailureV1> {
+    use hiroute_application_api::{ObservationReadFailureReasonV1 as R, ObservationReadFailureV1};
+    let (reason, retry_after_ms, action) = match error {
+        ObservationQueryError::ReadTimeout => (R::Timeout, 100, "retry_scoped_read"),
+        ObservationQueryError::ReaderBusy => (R::ReaderBusy, 100, "retry_read"),
+        ObservationQueryError::IndexUnavailable => {
+            (R::IndexUnavailable, 1000, "check_observation_index_status")
+        }
+        ObservationQueryError::Unavailable | ObservationQueryError::Corrupt => {
+            (R::StorageUnavailable, 1000, "check_service_and_storage")
+        }
+        _ => return None,
+    };
+    Some(ObservationReadFailureV1 {
+        reason,
+        retry_after_ms,
+        action: action.into(),
+    })
 }
 
 fn accepted_apply(

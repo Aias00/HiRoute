@@ -682,6 +682,8 @@ pub struct ErrorV1 {
     pub details_schema: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_budget_conflict: Option<Box<hiroute_domain::AgentModelBudgetConflictV1>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub observation_read: Option<crate::ObservationReadFailureV1>,
 }
 
 impl ErrorV1 {
@@ -698,6 +700,7 @@ impl ErrorV1 {
             operation_id: None,
             details_schema: "hiroute.error-details/none-v1".to_owned(),
             model_budget_conflict: None,
+            observation_read: None,
         }
     }
 }

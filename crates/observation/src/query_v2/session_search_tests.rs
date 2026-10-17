@@ -8,6 +8,16 @@ use rusqlite::params;
 
 #[test]
 fn live_search_large_distinct_source_cache_keeps_indexed_anchors_and_complete_pagination() {
+    search_scale(30_000, 30_000);
+}
+
+#[test]
+#[ignore = "targeted 250k-occurrence/60k-source gate; execute explicitly outside ordinary parallel unit tests"]
+fn live_search_250k_occurrences_and_60k_sources_under_real_deadline() {
+    search_scale(60_000, 250_000);
+}
+
+fn search_scale(distinct: usize, occurrences: usize) {
     let root = tempfile::tempdir().unwrap();
     let store = LocalObservationStore::open(root.path(), DigestAuthority::new([2; 32])).unwrap();
     {
@@ -20,7 +30,7 @@ fn live_search_large_distinct_source_cache_keeps_indexed_anchors_and_complete_pa
         // Component cache fixture: unlike the repeated single-blob corpus, each
         // row has its own real digest, folded block and production lookup grams.
         // Native acceptance separately proves capture, publication and body reads.
-        for n in 0..60_000 {
+        for n in 0..distinct {
             let body = if n < 51 {
                 format!("checksum {n}")
             } else {
@@ -49,12 +59,16 @@ fn live_search_large_distinct_source_cache_keeps_indexed_anchors_and_complete_pa
             )
             .unwrap();
         }
-        // Component scale: 60k distinct digest-verified sources and 250k
-        // occurrences, including repeated input history. Production-path
-        // acceptance separately reads the preserved installed corpus.
-        for replica in 0..4 {
-            let limit = if replica == 3 { 10_000 } else { 60_000 };
-            tx.execute("INSERT INTO content_instances_v2(workspace_id,content_id,message_instance_id,request_id,direction,fork_id,part_ordinal,content_kind,canonical_media_type,content_blob_digest,has_content_ref,accumulated_byte_count,state,created_at_unix_nanos) SELECT workspace_id,?1||content_id,message_instance_id,request_id,direction,fork_id,part_ordinal+?2,content_kind,canonical_media_type,content_blob_digest,has_content_ref,accumulated_byte_count,state,created_at_unix_nanos FROM content_instances_v2 WHERE workspace_id=?3 AND content_id LIKE 'content-%' ORDER BY content_id LIMIT ?4",params![format!("repeat-{replica}-"),(replica+1)*60_000,WorkspaceId::DEFAULT,limit]).unwrap();
+        // The separately selected scale gate uses 60k verified sources and
+        // 250k occurrences, including repeated input history. Native acceptance
+        // separately reads the preserved installed corpus.
+        let mut remaining = occurrences - distinct;
+        let mut replica = 0;
+        while remaining > 0 {
+            let limit = remaining.min(distinct);
+            tx.execute("INSERT INTO content_instances_v2(workspace_id,content_id,message_instance_id,request_id,direction,fork_id,part_ordinal,content_kind,canonical_media_type,content_blob_digest,has_content_ref,accumulated_byte_count,state,created_at_unix_nanos) SELECT workspace_id,?1||content_id,message_instance_id,request_id,direction,fork_id,part_ordinal+?2,content_kind,canonical_media_type,content_blob_digest,has_content_ref,accumulated_byte_count,state,created_at_unix_nanos FROM content_instances_v2 WHERE workspace_id=?3 AND content_id LIKE 'content-%' ORDER BY content_id LIMIT ?4",params![format!("repeat-{replica}-"),((replica+1)*distinct) as i64,WorkspaceId::DEFAULT,limit as i64]).unwrap();
+            remaining -= limit;
+            replica += 1;
         }
         tx.commit().unwrap();
         // Matching reads source identities and covering content metadata, not

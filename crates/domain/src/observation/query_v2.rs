@@ -16,9 +16,20 @@ pub struct ObservationReaderContext {
     search_content: bool,
     authorization_generation: u64,
     expires_at_ms: i64,
+    query_deadline: Option<std::time::Instant>,
 }
 
 impl ObservationReaderContext {
+    /// A composed analysis shares one budget across its existing read owners.
+    /// This trusted context is never deserialized from a client request.
+    pub fn with_query_deadline(mut self, deadline: std::time::Instant) -> Self {
+        self.query_deadline =
+            Some(deadline.min(std::time::Instant::now() + std::time::Duration::from_millis(500)));
+        self
+    }
+    pub fn query_deadline(&self) -> Option<std::time::Instant> {
+        self.query_deadline
+    }
     /// Cancels this observation only; never cancels an Agent, Worker or model.
     pub fn cancel(&self) {
         self.cancelled
@@ -58,6 +69,7 @@ impl ObservationReaderContext {
             search_content,
             authorization_generation,
             expires_at_ms,
+            query_deadline: None,
         })
     }
 
@@ -95,6 +107,12 @@ impl ObservationReaderContext {
         content: bool,
         search: bool,
     ) -> Result<(), ObservationQueryError> {
+        if self
+            .query_deadline
+            .is_some_and(|deadline| std::time::Instant::now() >= deadline)
+        {
+            return Err(ObservationQueryError::ReadTimeout);
+        }
         if self.is_cancelled() {
             return Err(ObservationQueryError::Unavailable);
         }

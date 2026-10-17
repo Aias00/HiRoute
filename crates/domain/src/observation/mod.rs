@@ -6,6 +6,7 @@
 //! none of these ports may mutate routing/runtime state.
 
 mod analysis;
+mod analysis_results;
 mod envelope;
 mod execution;
 mod execution_attempt;
@@ -22,6 +23,7 @@ mod query;
 mod query_v2;
 
 pub use analysis::*;
+pub use analysis_results::*;
 pub use envelope::*;
 pub use execution::*;
 pub use execution_attempt::*;

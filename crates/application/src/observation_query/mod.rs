@@ -20,6 +20,17 @@ pub struct ObservationQueryService {
 }
 
 impl ObservationQueryService {
+    pub fn observation_analysis(
+        &self,
+        reader: &hiroute_domain::ObservationReaderContext,
+        query: &hiroute_domain::ObservationAnalysisQueryV1,
+        range: Option<&hiroute_domain::AnalysisTimeRangeV1>,
+        prices: Option<&hiroute_domain::AnalysisPricesV1>,
+        now_ms: i64,
+    ) -> Result<hiroute_domain::ObservationAnalysisPageV1, ObservationQueryError> {
+        self.port
+            .observation_analysis(reader, query, range, prices, now_ms)
+    }
     pub fn preview_session_deletion_v2(
         &self,
         principal: &ObservationPrincipalV1,

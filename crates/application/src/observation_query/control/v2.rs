@@ -9,6 +9,7 @@ impl ObservationControl {
         payload: Value,
         operation: &str,
     ) -> Result<Value, ObservationQueryError> {
+        let started = std::time::Instant::now();
         let request: ObservationReadRequestV2 =
             serde_json::from_value(payload).map_err(|_| ObservationQueryError::InvalidQuery)?;
         if request.operation() != operation {
@@ -28,11 +29,11 @@ impl ObservationControl {
                 | ObservationReadIntentV2::Content(_)
                 | ObservationReadIntentV2::Search(_)
                 | ObservationReadIntentV2::SessionSearch(_)
-        );
+        ) || matches!(&request.intent, ObservationReadIntentV2::Analysis(q) if q.view.content() || q.query.is_some());
         let search = matches!(
             request.intent,
             ObservationReadIntentV2::Search(_) | ObservationReadIntentV2::SessionSearch(_)
-        );
+        ) || matches!(&request.intent, ObservationReadIntentV2::Analysis(q) if q.query.is_some());
         if grant.is_some() {
             self.protected_principal(grant, request.protected_operation(), &request)?;
         }
@@ -47,7 +48,33 @@ impl ObservationControl {
             content,
             search,
         )?;
+        let reader = if matches!(&request.intent, ObservationReadIntentV2::Analysis(_)) {
+            reader.with_query_deadline(started + std::time::Duration::from_millis(500))
+        } else {
+            reader
+        };
         let result = match request.intent {
+            ObservationReadIntentV2::Analysis(q) => {
+                if (q.analysis_scope.is_some() || q.cursor.is_some()) && !q.time.is_empty() {
+                    return Err(ObservationQueryError::InvalidQuery);
+                }
+                let range = if q.analysis_scope.is_some() || q.cursor.is_some() {
+                    None
+                } else {
+                    Some(super::super::time::resolve(
+                        self.clock.as_ref(),
+                        &q.time,
+                        now,
+                    )?)
+                };
+                serde_json::to_value(self.service.observation_analysis(
+                    &reader,
+                    &q,
+                    range.as_ref(),
+                    None,
+                    now,
+                )?)
+            }
             ObservationReadIntentV2::Status(_) => {
                 serde_json::to_value(self.service.observed_maintenance_status(&reader, now)?)
             }

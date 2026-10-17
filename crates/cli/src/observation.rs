@@ -1,4 +1,5 @@
 //! Finite CLI codecs for observation and value reads.
+mod analysis;
 
 #[cfg(test)]
 use std::io::Read;
@@ -84,6 +85,9 @@ pub(super) fn sessions_list(options: &[String]) -> Result<Value, ErrorCode> {
             input.read(MAX_REQUEST_BYTES)?,
         );
     }
+    if options.iter().any(|flag| flag == "--view") {
+        return analysis::sessions(options, None);
+    }
     let mut query = SessionListRequestV1::default();
     let mut index = 0;
     while index < options.len() {
@@ -126,6 +130,9 @@ pub(super) fn session_show(options: &[String]) -> Result<Value, ErrorCode> {
     let Some(id) = options.first().filter(|value| valid_positional(value)) else {
         return Err(ErrorCode::InvalidArguments);
     };
+    if options.iter().any(|flag| flag == "--view") {
+        return analysis::sessions(&options[1..], Some(id));
+    }
     let content = if options.len() == 1 {
         None
     } else if options.len() == 3 && options[1] == "--content" {
@@ -171,6 +178,15 @@ pub(super) fn value_show(options: &[String]) -> Result<Value, ErrorCode> {
             ObservationCommand::Value,
             input.read(MAX_REQUEST_BYTES)?,
         );
+    }
+    if options
+        .iter()
+        .any(|flag| matches!(flag.as_str(), "--view" | "--analysis-scope" | "--order-by"))
+        || options.windows(2).any(|pair| {
+            pair[0] == "--group-by" && matches!(pair[1].as_str(), "session" | "request")
+        })
+    {
+        return analysis::value(options);
     }
     let mut query = ObservationValueReportOptionsV2::default();
     let mut basis = None;
@@ -255,6 +271,28 @@ fn observation_value_payload(
     value: Value,
 ) -> Result<Value, ErrorCode> {
     let request: ObservationReadRequestV2 = crate::request_input::deserialize(value)?;
+    if let ObservationReadIntentV2::Analysis(ref q) = request.intent {
+        let allowed = match command {
+            ObservationCommand::Sessions => matches!(
+                q.view,
+                hiroute_application_api::AnalysisViewV1::Conversations
+                    | hiroute_application_api::AnalysisViewV1::Switches
+            ),
+            ObservationCommand::Timeline => {
+                matches!(
+                    q.view,
+                    hiroute_application_api::AnalysisViewV1::Conversation
+                        | hiroute_application_api::AnalysisViewV1::Routing
+                ) && q.session_id.is_some()
+            }
+            ObservationCommand::Value => q.view.monetary(),
+            _ => false,
+        };
+        if !allowed {
+            return Err(ErrorCode::InvalidArguments);
+        }
+        return serde_json::to_value(request).map_err(|_| ErrorCode::Internal);
+    }
     let matches_command = match (command, &request.intent) {
         (
             ObservationCommand::Sessions,

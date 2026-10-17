@@ -212,14 +212,14 @@ impl ObservationQueryPort for LocalObservationStore {
         validate_list_query(query)?;
         let _permit = self
             .query_permit()
-            .map_err(crate::query_v2::ObservationV2Error::into_domain)?;
+            .map_err(crate::query_v2::ObservationV2Error::into_legacy_domain)?;
         let connection = rusqlite::Connection::open_with_flags(
             &self.activity_path,
             rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
         )
         .map_err(|_| ObservationQueryError::Unavailable)?;
         let _deadline = crate::query_v2::QueryDeadline::start(&connection)
-            .map_err(crate::query_v2::ObservationV2Error::into_domain)?;
+            .map_err(crate::query_v2::ObservationV2Error::into_legacy_domain)?;
         let visibility = query_visibility(&connection)?;
         let mut statement = connection
             .prepare(
@@ -317,14 +317,14 @@ impl ObservationQueryPort for LocalObservationStore {
     ) -> Result<SessionDetailV1, ObservationQueryError> {
         let _permit = self
             .query_permit()
-            .map_err(crate::query_v2::ObservationV2Error::into_domain)?;
+            .map_err(crate::query_v2::ObservationV2Error::into_legacy_domain)?;
         let connection = rusqlite::Connection::open_with_flags(
             &self.activity_path,
             rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
         )
         .map_err(|_| ObservationQueryError::Unavailable)?;
         let _deadline = crate::query_v2::QueryDeadline::start(&connection)
-            .map_err(crate::query_v2::ObservationV2Error::into_domain)?;
+            .map_err(crate::query_v2::ObservationV2Error::into_legacy_domain)?;
         let visibility = query_visibility(&connection)?;
         let row = connection
             .query_row(
@@ -390,14 +390,14 @@ impl ObservationQueryPort for LocalObservationStore {
     ) -> Result<RoutingReceiptV1, ObservationQueryError> {
         let _permit = self
             .query_permit()
-            .map_err(crate::query_v2::ObservationV2Error::into_domain)?;
+            .map_err(crate::query_v2::ObservationV2Error::into_legacy_domain)?;
         let connection = rusqlite::Connection::open_with_flags(
             &self.activity_path,
             rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
         )
         .map_err(|_| ObservationQueryError::Unavailable)?;
         let _deadline = crate::query_v2::QueryDeadline::start(&connection)
-            .map_err(crate::query_v2::ObservationV2Error::into_domain)?;
+            .map_err(crate::query_v2::ObservationV2Error::into_legacy_domain)?;
         let (request, body, stored_digest): (String, String, String) = connection
             .query_row(
                 "SELECT r.request_id, CASE WHEN length(r.body_json)<=1048576 THEN r.body_json ELSE '' END, r.body_digest FROM routing_receipts r
@@ -470,14 +470,14 @@ impl ObservationQueryPort for LocalObservationStore {
     ) -> Result<ObservationStatusV1, ObservationQueryError> {
         let _permit = self
             .query_permit()
-            .map_err(crate::query_v2::ObservationV2Error::into_domain)?;
+            .map_err(crate::query_v2::ObservationV2Error::into_legacy_domain)?;
         let connection = rusqlite::Connection::open_with_flags(
             &self.activity_path,
             rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
         )
         .map_err(|_| ObservationQueryError::Unavailable)?;
         let _deadline = crate::query_v2::QueryDeadline::start(&connection)
-            .map_err(crate::query_v2::ObservationV2Error::into_domain)?;
+            .map_err(crate::query_v2::ObservationV2Error::into_legacy_domain)?;
         let (gaps, gaps_truncated) = read_gaps(&connection, workspace_id)?;
         let facts_completeness = aggregate_facts_completeness(&connection, workspace_id)?;
         let content_completeness = aggregate_content_completeness(&connection, workspace_id)?;

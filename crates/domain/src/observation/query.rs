@@ -236,6 +236,16 @@ pub struct ObservationStatusV1 {
 }
 
 pub trait ObservationQueryPort: Send + Sync {
+    fn observation_analysis(
+        &self,
+        _reader: &super::ObservationReaderContext,
+        _query: &super::ObservationAnalysisQueryV1,
+        _range: Option<&super::AnalysisTimeRangeV1>,
+        _prices: Option<&super::AnalysisPricesV1>,
+        _now_ms: i64,
+    ) -> Result<super::ObservationAnalysisPageV1, ObservationQueryError> {
+        Err(ObservationQueryError::Unavailable)
+    }
     fn observed_maintenance_status(
         &self,
         _reader: &super::ObservationReaderContext,
