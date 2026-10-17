@@ -35,7 +35,7 @@ $p.Refresh()
 if($q.action -eq 'tray-observe') {
  $desktop=[Windows.Automation.AutomationElement]::RootElement
  $tops=@($desktop.FindAll([Windows.Automation.TreeScope]::Children,[Windows.Automation.Condition]::TrueCondition))
- $windows=@($tops | Where-Object {$_.Current.ClassName -in @('Shell_TrayWnd','NotifyIconOverflowWindow','TopLevelWindowForOverflowXamlIsland') -and -not $_.Current.IsOffscreen})
+ $windows=@($tops | Where-Object {($_.Current.ClassName -in @('Shell_TrayWnd','NotifyIconOverflowWindow','TopLevelWindowForOverflowXamlIsland') -or ($_.Current.ClassName -eq '#32768' -and $_.Current.ProcessId -eq $q.pid)) -and -not $_.Current.IsOffscreen})
  $nodes=@(foreach($w in $windows){foreach($e in $w.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.Condition]::TrueCondition)){
   @{name=$e.Current.Name;type=$e.Current.ControlType.ProgrammaticName;automation_id=$e.Current.AutomationId;offscreen=$e.Current.IsOffscreen;runtime_id=($e.GetRuntimeId() -join '.')}
  }})
@@ -56,6 +56,16 @@ if($q.action -eq 'quit') {
  $name=[Windows.Automation.AutomationElement]::NameProperty
  $children=[Windows.Automation.TreeScope]::Children
  $descendants=[Windows.Automation.TreeScope]::Descendants
+ function QuitItems {
+  $windows=$desktop.FindAll($children,[Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ProcessIdProperty,[int]$q.pid))
+  $items=@()
+  foreach($w in $windows){$items+=@($w.FindAll($descendants,[Windows.Automation.Condition]::TrueCondition))}
+  $menuItems=@($items | Where-Object {$_.Current.ControlType -eq [Windows.Automation.ControlType]::MenuItem -and -not $_.Current.IsOffscreen} | Sort-Object {($_.GetRuntimeId() -join '.')} -Unique)
+  @($menuItems | ForEach-Object {@{name=$_.Current.Name;runtime_id=($_.GetRuntimeId() -join '.')}}) | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $PSScriptRoot 'menu-before.json') -Encoding UTF8
+  return @($menuItems | Where-Object {$_.Current.Name -eq 'Quit'})
+ }
+ $quit=@(QuitItems)
+ if($quit.Count -eq 0) {
  $bar=$desktop.FindFirst($children,[Windows.Automation.PropertyCondition]::new($class,'Shell_TrayWnd'))
  if($null -eq $bar){throw 'No native notification area'}
  $find=[Windows.Automation.PropertyCondition]::new($name,'HiRoute')
@@ -80,13 +90,9 @@ if($q.action -eq 'quit') {
  if($icons.Count -ne 1){throw 'Exactly one visible HiRoute notification icon is required'}
  $icons[0].GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
  Start-Sleep -Milliseconds 500
- $windows=$desktop.FindAll($children,[Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ProcessIdProperty,[int]$q.pid))
- $quit=@()
- foreach($w in $windows){$quit+=@($w.FindAll($descendants,[Windows.Automation.PropertyCondition]::new($name,'Quit')))}
- $quit=@($quit | Where-Object {
-  $_.Current.ControlType -eq [Windows.Automation.ControlType]::MenuItem -and -not $_.Current.IsOffscreen
- })
- if($quit.Count -ne 1){throw 'The measured Desktop did not expose one native Quit menu item'}
+ $quit=@(QuitItems)
+ }
+ if($quit.Count -ne 1){throw "The measured Desktop exposed $($quit.Count) native Quit menu items; inspect menu-before.json"}
  $quit[0].GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
  if(-not $p.WaitForExit(10000)){throw 'Native Quit did not exit the measured Desktop'}
  @{quit=$true;pid=$p.Id;menu_item='Quit'}|ConvertTo-Json -Compress
