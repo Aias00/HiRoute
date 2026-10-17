@@ -402,6 +402,13 @@ explicit rollback path and is never run automatically after a DAG failure. Other
 selectors, profiles and filters use the ordinary runner. A bridge over the old
 three-slot locks keeps legacy and eight-slot workers mutually exclusive.
 
+The installed Linux package scenario requires the same candidate's production frontend
+at `apps/desktop/dist`. Build it through the configured frontend target, then stage those
+bytes into the inactive managed backend checkout under its checkout lease before running
+`installed_standalone_cli_completes_the_headless_management_loop`. Do not replace them with
+a dummy page or install a second frontend toolchain on the backend. Hosted full CI uses
+its frontend artifact handoff for this prerequisite.
+
 ## Pilot from either development machine
 
 ### Reuse one build across scenarios

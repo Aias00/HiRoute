@@ -82,6 +82,9 @@ class CandidateTests(unittest.TestCase):
                 (assets / "assets").mkdir(parents=True)
                 (assets / "index.html").write_text('<script src="/assets/app.js"></script>')
                 (assets / "assets/app.js").write_text('console.info("fixture")')
+                for path in assets.rglob("*"):
+                    if path.is_file():
+                        path.chmod(0o644)
             return ""
         if args[:2] == ("cargo", "build"):
             self.assertIn("--locked", args)
