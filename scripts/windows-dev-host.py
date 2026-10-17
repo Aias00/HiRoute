@@ -247,8 +247,10 @@ function InProductPath($value) {
  return $false
 }
 $processes=@(Get-CimInstance Win32_Process | Where-Object {
- (InProductPath $_.ExecutablePath) -or ($_.SessionId -eq $session -and $_.Name -in @('hiroute.exe','hirouted.exe','hiroute-shell.exe','cliproxyapi.exe','windows_headless.exe','windows_desktop.exe'))
-} | Select-Object ProcessId,Name,ExecutablePath)
+ (InProductPath $_.ExecutablePath) -or ($_.SessionId -eq $session -and $_.Name -in @('hiroute.exe','hirouted.exe','hiroute-shell.exe','hiroute-preflight.exe','hiroute-uninstall-helper.exe','installer.exe','cliproxyapi.exe','windows_headless.exe','windows_desktop.exe'))
+} | Select-Object ProcessId,ParentProcessId,Name,ExecutablePath,@{Name='installer_verb';Expression={
+ if($_.CommandLine -match '--installer-[a-z-]+|__windows-(?:install|uninstall)'){$Matches[0]}
+}},@{Name='created_at';Expression={$_.CreationDate.ToUniversalTime().ToString('o')}})
 $tasks=@(Get-ScheduledTask | Where-Object {
  $principal=$_.Principal.UserId
  $ours=$principal -eq $identity.User.Value -or $principal -eq $identity.Name -or $principal -eq $env:USERNAME
@@ -288,7 +290,8 @@ def worker(request):
             raise ValueError('The selected manifests do not include required binaries')
         if request.get('operation') == 'inspect':
             result.update(passed=True, assessment='inspection_only',
-                          installation=profile_helper(request).inspect_installation(Path.home(), Path(os.environ['LOCALAPPDATA'])))
+                          installation=profile_helper(request).inspect_installation(Path.home(), Path(os.environ['LOCALAPPDATA'])),
+                          profile_activity=profile_activity(config, request['run_id']))
             return 0
         if request.get('operation') == 'archive':
             parent = directory(root, request['inspection_run'])

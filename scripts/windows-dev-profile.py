@@ -72,6 +72,13 @@ def inspect_installation(native_home, local_app_data):
             facts[name] = dict(path=str(path), sha256=digest(path), bytes=path.stat().st_size)
             if name.endswith('.json') and path.stat().st_size <= 64 * 1024:
                 facts[name]['record'] = json.loads(path.read_text(encoding='utf-8'))
+    for name in ('install-pending.json', 'package-cleanup.json', 'update-outcome.json'):
+        path = plain(local_app_data / 'HiRoute/shell' / name)
+        if path.is_file():
+            facts[name] = dict(sha256=digest(path), bytes=path.stat().st_size,
+                               modified_unix=path.stat().st_mtime)
+            if path.stat().st_size <= 64 * 1024:
+                facts[name]['record'] = json.loads(path.read_text(encoding='utf-8'))
     return facts
 
 
