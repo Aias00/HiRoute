@@ -258,5 +258,97 @@ pub fn preview_previous_routing(
     Ok(result)
 }
 
+/// Recovery is offered only for currently mapped presets with a complete retained chain.
+/// This supplies navigation hints, never mutation authority; Preview rechecks the chain.
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct PreviousRoutingTargetV1 {
+    pub agent: String,
+    pub presets: Vec<String>,
+}
+
+pub fn previous_routing_targets(
+    connection: &dyn AgentConnectionControlPort,
+    state: &dyn ControlStatePort,
+    plan_id: &str,
+) -> Result<Vec<PreviousRoutingTargetV1>, ControlReadError> {
+    let mut targets = Vec::new();
+    for agent in [
+        "agent_claude_default",
+        "agent_codex_default",
+        "agent_dsh_default",
+        "agent_pi_default",
+        "agent_qoder_default",
+    ] {
+        let head = match connection.previous_routing_head(agent) {
+            Ok(head) => head,
+            Err(ControlReadError::NotFound | ControlReadError::Unavailable) => continue,
+            Err(error) => return Err(error),
+        };
+        let Some(operation_id) = &head.operation else {
+            continue;
+        };
+        let Some(operation) = state.operation(operation_id)? else {
+            continue;
+        };
+        let Ok(current) = node(&operation, &head.context_id, agent) else {
+            continue;
+        };
+        let presets = mapped_presets(&current.settings, plan_id);
+        for preset in presets {
+            let query = AgentPreviousRoutingQueryV1 {
+                agent: agent.into(),
+                presets: vec![preset.clone()],
+            };
+            if matches!(
+                preview_previous_routing(connection, state, &query)?,
+                Preview::Available { .. }
+            ) {
+                targets.push(PreviousRoutingTargetV1 {
+                    agent: agent.into(),
+                    presets: vec![preset],
+                });
+            }
+        }
+        if connection.previous_routing_head(agent)? != head {
+            return Err(ControlReadError::SnapshotChanged);
+        }
+    }
+    Ok(targets)
+}
+
+fn mapped_presets(settings: &AgentModelSelectionV2, plan: &str) -> Vec<String> {
+    match settings {
+        AgentModelSelectionV2::ClaudeLauncher {
+            preset_mappings, ..
+        } => [
+            ("opus", &preset_mappings.opus),
+            ("sonnet", &preset_mappings.sonnet),
+            ("haiku", &preset_mappings.haiku),
+        ]
+        .into_iter()
+        .filter_map(|(preset, selection)| match selection {
+            AgentClaudePresetSelectionV2::Plan { plan_id } if plan_id.as_str() == plan => {
+                Some(preset.into())
+            }
+            _ => None,
+        })
+        .collect(),
+        AgentModelSelectionV2::CodexDefault {
+            default_selection: AgentModelDefaultSelectionV2::Plan { plan_id },
+            ..
+        } if plan_id.as_str() == plan => vec!["default".into()],
+        AgentModelSelectionV2::DshAdditional {
+            allowed_plan_ids, ..
+        }
+        | AgentModelSelectionV2::PiAdditional {
+            allowed_plan_ids, ..
+        }
+        | AgentModelSelectionV2::QoderAdditional {
+            allowed_plan_ids, ..
+        } if allowed_plan_ids.iter().any(|id| id.as_str() == plan) => vec!["models".into()],
+        _ => Vec::new(),
+    }
+}
+
 #[cfg(test)]
 mod tests;

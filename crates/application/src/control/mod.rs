@@ -93,6 +93,13 @@ pub trait ControlStatePort: Send + Sync {
     ) -> Result<ControlReadAttempt<u64>, ControlReadError> {
         Err(ControlReadError::Unavailable)
     }
+    fn trust_recovery_targets(
+        &self,
+        _plan_id: &str,
+    ) -> Result<Vec<crate::agent_connection::PreviousRoutingTargetV1>, ControlReadError> {
+        Ok(Vec::new())
+    }
+
     fn trust_plan_ids(&self, _workspace: &WorkspaceId) -> Result<Vec<String>, ControlReadError> {
         Err(ControlReadError::Unavailable)
     }

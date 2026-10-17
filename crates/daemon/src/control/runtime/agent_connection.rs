@@ -327,9 +327,17 @@ impl AgentConnectionControlPort for LocalControlAdapter {
         &self,
         agent: &str,
     ) -> Result<hiroute_application::agent_connection::PreviousRoutingHead, ControlReadError> {
-        let context_id = self
-            .settings_context_for_agent(agent)
-            .ok_or(ControlReadError::NotFound)?;
+        let context_id = if agent == "agent_codex_default" {
+            let access = self.codex_access_view()?;
+            if access.selected_mode == "profile" {
+                access.profile_context_id
+            } else {
+                access.root_context_id
+            }
+        } else {
+            self.settings_context_for_agent(agent)
+                .ok_or(ControlReadError::NotFound)?
+        };
         let spec = hiroute_domain::AgentSettingsSpecV2 {
             schema_version: hiroute_domain::AGENT_SETTINGS_SCHEMA_V2,
             context_id: context_id.clone(),

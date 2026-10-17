@@ -42,7 +42,7 @@ impl ObservationControl {
                 .cloned()
                 .collect();
             if !branches.is_empty() {
-                suggestions.push(json!({"plan_id":plan_id,"active_revision":report["active_revision"],"branches":branches,"announcements":report["announcements"],"rows":report["rows"]}));
+                suggestions.push(json!({"plan_id":plan_id,"active_revision":report["active_revision"],"branches":branches,"announcements":report["announcements"],"rows":report["rows"],"previous_routing":report["previous_routing"]}));
             }
         }
         if self
@@ -135,13 +135,38 @@ impl ObservationControl {
         if tasks.over_limit {
             return Err(ObservationQueryError::ScopeTooLarge);
         }
-        serde_json::to_value(crate::trust::report::report(
-            query,
-            &context,
-            &population,
-            &runs,
-            &tasks.tasks,
-        ))
-        .map_err(|_| ObservationQueryError::Corrupt)
+        let mut report =
+            crate::trust::report::report(query, &context, &population, &runs, &tasks.tasks);
+        let mut targets = Vec::new();
+        if report.branches.iter().any(|branch| {
+            matches!(
+                branch.suggestion,
+                hiroute_domain::TrustSuggestionV1::ChangeRegularModel
+            )
+        }) {
+            targets = self
+                .state
+                .trust_recovery_targets(&query.plan_id)
+                .map_err(map_control)?;
+            if !targets.is_empty() {
+                for branch in &mut report.branches {
+                    if matches!(
+                        branch.suggestion,
+                        hiroute_domain::TrustSuggestionV1::ChangeRegularModel
+                    ) {
+                        branch.suggestion = crate::trust::suggestion::suggest(
+                            branch.threshold_millis,
+                            &branch.full_history,
+                            &branch.upward_cohort,
+                            true,
+                        );
+                    }
+                }
+            }
+        }
+        let mut value = serde_json::to_value(report).map_err(|_| ObservationQueryError::Corrupt)?;
+        value["previous_routing"] =
+            serde_json::to_value(targets).map_err(|_| ObservationQueryError::Corrupt)?;
+        Ok(value)
     }
 }

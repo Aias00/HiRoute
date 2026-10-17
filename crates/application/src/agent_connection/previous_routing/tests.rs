@@ -30,13 +30,31 @@ fn fixture(id: &str, previous: Option<&str>, opus: &str, sonnet: &str) -> Node {
 
 #[test]
 fn previous_routing_skips_unchanged_opus_and_preserves_later_sonnet() {
-    let current = fixture("op-3", Some("op-2"), "plan/trial", "plan/new-sonnet");
+    let current = fixture(
+        "op_00000000000000000000000000000003",
+        Some("op_00000000000000000000000000000002"),
+        "plan/trial",
+        "plan/new-sonnet",
+    );
     let mut chain = BTreeMap::from([
         (
-            "op-2",
-            fixture("op-2", Some("op-1"), "plan/trial", "plan/sonnet"),
+            "op_00000000000000000000000000000002",
+            fixture(
+                "op_00000000000000000000000000000002",
+                Some("op_00000000000000000000000000000001"),
+                "plan/trial",
+                "plan/sonnet",
+            ),
         ),
-        ("op-1", fixture("op-1", None, "plan/opus", "plan/sonnet")),
+        (
+            "op_00000000000000000000000000000001",
+            fixture(
+                "op_00000000000000000000000000000001",
+                None,
+                "plan/opus",
+                "plan/sonnet",
+            ),
+        ),
     ]);
     let result = recover(current, &BTreeSet::from(["opus".into()]), |id| {
         chain.remove(id.as_str()).ok_or("history_missing")
@@ -69,7 +87,10 @@ fn previous_routing_skips_unchanged_opus_and_preserves_later_sonnet() {
             plan_id: AgentPlanId::parse("plan/new-sonnet").unwrap()
         }
     );
-    assert_eq!(restored_from["opus"].as_str(), "op-1");
+    assert_eq!(
+        restored_from["opus"].as_str(),
+        "op_00000000000000000000000000000001"
+    );
     assert_eq!(spec.collaboration, AgentFacetIntent::Keep);
     assert_eq!(spec.access_token, AgentAccessTokenIntentV1::Keep);
 }
@@ -78,15 +99,30 @@ fn previous_routing_skips_unchanged_opus_and_preserves_later_sonnet() {
 fn previous_routing_never_infers_native_from_missing_or_cyclic_history() {
     for (current, reason) in [
         (
-            fixture("op-1", None, "plan/trial", "plan/sonnet"),
+            fixture(
+                "op_00000000000000000000000000000001",
+                None,
+                "plan/trial",
+                "plan/sonnet",
+            ),
             "no_previous_configuration",
         ),
         (
-            fixture("op-1", Some("op-1"), "plan/trial", "plan/sonnet"),
+            fixture(
+                "op_00000000000000000000000000000001",
+                Some("op_00000000000000000000000000000001"),
+                "plan/trial",
+                "plan/sonnet",
+            ),
             "history_cycle",
         ),
         (
-            fixture("op-1", Some("op-0"), "plan/trial", "plan/sonnet"),
+            fixture(
+                "op_00000000000000000000000000000001",
+                Some("op_00000000000000000000000000000000"),
+                "plan/trial",
+                "plan/sonnet",
+            ),
             "history_missing",
         ),
     ] {
@@ -100,13 +136,18 @@ fn previous_routing_never_infers_native_from_missing_or_cyclic_history() {
 #[test]
 fn previous_routing_bound_is_explicit_even_when_every_mapping_is_unchanged() {
     let result = recover(
-        fixture("op-0", Some("op-1"), "plan/trial", "plan/sonnet"),
+        fixture(
+            "op_00000000000000000000000000000000",
+            Some("op_00000000000000000000000000000001"),
+            "plan/trial",
+            "plan/sonnet",
+        ),
         &BTreeSet::from(["opus".into()]),
         |id| {
-            let n: u64 = id.as_str().strip_prefix("op-").unwrap().parse().unwrap();
+            let n = u64::from_str_radix(id.as_str().strip_prefix("op_").unwrap(), 16).unwrap();
             Ok(fixture(
                 id.as_str(),
-                Some(&format!("op-{}", n + 1)),
+                Some(&format!("op_{:032x}", n + 1)),
                 "plan/trial",
                 "plan/sonnet",
             ))
@@ -115,4 +156,20 @@ fn previous_routing_bound_is_explicit_even_when_every_mapping_is_unchanged() {
     assert!(
         matches!(result, Preview::Unavailable { reason, .. } if reason == "history_bound_reached")
     );
+}
+
+#[test]
+fn recovery_targets_only_include_presets_currently_mapped_to_the_plan() {
+    let value = fixture(
+        "op_00000000000000000000000000000001",
+        None,
+        "plan/trial",
+        "plan/separate",
+    );
+    assert_eq!(mapped_presets(&value.settings, "plan/trial"), vec!["opus"]);
+    assert_eq!(
+        mapped_presets(&value.settings, "plan/separate"),
+        vec!["sonnet"]
+    );
+    assert!(mapped_presets(&value.settings, "plan/unmapped").is_empty());
 }

@@ -1174,6 +1174,14 @@ impl ControlStatePort for LocalControlAdapter {
             .map_err(map_port)?;
         Ok(ControlReadAttempt::Ready(revisions.target))
     }
+    fn trust_recovery_targets(
+        &self,
+        plan_id: &str,
+    ) -> Result<Vec<hiroute_application::agent_connection::PreviousRoutingTargetV1>, ControlReadError>
+    {
+        hiroute_application::agent_connection::previous_routing_targets(self, self, plan_id)
+    }
+
     fn trust_plan_ids(&self, workspace: &WorkspaceId) -> Result<Vec<String>, ControlReadError> {
         let stores = self.stores_lock().map_err(map_port)?;
         let heads = stores
