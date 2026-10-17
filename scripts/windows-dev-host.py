@@ -163,6 +163,17 @@ foreach($rule in $acl.GetAccessRules($true,$true,$sid)){
   throw 'Runner evidence directory admits an unrelated identity'
  }
 }
+$inherit=[Security.AccessControl.InheritanceFlags]'ContainerInherit,ObjectInherit'
+$full=[Security.AccessControl.FileSystemRights]::FullControl
+$ownerRules=@($acl.GetAccessRules($true,$false,$sid)|Where-Object {
+ $_.AccessControlType -eq 'Allow' -and $_.IdentityReference.Value -eq $target.Value -and
+ ($_.FileSystemRights -band $full) -eq $full -and
+ ($_.InheritanceFlags -band $inherit) -eq $inherit -and
+ $_.PropagationFlags -eq [Security.AccessControl.PropagationFlags]::None
+})
+if($ownerRules.Count -eq 0){
+ throw 'Runner evidence directory does not grant the configured account inheritable access. Use a separate HOME-configured root for this account.'
+}
 '''
     ps(script)
 

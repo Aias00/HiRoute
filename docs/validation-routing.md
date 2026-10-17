@@ -131,6 +131,9 @@ modules. `doctor` reports the actual OS and existing sessions; select the intend
 session in HOME rather than silently falling back to SSH service context. An
 administrator session is not standard-user evidence. The configured account must
 be able to read the bundles and register a task for its existing login session.
+Use a separate workbench `root` for each native account. Its private evidence
+directory must grant that account inheritable access; the runner rejects an
+inaccessible directory before creating a Task and preserves its existing ACL.
 
 ```sh
 python3 scripts/validation.py windows doctor
