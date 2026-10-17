@@ -281,6 +281,7 @@ def main():
     uninstall.add_argument('--product', required=True)
     uninstall.add_argument('--shell-sha256', required=True)
     uninstall.add_argument('--probe-only', action='store_true')
+    uninstall.add_argument('--adapter-diagnostic', action='store_true', help='Run the verified mutating shell uninstall adapter and retain its typed result; this is not a full NSIS uninstall')
     desktop = commands.add_parser('desktop-session', help='Measured installed Desktop and native UI acceptance')
     desktop.add_argument('--product', required=True)
     desktop.add_argument('--action', dest='desktop_action', required=True,
@@ -371,6 +372,10 @@ def main():
                 if not re.fullmatch(r'[a-f0-9]{64}', args.shell_sha256):
                     raise ValueError('Expected the measured shell SHA-256')
                 values['shell_sha256'] = args.shell_sha256
+                if args.adapter_diagnostic:
+                    if args.probe_only:
+                        raise ValueError('Read-only probing and mutating adapter diagnostics are distinct operations')
+                    values.update(operation='uninstall-adapter', case='native_uninstall_adapter_diagnostic')
                 if args.probe_only:
                     values.update(operation='probe', case='candidate_read_only_probe')
             args.action = 'run'

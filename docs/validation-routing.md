@@ -202,8 +202,16 @@ must use their normal uninstall entry first. For the exact measured candidate,
 --shell-sha256 MEASURED_SHELL_SHA` invokes its actual NSIS `/S` entry, preserving
 data. It pins the installed CLI/daemon, shell and uninstaller inventory, rejects
 other active work, and waits for the owned installation to disappear. It cannot
-force an unavailable restore or remove business data. This reversible preparation creates
-no account and establishes no upgrade, restoration or migration acceptance.
+force an unavailable restore or remove business data. It copies the verified
+uninstaller outside the program directory and uses NSIS's final `_?=` argument
+to observe the actual uninstall process and exit code instead of its detached
+launcher. `--adapter-diagnostic` is a separate **mutating** diagnostic: it runs a
+verified shell copy's existing uninstall adapter and retains its typed result;
+it does not run the rest of NSIS or establish complete uninstall success.
+Read-only probing remains `--probe-only` and cannot be combined with that option.
+These operations create no account. A preparation record alone establishes no
+upgrade, Agent restoration or migration acceptance; business acceptance also
+requires actual before/after Agent files, Operation/status and package identity.
 
 For the NSIS candidate, manually dispatch `build-release-platform.yml` with its
 default x64 Windows/Desktop options. Its `artifacts/windows-desktop` upload

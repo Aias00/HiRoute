@@ -140,6 +140,15 @@ def worker_image(request):
     return path.with_name('pythonw.exe') if request.get('operation') == 'desktop' else path
 
 
+def nsis_uninstall_command(executable, programs):
+    # NSIS documents an unquoted, last _?= tail to suppress its detached copy.
+    # CreateProcess receives this directly; there is no command shell involved.
+    value = str(programs)
+    if any(c in value for c in '\x00\r\n"'):
+        raise ValueError('Invalid native installation directory')
+    return subprocess.list2cmdline([str(executable), '/S']) + ' _?=' + value
+
+
 def private_runs(root, user):
     path = plain(root / 'runs')
     # Raw native output stays under a private runner-owned parent. Never repair
@@ -322,7 +331,7 @@ def worker(request):
                           installation=profile_helper(request).inspect_installation(Path.home(), Path(os.environ['LOCALAPPDATA'])),
                           profile_activity=profile_activity(config, request['run_id']))
             return 0
-        if request.get('operation') in ('archive', 'uninstall', 'probe'):
+        if request.get('operation') in ('archive', 'uninstall', 'probe', 'uninstall-adapter'):
             parent = directory(root, request['inspection_run'])
             inspected = json.loads((parent / 'result.json').read_text(encoding='utf-8'))
             original = json.loads((parent / 'request.json').read_text(encoding='utf-8'))
@@ -336,7 +345,7 @@ def worker(request):
                 raise ValueError('A recent inspection of this standard account and product is required')
             activity = profile_activity(config, request['run_id'])
             result['profile_activity'] = activity
-            if request['operation'] in ('uninstall', 'probe'):
+            if request['operation'] in ('uninstall', 'probe', 'uninstall-adapter'):
                 helper = profile_helper(request)
                 uninstaller, installed = helper.candidate_uninstaller(
                     Path.home(), Path(os.environ['LOCALAPPDATA']), inspected['installation'],
@@ -352,10 +361,27 @@ def worker(request):
                                            stdout=completed.stdout[:4096], stderr=completed.stderr[:4096]))
                     result.update(passed=True, assessment='read_only_probe', probes=probes)
                     return 0
+                if request['operation'] == 'uninstall-adapter':
+                    source = before['programs'] / 'hiroute-shell.exe'
+                    adapter = run / 'uninstall-adapter.exe'
+                    shutil.copyfile(plain(source), adapter)
+                    if digest(adapter) != request['shell_sha256']:
+                        raise ValueError('Staged native adapter differs from the installed shell')
+                    with (run / 'adapter.stdout').open('xb') as out, (run / 'adapter.stderr').open('xb') as err:
+                        completed = subprocess.run([str(adapter), '--installer-uninstall'], stdin=subprocess.DEVNULL,
+                                                   stdout=out, stderr=err, timeout=150)
+                    result.update(passed=completed.returncode == 0, assessment='native_uninstall_adapter_only',
+                                  native_entry='packaged --installer-uninstall', exit_code=completed.returncode,
+                                  installation=helper.inspect_installation(Path.home(), Path(os.environ['LOCALAPPDATA'])))
+                    return 0 if result['passed'] else 1
+                staged = run / 'nsis-uninstaller.exe'
+                shutil.copyfile(plain(uninstaller), staged)
+                if digest(staged) != digest(uninstaller):
+                    raise ValueError('Staged NSIS uninstaller differs from its verified inventory')
                 deadline = time.monotonic() + request['timeout']
                 with (run / 'uninstall.stdout').open('xb') as out, (run / 'uninstall.stderr').open('xb') as err:
-                    completed = subprocess.run([str(uninstaller), '/S'], stdin=subprocess.DEVNULL,
-                                               stdout=out, stderr=err, timeout=request['timeout'], check=True)
+                    completed = subprocess.run(nsis_uninstall_command(staged, before['programs']), executable=str(staged),
+                                               stdin=subprocess.DEVNULL, stdout=out, stderr=err, timeout=150, check=True)
                 removed = [Path(inspected['installation']['marker']['path']), installed,
                            before['stable_cli'], before['programs'] / 'hiroute-shell.exe',
                            Path(inspected['installation']['definition']['path'])]

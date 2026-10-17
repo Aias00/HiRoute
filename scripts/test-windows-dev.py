@@ -136,6 +136,13 @@ class Runner(unittest.TestCase):
         self.assertIn("$t.State -ne 'Ready'", ps.call_args.args[0])
         self.assertFalse(lock.exists())
 
+    def test_nsis_uninstall_waits_on_the_staged_program_and_preserves_the_final_path_tail(self):
+        command = host.nsis_uninstall_command(r'C:\Private Runs\nsis-uninstaller.exe', r'C:\Users\Standard User\AppData\Local\Programs\HiRoute')
+        self.assertEqual(command, '"C:\\Private Runs\\nsis-uninstaller.exe" /S _?=C:\\Users\\Standard User\\AppData\\Local\\Programs\\HiRoute')
+        for invalid in ('path\nother', 'path"other', 'path\0other'):
+            with self.assertRaises(ValueError):
+                host.nsis_uninstall_command('uninstaller.exe', invalid)
+
     def test_archive_traversal_and_unmanifested_entries_fail(self):
         for name in ('../escape', '/absolute', 'C:/absolute', 'dir\\file.exe', 'other.exe'):
             with self.subTest(name=name):
