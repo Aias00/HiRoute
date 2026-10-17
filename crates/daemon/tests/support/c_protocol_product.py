@@ -4,7 +4,9 @@ The only upstream is the caller's counted local deterministic HTTP fixture.
 """
 import copy
 import hashlib
+import http.client
 import json
+import time
 from publication_process import plan_change
 from publication_product import encoded
 
@@ -120,6 +122,11 @@ def exercise(product, cli, service, endpoint, selection):
     assert cli('decision services test', stale, ok=False)['status'] != 'succeeded'
     assert len(endpoint.requests) == calls, 'missing saved revision dispatched a request'
 
+    routing_calls = 0
+    if product.cpa_args:
+        routing_calls = execute_and_inspect(product, endpoint, saved)
+        calls += routing_calls
+
     # Full 16-branch shape is compiled by the product, then tested in one actual call.
     branches = [{'id': f'category-{i}', 'name': f'Category {i}', 'condition': f'Synthetic work {i}',
                  'candidates': [selection], 'primary_candidates': [selection], 'judgment': None} for i in range(16)]
@@ -155,4 +162,65 @@ def exercise(product, cli, service, endpoint, selection):
     assert restored['assessment_review']['smart_saving']['source'] == source['source']
     endpoint.c_vectors = False
     print(json.dumps({'scenario': 'c-reviewed-adoption-restart-explicit-3-and-19-question-diagnostics-exact-scope-rollback',
-                      'state': 'green', 'explicit_calls': 3, 'implicit_calls': 0}), flush=True)
+                      'state': 'green', 'explicit_calls': 3, 'routing_calls': routing_calls, 'implicit_calls': 0}), flush=True)
+
+
+def execute_and_inspect(product, endpoint, saved):
+    """Actual Gateway -> event ingestion -> existing retained query, with local upstreams."""
+    started = int(time.time() * 1000)
+    before = len(endpoint.requests)
+    endpoint.c_score = 0.2
+    endpoint.c_applicability = 0.25
+    messages = [{'role': 'user', 'content': 'Complete the first deterministic C stage.'}]
+    for index in range(2):
+        client = http.client.HTTPConnection('127.0.0.1', product.port, timeout=30)
+        try:
+            client.request('POST', '/v1/responses', encoded({'model': product.model_alias, 'input': messages, 'stream': True}),
+                {'Content-Type': 'application/json', 'X-HiRoute-Token': product.bearer(product.agent_connection),
+                 'session-id': 'c-protocol-product-retained'})
+            response = client.getresponse()
+            body = response.read()
+            assert response.status == 200, (response.status, body[:500])
+            completed = [json.loads(line[6:]) for line in body.splitlines() if line.startswith(b'data: {')]
+            answer = next(event['response'] for event in completed if event.get('type') == 'response.completed')
+            text = ''.join(part['text'] for item in answer['output'] if item['type'] == 'message'
+                           for part in item['content'] if part['type'] == 'output_text')
+            assert text
+            if index == 0:
+                messages.extend([{'role': 'assistant', 'content': text},
+                                 {'role': 'user', 'content': 'Continue with the next deterministic C step.'}])
+        finally:
+            client.close()
+    assert len(endpoint.requests) == before + 2
+    assert endpoint.requests[-1][1]['state']['assessment_stage'], 'actual completed stage was not attributed'
+    assert len(endpoint.requests[-1][1]['questions']) == 3, 'required applicability question was omitted'
+
+    query = {'plan_id': product.plan_id, 'plan_revision': saved['head']['reference']['content_revision'],
+             'from_ms': started - 1, 'to_ms': int(time.time() * 1000) + 60000, 'limit': 20,
+             'include_routing_observations': True}
+    def read(options):
+        return product.control('GetPlanQualitySamples', {'schema': 'hiroute.observation.query/v2',
+            'intent': {'view': 'plan_quality', 'query': options}})['data']
+    deadline = time.monotonic() + 30
+    while True:
+        page = read(query)
+        summary = page['routing_observations']
+        if summary['retained_decisions'] >= 2:
+            break
+        assert time.monotonic() < deadline, 'C decisions did not reach retained product observations'
+        time.sleep(.05)
+    assert summary['coverage'] == 'complete', summary
+    assert len(summary['cohorts']) == 1, summary
+    counts = summary['cohorts'][0]['counts']
+    assert counts['c_decisions'] == 2 and counts['requested'] == 1 and counts['unavailable'] == 0, counts
+    assert counts['gate_opportunities'] == 1 and counts['suppressed'] == 1, counts
+    assert counts['suppressed_per_opportunity'] == 1.0 and counts['suppressed_per_c_decision'] == 0.5, counts
+    filtered = read({**query, 'model_configuration_id': 'model/no-matching-execution'})
+    assert filtered['samples'] == [] and filtered['routing_observations'] == summary
+    strict = read({**query, 'include_routing_observations': False})
+    assert 'routing_observations' not in strict
+    assert all('routing_observation' not in (sample.get('selection') or {}) for sample in strict['samples'])
+    endpoint.c_score, endpoint.c_applicability = 1.0, 0.75
+    print(json.dumps({'scenario': 'c-real-gateway-to-retained-product-observations', 'state': 'green',
+                      'routing_calls': 2, 'requested': 1, 'protection_opportunities': 1, 'suppressed': 1}), flush=True)
+    return 2
