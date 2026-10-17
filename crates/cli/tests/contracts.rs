@@ -16,7 +16,7 @@ fn checked_in_contracts_are_exact_generator_output() {
 #[test]
 fn each_p0_leaf_has_stable_positive_and_negative_plans() {
     let commands = planned_commands();
-    assert_eq!(commands.len(), 88); // Full staged surface including decision services.
+    assert_eq!(commands.len(), 99); // Full staged surface including model feeds and trial observations.
     for command in commands {
         assert!(command.positive.scenario_id.ends_with(".positive"));
         assert!(command.negative.scenario_id.ends_with(".negative"));
@@ -41,6 +41,7 @@ fn release_manifest_is_a_strict_subset_of_planned_registry() {
             "system.status",
             "agents.scan",
             "agents.list",
+            "agents.previous-routing.preview",
             "agents.connect.preview",
             "agents.connect.apply",
             "agents.connect.status",
@@ -79,6 +80,12 @@ fn release_manifest_is_a_strict_subset_of_planned_registry() {
             "decision.services.list",
             "decision.services.apply",
             "decision.services.test",
+            "models.feed.status",
+            "models.feed.refresh",
+            "models.feed.settings.apply",
+            "models.feed.remove.preview",
+            "models.feed.remove.apply",
+            "models.availability",
             "models.show",
             "prices.effective",
             "prices.override.preview",
@@ -89,6 +96,10 @@ fn release_manifest_is_a_strict_subset_of_planned_registry() {
             "sessions.receipt",
             "sessions.status",
             "value.show",
+            "sessions.timeline",
+            "observation.plan-trust",
+            "observation.plan-trust.replay",
+            "observation.plan-trust.suggestions",
             "observation.plan-quality.samples",
         ]
     );
@@ -322,7 +333,7 @@ fn gateway_show_waits_for_native_discovery_and_honors_control_timeout() {
     use std::time::{Duration, Instant};
 
     use hiroute_application_api::{
-        ClientHelloV1, LocalControlWireRequestV2, MachineEnvelopeV2, negotiate_hello,
+        negotiate_hello, ClientHelloV1, LocalControlWireRequestV2, MachineEnvelopeV2,
     };
     use serde_json::json;
 
@@ -490,11 +501,9 @@ fn real_hidden_helper_uses_only_the_owner_raw_endpoint_and_stdout_token_boundary
         .arg("--help")
         .output()
         .unwrap();
-    assert!(
-        !String::from_utf8(help.stdout)
-            .unwrap()
-            .contains(HIDDEN_AGENT_GRANT_HELPER_VERB_V1)
-    );
+    assert!(!String::from_utf8(help.stdout)
+        .unwrap()
+        .contains(HIDDEN_AGENT_GRANT_HELPER_VERB_V1));
 }
 
 #[cfg(unix)]
