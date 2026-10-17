@@ -6,6 +6,8 @@ use hiroute_domain::{
 };
 #[path = "candidate_execution_tests/native_protocol_profiles.rs"]
 mod native_protocol_profiles;
+#[path = "candidate_execution_tests/feed_lifecycle.rs"]
+mod feed_lifecycle;
 
 fn user_fact<T>(value: T) -> hiroute_domain::ComputeManagementFactValueV2<T> {
     hiroute_domain::ComputeManagementFactValueV2 {

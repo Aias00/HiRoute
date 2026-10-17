@@ -509,4 +509,6 @@ fn attempt_failure_code(reason: &str) -> &'static str {
 }
 
 #[cfg(test)]
+pub(crate) mod fixtures;
+#[cfg(test)]
 mod tests;

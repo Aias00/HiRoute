@@ -251,14 +251,13 @@ fn validate_transition(previous: &FeedPayload, next: &FeedPayload) -> Result<(),
             .records
             .iter()
             .find(|r| r.kind() == record.kind() && r.id() == record.id())
+            && old.included_on() != record.included_on()
         {
-            if old.included_on() != record.included_on() {
-                return Err(format!(
-                    "first inclusion date changed for {} {}",
-                    record.kind(),
-                    record.id()
-                ));
-            }
+            return Err(format!(
+                "first inclusion date changed for {} {}",
+                record.kind(),
+                record.id()
+            ));
         }
     }
     Ok(())
@@ -478,10 +477,10 @@ pub fn project(
             .filter_map(|key| minimums.get(key))
             .filter_map(|v| semver::Version::parse(v).ok())
             .max();
-        if let (Some(minimum), Some(required)) = (minimums.get_mut(&key), required) {
-            if semver::Version::parse(minimum).map_err(|_| "invalid client minimum")? < required {
-                *minimum = required.to_string();
-            }
+        if let (Some(minimum), Some(required)) = (minimums.get_mut(&key), required)
+            && semver::Version::parse(minimum).map_err(|_| "invalid client minimum")? < required
+        {
+            *minimum = required.to_string();
         }
     }
     payload.records.retain_mut(|record| {

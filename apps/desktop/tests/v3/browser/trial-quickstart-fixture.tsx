@@ -13,7 +13,7 @@ export const trialModel = catalog.find(m=>m.binding_ids.includes('binding/bailia
 export const primaryModel = catalog.find(m=>m.binding_ids.includes('binding/codex/gpt-5.6-sol'))!;
 Object.assign(window,{trialModel,primaryModel});
 export async function quickStartInvoke(command:string,payload:any,params:URLSearchParams) {
- if(command==='model_availability') return {featured:[],models:catalog};
+ if(command==='model_availability') return {featured:[],models:params.has('saved-only')?[]:catalog};
  if(command==='desktop_snapshot') return structuredClone(desktop);
  if(command==='agent_snapshot') return structuredClone(agents);
  if(command==='decision_services') return {services:[decision]};
@@ -42,5 +42,5 @@ export function TrialFixture({language}:{language:'zh'|'en'}) {
  const [snapshot,setSnapshot]=useState<DesktopSnapshot>(structuredClone(desktop));
  const [operation,setOperation]=useState<DesktopOperation|null>(null);
  const [open,setOpen]=useState(false);
- return <><NewModels language={language} active plans={snapshot.catalog.plans} refreshVersion={0} onTry={()=>setOpen(true)} />{open&&<TrialQuickStart initialModelId={trialModel.model_configuration_id} language={language} mutable snapshot={snapshot} operation={operation} onOperation={setOperation} onRefresh={async()=>{setSnapshot(structuredClone(desktop));setOperation(observed);}} onClose={()=>setOpen(false)} onOpenAgent={()=>{}} />}</>;
+ return <><NewModels language={language} active plans={snapshot.catalog.plans} refreshVersion={0} onTry={()=>setOpen(true)} />{open&&<TrialQuickStart initialModelId={trialModel.model_configuration_id} initialBindingId="binding/bailian/qwen-coder" language={language} mutable snapshot={snapshot} operation={operation} onOperation={setOperation} onRefresh={async()=>{setSnapshot(structuredClone(desktop));setOperation(observed);}} onClose={()=>setOpen(false)} onOpenAgent={()=>{}} />}</>;
 }

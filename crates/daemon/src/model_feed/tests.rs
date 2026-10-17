@@ -12,7 +12,7 @@ fn verify_fixture(bytes: &[u8]) -> Result<VerifiedFeed, FeedError> {
     hiroute_integrations::model_feed::verify_envelope_with_keys(bytes, &keys)
 }
 fn payload(sequence: u64) -> Vec<u8> {
-    let bytes = serde_json::to_vec(&FeedPayload {
+    sign(&FeedPayload {
         schema: MODEL_FEED_SCHEMA.into(),
         sequence,
         issued_at: "2026-10-18T00:00:00Z".into(),
@@ -20,8 +20,89 @@ fn payload(sequence: u64) -> Vec<u8> {
         records: vec![],
         featured: vec![],
     })
-    .unwrap();
+}
+fn sign(payload: &FeedPayload) -> Vec<u8> {
+    let bytes = serde_json::to_vec(payload).unwrap();
     serde_json::to_vec(&serde_json::json!({"schema":hiroute_integrations::model_feed::MODEL_FEED_ENVELOPE_SCHEMA,"payload":STANDARD.encode(&bytes),"signatures":[{"key_id":"daemon-test","ed25519":STANDARD.encode(test_key().sign(&bytes).as_ref())}]})).unwrap()
+}
+
+#[test]
+fn model_feed_restart_and_removal_preserve_captured_catalog_without_authorizing_new_use() {
+    let root = tempfile::tempdir().unwrap();
+    let service = open(root.path(), 0);
+    let bytes = sign(&super::fixtures::publication(17));
+    service
+        .refresh_using(
+            |_| {
+                Ok(FeedDownload::Content {
+                    bytes: bytes.clone(),
+                    etag: None,
+                })
+            },
+            |_, _| Ok(()),
+        )
+        .unwrap();
+    let captured = service.current();
+    assert!(
+        captured
+            .model_data()
+            .model(super::fixtures::MODEL)
+            .is_some()
+    );
+    drop(service);
+    let restarted = open(root.path(), captured.generation);
+    assert_eq!(
+        restarted.current().model_data_provenance(),
+        captured.model_data_provenance()
+    );
+    restarted
+        .remove(&restarted.removal_digest().unwrap(), true, |_, _| Ok(()))
+        .unwrap();
+    assert!(
+        restarted
+            .current()
+            .model_data()
+            .model(super::fixtures::MODEL)
+            .is_none()
+    );
+    assert!(
+        captured
+            .model_data()
+            .model(super::fixtures::MODEL)
+            .is_some()
+    );
+    let generation = restarted.current().generation;
+    drop(restarted);
+    let restarted = open(root.path(), generation);
+    assert!(
+        restarted
+            .current()
+            .model_data()
+            .model(super::fixtures::MODEL)
+            .is_none()
+    );
+    assert_eq!(
+        restarted.status().unwrap().highest_accepted_sequence,
+        Some(17)
+    );
+    restarted
+        .refresh_using(
+            |_| {
+                Ok(FeedDownload::Content {
+                    bytes: bytes.clone(),
+                    etag: None,
+                })
+            },
+            |_, _| Ok(()),
+        )
+        .unwrap();
+    assert!(
+        restarted
+            .current()
+            .model_data()
+            .model(super::fixtures::MODEL)
+            .is_some()
+    );
 }
 fn open(path: &Path, min: u64) -> ModelFeedService {
     ModelFeedService::open_with_verifier(

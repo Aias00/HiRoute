@@ -21,8 +21,8 @@ import { TrialReview } from './TrialReview';
 import { currentPrimary, initialTrialMapping, trialSelection, type TrialMapping } from './model';
 import './trial.css';
 
-export function TrialQuickStart({ initialModelId, language, mutable, snapshot, operation, onOperation, onRefresh, onClose, onOpenAgent, onOpenPerformance, onOpenSessions }: {
-  initialModelId?: string; language: 'zh' | 'en'; mutable: boolean; snapshot: DesktopSnapshot | null; operation: DesktopOperation | null;
+export function TrialQuickStart({ initialModelId, initialBindingId, language, mutable, snapshot, operation, onOperation, onRefresh, onClose, onOpenAgent, onOpenPerformance, onOpenSessions }: {
+  initialModelId?: string; initialBindingId?: string; language: 'zh' | 'en'; mutable: boolean; snapshot: DesktopSnapshot | null; operation: DesktopOperation | null;
   onOpenPerformance?(plan: Plan): void; onOpenSessions?(): void;
   onOperation(operation: DesktopOperation | null): void; onRefresh(): Promise<void>; onClose(): void; onOpenAgent(id: string): void;
 }) {
@@ -58,6 +58,8 @@ export function TrialQuickStart({ initialModelId, language, mutable, snapshot, o
       setData({ availability, options, management, agents }); setServices(decisions.services);
       if (!initialized.current) {
         initialized.current = true;
+        const requested = options.candidates.find(c => c.binding_id === initialBindingId && c.routable);
+        if (requested) { setTrialId(requested.model_configuration_id); setTrialBinding(requested.binding_id); }
         const target = initialTrialMapping(agents); setMapping(target);
         const current = currentPrimary(agents.agents.find(a => a.agent_id === target.agentId), agents.plans.plans);
         const candidate = options.candidates.find(c => c.binding_id === current?.binding_id && c.routable);
@@ -71,7 +73,11 @@ export function TrialQuickStart({ initialModelId, language, mutable, snapshot, o
   useEffect(() => { void refresh(); }, []);
   const openDecision: OpenDecisionConnection = (kind, select) => { decisionSelect.current = select; setDecision({ key: crypto.randomUUID(), kind }); };
   const operationRef = (value: OperationReference) => onOperation({ ...value, safe_error_code: null });
-  const models = data?.availability.models ?? [];
+  type TrialModel = Pick<AvailableModel, 'model_configuration_id' | 'display_name' | 'identity_stability' | 'availability'> & { catalog?: AvailableModel };
+  const models: TrialModel[] = (data?.availability.models ?? []).filter(m => m.origin.kind !== 'published').map(m => ({ ...m, catalog: m }));
+  for (const candidate of data?.options.candidates ?? []) {
+    if (candidate.routable && !models.some(m => m.model_configuration_id === candidate.model_configuration_id)) models.push({ model_configuration_id: candidate.model_configuration_id, display_name: candidate.display_name, identity_stability: 'unknown', availability: { kind: 'executable' } });
+  }
   const trial = models.find(m => m.model_configuration_id === trialId), primary = models.find(m => m.model_configuration_id === primaryId);
   function candidates(id: string) { return data?.options.candidates.filter(c => c.model_configuration_id === id && c.routable) ?? []; }
   const trialCandidates = candidates(trialId), primaryCandidates = candidates(primaryId);
@@ -86,9 +92,9 @@ export function TrialQuickStart({ initialModelId, language, mutable, snapshot, o
     return <section className="editor-section"><label className="field"><span className="field-label">{role === 'trial' ? t('试用模型（常规）', 'Trial model (Regular)') : t('主力模型', 'Primary model')}</span><select className="input" value={id} onChange={e => {
       if (role === 'trial') { setTrialId(e.target.value); setTrialBinding(''); }
       else { setPrimaryId(e.target.value); setPrimaryBinding(''); setPrimarySelection(undefined); }
-    }}><option value="">{t('选择模型', 'Select a model')}</option>{models.filter(m => m.origin.kind !== 'published').map(m => <option key={m.model_configuration_id} value={m.model_configuration_id} disabled={m.availability.kind === 'needs_newer_client'}>{m.display_name}{m.availability.kind === 'needs_newer_client' ? ` · HiRoute ${m.availability.version}+` : ''}</option>)}</select></label>
+    }}><option value="">{t('选择模型', 'Select a model')}</option>{models.map(m => <option key={m.model_configuration_id} value={m.model_configuration_id} disabled={m.availability.kind === 'needs_newer_client'}>{m.display_name}{m.availability.kind === 'needs_newer_client' ? ` · HiRoute ${m.availability.version}+` : ''}</option>)}</select></label>
       {model && available.length > 1 && <label className="field"><span className="field-label">{t('使用的接入', 'Connection')}</span><select className="input" value={selected?.binding_id ?? ''} onChange={e => role === 'trial' ? setTrialBinding(e.target.value) : (setPrimaryBinding(e.target.value), setPrimarySelection(undefined))}><option value="">{t('请选择', 'Select')}</option>{available.map(c => <option key={c.binding_id} value={c.binding_id}>{data?.management.sources.find(s => s.models.some(m => m.binding_id === c.binding_id))?.display_name ?? c.display_name} · {c.billing_class}</option>)}</select></label>}
-      {model && !available.length && model.availability.kind !== 'needs_newer_client' && <button className="btn" onClick={() => setConnect(model)}>{t('在此接入', 'Connect here')} {model.display_name}</button>}
+      {model?.catalog && !available.length && model.availability.kind !== 'needs_newer_client' && <button className="btn" onClick={() => setConnect(model.catalog!)}>{t('在此接入', 'Connect here')} {model.display_name}</button>}
       {role === 'primary' && <><p className="field-help">{t('仅在已保存配置明确指向单个模型时，才自动填入当前主力；原生预设名称不会被猜成某个模型版本。', 'The current Primary is prefilled only when saved settings identify a single model. A native preset name does not prove a model version.')}</p><button className="btn btn-quiet" onClick={() => setSubscriptions(true)}>{t('复用本机订阅', 'Reuse a local subscription')}</button></>}
       {model && ['rolling-alias', 'dynamic-route', 'unknown'].includes(model.identity_stability ?? 'unknown') && <p className="field-help">{t('供应商可能更新同名模型；后续证据可能混合多个版本。', 'The provider may update this model alias; later evidence may mix versions.')}</p>}
     </section>;

@@ -66,7 +66,7 @@ try {
  await open('lang=en&view=attention&error=1');assert.ok(await evaluate(client,`document.querySelector('.trust-attention [role=alert]').textContent.includes('retry before deciding')`));assert.equal(await evaluate(client,`[...document.querySelectorAll('.trust-attention button')].find(e=>e.textContent.includes('Review evidence')).disabled`),true);await click('button','Retry');assert.equal(await evaluate(client,`trialTrace.filter(x=>x.command==='retry-suggestions').length`),1);results.push({id:'attention.failed-read-is-not-empty',status:'passed'});
  }
  for(const [lang,theme,lost] of [['en','light',false],['zh','dark',true]]) {
-  await open(`lang=${lang}&theme=${theme}&view=quickstart${lost?'&lost=1':''}`,755,600);
+  await open(`lang=${lang}&theme=${theme}&view=quickstart${lost?'&lost=1&saved-only=1':''}`,755,600);
   await click('.new-models button',lang==='zh'?'试用':'Try');
   await waitFor(client,`!!document.querySelector('.trial-agent-choice')`);
   assert.equal(await evaluate(client,`[...document.querySelectorAll('.trial-presets input:checked')].length`),1);

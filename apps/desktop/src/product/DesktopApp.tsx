@@ -108,7 +108,7 @@ export function DesktopApp() {
   const preferences = usePresentationPreferences();
   const { language } = preferences;
   const home = useDesktopHome();
-  const [trialIntent, setTrialIntent] = useState<{ modelId?: string } | null>(null);
+  const [trialIntent, setTrialIntent] = useState<{ modelId?: string; bindingId?: string } | null>(null);
   const [page, setPage] = useState<Page>('home');
   const [modelTab, setModelTab] = useState<'general' | 'decisions'>('general');
   const [decisionIntent, setDecisionIntent] = useState<DecisionIntent | null>(null);
@@ -685,7 +685,7 @@ export function DesktopApp() {
           </div>
         </div>}
 
-        {trialIntent && <TrialQuickStart onOpenPerformance={plan => { setTrialIntent(null); void showRouting({ key: `trial/${crypto.randomUUID()}`, plan, initialView: 'performance' }); }} onOpenSessions={() => { setTrialIntent(null); void openPageSafely('sessions'); }} initialModelId={trialIntent.modelId} language={language} mutable={Boolean(home.desktopSnapshot?.trusted_authority && home.desktopSnapshot.service.mutation_available)} snapshot={home.desktopSnapshot} operation={operation} onOperation={value => acceptOperation(value, { kind: 'routing' })} onRefresh={async () => { setObserving(true); await home.refreshAll(); setRefreshVersion(value => value + 1); }} onClose={() => setTrialIntent(null)} onOpenAgent={id => { setTrialIntent(null); setAgentIntent({ key: `agents/${crypto.randomUUID()}`, agentId: id }); openPage('agents'); }} />}
+        {trialIntent && <TrialQuickStart onOpenPerformance={plan => { setTrialIntent(null); void showRouting({ key: `trial/${crypto.randomUUID()}`, plan, initialView: 'performance' }); }} onOpenSessions={() => { setTrialIntent(null); void openPageSafely('sessions'); }} initialModelId={trialIntent.modelId} initialBindingId={trialIntent.bindingId} language={language} mutable={Boolean(home.desktopSnapshot?.trusted_authority && home.desktopSnapshot.service.mutation_available)} snapshot={home.desktopSnapshot} operation={operation} onOperation={value => acceptOperation(value, { kind: 'routing' })} onRefresh={async () => { setObserving(true); await home.refreshAll(); setRefreshVersion(value => value + 1); }} onClose={() => setTrialIntent(null)} onOpenAgent={id => { setTrialIntent(null); setAgentIntent({ key: `agents/${crypto.randomUUID()}`, agentId: id }); openPage('agents'); }} />}
         <div hidden={page !== 'home'}><Home
             language={language}
             reads={home.reads}
@@ -716,7 +716,7 @@ export function DesktopApp() {
               const plan = home.desktopSnapshot?.catalog.plans.find(item => item.agent_plan_id === planId);
               if (plan) void showRouting({ key: plan.agent_plan_id, plan });
             }}
-            onTryModel={modelId => setTrialIntent({ modelId })}
+            onTryModel={(modelId, bindingId) => setTrialIntent({ modelId, bindingId })}
             onCreatePlan={bindingId => void showRouting({ key: `routing/${crypto.randomUUID()}`, initialBindingId: bindingId })}
           /></div>}
         {visited.has('models') && <div hidden={page !== 'models' || modelTab !== 'decisions'}><DecisionServicesPage

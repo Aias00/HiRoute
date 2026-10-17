@@ -155,7 +155,7 @@ export function ModelManagementPage({
   plans?: Plan[];
   agents?: Agent[];
   onOpenPlan?(planId: string): void;
-  onTryModel?(modelId: string): void;
+  onTryModel?(modelId: string | undefined, bindingId: string): void;
   onCreatePlan?(bindingId: string): void;
   tabs?: import('react').ReactNode;
 }) {
