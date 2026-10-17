@@ -273,6 +273,7 @@ def main():
     uninstall.add_argument('inspection_run')
     uninstall.add_argument('--product', required=True)
     uninstall.add_argument('--shell-sha256', required=True)
+    uninstall.add_argument('--probe-only', action='store_true')
     run = commands.add_parser('run')
     run.add_argument('--harness', required=True)
     run.add_argument('--product', required=True)
@@ -329,6 +330,8 @@ def main():
                 if not re.fullmatch(r'[a-f0-9]{64}', args.shell_sha256):
                     raise ValueError('Expected the measured shell SHA-256')
                 values['shell_sha256'] = args.shell_sha256
+                if args.probe_only:
+                    values.update(operation='probe', case='candidate_read_only_probe')
             args.action = 'run'
         elif args.action == 'run':
             values['run_id'] = uuid.uuid4().hex

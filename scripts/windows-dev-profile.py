@@ -79,6 +79,19 @@ def inspect_installation(native_home, local_app_data):
                                modified_unix=path.stat().st_mtime)
             if path.stat().st_size <= 64 * 1024:
                 facts[name]['record'] = json.loads(path.read_text(encoding='utf-8'))
+    expected = facts.get('shell-package.json', {}).get('record', {}).get('files', {})
+    mismatches = []
+    for name, wanted in expected.items():
+        if (len(name) >= 512 or '\\' in name or any(p in ('', '.', '..') for p in name.split('/'))):
+            raise ValueError('Unsafe shell inventory path')
+        path = plain(paths['programs'] / name)
+        if path.exists() and digest(path) != wanted:
+            mismatches.append(name)
+    if expected:
+        facts['shell_inventory_mismatches'] = mismatches
+    backups = plain(local_app_data / 'HiRoute/shell/install-backups')
+    if backups.is_dir():
+        facts['shell_backup_entries'] = sorted(str(p.relative_to(backups)) for p in backups.rglob('*') if p.is_file())[:100]
     return facts
 
 

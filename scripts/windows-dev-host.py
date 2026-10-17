@@ -293,7 +293,7 @@ def worker(request):
                           installation=profile_helper(request).inspect_installation(Path.home(), Path(os.environ['LOCALAPPDATA'])),
                           profile_activity=profile_activity(config, request['run_id']))
             return 0
-        if request.get('operation') in ('archive', 'uninstall'):
+        if request.get('operation') in ('archive', 'uninstall', 'probe'):
             parent = directory(root, request['inspection_run'])
             inspected = json.loads((parent / 'result.json').read_text(encoding='utf-8'))
             original = json.loads((parent / 'request.json').read_text(encoding='utf-8'))
@@ -307,12 +307,22 @@ def worker(request):
                 raise ValueError('A recent inspection of this standard account and product is required')
             activity = profile_activity(config, request['run_id'])
             result['profile_activity'] = activity
-            if request['operation'] == 'uninstall':
+            if request['operation'] in ('uninstall', 'probe'):
                 helper = profile_helper(request)
                 uninstaller, installed = helper.candidate_uninstaller(
                     Path.home(), Path(os.environ['LOCALAPPDATA']), inspected['installation'],
                     pm, request['shell_sha256'], activity)
                 before = helper.locations(Path.home(), Path(os.environ['LOCALAPPDATA']))
+                if request['operation'] == 'probe':
+                    probes = []
+                    for verb in ('--installer-preflight', '--installer-options'):
+                        completed = subprocess.run([str(before['programs'] / 'hiroute-shell.exe'), verb],
+                                                   stdin=subprocess.DEVNULL, capture_output=True,
+                                                   timeout=60, text=True, errors='replace')
+                        probes.append(dict(verb=verb, exit_code=completed.returncode,
+                                           stdout=completed.stdout[:4096], stderr=completed.stderr[:4096]))
+                    result.update(passed=True, assessment='read_only_probe', probes=probes)
+                    return 0
                 deadline = time.monotonic() + request['timeout']
                 with (run / 'uninstall.stdout').open('xb') as out, (run / 'uninstall.stderr').open('xb') as err:
                     completed = subprocess.run([str(uninstaller), '/S'], stdin=subprocess.DEVNULL,
