@@ -353,12 +353,12 @@ export function Models(props: Props) {
               ['free', text('免费', 'Free')],
             ] as const).map(([value, label]) => <button className={`source-tab${filter === value ? ' active' : ''}`} key={value} type="button" aria-pressed={filter === value} onClick={() => { setFilter(value); setDetailOpen(false); }}>{label}</button>)}
           </div>
+          <div className="segmented model-view-switch" role="group" aria-label={text('查看方式', 'View')}>
+            <button className={`segment${view === 'models' ? ' active' : ''}`} type="button" aria-pressed={view === 'models'} onClick={() => setView('models')}>{text('按模型', 'Models')}</button>
+            <button className={`segment${view === 'connections' ? ' active' : ''}`} type="button" aria-pressed={view === 'connections'} onClick={() => setView('connections')}>{text('按接入', 'Connections')}</button>
+          </div>
         </div>
         <nav className="master-list native-list" aria-label={text('模型', 'Models')}>
-          <div className="filter-row" role="group" aria-label={text('查看方式', 'View')}>
-            <button className="filter-chip" type="button" aria-pressed={view === 'models'} onClick={() => setView('models')}>{text('按模型', 'Models')}</button>
-            <button className="filter-chip" type="button" aria-pressed={view === 'connections'} onClick={() => setView('connections')}>{text('按接入', 'Connections')}</button>
-          </div>
           {entries.map(item => {
             const active = source?.source_id === item.source.source_id && model?.model_ref === item.model?.model_ref;
             const itemStatus = modelAvailability(item.source, item.model);

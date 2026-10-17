@@ -50,6 +50,8 @@ export const focusedRequirements = {
 };
 
 export const productShellRequired = [
+  'desktop.models.view-switch',
+  'desktop.presentation.control-layout',
   'desktop.routing.two-context-conflict',
   'desktop.routing.additional-budget-consumers',
   'desktop.models.subscription-scan.recommended-login',

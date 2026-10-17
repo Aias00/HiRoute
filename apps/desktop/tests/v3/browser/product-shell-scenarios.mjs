@@ -1,5 +1,6 @@
 import { scenario, scenarioCatalog, runScenarios } from './scenario-selection.mjs';
 import { productShellRequired } from './scenario-requirements.mjs';
+import { presentationScenarios } from './presentation-interactions.mjs';
 const c = () => window.productShell;
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const assert = (condition, message) => { if (!condition) throw new Error(message); };
@@ -55,6 +56,7 @@ async function routing() {
   await until(() => document.querySelector('.plan-identity-fields input'), 'route editor');
 }
 const scenarios = [
+  ...presentationScenarios,
   scenario('desktop.routing.two-context-conflict', ['routing-editor'], 'A rival context revision refuses stale publication and preserves the current draft', async () => {
     await fresh(); await routing();
     const name = document.querySelector('.plan-identity-fields input');
