@@ -50,7 +50,16 @@ impl LocalObservationStore {
         if !schema::available(&db) {
             return Err(Error::Unavailable);
         }
-        let tx = db.transaction()?;
+        // Initial membership and price captures are writes. Reserve that writer
+        // before reading their source snapshot so concurrent catch-up cannot
+        // turn every pending-progress response into SQLITE_BUSY_SNAPSHOT.
+        // Existing complete scopes keep concurrent read transactions.
+        let behavior = if (q.analysis_scope.is_none() && q.cursor.is_none()) || capture.is_some() {
+            rusqlite::TransactionBehavior::Immediate
+        } else {
+            rusqlite::TransactionBehavior::Deferred
+        };
+        let tx = db.transaction_with_behavior(behavior)?;
         let (mut s, offset) = if q.analysis_scope.is_some() || q.cursor.is_some() {
             scope::load(self, &tx, reader, q, now)?
         } else {
