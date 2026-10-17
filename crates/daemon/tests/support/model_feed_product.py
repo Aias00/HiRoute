@@ -129,7 +129,9 @@ def worker(product, plan, key, previous=None):
     while True:
         result = product.cli('worker', 'result', '--run', accepted['run_id'])['data']
         if terminal(result['run_state']):
-            assert result['run_state'] == 'succeeded' and 'native product answer' in result['result'], result
+            assert result['run_state'] == 'succeeded' and 'native product answer' in result['result'], {
+                'result': result, 'events': product.cli('worker', 'read', '--run', accepted['run_id'])['data'],
+                'task': next(x for x in product.cli('worker', 'list')['data']['tasks'] if x['task_id'] == accepted['task_id'])}
             task = next(x for x in product.cli('worker', 'list')['data']['tasks'] if x['task_id'] == accepted['task_id'])
             if task['run']['cleanup'] == 'complete' and task['resumable_until_ms'] is not None:
                 return accepted
@@ -200,6 +202,8 @@ def run(repository):
         main_session(product)
         prior = worker(product, plan, 'feed-before')
         prior = worker(product, plan, 'feed-before-continue', prior)
+        new_draft = {'change': plan_change('update', editor, plan, frozen['head']['head_revision'])}
+        assert product.cli('routing', 'preview', '--request-stdin', payload=new_draft)['status'] == 'succeeded'
         stage = 'withdraw-remove-restart'
         print(json.dumps({'scenario': 'installed-signed-feed-lifecycle', 'stage': stage}), flush=True)
         withdrawn = publication(product, 18, False)
@@ -220,8 +224,12 @@ def run(repository):
         stage = 'new-admission-rejected'
         print(json.dumps({'scenario': 'installed-signed-feed-lifecycle', 'stage': stage}), flush=True)
         available = product.cli('models', 'availability')['data']
-        assert MODEL not in wire(available).decode(), available
-        rejected = raw(product, 'routing', 'preview', payload={'change': plan_change('update', editor, plan, frozen['head']['head_revision'])})
+        retained_model = next(x for x in available['models'] if x['model_configuration_id'] == MODEL)
+        assert retained_model['availability']['kind'] == 'used_by_published_plans' and not retained_model['binding_ids'], retained_model
+        options = product.cli('routing', 'options', '--request-stdin', payload={})['data']
+        assert all(x['binding_id'] != binding for x in options['candidates']), options
+        # Exactly the same previously accepted draft must stop compiling with withdrawn facts.
+        rejected = raw(product, 'routing', 'preview', payload=new_draft)
         assert rejected['status'] != 'succeeded', rejected
         snapshot = product.cli('compute', 'list')['data']
         saved = next(x for x in snapshot['sources'] if x['source_id'] == source['source_id'])
@@ -229,7 +237,7 @@ def run(repository):
             'expected_revisions': snapshot['revisions'], 'selected_model_refs': [m['model_ref'] for m in saved['models']],
             'intent': 'save_ready', 'key_edits': []}
         rejected = raw(product, 'compute', 'connection', 'preview', payload={'change': change})
-        assert rejected['status'] != 'succeeded', rejected
+        assert rejected['status'] != 'succeeded' and rejected['error']['code'] != 'INVALID_ARGUMENTS', rejected
         recheck = copy.deepcopy(checked_request)
         recheck['request'].update(expected_catalog=product.cli('compute', 'connection', 'options')['data']['catalog'],
             existing_source_id=source['source_id'], expected_source_revision=saved['revision'], check_id='check/feed/withdrawn')
@@ -252,10 +260,10 @@ def run(repository):
         assert product.cli('models', 'feed', 'refresh')['data']['held']['sequence'] == 19
         (fixture / 'absorbed.json').write_bytes(wire(restored))
         restart(product)
-        assert product.cli('models', 'feed', 'status')['data']['counts']['ignored_embedded'] >= 3
+        absorbed = product.cli('models', 'feed', 'status')['data']
+        assert absorbed['counts']['ignored_embedded'] >= 3 and absorbed['counts']['applied'] == 0, absorbed
         main_session(product)
-        admitted = product.cli('routing', 'preview', '--request-stdin', payload={
-            'change': plan_change('update', editor, plan, frozen['head']['head_revision'])})
+        admitted = product.cli('routing', 'preview', '--request-stdin', payload=new_draft)
         assert admitted['status'] == 'succeeded', 'absorption must admit a new draft without rechecking the saved source'
         assert len(upstream.requests) >= 7 and all(x['model'] == UPSTREAM for x in upstream.requests)
         print(json.dumps({'scenario': 'installed-signed-feed-lifecycle', 'state': 'green', 'candidate': product.sha,
