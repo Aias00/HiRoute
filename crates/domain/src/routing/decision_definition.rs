@@ -22,16 +22,17 @@ pub struct OrdinalDefinitionV1 {
 // retaining the untagged form accepted by the existing v1 reader.
 impl<'de> Deserialize<'de> for OrdinalDefinitionV1 {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        #[derive(Deserialize)]
+        #[derive(Default, Deserialize)]
         #[serde(rename_all = "snake_case")]
         enum Kind {
+            #[default]
             Ordinal,
         }
         #[derive(Deserialize)]
         #[serde(deny_unknown_fields)]
         struct Wire {
             #[serde(default, rename = "kind")]
-            _kind: Option<Kind>,
+            _kind: Kind,
             instructions: String,
             levels: Vec<OrdinalLevelV1>,
         }
@@ -116,6 +117,8 @@ mod tests {
             value
         );
         wire["kind"] = json!("categorical");
+        assert!(serde_json::from_value::<OrdinalDefinitionV1>(wire.clone()).is_err());
+        wire["kind"] = json!(null);
         assert!(serde_json::from_value::<OrdinalDefinitionV1>(wire.clone()).is_err());
         wire["kind"] = json!("ordinal");
         wire["unrecognized"] = json!(true);
