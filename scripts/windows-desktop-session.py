@@ -35,6 +35,7 @@ public class DesktopWindow {
  [DllImport("user32.dll")] public static extern uint GetMenuState(IntPtr menu,uint item,uint flags);
  [DllImport("user32.dll")] public static extern bool GetMenuItemRect(IntPtr window,IntPtr menu,uint item,out Rect rect);
  [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(Point point);
+ [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window,out uint process);
 }
 '@
 $q=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'ui-request.json') -Raw | ConvertFrom-Json
@@ -151,10 +152,28 @@ if([DesktopWindow]::GetForegroundWindow() -ne $p.MainWindowHandle) {
  $bar=$desktop.FindFirst([Windows.Automation.TreeScope]::Children,[Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ClassNameProperty,'Shell_TrayWnd'))
  if($null -ne $bar) {
   $buttons=@($bar.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::AutomationIdProperty,'Appid: ai.hiroute.desktop')) | Where-Object {-not $_.Current.IsOffscreen -and $_.Current.Name.StartsWith('HiRoute')})
-  if($buttons.Count -eq 1){$buttons[0].GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke();Start-Sleep -Milliseconds 500}
+  if($buttons.Count -eq 1) {
+   $buttons[0].GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+   Start-Sleep -Milliseconds 500
+   if([DesktopWindow]::GetForegroundWindow() -ne $p.MainWindowHandle) {
+    $where=$buttons[0].GetClickablePoint()
+    $point=[DesktopWindow+Point]::new([int]$where.X,[int]$where.Y)
+    $owner=[uint32]0
+    [void][DesktopWindow]::GetWindowThreadProcessId([DesktopWindow]::WindowFromPoint($point),[ref]$owner)
+    if($owner -ne $bar.Current.ProcessId){throw 'The observed HiRoute taskbar button is obscured'}
+    [void][DesktopWindow]::SetCursorPos($point.X,$point.Y)
+    [DesktopWindow]::mouse_event(2,0,0,0,[UIntPtr]::Zero)
+    [DesktopWindow]::mouse_event(4,0,0,0,[UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 750
+   }
+  }
  }
 }
-if([DesktopWindow]::GetForegroundWindow() -ne $p.MainWindowHandle){throw 'Native Desktop is not foreground; preserve observation'}
+if([DesktopWindow]::GetForegroundWindow() -ne $p.MainWindowHandle){
+ $foreground=[Windows.Automation.AutomationElement]::FromHandle([DesktopWindow]::GetForegroundWindow())
+ @{expected=$p.MainWindowHandle.ToInt64();foreground=@{handle=[DesktopWindow]::GetForegroundWindow().ToInt64();pid=$foreground.Current.ProcessId;name=$foreground.Current.Name;class=$foreground.Current.ClassName}}|ConvertTo-Json -Depth 4|Set-Content -LiteralPath (Join-Path $PSScriptRoot 'focus.json') -Encoding UTF8
+ throw 'Native Desktop is not foreground; inspect focus.json'
+}
 $root=[Windows.Automation.AutomationElement]::FromHandle($p.MainWindowHandle)
 function Observe($root) {
  $all=$root.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.Condition]::TrueCondition)
