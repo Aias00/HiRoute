@@ -272,6 +272,7 @@
     "hiroute.observation.native-continuation/v1",
     "hiroute.observation.product-execution-envelope/v2",
     "hiroute.observation.query/v2",
+    "hiroute.observation.read-failure/v1",
     "hiroute.observation.run-link/v1",
     "hiroute.observation.serialization-failure/v1",
     "hiroute.observation.valuation-summary/v2",
