@@ -45,6 +45,9 @@ pub(crate) fn run(verb: &str, arguments: &[OsString]) -> u8 {
                     "INSTALL_ARCHITECTURE_UNSUPPORTED",
                     "INSTALL_MAINTENANCE_BUSY",
                     "INSTALL_OWNERSHIP_CONFLICT",
+                    "AGENT_CONTROL_UNAVAILABLE",
+                    "AGENT_RESTORE_DATA_REQUIRED",
+                    "INSTALL_PACKAGE_IN_USE",
                 ]
                 .into_iter()
                 .find(|code| text == *code)

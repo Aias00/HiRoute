@@ -83,7 +83,7 @@ fn failed_exchanges_have_per_peer_and_global_bounded_limits() {
         a.exchange_token("invalid", peer()).err(),
         Some(AuthError::RateLimited)
     );
-    for i in 0..56 {
+    for i in 0..64 {
         let ip = IpAddr::V4(std::net::Ipv4Addr::new(192, 0, 2, i + 1));
         assert_eq!(
             a.exchange_token("invalid", ip).err(),
@@ -95,23 +95,87 @@ fn failed_exchanges_have_per_peer_and_global_bounded_limits() {
             .err(),
         Some(AuthError::RateLimited)
     );
-    assert_eq!(a.failures.len(), 64);
-}
-#[test]
-fn bearer_is_explicit_and_sessions_are_bounded_and_memory_only() {
-    let (root, mut a) = auth();
-    assert!(a.authenticate(&HeaderMap::new(), peer()).is_err());
-    for _ in 0..16 {
-        let code = a.create_launch().unwrap();
-        a.exchange_launch(&code, peer()).unwrap();
-    }
+    assert_eq!(a.failures.len(), 72);
     let code = a.create_launch().unwrap();
+    let local = "127.0.0.2".parse().unwrap();
+    let session = a.exchange_launch(&code, local).unwrap();
+    assert!(a.authenticate(&headers(&session.bearer), local).is_ok());
+    // A separate local peer limit still applies; isolation is not an exemption.
     assert_eq!(
         a.exchange_launch(&code, peer()).err(),
-        Some(AuthError::Capacity)
+        Some(AuthError::RateLimited)
+    );
+}
+#[test]
+fn bearer_is_explicit_and_capacity_evicts_the_least_recently_used_session() {
+    let (root, mut a) = auth();
+    assert!(a.authenticate(&HeaderMap::new(), peer()).is_err());
+    let mut sessions = vec![];
+    for _ in 0..16 {
+        let code = a.create_launch().unwrap();
+        sessions.push(a.exchange_launch(&code, peer()).unwrap());
+    }
+    // Refresh the oldest session: the second session must now be evicted.
+    assert!(
+        a.authenticate(&headers(&sessions[0].bearer), peer())
+            .is_ok()
+    );
+    let code = a.create_launch().unwrap();
+    let newest = a.exchange_launch(&code, peer()).unwrap();
+    assert_eq!(a.sessions.len(), 16);
+    assert!(
+        a.authenticate(&headers(&sessions[0].bearer), peer())
+            .is_ok()
+    );
+    assert!(
+        a.authenticate(&headers(&sessions[1].bearer), peer())
+            .is_err()
+    );
+    assert!(a.authenticate(&headers(&newest.bearer), peer()).is_ok());
+    assert!(!a.session_active(&sessions[1].session.id));
+    assert!(
+        std::fs::read_to_string(root.path().join("console/audit.jsonl"))
+            .unwrap()
+            .contains("session_evicted")
     );
     let b = ConsoleAuth::open(root.path()).unwrap();
     assert!(b.sessions.is_empty());
+}
+#[test]
+fn invalid_credentials_cannot_evict_sessions_and_local_failures_do_not_block_remote_login() {
+    let (_root, mut a) = auth();
+    let token = a.create_token("Remote".into(), None).unwrap();
+    for _ in 0..16 {
+        a.exchange_token(&token.token, peer()).unwrap();
+    }
+    let before: Vec<_> = a.sessions.keys().cloned().collect();
+    assert_eq!(
+        a.exchange_token("invalid", peer()).err(),
+        Some(AuthError::Invalid)
+    );
+    assert_eq!(a.sessions.keys().cloned().collect::<Vec<_>>(), before);
+    for i in 1..=63 {
+        let ip = IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, i + 1));
+        assert_eq!(
+            a.exchange_token("invalid", ip).err(),
+            Some(AuthError::Invalid)
+        );
+    }
+    assert_eq!(
+        a.exchange_token("invalid", "127.0.1.1".parse().unwrap())
+            .err(),
+        Some(AuthError::RateLimited)
+    );
+    assert!(
+        a.exchange_token(&token.token, "192.0.2.1".parse().unwrap())
+            .is_ok()
+    );
+    // The failure window expires without restarting the service.
+    let old = now().unwrap() - 61;
+    for (at, _) in &mut a.failures {
+        *at = old;
+    }
+    assert!(a.exchange_token(&token.token, peer()).is_ok());
 }
 #[cfg(unix)]
 #[test]

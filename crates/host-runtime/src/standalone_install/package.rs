@@ -40,6 +40,13 @@ pub struct Package {
     distribution: String,
 }
 impl Package {
+    pub fn directory_name(&self) -> String {
+        format!(
+            "{}-{}",
+            self.version,
+            &self.revision[..self.revision.len().min(12)]
+        )
+    }
     pub fn read(directory: &Path) -> io::Result<Self> {
         let value: Self = read_json(&directory.join("package-manifest.json"), 1024 * 1024)?
             .ok_or_else(invalid)?;
@@ -202,4 +209,4 @@ fn pe_machine(mut file: fs::File, machine: u16) -> io::Result<()> {
 }
 
 #[cfg(test)]
-mod tests;
+pub(super) mod tests;

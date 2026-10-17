@@ -219,6 +219,14 @@ fn actual_nsis_silent_install_repeat_console_and_uninstall_preserve_data() {
     console_ready(&cli_path, &evidence, "fresh");
     run(&installer, &["/S"], &evidence, "repeat");
     console_ready(&cli_path, &evidence, "repeated");
+    hiroute_platform::windows::lifecycle::drain(
+        &layout.lifecycle_endpoint(),
+        &record.install_root.join("hirouted.exe"),
+        Duration::from_secs(30),
+    )
+    .unwrap();
+    run(&installer, &["/P", "/UPDATE"], &evidence, "passive-update");
+    console_ready(&cli_path, &evidence, "passive-updated");
 
     let sentinel = layout.state_root.join("nsis-preserved-data.txt");
     std::fs::write(&sentinel, b"native NSIS acceptance data").unwrap();
@@ -232,6 +240,10 @@ fn actual_nsis_silent_install_repeat_console_and_uninstall_preserve_data() {
     assert!(!layout.marker_path.exists());
     assert!(!record.service_definition.exists());
     assert!(!cli_path.exists());
+    assert!(
+        !record.install_root.exists(),
+        "uninstall left its versioned package behind"
+    );
     assert_eq!(
         std::fs::read(&sentinel).unwrap(),
         b"native NSIS acceptance data"
@@ -242,6 +254,7 @@ fn actual_nsis_silent_install_repeat_console_and_uninstall_preserve_data() {
         serde_json::to_vec_pretty(&json!({
             "revision":revision,"installer_sha256":hash(&installer),"standard_user":true,
             "silent_defaults":"green","repeat_install":"green","console_gateway_ready":"green",
+            "passive_update":"green","versioned_package_removed":"green",
             "uninstall_preserves_data":"green","agent_restore":"not_executed",
             "native_webview":"not_executed","update_recovery":"not_executed",
             "preserved_state":true

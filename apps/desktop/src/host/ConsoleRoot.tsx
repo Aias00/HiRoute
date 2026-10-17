@@ -86,6 +86,8 @@ function ConsoleSessionRoot({ children }: PropsWithChildren) {
         {phase === 'assets' && <p>{text('请在服务所在设备重新安装完整的 HiRoute 安装包。', 'Reinstall the complete HiRoute package on the service host.')} <code>CONSOLE_ASSETS_UNAVAILABLE</code></p>}
         {phase === 'loading' && <p role="status">{text('正在读取实际服务状态…', 'Reading the service status…')}</p>}
         {error && <p className="console-entry-error" role="alert">{text('未能完成连接', 'Could not complete the connection')} <code>{error}</code></p>}
+        {error === 'CONSOLE_SESSION_LIMIT' && <p>{text('请退出其他设备上的控制台会话，或等待会话过期后重试。', 'Sign out of a console session on another device, or wait for a session to expire and try again.')}</p>}
+        {error === 'CONSOLE_RATE_LIMITED' && <p>{text('登录失败次数过多，请等待一分钟后重试。远程登录失败不会阻止本机启动链接。', 'Too many failed sign-in attempts. Wait one minute and try again. Remote sign-in failures do not block local launch links.')}</p>}
         <div className="console-entry-preferences"><button className="btn btn-quiet" onClick={() => preferences.setLanguage(zh ? 'en' : 'zh')}>{zh ? 'English' : '中文'}</button><button className="btn btn-quiet" onClick={() => preferences.setTheme(preferences.resolvedTheme === 'dark' ? 'light' : 'dark')}>{preferences.resolvedTheme === 'dark' ? text('浅色', 'Light') : text('深色', 'Dark')}</button></div>
       </section></main>
     </PresentationRoot>}

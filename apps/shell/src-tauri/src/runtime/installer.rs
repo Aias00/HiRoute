@@ -38,6 +38,9 @@ fn read_preferences(root: &std::path::Path) -> Result<Option<ShellInstall>, &'st
     }
     Ok(Some(value))
 }
+pub(super) fn path_added(root: &std::path::Path) -> Result<bool, &'static str> {
+    Ok(read_preferences(root)?.is_some_and(|record| record.cli_path_added))
+}
 pub(super) fn tray_enabled() -> bool {
     program_root()
         .ok()
@@ -119,9 +122,8 @@ fn install(args: &[String]) -> Result<Value, String> {
     request(
         &package.join("hiroute.exe"),
         "__windows-install",
-        json!({"schema":"hiroute.windows-install-request/v1", "package_directory":package,"autostart":enabled,"console_loopback":true,"allow_legacy_stop":args.iter().any(|arg| arg == "--allow-legacy-stop")}),
+        json!({"schema":"hiroute.windows-install-request/v1", "package_directory":package,"autostart":enabled,"console_loopback":true,"defer_package_cleanup":true,"allow_legacy_stop":args.iter().any(|arg| arg == "--allow-legacy-stop")}),
     )?;
-    let metadata = root.join("shell-install.json");
     let previous = read_preferences(&root)?.is_some_and(|value| value.cli_path_added);
     let added = user_path::configure(true).map_err(|_| "USER_PATH_UNAVAILABLE")?;
     let bytes = serde_json::to_vec(&ShellInstall {
@@ -130,7 +132,7 @@ fn install(args: &[String]) -> Result<Value, String> {
         tray_enabled: !args.iter().any(|a| a == "--no-tray"),
     })
     .map_err(|_| "INSTALL_FAILED")?;
-    if hiroute_platform::durable::write_private_atomic(&metadata, &bytes).is_err() {
+    if super::install_transaction::write_preferences(&bytes).is_err() {
         if added {
             let _ = user_path::configure(false);
         }
@@ -148,26 +150,49 @@ fn install(args: &[String]) -> Result<Value, String> {
 }
 fn uninstall(args: &[String]) -> Result<Value, String> {
     windows::preflight().map_err(|error| error.to_string())?;
-    let root = program_root()?;
+    // NSIS runs a verified copy outside the installation so interrupted first
+    // installs can remove their own shell files during recovery as well.
+    let root = super::install_transaction::root().map_err(|error| error.to_string())?;
+    if super::install_transaction::hash(
+        &std::env::current_exe().map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| error.to_string())?
+        != super::install_transaction::hash(&root.join("hiroute-shell.exe"))
+            .map_err(|error| error.to_string())?
+    {
+        return Err("INSTALL_OWNERSHIP_CONFLICT".into());
+    }
+    if super::install_transaction::has_pending().map_err(|error| error.to_string())? {
+        super::install_transaction::rollback(
+            args.iter()
+                .any(|arg| arg == "--allow-unavailable-agent-restore"),
+        )
+        .map_err(|error| error.to_string())?;
+        let layout = hiroute_host_runtime::StandaloneLayout::from_environment()
+            .map_err(|_| "INSTALLATION_UNAVAILABLE")?;
+        if !root
+            .join("shell-package.json")
+            .try_exists()
+            .map_err(|error| error.to_string())?
+            && !layout
+                .marker_path
+                .try_exists()
+                .map_err(|error| error.to_string())?
+        {
+            return Ok(
+                json!({"uninstalled":true,"recovered_first_install":true,"state_preserved":true}),
+            );
+        }
+    }
     super::install_transaction::validate_installed().map_err(|error| error.to_string())?;
     let previous = read_preferences(&root)?;
-    let layout = hiroute_host_runtime::StandaloneLayout::from_environment()
-        .map_err(|_| "INSTALLATION_UNAVAILABLE")?;
-    let cli = if layout
-        .marker_path
-        .try_exists()
-        .map_err(|_| "INSTALLATION_UNAVAILABLE")?
-    {
-        service::cli()?
-    } else {
-        let package = root.join("standalone");
-        Package::read(&package).map_err(|_| "INSTALL_PACKAGE_INVALID")?;
-        package.join("hiroute.exe")
-    };
+    let package = root.join("standalone");
+    Package::read(&package).map_err(|_| "INSTALL_PACKAGE_INVALID")?;
+    let cli = package.join("hiroute.exe");
     let result = request(
         &cli,
         "__windows-uninstall",
-        json!({"schema":"hiroute.windows-uninstall-request/v1", "remove_data":args.iter().any(|arg| arg == "--remove-data"),"allow_legacy_stop":args.iter().any(|arg| arg == "--allow-legacy-stop")}),
+        json!({"schema":"hiroute.windows-uninstall-request/v1", "remove_data":args.iter().any(|arg| arg == "--remove-data"),"allow_legacy_stop":args.iter().any(|arg| arg == "--allow-legacy-stop"),"allow_unavailable_agent_restore":args.iter().any(|arg| arg == "--allow-unavailable-agent-restore")}),
     )?;
     shell_login::remove().map_err(|_| "SHELL_LOGIN_UNAVAILABLE")?;
     if previous.is_some_and(|v| v.cli_path_added) {
@@ -221,15 +246,29 @@ pub fn run_if_requested() -> Option<i32> {
         verb.as_str(),
         "--installer-rollback" | "--installer-recover"
     ) {
+        let allow = args
+            .get(1)
+            .is_some_and(|arg| arg == "--allow-unavailable-agent-restore");
+        if args.len() > 2 || (args.len() == 2 && !allow) {
+            return Some(1);
+        }
         let result =
-            windows::recover_pending().and_then(|()| super::install_transaction::rollback());
+            windows::recover_pending().and_then(|()| super::install_transaction::rollback(allow));
         let _ = super::updater::resume_admission();
-        return Some(if result.is_ok() { 0 } else { 1 });
+        return Some(match result {
+            Ok(()) => 0,
+            Err(error) if error.to_string() == "AGENT_CONTROL_UNAVAILABLE" => 23,
+            Err(_) => 1,
+        });
     }
     let result = if args.iter().skip(1).any(|a| {
         !matches!(
             a.as_str(),
-            "--no-login-start" | "--no-tray" | "--allow-legacy-stop" | "--remove-data"
+            "--no-login-start"
+                | "--no-tray"
+                | "--allow-legacy-stop"
+                | "--remove-data"
+                | "--allow-unavailable-agent-restore"
         )
     }) {
         Err("INSTALL_ARGUMENTS_INVALID".into())
@@ -252,6 +291,8 @@ pub fn run_if_requested() -> Option<i32> {
                 21
             } else if error.contains("UPGRADE_ACTIVE_WORK") {
                 22
+            } else if error.contains("AGENT_CONTROL_UNAVAILABLE") {
+                23
             } else {
                 1
             },

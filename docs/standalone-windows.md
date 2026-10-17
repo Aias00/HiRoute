@@ -88,6 +88,17 @@ Agents that need a decision. Uninstall removes owned program files, Task, shell
 login entry and the CLI PATH entry it added. Data is preserved by default. Explicit
 data removal affects only standalone data/state, never Agent files or projects.
 
+If the service is unavailable, the interactive installer or uninstaller can offer
+an explicit, default-No choice to continue without verified Agent restoration.
+Configured Agents may need manual repair and stopping the owned Task may interrupt
+work. Continuing retains all data; unattended mode refuses this exception. An
+enumerated restoration conflict still stops removal. A first-install rollback
+with no Agent storage does not require a running service.
+
+After a successful upgrade, obsolete verified version directories are removed
+once shell rollback no longer needs them. Uninstall removes the current verified
+version too. Changed or foreign entries are preserved for repair.
+
 ## Native evidence
 
 [Validation routing](validation-routing.md#windows-iteration-and-release-validation)

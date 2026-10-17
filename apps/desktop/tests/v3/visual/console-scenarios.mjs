@@ -19,6 +19,14 @@ export async function runConsoleScenarios(client, baseUrl, output) {
       await waitFor(client, 'document.querySelector(".console-transport-bar")?.getBoundingClientRect().height > 0');
       assert(await evaluate(client, '!window.consoleComponent.errors.length'), 'Incomplete console component fixture: ' + await evaluate(client, 'JSON.stringify(window.consoleComponent.errors)'));
     }
+    if (state === 'rate-limited' || state === 'session-limit') {
+      await evaluate(client, 'Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set.call(document.querySelector("input"), "c".repeat(64)); document.querySelector("input").dispatchEvent(new Event("input",{bubbles:true}))');
+      await evaluate(client, 'document.querySelector("form").requestSubmit()');
+      await waitFor(client, 'Boolean(document.querySelector("[role=alert]")) && !document.querySelector("input").disabled');
+      assert(await evaluate(client, '!document.querySelector("input").value && !sessionStorage.getItem("hiroute.console.session")'), 'Rejected sign-in retained its input or granted a session');
+      const hint = state === 'rate-limited' ? (language === 'zh' ? '一分钟' : 'one minute') : (language === 'zh' ? '退出其他设备' : 'Sign out');
+      assert(await evaluate(client, `document.body.innerText.includes(${JSON.stringify(hint)})`), 'Sign-in recovery hint is missing');
+    }
   };
   const check = async (id, run) => { try { await run(); results.push({ id, state: 'green' }); } catch (error) { results.push({ id, state: 'red', error: String(error) }); } };
   await check('console.session.launch', async () => {
@@ -47,7 +55,7 @@ export async function runConsoleScenarios(client, baseUrl, output) {
     assert(await evaluate(client, 'Boolean(document.querySelector(".console-transport-bar.plaintext"))'), 'Persistent plaintext banner is missing');
   });
   for (const language of ['zh', 'en']) for (const theme of ['light', 'dark']) for (const [width, height] of [[1200, 813], [755, 600]]) {
-    for (const state of ['login', 'expired', 'unavailable', 'assets', 'ready']) {
+    for (const state of ['login', 'expired', 'unavailable', 'assets', 'ready', 'rate-limited', 'session-limit']) {
       await open(state, language, theme, width, height);
       const geometry = await evaluate(client, `(() => {
         const element = document.querySelector('.console-entry-card') ?? document.querySelector('.console-transport-bar');

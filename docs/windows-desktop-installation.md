@@ -29,6 +29,19 @@ login settings and actual Control/Gateway readiness succeed. Changed/foreign
 entries are preserved and require repair. Committed cleanup does not replay
 installation or roll back a successfully committed package.
 
+Recovery and uninstall run a verified shell copy outside the program directory.
+A failed first installation can therefore roll back before `shell-package.json`
+exists, without trying to delete a running shell or CLI. When no Agent storage or
+storage-upgrade backup exists, rollback does not need to start the daemon.
+
+After both transactions commit, the Rust core prunes obsolete versioned payloads
+under `%USERPROFILE%\.local\lib\hiroute`. It retains the previous package until
+shell rollback is no longer possible. Uninstall uses the bundled CLI outside the
+version root and removes the verified current payload too. Cleanup resumes from
+the current manifest after interruption and preserves changed, foreign or linked
+entries. The shell records cleanup results in
+`%LOCALAPPDATA%\HiRoute\shell\package-cleanup.json` for diagnosis.
+
 The installer accepts `/S` for unattended installation with the default login-start
 and tray choices and no prompts. Failures return a nonzero process exit code.
 
@@ -53,6 +66,8 @@ flag. The installer repeats drain before stopping the owned daemon. A manual
 installer uses that same hook and a bounded wait. An older daemon without drain
 support requires a separate explicit interactive confirmation; passive updates
 refuse it.
+Passive updates skip the login/tray options page and reuse the saved choices;
+silent `/S` installations continue to use the documented defaults.
 
 Pre-stop failures resume admission. Replacement failure attempts the old package
 and Task through the same Rust journal core; it never rewrites a marker to pretend
@@ -69,6 +84,14 @@ shell login command and recorded files are removed; a foreign Run command or fil
 is preserved. User PATH removal applies only when the installer added that fixed
 entry. Data removal is an explicit unchecked option and does not turn the headless
 state root into the NSIS program directory.
+
+If the service cannot start or Agent state cannot be enumerated, interactive
+recovery/uninstall offers a separate confirmation with **No** selected by default.
+It explains that configured Agents may need manual restoration, affected Agents
+cannot be listed, and stopping the owned unresponsive Task may interrupt work.
+Continuing always retains all business data, including restoration material.
+Silent/passive mode refuses this exception; a known restoration conflict cannot
+be bypassed by it. Retry the installer to recover an interrupted installation.
 
 ## Evidence and release claims
 

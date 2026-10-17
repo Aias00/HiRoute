@@ -13,7 +13,7 @@ const state = query.get('case') ?? 'login';
 localStorage.setItem('hiroute.language', query.get('language') ?? 'zh');
 localStorage.setItem('hiroute.theme', query.get('theme') ?? 'light');
 sessionStorage.clear();
-if (!['login', 'launch'].includes(state)) sessionStorage.setItem('hiroute.console.session', 'b'.repeat(64));
+if (!['login', 'launch', 'rate-limited', 'session-limit'].includes(state)) sessionStorage.setItem('hiroute.console.session', 'b'.repeat(64));
 if (state === 'launch') history.replaceState(null, '', '/launch?code=' + 'a'.repeat(64));
 const control = {
   requests: [] as { path: string; headers: Record<string, string>; credentials?: RequestCredentials; url: string; body: unknown }[],
@@ -46,7 +46,11 @@ window.fetch = async (input, options) => {
   control.requests.push({ path: url.pathname, headers: Object.fromEntries(headers), credentials: options?.credentials, url: location.href, body: options?.body ? JSON.parse(String(options.body)) : null });
   if (control.unavailable) throw new TypeError('Synthetic disconnected service');
   const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-  if (/\/session\/(launch|token)$/.test(url.pathname)) return reply({ bearer: 'b'.repeat(64) });
+  if (/\/session\/(launch|token)$/.test(url.pathname)) {
+    if (state === 'rate-limited') return reply({ kind: 'native', code: 'CONSOLE_RATE_LIMITED' }, 429);
+    if (state === 'session-limit') return reply({ kind: 'native', code: 'CONSOLE_SESSION_LIMIT' }, 503);
+    return reply({ bearer: 'b'.repeat(64) });
+  }
   if (control.expired) return reply({ kind: 'native', code: 'CONSOLE_AUTH_REQUIRED' }, 401);
   if (url.pathname.endsWith('/session')) return reply({
     session: { id: 'session/component', credential_kind: 'access_token', token_id: 'token/component', expires: 9999999999 },

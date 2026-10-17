@@ -83,6 +83,11 @@ its own product context. Several clients can operate concurrently; a stale edit
 shows a revision conflict, refreshes actual facts and retains the unsubmitted
 draft. It does not automatically merge or replay the mutation.
 
+Up to 16 sessions stay active. A successful new login at capacity ends the least
+recently used session; closing a tab alone does not sign it out. Sessions expire
+after 12 hours idle or seven days total. Failed logins are limited per address
+and globally, with independent loopback and network budgets.
+
 An authenticated console session has the same protected-operation authority as
 macOS Desktop. Every protected operation still presents its page confirmation and
 registers authority for the exact digest. There is no password or unlock step.
@@ -106,6 +111,9 @@ bundled startup page and reconnects without credential entry. See
   API and Gateway do not depend on frontend assets being present.
 - **Session ended:** create a fresh local launch URL or enter a valid access token.
   A browser does not silently acquire replacement owner credentials.
+- **Too many failed sign-ins:** wait one minute before retrying. Network failures
+  do not block a local launch link. Sign out before closing an unused console tab;
+  a new login at the session limit retires the least recently used session.
 - **Port/listener failure:** inspect the desired and applied console addresses;
   correct the saved listener and restart the service. Gateway settings are separate.
 - **Origin denied:** use the actual console address and port. Requests with a

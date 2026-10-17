@@ -250,6 +250,8 @@ Every console request other than static frontend assets and the credential excha
 
 An authenticated console session SHALL have the same protected-operation authority as macOS Desktop, without a password or unlock step. Every protected operation SHALL retain its in-page confirmation and exact-digest authority registration. Callers operating under collaboration or Skill authorization SHALL NOT mint console launch credentials or access tokens. Protected-operation uses SHALL be audited without credentials, secret input or conversation bodies.
 
+Sessions SHALL remain in memory only, expire after 12 hours idle or seven days total, and be bounded to 16 active sessions. A valid new login at capacity SHALL retire and audit the least recently used session. Invalid credentials SHALL NOT evict a session. Failed exchanges SHALL be limited per peer and globally within independent loopback and network budgets, so network failures cannot block a local launch credential.
+
 #### Scenario: Launch credential replay
 
 - **WHEN** a launch link that was already exchanged, or has expired, is opened again
@@ -274,6 +276,16 @@ An authenticated console session SHALL have the same protected-operation authori
 
 - **WHEN** a client calls a console operation without a valid session
 - **THEN** the response contains no product data and an authentication-required result.
+
+#### Scenario: Abandoned sessions at capacity
+
+- **WHEN** the owner successfully signs in after 16 sessions have accumulated
+- **THEN** the least recently used session ends, recently used sessions remain valid, and the new session works without restarting the daemon.
+
+#### Scenario: Network login failures
+
+- **WHEN** network peers exhaust the failed-exchange budget
+- **THEN** further network exchanges are limited while a valid local launch credential remains usable; existing authenticated sessions remain usable.
 
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/132#issuecomment-6219725852

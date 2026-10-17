@@ -201,6 +201,73 @@ fn real_role_all_keeps_external_gate_and_console_auth_authority_separate() {
     );
     assert_eq!(status, 200, "{input}");
     assert!(!input.to_string().contains(secret));
+    // Exercise capacity through OS-trusted minting and the real HTTP exchange,
+    // rather than creating sessions directly in the authentication fixture.
+    let login = || {
+        let launch = runtime
+            .block_on(external.call_wire(request("CreateConsoleLaunch", json!({}))))
+            .unwrap()
+            .data
+            .unwrap();
+        let code = launch["url"]
+            .as_str()
+            .unwrap()
+            .split_once("?code=")
+            .unwrap()
+            .1;
+        let (status, session, _) = http(
+            address,
+            "/api/console/v1/session/launch",
+            Some(json!({"code":code})),
+            None,
+            "",
+        );
+        assert_eq!(status, 200, "new login must not require a daemon restart");
+        session["bearer"].as_str().unwrap().to_owned()
+    };
+    let sessions: Vec<_> = (0..16).map(|_| login()).collect();
+    assert_eq!(
+        http(address, "/api/console/v1/session", None, Some(bearer), "").0,
+        401
+    );
+    assert_eq!(
+        http(
+            address,
+            "/api/console/v1/session",
+            None,
+            Some(&sessions[0]),
+            ""
+        )
+        .0,
+        200
+    );
+    let newest = login();
+    assert_eq!(
+        http(
+            address,
+            "/api/console/v1/session",
+            None,
+            Some(&sessions[1]),
+            ""
+        )
+        .0,
+        401
+    );
+    assert_eq!(
+        http(
+            address,
+            "/api/console/v1/session",
+            None,
+            Some(&sessions[0]),
+            ""
+        )
+        .0,
+        200
+    );
+    assert_eq!(
+        http(address, "/api/console/v1/session", None, Some(&newest), "").0,
+        200
+    );
     role.upgrade_status(hiroute_host_runtime::UpgradeAction::Prepare, "test".into())
         .unwrap();
     assert!(
@@ -220,6 +287,7 @@ fn real_role_all_keeps_external_gate_and_console_auth_authority_separate() {
     assert!(!audit.contains(secret));
     assert!(!audit.contains(bearer));
     assert!(!audit.contains(code));
+    assert!(!audit.contains(&newest));
     console.shutdown();
     role.shutdown();
     role.join(Duration::from_secs(30)).unwrap();

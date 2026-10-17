@@ -285,6 +285,24 @@ pub(super) fn record_generated() -> io::Result<()> {
     }
     write(&data()?.join(PENDING), &value)
 }
+pub(super) fn write_preferences(bytes: &[u8]) -> io::Result<()> {
+    let mut value = pending()?;
+    value.new.insert(
+        "shell-install.json".into(),
+        format!("{:x}", Sha256::digest(bytes)),
+    );
+    write(&data()?.join(PENDING), &value)?;
+    hiroute_platform::durable::write_private_atomic(&root()?.join("shell-install.json"), bytes)
+}
+fn cleanup_committed() {
+    let report = match windows::cleanup_packages() {
+        Ok(report) => serde_json::json!({"status":"complete","packages":report}),
+        Err(_) => serde_json::json!({"status":"pending","code":"INSTALL_PACKAGE_CLEANUP_REQUIRED"}),
+    };
+    if let Ok(data) = data() {
+        let _ = write(&data.join("package-cleanup.json"), &report);
+    }
+}
 pub(super) fn commit() -> io::Result<()> {
     record_generated()?;
     let mut value = pending()?;
@@ -315,7 +333,9 @@ pub(super) fn commit() -> io::Result<()> {
     hiroute_platform::durable::write_private_atomic(&root.join(INVENTORY), &bytes)?;
     value.phase = Phase::Committed;
     write(&data()?.join(PENDING), &value)?;
-    clear(&value.old)
+    clear(&value.old)?;
+    cleanup_committed();
+    Ok(())
 }
 fn clear(old: &BTreeMap<String, String>) -> io::Result<()> {
     let data = data()?;
@@ -330,7 +350,7 @@ fn clear(old: &BTreeMap<String, String>) -> io::Result<()> {
     }
     fs::remove_file(data.join(PENDING))
 }
-pub(super) fn rollback() -> io::Result<()> {
+pub(super) fn rollback(allow_unavailable_agent_restore: bool) -> io::Result<()> {
     if !has_pending()? {
         return Ok(());
     }
@@ -338,7 +358,9 @@ pub(super) fn rollback() -> io::Result<()> {
     let root = root()?;
     if value.phase == Phase::Committed {
         validate_installed()?;
-        return clear(&value.old);
+        clear(&value.old)?;
+        cleanup_committed();
+        return Ok(());
     }
     windows::recover_pending()?;
     // Validate the complete replacement set before restoring the first file.
@@ -351,6 +373,40 @@ pub(super) fn rollback() -> io::Result<()> {
             }
         }
     }
+    let remove_added_path = super::installer::path_added(&root).map_err(|_| invalid())?
+        && !super::installer::path_added(&data()?.join("install-backups"))
+            .map_err(|_| invalid())?;
+    // A failed post-install hook can follow a committed standalone transaction. Reinstall
+    // the exact retained package through the same Rust core instead of editing its marker.
+    if let Some(package) = &value.previous_package {
+        windows::install(serde_json::from_value(serde_json::json!({"schema":"hiroute.windows-install-request/v1","package_directory":package,"autostart":value.previous_autostart,"console_loopback":false,"defer_package_cleanup":true})).map_err(|_|invalid())?)?;
+    } else {
+        let layout =
+            hiroute_host_runtime::StandaloneLayout::from_environment().map_err(|_| invalid())?;
+        if present(&layout.marker_path)? {
+            // The bundled CLI is outside the version root that uninstall removes.
+            let cli = root.join("standalone/hiroute.exe");
+            let (success, reply) = super::service::execute_reply(
+                &cli,
+                &["__windows-uninstall", "--request-stdin"],
+                Some(&serde_json::to_vec(&serde_json::json!({"schema":"hiroute.windows-uninstall-request/v1","allow_unavailable_agent_restore":allow_unavailable_agent_restore})).map_err(|_|invalid())?),
+                std::time::Duration::from_secs(600),
+            )
+            .map_err(|_| invalid())?;
+            if !success {
+                return Err(io::Error::other(
+                    if reply["error"]["code"] == "AGENT_CONTROL_UNAVAILABLE" {
+                        "AGENT_CONTROL_UNAVAILABLE"
+                    } else {
+                        "SHELL_INSTALL_RECOVERY_REQUIRED"
+                    },
+                ));
+            }
+        }
+    }
+    if remove_added_path {
+        hiroute_platform::windows::user_path::configure(false)?;
+    }
     for (name, expected) in &value.old {
         let backup = data()?.join("install-backups").join(name);
         if hash(&backup)? != *expected {
@@ -361,24 +417,6 @@ pub(super) fn rollback() -> io::Result<()> {
             security::open_identity(parent, true)?;
         }
         fs::copy(backup, dest)?;
-    }
-    // A failed post-install hook can follow a committed standalone transaction. Reinstall
-    // the exact retained package through the same Rust core instead of editing its marker.
-    if let Some(package) = &value.previous_package {
-        windows::install(serde_json::from_value(serde_json::json!({"schema":"hiroute.windows-install-request/v1","package_directory":package,"autostart":value.previous_autostart,"console_loopback":false})).map_err(|_|invalid())?)?;
-    } else {
-        let layout =
-            hiroute_host_runtime::StandaloneLayout::from_environment().map_err(|_| invalid())?;
-        if present(&layout.marker_path)? {
-            let cli = super::service::cli().map_err(|_| invalid())?;
-            super::service::execute(
-                &cli,
-                &["__windows-uninstall", "--request-stdin"],
-                Some(br#"{"schema":"hiroute.windows-uninstall-request/v1"}"#),
-                std::time::Duration::from_secs(600),
-            )
-            .map_err(|_| invalid())?;
-        }
     }
     let layout =
         hiroute_host_runtime::StandaloneLayout::from_environment().map_err(|_| invalid())?;
@@ -407,5 +445,7 @@ pub(super) fn rollback() -> io::Result<()> {
         &data()?.join("update-outcome.json"),
         &serde_json::json!({"schema":"hiroute.windows-shell-update-outcome/v1","status":"failed","code":"UPGRADE_INSTALL_FAILED","service_available":value.service_active}),
     )?;
-    clear(&value.old)
+    clear(&value.old)?;
+    cleanup_committed();
+    Ok(())
 }

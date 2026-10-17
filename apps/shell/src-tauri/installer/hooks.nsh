@@ -5,8 +5,26 @@ Var HiRouteTrayChoice
 Var HiRouteLoginCheckbox
 Var HiRouteTrayCheckbox
 Var HiRouteArguments
+Var HiRouteRestoreConsent
+Var HiRoutePrepared
+
+!macro HiRouteRestoreConfirmation PREFIX
+Function ${PREFIX}HiRouteConfirmUnavailableRestore
+  StrCpy $HiRouteRestoreConsent 0
+  IfSilent hiroute_restore_declined
+  ${If} $PassiveMode = 1
+    Return
+  ${EndIf}
+  MessageBox MB_YESNO|MB_ICONEXCLAMATION|MB_DEFBUTTON2 "HiRoute cannot read Agent settings because its background service is unavailable. Continuing stops only this account's HiRoute Task and may interrupt active work. Affected Agents cannot be listed; any HiRoute-configured Agent may need manual restoration. All HiRoute data will be kept. Continue without verified Agent restoration?" /SD IDNO IDNO hiroute_restore_declined
+  StrCpy $HiRouteRestoreConsent 1
+  hiroute_restore_declined:
+FunctionEnd
+!macroend
+!insertmacro HiRouteRestoreConfirmation ""
+!insertmacro HiRouteRestoreConfirmation "un."
 
 Function HiRouteOptions
+  ${IfThen} $PassiveMode = 1 ${|} Abort ${|}
   IfSilent 0 +2
     Abort
   nsDialogs::Create 1018
@@ -41,6 +59,7 @@ FunctionEnd
     MessageBox MB_ICONSTOP "HiRoute could not prepare a verified backup. Existing data is preserved." /SD IDOK
     Abort
   ${EndIf}
+  StrCpy $HiRoutePrepared 1
 !macroend
 
 !macro NSIS_HOOK_POSTINSTALL
@@ -55,6 +74,7 @@ FunctionEnd
   Pop $0
   Pop $1
   ${If} $0 = 20
+    ${IfThen} $PassiveMode = 1 ${|} Goto hiroute_install_failed ${|}
     IfSilent hiroute_install_failed
     MessageBox MB_YESNO|MB_ICONEXCLAMATION "The older background service cannot drain work. Stopping it may interrupt active requests and Worker tasks. Stop it and continue?" IDNO hiroute_install_failed
     nsExec::ExecToStack '"$INSTDIR\hiroute-shell.exe" --installer-install --allow-legacy-stop $HiRouteArguments'
@@ -74,13 +94,25 @@ FunctionEnd
     ${If} $DeleteAppDataCheckboxState = 1
       StrCpy $HiRouteArguments "--remove-data"
     ${EndIf}
-    nsExec::ExecToStack '"$INSTDIR\hiroute-shell.exe" --installer-uninstall $HiRouteArguments'
+    nsExec::ExecToStack '"$PLUGINSDIR\hiroute-uninstall-helper.exe" --installer-uninstall $HiRouteArguments'
     Pop $0
     Pop $1
+    ${If} $0 = 23
+      Call un.HiRouteConfirmUnavailableRestore
+      ${If} $HiRouteRestoreConsent = 1
+        ; Unverified restoration always retains the complete business data.
+        StrCpy $DeleteAppDataCheckboxState 0
+        StrCpy $HiRouteArguments "--allow-unavailable-agent-restore"
+        nsExec::ExecToStack '"$PLUGINSDIR\hiroute-uninstall-helper.exe" --installer-uninstall $HiRouteArguments'
+        Pop $0
+        Pop $1
+      ${EndIf}
+    ${EndIf}
     ${If} $0 = 20
+      ${IfThen} $PassiveMode = 1 ${|} Goto hiroute_uninstall_failed ${|}
       IfSilent hiroute_uninstall_failed
       MessageBox MB_YESNO|MB_ICONEXCLAMATION "The older background service cannot drain work. Stopping it may interrupt active requests and Worker tasks. Stop it and continue uninstalling?" IDNO hiroute_uninstall_failed
-      nsExec::ExecToStack '"$INSTDIR\hiroute-shell.exe" --installer-uninstall --allow-legacy-stop $HiRouteArguments'
+      nsExec::ExecToStack '"$PLUGINSDIR\hiroute-uninstall-helper.exe" --installer-uninstall --allow-legacy-stop $HiRouteArguments'
       Pop $0
       Pop $1
     ${EndIf}

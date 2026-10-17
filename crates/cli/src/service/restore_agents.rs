@@ -102,7 +102,7 @@ pub(super) fn restore(layout: &hiroute_host_runtime::StandaloneLayout) -> io::Re
                 let _ = error;
                 std::thread::sleep(Duration::from_millis(100));
             }
-            Err(error) => return Err(error),
+            Err(_) => return Err(io::Error::other("AGENT_CONTROL_UNAVAILABLE")),
         }
     };
     let _ = layout;

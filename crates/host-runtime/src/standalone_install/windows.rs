@@ -27,6 +27,8 @@ pub struct InstallRequest {
     pub console_loopback: bool,
     #[serde(default)]
     pub allow_legacy_stop: bool,
+    #[serde(default)]
+    pub defer_package_cleanup: bool,
     #[serde(default = "timeout")]
     pub timeout_ms: u64,
 }
@@ -38,6 +40,8 @@ pub struct UninstallRequest {
     pub remove_data: bool,
     #[serde(default)]
     pub allow_legacy_stop: bool,
+    #[serde(default)]
+    pub allow_unavailable_agent_restore: bool,
     #[serde(default = "timeout")]
     pub timeout_ms: u64,
 }
@@ -122,6 +126,7 @@ struct NativeHost<'a> {
     layout: &'a StandaloneLayout,
     timeout: Duration,
     allow_legacy_stop: bool,
+    allow_unavailable_stop: bool,
 }
 impl ManagerHost for NativeHost<'_> {
     fn quiesce(&mut self, values: &[&Value]) -> io::Result<()> {
@@ -136,6 +141,29 @@ impl ManagerHost for NativeHost<'_> {
                         Ok(()) => {}
                         Err(e)
                             if e.kind() == io::ErrorKind::Unsupported && self.allow_legacy_stop => {
+                        }
+                        Err(e)
+                            if self.allow_unavailable_stop
+                                && matches!(
+                                    e.kind(),
+                                    io::ErrorKind::NotFound
+                                        | io::ErrorKind::TimedOut
+                                        | io::ErrorKind::ConnectionRefused
+                                        | io::ErrorKind::ConnectionReset
+                                        | io::ErrorKind::NotConnected
+                                        | io::ErrorKind::BrokenPipe
+                                ) =>
+                        {
+                            // Only the exact owner/image-verified Task can be stopped here.
+                            task::force_stop(&value)?;
+                            let deadline = std::time::Instant::now() + self.timeout;
+                            while task::active(&value)? {
+                                if std::time::Instant::now() >= deadline {
+                                    return Err(io::ErrorKind::TimedOut.into());
+                                }
+                                std::thread::sleep(Duration::from_millis(50));
+                            }
+                            return Ok(());
                         }
                         Err(e) => return Err(e),
                     }
@@ -178,11 +206,34 @@ pub fn recover_pending() -> io::Result<()> {
         layout: &layout,
         timeout: Duration::from_secs(30),
         allow_legacy_stop: false,
+        allow_unavailable_stop: false,
     };
     if let Some(journal) = Journal::read(&layout)? {
         journal.recover(&layout, &mut host)?;
     }
     Ok(())
+}
+fn cleanup_locked(layout: &StandaloneLayout) -> io::Result<PackageCleanup> {
+    let mut retained = vec![];
+    if let Some(marker) = read_json::<StandaloneInstallRecordV1>(&layout.marker_path, MAX_RECORD)? {
+        marker.validate().map_err(|_| invalid())?;
+        retained.push(marker.install_root);
+    }
+    if let Some(journal) = Journal::read(layout)? {
+        retained.push(journal.new_marker.install_root);
+        retained.extend(journal.old_marker.map(|marker| marker.install_root));
+    }
+    prune_packages(
+        &layout.home.join(".local/lib/hiroute"),
+        hiroute_platform::windows::install::native_target()?,
+        &retained,
+    )
+}
+/// Called by the shell only after its own rollback sources are no longer needed.
+pub fn cleanup_packages() -> io::Result<PackageCleanup> {
+    let layout = layout()?;
+    let _lock = lock(&layout)?;
+    cleanup_locked(&layout)
 }
 fn current(
     layout: &StandaloneLayout,
@@ -292,16 +343,16 @@ pub fn install(request: InstallRequest) -> io::Result<Value> {
         layout: &layout,
         timeout,
         allow_legacy_stop: request.allow_legacy_stop,
+        allow_unavailable_stop: false,
     };
     if let Some(journal) = Journal::read(&layout)? {
         journal.recover(&layout, &mut host)?;
     }
     let old = current(&layout)?;
-    let root = layout.home.join(".local/lib/hiroute").join(format!(
-        "{}-{}",
-        package.version,
-        &package.revision[..package.revision.len().min(12)]
-    ));
+    let root = layout
+        .home
+        .join(".local/lib/hiroute")
+        .join(package.directory_name());
     publish_package(&request.package_directory, &root, &package)?;
     let native = Definition::new(Manager::Task, root.join("hirouted.exe"))?;
     let marker = StandaloneInstallRecordV1 {
@@ -384,8 +435,13 @@ pub fn install(request: InstallRequest) -> io::Result<Value> {
             .configure(ConsoleListenerDesiredV1::loopback())
             .map_err(|_| invalid())?;
     }
+    let cleanup = if request.defer_package_cleanup {
+        None
+    } else {
+        Some(cleanup_locked(&layout)?)
+    };
     Ok(
-        json!({"schema":"hiroute.windows-install-result/v1","installed":true,"version":package.version,"manager":"task","cli":layout.home.join(".local/bin/hiroute.exe"),"started":false}),
+        json!({"schema":"hiroute.windows-install-result/v1","installed":true,"version":package.version,"manager":"task","cli":layout.home.join(".local/bin/hiroute.exe"),"started":false,"package_cleanup":cleanup}),
     )
 }
 pub fn uninstall(
@@ -395,6 +451,9 @@ pub fn uninstall(
     if request.schema != "hiroute.windows-uninstall-request/v1" {
         return Err(invalid());
     }
+    if request.allow_unavailable_agent_restore && request.remove_data {
+        return Err(io::Error::other("AGENT_RESTORE_DATA_REQUIRED"));
+    }
     let timeout = deadline(request.timeout_ms)?;
     let layout = layout()?;
     let lock = lock(&layout)?;
@@ -402,20 +461,37 @@ pub fn uninstall(
         layout: &layout,
         timeout,
         allow_legacy_stop: request.allow_legacy_stop,
+        allow_unavailable_stop: false,
     };
     if let Some(journal) = Journal::read(&layout)? {
         journal.recover(&layout, &mut host)?;
     }
     let Some((marker, value, package)) = current(&layout)? else {
+        let cleanup = cleanup_locked(&layout)?;
         return Ok(
-            json!({"schema":"hiroute.windows-uninstall-result/v1","uninstalled":true,"already_absent":true}),
+            json!({"schema":"hiroute.windows-uninstall-result/v1","uninstalled":true,"already_absent":true,"package_cleanup":cleanup}),
         );
     };
     let native = definition(&value)?;
-    if !task::active(&native)? {
-        task::start(&native)?;
+    if let Some(installed_cli) = regular(&marker.install_root.join("hiroute.exe"))? {
+        let running_cli = security::open_identity(&std::env::current_exe()?, false)?;
+        if security::file_identity(&installed_cli)? == security::file_identity(&running_cli)? {
+            return Err(io::Error::other("INSTALL_PACKAGE_IN_USE"));
+        }
     }
-    restore_agents(&layout)?;
+    let restoration = super::uninstall::restore(
+        &layout,
+        request.allow_unavailable_agent_restore,
+        request.remove_data,
+        || {
+            if !task::active(&native)? {
+                task::start(&native).map_err(|_| io::Error::other("AGENT_CONTROL_UNAVAILABLE"))?;
+            }
+            Ok(())
+        },
+        || restore_agents(&layout),
+    )?;
+    host.allow_unavailable_stop = restoration != super::uninstall::Restoration::Restored;
     let planned = journal::plan(
         entries(&marker.install_root, &layout, &package),
         &layout,
@@ -443,6 +519,7 @@ pub fn uninstall(
     journal.commit(&layout)?;
     journal.finish(&layout)?;
     hiroute_platform::windows::shell_login::remove()?;
+    let cleanup = cleanup_locked(&layout)?;
     drop(host);
     drop(lock);
     if request.remove_data {
@@ -450,7 +527,7 @@ pub fn uninstall(
         remove_tree(&layout.state_root)?;
     }
     Ok(
-        json!({"schema":"hiroute.windows-uninstall-result/v1","uninstalled":true,"data_removed":request.remove_data,"state_preserved":!request.remove_data}),
+        json!({"schema":"hiroute.windows-uninstall-result/v1","uninstalled":true,"data_removed":request.remove_data,"state_preserved":!request.remove_data,"agent_restoration_unverified":restoration == super::uninstall::Restoration::Unverified,"package_cleanup":cleanup}),
     )
 }
 fn remove_tree(root: &Path) -> io::Result<()> {

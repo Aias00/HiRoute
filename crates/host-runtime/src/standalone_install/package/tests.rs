@@ -9,7 +9,7 @@ fn image(machine: u16) -> Vec<u8> {
     bytes[68..70].copy_from_slice(&machine.to_le_bytes());
     bytes
 }
-fn fixture(target: &str, machine: u16) -> (tempfile::TempDir, Package) {
+pub(crate) fn fixture(target: &str, machine: u16) -> (tempfile::TempDir, Package) {
     let root = tempfile::tempdir().unwrap();
     let mut files = BTreeMap::new();
     for name in [

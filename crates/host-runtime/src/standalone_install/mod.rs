@@ -1,7 +1,11 @@
 //! The single Windows installation transaction and its current journal schema.
+mod cleanup;
 mod files;
 mod journal;
 mod package;
+#[cfg(any(windows, test))]
+mod uninstall;
+pub use cleanup::{PackageCleanup, prune_packages};
 pub(crate) use files::*;
 pub use journal::{Entry, EntryKind, Journal, ManagerHost, Operation, Phase, plan};
 pub use package::{Package, PackageFile};

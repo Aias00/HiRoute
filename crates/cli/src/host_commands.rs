@@ -79,8 +79,8 @@ fn service_command(
     arguments: &[String],
     globals: &Globals,
 ) -> Result<serde_json::Value, ErrorCode> {
-    // The unpublished #127 adapters remain below, but only the private Rust
-    // transaction is an installation entry. No public command can bypass it.
+    // Only the private Rust transaction is an installation entry. The dormant
+    // manager adapters remain in the service module for low-level SCM tests.
     if arguments.first().is_some_and(|verb| {
         matches!(
             verb.as_str(),
@@ -98,7 +98,6 @@ fn service_command(
         [verb] if verb == "logs" => service::logs().map_err(map)?,
         [verb] if verb == "doctor" => service::doctor(),
         [verb] if verb == "layout" => service::windows_layout().map_err(map)?,
-        [verb] if verb == "prepare-install" => service::prepare_windows_install().map_err(map)?,
         [verb, manager_flag, manager, daemon_flag, daemon]
             if verb == "describe-install"
                 && manager_flag == "--manager"
@@ -106,18 +105,6 @@ fn service_command(
         {
             service::describe_windows_manager(manager, std::path::Path::new(daemon)).map_err(map)?
         }
-        [verb, source] if verb == "publish-install" && source == "--request-stdin" => {
-            service::publish_install_record().map_err(map)?
-        }
-        [verb, path_flag, path, source]
-            if verb == "write-record" && path_flag == "--path" && source == "--request-stdin" =>
-        {
-            service::write_private_record(std::path::Path::new(path)).map_err(map)?
-        }
-        [verb, flag, manager] if verb == "install" && flag == "--manager" && manager == "task" => {
-            service::install_manager(manager, false).map_err(map)?
-        }
-        [verb] if verb == "uninstall" => service::uninstall_manager(timeout).map_err(map)?,
         [autostart, verb] if autostart == "autostart" && verb == "enable" => {
             json_value(service::set_autostart(true).map_err(map)?)?
         }

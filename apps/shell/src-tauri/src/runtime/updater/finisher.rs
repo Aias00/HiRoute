@@ -229,7 +229,7 @@ fn finish(id: &str) -> Result<(), &'static str> {
         .status()
         .is_ok_and(|status| status.success());
     if !installed || transaction::has_pending().map_err(err)? {
-        transaction::rollback().map_err(|_| "SHELL_INSTALL_RECOVERY_REQUIRED")?;
+        transaction::rollback(false).map_err(|_| "SHELL_INSTALL_RECOVERY_REQUIRED")?;
         let resumed = resume_admission().is_ok() && service::available_blocking();
         write(
             &transaction::data()
@@ -257,7 +257,7 @@ fn recover() -> Result<(), &'static str> {
     update.try_lock_exclusive().map_err(|_| "UPGRADE_BUSY")?;
     let _install =
         hiroute_platform::windows::install::desktop_install_guard().map_err(|_| "UPGRADE_BUSY")?;
-    let result = transaction::rollback().map_err(|_| "SHELL_INSTALL_RECOVERY_REQUIRED");
+    let result = transaction::rollback(false).map_err(|_| "SHELL_INSTALL_RECOVERY_REQUIRED");
     let admission = if daemon().is_ok() {
         resume_admission()
     } else {

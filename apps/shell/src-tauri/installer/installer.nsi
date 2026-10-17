@@ -32,9 +32,6 @@ ManifestDPIAwareness PerMonitorV2
 ${StrCase}
 ${StrLoc}
 
-{{#if installer_hooks}}
-!include "{{installer_hooks}}"
-{{/if}}
 
 !define WEBVIEW2APPGUID "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
 
@@ -77,6 +74,10 @@ Var NoShortcutMode
 Var WixMode
 Var OldMainBinaryName
 Var HiRouteInstallMutex
+
+{{#if installer_hooks}}
+!include "{{installer_hooks}}"
+{{/if}}
 
 Name "${PRODUCTNAME}"
 BrandingText "${COPYRIGHT}"
@@ -478,6 +479,12 @@ FunctionEnd
 {{/each}}
 
 Function .onInit
+  StrCpy $HiRoutePrepared 0
+  StrCpy $PassiveMode 0
+  ${GetOptions} $CMDLINE "/P" $PassiveMode
+  ${IfNot} ${Errors}
+    StrCpy $PassiveMode 1
+  ${EndIf}
   ; Native architecture and SCM admission precede product writes or WebView2 setup.
   System::Call 'kernel32::IsWow64Process2(p -1, *i .r0, *i .r1) i .r2'
   IntOp $1 $1 & 65535
@@ -523,6 +530,14 @@ Function .onInit
   nsExec::ExecToStack '"$PLUGINSDIR\hiroute-preflight.exe" --installer-recover'
   Pop $0
   Pop $1
+  ${If} $0 = 23
+    Call HiRouteConfirmUnavailableRestore
+    ${If} $HiRouteRestoreConsent = 1
+      nsExec::ExecToStack '"$PLUGINSDIR\hiroute-preflight.exe" --installer-recover --allow-unavailable-agent-restore'
+      Pop $0
+      Pop $1
+    ${EndIf}
+  ${EndIf}
   ${If} $0 != 0
     MessageBox MB_ICONSTOP "HiRoute needs installation recovery. Existing data and changed files are preserved." /SD IDOK
     Abort
@@ -824,6 +839,26 @@ Function .onInstFailed
   nsExec::ExecToStack '"$PLUGINSDIR\hiroute-preflight.exe" --installer-rollback'
   Pop $0
   Pop $1
+  ${If} $0 = 23
+    Call HiRouteConfirmUnavailableRestore
+    ${If} $HiRouteRestoreConsent = 1
+      nsExec::ExecToStack '"$PLUGINSDIR\hiroute-preflight.exe" --installer-rollback --allow-unavailable-agent-restore'
+      Pop $0
+      Pop $1
+    ${EndIf}
+  ${EndIf}
+  ${If} $0 = 0
+  ${AndIf} $HiRoutePrepared = 1
+    ; A completed first-install rollback has no surviving Desktop inventory.
+    ; Remove only the registration written by this attempt, never an older one.
+    IfFileExists "$INSTDIR\shell-package.json" hiroute_rollback_registration_done
+    IfFileExists "$INSTDIR\hiroute-shell.exe" hiroute_rollback_registration_done
+    ReadRegStr $R0 HKCU "${UNINSTKEY}" "InstallLocation"
+    ${If} $R0 == "$\"$INSTDIR$\""
+      DeleteRegKey HKCU "${UNINSTKEY}"
+    ${EndIf}
+  ${EndIf}
+  hiroute_rollback_registration_done:
   SetErrorLevel 1
 FunctionEnd
 
@@ -831,7 +866,12 @@ Function un.onInit
   StrCmp $INSTDIR "$LOCALAPPDATA\Programs\HiRoute" +3
     MessageBox MB_ICONSTOP "HiRoute uninstall directory is invalid. No files were removed." /SD IDOK
     Abort
-  nsExec::ExecToStack '"$INSTDIR\hiroute-shell.exe" --installer-mutex'
+  InitPluginsDir
+  System::Call 'kernel32::CopyFileW(w "$INSTDIR\hiroute-shell.exe", w "$PLUGINSDIR\hiroute-uninstall-helper.exe", i 1) i .r0'
+  ${If} $0 = 0
+    Abort
+  ${EndIf}
+  nsExec::ExecToStack '"$PLUGINSDIR\hiroute-uninstall-helper.exe" --installer-mutex'
   Pop $0
   Pop $1
   ${If} $0 != 0

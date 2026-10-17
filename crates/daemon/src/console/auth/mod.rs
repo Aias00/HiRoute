@@ -6,6 +6,7 @@ use std::{
     collections::{BTreeMap, VecDeque},
     net::IpAddr,
     path::{Path, PathBuf},
+    time::Instant,
 };
 use zeroize::Zeroizing;
 mod store;
@@ -64,6 +65,7 @@ struct Session {
     identity: SessionIdentity,
     created: u64,
     last_used: u64,
+    last_access: Instant,
 }
 #[derive(Serialize)]
 pub(super) struct AuditEvent<'a> {
@@ -221,9 +223,6 @@ impl ConsoleAuth {
         now: u64,
     ) -> Result<SessionExchange, AuthError> {
         self.expire(now)?;
-        if self.sessions.len() >= 16 {
-            return Err(AuthError::Capacity);
-        }
         let secret = random()?;
         let identity = SessionIdentity {
             id: random()?.to_string(),
@@ -231,6 +230,15 @@ impl ConsoleAuth {
             token_id,
             expires: now + IDLE_TTL,
         };
+        if self.sessions.len() >= 16 {
+            let oldest = self
+                .sessions
+                .iter()
+                .min_by_key(|(_, session)| session.last_access)
+                .map(|(key, _)| key.clone())
+                .ok_or(AuthError::Unavailable)?;
+            self.remove_session(&oldest, "session_evicted")?;
+        }
         self.session_event("session_created", &identity, now)?;
         self.sessions.insert(
             hash(&secret),
@@ -238,6 +246,7 @@ impl ConsoleAuth {
                 identity: identity.clone(),
                 created: now,
                 last_used: now,
+                last_access: Instant::now(),
             },
         );
         Ok(SessionExchange {
@@ -273,6 +282,7 @@ impl ConsoleAuth {
             .get_mut(&hash(bearer))
             .ok_or(AuthError::Required)?;
         session.last_used = now;
+        session.last_access = Instant::now();
         session.identity.expires = (now + IDLE_TTL).min(session.created + ABSOLUTE_TTL);
         Ok(session.identity.clone())
     }
@@ -387,9 +397,13 @@ impl ConsoleAuth {
         while self.failures.front().is_some_and(|(at, _)| *at <= cutoff) {
             self.failures.pop_front();
         }
-        if self.failures.len() >= 64
-            || self.failures.iter().filter(|(_, p)| *p == peer).count() >= 8
-        {
+        // Remote failures must not consume the owner's local recovery budget.
+        let realm_failures = self
+            .failures
+            .iter()
+            .filter(|(_, address)| address.is_loopback() == peer.is_loopback())
+            .count();
+        if realm_failures >= 64 || self.failures.iter().filter(|(_, p)| *p == peer).count() >= 8 {
             Err(AuthError::RateLimited)
         } else {
             Ok(())
