@@ -84,6 +84,9 @@ pub(crate) fn command_payload(
         "models.feed.remove.apply" => {
             Some(request::<hiroute_application_api::ModelFeedRemoveRequestV1>(options))
         }
+        "agents.previous-routing.preview" => Some(request::<
+            hiroute_application_api::AgentPreviousRoutingQueryV1,
+        >(options)),
         "models.show" => Some(request::<hiroute_application_api::ModelCatalogQueryV1>(
             options,
         )),

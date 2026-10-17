@@ -26,6 +26,8 @@ use std::sync::{
 use tauri::{Manager, State, WebviewWindow};
 use tokio::sync::Mutex;
 mod model_connection_web;
+mod previous_routing;
+use previous_routing::*;
 mod model_feed;
 use model_feed::*;
 mod model_connections;
@@ -1050,6 +1052,7 @@ pub fn run() {
             web_confirmation_snapshot,
             resolve_web_confirmation,
             agent_snapshot,
+            preview_agent_previous_routing,
             preview_agent_settings,
             retry_agent_settings,
             check_agent_authentication,

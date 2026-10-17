@@ -15,6 +15,8 @@ mod agent_settings;
 mod agent_settings_preview;
 pub use agent_discovery::*;
 pub use agent_settings_preview::*;
+mod previous_routing;
+pub use previous_routing::*;
 mod classifier_diagnostic;
 mod client_access;
 mod work_plans;

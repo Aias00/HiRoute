@@ -323,6 +323,29 @@ impl LocalControlAdapter {
 }
 
 impl AgentConnectionControlPort for LocalControlAdapter {
+    fn previous_routing_head(
+        &self,
+        agent: &str,
+    ) -> Result<hiroute_application::agent_connection::PreviousRoutingHead, ControlReadError> {
+        let context_id = self
+            .settings_context_for_agent(agent)
+            .ok_or(ControlReadError::NotFound)?;
+        let spec = hiroute_domain::AgentSettingsSpecV2 {
+            schema_version: hiroute_domain::AGENT_SETTINGS_SCHEMA_V2,
+            context_id: context_id.clone(),
+            model: Default::default(),
+            collaboration: Default::default(),
+            restore_native_model: None,
+            protected_native_model_ids: Vec::new(),
+            access_token: Default::default(),
+        };
+        let input = self.capture_settings_facts(&spec)?;
+        Ok(hiroute_application::agent_connection::PreviousRoutingHead {
+            context_id,
+            operation: input.model_file.and_then(|f| f.active_configuration),
+        })
+    }
+
     fn check_collaboration(&self, agent_id: &str) -> Result<(), CollaborationCheckError> {
         #[cfg(any(unix, windows))]
         {

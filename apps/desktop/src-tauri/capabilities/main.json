@@ -60,6 +60,7 @@
     "allow-save-classifier-header-secret",
     "allow-save-classifier-openapi",
     "allow-agent-snapshot",
+    "allow-preview-agent-previous-routing",
     "allow-preview-agent-settings",
     "allow-retry-agent-settings",
     "allow-check-agent-authentication",

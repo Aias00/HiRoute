@@ -173,6 +173,9 @@ impl ApplicationService {
                 control_plane::agent_settings::preview(self, request)
             }
             "ApplyAgentConnectionRestore" => control_plane::agent_settings::apply(self, request),
+            "PreviewAgentPreviousRouting" => {
+                control_plane::agent_settings::previous_routing(self, request)
+            }
             "GetAgentConnectionStatus" => {
                 control_plane::dispatch_status_agent_connection(self, request)
             }

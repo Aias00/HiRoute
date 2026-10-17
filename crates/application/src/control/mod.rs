@@ -250,6 +250,13 @@ pub trait ApplicationMutationPort: Send + Sync {
 /// Read-only facts needed by the typed AgentConnection planner and managed-launch endpoint.
 /// The daemon adapter owns filesystem/publication joins; Application owns every product decision.
 pub trait AgentConnectionControlPort: Send + Sync {
+    fn previous_routing_head(
+        &self,
+        _agent: &str,
+    ) -> Result<crate::agent_connection::PreviousRoutingHead, ControlReadError> {
+        Err(ControlReadError::Unavailable)
+    }
+
     fn retry_settings_operation(
         &self,
         _request: &hiroute_application_api::AgentSettingsRetryV1,

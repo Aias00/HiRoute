@@ -346,6 +346,15 @@ const COMMANDS: &[StaticCommandDescriptor] = &[
         "List discovered Agent installations and connection state."
     ),
     command!(
+        "agents.previous-routing.preview",
+        ["agents", "previous-routing", "preview"],
+        "PreviewAgentPreviousRouting",
+        ["CLI-068", "APP-068"],
+        Released,
+        Query,
+        "Recover selected previous mappings as an ordinary Agent settings draft."
+    ),
+    command!(
         "agents.show",
         ["agents", "show"],
         "GetAgent",

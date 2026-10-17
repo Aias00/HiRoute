@@ -18,7 +18,11 @@ fn trust_population_keeps_full_active_history_beside_the_selected_window() {
             at,
         );
         assert!(matches!(
-            offer_fact(&writer, &channel, fixture.fact(index as u64 + 1, fact, at)),
+            offer_fact(
+                &writer,
+                &channel,
+                fixture.fact(index as u64 + 1, fact, at as i64)
+            ),
             WriterCycleOutcome::Ack(_)
         ));
     }
