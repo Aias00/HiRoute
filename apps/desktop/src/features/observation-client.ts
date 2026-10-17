@@ -13,7 +13,7 @@ export async function observationRead<T>(view: string, query: object, signal?: A
     return await invoke<T>('observation_read', {
       request: {
         schema: 'hiroute.observation.query/v2',
-        intent: { view, query },
+        intent: { view, query: view === 'facts' || view === 'plan_quality' ? { ...query, include_routing_observations: true } : query },
       },
     });
   } finally {

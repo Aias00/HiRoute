@@ -26,7 +26,12 @@ export function NativeProtocolEditor({ protocol, reviews, scopes, service, branc
     const snapshot = key; setBusy(true);
     try {
       const digest = await contentDigest(composedAssessment(protocol, scope.judgment));
-      if (current.current === snapshot) onScope(scope.id, scope.judgment, { protocol: destination, assessment_digest: digest, method: choices[scope.id]?.method ?? 'reviewed_custom', ...(choices[scope.id]?.source ? { source: choices[scope.id].source } : {}) });
+      if (current.current === snapshot) {
+        const choice = choices[scope.id];
+        const historical = choice?.method === 'historical' && sources.find(s => JSON.stringify(s.source) === JSON.stringify(choice.source) && s.instructions === scope.judgment.competence.instructions && JSON.stringify(s.criteria) === JSON.stringify(scope.judgment.competence.criteria));
+        const stock = choice?.method === 'stock' && JSON.stringify(composedAssessment(protocol, scope.judgment)) === JSON.stringify(composedAssessment(protocol, stockAssessment(scope.judgment, protocol)));
+        onScope(scope.id, scope.judgment, { protocol: destination, assessment_digest: digest, method: historical ? 'historical' : stock ? 'stock' : 'reviewed_custom', ...(historical ? { source: historical.source } : {}) });
+      }
     } finally { setBusy(false); }
   }
   async function test() {
@@ -51,9 +56,8 @@ export function NativeProtocolEditor({ protocol, reviews, scopes, service, branc
         <div className="field-actions"><button type="button" className="btn" disabled={busy} onClick={() => { setChoices(c => ({ ...c, [scope.id]: { method: 'stock' } })); onScope(scope.id, stockAssessment(scope.judgment, protocol)); }}>{protocol ? t('采用标准 C 评分', 'Adopt stock C assessment') : t('采用旧默认评分', 'Adopt legacy default assessment')}</button>
           {!protocol && <button type="button" className="btn" disabled={busy || !source} title={!source ? t('没有可用的保留版本或匹配范围。', 'No retained source or matching scope is available.') : undefined} onClick={() => { if (!source) return; setChoices(c => ({ ...c, [scope.id]: { method: 'historical', source: source.source } })); onScope(scope.id, { ...scope.judgment, competence: { ...scope.judgment.competence, instructions: source.instructions, criteria: source.criteria } }); }}>{source ? t(`恢复版本 ${source.source.plan.content_revision} 的评分`, `Restore revision ${source.source.plan.content_revision} assessment`) : t('历史评分不可用', 'Historical assessment unavailable')}</button>}
         </div>
-        <Disclosure label={t('审阅完整评分问题与标准', 'Review composed assessment and criteria')} language={language}><p className="native-prompt">{question.instructions}</p>{question.criteria.map((criterion, i) => <p className="native-prompt" key={i}>{i / 2} · {criterion}</p>)}<code className="native-content-digest">{digests[scope.id]}</code></Disclosure>
+        <Disclosure label={t('审阅完整评分问题与标准', 'Review composed assessment and criteria')} language={language}><p className="native-prompt">{question.instructions}</p>{question.criteria.map((criterion, i) => <p className="native-prompt" key={i}>{i / 2} · {criterion}</p>)}<code className="native-content-digest">{digests[scope.id]}</code><button className="btn" type="button" disabled={busy || incompatible || valid} onClick={() => void review(scope)}>{t('已审阅，确认此范围', 'Reviewed: confirm this scope')}</button></Disclosure>
         {incompatible && <p className="field-error" role="alert">{t('此评分包含目标协议不支持的历史字段，请先编辑评分要求。', 'This assessment references history fields unavailable in the destination protocol. Edit the assessment first.')}</p>}
-        <button className="btn" type="button" disabled={busy || incompatible || valid} onClick={() => void review(scope)}>{t('已审阅，确认此范围', 'Reviewed: confirm this scope')}</button>
       </div>;
     })}
     {protocol && <><p className="field-help native-content-digest">{t('冻结内容摘要', 'Frozen content digest')} · {frozenDigest || '…'}</p><p role="status">{capability ? ({ verified: t('C 能力已验证', 'C capability verified'), unsupported: t('此形状的 C 响应不受支持', 'C response shape unsupported'), test_failed: t('C 能力测试失败', 'C capability test failed'), not_tested: t('本次打开尚未测试 C 能力', 'Not tested in this session') })[capability.state] : t('本次打开尚未测试 C 能力', 'Not tested in this session')}</p><p className="field-help">{t('缺少本次打开的能力证据仍可保存或发布。显式测试发送 1 次合成请求，可能消耗供应商配额；保存和发布不会测试。', 'Saving and publication remain available without current-session evidence. Explicit testing sends one synthetic request and may consume provider quota; saving and publishing do not test.')}</p><button className="btn" type="button" disabled={busy} onClick={() => void test()}>{t('测试此路由的 C 能力（1 次请求）', 'Test this route’s C capability (1 request)')}</button>{failure && <p role="alert">{failure}</p>}</>}

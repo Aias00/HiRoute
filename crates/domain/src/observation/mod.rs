@@ -15,6 +15,8 @@ mod feedback;
 mod identity;
 mod lifecycle;
 mod plan_quality;
+mod routing_observations;
+pub use routing_observations::*;
 mod pricing;
 mod projection;
 mod query;

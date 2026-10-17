@@ -128,6 +128,7 @@ fn assessment_for_model(
 
 fn query(plan_revision: Option<u64>) -> PlanQualitySamplesQuery {
     PlanQualitySamplesQuery {
+        include_routing_observations: false,
         competence: None,
         plan_id: Some(PLAN.into()),
         session_id: None,

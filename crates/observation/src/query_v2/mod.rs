@@ -8,6 +8,7 @@ mod facts;
 mod plan_quality;
 mod relation;
 mod requests;
+mod routing_observations;
 mod schema;
 mod search;
 #[cfg(test)]

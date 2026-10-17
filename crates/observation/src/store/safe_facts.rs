@@ -12,6 +12,7 @@ pub(crate) fn project(
 ) -> Result<(), Error> {
     let fact_json = serde_json::to_value(&envelope.fact).map_err(|_| Error::Corrupt)?;
     let mut fact = ObservationSafeFactV2 {
+        routing_observation: None,
         event_id: envelope.event_id.to_string(),
         sequence: envelope.sequence,
         original_digest: digest.to_string(),
@@ -35,6 +36,30 @@ pub(crate) fn project(
         sensitive_fields_deleted: false,
     };
     match &envelope.fact {
+        ExecutionFactV1::RouteDecision(decision) => {
+            if let Some(complexity) = &decision.complexity
+                && let Some(observation) = &complexity.routing_observation
+            {
+                let (Some(plan_id), hiroute_domain::ModelRequestRouteV2::Plan { revision, .. }) =
+                    (&envelope.trust.agent_plan_id, &envelope.trust.route)
+                else {
+                    return Err(Error::Corrupt);
+                };
+                if !observation.validate() {
+                    return Err(Error::Corrupt);
+                }
+                fact.routing_observation = Some(hiroute_domain::ObservationRoutingDecisionV1 {
+                    plan_id: plan_id.to_string(),
+                    plan_revision: *revision,
+                    inherited: complexity.decision_source
+                        == hiroute_domain::ComplexityDecisionSourceV1::Inherited,
+                    selected_branch_id: complexity.branch_id.clone(),
+                    execution_group: complexity.execution_group,
+                    selection_reason: complexity.selection_reason,
+                    observation: observation.clone(),
+                });
+            }
+        }
         ExecutionFactV1::AttemptStarted {
             ordinal,
             request_model,

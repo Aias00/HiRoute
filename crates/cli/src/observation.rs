@@ -23,6 +23,7 @@ pub(super) fn plan_quality_samples(options: &[String]) -> Result<Value, ErrorCod
         );
     }
     let mut query = hiroute_application_api::PlanQualitySamplesQuery {
+        include_routing_observations: true,
         competence: None,
         plan_id: None,
         session_id: None,
