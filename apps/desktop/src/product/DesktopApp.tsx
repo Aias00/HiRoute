@@ -1,3 +1,5 @@
+import { TrialQuickStart } from '../features/trial/TrialQuickStart';
+import { NewModels } from '../features/trial/NewModels';
 import { useTrustSuggestions } from '../features/trust/use-trust-suggestions';
 import type { DecisionIntent, OpenDecisionConnection } from '../features/decision-services/presentation';
 import type { DecisionService } from '../features/decision-services/types';
@@ -105,6 +107,7 @@ export function DesktopApp() {
   const preferences = usePresentationPreferences();
   const { language } = preferences;
   const home = useDesktopHome();
+  const [trialIntent, setTrialIntent] = useState<{ modelId?: string } | null>(null);
   const [page, setPage] = useState<Page>('home');
   const [modelTab, setModelTab] = useState<'general' | 'decisions'>('general');
   const [decisionIntent, setDecisionIntent] = useState<DecisionIntent | null>(null);
@@ -650,11 +653,13 @@ export function DesktopApp() {
           </div>
         </div>}
 
+        {trialIntent && <TrialQuickStart initialModelId={trialIntent.modelId} language={language} mutable={Boolean(home.desktopSnapshot?.trusted_authority && home.desktopSnapshot.service.mutation_available)} snapshot={home.desktopSnapshot} operation={operation} onOperation={value => acceptOperation(value, { kind: 'routing' })} onRefresh={async () => { setObserving(true); await home.refreshAll(); setRefreshVersion(value => value + 1); }} onClose={() => setTrialIntent(null)} onOpenAgent={id => { setTrialIntent(null); setAgentIntent({ key: `agents/${crypto.randomUUID()}`, agentId: id }); openPage('agents'); }} />}
         <div hidden={page !== 'home'}><Home
             language={language}
             reads={home.reads}
             operation={homeOperation}
             trustSuggestions={trustSuggestions}
+            newModels={<NewModels language={language} active={page === 'home'} plans={home.desktopSnapshot?.catalog.plans ?? []} refreshVersion={refreshVersion} onTry={modelId => setTrialIntent({ modelId })} />}
             hasTasks={taskRead.status === 'ready' && taskRead.tasks.length > 0}
             onAction={handleHomeAction}
           /></div>
@@ -703,6 +708,7 @@ export function DesktopApp() {
             onOpenServices={addDecisionForRoute}
             initialEditor={routingIntent.editor}
             suggestionPlanIds={trustSuggestions.plans.map(p => p.plan_id)}
+            onTryModel={() => setTrialIntent({})}
             notice={routingIntent.notice}
             onRefresh={async () => { setObserving(true); await home.refreshDesktop(); setRefreshVersion(v => v + 1); }}
             onOpenAgent={agentId => { void (async () => { if (!await allowPageChange('agents')) return; setAgentIntent({ key: `agents/${crypto.randomUUID()}`, agentId }); openPage('agents'); })(); }}

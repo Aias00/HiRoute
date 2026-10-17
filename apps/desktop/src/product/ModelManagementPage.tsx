@@ -1,3 +1,5 @@
+import { newModelConnectionDraft } from '../features/model-connections/new-draft';
+import { modelConnectionBackend } from '../features/model-connections/backend';
 import { managementLoadFailureCopy, subscriptionFailureCopy } from '../features/models/subscription-copy';
 import { requestEditorReplacement } from '../ui/discard-guard';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -118,31 +120,7 @@ function discoveredAgentName(agentId: string, language: 'zh' | 'en') {
   return language === 'zh' ? '本机 Agent' : 'Local agent';
 }
 
-export function newModelConnectionDraft(kind: 'known' | 'custom' | 'free' = 'custom'): ModelConnectionDraft {
-  const known = kind === 'known';
-  return {
-    entry_kind: kind === 'free' ? 'free_api_key' : known ? 'preset_api' : 'custom_api',
-    candidate_ref: null,
-    lineage_ref: `lineage/native/${crypto.randomUUID()}`,
-    display_name: '',
-    existing_source_id: null,
-    expected_source_revision: null,
-    edit_revision: 1,
-    check_id: '',
-    base_url: '',
-    base_kind: 'api_root',
-    request_path_override: null,
-    inventory_path_override: null,
-    protocol: 'chat_completions',
-    protocol_profile_id: 'profile/custom/chat_completions',
-    protocol_profile_revision: 1,
-    authentication: { kind: 'bearer' },
-    additional_endpoints: [],
-    provenance: { kind: 'user_configured', configuration_revision: 1 },
-    qualification: { free_access: null, evidence_ref: null },
-    models: [],
-  };
-}
+export { newModelConnectionDraft } from '../features/model-connections/new-draft';
 
 export function ModelManagementPage({
   language,
@@ -687,28 +665,7 @@ export function ModelManagementPage({
     setAddStage('scan');
   }, [startScanning, trustedAuthority, active]);
 
-  const backend = useMemo<ModelConnectionBackend>(() => ({
-    registerProtectedInput: secret => invoke<ProtectedInputRegistration>(
-      'register_protected_model_input',
-      { secret },
-    ),
-    releaseProtectedInput: input => invoke<void>('release_protected_model_input', { input }),
-    listConnectionOptions: () => invoke('compute_connection_options'),
-    checkModelConnection: request => invoke('check_model_connection', { request }),
-    checkRegisteredModelConnection: request => invoke('check_registered_model_connection', { request }),
-    cancelModelConnectionCheck: checkId => invoke('cancel_model_connection_check', { checkId }),
-    previewComputeSave: async change => {
-      // The editor may stay open across unrelated saves. Bind each new preview to
-      // current revisions, just like the existing-source editor; Apply still CASes
-      // this preview and the candidate retains its own source-revision binding.
-      const current = await invoke<ManagementSnapshot>('compute_management_snapshot');
-      return invoke('preview_compute_save', {
-        change: { ...change, expected_revisions: current.revisions },
-      });
-    },
-    applyComputeSave: request => invoke('apply_compute_save', { request, language }),
-    getComputeSaveResult: operation => invoke('get_compute_save_result', { operation }),
-  }), [language]);
+  const backend = useMemo(() => modelConnectionBackend(language), [language]);
 
   function discardProtectedInputs() {
     const inputs = protectedInputs.current.splice(0);

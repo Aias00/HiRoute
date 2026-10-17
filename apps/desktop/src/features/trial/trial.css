@@ -1,0 +1,12 @@
+.modal.trial-dialog { width: min(960px, calc(100vw - 32px)); }
+.trial-dialog fieldset { min-width: 0; border: 0; margin: 0; padding: 0; }
+.trial-dialog .plan-editor { min-width: 0; }
+.trial-dialog .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 16px; }
+.trial-dialog .field, .trial-dialog p { overflow-wrap: anywhere; }
+.trial-presets { display: flex; flex-wrap: wrap; gap: 20px; margin-block: 16px; }
+.trial-agent-choice { margin-block: 20px !important; }
+.trial-mapping { min-width: 0; }
+.new-models-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); gap: 12px; padding: 16px; }
+.new-model-card { border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
+.new-model-card h3, .new-model-card p { overflow-wrap: anywhere; }
+.new-model-card .actions { display: flex; flex-wrap: wrap; gap: 8px; }

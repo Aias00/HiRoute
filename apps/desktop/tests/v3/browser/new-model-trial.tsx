@@ -1,3 +1,4 @@
+import { TrialFixture, quickStartInvoke } from './trial-quickstart-fixture';
 import { TrustAttention } from '../../../src/features/trust/TrustAttention';
 import { createRoot } from 'react-dom/client';
 import { mockIPC } from '@tauri-apps/api/mocks';
@@ -22,6 +23,7 @@ const timelineTurn = (i:number,updated=false) => ({turn_id:`request-${i}`,agent_
 let failed = false;
 mockIPC(async (command, payload: any) => {
   trace.push({command,payload});
+  if(params.get('view')==='quickstart') return quickStartInvoke(command,payload,params);
   if (command === 'worker_executor_availability') return {executors:['deepseek_harness','codex_cli','claude_code','pi','qoder_cli'].map(harness=>({harness,state:harness==='deepseek_harness'?'ready':'unavailable'}))};
   if (command === 'model_feed_status') { if (params.has('error') && !failed) {failed=true;throw new Error('DAEMON_UNAVAILABLE');} return structuredClone(feed); }
   if (command === 'model_feed_refresh') { feed.last_attempt={at:Date.now(),result:'signature',reason:'invalid_signature'}; return structuredClone(feed); }
@@ -54,5 +56,5 @@ plan.desired.delegation_enabled=false;
 plan.desired.strategy.judgment!.degree.simple_threshold_millis=720;
 plan.desired.strategy.classifier={kind:'decision_service',service:{id:'decision/test',revision:1,name:'Decision model',connection:{kind:'custom',endpoint:'https://decision.example.test',timeout_ms:1000,auth_header:{kind:'none'}}}};
 createRoot(document.getElementById('root')!).render(<PresentationRoot language={language} theme={params.get('theme') === 'dark' ? 'dark' : 'light'} textScale={1}>
-  {params.get('view') === 'attention' ? <ProductPage title="Home"><TrustAttention language={language} names={{[dailyPlan.agent_plan_id]:'My daily route'}} read={{status:params.has('error')?'error':'ready',plans:[report],error:'OBSERVATION_UNAVAILABLE',refresh:()=>trace.push({command:'retry-suggestions',payload:{}})}} onOpen={planId=>trace.push({command:'review-trust',payload:{planId}})} /></ProductPage> : params.get('view') === 'timeline' ? <Sessions language={language} initialSession="timeline-session" /> : params.get('view') === 'editor' ? <ProductPage title="Routing"><PlanEditor plan={plan} language={language} onCreateDraft={async editor=>{ Object.assign(window,{divisionDraft:editor}); return false; }} onDone={async()=>{}} onClose={()=>{}} /></ProductPage> : <ProductPage title="Models" flush className="hr-models-page"><Models language={language} snapshot={readyManagement} mutable onRefresh={async()=>{}} onPrepareKeyInput={async()=>{throw Error('outside scenario')}} onPreview={async()=>{throw Error('outside scenario')}} onApply={async()=>''} onDiscardProtectedInputs={()=>{}} /></ProductPage>}
+  {params.get('view') === 'quickstart' ? <TrialFixture language={language} /> : params.get('view') === 'attention' ? <ProductPage title="Home"><TrustAttention language={language} names={{[dailyPlan.agent_plan_id]:'My daily route'}} read={{status:params.has('error')?'error':'ready',plans:[report],error:'OBSERVATION_UNAVAILABLE',refresh:()=>trace.push({command:'retry-suggestions',payload:{}})}} onOpen={planId=>trace.push({command:'review-trust',payload:{planId}})} /></ProductPage> : params.get('view') === 'timeline' ? <Sessions language={language} initialSession="timeline-session" /> : params.get('view') === 'editor' ? <ProductPage title="Routing"><PlanEditor plan={plan} language={language} onCreateDraft={async editor=>{ Object.assign(window,{divisionDraft:editor}); return false; }} onDone={async()=>{}} onClose={()=>{}} /></ProductPage> : <ProductPage title="Models" flush className="hr-models-page"><Models language={language} snapshot={readyManagement} mutable onRefresh={async()=>{}} onPrepareKeyInput={async()=>{throw Error('outside scenario')}} onPreview={async()=>{throw Error('outside scenario')}} onApply={async()=>''} onDiscardProtectedInputs={()=>{}} /></ProductPage>}
 </PresentationRoot>);

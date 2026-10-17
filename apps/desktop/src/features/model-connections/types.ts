@@ -381,6 +381,7 @@ export type ModelConnectionBackend = {
 };
 
 export type ModelConnectionFormProps = {
+  allowCustom?: boolean;
   existingNames?: string[];
   appendTo?: import('../models/types').ManagedSource;
   savedSource?: import('../models/types').ManagedSource;

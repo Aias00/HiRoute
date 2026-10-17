@@ -1,3 +1,5 @@
+import { ContentExcerpt } from '../Sessions';
+import { agentDisplayName } from '../agents/ecosystems';
 import { useEffect, useState } from 'react';
 import { Disclosure } from '../../ui';
 import { observationRead } from '../observation-client';
@@ -6,8 +8,9 @@ import { trustLevelLabel } from './levels';
 import type { TrustReport, TrustRow, TrustBranch } from './types';
 import './trust.css';
 
-export function TrustEvidencePanel({ planId, revision, fromMs, toMs, active, language, names, onSelect, onThreshold, onDivision }: {
+export function TrustEvidencePanel({ planId, revision, fromMs, toMs, active, language, names, onSelect, onThreshold, onDivision, onOpenAgent, onOpenSession }: {
   planId: string; revision: 'active' | 'all' | number; fromMs?: number; toMs: number; active: boolean; language: 'zh' | 'en'; names: Map<string, string>;
+  onOpenAgent?(agent: string): void; onOpenSession?(session: string): void;
   onSelect(row: TrustRow, groupByExecutor: boolean): void; onThreshold?(branch: string, threshold: number): void; onDivision?(branch: string): void;
 }) {
   const t = (zh: string, en: string) => language === 'zh' ? zh : en;
@@ -15,6 +18,7 @@ export function TrustEvidencePanel({ planId, revision, fromMs, toMs, active, lan
   const [report, setReport] = useState<TrustReport | null>(null);
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
+  const [sessionLimit, setSessionLimit] = useState(12);
   useEffect(() => {
     if (!active) return;
     let current = true;
@@ -32,7 +36,8 @@ export function TrustEvidencePanel({ planId, revision, fromMs, toMs, active, lan
       return <><p>{t(`可以考虑${suggestion.kind === 'step_up' ? '升' : '降'}到「${trustLevelLabel(suggestion.threshold_millis, language)}」。`, `Consider ${suggestion.kind === 'step_up' ? 'stepping up' : 'stepping down'} to ${trustLevelLabel(suggestion.threshold_millis, language)}.`)}</p>{replay && <p>{t(`历史回放中，常规组占比为 ${percent(replay.regular_share)}，${replay.protected_as_primary} 个阶段仍由主力保护。`, `Historical replay assigns ${percent(replay.regular_share)} to Regular; ${replay.protected_as_primary} stages remain protected by Primary.`)}{replay.newly_regular > 0 && t(` ${replay.newly_regular} 个阶段将首次交给常规组，历史由主力处理，没有常规胜任证据。`, ` ${replay.newly_regular} stages would newly go to Regular. Primary handled them, so they carry no Regular competence evidence.`)}</p>}{onThreshold && <button type="button" className="btn" onClick={() => onThreshold(branch.branch_id, suggestion.threshold_millis)}>{t('查看档位调整草稿', 'Review level change')}</button>}</>;
     }
     if (suggestion.kind === 'explore_division') return <><p>{t('当前证据支持探索模型和执行 Agent 分工。', 'Current evidence supports exploring model and execution-agent division.')}</p>{onDivision && <button type="button" className="btn" onClick={() => onDivision(branch.branch_id)}>{t('查看分工草稿', 'Review division draft')}</button>}</>;
-    if (suggestion.kind === 'change_regular_model' || suggestion.kind === 'return_to_previous_routing') return <p>{t('常规组的胜任率偏低。可以调整常规模型，或在 Agent 设置中回到之前的路由。', 'Regular competence is low. Consider changing its model or returning to previous routing in Agent settings.')}</p>;
+    if (suggestion.kind === 'return_to_previous_routing') return <><p>{t('常规组胜任率偏低，可以审阅已确认存在的历史映射。', 'Regular competence is low. Review an available historical mapping.')}</p>{(report?.previous_routing ?? []).map(target => <button className="btn" key={`${target.agent}/${target.presets.join(',')}`} disabled={!onOpenAgent} onClick={() => onOpenAgent?.(target.agent)}>{t('查看之前的路由', 'Review previous routing')} · {agentDisplayName(target.agent, language)} · {target.presets.join(', ')}</button>)}</>;
+    if (suggestion.kind === 'change_regular_model') return <p>{t('常规组胜任率偏低，可以调整常规模型。尚未确认有可恢复的历史映射。', 'Regular competence is low. Consider changing its model; no recoverable historical mapping is confirmed.')}</p>;
     return <p>{suggestion.kind === 'keep' && suggestion.missing.length ? t('证据尚不足以建议提高信任。保持当前档位即可。', 'Evidence is not sufficient to recommend raising trust. Keeping this level is a valid choice.') : t('建议保持当前档位。', 'Keeping the current level is a valid choice.')}</p>;
   }
   return <section className="trust-evidence" aria-label={t('信任证据', 'Trust evidence')}>
@@ -61,6 +66,9 @@ export function TrustEvidencePanel({ planId, revision, fromMs, toMs, active, lan
       </Disclosure>
       <p className="field-help">{t('成本对比暂不可用：比较基准尚未接入。', 'Cost comparison is unavailable: the comparison basis is not available yet.')}</p>
       <p className="field-help">{t(`证据来自 ${report.session_total} 个会话。`, `Evidence comes from ${report.session_total} sessions.`)}</p>
+      {report.sessions.length > 0 && <Disclosure label={t('贡献证据的会话', 'Contributing sessions')} language={language}><div className="native-list">{report.sessions.slice(0, sessionLimit).map(session => <button className="list-row" key={session.session_id} disabled={!onOpenSession} onClick={() => onOpenSession?.(session.session_id)}><span className="row-main"><ContentExcerpt session={session.session_id} language={language} fallback={t('会话记录', 'Session')} limit={64} /></span><span>{session.stages} {t('个阶段', 'stages')}</span></button>)}</div>{sessionLimit < report.sessions.length && <button className="btn" onClick={() => setSessionLimit(n => n + 12)}>{t('查看更多', 'Show more')}</button>}</Disclosure>}
+      {onDivision && report.branches.length > 0 && <Disclosure label={t('尝试任务分工', 'Explore task division')} language={language}><p className="field-help">{t('可以随时查看分工草稿；打开草稿不代表已有证据支持扩大试用范围。', 'You can review division drafts at any time. Opening a draft does not establish evidence for broader use.')}</p>{report.branches.map(branch => <button className="btn" key={branch.branch_id} onClick={() => onDivision(branch.branch_id)}>{t('查看分工草稿', 'Review division draft')} · {branch.branch_id}</button>)}</Disclosure>}
+
     </>}
   </section>;
 }

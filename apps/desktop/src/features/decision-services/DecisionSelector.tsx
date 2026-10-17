@@ -4,8 +4,8 @@ import { DecisionIcon } from './DecisionIcon';
 import { emptyService, type Classifier, type DecisionService } from './types';
 import { providerLabel, type DecisionKind, type OpenDecisionConnection } from './presentation';
 
-export function DecisionSelector({ classifier, smart, services, language, onChange, onOpenServices, error }: {
-  classifier: Classifier; smart: boolean; services: DecisionService[]; language: 'zh' | 'en';
+export function DecisionSelector({ classifier, smart, services, language, onChange, onOpenServices, error, allowHeuristic = true }: {
+  classifier: Classifier; smart: boolean; allowHeuristic?: boolean; services: DecisionService[]; language: 'zh' | 'en';
   onChange(classifier: Classifier): void; onOpenServices?: OpenDecisionConnection; error?: string;
 }) {
   const t = (zh: string, en: string) => language === 'zh' ? zh : en;
@@ -27,7 +27,7 @@ export function DecisionSelector({ classifier, smart, services, language, onChan
     <h3>{t('判断方式', 'Decision method')}</h3>
     <div className="decision-methods" role="group" aria-label={t('判断方式', 'Decision method')}>
       <button className="btn" type="button" aria-pressed={mode === 'system_one'} onClick={() => changeMode('system_one')}>{t('决策模型', 'Decision model')}</button>
-      {smart && <button className="btn" type="button" aria-pressed={mode === 'local_rules'} onClick={() => changeMode('local_rules')}>{t('启发式规则', 'Heuristic rules')}</button>}
+      {smart && allowHeuristic && <button className="btn" type="button" aria-pressed={mode === 'local_rules'} onClick={() => changeMode('local_rules')}>{t('启发式规则', 'Heuristic rules')}</button>}
       <button className="btn" type="button" aria-pressed={mode === 'custom'} onClick={() => changeMode('custom')}>{t('自定义扩展', 'Custom extension')}</button>
     </div>
     <p className="field-help">{mode === 'local_rules' ? t('按任务特征判断简单或复杂，不产生模型胜任评分。', 'Classifies simple or complex tasks from structural signals; no competence scoring.') : mode === 'custom' ? t('由扩展按传入的任务条件和判断标准进行决策，HiRoute 负责选择并执行模型。', 'Your extension follows the supplied task conditions and judgment standards. HiRoute selects and executes the models.') : (smart ? t('判断任务简单或复杂，并评估上一阶段的胜任情况。', 'Judge task difficulty and assess competence in the preceding stage.') : t('先按任务条件选择分支，再判断该分支需要常规还是主力模型。', 'Choose a task branch, then decide whether regular or primary models are needed.'))}</p>

@@ -18,7 +18,7 @@ const EMPTY_SUMMARY: QualitySummary = { models: [], scored_stage_count: 0, unrat
 
 export function PlanQuality({
   planId, sessionId, planRevision, currentModels = [], language, compact = false,
-  active = true, refreshVersion = 0, onOpenEvidence, onThreshold, onDivision,
+  active = true, refreshVersion = 0, onOpenEvidence, onThreshold, onDivision, onOpenAgent,
 }: {
   planId?: string | null;
   sessionId?: string | null;
@@ -29,7 +29,7 @@ export function PlanQuality({
   active?: boolean;
   refreshVersion?: number;
   onThreshold?: (branch: string, threshold: number) => void;
-  onDivision?: (branch: string) => void;
+  onDivision?: (branch: string) => void; onOpenAgent?: (agent: string) => void;
   onOpenEvidence?: (sessionId: string, requestId: string) => void;
 }) {
   const text = (zh: string, en: string) => language === 'zh' ? zh : en;
@@ -136,7 +136,7 @@ export function PlanQuality({
         <button className="btn btn-quiet quality-refresh" type="button" disabled={busy} onClick={() => setReload(value => value + 1)}><UiIcon name="refresh" />{text('刷新', 'Refresh')}</button>
       </div>
     </div>
-    {!compact && planId && !sessionId && <TrustEvidencePanel planId={planId} revision={version === 'current' ? 'active' : version === 'all' ? 'all' : Number(version)} fromMs={window.from} toMs={window.to} active={active} language={language} names={modelNames} onThreshold={onThreshold} onDivision={onDivision} onSelect={(row, groupByExecutor) => {
+    {!compact && planId && !sessionId && <TrustEvidencePanel planId={planId} revision={version === 'current' ? 'active' : version === 'all' ? 'all' : Number(version)} fromMs={window.from} toMs={window.to} active={active} language={language} names={modelNames} onThreshold={onThreshold} onDivision={onDivision} onOpenAgent={onOpenAgent} onOpenSession={session => onOpenEvidence?.(session, '')} onSelect={(row, groupByExecutor) => {
       const trustRow = { branch_id: row.branch_id, group: row.group, model_configuration_id: row.model_configuration_id, reasoning_profile_id: row.reasoning_profile_id, attribution: row.attribution, executor: row.executor, group_by_executor: groupByExecutor };
       setSelected({ key: JSON.stringify(trustRow), execution: null, trustRow, label: modelNames.get(row.model_configuration_id ?? '') ?? text('所选执行组', 'Selected execution group') }); setScore('all');
     }} />}
