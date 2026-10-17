@@ -184,7 +184,9 @@ pub(super) fn load(
     if s.source_revision != Some(revision) {
         check_population(db, &s)?;
         s.source_revision = Some(revision);
-        save(db, &s)?;
+        // This cache refresh belongs to the current read snapshot. Persisting
+        // it here would upgrade a deferred read to a writer and contend with
+        // ordinary retention/catch-up even when the pinned population is intact.
     }
     Ok((s, offset))
 }
