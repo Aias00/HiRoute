@@ -1163,7 +1163,7 @@
       "field": "context_window_tokens",
       "mode": "recovery_read_only",
       "owner": "agent-connections",
-      "reason": "A descriptor reconstructed from a pre-window immutable settings operation has no managed context policy. It retains that operation\u2019s behavior until settings are saved again.",
+      "reason": "A descriptor reconstructed from a pre-window immutable settings operation has no managed context policy. It retains that operation’s behavior until settings are saved again.",
       "removal_condition": "Retire with the pre-window settings operation recovery reader.",
       "allowed_paths": [
         "crates/domain/src/agents/managed_launch.rs",
@@ -1562,6 +1562,18 @@
       "allowed_paths": [
         "crates/domain/src/observation/execution_validation.rs",
         "crates/domain/src/observation/execution_tests.rs"
+      ]
+    },
+    {
+      "contract": "hiroute.compiled-agent-plan/v3",
+      "field": "ordinal refinement definition with omitted kind",
+      "mode": "recovery_read_only",
+      "owner": "decision-foundation",
+      "reason": "Preserve the untagged ordinal form accepted by the existing v1 reader while reading the current emitted kind=ordinal discriminator. Categorical C capability requests exercise the same definition. Current serialization always emits ordinal; other tags and unknown members remain invalid.",
+      "removal_condition": "Retire only through an explicit versioned reader or request adapter that accounts for previously accepted untagged ordinal definitions and supported retained inputs.",
+      "allowed_paths": [
+        "crates/domain/src/routing/decision_definition.rs",
+        "crates/cli/src/control_plane.rs"
       ]
     }
   ]

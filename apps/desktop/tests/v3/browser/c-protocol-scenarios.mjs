@@ -72,5 +72,41 @@ export function cProtocolScenarios({ fresh, routing, click, until, all, text, ca
       const footer = document.querySelector('.plan-editor-footer, .editor-actions, .plan-editor .modal-foot');
       if (footer) assert(footer.getBoundingClientRect().bottom <= innerHeight + 1, 'Save actions left the supported viewport');
     }
+  }), scenario('desktop.quality.c-observations', ['routing-editor', 'sessions', 'c-protocol'], 'Retained C counts, denominators, partial coverage and empty states remain readable', async () => {
+    for (const language of ['zh', 'en']) {
+      const t = (zh, en) => language === 'zh' ? zh : en;
+      let partial = false, empty = false;
+      const cohort = { protocol: 'hiroute.system-one-c/v1', content_digest: 'sha256:' + 'a'.repeat(64), bundle_digest: 'sha256:' + 'b'.repeat(64),
+        scope_id: 'synthetic-category-with-long-visible-name', standard: 'custom', provider: 'fixture-provider', model: 'synthetic-c-model-with-long-name', simple_threshold_millis: 800, competence_floor_millis: 500 };
+      await fresh(() => {
+        control().handlers.observation_read = payload => {
+          if (payload.request.intent.view !== 'plan_quality') return control().fixtureResponse('observation_read', payload);
+          assert(payload.request.intent.query.include_routing_observations === true, 'Desktop omitted the opt-in projection');
+          return { samples: [], summary: { models: [], scored_stage_count: 0, unrated_stage_count: 0, session_count: 0, available_revisions: [8] }, next_cursor: null,
+            routing_observations: { coverage: partial ? 'partial' : 'complete', covered_from_ms: 0, covered_to_ms: Date.now(), retained_decisions: empty ? 0 : 11,
+              legacy_or_unknown_decisions: partial ? 2 : 0, unknown_scope_decisions: 0, missing_projection_events: partial ? 1 : 0, scan_limited: partial,
+              cohorts: empty ? [] : [{ cohort, counts: { c_decisions: 10, inherited: 1, requested: 7, unavailable: 4, no_target_omissions: 1, partial_target_omissions: 1,
+                required_question_missing: 1, gate_opportunities: 4, suppressed: 1, unavailable_per_requested: partial ? null : 4 / 7,
+                suppressed_per_opportunity: partial ? null : 1 / 4, suppressed_per_c_decision: partial ? null : 1 / 10 } }] } };
+        };
+      });
+      localStorage.setItem('hiroute.language', language); control().remount();
+      if (language === 'zh') await routing();
+      else { await click('Smart routing'); await until(() => all('.master-list .list-row').length, 'saved routes'); all('.master-list .list-row')[0].click(); }
+      await click(t('模型表现', 'Model performance'));
+      await until(() => all('.routing-observations summary').length, 'C observation entry');
+      all('.routing-observations summary')[0].click();
+      await until(() => text().includes('57.1%') && text().includes('25.0%') && text().includes('10.0%'), 'retained denominator rates');
+      assert(all('.routing-counts')[0].textContent.includes('4 / 7'), 'Unavailable numerator or request denominator lost');
+      all('.routing-cohort details summary')[0].click();
+      for (const element of all('.routing-counts dt, .routing-counts dd, .routing-cohort strong, .quality-diagnostic-identity')) {
+        assert(element.scrollWidth <= element.clientWidth + 1, 'C observation identity or count overflows');
+      }
+      partial = true; all('.quality-refresh')[0].click();
+      await until(() => text().includes(t('覆盖不完整，比例不可用', 'Partial coverage; rates unavailable')), 'partial coverage');
+      assert(!all('.routing-counts')[0].textContent.includes('%') && all('.routing-counts')[0].textContent.includes('4 / 7'), 'Partial coverage hides counts or claims a rate');
+      empty = true; partial = false; all('.quality-refresh')[0].click();
+      await until(() => text().includes(t('此范围内暂无可用的 C 决策记录', 'No C decision records are available')), 'empty retained scope');
+    }
   })];
 }
