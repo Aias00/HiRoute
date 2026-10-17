@@ -35,10 +35,10 @@ pub(super) fn command_network(command_id: &str, kind: CommandKind) -> &'static s
 }
 pub(super) fn automation(command_id: &str) -> &'static str {
     if matches!(command_id, "sessions.list" | "sessions.show") {
-        return "Authenticated same-OS-user Local Control can read explicit message/tool content and search without a separate GUI grant. Supplied capability FDs are still validated. List first; sessions show ID --content messages-and-tools reads retained content. Typed V2 sessions/list accepts sessions, search and session_search; sessions/show accepts a scoped timeline, catalog, ancestry or content query. Follow next_cursor and retain exact time/filter scope. Use sessions receipt for request facts and observation plan-quality samples for decision/competence analysis. Missing, expired or partial capture is not proof of a routing error. Model Gateway credentials do not grant management access.";
+        return SESSION_ANALYSIS_HELP;
     }
     if command_id == "value.show" {
-        return "Ordinary value show retains frozen historical valuation. Opt in with --basis api-equivalent --reference-binding BINDING --currency USD|CNY and --routing PLAN or --session SESSION plus an interval/period. Resolve the reference from actual model/Plan options, normally the primary model. This read uses one current source-specific API-equivalent price generation and recorded attempt usage, including retries; it does not rewrite receipts or prove subscription payments/cash savings. Fill missing reference rates through prices effective and prices override preview/apply with valuation_kind=api_equivalent; copy observed edit_context revisions and exact Preview Apply fields. Output includes prices, reference, coverage and paired request counts. Incomplete totals/savings are null; paired subtotals are partial evidence. Narrow the interval if the bounded query is unavailable. Day grouping is not supported for this opt-in view.";
+        return VALUE_ANALYSIS_HELP;
     }
     if command_id == "decision.services.apply" {
         return "Read decision services options first; reuse an exact saved connection when suitable. Convenience flags prepare a Preview only. A new connection requires --id, --name, --provider and its required endpoint/model plus --candidate, or explicit --no-auth for custom only. --candidate refers to an existing protected registration; never pass a credential in flags/JSON/chat. The user can run protected-input register --candidate REF --prompt --format bearer|raw in their own terminal. System One uses Authorization and bearer; custom supports --header NAME or --no-auth. Updates by --id preserve omitted fields; changing endpoint/provider/header requires explicit new credentials or custom --no-auth. --timeout-ms defaults to 10000 for a new connection. --apply-file creates a new private exact Apply request, never overwrites or applies; submit it with the same decision services apply verb. Keep its Operation lookup and identical request for uncertain delivery. Typed Preview/Apply remain alternatives; --apply-file accepts Preview input only. No save proves connectivity, native loading or decision quality.";
@@ -275,3 +275,32 @@ pub(super) fn example(command_id: &str, joined_path: &str) -> String {
         _ => format!("hiroute {joined_path} --non-interactive --output json"),
     }
 }
+
+const SESSION_ANALYSIS_HELP: &str = r#"Same-OS-user Local Control reads retained message/tool content and searches without a separate GUI ticket. Supplied capability FDs remain validated; Gateway keys grant no management authority.
+
+Analysis journey (opt in; legacy views/cursors keep their meanings):
+  hiroute sessions list --view conversations --period 7d --limit 50
+  hiroute sessions list --view switches --day 2026-10-16
+  hiroute sessions show SESSION --view routing --analysis-scope TOKEN
+  hiroute sessions show SESSION --view conversation --request REQUEST --analysis-scope TOKEN
+
+Use --period today|yesterday|7d|30d, --day YYYY-MM-DD, or --from-ms N --to-ms N; choose one mode. Civil days follow this service host's local day (actual offsets are returned); absolute bounds are UTC milliseconds, half-open. Default is 7d. Analysis scopes return requested/effective bounds, expiry and relation/numeric/price watermarks. Retention may clip their start so used evidence stays retained for the token lifetime. No stable interval and missing native evidence are explicit gaps, not empty-success claims.
+
+Retain analysis_scope for ranking/switch/content drill-down; follow next_cursor with the same view/filters/limit and no new time selection. Follow-ups can narrow --session/--request, never widen the original Plan/Agent/query scope. New requests or unrelated lineage do not change a pinned range. Expired scope/cursor, withdrawal/full deletion or changed authority require a fresh initial query; do not silently compare totals across refreshed scopes. A page can be shorter than limit; its length is not the total.
+
+--query searches retained content in the conversations list. Pending/unavailable index is marked partial. --model-switch is invalid for new views; its legacy any|only|exclude behavior is unchanged. Recorded selection/competence stages explain routing; stage boundaries and credential relay are not user-turn model changes. Compare actual accepted endpoints and explicit reasoning settings. continuation_boundary marks a verified native compression boundary, including mid-turn compression; turn_context_reset/unknown/pending never establish adjacent user turns. Missing proof leaves physical sessions separate. Member previews include exact counts and partial markers. Request content is bounded; reference_only/partial entries supply content_id/request_id for typed V2 content pagination, never expose provider private state. Use sessions receipt RECEIPT for immutable routing facts and observation plan-quality samples for stage details. Missing/deleted/expired capture does not prove wrong routing.
+
+Legacy sessions list --include-unlinked --query TEXT and sessions show SESSION --content messages-and-tools remain available. Typed V2 accepts sessions/search/session_search, timeline/catalog/ancestry/content, and family-specific analysis requests. Read schema show --command-id sessions.show --include-schema for complete contracts. Observation errors opt in to timeout, reader_busy, index_unavailable or storage_unavailable diagnostics; retry the same scope where still valid. No read performs a classifier call or changes routing."#;
+
+const VALUE_ANALYSIS_HELP: &str = r#"Ordinary value show keeps frozen historical valuation. New analysis paths:
+  hiroute value show --view summary --period 7d
+  hiroute value show --group-by session --order-by cost-desc --period 7d
+  hiroute value show --group-by request --order-by cost-desc --analysis-scope TOKEN --session SESSION
+
+Summary defaults to current-price API-equivalent estimates and an unambiguous selected Plan's primary binding. Ambiguous reference/currency or missing prices returns choices; resolve actual binding IDs from routing options, never invent rates or exchange rates. Ranking needs no reference. Choose --basis recorded|api-equivalent; --currency USD|CNY and --valuation-kind usage-estimate|api-equivalent select one recorded currency/kind. Do not add different kinds or mix recorded estimates with current-price recalculation. Same time selectors, retention-safe bounds, analysis_scope, next_cursor and expiry rules as sessions --view apply; drill-downs inherit the pinned relation/numeric/price generations. Live traffic/new settlement/current price edits do not silently change them.
+
+The complete selected scope is aggregated before cost-desc pagination. Failed/retried attempts are counted once and rounded once per attempt, using exact source/model identity matching. Missing amounts are unknown, never zero/free. An incomplete ranking is highest-known-only. Savings shows signed paired subtotals, compared/missing/excluded coverage and decision overhead as unmeasured; a zero reference denominator has no percentage. Subscription/Coding Plan API-equivalent savings proves neither cash savings nor equal output/quality. Recorded receipts remain unchanged.
+
+For missing rates read prices effective, use its exact Binding locator/edit_context with prices override preview/apply, and valuation_kind=api_equivalent. Keep complete recovery material and exact retry requests. Scope/P capture capacity or reader contention is retryable within the same 500 ms budget; pending reconciliation reports target/progress and stalled state, never an empty total. Expired/deleted/withdrawn evidence requires an explicitly refreshed initial scope. Use sessions --help for related content/routing drill-downs.
+
+Legacy one-shot --basis api-equivalent --reference-binding BINDING --currency CNY with --routing PLAN or --session SESSION and an interval/period retains its original shape/time meaning and paired-coverage rules; it has no day grouping. New --view summary does not accept --group-by/--order-by. Read schema show --command-id value.show --include-schema for typed alternatives."#;

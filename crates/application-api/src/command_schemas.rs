@@ -107,42 +107,55 @@ pub fn command_schemas(command_id: &str) -> Option<CommandSchemasV1> {
             response!(PriceApplyOperationV2),
         ),
         "value.show" => (
-            observation_request(&[
-                "value",
-                "home_value",
-                "value_report",
-                "api_equivalent_value",
-            ]),
+            analysis_request(
+                &[
+                    "value",
+                    "home_value",
+                    "value_report",
+                    "api_equivalent_value",
+                    "analysis",
+                ],
+                &["cost_ranking", "savings_summary"],
+            ),
             response!(
                 hiroute_domain::ObservationValueSummaryV2,
                 hiroute_domain::ObservationValueReportV2,
-                hiroute_domain::ApiEquivalentValueReportV1
+                hiroute_domain::ApiEquivalentValueReportV1,
+                hiroute_domain::ObservationAnalysisPageV1
             ),
         ),
         "sessions.list" => (
             alternatives(vec![
                 schema::<SessionListRequestV1>(false),
-                observation_request(&["status", "sessions", "search", "session_search"]),
+                analysis_request(
+                    &["status", "sessions", "search", "session_search", "analysis"],
+                    &["conversations", "switches"],
+                ),
             ]),
             response!(
                 SessionListPageV1,
                 ObservationMaintenanceStatusV2,
                 ObservationSessionPageV2,
                 ObservationSearchPageV2,
-                ObservationSessionSearchPageV1
+                ObservationSessionSearchPageV1,
+                hiroute_domain::ObservationAnalysisPageV1
             ),
         ),
         "sessions.show" => (
             alternatives(vec![
                 schema::<SessionLookupV1>(false),
-                observation_request(&["timeline", "catalog", "ancestry", "content"]),
+                analysis_request(
+                    &["timeline", "catalog", "ancestry", "content", "analysis"],
+                    &["conversation", "routing"],
+                ),
             ]),
             response!(
                 hiroute_domain::SessionDetailV1,
                 ObservationRequestPage,
                 ObservationCatalogPageV2,
                 ObservationAncestryV2,
-                ObservationContentPageV2
+                ObservationContentPageV2,
+                hiroute_domain::ObservationAnalysisPageV1
             ),
         ),
         "sessions.receipt" => (
@@ -373,6 +386,16 @@ fn observation_request(views: &[&str]) -> Value {
                 .and_then(Value::as_str)
                 .is_some_and(|view| views.contains(&view))
         });
+    }
+    result
+}
+fn analysis_request(views: &[&str], analysis_views: &[&str]) -> Value {
+    let mut result = observation_request(views);
+    if let Some(values) = result
+        .pointer_mut("/$defs/AnalysisViewV1/enum")
+        .and_then(Value::as_array_mut)
+    {
+        values.retain(|v| v.as_str().is_some_and(|s| analysis_views.contains(&s)));
     }
     result
 }

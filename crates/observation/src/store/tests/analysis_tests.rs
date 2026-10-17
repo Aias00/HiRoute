@@ -232,7 +232,7 @@ fn a_recorded_stage_is_evidence_for_a_selected_transition_not_a_switch() {
                     segment_id: "stage-1".into(),
                     ordinal: 1,
                     plan_id: AgentPlanId::parse("plan/codex-daily").unwrap(),
-                    plan_revision: 1,
+                    plan_revision: 17,
                     selected_branch_id: "economy".into(),
                     executed_branch_id: Some("economy".into()),
                     model_configuration_id: Some("model-a".into()),
@@ -259,7 +259,7 @@ fn a_recorded_stage_is_evidence_for_a_selected_transition_not_a_switch() {
         .unwrap();
     assert_eq!(page.transitions.len(), 1);
     let t = &page.transitions[0];
-    assert_eq!(t.kind, AnalysisTransitionKindV1::InitialSelection);
+    assert_eq!(t.kind, AnalysisTransitionKindV1::InitialSelection, "{t:?}");
     assert_eq!(t.reason.as_ref().unwrap().segment_id, "stage-1");
     assert!(!page.transition_counts.contains_key("between_turn_change"));
 }

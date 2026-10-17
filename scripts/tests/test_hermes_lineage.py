@@ -10,6 +10,11 @@ from test_hermes_plugin import plugin
 
 class NativeReader:
     def __init__(self, rows, chain, child=None, blocked=None):
+        for session, row in rows.items():
+            row.setdefault("id", session)
+            row.setdefault("parent_session_id", None)
+            row.setdefault("ended_at", None)
+            row.setdefault("end_reason", None)
         self.rows, self.chain, self.child, self.blocked = rows, chain, child, blocked
         self.get_calls = self.chain_calls = self.child_calls = 0
         self.read_only = True
@@ -56,6 +61,21 @@ class LineageTests(unittest.TestCase):
                     return
             time.sleep(.001)
         self.fail("background reader did not finish")
+
+    def test_an_idle_profile_worker_can_be_retired(self):
+        manager = self.manager(NativeReader({"root": {}}, ["root"]))
+        self.warm(manager, "root")
+        deadline = time.monotonic() + 1
+        while not manager.retire_idle() and time.monotonic() < deadline:
+            time.sleep(.001)
+        self.assertFalse(manager.worker.is_alive())
+
+    def test_missing_native_schema_does_not_invent_an_open_root(self):
+        reader = NativeReader({"root": {}}, ["root"])
+        reader.rows["root"].pop("parent_session_id")
+        manager = self.manager(reader)
+        self.assertIsNone(manager.header("root"))
+        self.assertEqual(reader.chain_calls, 0)
 
     def test_warm_ancestor_proof_survives_normal_generation_interval(self):
         rows = {"parent": {"parent_session_id": None, "ended_at": 1, "end_reason": "compression"},

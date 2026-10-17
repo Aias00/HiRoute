@@ -19,6 +19,12 @@ def _state(row):
     return "compression_closed" if row.get("end_reason") == "compression" else "other_closed"
 
 
+def _native_row(row, session):
+    return (isinstance(row, Mapping) and row.get("id") == session
+            and all(k in row for k in ("parent_session_id", "ended_at", "end_reason"))
+            and (row["parent_session_id"] is None or _identity(row["parent_session_id"])))
+
+
 class _LineageReader:
     """One bounded/coalescing worker per selected profile, using public SDK reads.
 
@@ -34,16 +40,28 @@ class _LineageReader:
         self.wake = threading.Event()
         self.pending, self.cache = OrderedDict(), OrderedDict()
         self.active = False
+        self.closed = False
         self.worker = threading.Thread(target=self._run, name="hiroute-hermes-lineage", daemon=True)
         self.worker.start()
 
     def schedule(self, session, ticket=None):
         with self.lock:
+            if self.closed:
+                return
             if session in self.pending or len(self.pending) < 64:
                 previous = self.pending.get(session)
                 self.pending[session] = ticket or previous
                 self.pending.move_to_end(session)
                 self.wake.set()
+
+    def retire_idle(self):
+        with self.lock:
+            if self.active or self.pending:
+                return False
+            self.closed = True
+            self.wake.set()
+        self.worker.join(0.01)
+        return not self.worker.is_alive()
 
     def stamp(self):
         self.sequence += 1
@@ -96,6 +114,8 @@ class _LineageReader:
         while True:
             self.wake.wait()
             with self.lock:
+                if self.closed:
+                    return
                 if not self.pending:
                     self.wake.clear()
                     continue
@@ -126,7 +146,7 @@ class _LineageReader:
                     "get_session", "get_compression_chain", "find_live_compression_child")):
                 return
             row = reader.get_session(current)
-            if not row:
+            if not _native_row(row, current):
                 return
             observed = self.stamp()
             if ticket:
@@ -142,7 +162,7 @@ class _LineageReader:
                 if not _identity(parent) or parent in rows:
                     return
                 row = reader.get_session(parent)
-                if not row:
+                if not _native_row(row, parent):
                     return
                 rows[parent] = row
                 candidates.append(parent)
@@ -186,12 +206,16 @@ def _lineage_header(session):
         with _MANAGERS_LOCK:
             manager = _MANAGERS.get(key)
             if manager is None:
-                # Retain at most four profile workers, including a blocked SDK.
-                # A fifth profile simply omits optional continuation metadata.
+                # Replaced databases/profiles may retire an idle worker. Blocked
+                # or busy readers remain counted; never spawn around the bound.
                 if len(_MANAGERS) >= 4:
-                    return None
+                    retired = next((k for k, v in _MANAGERS.items() if v.retire_idle()), None)
+                    if retired is None:
+                        return None
+                    _MANAGERS.pop(retired)
                 manager = _LineageReader(path, identity, SessionDB)
                 _MANAGERS[key] = manager
+            _MANAGERS.move_to_end(key)
         return manager.header(session)
     except Exception:
         return None
