@@ -19,10 +19,11 @@ use crate::server::request_plan::RestBranchClassifierAuthorityV1;
 const MAX_REQUEST_BYTES: usize = 256 * 1024;
 
 pub(super) struct Bindings {
-    definition: DecisionDefinitionV1,
+    pub(super) definition: DecisionDefinitionV1,
     choice: Option<String>,
     degrees: BTreeMap<String, String>,
-    assessment: Option<String>,
+    pub(super) assessment: Option<String>,
+    pub(super) applicability: Option<String>,
 }
 
 pub(super) fn request_template(
@@ -30,47 +31,14 @@ pub(super) fn request_template(
     request: &ModelRequestIRV1,
     history: &AgentTurnHistorySnapshot,
 ) -> Result<PreparedDecisionRequest, CallFailure> {
+    if authority.native_protocol.is_some() {
+        return super::c_request::request_template(authority, request, history);
+    }
     let mut refs = Vec::new();
     let latest =
         latest_user_wire_value(request, &mut refs).map_err(|_| CallFailure::RejectedInput)?;
     let mut target = assessment_definition(history, authority);
-    let mut questions = Map::new();
-    let mut bindings = Bindings {
-        definition: authority.decision.clone(),
-        choice: None,
-        degrees: BTreeMap::new(),
-        assessment: None,
-    };
-    match &authority.decision {
-        DecisionDefinitionV1::Ordinal {
-            instructions,
-            levels,
-        } => {
-            let id = add_degree(&mut questions, instructions, levels);
-            bindings.degrees.insert(SMART_SAVING_SCOPE_ID.into(), id);
-        }
-        DecisionDefinitionV1::Categorical {
-            instructions,
-            options,
-        } => {
-            let id = question_id(&questions);
-            let criteria: Map<String, Value> = options
-                .iter()
-                .map(|o| (o.id.clone(), Value::String(o.criterion.clone())))
-                .collect();
-            questions.insert(
-                id.clone(),
-                json!({"type":"choice","instructions":instructions,"criteria":criteria}),
-            );
-            bindings.choice = Some(id);
-            for option in options {
-                if let Some(degree) = &option.refinement {
-                    let id = add_degree(&mut questions, &degree.instructions, &degree.levels);
-                    bindings.degrees.insert(option.id.clone(), id);
-                }
-            }
-        }
-    }
+    let (mut questions, mut bindings) = base_questions(authority);
     if let Some(target) = &target {
         let id = question_id(&questions);
         questions.insert(id.clone(), json!({
@@ -117,19 +85,70 @@ pub(super) fn request_template(
         has_target: target.is_some(),
         target_partial,
         bindings: Some(bindings),
+        routing_observation: None,
     })
 }
 
-fn question_id(questions: &Map<String, Value>) -> String {
+pub(super) fn base_questions(
+    authority: &RestBranchClassifierAuthorityV1,
+) -> (Map<String, Value>, Bindings) {
+    let mut questions = Map::new();
+    let mut bindings = Bindings {
+        definition: authority.decision.clone(),
+        choice: None,
+        degrees: BTreeMap::new(),
+        assessment: None,
+        applicability: None,
+    };
+    let prefix = authority.native_protocol.as_ref().map_or(
+        "Assess state.latest_user only, not historical competence.",
+        |p| p.protocol.fixed.degree_prefix.as_str(),
+    );
+    match &authority.decision {
+        DecisionDefinitionV1::Ordinal {
+            instructions,
+            levels,
+        } => {
+            let id = add_degree(&mut questions, prefix, instructions, levels);
+            bindings.degrees.insert(SMART_SAVING_SCOPE_ID.into(), id);
+        }
+        DecisionDefinitionV1::Categorical {
+            instructions,
+            options,
+        } => {
+            let id = question_id(&questions);
+            let criteria: Map<String, Value> = options
+                .iter()
+                .map(|o| (o.id.clone(), Value::String(o.criterion.clone())))
+                .collect();
+            questions.insert(
+                id.clone(),
+                json!({"type":"choice","instructions":instructions,"criteria":criteria}),
+            );
+            bindings.choice = Some(id);
+            for option in options {
+                if let Some(degree) = &option.refinement {
+                    let id =
+                        add_degree(&mut questions, prefix, &degree.instructions, &degree.levels);
+                    bindings.degrees.insert(option.id.clone(), id);
+                }
+            }
+        }
+    }
+    (questions, bindings)
+}
+
+pub(super) fn question_id(questions: &Map<String, Value>) -> String {
     format!("q{}", questions.len())
 }
 fn add_degree(
     questions: &mut Map<String, Value>,
+    prefix: &str,
     instructions: &str,
     levels: &[OrdinalLevelV1],
 ) -> String {
     let id = question_id(questions);
-    questions.insert(id.clone(), json!({"type":"score","instructions":format!("Assess state.latest_user only, not historical competence. {instructions}"),"criteria":levels.iter().map(|l| &l.criterion).collect::<Vec<_>>()}));
+    questions.insert(id.clone(), json!({"type":"score","instructions":format!("{prefix} {instructions}"),"criteria":levels.iter().map(|l| &l.criterion).collect::<Vec<_>>()}));
     id
 }
 struct ByteBudget(usize);
@@ -228,6 +247,19 @@ pub(super) fn parse_response(
         probabilities,
         degree_failed,
         invalid_assessment: raw_score.is_some() && score.is_none(),
+        applicability: bindings
+            .applicability
+            .as_ref()
+            .and_then(|id| answers.get(id))
+            .and_then(|raw| {
+                let degree: Degree = serde_json::from_str(raw.get()).ok()?;
+                if degree.kind != "choice" {
+                    return None;
+                }
+                normalize_probabilities(degree.probabilities.0, ["applicable", "not_established"])
+                    .ok()
+                    .map(|p| p["applicable"])
+            }),
         assessment: score.map(|s| ClassifierAssessment {
             score: s.score / 2.0,
             partial: false,

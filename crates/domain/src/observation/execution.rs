@@ -244,6 +244,8 @@ pub enum ComplexityReasonCodeV1 {
 #[serde(deny_unknown_fields)]
 pub struct BranchDecisionV1 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub routing_observation: Option<crate::RoutingObservationV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub policy: Option<crate::BranchExecutionPolicyV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub competence_trigger: Option<crate::CompetenceProtectionV1>,
@@ -267,6 +269,13 @@ pub struct BranchDecisionV1 {
 
 impl BranchDecisionV1 {
     pub(crate) fn validate(&self) -> Result<(), ExecutionFactError> {
+        if self
+            .routing_observation
+            .as_ref()
+            .is_some_and(|o| !o.validate())
+        {
+            return Err(ExecutionFactError::InvalidFact);
+        }
         if self.strategy_id.trim().is_empty()
             || self.schema_version.trim().is_empty()
             || CanonicalDigest::parse(self.payload_digest.as_str()).is_err()

@@ -11,6 +11,8 @@ mod decision;
 pub use decision::*;
 mod system_one_c;
 pub use system_one_c::*;
+mod c_observation;
+pub use c_observation::*;
 mod decision_definition;
 pub use decision_definition::*;
 mod context_window;

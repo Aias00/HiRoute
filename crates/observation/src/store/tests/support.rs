@@ -311,6 +311,7 @@ pub(crate) fn route_decision(plan_id: &str) -> ExecutionFactV1 {
         output_digest: digest("planner-output"),
         branch: PlannedBranchV1::CustomExactOrder,
         complexity: Some(BranchDecisionV1 {
+            routing_observation: None,
             policy: None,
             competence_trigger: None,
             execution_group: hiroute_domain::ExecutionGroupV1::Regular,

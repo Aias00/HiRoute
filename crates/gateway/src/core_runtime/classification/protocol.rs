@@ -27,6 +27,7 @@ pub(super) struct ClassifierResponse {
     pub(super) degree_failed: bool,
     pub(super) assessment: Option<ClassifierAssessment>,
     pub(super) invalid_assessment: bool,
+    pub(super) applicability: Option<f64>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -65,7 +66,11 @@ pub(super) fn assessment_definition(
             .find(|b| b.id == *executed_branch_id)?;
         (&branch.judgment, branch.name.as_str())
     };
-    if target.branch_execution.as_ref()?.policy != judgment.execution_policy(name) {
+    let policy = authority.native_protocol.as_ref().map_or_else(
+        || judgment.execution_policy(name),
+        |p| p.execution_policy(executed_branch_id, judgment, name),
+    );
+    if target.branch_execution.as_ref()?.policy != policy {
         return None;
     }
     Some(AssessmentDefinition {
@@ -98,6 +103,7 @@ pub(super) fn classifier_request_template(
         has_target: target.is_some(),
         target_partial: false,
         bindings: None,
+        routing_observation: None,
     })
 }
 pub(super) fn latest_user_wire_value(
@@ -244,6 +250,7 @@ pub(super) fn parse_classifier_response(
         })
     });
     Ok(ClassifierResponse {
+        applicability: None,
         branch_id,
         probabilities,
         degree_failed,

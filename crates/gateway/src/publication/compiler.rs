@@ -545,6 +545,17 @@ pub(crate) fn compile_classifier_mode_authority(
         },
     };
     Ok(Arc::new(RestBranchClassifierAuthorityV1 {
+        decision_provider: match mode {
+            hiroute_domain::ComplexityClassifierModeV1::DecisionService { service } => {
+                match &service.connection {
+                    hiroute_domain::DecisionConnectionV1::SystemOne { provider, .. } => {
+                        provider.clone()
+                    }
+                    _ => "custom".into(),
+                }
+            }
+            _ => "local".into(),
+        },
         native_protocol: None,
         endpoint: normalized_endpoint.into(),
         http_authority: normalized_authority.into(),

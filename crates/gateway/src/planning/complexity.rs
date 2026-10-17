@@ -320,6 +320,7 @@ impl ComplexityV1 {
         if !matched_user_phrase_ids.is_empty() {
             return Ok((
                 BranchDecisionV1 {
+                    routing_observation: None,
                     policy: None,
                     competence_trigger: None,
                     execution_group: hiroute_domain::ExecutionGroupV1::Primary,
@@ -380,6 +381,7 @@ impl ComplexityV1 {
         }
         Ok((
             BranchDecisionV1 {
+                routing_observation: None,
                 policy: None,
                 competence_trigger: None,
                 execution_group: if score >= strategy.threshold {
@@ -432,6 +434,7 @@ fn strategy_digest(strategy: &CompiledComplexityStrategyV1) -> Result<String, Pl
 
 fn unresolved_decision(strategy: &CompiledComplexityStrategyV1) -> BranchDecisionV1 {
     BranchDecisionV1 {
+        routing_observation: None,
         policy: None,
         competence_trigger: None,
         execution_group: hiroute_domain::ExecutionGroupV1::Primary,
@@ -485,6 +488,7 @@ fn inherited_decision(
     }));
     Ok(BranchDecisionV1 {
         policy: previous.policy.clone(),
+        routing_observation: previous.routing_observation.clone(),
         competence_trigger: previous.competence_trigger.clone(),
         execution_group: previous.execution_group,
         simple_probability: previous.simple_probability.clone(),

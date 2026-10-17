@@ -21,6 +21,8 @@ mod diagnostic;
 use diagnostic::classifier_status_failure;
 use diagnostic::{CallDiagnostic, classifier_response_failure, diagnostic_request};
 
+#[path = "classification/c_request.rs"]
+mod c_request;
 #[path = "classification/group_policy.rs"]
 mod group_policy;
 #[path = "classification/protocol.rs"]
@@ -116,6 +118,7 @@ pub(super) struct ClassificationRequest<'a> {
 }
 
 struct PreparedDecisionRequest {
+    routing_observation: Option<hiroute_domain::RoutingObservationV1>,
     template: PreparedReplayTemplate,
     has_target: bool,
     target_partial: bool,
@@ -145,6 +148,21 @@ enum CallFailure {
     RateLimited,
     EndpointRejected,
     InvalidOutput,
+}
+
+impl CallFailure {
+    fn applicability_reason(self) -> hiroute_domain::ApplicabilityReasonV1 {
+        use hiroute_domain::ApplicabilityReasonV1 as R;
+        match self {
+            Self::Timeout => R::Timeout,
+            Self::Unavailable => R::Unavailable,
+            Self::RejectedInput => R::RejectedInput,
+            Self::AuthenticationRejected => R::AuthenticationRejected,
+            Self::RateLimited => R::RateLimited,
+            Self::EndpointRejected => R::EndpointRejected,
+            Self::InvalidOutput => R::InvalidOutput,
+        }
+    }
 }
 
 struct ResolvedLatestUser {
@@ -311,6 +329,7 @@ impl ProductionGatewayRuntime {
             });
         }
 
+        let mut routing_observation = None;
         let result = match request.classifier {
             Some(classifier) => {
                 let prepared = if classifier.system_one_model.is_some() {
@@ -322,6 +341,7 @@ impl ProductionGatewayRuntime {
                 match prepared {
                     Err(error) => Err(error),
                     Ok(prepared) => {
+                        routing_observation = prepared.routing_observation.clone();
                         let target_trimmed = prepared.target_partial;
                         match ensure_call_active(
                             call_deadline,
@@ -363,6 +383,23 @@ impl ProductionGatewayRuntime {
             u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
         match result {
             Ok(response) => {
+                if let Some(o) = routing_observation.as_mut() {
+                    if o.applicability_requested {
+                        o.applicability_probability = response
+                            .applicability
+                            .and_then(serde_json::Number::from_f64);
+                        o.applicability_state = if o.applicability_probability.is_some() {
+                            hiroute_domain::ApplicabilityStateV1::Valid
+                        } else {
+                            hiroute_domain::ApplicabilityStateV1::Unavailable
+                        };
+                        o.applicability_reason = if o.applicability_probability.is_some() {
+                            hiroute_domain::ApplicabilityReasonV1::Answered
+                        } else {
+                            hiroute_domain::ApplicabilityReasonV1::InvalidOutput
+                        };
+                    }
+                }
                 let reason_codes = if response.invalid_assessment {
                     vec![ComplexityReasonCodeV1::ClassifierAssessmentInvalid]
                 } else {
@@ -378,6 +415,7 @@ impl ProductionGatewayRuntime {
                 Ok(ClassificationOutcome {
                     diagnostic_failure: None,
                     decision: BranchDecisionV1 {
+                        routing_observation,
                         policy: None,
                         competence_trigger: None,
                         execution_group: hiroute_domain::ExecutionGroupV1::Regular,
@@ -411,6 +449,12 @@ impl ProductionGatewayRuntime {
             }
             Err(failure) => {
                 let mut fallback = local_decision;
+                if let Some(o) = routing_observation.as_mut() {
+                    if o.applicability_requested {
+                        o.applicability_reason = failure.applicability_reason();
+                    }
+                }
+                fallback.routing_observation = routing_observation;
                 fallback.fallback_used = true;
                 fallback.classification_duration_micros = Some(classification_duration_micros);
                 fallback.fallback_reason = Some(match failure {
