@@ -296,7 +296,9 @@ impl LocalControlAdapter {
                 evidence_ref: None,
             },
             runtime_fallback_denied_model_ids: super::runtime_fallback_denied_model_ids(
-                self.release_catalog.as_ref(),
+                self.current_catalog()
+                    .as_deref()
+                    .map(|snapshot| &snapshot.catalog),
             ),
             models,
         };

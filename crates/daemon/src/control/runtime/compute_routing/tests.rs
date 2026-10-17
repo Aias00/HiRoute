@@ -503,6 +503,7 @@ fn current_catalog_drift_excludes_only_stale_projection_from_routing_snapshot() 
         scanner,
         artifacts,
         release_catalog: Some(catalog),
+        model_feed: None,
         protected_inputs: Mutex::new(BTreeMap::new()),
         manual_protected_inputs: Mutex::new(BTreeMap::new()),
         agent_token_inputs: Mutex::new(BTreeMap::new()),

@@ -80,8 +80,7 @@ impl LocalControlAdapter {
         deadline: Option<std::time::Instant>,
     ) -> Result<PriceControlFactsV1, ControlReadError> {
         let catalog = self
-            .release_catalog
-            .as_ref()
+            .current_catalog()
             .ok_or(ControlReadError::Unavailable)?;
         let check = || {
             if deadline.is_some_and(|d| std::time::Instant::now() >= d) {
@@ -106,9 +105,12 @@ impl LocalControlAdapter {
             .iter()
             .try_fold(0u64, |sum, value| sum.checked_add(value.revision))
             .ok_or(ControlReadError::Corrupt)?;
-        let revisions = control
+        let mut revisions = control
             .current_revisions(&WorkspaceId::default())
             .map_err(map_port)?;
+        revisions
+            .dependencies
+            .insert("feed.model_data".into(), catalog.generation);
         let (_, sequence, digest) = catalog.model_data_provenance();
         let catalog_refs = vec![PriceFactRefV1 {
             id: catalog.model_data().bundle_version.clone(),
@@ -178,7 +180,7 @@ impl LocalControlAdapter {
                     .clone()
                     .unwrap_or_else(|| model.model_ref.clone());
                 let offer_ref = registered.as_ref().and_then(|(_, resolved)| {
-                    unique_offer(catalog, resolved, &model_configuration_id)
+                    unique_offer(&catalog, resolved, &model_configuration_id)
                         .map(|offer| offer.offer_id.clone())
                 });
                 source_bindings.push(PriceSourceBinding {

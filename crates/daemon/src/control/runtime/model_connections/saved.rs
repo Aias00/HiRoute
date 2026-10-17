@@ -69,9 +69,13 @@ impl LocalControlAdapter {
             ComputeManagementProvenanceV2::Registered { .. } => {
                 self.saved_registered_draft(request, &source, &candidate)?
             }
-            ComputeManagementProvenanceV2::UserConfigured { .. } => {
-                saved_user_draft(request, &source, self.release_catalog.as_ref())?
-            }
+            ComputeManagementProvenanceV2::UserConfigured { .. } => saved_user_draft(
+                request,
+                &source,
+                self.current_catalog()
+                    .as_deref()
+                    .map(|snapshot| &snapshot.catalog),
+            )?,
             ComputeManagementProvenanceV2::ConnectorOwned { .. } => {
                 return Err(ComputeManagementControlError::Invalid);
             }
@@ -98,8 +102,7 @@ impl LocalControlAdapter {
             return Err(ComputeManagementControlError::Corrupt);
         };
         let catalog = self
-            .release_catalog
-            .as_ref()
+            .current_catalog()
             .ok_or(ComputeManagementControlError::Unavailable)?;
         let provenance = catalog
             .compute_catalog_provenance()

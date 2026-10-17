@@ -2,10 +2,12 @@
 
 mod admission;
 mod contract;
+mod transport;
 mod verification;
 
 pub use admission::*;
 pub use contract::*;
+pub use transport::{FeedDownload, retrieve_feed};
 pub use verification::{VerifiedFeed, verify_envelope};
 
 #[cfg(any(test, feature = "test-support"))]

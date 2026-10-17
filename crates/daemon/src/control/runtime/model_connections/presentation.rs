@@ -86,8 +86,7 @@ impl LocalControlAdapter {
             .price_control_facts()
             .map_err(|_| ComputeManagementControlError::Unavailable)?;
         let catalog = self
-            .release_catalog
-            .as_ref()
+            .current_catalog()
             .ok_or(ComputeManagementControlError::Unavailable)?;
         let evaluated_at_ms = prices
             .evaluated_at

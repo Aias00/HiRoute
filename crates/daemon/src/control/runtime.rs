@@ -74,6 +74,7 @@ mod effects;
 mod hermes_management_status;
 mod model_catalog;
 mod model_connections;
+mod model_feed;
 mod mutation;
 mod native_additional_model;
 mod native_claude_model;
@@ -345,6 +346,26 @@ impl ProductionControlRuntime {
             .begin_plan_version_recovery()
             .map_err(|error| error.to_string())?;
         release_install::activate_release_catalog_revisions(&stores, &release_catalog)?;
+        let feed_generation = stores
+            .control()
+            .current_revisions(&WorkspaceId::default())
+            .map_err(|error| error.to_string())?
+            .dependencies
+            .get("feed.model_data")
+            .copied()
+            .unwrap_or(0);
+        let model_feed = Arc::new(crate::model_feed::ModelFeedService::open(
+            storage_root,
+            release_catalog.clone(),
+            feed_generation,
+        )?);
+        stores
+            .control()
+            .activate_model_feed_generation(
+                &WorkspaceId::default(),
+                model_feed.current().generation,
+            )
+            .map_err(|error| error.to_string())?;
         let home = native_agent_home()?;
         let project = std::env::current_dir().map_err(|error| error.to_string())?;
         let scanner = match overrides.scanner {
@@ -553,6 +574,7 @@ impl ProductionControlRuntime {
             scanner,
             artifacts,
             release_catalog: Some(release_catalog),
+            model_feed: Some(model_feed),
             protected_inputs: Mutex::new(BTreeMap::new()),
             manual_protected_inputs: Mutex::new(BTreeMap::new()),
             agent_token_inputs: Mutex::new(BTreeMap::new()),
@@ -610,6 +632,7 @@ impl ProductionControlRuntime {
                 .finish_startup_publication_recovery()
                 .map_err(|error| error.to_string())?;
         }
+        model_feed::start_retrieval(&adapter);
         Ok(Self {
             _observation_maintenance:
                 hiroute_observation::maintenance::ObservationMaintenance::start_with_hook(
@@ -863,6 +886,7 @@ struct LocalControlAdapter {
     scanner: FilesystemAgentScannerV1,
     artifacts: ManagedArtifactStore,
     release_catalog: Option<TrustedReleaseCatalog>,
+    model_feed: Option<Arc<crate::model_feed::ModelFeedService>>,
     protected_inputs: Mutex<BTreeMap<String, DiscoveredCredentialRefV1>>,
     manual_protected_inputs: Mutex<BTreeMap<String, ProtectedSecret>>,
     agent_token_inputs: Mutex<BTreeMap<String, ProtectedSecret>>,

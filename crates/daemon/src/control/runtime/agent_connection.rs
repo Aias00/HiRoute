@@ -707,6 +707,7 @@ mod tests {
             scanner,
             artifacts,
             release_catalog: None,
+            model_feed: None,
             protected_inputs: Mutex::new(BTreeMap::new()),
             manual_protected_inputs: Mutex::new(BTreeMap::new()),
             agent_token_inputs: Mutex::new(BTreeMap::new()),

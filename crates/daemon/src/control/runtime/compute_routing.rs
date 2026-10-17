@@ -25,8 +25,7 @@ impl LocalControlAdapter {
         &self,
     ) -> Result<Vec<RegisteredComputeCandidateV1>, ControlReadError> {
         let catalog = self
-            .release_catalog
-            .as_ref()
+            .current_catalog()
             .ok_or(ControlReadError::Unavailable)?;
         let discoveries = self
             .refresh_discovery()
@@ -156,8 +155,7 @@ impl LocalControlAdapter {
             .ok_or(ControlReadError::SnapshotChanged);
         }
         let catalog = self
-            .release_catalog
-            .as_ref()
+            .current_catalog()
             .ok_or(ControlReadError::Unavailable)?;
         let mut matched = false;
         for discovery in self.scanner.scan() {
@@ -196,8 +194,7 @@ impl LocalControlAdapter {
         connection_option_id: &str,
     ) -> Result<Vec<(CpaRegisteredSourceV1, String)>, ControlReadError> {
         let catalog = self
-            .release_catalog
-            .as_ref()
+            .current_catalog()
             .ok_or(ControlReadError::Unavailable)?;
         let kind = catalog
             .resolve_connection_option(connection_option_id)
@@ -223,8 +220,7 @@ impl LocalControlAdapter {
         sources: Vec<CpaRegisteredSourceV1>,
     ) -> Result<Vec<(CpaRegisteredSourceV1, String)>, ControlReadError> {
         let catalog = self
-            .release_catalog
-            .as_ref()
+            .current_catalog()
             .ok_or(ControlReadError::Unavailable)?;
         let mut candidates = sources
             .into_iter()
@@ -257,8 +253,7 @@ impl LocalControlAdapter {
         change: &ComputeConnectionChangeV1,
     ) -> Result<PreparedComputeProjectionV1, ComputeProjectionReadError> {
         let catalog = self
-            .release_catalog
-            .as_ref()
+            .current_catalog()
             .ok_or(ComputeProjectionReadError::Control(
                 ControlReadError::Unavailable,
             ))?;
@@ -355,8 +350,7 @@ impl ComputeFactsPort for LocalControlAdapter {
     }
     fn scan_compute(&self) -> Result<ComputeScanResultV1, ControlReadError> {
         let catalog = self
-            .release_catalog
-            .as_ref()
+            .current_catalog()
             .ok_or(ControlReadError::Unavailable)?;
         let provenance = catalog
             .compute_catalog_provenance()
@@ -382,8 +376,7 @@ impl ComputeFactsPort for LocalControlAdapter {
 
     fn connection_options(&self) -> Result<ComputeConnectionOptionsResultV1, ControlReadError> {
         let catalog = self
-            .release_catalog
-            .as_ref()
+            .current_catalog()
             .ok_or(ControlReadError::Unavailable)?;
         let provenance = catalog
             .compute_catalog_provenance()

@@ -253,7 +253,12 @@ impl ComputeManagementControlPort for LocalControlAdapter {
 
         let checked = (|| {
             let expected_source_revision = request.draft.expected_source_revision;
-            let mut draft = trusted_draft(request.draft, self.release_catalog.as_ref())?;
+            let mut draft = trusted_draft(
+                request.draft,
+                self.current_catalog()
+                    .as_deref()
+                    .map(|snapshot| &snapshot.catalog),
+            )?;
             let saved_key = if let Some(source_id) = draft.existing_source_id.as_deref() {
                 let expected_revision =
                     expected_source_revision.ok_or(ComputeManagementControlError::Invalid)?;

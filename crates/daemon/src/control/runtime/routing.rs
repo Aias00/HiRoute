@@ -320,8 +320,7 @@ impl LocalControlAdapter {
     > {
         use hiroute_application::model_catalog::{ModelRatings, RatingQueryError};
         let snapshot = self
-            .release_catalog
-            .as_ref()
+            .current_catalog()
             .ok_or(RatingQueryError::SnapshotUnavailable)?
             .rating_snapshot()
             .clone();
@@ -347,8 +346,7 @@ impl LocalControlAdapter {
             None,
             || {
                 let catalog = self
-                    .release_catalog
-                    .as_ref()
+                    .current_catalog()
                     .ok_or(ControlReadError::Unavailable)?;
                 let provenance = catalog
                     .compute_catalog_provenance()
@@ -788,6 +786,9 @@ impl LocalControlAdapter {
                     .transpose()
                     .map_err(|_| ControlReadError::Corrupt)?;
                 let mut expected_revisions = revisions;
+                expected_revisions
+                    .dependencies
+                    .insert("feed.model_data".into(), catalog.generation);
                 expected_revisions
                     .dependencies
                     .insert("release.registry".into(), provenance.release_sequence);
