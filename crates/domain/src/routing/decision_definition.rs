@@ -30,17 +30,20 @@ impl<'de> Deserialize<'de> for OrdinalDefinitionV1 {
         #[derive(Deserialize)]
         #[serde(deny_unknown_fields)]
         struct Wire {
-            #[serde(default)]
-            kind: Option<Kind>,
+            #[serde(default, rename = "kind")]
+            _kind: Option<Kind>,
             instructions: String,
             levels: Vec<OrdinalLevelV1>,
         }
         let Wire {
-            kind: _,
+            _kind: _,
             instructions,
             levels,
         } = Wire::deserialize(deserializer)?;
-        Ok(Self { instructions, levels })
+        Ok(Self {
+            instructions,
+            levels,
+        })
     }
 }
 
@@ -103,9 +106,15 @@ mod tests {
         let value = DegreePolicyV1::default().definition();
         let mut wire = serde_json::to_value(&value).unwrap();
         assert_eq!(wire["kind"], "ordinal");
-        assert_eq!(serde_json::from_value::<OrdinalDefinitionV1>(wire.clone()).unwrap(), value);
+        assert_eq!(
+            serde_json::from_value::<OrdinalDefinitionV1>(wire.clone()).unwrap(),
+            value
+        );
         wire.as_object_mut().unwrap().remove("kind");
-        assert_eq!(serde_json::from_value::<OrdinalDefinitionV1>(wire.clone()).unwrap(), value);
+        assert_eq!(
+            serde_json::from_value::<OrdinalDefinitionV1>(wire.clone()).unwrap(),
+            value
+        );
         wire["kind"] = json!("categorical");
         assert!(serde_json::from_value::<OrdinalDefinitionV1>(wire.clone()).is_err());
         wire["kind"] = json!("ordinal");
