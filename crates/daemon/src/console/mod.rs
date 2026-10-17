@@ -9,5 +9,5 @@ mod http;
 mod server;
 pub use server::ConsoleService;
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests;

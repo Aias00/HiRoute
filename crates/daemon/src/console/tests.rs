@@ -44,12 +44,18 @@ fn http(
         status.into(),
     )
 }
+// KnownFolders cannot be redirected on Windows; its installed composition uses
+// the native standard-user acceptance route instead of this isolated Unix home.
+#[cfg(unix)]
 #[test]
 fn real_role_all_keeps_external_gate_and_console_auth_authority_separate() {
     #[cfg(unix)]
     if crate::test_support::isolated_agent_home(
         "console::tests::real_role_all_keeps_external_gate_and_console_auth_authority_separate",
     ) {
+        return;
+    }
+    if installed_test_layout() {
         return;
     }
     let directory = crate::test_support::private_tempdir();
@@ -217,4 +223,41 @@ fn real_role_all_keeps_external_gate_and_console_auth_authority_separate() {
     console.shutdown();
     role.shutdown();
     role.join(Duration::from_secs(30)).unwrap();
+}
+
+/// Standalone admission authenticates the adjacent CLI and stable entry even
+/// when a composition test never executes the CLI. Reexec in a private layout;
+/// never create an alias beside Cargo's shared test binaries. This native test
+/// image is only a layout fixture, not installed CLI or provider-call evidence.
+#[cfg(unix)]
+fn installed_test_layout() -> bool {
+    const CHILD: &str = "HIROUTE_CONSOLE_LAYOUT_TEST";
+    let test =
+        "console::tests::real_role_all_keeps_external_gate_and_console_auth_authority_separate";
+    if std::env::var(CHILD).as_deref() == Ok(test) {
+        return false;
+    }
+    assert_eq!(
+        std::env::var("HIROUTE_ISOLATED_DAEMON_TEST").as_deref(),
+        Ok(test)
+    );
+    let home = crate::control::native_agent_home().unwrap();
+    let staged = crate::test_support::private_tempdir();
+    let daemon = staged.path().join("hirouted");
+    let cli = staged.path().join("hiroute");
+    std::fs::copy(std::env::current_exe().unwrap(), &daemon).unwrap();
+    std::fs::copy(&daemon, &cli).unwrap();
+    let bin = home.join(".local/bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    std::os::unix::fs::symlink(&cli, bin.join("hiroute")).unwrap();
+    let status = std::process::Command::new(&daemon)
+        .args(["--exact", test, "--nocapture", "--test-threads=1"])
+        .env(CHILD, test)
+        .status()
+        .unwrap();
+    assert!(
+        status.success(),
+        "installed-layout console composition failed"
+    );
+    true
 }
