@@ -91,21 +91,19 @@ impl FeedStore {
         if state.schema != STATE_SCHEMA {
             return Err("feed_state_newer_schema".into());
         }
-        if let Some(highest) = &state.highest_accepted {
-            if highest.sequence == 0
-                || CanonicalDigest::parse(highest.payload_digest.as_str()).is_err()
-            {
-                return Err("feed_state_invalid".into());
-            }
+        if let Some(highest) = &state.highest_accepted
+            && (highest.sequence == 0
+                || CanonicalDigest::parse(highest.payload_digest.as_str()).is_err())
+        {
+            return Err("feed_state_invalid".into());
         }
-        if let Some(held) = &state.held {
-            if CanonicalDigest::parse(held.envelope_digest.as_str()).is_err()
+        if let Some(held) = &state.held
+            && (CanonicalDigest::parse(held.envelope_digest.as_str()).is_err()
                 || !state.highest_accepted.as_ref().is_some_and(|high| {
                     high.sequence == held.sequence && high.payload_digest == held.payload_digest
-                })
-            {
-                return Err("feed_state_invalid".into());
-            }
+                }))
+        {
+            return Err("feed_state_invalid".into());
         }
         Ok(state)
     }

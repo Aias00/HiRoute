@@ -590,7 +590,7 @@ fn scan_item(
                 display_path: finding.display_path.clone(),
                 required_mode: finding.required_mode,
             });
-    let authorized = authorized_compute_discovery(&catalog, discovery)?;
+    let authorized = authorized_compute_discovery(catalog, discovery)?;
     let protected_prepare = authorized.as_ref().is_some_and(|authorized| {
         authorized.fact.connection_option_id == PROTECTED_PREPARE_CONNECTION_OPTION_ID
             && authorized.fact.model_configuration_id == PROTECTED_PREPARE_MODEL_CONFIGURATION_ID

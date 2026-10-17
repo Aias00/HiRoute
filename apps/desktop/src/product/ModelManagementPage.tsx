@@ -1,3 +1,4 @@
+import { ModelFeedPanel } from '../features/model-feed/ModelFeedPanel';
 import { newModelConnectionDraft } from '../features/model-connections/new-draft';
 import { modelConnectionBackend } from '../features/model-connections/backend';
 import { managementLoadFailureCopy, subscriptionFailureCopy } from '../features/models/subscription-copy';
@@ -1172,6 +1173,7 @@ export function ModelManagementPage({
     {(notice || modelNotice) && <div className="toast-stack" aria-live="polite"><div className="toast" role="status"><UiIcon name="check" /><span>{notice || modelNotice}</span></div></div>}
     {loading && <div className="empty-state" role="status"><div><span className="oc-spinner" /><p>{text.loading}</p></div></div>}
     {error && <div className="callout bad" role="alert" data-error-code={error}><UiIcon name="warning" /><span>{managementLoadFailureCopy(error, language).detail}</span><button className="btn" type="button" onClick={() => void refreshManagement()}>{managementLoadFailureCopy(error, language).retry}</button></div>}
+    {management && !management.sources.length && <Disclosure className="model-feed-section" label={language === 'zh' ? '模型信息更新' : 'Model feed'} language={language}><ModelFeedPanel language={language} mutable={trustedAuthority} onChanged={() => void refreshManagement()} /></Disclosure>}
     {management && !management.sources.length && !loading && !error && <div className="empty-state v3-empty"><div>
       <span className="empty-icon"><UiIcon name="models" /></span>
       <h3>{language === 'zh' ? '先连接一个模型' : 'Connect your first model'}</h3>
