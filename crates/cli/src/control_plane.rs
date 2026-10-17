@@ -69,9 +69,7 @@ pub(crate) fn command_payload(
             options,
         )),
         "decision.services.apply" => Some(preview_or_apply(options)),
-        "decision.services.test" => Some(request::<
-            hiroute_application_api::ClassifierDecisionTestRequestV1,
-        >(options)),
+        "decision.services.test" => Some(classifier_request(options)),
         "models.show" => Some(request::<hiroute_application_api::ModelCatalogQueryV1>(
             options,
         )),
@@ -141,6 +139,19 @@ fn compute_preview(options: &[String]) -> Result<Value, ErrorCode> {
 fn typed_value<T: DeserializeOwned + Serialize>(value: Value) -> Result<Value, ErrorCode> {
     let request: T = request_input::deserialize(value)?;
     serde_json::to_value(request).map_err(|_| ErrorCode::Internal)
+}
+
+fn classifier_request(options: &[String]) -> Result<Value, ErrorCode> {
+    classifier_value(request_input::read(options, MAX_REQUEST_BYTES)?)
+}
+
+fn classifier_value(value: Value) -> Result<Value, ErrorCode> {
+    match value.get("schema").and_then(Value::as_str) {
+        Some(hiroute_application_api::CLASSIFIER_DECISION_TEST_SCHEMA_V2) => {
+            typed_value::<hiroute_application_api::ClassifierDecisionTestRequestV2>(value)
+        }
+        _ => typed_value::<hiroute_application_api::ClassifierDecisionTestRequestV1>(value),
+    }
 }
 
 fn routing_request(options: &[String], apply: bool) -> Result<Value, ErrorCode> {
@@ -444,5 +455,35 @@ mod agent_settings_codec_tests {
         let mut unknown = preview;
         unknown["spec"]["schema_version"]["major"] = json!(3);
         assert!(validate_agent_request(unknown, false).is_err());
+    }
+}
+
+#[cfg(test)]
+mod classifier_codec_tests {
+    use super::*;
+    use hiroute_domain::*;
+    use serde_json::json;
+
+    #[test]
+    fn explicit_c_request_reaches_control_while_v1_stays_unchanged() {
+        let legacy = json!({"schema":"hiroute.classifier-decision-test/v1","classifier":{"kind":"local_rules"}});
+        assert_eq!(classifier_value(legacy.clone()).unwrap(), legacy);
+        let protocol = NativeProtocolV1::default();
+        let mut judgment = JudgmentSettingsV1::default();
+        protocol.stock_assessment(&mut judgment);
+        let frozen = FrozenNativeProtocolV1::freeze(
+            &protocol,
+            judgment.degree.definition().into(),
+            [(SMART_SAVING_SCOPE_ID.into(), judgment)],
+        )
+        .unwrap();
+        let request = json!({"schema":"hiroute.classifier-decision-test/v2","service_id":"saved-fixture","service_revision":7,"shape":"standard","protocol":frozen});
+        assert_eq!(classifier_value(request.clone()).unwrap(), request);
+        let mut injected = request.clone();
+        injected["state"] = json!("verified");
+        assert_eq!(classifier_value(injected), Err(ErrorCode::InvalidArguments));
+        let mut unknown = request;
+        unknown["schema"] = json!("unknown");
+        assert_eq!(classifier_value(unknown), Err(ErrorCode::InvalidArguments));
     }
 }
