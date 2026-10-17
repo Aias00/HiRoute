@@ -1,0 +1,229 @@
+use super::*;
+use crate::store::tests::support::route_decision;
+use hiroute_domain::*;
+
+fn observation(variant: u8) -> RoutingObservationV1 {
+    let protocol = NativeProtocolV1::default();
+    let mut j = JudgmentSettingsV1::default();
+    protocol.stock_assessment(&mut j);
+    let frozen = FrozenNativeProtocolV1::freeze(
+        &protocol,
+        j.degree.definition().into(),
+        [(SMART_SAVING_SCOPE_ID.into(), j)],
+    )
+    .unwrap();
+    let mut o = RoutingObservationV1::not_dispatched(&frozen, SMART_SAVING_SCOPE_ID);
+    o.provider = "fixture".into();
+    o.model = "fixture-model".into();
+    o.simple_probability = Some(serde_json::json!(0.9).as_number().unwrap().clone());
+    if variant == 0 {
+        o.eligibility = ProtectionEligibilityV1::NoTarget;
+        o.applicability_reason = ApplicabilityReasonV1::NoTarget;
+        return o;
+    }
+    o.target_segment = Some("stage-source".into());
+    if variant == 1 {
+        o.eligibility = ProtectionEligibilityV1::PartialTarget;
+        o.applicability_reason = ApplicabilityReasonV1::PartialTarget;
+        return o;
+    }
+    o.target_complete = true;
+    o.eligibility = ProtectionEligibilityV1::Eligible;
+    o.score = Some(serde_json::json!(0.1).as_number().unwrap().clone());
+    o.applicability_requested = variant != 5;
+    if variant == 4 {
+        o.applicability_state = ApplicabilityStateV1::Unavailable;
+        o.applicability_reason = ApplicabilityReasonV1::Timeout;
+        o.protection_action = HistoricalProtectionActionV1::RetainedUnavailable;
+    } else if variant == 5 {
+        o.applicability_reason = ApplicabilityReasonV1::RequiredQuestionMissing;
+        o.protection_action = HistoricalProtectionActionV1::RetainedUnavailable;
+    } else {
+        o.applicability_state = ApplicabilityStateV1::Valid;
+        o.applicability_reason = ApplicabilityReasonV1::Answered;
+        o.applicability_probability =
+            serde_json::Number::from_f64(if variant == 3 { 0.1 } else { 0.9 });
+        o.protection_action = if variant == 3 {
+            HistoricalProtectionActionV1::Suppressed
+        } else {
+            HistoricalProtectionActionV1::Applied
+        };
+        if variant == 7 {
+            o.score = serde_json::Number::from_f64(0.5);
+            o.protection_action = HistoricalProtectionActionV1::NotNeeded;
+        }
+    }
+    assert!(o.validate());
+    o
+}
+
+#[test]
+fn routing_stats_use_all_decisions_and_preserve_safe_evidence_after_content_deletion() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = open_store(directory.path());
+    let fixture = Fixture::new("c-routing-statistics");
+    let channel = fact_channel(&fixture, 1024 * 1024);
+    let writer = writer(&store);
+    for variant in 0..8 {
+        let mut fact = route_decision(PLAN);
+        let ExecutionFactV1::RouteDecision(decision) = &mut fact else {
+            unreachable!()
+        };
+        let c = decision.complexity.as_mut().unwrap();
+        c.routing_observation = Some(observation(variant));
+        c.decision_source = if variant == 6 {
+            ComplexityDecisionSourceV1::Inherited
+        } else {
+            ComplexityDecisionSourceV1::ExternalClassifier
+        };
+        c.complexity_score = None;
+        c.threshold = None;
+        c.classification_duration_micros = Some(1);
+        let envelope = fixture.fact(u64::from(variant) + 1, fact, 1000 + i64::from(variant));
+        assert!(matches!(
+            offer_fact(&writer, &channel, envelope.clone()),
+            WriterCycleOutcome::Ack(_)
+        ));
+        assert!(matches!(
+            offer_fact(&writer, &channel, envelope),
+            WriterCycleOutcome::Ack(_)
+        ));
+    }
+    let mut q = query(Some(17));
+    q.include_routing_observations = true;
+    q.model_configuration_id = Some("does-not-match".into());
+    q.limit = 1;
+    let page = store
+        .observed_plan_quality_samples(&reader(), &q, 5000)
+        .unwrap();
+    assert!(page.samples.is_empty());
+    let report = page.routing_observations.unwrap();
+    assert_eq!(report.coverage, "complete");
+    assert_eq!(report.retained_decisions, 8);
+    assert_eq!(report.cohorts.len(), 1);
+    let c = &report.cohorts[0].counts;
+    assert_eq!(
+        (
+            c.c_decisions,
+            c.requested,
+            c.unavailable,
+            c.gate_opportunities,
+            c.suppressed,
+            c.inherited,
+            c.required_question_missing
+        ),
+        (7, 4, 1, 4, 1, 1, 1)
+    );
+    assert_eq!((c.no_target_omissions, c.partial_target_omissions), (1, 1));
+    assert_eq!(c.unavailable_per_requested, Some(0.25));
+    assert_eq!(c.suppressed_per_opportunity, Some(0.25));
+    assert_eq!(c.suppressed_per_c_decision, Some(1.0 / 7.0));
+    let mut fq = ObservationFactsQueryV2 {
+        request_id: fixture.request.clone(),
+        limit: 1,
+        cursor: None,
+        include_routing_observations: true,
+    };
+    let facts = store.observed_facts(&reader(), &fq, 5000).unwrap();
+    assert!(facts.facts[0].routing_observation.is_some());
+    fq.cursor = facts.next_cursor;
+    fq.include_routing_observations = false;
+    assert!(matches!(
+        store.observed_facts(&reader(), &fq, 5000),
+        Err(crate::query_v2::ObservationV2Error::Stale)
+    ));
+    fq.cursor = None;
+    let old = store.observed_facts(&reader(), &fq, 5000).unwrap();
+    assert!(
+        serde_json::to_value(&old.facts[0])
+            .unwrap()
+            .get("routing_observation")
+            .is_none()
+    );
+    let principal = ObservationPrincipalV1::local_user(fixture.workspace.clone());
+    let mut spec = SessionDeletionSpecV1 {
+        workspace_id: fixture.workspace.clone(),
+        session_id: fixture.session.clone(),
+        data_class: DeletionDataClass::ContentOnly,
+        delete_rollups: false,
+    };
+    let preview = store.preview_session_deletion(&principal, &spec).unwrap();
+    store
+        .apply_session_deletion(
+            &principal,
+            &spec,
+            preview.store_revision,
+            &preview.change_digest,
+            2000,
+        )
+        .unwrap();
+    assert_eq!(
+        store
+            .observed_plan_quality_samples(&reader(), &q, 5000)
+            .unwrap()
+            .routing_observations
+            .unwrap(),
+        report
+    );
+    let encoded: Vec<String> = {
+        let connection = store.connection.lock();
+        let mut stmt = connection
+            .prepare("SELECT body_json FROM observation_safe_facts_v2")
+            .unwrap();
+        stmt.query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap()
+    };
+    assert!(
+        encoded
+            .iter()
+            .all(|s| !s.contains("Distinguish those meanings")
+                && !s.contains("assessment_stage")
+                && !s.contains("credentials"))
+    );
+    drop(writer);
+    drop(store);
+    let reopened = open_store(directory.path());
+    assert_eq!(
+        reopened
+            .observed_plan_quality_samples(&reader(), &q, 5000)
+            .unwrap()
+            .routing_observations
+            .unwrap(),
+        report
+    );
+    spec.data_class = DeletionDataClass::FactsAndContent;
+    let preview = reopened
+        .preview_session_deletion(&principal, &spec)
+        .unwrap();
+    reopened
+        .apply_session_deletion(
+            &principal,
+            &spec,
+            preview.store_revision,
+            &preview.change_digest,
+            3000,
+        )
+        .unwrap();
+    let report = reopened
+        .observed_plan_quality_samples(&reader(), &q, 5000)
+        .unwrap()
+        .routing_observations
+        .unwrap();
+    assert_eq!(report.retained_decisions, 0);
+    assert!(report.cohorts.is_empty());
+}
+
+#[test]
+fn impossible_applicability_combinations_are_rejected() {
+    let mut o = observation(4);
+    o.applicability_probability = serde_json::Number::from_f64(0.3);
+    assert!(!o.validate());
+    let mut o = observation(3);
+    o.eligibility = ProtectionEligibilityV1::DifferentPlan;
+    assert!(!o.validate());
+    let mut o = observation(0);
+    o.protection_action = HistoricalProtectionActionV1::Suppressed;
+    assert!(!o.validate());
+}

@@ -49,7 +49,7 @@ pub(crate) fn project(
                     return Err(Error::Corrupt);
                 }
                 fact.routing_observation = Some(hiroute_domain::ObservationRoutingDecisionV1 {
-                    plan_id: plan_id.to_string(),
+                    plan_id: plan_id.as_str().to_owned(),
                     plan_revision: *revision,
                     inherited: complexity.decision_source
                         == hiroute_domain::ComplexityDecisionSourceV1::Inherited,

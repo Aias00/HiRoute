@@ -9,6 +9,7 @@ use crate::query_v2::ObservationReaderContext;
 
 use super::support::{Fixture, fact_channel, offer_fact, open_store, writer};
 
+mod routing_observations;
 mod summary;
 
 const PLAN: &str = "plan/codex-daily";

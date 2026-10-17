@@ -110,65 +110,70 @@ fn follow_up_keeps_an_in_group_backup_and_still_rejudges_the_group() {
 
 #[test]
 fn primary_relay_stays_in_this_turn_but_new_users_decide_again() {
-    for smart in [true, false] {
-        for change_instructions in [false, true] {
-            let simple: &'static [u8] = if smart {
-                br#"{"answers":{"q0":{"type":"score","probabilities":{"0":0.9,"1":0.1}}}}"#
-            } else {
-                br#"{"answers":{"q0":{"type":"choice","choice":"code"},"q1":{"type":"score","probabilities":{"0":0.9,"1":0.1}}}}"#
-            };
-            // Empty native output is a request-local protocol failure. The
-            // regular provider is healthy again by the next request, so cooldown
-            // cannot hide a backwards attempt on the tool continuation.
-            let regular = NativeProvider::start(vec![
+    for c in [false, true] {
+        for smart in [true, false] {
+            for change_instructions in [false, true] {
+                let simple: &'static [u8] = if smart {
+                    br#"{"answers":{"q0":{"type":"score","probabilities":{"0":0.9,"1":0.1}}}}"#
+                } else {
+                    br#"{"answers":{"q0":{"type":"choice","choice":"code"},"q1":{"type":"score","probabilities":{"0":0.9,"1":0.1}}}}"#
+                };
+                // Empty native output is a request-local protocol failure. The
+                // regular provider is healthy again by the next request, so cooldown
+                // cannot hide a backwards attempt on the tool continuation.
+                let regular = NativeProvider::start(vec![
                 reply(br#"{"id":"empty","status":"completed","output":[],"usage":{"input_tokens":1,"output_tokens":0,"total_tokens":1}}"#),
                 reply(RESPONSES_OK),
                 reply(RESPONSES_OK),
             ]);
-            let primary =
-                NativeProvider::start(vec![reply(RESPONSES_TOOL_CALL), reply(RESPONSES_OK)]);
-            let decider = NativeProvider::start(vec![reply(simple), reply(simple)]);
-            let fixture =
-                RuntimeFixture::launch_builtin_branches(&[&regular, &primary, &decider], smart);
-            let send = |input: &[Value], instructions: &str| {
-                let response = request(fixture.address, "POST", "/v1/responses", &[
+                let primary =
+                    NativeProvider::start(vec![reply(RESPONSES_TOOL_CALL), reply(RESPONSES_OK)]);
+                let decider = NativeProvider::start(vec![reply(simple), reply(simple)]);
+                let fixture =
+                    RuntimeFixture::launch_builtin_branches(&[&regular, &primary, &decider], smart);
+                if c {
+                    enable_c(&fixture);
+                }
+                let send = |input: &[Value], instructions: &str| {
+                    let response = request(fixture.address, "POST", "/v1/responses", &[
                     ("X-HiRoute-Token", TOKEN), ("session-id", "relay-turn-boundary"),
                 ], &serde_json::to_vec(&json!({"model":MODEL,"stream":false,"instructions":instructions,"input":input})).unwrap());
+                    assert_eq!(
+                        response.status,
+                        200,
+                        "{}",
+                        String::from_utf8_lossy(&response.body)
+                    );
+                    serde_json::from_slice::<Value>(&response.body).unwrap()
+                };
+                let mut history = vec![json!({"role":"user","content":"Look up the record."})];
+                let first = send(&history, "Use the lookup tool.");
                 assert_eq!(
-                    response.status,
-                    200,
-                    "{}",
-                    String::from_utf8_lossy(&response.body)
+                    (regular.calls(), primary.calls(), decider.calls()),
+                    (1, 1, 1)
                 );
-                serde_json::from_slice::<Value>(&response.body).unwrap()
-            };
-            let mut history = vec![json!({"role":"user","content":"Look up the record."})];
-            let first = send(&history, "Use the lookup tool.");
-            assert_eq!(
-                (regular.calls(), primary.calls(), decider.calls()),
-                (1, 1, 1)
-            );
-            history.extend(first["output"].as_array().unwrap().iter().cloned());
-            history.push(json!({"type":"function_call_output","call_id":first["output"][0]["call_id"],"output":"record found"}));
-            let instructions = if change_instructions {
-                "Summarize the lookup result."
-            } else {
-                "Use the lookup tool."
-            };
-            let continued = send(&history, instructions);
-            assert_eq!(
-                (regular.calls(), primary.calls(), decider.calls()),
-                (1, 2, 1),
-                "same-turn relay must not retry regular, even when instructions invalidate the candidate hold"
-            );
-            history.extend(continued["output"].as_array().unwrap().iter().cloned());
-            history.push(json!({"role":"user","content":"A new simple task: say hello."}));
-            send(&history, instructions);
-            assert_eq!(
-                (regular.calls(), primary.calls(), decider.calls()),
-                (2, 2, 2),
-                "the next real user message must decide again, without a persistent primary floor"
-            );
+                history.extend(first["output"].as_array().unwrap().iter().cloned());
+                history.push(json!({"type":"function_call_output","call_id":first["output"][0]["call_id"],"output":"record found"}));
+                let instructions = if change_instructions {
+                    "Summarize the lookup result."
+                } else {
+                    "Use the lookup tool."
+                };
+                let continued = send(&history, instructions);
+                assert_eq!(
+                    (regular.calls(), primary.calls(), decider.calls()),
+                    (1, 2, 1),
+                    "same-turn relay must not retry regular, even when instructions invalidate the candidate hold"
+                );
+                history.extend(continued["output"].as_array().unwrap().iter().cloned());
+                history.push(json!({"role":"user","content":"A new simple task: say hello."}));
+                send(&history, instructions);
+                assert_eq!(
+                    (regular.calls(), primary.calls(), decider.calls()),
+                    (2, 2, 2),
+                    "the next real user message must decide again, without a persistent primary floor"
+                );
+            }
         }
     }
 }
@@ -497,6 +502,149 @@ fn builtin_decision_reselects_groups_and_observes_actual_execution_in_both_modes
                 "complex_task",
                 "simple_task"
             ]
+        );
+    }
+}
+
+fn enable_c(fixture: &RuntimeFixture) {
+    use hiroute_domain::*;
+    use hiroute_gateway::server::publication::AliasRequestOwnedRouteV1;
+    let mut publication = fixture.publication();
+    match &mut publication.aliases[0]
+        .routing
+        .as_mut()
+        .unwrap()
+        .request_owned
+    {
+        AliasRequestOwnedRouteV1::Classified {
+            judgment,
+            native_protocol,
+            ..
+        } => {
+            let p = NativeProtocolV1::default();
+            p.stock_assessment(judgment);
+            *native_protocol = Some(
+                FrozenNativeProtocolV1::freeze(
+                    &p,
+                    judgment.degree.definition().into(),
+                    [(SMART_SAVING_SCOPE_ID.into(), judgment.clone())],
+                )
+                .unwrap(),
+            );
+        }
+        AliasRequestOwnedRouteV1::Branches {
+            branches,
+            default_branch_id,
+            native_protocol,
+            ..
+        } => {
+            let p = NativeProtocolV1::default();
+            for b in branches.iter_mut() {
+                p.stock_assessment(&mut b.judgment);
+            }
+            *native_protocol = Some(
+                FrozenNativeProtocolV1::freeze(
+                    &p,
+                    branch_decision_definition(branches, default_branch_id),
+                    branches.iter().map(|b| (b.id.clone(), b.judgment.clone())),
+                )
+                .unwrap(),
+            );
+        }
+        _ => unreachable!(),
+    }
+    publication.publication_revision += 1;
+    fixture.publish(&mut publication);
+}
+fn c_answer(smart: bool, applicable: bool) -> &'static [u8] {
+    match (smart,applicable) {
+        (true,true) => br#"{"answers":{"q0":{"type":"score","probabilities":{"0":0.9,"1":0.1}},"q1":{"type":"score","score":0.2},"q2":{"type":"choice","probabilities":{"applicable":0.9,"not_established":0.1}}}}"#,
+        (true,false) => br#"{"answers":{"q0":{"type":"score","probabilities":{"0":0.9,"1":0.1}},"q1":{"type":"score","score":0.2},"q2":{"type":"choice","probabilities":{"applicable":0.1,"not_established":0.9}}}}"#,
+        (false,true) => br#"{"answers":{"q0":{"type":"choice","choice":"code"},"q1":{"type":"score","probabilities":{"0":0.9,"1":0.1}},"q2":{"type":"score","score":0.2},"q3":{"type":"choice","probabilities":{"applicable":0.9,"not_established":0.1}}}}"#,
+        (false,false) => br#"{"answers":{"q0":{"type":"choice","choice":"code"},"q1":{"type":"score","probabilities":{"0":0.9,"1":0.1}},"q2":{"type":"score","score":0.2},"q3":{"type":"choice","probabilities":{"applicable":0.1,"not_established":0.9}}}}"#,
+    }
+}
+#[test]
+fn c_protocol_rejudges_current_work_and_observes_protection_and_release_on_real_listeners() {
+    for smart in [true, false] {
+        let plain: &'static [u8] = if smart {
+            br#"{"answers":{"q0":{"type":"score","probabilities":{"0":0.9,"1":0.1}}}}"#
+        } else {
+            br#"{"answers":{"q0":{"type":"choice","choice":"code"},"q1":{"type":"score","probabilities":{"0":0.9,"1":0.1}}}}"#
+        };
+        let regular = NativeProvider::start(vec![reply(RESPONSES_OK); 3]);
+        let primary = NativeProvider::start(vec![reply(RESPONSES_OK); 3]);
+        let decider = NativeProvider::start(vec![
+            reply(plain),
+            reply(c_answer(smart, true)),
+            reply(c_answer(smart, false)),
+            reply(c_answer(smart, true)),
+        ]);
+        let fixture =
+            RuntimeFixture::launch_builtin_branches(&[&regular, &primary, &decider], smart);
+        enable_c(&fixture);
+        let mut input = Vec::new();
+        for (index, text) in [
+            "Provide the requested title.",
+            "The title is still missing. Deliver it now.",
+            "I saved the corrected title. Now correct an unrelated typo.",
+            "The same required constraint is still not satisfied. Retry the required work.",
+        ]
+        .iter()
+        .enumerate()
+        {
+            if index > 0 {
+                input.push(json!({"role":"assistant","content":"client representation"}));
+            }
+            input.push(json!({"role":"user","content":text}));
+            let response = request(
+                fixture.address,
+                "POST",
+                "/v1/responses",
+                &[
+                    ("X-HiRoute-Token", TOKEN),
+                    ("session-id", "c-protocol-rounds"),
+                ],
+                &serde_json::to_vec(&json!({"model":MODEL,"stream":false,"input":input})).unwrap(),
+            );
+            assert_eq!(
+                response.status,
+                200,
+                "{}",
+                String::from_utf8_lossy(&response.body)
+            );
+            let expected = [(1, 0, 1), (1, 1, 2), (2, 1, 3), (2, 2, 4)][index];
+            assert_eq!(
+                (regular.calls(), primary.calls(), decider.calls()),
+                expected
+            );
+        }
+        let wire = decider.requests();
+        for (i, request) in wire.iter().enumerate() {
+            let offset = request.windows(4).position(|w| w == b"\r\n\r\n").unwrap() + 4;
+            let body: Value = serde_json::from_slice(&request[offset..]).unwrap();
+            assert!(body["state"].get("visible_conversation").is_none());
+            assert!(body["state"].get("assessment_stage").is_some());
+            let applicability = if smart { "q2" } else { "q3" };
+            assert_eq!(body["questions"].get(applicability).is_some(), i > 0);
+        }
+        let facts = wait_execution_facts(&fixture, 4);
+        let actions: Vec<_> = facts
+            .iter()
+            .filter_map(|f| {
+                f.pointer("/fact/complexity/routing_observation/protection_action")
+                    .and_then(Value::as_str)
+            })
+            .collect();
+        assert_eq!(
+            actions,
+            ["not_considered", "applied", "suppressed", "applied"]
+        );
+        assert!(
+            facts
+                .iter()
+                .filter(|f| f.pointer("/fact/kind") == Some(&json!("branch_assessment_recorded")))
+                .all(|f| f.pointer("/fact/score") == Some(&json!(0.1)))
         );
     }
 }

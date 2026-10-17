@@ -305,6 +305,61 @@ impl FrozenNativeProtocolV1 {
         {
             return Err(NativeProtocolError::ContentMismatch);
         }
+        let score = |question: &Value| {
+            question.as_object().is_some_and(|o| o.len() == 3)
+                && question["type"] == "score"
+                && question["instructions"].as_str().is_some_and(|s| {
+                    s.starts_with(&(self.protocol.fixed.assessment_wrapper.clone() + " "))
+                        && !s.trim().is_empty()
+                })
+                && question["criteria"].as_array().is_some_and(|v| {
+                    v.len() == 3
+                        && v.iter()
+                            .all(|s| s.as_str().is_some_and(|s| !s.trim().is_empty()))
+                })
+        };
+        if self.scopes.values().any(|s| {
+            !score(&s.assessment)
+                || s.simple_threshold_millis > 1000
+                || s.competence_floor_millis > 1000
+                || !matches!(s.standard.as_str(), "stock" | "custom")
+        }) {
+            return Err(NativeProtocolError::ContentMismatch);
+        }
+        let degree = |instructions: &str, levels: &[super::OrdinalLevelV1]| {
+            !instructions.trim().is_empty()
+                && levels.len() == 2
+                && levels[0].id == "simple"
+                && levels[1].id == "complex"
+                && levels.iter().all(|l| !l.criterion.trim().is_empty())
+        };
+        let keys: std::collections::BTreeSet<_> = self.scopes.keys().map(String::as_str).collect();
+        match &self.decision {
+            DecisionDefinitionV1::Ordinal {
+                instructions,
+                levels,
+            } if degree(instructions, levels)
+                && keys == std::collections::BTreeSet::from([super::SMART_SAVING_SCOPE_ID]) => {}
+            DecisionDefinitionV1::Categorical {
+                instructions,
+                options,
+            } if !instructions.trim().is_empty()
+                && (2..=16).contains(&options.len())
+                && options.len() == keys.len()
+                && options
+                    .iter()
+                    .map(|o| o.id.as_str())
+                    .collect::<std::collections::BTreeSet<_>>()
+                    == keys
+                && options.iter().all(|o| {
+                    super::valid_task_category_id(&o.id)
+                        && !o.criterion.trim().is_empty()
+                        && o.refinement
+                            .as_ref()
+                            .is_none_or(|d| degree(&d.instructions, &d.levels))
+                }) => {}
+            _ => return Err(NativeProtocolError::ContentMismatch),
+        }
         Ok(())
     }
     pub fn validate_smart(&self, judgment: &JudgmentSettingsV1) -> Result<(), NativeProtocolError> {
