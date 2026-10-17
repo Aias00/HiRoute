@@ -7,6 +7,7 @@ mod native;
 mod prices;
 mod projection;
 mod read;
+mod routing;
 mod schema;
 mod scope;
 mod selection;

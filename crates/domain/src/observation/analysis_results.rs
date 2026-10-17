@@ -51,6 +51,8 @@ pub struct AnalysisMemberV1 {
 pub struct AnalysisConversationV1 {
     pub analysis_session_id: String,
     pub members: Vec<AnalysisMemberV1>,
+    pub member_count: u64,
+    pub members_partial: bool,
     pub first_at_ms: i64,
     pub last_at_ms: i64,
     pub request_count: u64,
@@ -86,6 +88,7 @@ pub struct AnalysisRequestV1 {
     pub finished_at_ms: Option<i64>,
     pub content: Vec<AnalysisContentV1>,
     pub content_partial: bool,
+    pub content_state: String,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]

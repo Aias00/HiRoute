@@ -374,6 +374,12 @@ pub(super) fn evaluate(
             r
         })
         .collect();
+    let ranking_partial = rows
+        .iter()
+        .any(|r| r.coverage != ObservationMetricCoverageV2::Complete);
+    for r in &mut rows {
+        r.highest_known_only |= ranking_partial;
+    }
     rows.sort_by(|a, b| {
         b.known_sum_micros
             .cmp(&a.known_sum_micros)

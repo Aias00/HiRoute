@@ -4,7 +4,6 @@ use super::{scope, scope::Scope};
 use crate::{LocalObservationStore, query_v2::ObservationV2Error as Error};
 use hiroute_domain::*;
 use rusqlite::{Connection, params};
-use std::collections::BTreeMap;
 
 pub(super) struct Row {
     pub request: AnalysisRequestV1,
@@ -16,6 +15,7 @@ pub(super) struct Row {
     pub epoch: Option<String>,
     pub turn_partial: bool,
     pub terminal: bool,
+    pub credential_relay: bool,
 }
 
 pub(super) fn rows(
@@ -29,7 +29,7 @@ pub(super) fn rows(
       a.model_id,a.reasoning_profile_id,COALESCE(v.terminal,0),
       (SELECT COUNT(DISTINCT model_id) FROM observation_attempt_models_v2 am WHERE am.workspace_id=r.workspace_id AND am.request_id=r.request_id),
       t.agent_turn_id,t.ordinal,t.producer_epoch,COALESCE(t.partial,1),
-      (SELECT f.body_json FROM observation_safe_facts_v2 f WHERE f.workspace_id=r.workspace_id AND f.request_id=r.request_id ORDER BY f.rowid LIMIT 1)
+      EXISTS(SELECT 1 FROM observation_analysis_models_v1 ma JOIN observation_analysis_models_v1 mb ON mb.workspace_id=ma.workspace_id AND mb.request_id=ma.request_id AND mb.ordinal=ma.ordinal+1 WHERE ma.workspace_id=r.workspace_id AND ma.request_id=r.request_id AND ma.native_model=mb.native_model AND ma.credential_digest!=mb.credential_digest)
       FROM logical_requests r JOIN sessions s ON s.workspace_id=r.workspace_id AND s.session_id=r.session_id
       JOIN observation_analysis_members_v1 m ON m.scope_id=?1 AND m.session_id=r.session_id
       LEFT JOIN valuation_requests_v2 v ON v.workspace_id=r.workspace_id AND v.request_id=r.request_id
@@ -60,7 +60,7 @@ pub(super) fn rows(
                     model_configuration_id: r.get(11)?,
                     reasoning_profile_id: r.get(12)?,
                 };
-                let safe: Option<String> = r.get(19)?;
+                let safe: Option<String> = None;
                 let context = safe
                     .and_then(|s| serde_json::from_str::<ObservationSafeFactV2>(&s).ok())
                     .and_then(|f| f.routing_context)
@@ -91,6 +91,7 @@ pub(super) fn rows(
                         finished_at_ms: r.get(3)?,
                         content: vec![],
                         content_partial: false,
+                        content_state: "not_observed".into(),
                     },
                     anchor: r.get(6)?,
                     predecessor: r.get(7)?,
@@ -100,159 +101,125 @@ pub(super) fn rows(
                     epoch: r.get(17)?,
                     turn_partial: r.get(18)?,
                     terminal: r.get(13)?,
+                    credential_relay: r.get(19)?,
                 })
             },
         )?
         .collect::<Result<Vec<_>, _>>()?)
 }
 
-pub(super) fn conversations(rows: &[Row]) -> Vec<AnalysisConversationV1> {
-    let mut groups = BTreeMap::<String, AnalysisConversationV1>::new();
-    for r in rows {
-        let at = r.request.request.started_at_ms;
-        let c = groups
-            .entry(r.anchor.clone())
-            .or_insert(AnalysisConversationV1 {
-                analysis_session_id: r.anchor.clone(),
-                members: vec![],
-                first_at_ms: at,
-                last_at_ms: at,
-                request_count: 0,
-                lineage_partial: false,
-            });
-        c.first_at_ms = c.first_at_ms.min(at);
-        c.last_at_ms = c.last_at_ms.max(at);
-        c.request_count += 1;
-        c.lineage_partial |= r.gap.is_some();
-        if !c
-            .members
-            .iter()
-            .any(|m| m.session_id == r.request.request.session_id)
-        {
-            c.members.push(AnalysisMemberV1 {
-                session_id: r.request.request.session_id.clone(),
-                predecessor_session_id: r.predecessor.clone(),
-                gap_before: r.gap.clone(),
-            });
-        }
-    }
-    let mut result: Vec<_> = groups.into_values().collect();
-    result.sort_by(|a, b| {
-        b.last_at_ms
-            .cmp(&a.last_at_ms)
-            .then_with(|| a.analysis_session_id.cmp(&b.analysis_session_id))
-    });
-    result
+pub(super) fn conversation_groups(
+    db: &Connection,
+    s: &Scope,
+    q: &ObservationAnalysisQueryV1,
+) -> Result<Vec<AnalysisConversationV1>, Error> {
+    let mut stmt=db.prepare("SELECT m.anchor_id,MIN(r.started_at_ms),MAX(r.started_at_ms),COUNT(*),COUNT(DISTINCT m.session_id),MAX(m.gap IS NOT NULL)
+      FROM logical_requests r JOIN sessions se ON se.workspace_id=r.workspace_id AND se.session_id=r.session_id
+      JOIN observation_analysis_members_v1 m ON m.scope_id=?1 AND m.session_id=r.session_id
+      LEFT JOIN valuation_requests_v2 v ON v.workspace_id=r.workspace_id AND v.request_id=r.request_id
+      WHERE r.workspace_id=?2 AND r.started_at_ms>=?3 AND r.started_at_ms<?4 AND r.rowid<=?5
+       AND (?6 IS NULL OR v.plan_id=?6) AND (?7 IS NULL OR se.agent_id=?7) AND (?8 IS NULL OR r.request_id=?8)
+       AND (?9 IS NULL OR m.anchor_id=?9 OR m.anchor_id=(SELECT anchor_id FROM observation_analysis_members_v1 WHERE scope_id=?1 AND session_id=?9))
+       AND (?10 IS NULL OR r.request_id=?10)
+      GROUP BY m.anchor_id ORDER BY MAX(r.started_at_ms) DESC,m.anchor_id")?;
+    Ok(stmt
+        .query_map(
+            params![
+                s.id,
+                s.workspace,
+                s.range.effective_from_ms,
+                s.range.effective_to_ms,
+                s.source_watermark,
+                s.plan,
+                s.agent,
+                s.initial_request,
+                q.session_id,
+                q.request_id
+            ],
+            |r| {
+                Ok(AnalysisConversationV1 {
+                    analysis_session_id: r.get(0)?,
+                    first_at_ms: r.get(1)?,
+                    last_at_ms: r.get(2)?,
+                    request_count: r.get(3)?,
+                    member_count: r.get(4)?,
+                    lineage_partial: r.get(5)?,
+                    members: vec![],
+                    members_partial: false,
+                })
+            },
+        )?
+        .collect::<Result<_, _>>()?)
 }
 
-pub(super) fn transitions(rows: &[Row]) -> Vec<AnalysisTransitionV1> {
-    let mut previous = BTreeMap::<String, &Row>::new();
-    let last_by_session: BTreeMap<_, _> = rows
-        .iter()
-        .map(|r| (r.request.request.session_id.as_str(), r))
-        .collect();
-    let mut seen_physical = std::collections::BTreeSet::new();
-    let mut result = Vec::new();
-    for r in rows {
-        let own = &r.request.request;
-        let first_physical = seen_physical.insert(own.session_id.clone());
-        let boundary = first_physical && r.predecessor.is_some();
-        let prev = if boundary {
-            r.predecessor
-                .as_deref()
-                .and_then(|id| last_by_session.get(id).copied())
-        } else {
-            previous.get(&own.session_id).copied()
-        };
-        let known = r.terminal && r.request.model.native_model.is_some();
-        let endpoints = prev.is_some_and(|p| {
-            p.terminal
-                && p.request
-                    .finished_at_ms
-                    .is_some_and(|at| at < own.started_at_ms)
-                && p.request.model.native_model.is_some()
-        });
-        let changed = if known && endpoints {
-            prev.map(|p| p.request.model.native_model != r.request.model.native_model)
-        } else {
-            None
-        };
-        let reasoning = prev.and_then(|p| {
-            p.request
-                .model
-                .reasoning_profile_id
-                .as_ref()
-                .zip(r.request.model.reasoning_profile_id.as_ref())
-                .map(|(a, b)| a != b)
-        });
-        let adjacent = prev.is_some_and(|p| {
-            p.epoch.is_some()
-                && p.epoch == r.epoch
-                && p.ordinal
-                    .zip(r.ordinal)
-                    .is_some_and(|(a, b)| a.checked_add(1) == Some(b))
-                && p.turn != r.turn
-                && !p.turn_partial
-                && !r.turn_partial
-                && endpoints
-        });
-        let kind = if boundary {
-            AnalysisTransitionKindV1::ContinuationBoundary
-        } else if !r.terminal {
-            AnalysisTransitionKindV1::Unknown
-        } else if prev.is_none() && r.ordinal == Some(1) && !r.turn_partial {
-            AnalysisTransitionKindV1::InitialSelection
-        } else if adjacent && changed == Some(true) {
-            AnalysisTransitionKindV1::BetweenTurnChange
-        } else if adjacent && reasoning == Some(true) {
-            AnalysisTransitionKindV1::ReasoningChange
-        } else if adjacent && changed == Some(false) {
-            AnalysisTransitionKindV1::Unchanged
-        } else if prev.is_some_and(|p| p.turn.is_some() && p.turn == r.turn)
-            && changed == Some(false)
-        {
-            AnalysisTransitionKindV1::Unchanged
-        } else {
-            AnalysisTransitionKindV1::Unknown
-        };
-        let completeness = if !r.terminal || prev.is_some_and(|p| !p.terminal) {
-            "pending"
-        } else if boundary || !adjacent && prev.is_some() {
-            "turn_context_reset"
-        } else if known && endpoints {
-            "complete"
-        } else {
-            "unknown"
-        };
-        let transition = AnalysisTransitionV1 {
-            kind,
-            session_id: own.session_id.clone(),
-            request_id: own.request_id.clone(),
-            previous_session_id: prev.map(|p| p.request.request.session_id.clone()),
-            previous_request_id: prev.map(|p| p.request.request.request_id.clone()),
-            at_ms: own.started_at_ms,
-            previous_model: prev.map(|p| p.request.model.clone()),
-            model: r.request.model.clone(),
-            model_changed: changed,
-            reasoning_changed: reasoning,
-            completeness: completeness.into(),
-            receipt_id: own.receipt_id.clone(),
-            reason: None,
-        };
-        result.push(transition.clone());
-        if own.within_request_fallback == Some(true) {
-            result.push(AnalysisTransitionV1 {
-                kind: AnalysisTransitionKindV1::WithinRequestFallback,
-                previous_session_id: None,
-                previous_request_id: None,
-                previous_model: None,
-                model_changed: Some(true),
-                ..transition
-            });
-        }
-        previous.insert(own.session_id.clone(), r);
+pub(super) fn group_members(
+    db: &Connection,
+    s: &Scope,
+    q: &ObservationAnalysisQueryV1,
+    groups: &mut [AnalysisConversationV1],
+) -> Result<(), Error> {
+    // A list is a bounded member preview. Its exact count and explicit partial
+    // marker lead to the existing paged conversation/request view for detail.
+    let mut remaining = 512usize;
+    for g in groups {
+        let limit = remaining.min(g.member_count as usize);
+        let mut stmt=db.prepare("SELECT m.session_id,m.predecessor,m.gap FROM observation_analysis_members_v1 m WHERE m.scope_id=?1 AND m.anchor_id=?2
+           AND EXISTS(SELECT 1 FROM logical_requests r LEFT JOIN valuation_requests_v2 v ON v.workspace_id=r.workspace_id AND v.request_id=r.request_id
+             JOIN sessions se ON se.workspace_id=r.workspace_id AND se.session_id=r.session_id
+             WHERE r.workspace_id=?4 AND r.session_id=m.session_id AND r.started_at_ms>=?5 AND r.started_at_ms<?6 AND r.rowid<=?7
+               AND (?8 IS NULL OR v.plan_id=?8) AND (?9 IS NULL OR se.agent_id=?9) AND (?10 IS NULL OR r.request_id=?10) AND (?11 IS NULL OR r.request_id=?11))
+           ORDER BY m.session_id LIMIT ?3")?;
+        g.members = stmt
+            .query_map(
+                params![
+                    s.id,
+                    g.analysis_session_id,
+                    limit,
+                    s.workspace,
+                    s.range.effective_from_ms,
+                    s.range.effective_to_ms,
+                    s.source_watermark,
+                    s.plan,
+                    s.agent,
+                    s.initial_request,
+                    q.request_id
+                ],
+                |r| {
+                    Ok(AnalysisMemberV1 {
+                        session_id: r.get(0)?,
+                        predecessor_session_id: r.get(1)?,
+                        gap_before: r.get(2)?,
+                    })
+                },
+            )?
+            .collect::<Result<_, _>>()?;
+        remaining -= g.members.len();
+        g.members_partial = (g.members.len() as u64) < g.member_count;
     }
-    result
+    Ok(())
+}
+
+pub(super) fn hydrate_context(
+    db: &Connection,
+    reader: &ObservationReaderContext,
+    rows: &mut [AnalysisRequestV1],
+) -> Result<(), Error> {
+    let mut stmt=db.prepare("SELECT body_json FROM observation_safe_facts_v2 WHERE workspace_id=?1 AND request_id=?2 ORDER BY rowid LIMIT 1")?;
+    use rusqlite::OptionalExtension;
+    for r in rows {
+        let body: Option<String> = stmt
+            .query_row(
+                params![reader.workspace().as_str(), r.request.request_id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        r.request.routing_context = body
+            .and_then(|s| serde_json::from_str::<ObservationSafeFactV2>(&s).ok())
+            .and_then(|f| f.routing_context)
+            .filter(|c| c.valid())
+            .unwrap_or_else(ObservationRoutingContextV1::unavailable);
+    }
+    Ok(())
 }
 
 pub(super) fn content(
@@ -281,6 +248,20 @@ pub(super) fn content(
             )?
             .collect::<Result<Vec<_>, _>>()?;
         r.content_partial = parts.len() > 16;
+        let deleted:bool=db.query_row("SELECT EXISTS(SELECT 1 FROM observation_request_tombstones_v2 WHERE workspace_id=?1 AND request_id=?2)",params![reader.workspace().as_str(),r.request.request_id],|r|r.get(0))?;
+        r.content_state = if deleted {
+            "deleted"
+        } else if parts.is_empty() {
+            "not_observed"
+        } else if r.content_partial {
+            "partial"
+        } else {
+            "complete"
+        }
+        .into();
+        if parts.is_empty() {
+            r.content_partial = true;
+        }
         for (id, message, direction, kind, media, state) in parts.into_iter().take(16) {
             let mut c = AnalysisContentV1 {
                 content_id: id,
@@ -306,6 +287,11 @@ pub(super) fn content(
                         remaining = remaining.saturating_sub(text.len());
                         c.text = Some(text);
                         c.next_cursor = page.next_cursor;
+                        if c.next_cursor.is_some() {
+                            r.content_partial = true;
+                            c.completeness = "partial".into();
+                            r.content_state = "partial".into();
+                        }
                     }
                     Err(Error::Unavailable) => {
                         c.completeness = "unavailable".into();
@@ -315,6 +301,10 @@ pub(super) fn content(
                 }
             } else {
                 r.content_partial = true;
+                if c.completeness == "complete" {
+                    c.completeness = "reference_only".into();
+                    r.content_state = "partial".into();
+                }
             }
             r.content.push(c);
         }

@@ -126,7 +126,7 @@ pub(super) fn load(
         return Err(Error::Invalid);
     }
     let offset = if let Some(page) = decoded.page {
-        if page.query_digest != page_digest(q)? {
+        if page.query_digest != page_digest(q, &s)? {
             return Err(Error::Invalid);
         }
         page.offset
@@ -141,11 +141,18 @@ pub(super) fn digest(value: &impl Serialize) -> Result<String, Error> {
         .map(|d| d.to_string())
         .map_err(|_| Error::Invalid)
 }
-pub(super) fn page_digest(q: &ObservationAnalysisQueryV1) -> Result<String, Error> {
+pub(super) fn page_digest(q: &ObservationAnalysisQueryV1, s: &Scope) -> Result<String, Error> {
     let mut q = q.clone();
     q.cursor = None;
     q.analysis_scope = None;
     q.time = Default::default();
+    q.plan_id = q.plan_id.or_else(|| s.plan.clone());
+    q.agent_id = q.agent_id.or_else(|| s.agent.clone());
+    q.basis = q.basis.or(s.basis);
+    q.currency = q.currency.or_else(|| s.currency.clone());
+    q.valuation_kind = q.valuation_kind.or(s.valuation_kind);
+    q.reference_binding_id = q.reference_binding_id.or_else(|| s.reference.clone());
+    q.group_by = Some(q.group_by.unwrap_or_default());
     digest(&q)
 }
 pub(super) fn next(
@@ -159,7 +166,7 @@ pub(super) fn next(
         scope: s.id.clone(),
         binding: s.binding.clone(),
         page: Some(Page {
-            query_digest: page_digest(q)?,
+            query_digest: page_digest(q, s)?,
             offset,
         }),
     })
@@ -189,15 +196,16 @@ pub(super) fn create(
     let id = digest(&("analysis-scope/v1", &binding, now, &range, r, e, q, nonce))?;
     let mut stmt=db.prepare("SELECT DISTINCT r.session_id FROM logical_requests r JOIN sessions s ON s.workspace_id=r.workspace_id AND s.session_id=r.session_id
       LEFT JOIN valuation_requests_v2 v ON v.workspace_id=r.workspace_id AND v.request_id=r.request_id
-      WHERE r.workspace_id=?1 AND r.started_at_ms>=?2 AND r.started_at_ms<?3 AND (?4 IS NULL OR v.plan_id=?4) AND (?5 IS NULL OR s.agent_id=?5)")?;
-    let physical = stmt
+      WHERE r.workspace_id=?1 AND r.started_at_ms>=?2 AND r.started_at_ms<?3 AND (?4 IS NULL OR v.plan_id=?4) AND (?5 IS NULL OR s.agent_id=?5) AND (?6 IS NULL OR r.request_id=?6)")?;
+    let mut physical = stmt
         .query_map(
             params![
                 reader.workspace().as_str(),
                 range.effective_from_ms,
                 range.effective_to_ms,
                 q.plan_id,
-                q.agent_id
+                q.agent_id,
+                q.request_id
             ],
             |r| r.get::<_, String>(0),
         )?
@@ -205,6 +213,12 @@ pub(super) fn create(
     let stable_from = expiry
         .saturating_sub(crate::managed_text::RETENTION_MS)
         .saturating_add(1);
+    if let Some(session) = &q.session_id {
+        let known:bool=db.query_row("SELECT EXISTS(SELECT 1 FROM logical_requests WHERE workspace_id=?1 AND session_id=?2 AND started_at_ms>=?3)",params![reader.workspace().as_str(),session,stable_from],|r|r.get(0))?;
+        if known {
+            physical.insert(session.clone());
+        }
+    }
     let (mut all, _) =
         members::resolve(db, reader.workspace().as_str(), r, &physical, stable_from)?;
     let anchors = all

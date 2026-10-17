@@ -1,4 +1,4 @@
-use super::{cost, prices, schema, scope, views};
+use super::{cost, prices, routing, schema, scope, views};
 use crate::{
     LocalObservationStore,
     query_v2::{ObservationV2Error as Error, QueryDeadline},
@@ -61,6 +61,9 @@ impl LocalObservationStore {
             time: Some(s.range.clone()),
             expires_at_ms: Some(s.expires_ms),
             relation_watermark: Some(s.r),
+            numeric_watermark: s.e,
+            price_capture_ref: s.p.clone(),
+            basis: s.basis,
             ..Default::default()
         };
         if q.view.monetary() {
@@ -124,15 +127,16 @@ impl LocalObservationStore {
             page.numeric_watermark = s.e;
             page.price_capture_ref = s.p.clone();
         } else {
-            let rows = views::rows(&tx, &s, q)?;
             match q.view {
                 AnalysisViewV1::Conversations => {
-                    let values = views::conversations(&rows);
+                    let values = views::conversation_groups(&tx, &s, q)?;
                     let (values, next) = views::paginate(self, &s, q, &values, offset)?;
                     page.conversations = values;
+                    views::group_members(&tx, &s, q, &mut page.conversations)?;
                     page.next_cursor = next;
                 }
                 AnalysisViewV1::Conversation => {
+                    let rows = views::rows(&tx, &s, q)?;
                     let values: Vec<_> = rows
                         .into_iter()
                         .filter(|r| {
@@ -144,10 +148,12 @@ impl LocalObservationStore {
                         .collect();
                     let (values, next) = views::paginate(self, &s, q, &values, offset)?;
                     page.requests = values;
+                    views::hydrate_context(&tx, reader, &mut page.requests)?;
                     page.next_cursor = next;
                 }
                 AnalysisViewV1::Routing | AnalysisViewV1::Switches => {
-                    let transitions = views::transitions(&rows);
+                    let rows = views::rows(&tx, &s, q)?;
+                    let transitions = routing::transitions(&rows);
                     for t in &transitions {
                         let key = serde_json::to_value(t.kind)
                             .ok()
@@ -172,6 +178,7 @@ impl LocalObservationStore {
                         .collect();
                     let (values, next) = views::paginate(self, &s, q, &values, offset)?;
                     page.transitions = values;
+                    routing::reasons(&tx, reader, &mut page.transitions)?;
                     page.next_cursor = next;
                 }
                 _ => return Err(Error::Invalid),
@@ -195,6 +202,22 @@ impl LocalObservationStore {
         tx.commit()?;
         if q.view.content() {
             views::content(self, &db, reader, &mut page.requests, now)?;
+        }
+        if page.conversations.iter().any(|c| c.lineage_partial) {
+            page.gaps.push("native_grouping_partial".into());
+            if page.status == AnalysisStatusV1::Ready {
+                page.status = AnalysisStatusV1::Partial;
+            }
+        }
+        if page.requests.iter().any(|r| r.content_partial)
+            || page
+                .costs
+                .iter()
+                .any(|r| r.coverage != ObservationMetricCoverageV2::Complete)
+        {
+            if page.status == AnalysisStatusV1::Ready {
+                page.status = AnalysisStatusV1::Partial;
+            }
         }
         scope::check_live(&db, &s)?;
         reader.check(now, q.view.content(), q.query.is_some())?;
