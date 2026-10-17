@@ -473,6 +473,12 @@ pub enum ObservationQueryError {
     InvalidQuery,
     #[error("observation store is unavailable")]
     Unavailable,
+    #[error("observation query reached its deadline")]
+    ReadTimeout,
+    #[error("observation query readers are busy")]
+    ReaderBusy,
+    #[error("observation text index is unavailable")]
+    IndexUnavailable,
     #[error("observation store is corrupt or incompatible")]
     Corrupt,
     #[error("observation deletion preview is stale")]

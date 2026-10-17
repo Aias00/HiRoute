@@ -20,11 +20,11 @@ fn live_search_large_distinct_source_cache_keeps_indexed_anchors_and_complete_pa
         // Component cache fixture: unlike the repeated single-blob corpus, each
         // row has its own real digest, folded block and production lookup grams.
         // Native acceptance separately proves capture, publication and body reads.
-        for n in 0..30_000 {
+        for n in 0..60_000 {
             let body = if n < 51 {
                 format!("checksum {n}")
             } else {
-                format!("ordinary background e ch {n}")
+                format!("ordinary background e ch 中文 {n}")
             };
             let digest = store
                 .authority
@@ -48,6 +48,13 @@ fn live_search_large_distinct_source_cache_keeps_indexed_anchors_and_complete_pa
                 params![WorkspaceId::DEFAULT, digest],
             )
             .unwrap();
+        }
+        // Component scale: 60k distinct digest-verified sources and 250k
+        // occurrences, including repeated input history. Production-path
+        // acceptance separately reads the preserved installed corpus.
+        for replica in 0..4 {
+            let limit = if replica == 3 { 10_000 } else { 60_000 };
+            tx.execute("INSERT INTO content_instances_v2(workspace_id,content_id,message_instance_id,request_id,direction,fork_id,part_ordinal,content_kind,canonical_media_type,content_blob_digest,has_content_ref,accumulated_byte_count,state,created_at_unix_nanos) SELECT workspace_id,?1||content_id,message_instance_id,request_id,direction,fork_id,part_ordinal+?2,content_kind,canonical_media_type,content_blob_digest,has_content_ref,accumulated_byte_count,state,created_at_unix_nanos FROM content_instances_v2 WHERE workspace_id=?3 AND content_id LIKE 'content-%' ORDER BY content_id LIMIT ?4",params![format!("repeat-{replica}-"),(replica+1)*60_000,WorkspaceId::DEFAULT,limit]).unwrap();
         }
         tx.commit().unwrap();
         // Matching reads source identities and covering content metadata, not
@@ -135,17 +142,12 @@ fn live_search_large_distinct_source_cache_keeps_indexed_anchors_and_complete_pa
                     1,
                     "the shared keyword candidate set must be built once: {plan:?}"
                 );
-                let index = if exact_gram {
-                    "SEARCH b USING COVERING INDEX observation_text_blocks_source "
-                } else {
-                    "SEARCH b USING INDEX observation_text_blocks_source "
-                };
                 assert!(
-                    plan.iter()
-                        .any(|(_, _, step)| step.starts_with(index)
-                            && step.contains("(workspace=?)")),
-                    "source identity scan must precede readiness; short grams must avoid folded bodies: {plan:?}"
+                    plan.iter().any(|(_, _, step)| step
+                        .starts_with("SEARCH b USING INTEGER PRIMARY KEY (rowid=?)")),
+                    "keyword candidates must drive direct block identities, not every workspace source: {plan:?}"
                 );
+                let _ = exact_gram;
             } else if !returned_identities {
                 assert!(
                     plan.iter().any(|(_, _, step)| step

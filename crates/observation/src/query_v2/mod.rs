@@ -51,13 +51,21 @@ pub enum ObservationV2Error {
     Stale,
     #[error("observation query workers are busy")]
     Busy,
+    #[error("observation query reached its deadline")]
+    Timeout,
 }
 
 impl From<rusqlite::Error> for ObservationV2Error {
     fn from(_error: rusqlite::Error) -> Self {
         #[cfg(test)]
         eprintln!("observation query SQLite failure: {_error:?}");
-        Self::Unavailable
+        match _error.sqlite_error_code() {
+            Some(rusqlite::ErrorCode::OperationInterrupted) => Self::Timeout,
+            Some(rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked) => {
+                Self::Busy
+            }
+            _ => Self::Unavailable,
+        }
     }
 }
 
@@ -109,6 +117,8 @@ impl ObservationV2Error {
             Self::Invalid => E::InvalidQuery,
             Self::Stale => E::StalePreview,
             Self::RelationshipConflict => E::RevisionConflict,
+            Self::Busy => E::ReaderBusy,
+            Self::Timeout => E::ReadTimeout,
             _ => E::Unavailable,
         }
     }

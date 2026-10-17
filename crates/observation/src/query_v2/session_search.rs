@@ -81,7 +81,7 @@ pub(super) fn candidate_sql(only_switch: bool, exact_gram: bool) -> String {
     format!(
         "{with}
  SELECT c.workspace_id,c.request_id,MIN(c.rowid) AS content_rowid
- FROM observation_text_blocks_v2 b INDEXED BY observation_text_blocks_source
+ FROM observation_text_blocks_v2 b
  CROSS JOIN content_instances_v2 c INDEXED BY content_instances_v2_search_blob
    ON c.workspace_id=b.workspace AND c.content_blob_digest=b.digest
  WHERE b.workspace=?1

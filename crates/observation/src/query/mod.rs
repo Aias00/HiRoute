@@ -615,6 +615,7 @@ fn read_turns(
                     connection,
                     authority,
                     workspace_id,
+                    session_id,
                     &turn_id,
                     content_mode,
                     &mut body_budget,

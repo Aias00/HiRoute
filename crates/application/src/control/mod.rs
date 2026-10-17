@@ -138,6 +138,19 @@ pub trait ApplicationClockPort: Send + Sync {
     fn local_day_start_ms(&self, _at_ms: i64) -> Result<i64, ControlReadError> {
         Err(ControlReadError::Unavailable)
     }
+    /// Civil-date boundaries in this host's timezone. A named day and a
+    /// relative day are alternatives; a day is not assumed to have 24 hours.
+    fn analysis_local_day(
+        &self,
+        _day: Option<&str>,
+        _days_ago: u8,
+        _at_ms: i64,
+    ) -> Result<hiroute_domain::AnalysisLocalDayV1, ControlReadError> {
+        Err(ControlReadError::Unavailable)
+    }
+    fn local_utc_offset_seconds(&self, _at_ms: i64) -> Result<i32, ControlReadError> {
+        Err(ControlReadError::Unavailable)
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

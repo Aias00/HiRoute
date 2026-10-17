@@ -12,6 +12,7 @@ use hiroute_domain::{
 };
 
 pub(crate) mod control;
+mod time;
 
 #[derive(Clone)]
 pub struct ObservationQueryService {

@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Weak};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use hiroute_application::control::{
     AgentConfigPermissionFindingV1, AgentDiscoveryPort, AgentModelCatalogMetadataSourceV1,
@@ -57,6 +56,7 @@ mod agent_effective_state;
 mod agent_live_check;
 mod candidate_execution;
 mod client_access;
+mod clock;
 mod collaboration_installation;
 mod collaboration_status;
 mod compute_routing;
@@ -1389,27 +1389,6 @@ impl AgentDiscoveryPort for LocalControlAdapter {
                 Ok(agent)
             })
             .collect()
-    }
-}
-
-impl ApplicationClockPort for LocalControlAdapter {
-    fn local_day_start_ms(&self, at_ms: i64) -> Result<i64, ControlReadError> {
-        if at_ms < 0 {
-            return Err(ControlReadError::Corrupt);
-        }
-        // SQLite delegates local calendar conversion to the host timezone. No
-        // observation rows or configurable Plan timezone affect "Today".
-        let clock =
-            rusqlite::Connection::open_in_memory().map_err(|_| ControlReadError::Unavailable)?;
-        clock.query_row("SELECT CAST(strftime('%s',?1,'unixepoch','localtime','start of day','utc') AS INTEGER)*1000",[at_ms/1000],|r|r.get(0)).map_err(|_|ControlReadError::Unavailable)
-    }
-
-    fn now_ms(&self) -> Result<i64, ControlReadError> {
-        let milliseconds = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|_| ControlReadError::Corrupt)?
-            .as_millis();
-        i64::try_from(milliseconds).map_err(|_| ControlReadError::Corrupt)
     }
 }
 

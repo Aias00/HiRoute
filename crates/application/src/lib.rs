@@ -765,9 +765,11 @@ fn map_observation_error(error: ObservationQueryError) -> ErrorCode {
         ObservationQueryError::Unauthorized => ErrorCode::CapabilityDenied,
         ObservationQueryError::NotFound => ErrorCode::ResourceNotFound,
         ObservationQueryError::InvalidQuery => ErrorCode::InvalidArguments,
-        ObservationQueryError::Unavailable | ObservationQueryError::Corrupt => {
-            ErrorCode::ObservationUnavailable
-        }
+        ObservationQueryError::Unavailable
+        | ObservationQueryError::Corrupt
+        | ObservationQueryError::ReadTimeout
+        | ObservationQueryError::ReaderBusy
+        | ObservationQueryError::IndexUnavailable => ErrorCode::ObservationUnavailable,
         ObservationQueryError::StalePreview => ErrorCode::ChangePreviewStale,
         ObservationQueryError::RevisionConflict => ErrorCode::RevisionConflict,
     }
