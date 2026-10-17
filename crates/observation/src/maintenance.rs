@@ -79,8 +79,9 @@ fn run(
     let mut blob_gc = BlobGcSchedule {
         next_due: Instant::now(),
     };
+    let mut interval = MAINTENANCE_INTERVAL;
     while matches!(
-        stop.recv_timeout(MAINTENANCE_INTERVAL),
+        stop.recv_timeout(interval),
         Err(mpsc::RecvTimeoutError::Timeout)
     ) {
         let Some(store) = store.upgrade() else {
@@ -96,11 +97,18 @@ fn run(
         // tick's sixteen requests. Release the writer after each <=200 batch.
         let analysis_start = Instant::now();
         let mut analysis_failed = false;
+        let mut analysis_backlog = false;
         if let Some(now) = now_ms {
             while analysis_start.elapsed() < Duration::from_millis(50) {
                 match store.reconcile_analysis_batch(now) {
-                    Ok(0) => break,
-                    Ok(_) => std::thread::yield_now(),
+                    Ok(0) => {
+                        analysis_backlog = false;
+                        break;
+                    }
+                    Ok(_) => {
+                        analysis_backlog = true;
+                        std::thread::yield_now()
+                    }
                     Err(_) => {
                         analysis_failed = true;
                         break;
@@ -108,6 +116,11 @@ fn run(
                 }
             }
         }
+        interval = if analysis_backlog && !analysis_failed {
+            Duration::from_millis(1)
+        } else {
+            MAINTENANCE_INTERVAL
+        };
         let retention_failed = now_ms
             .map(|now| {
                 store.managed_text_expire_pending(now, 16).is_err()

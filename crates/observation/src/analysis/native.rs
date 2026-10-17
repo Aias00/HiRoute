@@ -181,6 +181,70 @@ fn state_allows(
     Ok(order(&e.proof_observation, &stamp) == Some(Ordering::Greater))
 }
 
+fn retained(
+    db: &Connection,
+    input: &NativeContinuationEvidenceV1,
+) -> Result<Option<NativeContinuationEvidenceV1>, Error> {
+    let mut e = input.clone();
+    let mut ids = e.ids.clone();
+    if let Some(n) = &e.invalid_edges {
+        for pair in &n.edges {
+            ids.extend(pair.iter().cloned());
+        }
+    }
+    let json = serde_json::to_string(&ids).map_err(|_| Error::Invalid)?;
+    let mut stmt=db.prepare("SELECT c.session_id,c.through_ms FROM observation_analysis_cuts_v1 c WHERE c.workspace_id=?1 AND c.session_id IN(SELECT value FROM json_each(?2))")?;
+    let cuts = stmt
+        .query_map(params![e.workspace_id, json], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+        })?
+        .collect::<Result<std::collections::BTreeMap<_, _>, _>>()?;
+    if cuts
+        .get(&e.current_session_id)
+        .is_some_and(|through| e.ingress_at_ms <= *through)
+    {
+        return Ok(None);
+    }
+    if let Some(index) = e.ids.iter().rposition(|id| cuts.contains_key(id)) {
+        let start = (index + 1).min(e.ids.len() - 1);
+        e.ids = e.ids[start..].to_vec();
+        e.complete = false;
+    }
+    if let Some(n) = &mut e.invalid_edges {
+        n.edges
+            .retain(|[p, c]| !cuts.contains_key(p) && !cuts.contains_key(c));
+        if n.edges.is_empty() {
+            e.invalid_edges = None;
+        }
+    }
+    Ok(Some(e))
+}
+fn store_event(db: &Connection, e: &NativeContinuationEvidenceV1, body: &str) -> Result<(), Error> {
+    db.execute("INSERT INTO observation_native_events_v1 VALUES(?1,?2,?3) ON CONFLICT(workspace_id,event_id) DO UPDATE SET body=excluded.body",params![e.workspace_id,e.event_id,body])?;
+    db.execute(
+        "DELETE FROM observation_native_event_members_v1 WHERE workspace_id=?1 AND event_id=?2",
+        params![e.workspace_id, e.event_id],
+    )?;
+    let mut ids = e
+        .ids
+        .iter()
+        .cloned()
+        .collect::<std::collections::BTreeSet<_>>();
+    if let Some(n) = &e.invalid_edges {
+        for [p, c] in &n.edges {
+            ids.insert(p.clone());
+            ids.insert(c.clone());
+        }
+    }
+    for id in ids {
+        db.execute(
+            "INSERT INTO observation_native_event_members_v1 VALUES(?1,?2,?3)",
+            params![e.workspace_id, id, e.event_id],
+        )?;
+    }
+    Ok(())
+}
+
 impl LocalObservationStore {
     pub fn ingest_native_continuation(
         &self,
@@ -212,8 +276,7 @@ impl LocalObservationStore {
         {
             return Err(Error::Invalid);
         }
-        let body = serde_json::to_string(e).map_err(|_| Error::Invalid)?;
-        if body.len() > 32 * 1024 {
+        if serde_json::to_vec(e).map_err(|_| Error::Invalid)?.len() > 32 * 1024 {
             return Err(Error::Invalid);
         }
         let mut db = self.connection.lock();
@@ -221,6 +284,11 @@ impl LocalObservationStore {
             return Err(Error::Unavailable);
         }
         let tx = db.transaction()?;
+        let Some(e) = retained(&tx, e)? else {
+            return Ok(());
+        };
+        let e = &e;
+        let body = serde_json::to_string(e).map_err(|_| Error::Invalid)?;
         let previous:Option<String>=tx.query_row("SELECT body FROM observation_native_events_v1 WHERE workspace_id=?1 AND event_id=?2",params![e.workspace_id,e.event_id],|r|r.get(0)).optional()?;
         if let Some(previous) = previous {
             if previous == body {
@@ -257,10 +325,7 @@ impl LocalObservationStore {
                 put_edge(&tx, e, parent, child, true, &e.proof_observation)?;
             }
         }
-        tx.execute(
-            "INSERT INTO observation_native_events_v1 VALUES(?1,?2,?3)",
-            params![e.workspace_id, e.event_id, body],
-        )?;
+        store_event(&tx, e, &body)?;
         tx.commit()?;
         Ok(())
     }
@@ -275,6 +340,16 @@ pub(crate) fn full_delete(
     if !schema::available(db) {
         return Ok(());
     }
+    for table in [
+        "observation_analysis_attempts_v1",
+        "observation_analysis_recorded_v1",
+        "observation_analysis_requests_v1",
+        "observation_analysis_models_v1",
+        "observation_analysis_reasoning_v1",
+        "observation_analysis_turns_v1",
+    ] {
+        db.execute(&format!("DELETE FROM {table} WHERE workspace_id=?1 AND request_id IN(SELECT request_id FROM logical_requests WHERE workspace_id=?1 AND session_id=?2)"),params![w,session])?;
+    }
     db.execute("INSERT INTO observation_analysis_cuts_v1 VALUES(?1,?2,?3,'full') ON CONFLICT(workspace_id,session_id,kind) DO UPDATE SET through_ms=MAX(through_ms,excluded.through_ms)",params![w,session,through])?;
     let removed=db.execute("DELETE FROM observation_native_relations_v1 WHERE workspace_id=?1 AND (parent_id=?2 OR child_id=?2)",params![w,session])?;
     if removed > 0 {
@@ -285,7 +360,50 @@ pub(crate) fn full_delete(
         params![w, session],
     )?;
     db.execute("DELETE FROM observation_analysis_members_v1 WHERE session_id=?2 AND scope_id IN(SELECT id FROM observation_analysis_scopes_v1 WHERE workspace_id=?1)",params![w,session])?;
-    // Native evidence is retained only as opaque cut metadata after deletion.
-    db.execute("DELETE FROM observation_native_events_v1 WHERE workspace_id=?1 AND (json_extract(body,'$.current_session_id')=?2 OR EXISTS(SELECT 1 FROM json_each(json_extract(body,'$.ids')) WHERE value=?2))",params![w,session])?;
+    // Preserve a still-proven suffix after the deleted bridge, while dropping
+    // its prefix and reverse references. This is retained observation evidence,
+    // never a replacement canonical execution/receipt payload.
+    while redact_events(db, w, Some(session), 200).map_err(|_| rusqlite::Error::InvalidQuery)?
+        == 200
+    {}
     Ok(())
+}
+
+pub(super) fn redact_events(
+    db: &Connection,
+    w: &str,
+    session: Option<&str>,
+    limit: usize,
+) -> Result<usize, Error> {
+    let mut stmt=db.prepare("SELECT DISTINCT e.event_id,e.body FROM observation_native_events_v1 e
+      JOIN observation_native_event_members_v1 m ON m.workspace_id=e.workspace_id AND m.event_id=e.event_id
+      JOIN observation_analysis_cuts_v1 c ON c.workspace_id=m.workspace_id AND c.session_id=m.session_id
+      WHERE e.workspace_id=?1 AND (?2 IS NULL OR m.session_id=?2)
+        AND (m.session_id!=json_extract(e.body,'$.current_session_id') OR json_extract(e.body,'$.ingress_at_ms')<=c.through_ms OR json_array_length(json_extract(e.body,'$.ids'))>1 OR json_array_length(json_extract(e.body,'$.invalid_edges.edges'))>0)
+      ORDER BY e.event_id LIMIT ?3")?;
+    let events = stmt
+        .query_map(params![w, session, limit], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut count = 0;
+    for (id, body) in events {
+        let e: NativeContinuationEvidenceV1 =
+            serde_json::from_str(&body).map_err(|_| Error::Unavailable)?;
+        if let Some(retained) = retained(db, &e)? {
+            let next = serde_json::to_string(&retained).map_err(|_| Error::Unavailable)?;
+            if next != body {
+                store_event(db, &retained, &next)?;
+                count += 1;
+            }
+        } else {
+            db.execute(
+                "DELETE FROM observation_native_events_v1 WHERE workspace_id=?1 AND event_id=?2",
+                params![w, id],
+            )?;
+            db.execute("DELETE FROM observation_native_event_members_v1 WHERE workspace_id=?1 AND event_id=?2",params![w,id])?;
+            count += 1;
+        }
+    }
+    Ok(count)
 }

@@ -46,6 +46,7 @@ pub(crate) fn migrate(db: &mut Connection) -> rusqlite::Result<()> {
             |r| r.get(0),
         )
         .optional()?;
+    let mut needs_cuts = covered.is_none();
     if covered.is_none() {
         // First admission/real missing coverage may scan metadata. A matched
         // ordinary reopen never repopulates or rebuilds this workset.
@@ -64,6 +65,7 @@ pub(crate) fn migrate(db: &mut Connection) -> rusqlite::Result<()> {
     } else {
         let saved:(i64,i64)=tx.query_row("SELECT (SELECT CAST(value AS INTEGER) FROM observation_analysis_meta_v1 WHERE key='covered_u'),(SELECT CAST(value AS INTEGER) FROM observation_analysis_meta_v1 WHERE key='covered_v')",[],|r|Ok((r.get(0)?,r.get(1)?)))?;
         if saved != checkpoint(&tx)? {
+            needs_cuts = true;
             // Old writers with the auxiliary triggers already installed notify
             // precisely. Also recover first-generation or interrupted admission
             // without trusting a checkpoint over missing source revisions.
@@ -78,8 +80,10 @@ pub(crate) fn migrate(db: &mut Connection) -> rusqlite::Result<()> {
     }
     // Retain proven historical cuts even if a compatible writer subsequently
     // clears the typed tombstone. Do not manufacture cuts from empty history.
-    tx.execute("INSERT INTO observation_analysis_cuts_v1 SELECT workspace_id,session_id,deleted_at_ms,'full' FROM observation_tombstones WHERE delete_scope='facts_and_content'
-        ON CONFLICT(workspace_id,session_id,kind) DO UPDATE SET through_ms=MAX(through_ms,excluded.through_ms)",[])?;
+    if needs_cuts {
+        tx.execute("INSERT INTO observation_analysis_cuts_v1 SELECT workspace_id,session_id,deleted_at_ms,'full' FROM observation_tombstones WHERE delete_scope='facts_and_content'
+            ON CONFLICT(workspace_id,session_id,kind) DO UPDATE SET through_ms=MAX(through_ms,excluded.through_ms)",[])?;
+    }
     tx.commit()
 }
 
@@ -107,7 +111,7 @@ fn install_dirty_triggers(db: &Connection) -> rusqlite::Result<()> {
     db.execute_batch("CREATE TRIGGER IF NOT EXISTS analysis_typed_delete_v1 AFTER INSERT ON observation_tombstones
         WHEN NEW.delete_scope='facts_and_content'
         BEGIN INSERT INTO observation_analysis_cuts_v1(workspace_id,session_id,through_ms,kind)
-            VALUES(NEW.workspace_id,NEW.session_id,NEW.deleted_at_ms,'full')
+            VALUES(NEW.workspace_id,NEW.session_id,MIN(NEW.deleted_at_ms,COALESCE((SELECT through_ms FROM observation_session_barriers_v2 b WHERE b.workspace_id=NEW.workspace_id AND b.session_id=NEW.session_id),NEW.deleted_at_ms)),'full')
             ON CONFLICT(workspace_id,session_id,kind) DO UPDATE SET through_ms=MAX(through_ms,excluded.through_ms); END;")
 }
 
@@ -177,6 +181,13 @@ CREATE TABLE IF NOT EXISTS observation_analysis_turns_v1(
  workspace_id TEXT NOT NULL,request_id TEXT NOT NULL,agent_turn_id TEXT NOT NULL,
  ordinal INTEGER NOT NULL,producer_epoch TEXT NOT NULL,partial INTEGER NOT NULL,
  PRIMARY KEY(workspace_id,request_id));
+CREATE TABLE IF NOT EXISTS observation_analysis_models_v1(
+ workspace_id TEXT NOT NULL,request_id TEXT NOT NULL,ordinal INTEGER NOT NULL,
+ native_model TEXT NOT NULL,model_id TEXT NOT NULL,profile_digest TEXT NOT NULL,credential_digest TEXT NOT NULL,
+ PRIMARY KEY(workspace_id,request_id,ordinal));
+CREATE TABLE IF NOT EXISTS observation_analysis_reasoning_v1(
+ workspace_id TEXT NOT NULL,request_id TEXT NOT NULL,model_id TEXT NOT NULL,profile_digest TEXT NOT NULL,reasoning_profile_id TEXT,
+ PRIMARY KEY(workspace_id,request_id,model_id,profile_digest));
 CREATE TABLE IF NOT EXISTS observation_analysis_recorded_v1(
  workspace_id TEXT NOT NULL,request_id TEXT NOT NULL,revision INTEGER NOT NULL,currency TEXT NOT NULL,
  valuation_kind TEXT NOT NULL,amount TEXT,coverage TEXT NOT NULL,
@@ -203,6 +214,10 @@ CREATE INDEX IF NOT EXISTS native_relation_child_v1 ON observation_native_relati
 CREATE TABLE IF NOT EXISTS observation_native_events_v1(
  workspace_id TEXT NOT NULL,event_id TEXT NOT NULL,body TEXT NOT NULL,
  PRIMARY KEY(workspace_id,event_id));
+CREATE TABLE IF NOT EXISTS observation_native_event_members_v1(
+ workspace_id TEXT NOT NULL,session_id TEXT NOT NULL,event_id TEXT NOT NULL,
+ PRIMARY KEY(workspace_id,session_id,event_id));
+CREATE INDEX IF NOT EXISTS native_event_member_event_v1 ON observation_native_event_members_v1(workspace_id,event_id);
 CREATE TABLE IF NOT EXISTS observation_native_states_v1(
  workspace_id TEXT NOT NULL,session_id TEXT NOT NULL,state TEXT NOT NULL,
  observer_id TEXT NOT NULL,sequence TEXT NOT NULL,observed_ms INTEGER NOT NULL,

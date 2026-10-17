@@ -138,7 +138,7 @@ pub(super) fn edge_usable(
     // When old origin is unavailable they only make ancestry unavailable. A
     // ContentOnly deletion retains its source requests and keeps grouping.
     let usable:bool=db.query_row("SELECT
-      EXISTS(SELECT 1 FROM logical_requests WHERE workspace_id=?1 AND request_id=?4 AND session_id=?3 AND started_at_ms>=?5)
+      EXISTS(SELECT 1 FROM logical_requests WHERE workspace_id=?1 AND request_id=?4 AND started_at_ms>=?5)
       AND EXISTS(SELECT 1 FROM logical_requests WHERE workspace_id=?1 AND session_id=?2 AND started_at_ms>=?5)
       AND NOT EXISTS(SELECT 1 FROM observation_analysis_cuts_v1 WHERE workspace_id=?1 AND session_id IN(?2,?3))
       AND NOT EXISTS(SELECT 1 FROM observation_session_barriers_v2 b WHERE b.workspace_id=?1 AND b.session_id IN(?2,?3)

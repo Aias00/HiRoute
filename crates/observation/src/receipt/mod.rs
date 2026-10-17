@@ -37,8 +37,6 @@ pub(crate) fn apply_fact(
     validation::ordered_facts(&facts, false)?;
     ensure_scope(transaction, &facts, envelope)?;
     plan_quality::apply(transaction, envelope)?;
-    crate::analysis::project_turn(transaction, envelope)
-        .map_err(|_| FactProjectionError::Storage)?;
     if matches!(envelope.fact, ExecutionFactV1::RequestFinished { .. }) {
         let receipt = build_receipt(transaction, &facts, None)?;
         immutable_receipt_insert(transaction, &receipt)?;

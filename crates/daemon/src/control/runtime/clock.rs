@@ -29,18 +29,22 @@ impl ApplicationClockPort for LocalControlAdapter {
     }
 
     fn local_utc_offset_seconds(&self, at_ms: i64) -> Result<i32, ControlReadError> {
-        if at_ms < 0 {
-            return Err(ControlReadError::Corrupt);
-        }
-        let clock = Connection::open_in_memory().map_err(|_| ControlReadError::Unavailable)?;
-        clock
-            .query_row(
-                "SELECT CAST(strftime('%s',?1,'unixepoch','localtime') AS INTEGER)-?1",
-                [at_ms / 1000],
-                |r| r.get(0),
-            )
-            .map_err(|_| ControlReadError::Unavailable)
+        utc_offset(at_ms)
     }
+}
+
+fn utc_offset(at_ms: i64) -> Result<i32, ControlReadError> {
+    if at_ms < 0 {
+        return Err(ControlReadError::Corrupt);
+    }
+    let clock = Connection::open_in_memory().map_err(|_| ControlReadError::Unavailable)?;
+    clock
+        .query_row(
+            "SELECT CAST(strftime('%s',?1,'unixepoch','localtime') AS INTEGER)-?1",
+            [at_ms / 1000],
+            |r| r.get(0),
+        )
+        .map_err(|_| ControlReadError::Unavailable)
 }
 
 fn local_day(
@@ -64,4 +68,34 @@ fn local_day(
         "SELECT CAST(strftime('%s',?1,'utc') AS INTEGER)*1000,CAST(strftime('%s',?1,'+1 day','utc') AS INTEGER)*1000",
         [civil], |r| Ok(AnalysisLocalDayV1 { from_ms: r.get(0)?, to_ms: r.get(1)? }),
     ).map_err(|_| ControlReadError::Unavailable)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn civil_day_boundaries_follow_both_dst_transitions() {
+        if std::env::var_os("HIROUTE_CLOCK_DST_CHILD").is_none() {
+            let output=std::process::Command::new(std::env::current_exe().unwrap())
+                .env("TZ","America/New_York").env("HIROUTE_CLOCK_DST_CHILD","1")
+                .args(["--exact","control::runtime::clock::tests::civil_day_boundaries_follow_both_dst_transitions","--nocapture"])
+                .output().unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stdout)
+            );
+            return;
+        }
+        for (day, hours, from_offset, to_offset) in [
+            ("2026-03-07", 24, -18000, -18000),
+            ("2026-03-08", 23, -18000, -14400),
+            ("2026-11-01", 25, -14400, -18000),
+        ] {
+            let range = local_day(Some(day), 0, 1).unwrap();
+            assert_eq!(range.to_ms - range.from_ms, hours * 3_600_000, "{day}");
+            assert_eq!(utc_offset(range.from_ms).unwrap(), from_offset);
+            assert_eq!(utc_offset(range.to_ms).unwrap(), to_offset);
+        }
+    }
 }
