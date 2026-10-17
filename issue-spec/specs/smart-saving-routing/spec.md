@@ -9,7 +9,8 @@ It uses the shared decision/competence policy without exposing category branches
 
 ### Requirement: Two groups are ordered relay lists, not escalation ladders
 
-The editor MUST present judgment source, economy group, and primary group. Each
+The editor MUST label this mode Difficulty routing and present judgment source,
+Regular (formerly Economy) group, and Primary group. Each
 group has ordered availability-relay candidates; it has no independent competence
 upgrade chain. New configuration favors a decision-model source but requires the
 user to select a saved connection before publication. Users may explicitly choose
@@ -21,6 +22,15 @@ generates no model-derived competence score, and hides probability/rubric contro
 while retaining their parked edits. Built-in and extension modes share
 [decision policy](../decision-services/spec.md); provider-specific hidden thresholds
 cannot override the published plan.
+
+#### Scenario: Existing route uses the Familiar threshold
+
+- **WHEN** a saved smart-saving route with threshold 0.80 is opened
+- **THEN** the editor MUST display Difficulty routing and Familiar without changing
+  the stored mode, candidate ordering or selected decision source.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/140#issuecomment-6236473660
 
 ### Requirement: Degree and competence thresholds are independent
 
@@ -82,6 +92,114 @@ model, native reasoning, position, opening probability/threshold, protection tar
 and any subsequent availability relay. Later assessment belongs to the earlier
 stage and its frozen rubric. Current drafts cannot reinterpret history; aggregation,
 coverage, and drill-down follow [session history](../session-history/spec.md).
+
+### Requirement: Trust levels express a routing choice, separately from evidence
+
+Difficulty routing and two-group categories MUST offer Trial 0.90, Familiar 0.80,
+Trusted 0.65 and Hands-off 0.50 from one shared level definition. The existing 0.80
+threshold displays Familiar. A nonmatching value remains an exact Custom value;
+reading or opening an editor MUST NOT round it. Heuristic routing offers no trust
+levels. The stored mode remains `smart_saving`, the editor keeps its `economy` candidate field,
+and the execution group remains `regular`. Existing Economy references name this same group.
+
+Changing a level changes only the simple-probability threshold. It MUST NOT alter
+competence floors, permissions, tool approvals or sandbox settings. The editor
+states the active revision's evidence separately and explicitly identifies zero
+samples. Keeping a level is a normal choice, not incomplete onboarding.
+
+#### Scenario: Custom threshold and adjacent suggestions
+
+- **WHEN** a route has threshold 0.72
+- **THEN** it displays Custom 0.72 until an explicit edit; an upward suggestion is
+  0.65 and a downward suggestion is 0.80, without silently replacing the value.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/140#issuecomment-6235185303
+
+### Requirement: Threshold replay previews recorded stages
+
+While a user chooses a trust level or threshold for a published difficulty-routing Plan or two-group branch, HiRoute SHALL show a replay preview computed from that Plan's retained recorded stages in a disclosed scope (published revision and time window, defaulting to the active revision's last seven days). For a candidate threshold t, a stage SHALL count as regular when its recorded decision-model simple probability is at least t and it was not selected for low-competence protection, and as primary otherwise. Stages selected for low-competence protection SHALL be counted as primary and reported separately, because their protection depends on earlier scores. Stages without a recorded model probability, including heuristic, degree-unavailable, decision-fallback, single-group and availability-relay selections, SHALL be excluded and counted by reason. The preview SHALL show regular and primary counts and shares among included stages, the excluded counts, the recorded share at the threshold actually in force, and a label that it is an estimate from history rather than a prediction. The preview SHALL state that it estimates how recorded work would have been allocated and does not establish competence on stages that the regular group did not handle. The preview SHALL be computed by the backend over the complete in-scope population or return a classified retryable failure; it SHALL NOT call a model, rerun a judgment or change the Plan. The same facts SHALL be available through the public observation CLI with help and schema discovery.
+
+#### Scenario: Preview at a lower threshold
+
+- **WHEN** a Plan has 100 in-scope stages with recorded probabilities, 10 low-competence protections and 20 heuristic stages, and the user previews a lower threshold
+- **THEN** the preview counts the 10 protections as primary, excludes the 20 heuristic stages with their reason, and reports the regular share among the remaining included stages at the new threshold.
+
+#### Scenario: Equality meets the threshold
+
+- **WHEN** a recorded stage probability equals the candidate threshold
+- **THEN** the stage counts as regular, consistent with the runtime rule that equality meets the threshold.
+
+#### Scenario: No usable history
+
+- **WHEN** the scope contains no stage with a recorded decision-model probability
+- **THEN** the preview states that no recorded evidence is available and shows no estimated shares instead of zero.
+
+#### Scenario: Higher level from lower-level history
+
+- **WHEN** a Plan's history was recorded at the Trial level and the user previews Hands-off
+- **THEN** the preview shows the estimated regular share and states that the stages it would newly send to the regular group were handled by the primary group and carry no regular-group competence evidence.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/140#issuecomment-6235187673
+
+### Requirement: Suggestions require complete, revision-scoped evidence
+
+Suggestions MUST use the full retained active published revision, not a sample or
+just the displayed time window. At least 30 complete-scored Regular stages are
+required in the evaluated direction. A competence rate below 70% suggests the
+adjacent more conservative level first, without an upward coverage gate. At the
+most conservative boundary, Return to previous routing is offered only when a
+currently mapped Agent preset has a verified recoverable configuration; otherwise
+the suggestion is to change the Regular model.
+
+An upward suggestion requires competence at least 85%, scoring coverage at least
+60%, and complete scores from at least three sessions. At Hands-off, qualifying
+evidence may suggest division. Rates use the counts defined in
+[session history](../session-history/spec.md). Custom thresholds use the nearest
+strict neighbour; a missing neighbour cannot cause an invented numeric jump.
+
+A model-update announcement for a Regular candidate scopes upward/division evidence
+to stages beginning after that announcement day in UTC. Older evidence stays
+visible and still informs downward evaluation. Announcement dates are editorial
+boundaries, not provider deployment/version proof. Removing an announcement does
+not manufacture a version identity. A failed or oversized read is retryable and
+MUST NOT appear as no suggestion. Home, navigation and Plan-list indicators use
+the same suggestion result. Applying a suggestion opens an ordinary editable
+change; it never silently publishes.
+
+#### Scenario: High rate with incomplete coverage or only old-version evidence
+
+- **WHEN** historical competence is high but coverage is below 60%, fewer than
+  three sessions contribute complete scores, or a current update has no qualifying
+  post-announcement scores
+- **THEN** the UI retains history and explains the missing evidence, with no upward
+  or division suggestion; observed low scores and protections remain visible.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/140#issuecomment-6235188590
+
+### Requirement: User-facing names describe difficulty routing
+
+User-facing Desktop text, website guides, README files and user documentation SHALL call the smart-saving mode "Difficulty routing" (按难度分流), described as giving simple tasks to the regular model and giving complex tasks, or the next turn after a stage that fell below the floor, to the primary model. They SHALL call its groups "Regular" (常规) and "Primary" (主力), the same names that two-group custom branches use. Text SHALL NOT describe the mode as saving money, because a regular model can cost more than the primary model. The new-routing dialog SHALL keep the four modes and SHALL offer "Try a new model" as a template of difficulty routing. Further templates MAY be added only as prefilled difficulty-routing drafts without new semantics. Stored identifiers, CLI arguments, JSON values, schemas, machine-readable output and routing semantics SHALL remain unchanged, including `smart_saving`, `smart` and the stored economy group. Human-readable CLI help MAY show the display name beside the identifier.
+
+#### Scenario: Existing Plan after upgrade
+
+- **WHEN** a user opens a Plan saved as `smart_saving` before this change
+- **THEN** Desktop shows it as Difficulty routing with Regular and Primary groups, and its stored content, digest and runtime behaviour are unchanged.
+
+#### Scenario: CLI compatibility
+
+- **WHEN** a script creates a Plan with the existing smart-saving CLI arguments and reads its JSON output
+- **THEN** the command and output are byte-compatible with the previous release apart from human-readable help text.
+
+#### Scenario: Expensive regular model
+
+- **WHEN** a user places a model that costs more than the primary model in the regular group
+- **THEN** no Desktop text calls the mode or the group a saving, and the model performance view shows any positive cost difference as additional cost.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/140#issuecomment-6236473660
 
 ## Implementation references
 

@@ -163,6 +163,33 @@ later scoring remains attributed to the old stage. Plan/session presentation fre
 probability, thresholds, selection/protection/relay reasons, and actual positions,
 using the same [quality queries](../session-history/spec.md).
 
+### Requirement: Division drafts disclose the change in protection
+
+Model performance MAY open separate editable unpublished division drafts without
+saving, publishing, changing Agent mappings or starting a Worker. A branch draft
+uses the former Primary for design/planning and the trial model for implementation,
+with editable conditions and an optional Primary group for implementation. It
+copies the trial's decision and competence policy.
+
+A delegated draft requires explicit executor selection, shows dependency results
+and orders DeepSeek Harness first for DeepSeek models without preselection. Both
+single-group task categories use the trial model and retain assessment policy.
+Before publication a summary derived from the draft MUST distinguish two-group
+next-turn Primary protection from single-group/Worker low-score recording without
+an upgrade group. Parent models and other executors do not rescue that Worker.
+Completed tasks are not competence results. Evidence from previously routed trial
+stages does not validate work that only Primary handled.
+
+#### Scenario: Keep Primary for implementation
+
+- **WHEN** the user enables Primary protection for the implementation category
+- **THEN** the draft contains that two-group category and its publication summary
+  describes next-turn protection; an unchecked single-group category states that
+  low scores are recorded without an upgrade.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/140#issuecomment-6235189421
+
 ## Implementation references
 
 - [Decision domain](../../../crates/domain/src/routing/decision.rs) and

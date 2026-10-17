@@ -306,6 +306,101 @@ HiRoute SHALL retain the physical identity and exact request/receipt attribution
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/125#issuecomment-6229104803
 
+### Requirement: Trial evidence discloses scoring coverage and execution scope
+
+Trust reports MUST scope by Plan, revision, time and optional category. Rows retain
+execution group, exact nullable model/reasoning identity and attribution; optional
+executor grouping distinguishes the main Agent, delegated Harness and unknown.
+Mixed identity cannot be credited to a single model. Complete and partial scores
+are classified first. A stage without a score is awaiting assessment only when no
+later turn exists and its Worker task is not terminal; other unscored stages stay
+unscored. Coverage is complete scores divided by executions; competence is complete
+scores meeting their frozen floor divided by complete scores. Partial, awaiting
+and unscored stages enter coverage's denominator, not competence's denominator.
+
+Reports disclose protection triggers, availability relay, recorded request duration
+and output rate where available, contributing sessions and retained excerpts.
+Exact-row drill-down preserves null identity and optional executor filters while
+leaving the full-scope quality summary unchanged. Rolling aliases, dynamic routes
+and unknown identities state that evidence may mix provider versions. Announcements
+split earlier/day/later evidence without certifying an executed version.
+
+Executor task outcomes are a separate population: tasks first submitted within the
+selected Plan/revision/time scope, using the latest run state, including tasks with
+no execution stage. Missing latest-run evidence is unknown. Continued tasks are
+identified independently. Completion is neither competence nor delivery acceptance;
+completion without a complete score remains unscored. Different executors are not
+ranked because their task populations differ. Unavailable cost comparisons are
+explicitly unavailable, never zero or a claimed saving.
+
+#### Scenario: Completed Worker without an assessment
+
+- **WHEN** a Worker succeeds but its model stage has no complete assessment
+- **THEN** task completion and unscored execution are reported separately; neither
+  supplies competence evidence for raising trust.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/140#issuecomment-6235188590
+
+### Requirement: The routing timeline re-emits late evidence without duplicates
+
+Session detail MUST show actual agent-turn selection, recorded boundary, group,
+model/reasoning, probability/threshold, continuations, relay, assessments and request
+usage/cost alongside retained conversation. Context invalidation establishes a
+context-rebuild boundary; a proven native-turn change with a fresh decision can
+establish a new-user boundary. Otherwise the boundary stays unknown. These are
+read-time projections of existing records, not new inferred execution facts.
+
+The opening request provides stable display identity before the turn-ending fact
+arrives. Late assessments and valuations update that turn. Incremental cursors MUST
+be authenticated and bound to reader, session, page size and retained visibility;
+pagination freezes fact, valuation and link positions until the changed page is
+consumed. Reconnect deduplicates equal content digests. Cleared or expired scope
+invalidates the cursor. Unknown usage/cost stays unknown, with per-model currency
+and valuation basis preserved.
+
+Reads share authorized observation limits and a 500 ms storage deadline, returning
+an explicit retryable scope error beyond 10,000 requests, 50,000 facts or a 1 MiB
+response rather than sampled evidence. Visible Desktop timelines refresh every two
+seconds; hidden views stop polling. The CLI's `--follow` emits NDJSON changes using
+the same query and preserves terminal errors.
+
+#### Scenario: Assessment arrives during pagination
+
+- **WHEN** an earlier turn receives a score after the first page was delivered
+- **THEN** the remaining frozen page is delivered first, followed by the updated
+  earlier turn once; reconnect cannot duplicate its unchanged projection.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/140#issuecomment-6235190304
+
+### Requirement: Model performance compares a model across executing Agents
+
+For a model and reasoning configuration in scope, the model performance view SHALL be able to group its stage evidence by executing Agent. The executing Agent is the main Agent of a connected session, or the executor of a delegated task such as DeepSeek Harness, and each group SHALL name the Plan that produced it. Each group SHALL show stages, scored and unrated counts, competence rate and observed duration on the same definitions as the rest of the view, and SHALL drill down to its sessions or tasks. For a Plan with task delegation enabled, the view SHALL also show delegated task outcomes in scope: submitted, completed, failed, cancelled and continued. These SHALL use the existing task projections. Task outcomes SHALL be shown separately from competence: a completed task without a complete valid score SHALL count as unscored, not as competent, and task completion SHALL NOT be presented as delivery acceptance. An executing Agent's name does not identify its installed version, and evidence from one executing Agent SHALL NOT be presented as evidence for another. Single-group custom branches SHALL show their recorded assessments under these definitions even though they do not judge difficulty. The view SHALL state that the groups handled different tasks, and SHALL NOT rank Agents or harnesses. Unknown executing identity SHALL remain a separate group.
+
+#### Scenario: Same model in two Agents
+
+- **WHEN** DeepSeek V4.1 Flash served stages in Claude Code through a difficulty-routing Plan and in DeepSeek Harness through a delegation Plan
+- **THEN** the view shows one group per executing Agent with its Plan, rates and counts, together with the note that the tasks differ, and opening a group lists its sessions or tasks.
+
+#### Scenario: Delegated task outcomes
+
+- **WHEN** a delegation Plan's scope contains eleven tasks, of which ten completed and one was cancelled
+- **THEN** the view shows those outcome counts from the task projections, and selecting cancelled opens that task.
+
+#### Scenario: Unknown executor
+
+- **WHEN** some stages lack a recorded executing identity
+- **THEN** those stages appear in a separate unknown group and are not merged into either Agent.
+
+#### Scenario: Completed but unscored task
+
+- **WHEN** a delegated task completed and its only stage has no complete valid score
+- **THEN** the view counts the task as completed and its stage as unscored, and the competence rate does not change.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/140#issuecomment-6236472910
+
 ## Implementation references
 
 - [Native identity resolver](../../../crates/gateway/src/context_hold/identity.rs) and

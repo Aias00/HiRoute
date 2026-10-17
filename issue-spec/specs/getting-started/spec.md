@@ -170,6 +170,63 @@ and exits. Deleting the App alone preserves data; optional cleanup cannot delete
 projects or native Agent credentials. Package construction alone is not signing,
 notarization, native installation, or live-Agent evidence.
 
+### Requirement: New-model trials compose the existing protected workflow
+
+Home MUST show at most six featured model entries with origin, availability and
+version disclosure; without featured entries it offers unused executable or
+connectable embedded models. Models needing a newer client cannot start a trial.
+Home and routing creation open one flow for trial model, in-place connection,
+Primary model, decision connection, selected Agent/presets and review.
+
+A registered connection must observe the selected model before continuing. Protected
+input/check/save and native subscription import retain their existing authority.
+Primary is prefilled only from a recorded unambiguous fixed-model resolution; a
+native alias does not identify a model version. Decision connections can be reused
+or created in place; this flow offers no heuristic classification. The editable
+review begins at Trial 0.90 with explicit low-progress/corrected-result competence
+criteria, both model groups, saved connections and the proposed mapping scope.
+
+Confirmation saves the ordinary draft, publishes it after its exact save and model
+facts are confirmed, then uses normal Agent Preview/Apply. Mapping only changes the
+selected presets/default; unrelated mappings, permissions and collaboration stay
+intact. Flow IDs are retained in memory across retries without new daemon trial
+state. Uncertain replies reconcile the same operation and exact resulting revision,
+never the preceding successful operation. Completed connections, drafts and Plans
+remain visible after later failures. A published Plan can be mapped from Routing
+after reload without recreating it.
+
+#### Scenario: Publication succeeds but its reply is lost
+
+- **WHEN** saving a trial draft succeeds and the subsequent publication reply is lost
+- **THEN** refresh MUST verify the publication operation and exact Plan revision,
+  without repeating either mutation or treating the draft save as publication;
+  Agent mapping remains a separate reviewed action.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/140#issuecomment-6235502571
+
+### Requirement: Home lists routing suggestions that need attention
+
+The Desktop Home "Needs your attention" section SHALL list each current level suggestion for difficulty-routing Plans and two-group branches: step up, step down, create a division draft, or return to previous routing. Suggestions SHALL come from the same backend computation as the model performance view. Each item SHALL name the Plan and its published trust level, state the facts behind the suggestion (scored stages, scoring coverage, contributing sessions, competence rate, protection count and, for a level change, the replay share at the suggested level), carry the version disclosure and the actual suggestion evidence window/cohort of the model performance view when they apply, and offer two actions. "View evidence" opens the Plan's model performance view. The primary action opens the existing draft, division-draft or Agent settings Preview/Apply. Neither action SHALL change routing until the user publishes or applies. An item SHALL disappear when its condition no longer holds for the active published revision. While Home is not shown, navigation SHALL mark that suggestions exist. Suggestions SHALL be presented as optional; keeping the current level SHALL remain a valid outcome, and trust levels SHALL NOT be presented as onboarding progress or completion. When no suggestion applies, the section SHALL say so without inventing progress. A failed suggestion read SHALL be shown as a retryable read failure and SHALL NOT be shown as an absence of suggestions.
+
+#### Scenario: Two Plans, two directions
+
+- **WHEN** one Plan qualifies to step up and another to step down
+- **THEN** Home lists both items with their facts, and opening the step-up draft changes nothing until it is published.
+
+#### Scenario: Condition resolved
+
+- **WHEN** the user publishes the suggested level for a Plan
+- **THEN** that Plan's item disappears, and no new suggestion appears for it until the new revision reaches the minimum scored stages.
+
+#### Scenario: Read failure
+
+- **WHEN** the suggestion query fails while other Home reads succeed
+- **THEN** the section reports the failed read with a retry, and the other Home content stays visible.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/140#issuecomment-6236472105
+
 ## Implementation references
 
 - [Native updater](../../../apps/desktop/src-tauri/src/updates.rs) and
