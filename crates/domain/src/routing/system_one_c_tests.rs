@@ -59,6 +59,26 @@ fn frozen_content_and_effective_authoring_must_both_agree() {
 }
 
 #[test]
+fn frozen_c_serialization_survives_key_normalization_between_consumers() {
+    let protocol = NativeProtocolV1::default();
+    let mut judgment = JudgmentSettingsV1::default();
+    protocol.stock_assessment(&mut judgment);
+    let frozen = FrozenNativeProtocolV1::freeze(
+        &protocol,
+        judgment.degree.definition().into(),
+        [(super::super::SMART_SAVING_SCOPE_ID.into(), judgment)],
+    )
+    .unwrap();
+    let before = serde_json::to_vec(&frozen).unwrap();
+    // Model a receiver that sorts generic objects, including a binary built
+    // without serde_json/preserve_order. Typed outer field order stays intact.
+    let wire = crate::canonicalize_json(serde_json::to_value(&frozen).unwrap());
+    let recovered: FrozenNativeProtocolV1 = serde_json::from_value(wire).unwrap();
+    recovered.validate().unwrap();
+    assert_eq!(serde_json::to_vec(&recovered).unwrap(), before);
+}
+
+#[test]
 fn legacy_omission_and_rubric_digest_remain_byte_stable() {
     let bytes = include_str!("authoring/fixtures/released-plan-editor.v2.json");
     let fixture: Value = serde_json::from_str(bytes).unwrap();
