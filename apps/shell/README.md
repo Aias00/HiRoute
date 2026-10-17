@@ -29,7 +29,9 @@ generic plugin or Local Control access. Tauri's native postMessage fallback keep
 host IPC available under the console's strict HTTP CSP.
 
 Build the installer through `scripts/build-release.py --windows-desktop` on the
-native x64 Windows producer. It stages a verified standalone package under the
+native x64 Windows producer. Silent NSIS installation (`/S`) applies default
+login/tray choices with no prompts. This is the only offered Windows install
+package; headless archives stay internal and SCM installation is not offered. It stages a verified standalone package under the
 ignored `src-tauri/resources/standalone` directory. Do not hand-populate or publish
 that staging directory. The vendored NSIS template and hooks are explained in
 [`installer/README.md`](src-tauri/installer/README.md).

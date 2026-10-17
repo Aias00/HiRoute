@@ -382,7 +382,7 @@ Function PageLeaveReinstall
       ${EndIf}
 
       ; Other erros? show generic error message and return to select un/reinstall page
-      MessageBox MB_ICONEXCLAMATION "$(unableToUninstall)"
+      MessageBox MB_ICONEXCLAMATION "$(unableToUninstall)" /SD IDOK
       Abort
     ${EndIf}
   reinst_done:
@@ -483,7 +483,7 @@ Function .onInit
   IntOp $1 $1 & 65535
   ${If} $2 = 0
   ${OrIf} $1 != 34404
-    MessageBox MB_ICONSTOP "HiRoute Desktop requires a native Windows x64 host."
+    MessageBox MB_ICONSTOP "HiRoute Desktop requires a native Windows x64 host." /SD IDOK
     Abort
   ${EndIf}
   InitPluginsDir
@@ -500,7 +500,7 @@ Function .onInit
   StrCpy $HiRouteInstallMutex $2
   ${If} $2 = 0
   ${OrIf} $0 = 183
-    MessageBox MB_ICONSTOP "Another HiRoute installation or uninstall is active for this account."
+    MessageBox MB_ICONSTOP "Another HiRoute installation or uninstall is active for this account." /SD IDOK
     Abort
   ${EndIf}
   {{#each resources}}
@@ -514,24 +514,32 @@ Function .onInit
   Pop $0
   Pop $1
   ${If} $0 != 0
-    MessageBox MB_ICONSTOP "HiRoute cannot install over this background service. $1"
+    MessageBox MB_ICONSTOP "HiRoute cannot install over this background service. $1" /SD IDOK
     Abort
   ${EndIf}
-  !insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
+  ${IfNot} ${Silent}
+    !insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
+  ${EndIf}
   nsExec::ExecToStack '"$PLUGINSDIR\hiroute-preflight.exe" --installer-recover'
   Pop $0
   Pop $1
   ${If} $0 != 0
-    MessageBox MB_ICONSTOP "HiRoute needs installation recovery. Existing data and changed files are preserved."
+    MessageBox MB_ICONSTOP "HiRoute needs installation recovery. Existing data and changed files are preserved." /SD IDOK
     Abort
   ${EndIf}
-  ExecWait '"$PLUGINSDIR\hiroute-preflight.exe" --installer-options' $0
-  ${If} $0 > 3
-    MessageBox MB_ICONSTOP "HiRoute could not read the existing installation options."
-    Abort
+  ${If} ${Silent}
+    ; Unattended installations always apply the documented default choices.
+    StrCpy $HiRouteLoginChoice 1
+    StrCpy $HiRouteTrayChoice 2
+  ${Else}
+    ExecWait '"$PLUGINSDIR\hiroute-preflight.exe" --installer-options' $0
+    ${If} $0 > 3
+      MessageBox MB_ICONSTOP "HiRoute could not read the existing installation options." /SD IDOK
+      Abort
+    ${EndIf}
+    IntOp $HiRouteLoginChoice $0 & 1
+    IntOp $HiRouteTrayChoice $0 & 2
   ${EndIf}
-  IntOp $HiRouteLoginChoice $0 & 1
-  IntOp $HiRouteTrayChoice $0 & 2
   ${GetOptions} $CMDLINE "/P" $PassiveMode
   ${IfNot} ${Errors}
     StrCpy $PassiveMode 1
@@ -685,7 +693,7 @@ Section WebView2
             ${If} $1 = 0
               DetailPrint "$(webview2InstallSuccess)"
             ${Else}
-              MessageBox MB_ICONEXCLAMATION|MB_ABORTRETRYIGNORE "$(webview2InstallError)" IDIGNORE ignore IDRETRY update_webview
+              MessageBox MB_ICONEXCLAMATION|MB_ABORTRETRYIGNORE "$(webview2InstallError)" /SD IDABORT IDIGNORE ignore IDRETRY update_webview
               Quit
               ignore:
             ${EndIf}
@@ -821,7 +829,7 @@ FunctionEnd
 
 Function un.onInit
   StrCmp $INSTDIR "$LOCALAPPDATA\Programs\HiRoute" +3
-    MessageBox MB_ICONSTOP "HiRoute uninstall directory is invalid. No files were removed."
+    MessageBox MB_ICONSTOP "HiRoute uninstall directory is invalid. No files were removed." /SD IDOK
     Abort
   nsExec::ExecToStack '"$INSTDIR\hiroute-shell.exe" --installer-mutex'
   Pop $0
@@ -834,7 +842,7 @@ Function un.onInit
   StrCpy $HiRouteInstallMutex $2
   ${If} $2 = 0
   ${OrIf} $0 = 183
-    MessageBox MB_ICONSTOP "Another HiRoute installation or uninstall is active for this account."
+    MessageBox MB_ICONSTOP "Another HiRoute installation or uninstall is active for this account." /SD IDOK
     Abort
   ${EndIf}
   !insertmacro SetContext
@@ -862,7 +870,9 @@ Section Uninstall
     !insertmacro NSIS_HOOK_PREUNINSTALL
   !endif
 
-  !insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
+  ${IfNot} ${Silent}
+    !insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
+  ${EndIf}
 
   ; Delete the app directory and its content from disk
   ; Copy main executable

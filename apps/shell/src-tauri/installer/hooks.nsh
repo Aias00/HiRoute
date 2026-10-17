@@ -32,13 +32,13 @@ FunctionEnd
 
 !macro NSIS_HOOK_PREINSTALL
   StrCmp $INSTDIR "$LOCALAPPDATA\Programs\HiRoute" +3
-    MessageBox MB_ICONSTOP "HiRoute install directory is invalid. No product files were written."
+    MessageBox MB_ICONSTOP "HiRoute install directory is invalid. No product files were written." /SD IDOK
     Abort
   nsExec::ExecToStack '"$PLUGINSDIR\hiroute-preflight.exe" --installer-prepare "$PLUGINSDIR\hiroute-package.json"'
   Pop $0
   Pop $1
   ${If} $0 != 0
-    MessageBox MB_ICONSTOP "HiRoute could not prepare a verified backup. Existing data is preserved."
+    MessageBox MB_ICONSTOP "HiRoute could not prepare a verified backup. Existing data is preserved." /SD IDOK
     Abort
   ${EndIf}
 !macroend
@@ -63,7 +63,7 @@ FunctionEnd
   ${EndIf}
   ${If} $0 != 0
     hiroute_install_failed:
-    MessageBox MB_ICONSTOP "HiRoute installation did not complete. Existing data is preserved. $1"
+    MessageBox MB_ICONSTOP "HiRoute installation did not complete. Existing data is preserved. $1" /SD IDOK
     Abort
   ${EndIf}
 !macroend
@@ -86,7 +86,7 @@ FunctionEnd
     ${EndIf}
     ${If} $0 != 0
       hiroute_uninstall_failed:
-      MessageBox MB_ICONSTOP "HiRoute was not removed. Resolve any Agent restore decisions or active work, then retry. $1"
+      MessageBox MB_ICONSTOP "HiRoute was not removed. Resolve any Agent restore decisions or active work, then retry. $1" /SD IDOK
       Abort
     ${EndIf}
   ${EndIf}
