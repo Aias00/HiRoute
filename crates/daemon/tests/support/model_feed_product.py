@@ -160,6 +160,7 @@ def run(repository):
         status = product.cli('models', 'feed', 'refresh')['data']
         assert status['held']['sequence'] == 17 and status['counts']['applied'] >= 3, status
         stage = 'registered-check-save-publish'
+        print(json.dumps({'scenario': 'installed-signed-feed-lifecycle', 'stage': stage}), flush=True)
         candidate_ref = 'candidate/feed/product'
         product.register_secret(candidate_ref, 'feed-product-key')
         product.secrets.add('feed-product-key')
@@ -172,7 +173,7 @@ def run(repository):
         save_candidate(product, checked['candidate'], None, 'feed-product-save')
         source = next(x for x in product.cli('compute', 'list')['data']['sources'] if x['display_name'] == 'Feed product connection')
         binding = source['models'][0]['binding_id']
-        editor = {'display_name': 'Feed product route', 'purpose': 'Frozen feed execution', 'custom_alias': 'feed-product',
+        editor = {'schema': 'hiroute.plan-editor/v2', 'display_name': 'Feed product route', 'purpose': 'Frozen feed execution',
             'mode': 'fixed_model', 'candidates': [{'binding_id': binding, 'reasoning': {'kind': 'toggle', 'enabled': True}}],
             'smart': {'economy': [], 'primary': [], 'judgment': judgment_fixture(), 'reselect_on_user_message': False,
                       'classifier': {'kind': 'local_rules'}, 'complex_keywords': []},
@@ -200,6 +201,7 @@ def run(repository):
         prior = worker(product, plan, 'feed-before')
         prior = worker(product, plan, 'feed-before-continue', prior)
         stage = 'withdraw-remove-restart'
+        print(json.dumps({'scenario': 'installed-signed-feed-lifecycle', 'stage': stage}), flush=True)
         withdrawn = publication(product, 18, False)
         (fixture / 'publication.json').write_bytes(wire(withdrawn))
         assert product.cli('models', 'feed', 'refresh')['data']['held']['sequence'] == 18
@@ -209,12 +211,14 @@ def run(repository):
         restart(product)
         assert product.cli('models', 'feed', 'status')['data']['highest_accepted_sequence'] == 18
         stage = 'frozen-execution-after-withdrawal'
+        print(json.dumps({'scenario': 'installed-signed-feed-lifecycle', 'stage': stage}), flush=True)
         main_session(product)
         worker(product, plan, 'feed-new-after')
         worker(product, plan, 'feed-continue-after', prior)
         retained = product.cli('routing', 'show', plan)['data']
         assert retained['head'] == frozen['head'] and retained['desired'] == frozen['desired'], 'published route changed'
         stage = 'new-admission-rejected'
+        print(json.dumps({'scenario': 'installed-signed-feed-lifecycle', 'stage': stage}), flush=True)
         available = product.cli('models', 'availability')['data']
         assert MODEL not in wire(available).decode(), available
         rejected = raw(product, 'routing', 'preview', payload={'change': plan_change('update', editor, plan, frozen['head']['head_revision'])})
@@ -232,6 +236,7 @@ def run(repository):
         rejected = raw(product, 'compute', 'connection', 'test', payload=recheck)
         assert rejected['status'] != 'succeeded' or not any(m['selectable'] for m in rejected['data']['candidate']['models']), rejected
         stage = 'rollback-and-identical-restoration'
+        print(json.dumps({'scenario': 'installed-signed-feed-lifecycle', 'stage': stage}), flush=True)
         (fixture / 'publication.json').write_bytes(wire(included))
         status = product.cli('models', 'feed', 'refresh')['data']
         assert status['last_attempt']['reason'] == 'older_sequence' and status['held'] is None, status
@@ -241,6 +246,7 @@ def run(repository):
         (fixture / 'publication.json').write_bytes(wire(conflicting))
         assert product.cli('models', 'feed', 'refresh')['data']['last_attempt']['reason'] == 'same_sequence_conflicting_digest'
         stage = 'embedded-absorption'
+        print(json.dumps({'scenario': 'installed-signed-feed-lifecycle', 'stage': stage}), flush=True)
         restored = publication(product, 19)
         (fixture / 'publication.json').write_bytes(wire(restored))
         assert product.cli('models', 'feed', 'refresh')['data']['held']['sequence'] == 19
@@ -248,6 +254,9 @@ def run(repository):
         restart(product)
         assert product.cli('models', 'feed', 'status')['data']['counts']['ignored_embedded'] >= 3
         main_session(product)
+        admitted = product.cli('routing', 'preview', '--request-stdin', payload={
+            'change': plan_change('update', editor, plan, frozen['head']['head_revision'])})
+        assert admitted['status'] == 'succeeded', 'absorption must admit a new draft without rechecking the saved source'
         assert len(upstream.requests) >= 7 and all(x['model'] == UPSTREAM for x in upstream.requests)
         print(json.dumps({'scenario': 'installed-signed-feed-lifecycle', 'state': 'green', 'candidate': product.sha,
             'upstream_calls': len(upstream.requests), 'published_session_after_withdrawal': True,
