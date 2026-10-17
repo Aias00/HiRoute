@@ -268,6 +268,32 @@ fn revision_cache_revalidates_prior_scopes_and_sql_notified_source_deletion() {
 }
 
 #[test]
+fn pinned_scope_reads_survive_an_unrelated_source_write_and_held_writer() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    let first = ingest(&store, "scope-held-writer");
+    let q = ObservationAnalysisQueryV1::new(AnalysisViewV1::Conversations);
+    let initial = store
+        .observed_analysis(&reader(), &q, Some(&range()), None, 1000)
+        .unwrap();
+    ingest(&store, "scope-unrelated-source");
+    let mut follow = q;
+    follow.analysis_scope = initial.analysis_scope.clone();
+    let writer = store.connection.lock();
+    let transaction = writer.unchecked_transaction().unwrap();
+    transaction
+        .execute("UPDATE observation_analysis_meta_v1 SET value=value", [])
+        .unwrap();
+    let repeated = store
+        .observed_analysis(&reader(), &follow, None, None, 1001)
+        .unwrap();
+    assert_eq!(repeated.analysis_scope, initial.analysis_scope);
+    assert_eq!(repeated.conversations.len(), 1);
+    assert_eq!(repeated.conversations[0].analysis_session_id, first.session.to_string());
+    transaction.rollback().unwrap();
+}
+
+#[test]
 fn unknown_analysis_format_does_not_reject_core_facts() {
     let dir = tempfile::tempdir().unwrap();
     let store = open_store(dir.path());
