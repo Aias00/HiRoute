@@ -438,7 +438,7 @@ pub fn install(request: InstallRequest) -> io::Result<Value> {
     let cleanup = if request.defer_package_cleanup {
         None
     } else {
-        Some(cleanup_locked(&layout)?)
+        Some(PackageCleanup::best_effort(cleanup_locked(&layout)))
     };
     Ok(
         json!({"schema":"hiroute.windows-install-result/v1","installed":true,"version":package.version,"manager":"task","cli":layout.home.join(".local/bin/hiroute.exe"),"started":false,"package_cleanup":cleanup}),
@@ -467,7 +467,7 @@ pub fn uninstall(
         journal.recover(&layout, &mut host)?;
     }
     let Some((marker, value, package)) = current(&layout)? else {
-        let cleanup = cleanup_locked(&layout)?;
+        let cleanup = PackageCleanup::best_effort(cleanup_locked(&layout));
         return Ok(
             json!({"schema":"hiroute.windows-uninstall-result/v1","uninstalled":true,"already_absent":true,"package_cleanup":cleanup}),
         );
@@ -519,7 +519,7 @@ pub fn uninstall(
     journal.commit(&layout)?;
     journal.finish(&layout)?;
     hiroute_platform::windows::shell_login::remove()?;
-    let cleanup = cleanup_locked(&layout)?;
+    let cleanup = PackageCleanup::best_effort(cleanup_locked(&layout));
     drop(host);
     drop(lock);
     if request.remove_data {

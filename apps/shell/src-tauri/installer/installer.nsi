@@ -555,11 +555,6 @@ Function .onInit
     IntOp $HiRouteLoginChoice $0 & 1
     IntOp $HiRouteTrayChoice $0 & 2
   ${EndIf}
-  ${GetOptions} $CMDLINE "/P" $PassiveMode
-  ${IfNot} ${Errors}
-    StrCpy $PassiveMode 1
-  ${EndIf}
-
   ${GetOptions} $CMDLINE "/NS" $NoShortcutMode
   ${IfNot} ${Errors}
     StrCpy $NoShortcutMode 1
@@ -869,6 +864,7 @@ Function un.onInit
   InitPluginsDir
   System::Call 'kernel32::CopyFileW(w "$INSTDIR\hiroute-shell.exe", w "$PLUGINSDIR\hiroute-uninstall-helper.exe", i 1) i .r0'
   ${If} $0 = 0
+    MessageBox MB_ICONSTOP "HiRoute could not prepare its uninstall helper. No files were removed. Close HiRoute and try again." /SD IDOK
     Abort
   ${EndIf}
   nsExec::ExecToStack '"$PLUGINSDIR\hiroute-uninstall-helper.exe" --installer-mutex'

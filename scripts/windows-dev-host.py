@@ -221,6 +221,43 @@ def start(root, request):
     return dict(run_id=run_id, state='submitted', task=task_name(run_id))
 
 
+def installation_profile(native_home, local_app_data):
+    """Read only this account's installation facts, without starting the product."""
+    paths = {'data': native_home / '.local/share/hiroute',
+             'state': local_app_data / 'HiRoute/cli',
+             'programs': local_app_data / 'Programs/HiRoute',
+             'stable_cli': native_home / '.local/bin/hiroute.exe'}
+    facts = {}
+    for name, path in paths.items():
+        plain(path)
+        facts[name] = dict(path=str(path), exists=path.exists())
+        if path.is_dir():
+            facts[name]['entries'] = sorted(p.name for p in path.iterdir())[:50]
+        elif path.is_file():
+            facts[name].update(sha256=digest(path), bytes=path.stat().st_size)
+    marker = plain(paths['data'] / 'standalone.json')
+    if marker.is_file():
+        if marker.stat().st_size > 64 * 1024:
+            raise ValueError('Installation marker exceeds its format bound')
+        record = json.loads(marker.read_text(encoding='utf-8'))
+        facts['marker'] = dict(path=str(marker), sha256=digest(marker), record=record)
+        for name, path in [('installed_cli', Path(record['install_root']) / 'hiroute.exe'),
+                           ('definition', Path(record['service_definition']))]:
+            plain(path)
+            facts[name] = dict(path=str(path), exists=path.exists())
+            if path.is_file():
+                facts[name].update(sha256=digest(path), bytes=path.stat().st_size)
+                if name == 'definition' and path.stat().st_size <= 64 * 1024:
+                    facts[name]['text'] = path.read_text(encoding='utf-8', errors='replace')
+    for name in ('shell-package.json', 'shell-install.json', 'uninstall.exe'):
+        path = plain(paths['programs'] / name)
+        if path.is_file():
+            facts[name] = dict(path=str(path), sha256=digest(path), bytes=path.stat().st_size)
+            if name.endswith('.json') and path.stat().st_size <= 64 * 1024:
+                facts[name]['record'] = json.loads(path.read_text(encoding='utf-8'))
+    return facts
+
+
 def worker(request):
     config = request['config']
     root = plain(config['root'])
@@ -247,6 +284,10 @@ def worker(request):
                       harness_files=hm['files'], product_files=pm['files'])
         if request['binary'] not in hm['files'] or not {'hiroute.exe', 'hirouted.exe'} <= set(pm['files']):
             raise ValueError('The selected manifests do not include required binaries')
+        if request.get('operation') == 'inspect':
+            result.update(passed=True, assessment='inspection_only',
+                          installation=installation_profile(Path.home(), Path(os.environ['LOCALAPPDATA'])))
+            return 0
         # Never manufacture HOME or remove an existing installation to make a gate pass.
         home = Path.home()
         for path in (Path(os.environ['LOCALAPPDATA']) / 'HiRoute/cli',

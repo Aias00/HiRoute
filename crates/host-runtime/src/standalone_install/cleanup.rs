@@ -7,6 +7,18 @@ use std::{collections::BTreeSet, fs, path::PathBuf};
 pub struct PackageCleanup {
     pub removed: Vec<PathBuf>,
     pub preserved: Vec<PathBuf>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+impl PackageCleanup {
+    #[cfg(any(windows, test))]
+    pub(crate) fn best_effort(result: io::Result<Self>) -> Self {
+        result.unwrap_or_else(|error| Self {
+            error: Some(error.to_string()),
+            ..Self::default()
+        })
+    }
 }
 
 pub fn prune_packages(
@@ -123,6 +135,17 @@ fn remove_package(root: &Path, target: &str) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn inaccessible_package_base_reports_cleanup_without_failing_the_committed_operation() {
+        let temp = tempfile::tempdir().unwrap();
+        let base = temp.path().join("not-a-directory");
+        fs::write(&base, b"preserve unknown material").unwrap();
+        let report =
+            PackageCleanup::best_effort(prune_packages(&base, "x86_64-pc-windows-msvc", &[]));
+        assert!(report.error.is_some());
+        assert!(report.removed.is_empty());
+        assert_eq!(fs::read(base).unwrap(), b"preserve unknown material");
+    }
     fn fixture() -> (tempfile::TempDir, PathBuf, PathBuf) {
         let temp = tempfile::tempdir().unwrap();
         let base = temp.path().canonicalize().unwrap().join("packages");

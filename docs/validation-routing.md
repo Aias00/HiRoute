@@ -141,6 +141,7 @@ python3 scripts/validation.py windows doctor
 python3 scripts/validation.py windows bundle --result /path/to/run/result.json \
   --log /path/to/run/command.log --output /path/to/development-bundle.zip
 python3 scripts/validation.py windows stage /path/to/development-bundle.zip
+python3 scripts/validation.py windows inspect-installation --product PRODUCT_BUNDLE_ID
 python3 scripts/validation.py windows run --harness HARNESS_BUNDLE_ID \
   --product PRODUCT_BUNDLE_ID --binary windows_headless.exe \
   --case actual_windows_complete_public_headless_business --ignored

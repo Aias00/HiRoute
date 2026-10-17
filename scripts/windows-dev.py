@@ -3,6 +3,7 @@
 import argparse
 import base64
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path, PureWindowsPath
@@ -221,6 +222,12 @@ def bundle_desktop(result_path, log_path, output):
     binaries = REPO / 'target/x86_64-pc-windows-msvc/release'
     harness = tests.pop()
     harness.relative_to(binaries.resolve(strict=True))
+    spec = importlib.util.spec_from_file_location('runtime_audit', Path(__file__).with_name('windows-native-runtime-audit.py'))
+    audit = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(audit)
+    imports = audit.pe_imports(harness.read_bytes())
+    if imports['debug_crt'] or imports['release_vc_runtime']:
+        raise ValueError('The native acceptance harness must use static CRT without external VC runtime DLLs')
     payload = REPO / 'apps/shell/src-tauri/resources/standalone'
     if digest(payload / 'package-manifest.json') != identity.get('standalone_manifest_sha256'):
         raise ValueError('Embedded package differs from the installer build identity')
@@ -251,6 +258,8 @@ def main():
     commands.add_parser('doctor')
     stage = commands.add_parser('stage')
     stage.add_argument('archive', type=Path)
+    inspect = commands.add_parser('inspect-installation')
+    inspect.add_argument('--product', required=True)
     run = commands.add_parser('run')
     run.add_argument('--harness', required=True)
     run.add_argument('--product', required=True)
@@ -292,6 +301,11 @@ def main():
             destination = remote.config['root'] + '/upload-' + checksum + '.zip'
             remote.upload(args.archive, destination)
             values = dict(archive=destination, sha256=checksum)
+        elif args.action == 'inspect-installation':
+            values = dict(run_id=uuid.uuid4().hex, harness=args.product, product=args.product,
+                          binary='hiroute.exe', case='installation_profile_inspection',
+                          operation='inspect', ignored=False, timeout=120)
+            args.action = 'run'
         elif args.action == 'run':
             values['run_id'] = uuid.uuid4().hex
         elif args.action == 'collect':

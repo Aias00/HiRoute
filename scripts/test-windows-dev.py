@@ -22,6 +22,7 @@ def load(name):
 
 
 controller, host = load('windows-dev'), load('windows-dev-host')
+images = load('test-windows-native-runtime-audit')
 
 
 class Runner(unittest.TestCase):
@@ -115,7 +116,7 @@ class Runner(unittest.TestCase):
         binaries = self.root / 'target/x86_64-pc-windows-msvc/release'
         binaries.mkdir(parents=True)
         harness = binaries / 'windows_desktop.exe'
-        harness.write_bytes(b'component-test-harness')
+        harness.write_bytes(images.image())
         payload = self.root / 'apps/shell/src-tauri/resources/standalone'
         payload.mkdir(parents=True)
         for name in ('hiroute.exe', 'hirouted.exe'):
@@ -149,6 +150,10 @@ class Runner(unittest.TestCase):
                 manifest = json.loads(archive.read('manifest.json'))
                 self.assertEqual(manifest['installer_format'], 'nsis')
                 self.assertEqual(archive.read('hirouted.exe'), b'embedded-hirouted.exe')
+            harness.write_bytes(images.image(('KERNEL32.dll', 'VCRUNTIME140.dll')))
+            with self.assertRaisesRegex(ValueError, 'static CRT'):
+                controller.bundle_desktop(record, log, self.root / 'dynamic-harness.zip')
+            harness.write_bytes(images.image())
             installer.write_bytes(b'changed installer')
             with self.assertRaisesRegex(ValueError, 'measured build identity'):
                 controller.bundle_desktop(record, log, self.root / 'changed.zip')
@@ -157,6 +162,31 @@ class Runner(unittest.TestCase):
             (payload / 'hirouted.exe').write_bytes(b'changed daemon')
             with self.assertRaisesRegex(ValueError, 'Embedded product bytes'):
                 controller.bundle_desktop(record, log, self.root / 'changed-product.zip')
+
+    def test_installation_inspection_reads_owned_paths_without_starting_or_changing_them(self):
+        native_home, local = self.root / 'account', self.root / 'local'
+        data = native_home / '.local/share/hiroute'
+        data.mkdir(parents=True)
+        install = native_home / '.local/lib/hiroute/version'
+        install.mkdir(parents=True)
+        (install / 'hiroute.exe').write_bytes(b'existing-cli')
+        definition = install / 'task.json'
+        definition.write_text('{"manager":"task"}')
+        marker = data / 'standalone.json'
+        marker.write_text(json.dumps(dict(install_root=str(install), service_definition=str(definition))))
+        facts = host.installation_profile(native_home, local)
+        self.assertTrue(facts['data']['exists'])
+        self.assertFalse(facts['state']['exists'])
+        self.assertEqual(facts['installed_cli']['sha256'], controller.digest(install / 'hiroute.exe'))
+        self.assertEqual(facts['definition']['text'], '{"manager":"task"}')
+        self.assertTrue(marker.exists())
+        self.assertFalse(local.exists())
+        foreign = self.root / 'foreign'
+        foreign.mkdir()
+        (local / 'Programs').mkdir(parents=True)
+        (local / 'Programs/HiRoute').symlink_to(foreign, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, 'Reparse'):
+            host.installation_profile(native_home, local)
 
     def test_symlink_and_multiple_links_are_not_runner_storage(self):
         archive = self.archive()
