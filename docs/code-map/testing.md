@@ -16,6 +16,10 @@ backups after explicit user authorization; it does not establish a product scena
 the installed NSIS member and collect actual Windows UI Automation/screenshot
 evidence. Public CLI readback is distinguished from a UI action, and a cross-build
 replacement is distinguished from a newer-version update.
+The [Windows uninstall restore plan](../../crates/cli/src/service/restore_plan.rs)
+keeps Codex root collaboration separate from its model-profile projection; its
+portable unit cases cover owner selection and refusal, while the actual NSIS
+uninstall remains the native evidence for restoring Agent files.
 
 Choose a user promise, then the layer that can observe its failure. Keep tests
 beside that owner and preserve independent assertions. A focused filesystem

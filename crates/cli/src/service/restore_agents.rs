@@ -1,9 +1,9 @@
 //! Uninstall reuses each context's ordinary restore Preview/Apply; no bulk authority.
+use super::restore_plan;
 use crate::LocalControlClient;
 use hiroute_application_api::*;
 use serde_json::{Value, json};
 use std::{
-    collections::BTreeMap,
     io,
     time::{Duration, Instant},
 };
@@ -35,38 +35,6 @@ fn decision(agents: Vec<String>) -> io::Error {
         "AGENT_RESTORE_REQUIRED:{}",
         serde_json::to_string(&agents).unwrap_or_default()
     ))
-}
-fn spec(context: &str, status: &AgentSettingsStatusV2) -> Option<AgentSettingsSpecV2> {
-    use AgentModelSettingsStateV2::{Configured, NotConfigured, Restored};
-    let restore =
-        |state: &AgentModelSettingsStateV2, point: &Option<String>| -> Option<Option<String>> {
-            match state {
-                NotConfigured | Restored => Some(None),
-                Configured => point.clone().map(Some),
-                _ => None,
-            }
-        };
-    let model = match status.model() {
-        Some(m) => restore(&m.state, &m.restore_point_ref)?,
-        None => None,
-    };
-    let collaboration = match status.collaboration() {
-        Some(c) => restore(&c.state, &c.restore_point_ref)?,
-        None => None,
-    };
-    Some(AgentSettingsSpecV2 {
-        schema_version: AGENT_SETTINGS_SCHEMA_V2,
-        context_id: context.into(),
-        model: model
-            .map(|restore_point_ref| AgentFacetIntent::Restore { restore_point_ref })
-            .unwrap_or_default(),
-        collaboration: collaboration
-            .map(|restore_point_ref| AgentFacetIntent::Restore { restore_point_ref })
-            .unwrap_or_default(),
-        restore_native_model: None,
-        protected_native_model_ids: vec![],
-        access_token: AgentAccessTokenIntentV1::Keep,
-    })
 }
 fn preview(client: &LocalControlClient, spec: &AgentSettingsSpecV2) -> io::Result<Value> {
     let value = call(
@@ -106,34 +74,24 @@ pub(super) fn restore(layout: &hiroute_host_runtime::StandaloneLayout) -> io::Re
         }
     };
     let _ = layout;
-    let agents = list["agents"]
-        .as_array()
-        .ok_or_else(|| io::Error::other("AGENT_RESTORE_UNAVAILABLE"))?;
-    let mut contexts = BTreeMap::new();
-    for agent in agents {
-        if let Some(context) = agent["context_id"].as_str().filter(|c| !c.is_empty()) {
-            contexts.insert(
-                context.to_owned(),
-                agent["agent_id"].as_str().unwrap_or(context).to_owned(),
-            );
-        }
-    }
+    let contexts = restore_plan::contexts(&list)?;
     let mut blocked = vec![];
     let mut specs = vec![];
-    for (context, name) in &contexts {
+    for context in &contexts {
+        let name = &context.agent;
         let status = call(
             &client,
             "GetAgentConnectionStatus",
             json!(AgentSettingsStatusRequestV2 {
                 schema_version: AGENT_SETTINGS_SCHEMA_V2,
-                context_id: context.clone()
+                context_id: context.id.clone()
             }),
         )
         .and_then(|v| serde_json::from_value::<AgentSettingsStatusV2>(v).map_err(io::Error::other));
         let Some(spec) = status
             .ok()
-            .filter(|s| s.valid() && s.context_id() == context)
-            .and_then(|s| spec(context, &s))
+            .filter(|s| s.valid() && s.context_id() == context.id)
+            .and_then(|s| restore_plan::spec(context, &s))
         else {
             blocked.push(name.clone());
             continue;

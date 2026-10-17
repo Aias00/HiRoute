@@ -32,6 +32,24 @@ $q=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'ui-request.json') -Raw | C
 $p=Get-Process -Id $q.pid -ErrorAction Stop
 if($p.Path -ne $q.image){throw 'Desktop image changed'}
 $p.Refresh()
+if($q.action -eq 'tray-observe') {
+ $desktop=[Windows.Automation.AutomationElement]::RootElement
+ $tops=@($desktop.FindAll([Windows.Automation.TreeScope]::Children,[Windows.Automation.Condition]::TrueCondition))
+ $windows=@($tops | Where-Object {$_.Current.ClassName -in @('Shell_TrayWnd','NotifyIconOverflowWindow','TopLevelWindowForOverflowXamlIsland') -and -not $_.Current.IsOffscreen})
+ $nodes=@(foreach($w in $windows){foreach($e in $w.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.Condition]::TrueCondition)){
+  @{name=$e.Current.Name;type=$e.Current.ControlType.ProgrammaticName;automation_id=$e.Current.AutomationId;offscreen=$e.Current.IsOffscreen;runtime_id=($e.GetRuntimeId() -join '.')}
+ }})
+ if($nodes.Count -gt 1600){throw 'Notification observation exceeds its bound'}
+ $rect=[Windows.Rect]::Empty
+ foreach($w in $windows){$rect.Union($w.Current.BoundingRectangle)}
+ if($rect.Width -lt 1 -or $rect.Height -lt 1 -or $rect.Width -gt 4096 -or $rect.Height -gt 4096){throw 'Notification area is not capturable'}
+ $bitmap=New-Object Drawing.Bitmap ([int]$rect.Width),([int]$rect.Height)
+ $graphics=[Drawing.Graphics]::FromImage($bitmap)
+ try {$graphics.CopyFromScreen([int]$rect.X,[int]$rect.Y,0,0,$bitmap.Size);$bitmap.Save((Join-Path $PSScriptRoot 'tray.png'),[Drawing.Imaging.ImageFormat]::Png)}
+ finally {$graphics.Dispose();$bitmap.Dispose()}
+ @{pid=$p.Id;nodes=$nodes;top_windows=@(foreach($w in $tops){@{name=$w.Current.Name;class=$w.Current.ClassName;pid=$w.Current.ProcessId}})}|ConvertTo-Json -Depth 6 -Compress
+ exit 0
+}
 if($q.action -eq 'quit') {
  $desktop=[Windows.Automation.AutomationElement]::RootElement
  $class=[Windows.Automation.AutomationElement]::ClassNameProperty
@@ -188,7 +206,7 @@ def execute(request, run, product, pm, helper, activity, manifest, root):
     if activity.get('administrator_groups') is not False:
         raise ValueError('Native Desktop evidence requires a standard account, not a filtered administrator')
     action = request['desktop_action']
-    if action not in ('install', 'launch', 'snapshot', 'invoke', 'text', 'click', 'close', 'quit', 'cli', 'native-files'):
+    if action not in ('install', 'launch', 'snapshot', 'invoke', 'text', 'click', 'close', 'quit', 'tray-observe', 'cli', 'native-files'):
         raise ValueError('Unknown native Desktop action')
     if action == 'native-files':
         files = {}

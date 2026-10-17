@@ -17,6 +17,8 @@ const MAX_LOG_BYTES: usize = 256 * 1024;
 
 #[cfg(windows)]
 mod restore_agents;
+#[cfg(any(windows, test))]
+mod restore_plan;
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
