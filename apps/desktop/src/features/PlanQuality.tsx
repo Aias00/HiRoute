@@ -4,12 +4,13 @@ import { safeDiagnosticCode } from '../error-code';
 import { observationRead } from './observation-client';
 import { qualityExecutionModels } from './plan-quality-models';
 import { PlanQualityStage, type PlanQualitySample } from './PlanQualityStage';
+import { RoutingObservations, type RoutingSummary } from './RoutingObservations';
 import { qualityRowSection, qualityRowSectionLabel, qualityGroupLabel, qualityModelRows, qualityNativeModelName, qualityReasoningLabel, type PlanQualityModel, type QualityExecution, type QualityModelRow, type QualitySummary } from './plan-quality-state';
 
 export type { PlanQualityModel } from './plan-quality-state';
 export type { PlanQualitySample } from './PlanQualityStage';
 
-type Page = { samples: PlanQualitySample[]; summary: QualitySummary; next_cursor?: string | null };
+type Page = { samples: PlanQualitySample[]; summary: QualitySummary; routing_observations?: RoutingSummary; next_cursor?: string | null };
 type ScoreFilter = 'all' | 'low' | 'high' | 'unrated';
 type Period = 'all' | 'seven_days';
 const EMPTY_SUMMARY: QualitySummary = { models: [], scored_stage_count: 0, unrated_stage_count: 0, session_count: 0, available_revisions: [] };
@@ -31,6 +32,7 @@ export function PlanQuality({
   const text = (zh: string, en: string) => language === 'zh' ? zh : en;
   const [samples, setSamples] = useState<PlanQualitySample[]>([]);
   const [summary, setSummary] = useState<QualitySummary>(EMPTY_SUMMARY);
+  const [routingSummary, setRoutingSummary] = useState<RoutingSummary | null>(null);
   const [executionModels, setExecutionModels] = useState<Record<string, string>>({});
   const [cursor, setCursor] = useState<string | null>(null);
   const [score, setScore] = useState<ScoreFilter>('all');
@@ -63,6 +65,7 @@ export function PlanQuality({
       });
       if (epoch !== generation.current) return;
       setSummary(page.summary);
+      setRoutingSummary(page.routing_observations ?? null);
       const stages = selected && !selected.execution ? [] : page.samples;
       setSamples(current => next ? [...current, ...stages] : stages);
       setCursor(selected && !selected.execution ? null : page.next_cursor ?? null);
@@ -86,6 +89,7 @@ export function PlanQuality({
 
   useEffect(() => {
     setSummary(EMPTY_SUMMARY);
+    setRoutingSummary(null);
   }, [planId, sessionId, revision, window]);
 
   useEffect(() => {
@@ -133,6 +137,7 @@ export function PlanQuality({
     </div>
     {error && <div className="callout bad" role="alert" data-error-code={error}><UiIcon name="warning" /><span>{text('模型表现暂时无法读取。', 'Model performance is temporarily unavailable.')}</span><button className="btn" type="button" onClick={() => setReload(value => value + 1)}>{text('重试', 'Retry')}</button></div>}
     {!loaded && busy && <div className="oc-status-row" role="status"><span className="oc-spinner" /><p>{text('正在读取模型表现…', 'Reading model performance…')}</p></div>}
+    {routingSummary && <RoutingObservations summary={routingSummary} language={language} />}
     {!compact && <div className="quality-model-scope">{groups.map(branch => <section className="quality-group" key={branch} data-execution-group={branch}>
       <header className="quality-group-heading"><h4>{qualityRowSectionLabel(rows.find(row => qualityRowSection(row) === branch)!, language)}</h4><span>{text(rows.filter(row => qualityRowSection(row) === branch).length + ' 个模型配置', rows.filter(row => qualityRowSection(row) === branch).length + (rows.filter(row => qualityRowSection(row) === branch).length === 1 ? ' model configuration' : ' model configurations'))}</span></header>
       <div className="quality-model-columns" aria-hidden="true"><span>{text('模型 / 思考设置', 'Model / Reasoning')}</span><span>{text('平均阶段胜任度', 'Average stage competence')}</span><span>{text('阶段样本', 'Stage samples')}</span><span /></div>

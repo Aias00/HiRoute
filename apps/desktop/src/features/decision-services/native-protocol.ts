@@ -47,7 +47,7 @@ export async function freezeNative(protocol: NativeProtocol, judgment: Judgment,
   } : { kind: 'ordinal', ...degree(judgment) };
   const scopes = Object.fromEntries((branches ? branches.map(b => [b.id, b.judgment ?? judgment] as const) : [['smart_saving', judgment] as const]).map(([id, j]) => [id, {
     assessment: composedAssessment(protocol, j), simple_threshold_millis: j.degree.simple_threshold_millis, competence_floor_millis: j.competence.floor_millis,
-    standard: JSON.stringify(composedAssessment(protocol, j)) === JSON.stringify(stock.q1) ? 'stock' : 'custom',
+    standard: JSON.stringify(composedAssessment(protocol, j)) === JSON.stringify(stock.q1) && `${protocol.fixed.degree_prefix} ${j.degree.instructions}` === stock.q0.instructions && j.degree.simple === stock.q0.criteria[0] && j.degree.complex === stock.q0.criteria[1] ? 'stock' : 'custom',
   }]));
   const context_layout = 'hiroute.partitioned-history/v1';
   return { protocol, context_layout, decision, scopes, digest: await contentDigest([protocol, context_layout, decision, scopes]) };
