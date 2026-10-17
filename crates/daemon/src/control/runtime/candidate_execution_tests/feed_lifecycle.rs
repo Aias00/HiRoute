@@ -15,7 +15,7 @@ fn feed_removal_excludes_new_compilation_but_keeps_frozen_execution_self_contain
         client_model_id: "feed-model".into(),
         candidate: hiroute_domain::CandidateSelectionV1 {
             binding_id: fact.binding_id.clone(),
-            reasoning: None,
+            reasoning: Some(hiroute_domain::ReasoningSelectionV1::Toggle { enabled: true }),
         },
     };
     let frozen =
