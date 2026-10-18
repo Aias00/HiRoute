@@ -320,4 +320,31 @@ fn evidence_refresh_preserves_released_facts_cursor_and_flag_binding() {
         store.observed_facts(&reader, &query, now),
         Err(crate::query_v2::ObservationV2Error::Stale)
     ));
+    // Restoring a missing row changes the visible population. Unlike metadata-only
+    // enrichment, this must still invalidate a cursor whose insertion watermark predates it.
+    query.include_routing_observations = false;
+    query.cursor = None;
+    let before_repair = store.observed_facts(&reader, &query, now).unwrap();
+    query.cursor = before_repair.next_cursor;
+    store
+        .connection
+        .lock()
+        .execute(
+            "DELETE FROM observation_safe_facts_v2 WHERE original_digest=?1",
+            [events[1].1.as_str()],
+        )
+        .unwrap();
+    store
+        .connection
+        .lock()
+        .execute(
+            "DELETE FROM observation_meta WHERE key='inline-backfill-fact-protocol-evidence-rowid'",
+            [],
+        )
+        .unwrap();
+    assert!(store.backfill_inline_payloads().unwrap() > 0);
+    assert!(matches!(
+        store.observed_facts(&reader, &query, now),
+        Err(crate::query_v2::ObservationV2Error::Stale)
+    ));
 }

@@ -9,10 +9,9 @@ pub(crate) fn project(
     transaction: &Transaction<'_>,
     envelope: &ExecutionFactEnvelopeV1,
     digest: &CanonicalDigest,
-) -> Result<(), Error> {
+) -> Result<usize, Error> {
     let json = serde_json::to_string(&projection(envelope, digest)?).map_err(|_| Error::Corrupt)?;
-    transaction.execute("INSERT OR IGNORE INTO observation_safe_facts_v2(workspace_id,request_id,original_digest,body_json) VALUES(?1,?2,?3,?4)",params![envelope.correlation.workspace_id.as_str(),envelope.correlation.request_id.as_str(),digest.as_str(),json]).map_err(|_|Error::ActivityUnavailable)?;
-    Ok(())
+    transaction.execute("INSERT OR IGNORE INTO observation_safe_facts_v2(workspace_id,request_id,original_digest,body_json) VALUES(?1,?2,?3,?4)",params![envelope.correlation.workspace_id.as_str(),envelope.correlation.request_id.as_str(),digest.as_str(),json]).map_err(|_|Error::ActivityUnavailable)
 }
 
 /// Rebuild only an existing projection proven to come from a supported pre-applicability

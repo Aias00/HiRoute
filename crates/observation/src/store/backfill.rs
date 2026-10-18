@@ -12,6 +12,7 @@ impl LocalObservationStore {
             .transaction()
             .map_err(|_| ObservationStoreError::ActivityUnavailable)?;
         let mut completed = 0;
+        let mut visibility_changed = false;
         let mut bytes = 0;
         for (table, column, digest_column, kind) in [
             (
@@ -73,6 +74,7 @@ impl LocalObservationStore {
                 };
                 bytes += body.len();
                 if !unavailable && (kind == "fact" || !body.contains("\"managed_sensitive_ref\"")) {
+                    let mut projection_changes = 0;
                     let verified = if kind == "fact" {
                         serde_json::from_str::<ExecutionFactEnvelopeV1>(&body)
                             .ok()
@@ -84,13 +86,15 @@ impl LocalObservationStore {
                                     && CanonicalDigest::of(fact).is_ok_and(|d| d.as_str() == digest)
                             })
                             .map(|fact| {
-                                super::safe_facts::project(
+                                let inserted = super::safe_facts::project(
                                     &tx,
                                     &fact,
                                     &CanonicalDigest::parse(&digest)
                                         .map_err(|_| ObservationStoreError::Corrupt)?,
                                 )?;
-                                super::safe_facts::refresh_pre_applicability(
+                                projection_changes += inserted;
+                                visibility_changed |= inserted > 0;
+                                projection_changes += super::safe_facts::refresh_pre_applicability(
                                     &tx,
                                     &fact,
                                     &CanonicalDigest::parse(&digest)
@@ -114,15 +118,22 @@ impl LocalObservationStore {
                             .map(|receipt| receipt.frozen_at_ms)
                     };
                     if let Some(created) = verified {
-                        let marker = super::sensitive::put(
-                            &tx, kind, &digest, &workspace, &session, &request, created, &body,
-                        )?;
-                        tx.execute(
-                            &format!("UPDATE {table} SET {column}=?2 WHERE rowid=?1"),
-                            params![id, marker],
-                        )
-                        .map_err(|_| ObservationStoreError::ActivityUnavailable)?;
-                        completed += 1;
+                        if stored.contains("\"managed_sensitive_ref\"") {
+                            // Internal evidence enrichment keeps source membership, row IDs
+                            // and reader authority intact. Existing cursors remain valid.
+                            completed += projection_changes;
+                        } else {
+                            let marker = super::sensitive::put(
+                                &tx, kind, &digest, &workspace, &session, &request, created, &body,
+                            )?;
+                            tx.execute(
+                                &format!("UPDATE {table} SET {column}=?2 WHERE rowid=?1"),
+                                params![id, marker],
+                            )
+                            .map_err(|_| ObservationStoreError::ActivityUnavailable)?;
+                            completed += 1;
+                            visibility_changed = true;
+                        }
                     } else {
                         tx.execute("INSERT INTO observation_meta(key,value) VALUES('inline_backfill_errors','1') ON CONFLICT(key) DO UPDATE SET value=CAST(value AS INTEGER)+1",[]).map_err(|_|ObservationStoreError::ActivityUnavailable)?;
                     }
@@ -134,9 +145,11 @@ impl LocalObservationStore {
                 .map_err(|_| ObservationStoreError::ActivityUnavailable)?;
             }
         }
-        if completed > 0 {
+        if visibility_changed {
             crate::query_v2::invalidate_visibility(&tx)
                 .map_err(|_| ObservationStoreError::ActivityUnavailable)?;
+        }
+        if completed > 0 {
             increment_store_revision(&tx)?;
         }
         tx.commit()
