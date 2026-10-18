@@ -322,3 +322,72 @@ fn c_reserves_q3_then_never_refills_a_budget_partial_target() {
     assert_eq!(o.stage_retained, 1);
     assert!(p.template.wire_len + 1024 < 256 * 1024);
 }
+
+#[test]
+fn c_background_keeps_bounded_interrupted_and_unknown_turns_in_chronology() {
+    for status in [AgentTurnStatus::Interrupted, AgentTurnStatus::Unknown] {
+        for position in [1, 8] {
+            for with_target in [false, true] {
+                let a = c_authority();
+                let mut h = c_history(&a);
+                let original = h.visible_conversation[0].clone();
+                h.visible_conversation = (0..10).map(|i| {
+                    let mut turn = (*original).clone();
+                    turn.user = vec![VisibleContentPart::Text { text: format!("Requirement {i}") }];
+                    if i == position { turn.status = status; }
+                    Arc::new(turn)
+                }).collect();
+                h.assessment_from = with_target.then_some(9);
+                if !with_target { h.assessment_target = None; }
+                let p = request_template(&a, &diagnostic_request(), &h).unwrap();
+                let wire: Value = serde_json::from_slice(&p.template.bytes).unwrap();
+                let background = wire["state"]["prior_context"].as_array().unwrap();
+                let start = if with_target { 1 } else { 2 };
+                assert_eq!(background.len(), 8, "{status:?}, {position}, {with_target}");
+                for (i, turn) in background.iter().enumerate() {
+                    assert_eq!(turn["user"][0]["text"], format!("Requirement {}", start + i));
+                }
+                if position >= start {
+                    assert_eq!(background[position-start]["status"], serde_json::to_value(status).unwrap());
+                }
+                assert_eq!(p.routing_observation.unwrap().target_complete, with_target);
+                assert_eq!(p.bindings.unwrap().applicability.is_some(), with_target);
+            }
+        }
+    }
+}
+
+#[test]
+fn c_reopened_frozen_questions_ignore_changed_current_authority_defaults() {
+    let mut a = c_authority();
+    let bytes = serde_json::to_vec(a.native_protocol.as_ref().unwrap()).unwrap();
+    let original = request_template(&a, &diagnostic_request(), &c_history(&a)).unwrap();
+    // Model a later binary's independently changed current category/degree defaults.
+    a.decision = DecisionDefinitionV1::Categorical {
+        instructions: "Changed current default; never execute for this publication".into(),
+        options: vec![CategoryOptionV1 { id: "new-default".into(), criterion: "New default".into(), refinement: None }],
+    };
+    a.native_protocol = Some(serde_json::from_slice(&bytes).unwrap());
+    a.native_protocol.as_ref().unwrap().validate_smart(a.smart_judgment.as_ref().unwrap()).unwrap();
+    let reopened = request_template(&a, &diagnostic_request(), &c_history(&a)).unwrap();
+    assert_eq!(reopened.template.bytes, original.template.bytes);
+    assert_eq!(reopened.bindings.unwrap().definition, a.native_protocol.unwrap().decision);
+}
+
+#[test]
+fn c_omitted_target_distinguishes_absent_evidence_from_policy_mismatch() {
+    use hiroute_domain::ProtectionEligibilityV1 as E;
+    for (variant, expected) in [(0, E::Unrated), (1, E::DifferentCategory), (2, E::DifferentPolicy)] {
+        let a = c_authority();
+        let mut h = c_history(&a);
+        let target = h.assessment_target.as_mut().unwrap();
+        match variant {
+            0 => target.branch_execution = None,
+            1 => if let ExecutionAttribution::Single { executed_branch_id, .. } = &mut target.attribution { *executed_branch_id = "removed-category".into(); },
+            _ => target.branch_execution.as_mut().unwrap().policy.floor_millis += 1,
+        }
+        let prepared = request_template(&a, &diagnostic_request(), &h).unwrap();
+        assert_eq!(prepared.routing_observation.unwrap().eligibility, expected);
+        assert!(prepared.bindings.unwrap().assessment.is_none());
+    }
+}

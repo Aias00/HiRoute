@@ -109,3 +109,22 @@ fn legacy_omission_and_rubric_digest_remain_byte_stable() {
     assert_eq!(j.degree.simple_threshold_millis, 800);
     assert_eq!(j.competence.floor_millis, 500);
 }
+
+#[test]
+fn categorical_stock_wording_is_not_the_stock_experimental_question_shape() {
+    let p = NativeProtocolV1::default();
+    let mut j = JudgmentSettingsV1::default();
+    p.stock_assessment(&mut j);
+    let branch = super::super::MaterializedBranchV1 {
+        id: "writing".into(), name: "Writing".into(), condition: "Write an article".into(),
+        group: super::super::MaterializedGroupId::Branch(0),
+        primary_group: Some(super::super::MaterializedGroupId::BranchPrimary(0)), judgment: j.clone(),
+    };
+    let frozen = FrozenNativeProtocolV1::freeze(&p, branch_decision_definition(std::slice::from_ref(&branch), "writing"), [("writing".into(), j)]).unwrap();
+    let before = serde_json::to_vec(&frozen).unwrap();
+    // Preserve the existing frozen provenance and digest; qualify the actual request.
+    assert_eq!(frozen.scopes["writing"].standard, "stock");
+    assert_eq!(crate::RoutingObservationV1::not_dispatched(&frozen, "writing").standard, "custom");
+    frozen.validate_branches(&[branch], "writing").unwrap();
+    assert_eq!(serde_json::to_vec(&frozen).unwrap(), before);
+}
