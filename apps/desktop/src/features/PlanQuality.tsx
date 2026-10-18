@@ -9,12 +9,13 @@ import { safeDiagnosticCode } from '../error-code';
 import { observationRead } from './observation-client';
 import { qualityExecutionModels } from './plan-quality-models';
 import { PlanQualityStage, type PlanQualitySample } from './PlanQualityStage';
+import { RoutingObservations, type RoutingSummary } from './RoutingObservations';
 import { qualityRowSection, qualityRowSectionLabel, qualityGroupLabel, qualityModelRows, qualityNativeModelName, qualityReasoningLabel, type PlanQualityModel, type QualityExecution, type QualityModelRow, type QualitySummary } from './plan-quality-state';
 
 export type { PlanQualityModel } from './plan-quality-state';
 export type { PlanQualitySample } from './PlanQualityStage';
 
-type Page = { samples: PlanQualitySample[]; summary: QualitySummary; next_cursor?: string | null };
+type Page = { samples: PlanQualitySample[]; summary: QualitySummary; routing_observations?: RoutingSummary; next_cursor?: string | null };
 type ScoreFilter = 'all' | 'low' | 'high' | 'unrated';
 type Period = 'all' | 'seven_days';
 const EMPTY_SUMMARY: QualitySummary = { models: [], scored_stage_count: 0, unrated_stage_count: 0, session_count: 0, available_revisions: [] };
@@ -38,6 +39,7 @@ export function PlanQuality({
   const text = (zh: string, en: string) => language === 'zh' ? zh : en;
   const [samples, setSamples] = useState<PlanQualitySample[]>([]);
   const [summary, setSummary] = useState<QualitySummary>(EMPTY_SUMMARY);
+  const [routingSummary, setRoutingSummary] = useState<RoutingSummary | null>(null);
   const [executionModels, setExecutionModels] = useState<Record<string, string>>({});
   const [cursor, setCursor] = useState<string | null>(null);
   const [score, setScore] = useState<ScoreFilter>('all');
@@ -63,6 +65,7 @@ export function PlanQuality({
     setBusy(true); setError('');
     try {
       const page = await observationRead<Page>('plan_quality', {
+        include_routing_observations: true,
         plan_id: planId || null, session_id: sessionId || null, plan_revision: revision,
         execution: selected?.execution ?? null,
         trust_row: selected?.trustRow ?? null,
@@ -72,6 +75,7 @@ export function PlanQuality({
       });
       if (epoch !== generation.current) return;
       setSummary(page.summary);
+      setRoutingSummary(page.routing_observations ?? null);
       const stages = selected && !selected.execution && !selected.trustRow ? [] : page.samples;
       setSamples(current => next ? [...current, ...stages] : stages);
       setCursor(selected && !selected.execution && !selected.trustRow ? null : page.next_cursor ?? null);
@@ -95,6 +99,7 @@ export function PlanQuality({
 
   useEffect(() => {
     setSummary(EMPTY_SUMMARY);
+    setRoutingSummary(null);
   }, [planId, sessionId, revision, window]);
 
   useEffect(() => {
@@ -196,6 +201,7 @@ export function PlanQuality({
     {report && groupBy === 'model' && <TrustTiles report={report} language={language} />}
     {error && <div className="callout bad" role="alert" data-error-code={error}><UiIcon name="warning" /><span>{text('模型表现暂时无法读取。', 'Model performance is temporarily unavailable.')}</span><button className="btn" type="button" onClick={() => setReload(value => value + 1)}>{text('重试', 'Retry')}</button></div>}
     {!loaded && busy && <div className="oc-status-row" role="status"><span className="oc-spinner" /><p>{text('正在读取模型表现…', 'Reading model performance…')}</p></div>}
+    <RoutingObservations key={planId ?? sessionId ?? ''} summary={routingSummary} language={language} />
     {!compact && <section className="quality-tables">
       <div className="quality-tables-head"><h3>{text('各模型的表现', 'Performance by model')}</h3>
         {trustScope && <div className="segmented" role="group" aria-label={text('观察分组', 'Evidence grouping')}>{([['model', text('按模型', 'By model')], ['executor', text('按执行 Agent', 'By execution agent')]] as const).map(([value, label]) => <button key={value} type="button" className={`segment${groupBy === value ? ' active' : ''}`} aria-pressed={groupBy === value} onClick={() => { resetDetail(); setGroupBy(value); }}>{label}</button>)}</div>}

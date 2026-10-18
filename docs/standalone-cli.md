@@ -745,6 +745,14 @@ from zero; a stage score does not rewrite its opening selection reason. Use the 
 cursor to read further pages. This facts-only query does not call a model or grant access
 to conversation bodies; discover its filters through the command's `--help` or `schema show`.
 
+Current normal-argument calls also opt into `routing_observations`: all retained
+matching C decisions, separate requested/unavailable/omitted/inherited/anomaly
+counts, historical protection opportunities and suppression, with exact cohorts
+and coverage. Zero denominators or coverage gaps have unavailable rates. Existing
+released v2 structured requests retain the prior
+response field set. Content-only deletion retains safe evidence; full fact deletion
+and retention remove it. These rates do not establish accuracy or model quality.
+
 ## Configure a Worker and delegate a task
 
 Worker reuses the existing commands. Discovery does not install or select software:
@@ -1065,6 +1073,38 @@ not only the CLI exit code. It tests that saved connection's transport and requi
 fields, reads no real conversation, runs no execution model and produces no competence sample.
 A pass is not a task-quality or continuing-health guarantee. Saving a connection and testing
 it are separate actions; neither publishes a route.
+
+Historical problem applicability is the built-in default for newly published native
+System One routes. Background is fixed at eight turns. Use ordinary Preview/Apply;
+the compiler freezes complete actual prompts, criteria, thresholds and content
+digest into the publication.
+Existing frozen routes continue unchanged until their next publication. Local
+rules and custom extensions retain their existing behavior.
+
+Assessments are default or custom. `judgment.competence.standard:"default"`
+resolves the current default at the next edit/publication; `"custom"` preserves
+instructions and all criteria byte-for-byte. Released input without intent
+recognizes only exact legacy built-in instructions and all three criteria as
+default. Threshold changes do not customize text. Reset to default restores the
+current default and keeps thresholds. Unsupported state references in custom text
+fail Preview with their scope and field; existing publications stay active.
+
+Connectivity keeps `hiroute.classifier-decision-test/v1` and its original result.
+The connection page has one test, using a current-default synthetic example.
+The separate [applicability diagnostic](../contracts/cli/historical-applicability-test.v1.schema.json)
+is available through CLI and acceptance tooling, using
+`schema:"hiroute.historical-applicability-test/v1"`, `service_id`,
+`service_revision`, `protocol:<actual frozen route>` and `shape:"standard"` or
+`"max_branches"`. Read the frozen object from publication Preview. A maximum
+sixteen-category dual-group shape has nineteen questions in one request; a smaller
+success proves no maximum capacity. Inspect result state and exact machine
+identity. Explicit tests may consume quota. Opening, saving and publication never
+probe. The route editor has no separate test or additional confirmation.
+
+Observation queries retain `hiroute.observation.query/v2`. Facts and plan-quality
+requests may set `include_routing_observations:true`; omission/false preserves the
+released strict result fields, authorization encoding and cursor binding. Protocol
+identities/digests and shape counts remain available in machine output.
 
 Plans use the existing `routing preview/apply` transaction with `hiroute.plan-editor/v2`:
 

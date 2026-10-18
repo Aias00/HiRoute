@@ -96,6 +96,21 @@ pub fn compile_agent_plan_v2(
             }
             (
                 RequestOwnedRouteV1::Branches {
+                    native_protocol: routing
+                        .native_protocol
+                        .as_ref()
+                        .map(|p| {
+                            FrozenNativeProtocolV1::freeze(
+                                &p.resolve()?,
+                                c_v1_branch_decision_definition(
+                                    &branches,
+                                    &routing.default_branch_id,
+                                ),
+                                branches.iter().map(|b| (b.id.clone(), b.judgment.clone())),
+                            )
+                        })
+                        .transpose()
+                        .map_err(|_| AgentPlanCompilerError::InvalidDesiredPlan)?,
                     classifier: ComplexityClassifierV1::with_mode(
                         Vec::new(),
                         routing.classifier.clone(),
@@ -112,6 +127,8 @@ pub fn compile_agent_plan_v2(
             economy,
             primary,
             judgment,
+            native_protocol,
+
             reselect_on_user_message,
             classifier,
             complex_keywords,
@@ -119,6 +136,17 @@ pub fn compile_agent_plan_v2(
             let simple_groups = vec![MaterializedGroupId::Economy, MaterializedGroupId::Primary];
             (
                 RequestOwnedRouteV1::Classified {
+                    native_protocol: native_protocol
+                        .as_ref()
+                        .map(|p| {
+                            FrozenNativeProtocolV1::freeze(
+                                &p.resolve()?,
+                                judgment.degree.definition().into(),
+                                [(SMART_SAVING_SCOPE_ID.into(), judgment.clone())],
+                            )
+                        })
+                        .transpose()
+                        .map_err(|_| AgentPlanCompilerError::InvalidDesiredPlan)?,
                     judgment: judgment.clone(),
                     reselect_on_user_message: *reselect_on_user_message,
                     classifier: ComplexityClassifierV1::with_mode(

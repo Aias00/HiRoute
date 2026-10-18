@@ -33,6 +33,7 @@ use hiroute_integrations::{
 use super::LocalControlAdapter;
 
 mod discovered;
+mod error;
 mod feed_admission;
 mod hermes_points;
 mod key_inputs;
@@ -44,6 +45,8 @@ mod presentation;
 mod registered;
 mod saved;
 mod saved_prefill;
+
+use error::{map_check_error, map_target_error};
 
 pub(super) fn registered_source_matches_current_option(
     source: &hiroute_domain::ComputeManagementSourceV2,
@@ -378,7 +381,7 @@ impl ComputeManagementControlPort for LocalControlAdapter {
             };
             self.model_connections
                 .check(draft, credential, &cancellation)
-                .map_err(|_| ComputeManagementControlError::Invalid)
+                .map_err(map_check_error)
         })();
         self.model_connection_cancellations
             .lock()
@@ -439,7 +442,7 @@ impl ComputeManagementControlPort for LocalControlAdapter {
                     },
                     &cancellation,
                 )
-                .map_err(|_| ComputeManagementControlError::Invalid)
+                .map_err(map_check_error)
         })();
         self.model_connection_cancellations
             .lock()
@@ -489,7 +492,7 @@ impl ComputeManagementControlPort for LocalControlAdapter {
             };
             self.model_connections
                 .check(prepared.draft, credential, &cancellation)
-                .map_err(|_| ComputeManagementControlError::Invalid)
+                .map_err(map_check_error)
         })();
         self.model_connection_cancellations
             .lock()
@@ -785,7 +788,7 @@ fn trusted_draft(
                     authentication: &endpoint.authentication,
                 },
             )
-            .map_err(|_| ComputeManagementControlError::Invalid)?;
+            .map_err(map_target_error)?;
             let target = normalized.candidate_target;
             Ok(hiroute_domain::ComputeNativeEndpointV3 {
                 target: hiroute_domain::ComputeManagementTargetV2 {

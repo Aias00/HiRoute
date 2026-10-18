@@ -173,6 +173,7 @@ impl ClientAccessPort for LocalControlAdapter {
                 protocol_advice: hiroute_domain::agent_protocol_advice(&compiled.body.materialized),
                 agent_plan_id: compiled.agent_plan_id().clone(),
                 desired,
+
                 head: head.clone(),
                 editable_route_digest,
                 agent_plan_revision: compiled.body.agent_plan_revision,

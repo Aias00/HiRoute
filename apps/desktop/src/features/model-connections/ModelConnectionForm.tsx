@@ -45,6 +45,7 @@ import { ConnectionEditingSession } from './connection-session';
 import './connection-flow.css';
 import {
   connectionErrorMessage,
+  PlaintextHttpWarning,
   ManualModelEditor,
   manualModelError,
   manualModelIdError,
@@ -709,7 +710,7 @@ export function ModelConnectionForm(props: ModelConnectionFormProps) {
                   ? `已收录 ${metadataCandidates.length} 个模型，检查接入后统一选择；未知能力采用可编辑兜底：上下文 200K、输出 32K、工具与流式开启、视觉关闭、思考开关。`
                   : `${metadataCandidates.length} models in this catalog. Choose after checking the connection; missing capabilities use editable defaults (200K context, 32K output, tools and streaming on, vision off, reasoning toggle).`}</p>}
               </div></Disclosure>}
-              <label className="field"><span className="field-label">Base URL</span><input className="input" inputMode="url" value={draft.base_url} placeholder="https://example.com/v1" onChange={event => invalidate(current => ({ ...current, base_url: event.target.value }), true, 'connection')} /></label>
+              <label className="field"><span className="field-label">Base URL</span><input className="input" inputMode="url" value={draft.base_url} placeholder="https://example.com/v1" onChange={event => invalidate(current => ({ ...current, base_url: event.target.value }), true, 'connection')} /><PlaintextHttpWarning baseUrl={draft.base_url} zh={zh} /></label>
               <label className="field"><span className="field-label">{zh ? '协议' : 'Protocol'}</span><select className="select" value={draft.protocol} onChange={event => {
                 const protocol = event.target.value as UpstreamProtocol;
                 invalidate(current => {
@@ -760,7 +761,7 @@ export function ModelConnectionForm(props: ModelConnectionFormProps) {
                   return <section key={`${index}-${endpoint.protocol}`} className="connection-fields">
                     <div className="detail-section-head"><strong>{zh ? '端点' : 'Endpoint'} {index + 2}</strong><button className="btn btn-quiet" type="button" onClick={() => invalidate(current => ({ ...current, additional_endpoints: current.additional_endpoints.filter((_, position) => position !== index) }), true, 'connection')}>{zh ? '移除' : 'Remove'}</button></div>
                     <label className="field"><span className="field-label">{zh ? '协议' : 'Protocol'}</span><select className="select" value={endpoint.protocol} onChange={event => { const protocol = event.target.value as UpstreamProtocol; updateEndpoint({ protocol, protocol_profile_id: `profile/custom/${protocol}`, protocol_profile_revision: endpoint.protocol_profile_revision + 1 }); }}><option value="chat_completions">OpenAI Chat Completions</option><option value="responses">OpenAI Responses</option><option value="messages">Anthropic Messages</option></select></label>
-                    <label className="field"><span className="field-label">Base URL</span><input className="input" inputMode="url" value={endpoint.base_url} onChange={event => updateEndpoint({ base_url: event.target.value })} /></label>
+                    <label className="field"><span className="field-label">Base URL</span><input className="input" inputMode="url" value={endpoint.base_url} onChange={event => updateEndpoint({ base_url: event.target.value })} /><PlaintextHttpWarning baseUrl={endpoint.base_url} zh={zh} /></label>
                     <label className="field"><span className="field-label">{zh ? '请求路径' : 'Request path'}</span><input className="input" value={endpoint.request_path_override ?? ''} onChange={event => updateEndpoint({ request_path_override: event.target.value || null })} /></label>
                     <label className="field"><span className="field-label">{zh ? '认证方式' : 'Authentication'}</span><select className="select" value={endpoint.authentication.kind} onChange={event => updateEndpoint({ authentication: event.target.value === 'api_key_header' ? { kind: 'api_key_header', header: 'x-api-key' } : event.target.value === 'none' ? { kind: 'none' } : { kind: 'bearer' } })}><option value="none">{zh ? '无认证' : 'None'}</option><option value="bearer">Bearer Token</option><option value="api_key_header">{zh ? '自定义 Header' : 'Custom header'}</option></select></label>
                     {endpoint.authentication.kind === 'api_key_header' && <label className="field"><span className="field-label">Header</span><input className="input" value={endpoint.authentication.header} onChange={event => updateEndpoint({ authentication: { kind: 'api_key_header', header: event.target.value } })} /></label>}

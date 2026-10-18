@@ -9,6 +9,27 @@ use crate::server::core_runtime::profiles::{
 
 pub(in crate::server::core_runtime) fn apply(
     input: &PlannerInputV1,
+    history: &AgentTurnHistorySnapshot,
+    outcome: &mut ClassificationOutcome,
+) {
+    if outcome.decision.decision_source != ComplexityDecisionSourceV1::Inherited
+        && outcome.decision.routing_observation.is_none()
+        && let Some(p) = native_protocol(input)
+    {
+        let mut o =
+            hiroute_domain::RoutingObservationV1::not_dispatched(p, &outcome.decision.branch_id);
+        if let Some(a) = &outcome.assessment {
+            o.target_segment = Some(a.target.segment_id.clone());
+            o.target_complete = !a.partial;
+        }
+        outcome.decision.routing_observation = Some(o);
+    }
+    reduce(input, history, outcome);
+    finalize_observation(input, outcome);
+}
+
+fn reduce(
+    input: &PlannerInputV1,
     _history: &AgentTurnHistorySnapshot,
     outcome: &mut ClassificationOutcome,
 ) {
@@ -35,7 +56,7 @@ pub(in crate::server::core_runtime) fn apply(
         }
         _ => return,
     };
-    let policy = judgment.execution_policy(name);
+    let policy = execution_policy(input, scope_id, judgment, name);
     outcome.decision.policy = Some(policy.clone());
     outcome.decision.competence_trigger = None;
     outcome.decision.simple_threshold_millis = None;
@@ -81,6 +102,7 @@ pub(in crate::server::core_runtime) fn apply(
         return;
     };
     if assessment.partial
+        || assessment.target.target_partial
         || !assessment.score.is_finite()
         || assessment.score < 0.0
         || assessment.score >= f64::from(judgment.competence.floor_millis) / 1000.0
@@ -107,6 +129,27 @@ pub(in crate::server::core_runtime) fn apply(
     {
         return;
     }
+    if native_protocol(input).is_some() {
+        use hiroute_domain::{ApplicabilityReasonV1 as R, HistoricalProtectionActionV1 as A};
+        if let Some(o) = outcome.decision.routing_observation.as_mut() {
+            if !o.applicability_requested {
+                o.applicability_reason = R::RequiredQuestionMissing;
+                o.protection_action = A::RetainedUnavailable;
+            } else if let Some(a) = o
+                .applicability_probability
+                .as_ref()
+                .and_then(serde_json::Number::as_f64)
+            {
+                if a < 0.5 {
+                    o.protection_action = A::Suppressed;
+                    return;
+                }
+                o.protection_action = A::Applied;
+            } else {
+                o.protection_action = A::RetainedUnavailable;
+            }
+        }
+    }
     outcome.decision.execution_group = ExecutionGroupV1::Primary;
     outcome.decision.selection_reason = ModelGroupReasonV1::LowCompetence;
     outcome.decision.competence_trigger =
@@ -118,6 +161,108 @@ pub(in crate::server::core_runtime) fn apply(
                 from_group: previous.group,
             }
         });
+}
+
+fn native_protocol(input: &PlannerInputV1) -> Option<&hiroute_domain::FrozenNativeProtocolV1> {
+    match &input.policy.route {
+        MaterializedRouteV1::SmartSaving {
+            native_protocol, ..
+        }
+        | MaterializedRouteV1::Branches {
+            native_protocol, ..
+        } => native_protocol.as_ref(),
+        _ => None,
+    }
+}
+
+fn execution_policy(
+    input: &PlannerInputV1,
+    scope: &str,
+    judgment: &hiroute_domain::JudgmentSettingsV1,
+    name: &str,
+) -> hiroute_domain::BranchExecutionPolicyV1 {
+    native_protocol(input).map_or_else(
+        || judgment.execution_policy(name),
+        |p| p.execution_policy(scope, judgment, name),
+    )
+}
+
+fn finalize_observation(input: &PlannerInputV1, outcome: &mut ClassificationOutcome) {
+    use hiroute_domain::{HistoricalProtectionActionV1 as A, ProtectionEligibilityV1 as E};
+    if outcome.decision.decision_source == ComplexityDecisionSourceV1::Inherited {
+        return;
+    }
+    let Some(p) = native_protocol(input) else {
+        return;
+    };
+    let Some(o) = outcome.decision.routing_observation.as_mut() else {
+        return;
+    };
+    let Some(scope) = p.scopes.get(&outcome.decision.branch_id) else {
+        return;
+    };
+    o.standard = scope.standard.clone();
+    o.simple_probability = outcome.decision.simple_probability.clone();
+    o.simple_threshold_millis = scope.simple_threshold_millis;
+    o.competence_floor_millis = scope.competence_floor_millis;
+    o.score = outcome
+        .assessment
+        .as_ref()
+        .and_then(|a| serde_json::Number::from_f64(a.score));
+    let dual = match &input.policy.route {
+        MaterializedRouteV1::Branches { branches, .. } => branches
+            .iter()
+            .find(|b| b.id == outcome.decision.branch_id)
+            .is_some_and(|b| b.primary_group.is_some()),
+        _ => true,
+    };
+    o.eligibility = if !dual {
+        E::SingleGroup
+    } else if !o.target_complete && !matches!(o.eligibility, E::NoTarget | E::PartialTarget) {
+        o.eligibility
+    } else if o.target_segment.is_none() {
+        E::NoTarget
+    } else if !o.target_complete {
+        E::PartialTarget
+    } else if let Some(a) = &outcome.assessment {
+        if a.partial
+            || a.target.target_partial
+            || !a.score.is_finite()
+            || !(0.0..=1.0).contains(&a.score)
+        {
+            E::Unrated
+        } else if !matches!(&input.policy.identity, PlannerRouteIdentityV2::Plan { plan_id, revision } if *plan_id == a.target.plan.plan_id && *revision == a.target.plan.plan_revision)
+        {
+            E::DifferentPlan
+        } else if let ExecutionAttribution::Single {
+            selected_branch_id,
+            executed_branch_id,
+            ..
+        } = &a.target.attribution
+        {
+            if *selected_branch_id != outcome.decision.branch_id
+                || *executed_branch_id != outcome.decision.branch_id
+            {
+                E::DifferentCategory
+            } else if a
+                .target
+                .branch_execution
+                .as_ref()
+                .is_none_or(|e| Some(&e.policy) != outcome.decision.policy.as_ref())
+            {
+                E::DifferentPolicy
+            } else {
+                E::Eligible
+            }
+        } else {
+            E::AmbiguousAttribution
+        }
+    } else {
+        E::Unrated
+    };
+    if o.protection_action == A::NotConsidered && o.eligibility == E::Eligible {
+        o.protection_action = A::NotNeeded;
+    }
 }
 
 /// Attribute the actual frozen position, never infer it from model-list membership.
@@ -141,7 +286,7 @@ pub(in crate::server::core_runtime) fn execution_position(
             };
             Some((
                 SMART_SAVING_SCOPE_ID,
-                judgment.execution_policy("Smart saving"),
+                execution_policy(input, SMART_SAVING_SCOPE_ID, judgment, "Smart saving"),
                 group,
             ))
         }
@@ -156,7 +301,11 @@ pub(in crate::server::core_runtime) fn execution_position(
             } else {
                 return None;
             };
-            Some((branch.id.as_str(), branch.execution_policy(), group))
+            Some((
+                branch.id.as_str(),
+                execution_policy(input, &branch.id, &branch.judgment, &branch.name),
+                group,
+            ))
         }),
         _ => None,
     };

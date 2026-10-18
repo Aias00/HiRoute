@@ -35,6 +35,44 @@ Category conditions, degree criteria and assessment criteria are separate inputs
 Existing plan/session views show actual group/model/profile, frozen thresholds and selection reasons
 separately from latest competence. Draft edits cannot reinterpret published evidence.
 
+Historical problem applicability is the default for newly published built-in System
+One routes. There is no switch or background setting. An existing frozen route
+continues unchanged until its next publication. Default assessments then resolve
+silently to the current default; custom instructions and every criterion remain
+byte-for-byte identical. Reset to default restores current text while preserving
+thresholds. Unsupported context references fail Preview with the scope and field.
+Local rules and custom extensions remain unchanged. Simple probability remains
+0.8 and the competence floor remains 0.5 unless configured otherwise.
+
+The applicability protocol supplies separate `prior_context`, `assessment_stage`
+and `latest_user`. Background is fixed at eight whole turns before the actual
+assessed stage, preserving bounded interrupted/unknown turns and their status.
+The complete stage can be longer. Wire-budget trimming marks the target partial and
+omits the applicability judgment without refilling history; partial scores cannot trigger
+historical protection. Current input is never silently truncated; tool-result bodies
+are excluded.
+
+For an otherwise eligible historical low-score protection opportunity, applicability
+at least 0.5 retains protection and a lower value suppresses it. Unavailable answers
+retain protection conservatively. Attribution, version, category, score/rubric
+validity, same-turn inheritance and availability relay retain their existing rules.
+
+The connection page retains one connectivity test with the existing contract and a
+current-default synthetic example. There is no route-editor test. CLI and
+acceptance diagnostics can explicitly test the full nineteen-question maximum
+shape through the production transport/parser. Explicit testing may consume
+quota; opening, saving and publication never probe a provider.
+
+Plan/session quality includes counts from all retained matching decisions,
+independent of stage pages and score/model filters. Current events mark all four
+classifier protocols; known non-applicability decisions are counted separately and
+do not make mixed scopes partial. Authenticated supported older formats also count as known earlier-publication
+decisions. Unproven unmarked events, missing projections and bounded scans remain
+coverage gaps: counts stay visible, while exact rates are
+unavailable. Content-only deletion keeps safe evidence; full fact deletion/expiry
+removes it. Every scope records its authored default/custom assessment intent before sealing. Rates describe
+routing behavior and do not claim accuracy or quality improvement.
+
 The CLI keeps `decision services list/apply/test` and the existing routing preview/apply workflow.
 Editor data uses `smart.judgment`, or `branch_routing.judgment` with branch `primary_candidates` and optional
 complete `judgment`. Custom extensions follow the supplied definition and rubric; their form provides
@@ -42,5 +80,6 @@ examples and the single current OpenAPI. No separate Secret-management UI is nee
 
 See [HiRoute extension API semantics](../decision-extensions/api/README.md), [optional self-hosted Jev deployment](../decision-extensions/extensions/jev-decider/README.md),
 [System One mapping](../decision-extensions/api/system-one-design.md) and [code owners](code-map/decision-foundation.md).
-Development v1 is replaced in place using fresh data, without migration or old-format compatibility.
+Earlier development-only custom-extension shapes have no negotiation path; supported
+released HiRoute data uses the registered admission/recovery readers.
 Tool selection is documentation-only.

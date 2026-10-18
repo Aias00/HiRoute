@@ -21,6 +21,11 @@ mod diagnostic;
 use diagnostic::classifier_status_failure;
 use diagnostic::{CallDiagnostic, classifier_response_failure, diagnostic_request};
 
+#[path = "classification/c_capability.rs"]
+mod c_capability;
+#[path = "classification/c_request.rs"]
+mod c_request;
+pub use c_capability::CClassifierDiagnosticOutcome;
 #[path = "classification/group_policy.rs"]
 mod group_policy;
 #[path = "classification/protocol.rs"]
@@ -116,6 +121,7 @@ pub(super) struct ClassificationRequest<'a> {
 }
 
 struct PreparedDecisionRequest {
+    routing_observation: Option<hiroute_domain::RoutingObservationV1>,
     template: PreparedReplayTemplate,
     has_target: bool,
     target_partial: bool,
@@ -145,6 +151,21 @@ enum CallFailure {
     RateLimited,
     EndpointRejected,
     InvalidOutput,
+}
+
+impl CallFailure {
+    fn applicability_reason(self) -> hiroute_domain::ApplicabilityReasonV1 {
+        use hiroute_domain::ApplicabilityReasonV1 as R;
+        match self {
+            Self::Timeout => R::Timeout,
+            Self::Unavailable => R::Unavailable,
+            Self::RejectedInput => R::RejectedInput,
+            Self::AuthenticationRejected => R::AuthenticationRejected,
+            Self::RateLimited => R::RateLimited,
+            Self::EndpointRejected => R::EndpointRejected,
+            Self::InvalidOutput => R::InvalidOutput,
+        }
+    }
 }
 
 struct ResolvedLatestUser {
@@ -185,6 +206,16 @@ impl ProductionGatewayRuntime {
                 })
                 .collect(),
             };
+        if hiroute_domain::native_mode(mode) {
+            let protocol = hiroute_domain::FrozenNativeProtocolV1::freeze(
+                &hiroute_domain::NativeProtocolV1::default(),
+                classifier.decision.clone(),
+                ["local", "general"]
+                    .map(|id| (id.to_owned(), hiroute_domain::JudgmentSettingsV1::default())),
+            )
+            .map_err(|_| ClassifierDiagnosticError::InvalidConfig)?;
+            Arc::make_mut(&mut classifier).native_protocol = Some(protocol);
+        }
         let config_digest = hiroute_domain::CanonicalDigest::of(mode)
             .map_err(|_| ClassifierDiagnosticError::InvalidConfig)?;
         let strategy = ComplexityV1::compile_with_classifier(
@@ -311,6 +342,7 @@ impl ProductionGatewayRuntime {
             });
         }
 
+        let mut routing_observation = None;
         let result = match request.classifier {
             Some(classifier) => {
                 let prepared = if classifier.system_one_model.is_some() {
@@ -322,6 +354,16 @@ impl ProductionGatewayRuntime {
                 match prepared {
                     Err(error) => Err(error),
                     Ok(prepared) => {
+                        routing_observation = prepared.routing_observation.clone();
+                        if let Some(o) = routing_observation.as_mut()
+                            && o.applicability_requested
+                        {
+                            o.applicability_requested = false;
+                            o.applicability_state =
+                                hiroute_domain::ApplicabilityStateV1::NotRequested;
+                            o.applicability_reason =
+                                hiroute_domain::ApplicabilityReasonV1::DispatchNotStarted;
+                        }
                         let target_trimmed = prepared.target_partial;
                         match ensure_call_active(
                             call_deadline,
@@ -333,6 +375,7 @@ impl ProductionGatewayRuntime {
                                     .call_classifier(
                                         classifier,
                                         prepared,
+                                        &mut routing_observation,
                                         request.replay,
                                         request.publication_revision,
                                         call_deadline,
@@ -363,6 +406,23 @@ impl ProductionGatewayRuntime {
             u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
         match result {
             Ok(response) => {
+                if let Some(o) = routing_observation.as_mut()
+                    && o.applicability_requested
+                {
+                    o.applicability_probability = response
+                        .applicability
+                        .and_then(serde_json::Number::from_f64);
+                    o.applicability_state = if o.applicability_probability.is_some() {
+                        hiroute_domain::ApplicabilityStateV1::Valid
+                    } else {
+                        hiroute_domain::ApplicabilityStateV1::Unavailable
+                    };
+                    o.applicability_reason = if o.applicability_probability.is_some() {
+                        hiroute_domain::ApplicabilityReasonV1::Answered
+                    } else {
+                        hiroute_domain::ApplicabilityReasonV1::InvalidOutput
+                    };
+                }
                 let reason_codes = if response.invalid_assessment {
                     vec![ComplexityReasonCodeV1::ClassifierAssessmentInvalid]
                 } else {
@@ -378,6 +438,8 @@ impl ProductionGatewayRuntime {
                 Ok(ClassificationOutcome {
                     diagnostic_failure: None,
                     decision: BranchDecisionV1 {
+                        decision_protocol: Some(hiroute_domain::DecisionProtocolV1::LocalRules),
+                        routing_observation,
                         policy: None,
                         competence_trigger: None,
                         execution_group: hiroute_domain::ExecutionGroupV1::Regular,
@@ -411,6 +473,12 @@ impl ProductionGatewayRuntime {
             }
             Err(failure) => {
                 let mut fallback = local_decision;
+                if let Some(o) = routing_observation.as_mut()
+                    && o.applicability_requested
+                {
+                    o.applicability_reason = failure.applicability_reason();
+                }
+                fallback.routing_observation = routing_observation;
                 fallback.fallback_used = true;
                 fallback.classification_duration_micros = Some(classification_duration_micros);
                 fallback.fallback_reason = Some(match failure {
@@ -438,6 +506,7 @@ impl ProductionGatewayRuntime {
         &self,
         classifier: &RestBranchClassifierAuthorityV1,
         prepared: PreparedDecisionRequest,
+        routing_observation: &mut Option<hiroute_domain::RoutingObservationV1>,
         replay: &ReplayStore,
         publication_revision: u64,
         call_deadline: Instant,
@@ -573,6 +642,16 @@ impl ProductionGatewayRuntime {
             .budget()
             .reserve(MemoryRole::ResponsePrefix, CLASSIFIER_RESPONSE_BYTES)
             .map_err(|_| ClassificationError::Resource)?;
+        if prepared
+            .bindings
+            .as_ref()
+            .is_some_and(|b| b.applicability.is_some())
+            && let Some(o) = routing_observation.as_mut()
+        {
+            o.applicability_requested = true;
+            o.applicability_state = hiroute_domain::ApplicabilityStateV1::Unavailable;
+            o.applicability_reason = hiroute_domain::ApplicabilityReasonV1::Pending;
+        }
         let exchange_result = collect_response(&mut exchange, call_deadline, &mut diagnostic).await;
         diagnostic.protocol(exchange.transport_facts().upstream_protocol);
         let (status, body) = match exchange_result {

@@ -158,6 +158,8 @@ fn fixed_execution_has_recorded_context_without_plan_identity() {
 fn external_and_rule_fallback_classification_facts_are_explicit() {
     let mut external = route();
     external.complexity = Some(BranchDecisionV1 {
+        decision_protocol: Some(crate::DecisionProtocolV1::LocalRules),
+        routing_observation: None,
         policy: None,
         competence_trigger: None,
         execution_group: crate::ExecutionGroupV1::Regular,
@@ -183,6 +185,8 @@ fn external_and_rule_fallback_classification_facts_are_explicit() {
 
     let mut fallback = route();
     fallback.complexity = Some(BranchDecisionV1 {
+        decision_protocol: Some(crate::DecisionProtocolV1::LocalRules),
+        routing_observation: None,
         policy: None,
         competence_trigger: None,
         execution_group: crate::ExecutionGroupV1::Regular,
@@ -249,6 +253,50 @@ fn authenticated_v1_fact_is_recovery_only_and_cannot_reenter_live_ingestion() {
         Err(ExecutionFactError::UnsupportedSchema)
     );
     legacy.validate_persisted_contract().unwrap();
+}
+
+#[test]
+fn pre_c_product_digest_is_read_only_and_cannot_authenticate_new_detail() {
+    let mut old = gateway_fact_envelopes().remove(0);
+    old.schema_digest = CanonicalDigest::parse(
+        "sha256:4f0dbcc9f7862133e73e451f64d7a6d6e5de146d958ac8bf3a4d1acc885b6b1d",
+    )
+    .unwrap();
+    let bytes = serde_json::to_vec(&old).unwrap();
+    let digest = CanonicalDigest::of(&old).unwrap();
+    assert_eq!(old.validate(), Err(ExecutionFactError::UnsupportedSchema));
+    old.validate_persisted_contract().unwrap();
+    let decoded: ExecutionFactEnvelopeV1 = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(serde_json::to_vec(&decoded).unwrap(), bytes);
+    assert_eq!(CanonicalDigest::of(&decoded).unwrap(), digest);
+    let p = crate::NativeProtocolV1::default();
+    let mut j = crate::JudgmentSettingsV1::default();
+    p.stock_assessment(&mut j);
+    let frozen = crate::FrozenNativeProtocolV1::freeze(
+        &p,
+        j.degree.definition().into(),
+        [(crate::SMART_SAVING_SCOPE_ID.into(), j)],
+    )
+    .unwrap();
+    let ExecutionFactV1::RouteDecision(route) = &mut old.fact else {
+        unreachable!()
+    };
+    let decision = route.complexity.as_mut().unwrap();
+    decision.decision_protocol = Some(crate::DecisionProtocolV1::SystemOneC);
+    decision.routing_observation = Some(crate::RoutingObservationV1::not_dispatched(
+        &frozen,
+        crate::SMART_SAVING_SCOPE_ID,
+    ));
+    decision.decision_source = ComplexityDecisionSourceV1::ExternalClassifier;
+    decision.complexity_score = None;
+    decision.threshold = None;
+    decision.classification_duration_micros = Some(125);
+    assert_eq!(
+        old.validate_persisted_contract(),
+        Err(ExecutionFactError::InvalidFact)
+    );
+    old.schema_digest = CanonicalDigest::parse(EXECUTION_FACT_PORT_DIGEST_V2).unwrap();
+    old.validate().unwrap();
 }
 
 #[test]
@@ -556,6 +604,8 @@ fn route() -> RouteDecisionFactV1 {
         output_digest: digest("output"),
         branch: PlannedBranchV1::CustomExactOrder,
         complexity: Some(BranchDecisionV1 {
+            decision_protocol: Some(crate::DecisionProtocolV1::LocalRules),
+            routing_observation: None,
             policy: None,
             competence_trigger: None,
             execution_group: crate::ExecutionGroupV1::Regular,

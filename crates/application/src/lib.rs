@@ -642,6 +642,11 @@ impl ApplicationService {
         let Some(ports) = self.ports.as_ref() else {
             return failed(ErrorCode::DaemonUnavailable, request.request_id);
         };
+        if request.payload.get("schema").and_then(Value::as_str)
+            == Some(hiroute_application_api::HISTORICAL_APPLICABILITY_TEST_SCHEMA_V1)
+        {
+            return self.test_classifier_decision_c(request);
+        }
         let Ok(test) = serde_json::from_value::<
             hiroute_application_api::ClassifierDecisionTestRequestV1,
         >(request.payload) else {
@@ -947,3 +952,5 @@ mod tests {
         }
     }
 }
+
+mod classifier_c;

@@ -240,6 +240,8 @@
     "hiroute.hermes-native-restore/v1",
     "hiroute.hermes-native/v1",
     "hiroute.hermes-plugin-restore/v1",
+    "hiroute.historical-applicability-test-result/v1",
+    "hiroute.historical-applicability-test/v1",
     "hiroute.launcher-upgrade-status/v1",
     "hiroute.launcher-upgrade/v1",
     "hiroute.local-pipe/v1",
@@ -277,6 +279,7 @@
     "hiroute.native-files/v1",
     "hiroute.native-launch/v1",
     "hiroute.native-observation/v2",
+    "hiroute.native-protocol-diagnostic/v1",
     "hiroute.native-restoration-ack/v1",
     "hiroute.observation-retention/v1",
     "hiroute.observation.ack/v2",
@@ -305,6 +308,7 @@
     "hiroute.operation-step/v1",
     "hiroute.operation-view/v1",
     "hiroute.otel.gen-ai-mapping/v1",
+    "hiroute.partitioned-history/v1",
     "hiroute.pi-additional-model/v1",
     "hiroute.pi-local-cli/v1",
     "hiroute.pi-native-resources/v1",
@@ -359,6 +363,7 @@
     "hiroute.release-model-data/v2",
     "hiroute.routing-control/v1",
     "hiroute.routing-control/v2",
+    "hiroute.routing-observations/v1",
     "hiroute.routing-publication-effect/v1",
     "hiroute.routing-publication-effect/v2",
     "hiroute.routing-receipt/v1",
@@ -416,6 +421,8 @@
     "hiroute.subscription-login-result/v1",
     "hiroute.subscription-maintenance/v2",
     "hiroute.subscription-proxy/v1",
+    "hiroute.system-one-c/v1",
+    "hiroute.system-one-legacy/v1",
     "hiroute.system-status/v1",
     "hiroute.trust-levels/v1",
     "hiroute.upgrade-installer-decision/v1",
@@ -1073,11 +1080,12 @@
       ]
     },
     {
-      "subject": "value_read_entry",
+      "subject": "observation_read_entry",
       "audited_prefixes": [
         "hiroute.value-query",
         "hiroute.value-view",
-        "hiroute.observation.value-report"
+        "hiroute.observation.value-report",
+        "hiroute.observation.query"
       ],
       "current_contracts": [
         "hiroute.observation.query/v2",
@@ -1153,6 +1161,40 @@
       "legacy_support": []
     },
     {
+      "subject": "windows_managed_artifact_marker",
+      "audited_prefixes": [
+        "hiroute.windows-managed-artifact-marker"
+      ],
+      "current_contracts": [
+        "hiroute.windows-managed-artifact-marker/v5"
+      ],
+      "legacy_support": []
+    },
+    {
+      "subject": "classifier_diagnostics",
+      "audited_prefixes": [
+        "hiroute.classifier-decision-test",
+        "hiroute.classifier-decision-test-result"
+      ],
+      "current_contracts": [
+        "hiroute.classifier-decision-test/v1",
+        "hiroute.classifier-decision-test-result/v1"
+      ],
+      "legacy_support": []
+    },
+    {
+      "subject": "historical_applicability_diagnostics",
+      "audited_prefixes": [
+        "hiroute.historical-applicability-test",
+        "hiroute.historical-applicability-test-result"
+      ],
+      "current_contracts": [
+        "hiroute.historical-applicability-test/v1",
+        "hiroute.historical-applicability-test-result/v1"
+      ],
+      "legacy_support": []
+    },
+    {
       "subject": "compute_scan_projection",
       "audited_prefixes": [
         "hiroute.compute-scan-result"
@@ -1165,16 +1207,6 @@
       "owner": "application-api/daemon/model-connections",
       "reason": "The shared scanner retains the currently published empty-request V1 projection and one-model discovery handles. An explicit V2 request selects connection-point projection; credentials and source semantics have one private owner. Current CLI/Desktop consume the V2 shape without expanding old handles.",
       "removal_condition": "Remove the V1 request/projection adapter only when the supported public caller policy retires the released V1 API and its one-model handles."
-    },
-    {
-      "subject": "windows_managed_artifact_marker",
-      "audited_prefixes": [
-        "hiroute.windows-managed-artifact-marker"
-      ],
-      "current_contracts": [
-        "hiroute.windows-managed-artifact-marker/v5"
-      ],
-      "legacy_support": []
     }
   ],
   "forbidden_contracts": [
@@ -1325,6 +1357,21 @@
       ]
     },
     {
+      "contract": "hiroute.worker-dependency-selection-confirmation/v1",
+      "field": "test-only Windows path projection of frozen schema23 Worker journals",
+      "mode": "frozen_fixture",
+      "owner": "local-storage",
+      "reason": "Exercise original schema23 SQL migration and recovery with valid Windows absolute paths. An independent derivation first authenticates the unchanged original fixture and its digest formulas, then changes only installation paths and dependent proofs. This fixture is synthetic and does not establish a historical Windows release or cross-platform backup migration.",
+      "removal_condition": "Retire together with the schema23 native-path recovery matrix and its replacement evidence; preserve the original historical producer fixture independently.",
+      "allowed_paths": [
+        "crates/local-storage/src/migrations/fixtures/schema23-worker-operations-windows.json",
+        "crates/local-storage/src/migrations/fixtures/derive-windows-schema23.py",
+        "crates/local-storage/src/migrations/fixtures/README.md",
+        "crates/local-storage/src/migrations/worker_dependencies_v24_tests.rs",
+        "crates/local-storage/src/migrations/upgrade_batch_recovery_tests.rs"
+      ]
+    },
+    {
       "contract": "hiroute.worker-settings/v1",
       "field": "Qoder CLI 1.1.65 exact native-session history and compaction witnesses in acceptance fixtures",
       "mode": "frozen_fixture",
@@ -1424,10 +1471,14 @@
       "field": "pre-branch execution digest sha256:de91d4f2333db66f0ec3f8b63ce192267dee0a56b65f34180b06996b232fb2c6",
       "mode": "recovery_read_only",
       "owner": "domain/observation",
-      "reason": "Read retained immutable observations made before branch competence metadata. New ingestion accepts only the current digest.",
+      "reason": "Read retained immutable observations made before branch competence metadata. New ingestion accepts only the current digest. Authenticated supported-format evidence may refresh the existing safe routing projection and count as known non-applicability without identifying a classifier family. Missing markers alone remain unknown.",
       "removal_condition": "Remove after the retained observation window no longer includes pre-branch producers.",
       "allowed_paths": [
-        "crates/domain/src/observation/execution_validation.rs"
+        "crates/domain/src/observation/execution_validation.rs",
+        "crates/domain/src/observation/execution.rs",
+        "crates/observation/src/store/safe_facts.rs",
+        "crates/observation/src/store/backfill.rs",
+        "crates/observation/src/store/tests/plan_quality/routing_observations.rs"
       ]
     },
     {
@@ -1512,13 +1563,16 @@
       "field": "function-only execution digest sha256:80b4ff13af8abc79d7721fea42141300beade2acf1d2659983ceaafcdc6e4799 and omitted required_named.tool_kind",
       "mode": "recovery_read_only",
       "owner": "domain/observation",
-      "reason": "Supported 0.2.0 d625e653, 0.3.0 ce4c4802 and 0.3.1 13856abd Product facts encode required_named with only name. Interpret omission as Function and keep that canonical encoding to authenticate retained fact/receipt digests. The 0.3.0/0.3.1 envelope digest and its optional pricing remain readable only in persisted recovery; live ingestion uses the current digest. Gateway live input still requires tool_kind, and Custom always retains its explicit discriminator. Inline frozen choice and digest fixtures preserve the exact released shapes.",
+      "reason": "Supported 0.2.0 d625e653, 0.3.0 ce4c4802 and 0.3.1 13856abd Product facts encode required_named with only name. Interpret omission as Function and keep that canonical encoding to authenticate retained fact/receipt digests. The 0.3.0/0.3.1 envelope digest and its optional pricing remain readable only in persisted recovery; live ingestion uses the current digest. Gateway live input still requires tool_kind, and Custom always retains its explicit discriminator. Inline frozen choice and digest fixtures preserve the exact released shapes. Authenticated supported-format evidence may refresh the existing safe routing projection and count as known non-applicability without identifying a classifier family. Missing markers alone remain unknown.",
       "removal_condition": "Retire only when every supported activity store and retained backup has no function-only contract rows/receipts, or an explicit identity-preserving migration replaces this reader. Keep the Function canonical encoding while retained authenticated digests depend on it.",
       "allowed_paths": [
         "crates/domain/src/observation/execution.rs",
         "crates/domain/src/observation/execution_validation.rs",
         "crates/domain/src/observation/execution_tests.rs",
-        "crates/observation/src/store/tests/store_flow.rs"
+        "crates/observation/src/store/tests/store_flow.rs",
+        "crates/observation/src/store/safe_facts.rs",
+        "crates/observation/src/store/backfill.rs",
+        "crates/observation/src/store/tests/plan_quality/routing_observations.rs"
       ]
     },
     {
@@ -1534,61 +1588,6 @@
         "crates/daemon/tests/fixtures/collaboration-skill-v0.3.1/README.md",
         "crates/daemon/src/control/runtime/settings_entry_tests.rs",
         "crates/daemon/src/control/runtime/settings_entry_collaboration_tests.rs"
-      ]
-    },
-    {
-      "contract": "hiroute.agent-model-grant/v3",
-      "field": "omitted consumer on retained grant, operation and publication bytes",
-      "mode": "recovery_read_only",
-      "owner": "domain/agents",
-      "reason": "An absent consumer retains the exact released v3 digest and existing non-Hermes interpretation. Only a digest-bound Hermes consumer receives the new identity policy; absence is never inferred from a native header or user-agent.",
-      "removal_condition": "Remove this absent-field read behavior only with supported grant/publication/Operation conversion and old-to-new recovery evidence.",
-      "allowed_paths": [
-        "crates/domain/src/agents/model_grant.rs",
-        "crates/domain/src/publication/snapshot.rs",
-        "crates/gateway/src/publication/schema.rs",
-        "crates/gateway/src/dispatch/run.rs"
-      ]
-    },
-    {
-      "contract": "hiroute.hermes-config-restore/v1",
-      "field": "prior long scoped Hermes provider keys and placeholder API keys in before/after native fields",
-      "mode": "recovery_read_only",
-      "owner": "agent-integrations/hermes",
-      "reason": "Retained pre-compact restore records and accepted native effects bind full provider keys. Current writes use a compact scoped provider, preserve the original baseline, and validate foreign destinations/references. Frozen synthetic bytes were emitted by product revision 80269c50c0dd15fcc7cd48d3768ca52aa2c7c362 through hermes_configure, with capture inputs recorded in the fixture. Exact stored before/after values also preserve prior placeholder API keys. Explicit reconfiguration writes the same scoped local model grant into the managed provider API key for auxiliary Chat SDK calls; it retains the original protected baseline and does not add global credential headers or change Gateway admission.",
-      "removal_condition": "Retire only when supported installed profiles and retained operation/restore records no longer contain long provider keys, together with the old-byte production reader regression.",
-      "allowed_paths": [
-        "crates/integrations/src/agents/hermes_config.rs",
-        "crates/integrations/tests/fixtures/hermes-config-restore-80269c5.json"
-      ]
-    },
-    {
-      "contract": "hiroute.gateway.publication-snapshot/v3",
-      "field": "omitted billing_class on retained executable projections",
-      "mode": "recovery_read_only",
-      "owner": "routing-publication",
-      "reason": "Preserve strict decoding and canonical stored Product bytes when the derived billing class is absent. gateway_snapshot projects trusted source billing class without rewriting stored publication/Plan records; absence is unknown, never free. Current request receipts use this supplying class independently of any selected API-equivalent estimate.",
-      "removal_condition": "Retire only with an explicit supported publication/cache compatibility decision.",
-      "allowed_paths": [
-        "crates/domain/src/publication/mod.rs",
-        "crates/domain/src/publication/snapshot.rs",
-        "crates/gateway/src/publication/schema.rs",
-        "crates/gateway/src/composition/ports.rs"
-      ]
-    },
-    {
-      "contract": "hiroute.worker-dependency-selection-confirmation/v1",
-      "field": "test-only Windows path projection of frozen schema23 Worker journals",
-      "mode": "frozen_fixture",
-      "owner": "local-storage",
-      "reason": "Exercise original schema23 SQL migration and recovery with valid Windows absolute paths. An independent derivation first authenticates the unchanged original fixture and its digest formulas, then changes only installation paths and dependent proofs. This fixture is synthetic and does not establish a historical Windows release or cross-platform backup migration.",
-      "removal_condition": "Retire together with the schema23 native-path recovery matrix and its replacement evidence; preserve the original historical producer fixture independently.",
-      "allowed_paths": [
-        "crates/local-storage/src/migrations/fixtures/schema23-worker-operations-windows.json",
-        "crates/local-storage/src/migrations/fixtures/derive-windows-schema23.py",
-        "crates/local-storage/src/migrations/fixtures/README.md",
-        "crates/local-storage/src/migrations/worker_dependencies_v24_tests.rs",
-        "crates/local-storage/src/migrations/upgrade_batch_recovery_tests.rs"
       ]
     },
     {
@@ -1680,6 +1679,120 @@
       ]
     },
     {
+      "contract": "hiroute.observation.product-execution-envelope/v2",
+      "field": "schema_digest sha256:4f0dbcc9f7862133e73e451f64d7a6d6e5de146d958ac8bf3a4d1acc885b6b1d and omitted routing_observation",
+      "mode": "recovery_read_only",
+      "owner": "observation-storage",
+      "reason": "Authenticate retained pre-C Product v2 bytes from producer 2b547d52a35011638ba63f8e4e0fbf1b289f30df without rewriting immutable fields or event digests. Live ingestion requires the current descriptor; C detail is invalid under older descriptors. Existing released readers remain retained. Authenticated supported-format evidence may refresh the existing safe routing projection and count as known non-applicability without identifying a classifier family. Missing markers alone remain unknown.",
+      "removal_condition": "Remove only after active stores and every supported retained backup contain no events with this exact pre-C descriptor.",
+      "allowed_paths": [
+        "crates/domain/src/observation/execution_validation.rs",
+        "crates/domain/src/observation/execution_tests.rs",
+        "crates/domain/src/observation/execution.rs",
+        "crates/observation/src/store/safe_facts.rs",
+        "crates/observation/src/store/backfill.rs",
+        "crates/observation/src/store/tests/plan_quality/routing_observations.rs"
+      ]
+    },
+    {
+      "contract": "hiroute.compiled-agent-plan/v3",
+      "field": "ordinal refinement definition with omitted kind",
+      "mode": "recovery_read_only",
+      "owner": "decision-foundation",
+      "reason": "Preserve the untagged ordinal form accepted by the existing v1 reader while reading the current emitted kind=ordinal discriminator. Categorical C capability requests exercise the same definition. Current serialization always emits ordinal; other tags and unknown members remain invalid.",
+      "removal_condition": "Retire only through an explicit versioned reader or request adapter that accounts for previously accepted untagged ordinal definitions and supported retained inputs.",
+      "allowed_paths": [
+        "crates/domain/src/routing/decision_definition.rs",
+        "crates/cli/src/control_plane.rs"
+      ]
+    },
+    {
+      "contract": "hiroute.system-one-c/v1",
+      "field": "immutable native category v1 templates",
+      "mode": "frozen_fixture",
+      "owner": "decision-foundation",
+      "reason": "Keep supported published category/degree composition independent of current defaults. Assessment standard follows authored default/custom intent; legacy category wording is owned separately.",
+      "removal_condition": "Retire only after an explicit supported-bundle retirement or versioned adapter preserves retained C v1 publications and their immutable question identity.",
+      "allowed_paths": [
+        "crates/domain/src/routing/fixtures/native_category_v1.json",
+        "crates/domain/src/routing/system_one_c.rs",
+        "crates/domain/src/routing/system_one_c_tests.rs",
+        "crates/gateway/src/publication/compiler.rs",
+        "crates/gateway/src/core_runtime/classification/system_one.rs"
+      ]
+    },
+    {
+      "contract": "hiroute.plan-editor/v2",
+      "field": "released competence text without default/custom intent",
+      "mode": "legacy_adapter",
+      "owner": "decision-foundation",
+      "reason": "Supported released editors and configurations omit competence.standard. Exact legacy instructions and all three criteria mean default when compiling a new edit; other text is custom. Existing authenticated publication bytes and identities are unchanged.",
+      "removal_condition": "Remove only when the release support policy retires all inputs without explicit assessment intent, preserving released default/custom regression evidence until then.",
+      "allowed_paths": [
+        "crates/domain/src/routing/assessment.rs",
+        "crates/domain/src/routing/decision.rs",
+        "crates/domain/src/routing/authoring/tests.rs",
+        "crates/domain/src/routing/system_one_c_tests.rs",
+        "crates/domain/src/routing/authoring/fixtures/released-plan-editor.v2.json",
+        "crates/domain/src/routing/authoring/fixtures/released-default-assessment.v1.json",
+        "apps/desktop/src/features/decision-services/native-protocol.ts"
+      ]
+    },
+    {
+      "contract": "hiroute.observation.product-execution-envelope/v2",
+      "field": "released v0.3.1 route-decision carrier and exact original digest",
+      "mode": "frozen_fixture",
+      "owner": "observation-storage",
+      "reason": "Captured from the checksum-verified public v0.3.1 x86_64 Linux artifact at source 13856abd873da5b4373d39322493b4cc105c4867, using a local deterministic decision service. Verifies authenticated supported-format refresh, mixed upgrade coverage, unchanged carrier/digest and content-only versus full deletion. No current serializer regenerates this old input. The pagination fixture preserves two same-request released events to verify that internal evidence refresh cannot invalidate a previously issued facts cursor. Existing production Local Control queries retain the released reader identity in cursor bindings; current same-OS-user admission and the separate analysis scope remain unchanged.",
+      "removal_condition": "Retire only when the release support policy retires the supported pre-applicability carrier reader and its retained backup inputs.",
+      "allowed_paths": [
+        "crates/observation/tests/fixtures/released-v0.3.1-route-decision.json",
+        "crates/observation/src/store/tests/plan_quality/routing_observations_released.rs",
+        "crates/observation/tests/fixtures/released-v0.3.1-route-pagination.json",
+        "crates/application/src/observation_query/control/v2.rs"
+      ]
+    },
+    {
+      "contract": "hiroute.agent-model-grant/v3",
+      "field": "omitted consumer on retained grant, operation and publication bytes",
+      "mode": "recovery_read_only",
+      "owner": "domain/agents",
+      "reason": "An absent consumer retains the exact released v3 digest and existing non-Hermes interpretation. Only a digest-bound Hermes consumer receives the new identity policy; absence is never inferred from a native header or user-agent.",
+      "removal_condition": "Remove this absent-field read behavior only with supported grant/publication/Operation conversion and old-to-new recovery evidence.",
+      "allowed_paths": [
+        "crates/domain/src/agents/model_grant.rs",
+        "crates/domain/src/publication/snapshot.rs",
+        "crates/gateway/src/publication/schema.rs",
+        "crates/gateway/src/dispatch/run.rs"
+      ]
+    },
+    {
+      "contract": "hiroute.hermes-config-restore/v1",
+      "field": "prior long scoped Hermes provider keys and placeholder API keys in before/after native fields",
+      "mode": "recovery_read_only",
+      "owner": "agent-integrations/hermes",
+      "reason": "Retained pre-compact restore records and accepted native effects bind full provider keys. Current writes use a compact scoped provider, preserve the original baseline, and validate foreign destinations/references. Frozen synthetic bytes were emitted by product revision 80269c50c0dd15fcc7cd48d3768ca52aa2c7c362 through hermes_configure, with capture inputs recorded in the fixture. Exact stored before/after values also preserve prior placeholder API keys. Explicit reconfiguration writes the same scoped local model grant into the managed provider API key for auxiliary Chat SDK calls; it retains the original protected baseline and does not add global credential headers or change Gateway admission.",
+      "removal_condition": "Retire only when supported installed profiles and retained operation/restore records no longer contain long provider keys, together with the old-byte production reader regression.",
+      "allowed_paths": [
+        "crates/integrations/src/agents/hermes_config.rs",
+        "crates/integrations/tests/fixtures/hermes-config-restore-80269c5.json"
+      ]
+    },
+    {
+      "contract": "hiroute.gateway.publication-snapshot/v3",
+      "field": "omitted billing_class on retained executable projections",
+      "mode": "recovery_read_only",
+      "owner": "routing-publication",
+      "reason": "Preserve strict decoding and canonical stored Product bytes when the derived billing class is absent. gateway_snapshot projects trusted source billing class without rewriting stored publication/Plan records; absence is unknown, never free. Current request receipts use this supplying class independently of any selected API-equivalent estimate.",
+      "removal_condition": "Retire only with an explicit supported publication/cache compatibility decision.",
+      "allowed_paths": [
+        "crates/domain/src/publication/mod.rs",
+        "crates/domain/src/publication/snapshot.rs",
+        "crates/gateway/src/publication/schema.rs",
+        "crates/gateway/src/composition/ports.rs"
+      ]
+    },
+    {
       "contract": "hiroute.observation.analysis/v1",
       "field": "retained released-writer SQL triggers and optional native creation projection",
       "mode": "recovery_read_only",
@@ -1692,6 +1805,27 @@
         "crates/observation/src/analysis/native.rs",
         "crates/observation/src/analysis/native_origin.rs",
         "crates/observation/src/store/tests/analysis_delete_tests.rs"
+      ]
+    },
+    {
+      "contract": "hiroute.system-one-legacy/v1",
+      "field": "omitted native_protocol in supported frozen native publications",
+      "mode": "recovery_read_only",
+      "owner": "decision-foundation",
+      "reason": "Supported released v0.3.x native publications retain their original flat state, independent legacy category/assessment composition, policy and identities until replaced by a new publication. Current plan-editor authoring has no selector and always freezes the applicability protocol for built-in decision models. Reads and runtime execution never upgrade old publications. Retained v0.3.1 Plan-content Operations authenticate their editor against the protocol already sealed in that Operation; startup validation never applies the new authoring default or replays completed effects.",
+      "removal_condition": "Remove only after the release support policy explicitly retires every supported frozen legacy publication and retained backup, or an authenticated versioned migration preserves their original execution meaning. New publication defaults alone do not retire execution support.",
+      "allowed_paths": [
+        "crates/domain/src/routing/legacy_category.rs",
+        "crates/domain/src/routing/assessment.rs",
+        "crates/domain/src/routing/authoring/editor.rs",
+        "crates/domain/src/routing/authoring/tests.rs",
+        "crates/domain/src/routing/system_one_c.rs",
+        "crates/application/src/compiler/explicit.rs",
+        "crates/gateway/src/core_runtime/classification/system_one.rs",
+        "crates/gateway/src/core_runtime/classification/protocol.rs",
+        "crates/gateway/src/publication/compiler.rs",
+        "crates/domain/src/routing/authoring.rs",
+        "crates/domain/src/operation/routing_content.rs"
       ]
     }
   ]

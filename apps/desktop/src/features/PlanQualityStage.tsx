@@ -1,4 +1,5 @@
 import React from 'react';
+import { RoutingDecisionDetail, type RoutingObservation } from './RoutingObservations';
 import { Disclosure, UiIcon } from '../ui';
 import { qualityBranchLabel, qualityGroupLabel, qualityReasoningLabel, type BranchPolicy } from './plan-quality-state';
 
@@ -14,7 +15,7 @@ type Assessment = {
 };
 
 export type PlanQualitySample = {
-  selection?: { execution_group: 'regular' | 'primary'; simple_probability: number | null; simple_threshold_millis: number | null; selection_reason: 'simple_task' | 'complex_task' | 'low_competence' | 'degree_unavailable' | 'single_group' | 'decision_fallback' | 'availability_relay' | 'heuristic'; competence_trigger?: { score: number; floor_millis: number; segment_id: string } | null } | null;
+  selection?: { execution_group: 'regular' | 'primary'; simple_probability: number | null; simple_threshold_millis: number | null; selection_reason: 'simple_task' | 'complex_task' | 'low_competence' | 'degree_unavailable' | 'single_group' | 'decision_fallback' | 'availability_relay' | 'heuristic'; competence_trigger?: { score: number; floor_millis: number; segment_id: string } | null; routing_observation?: RoutingObservation } | null;
   branch_execution?: { policy: BranchPolicy; group: 'regular' | 'primary'; candidate_index: number } | null;
   upgrade?: { decision: { segment_id: string; score: number; floor_millis: number; from_group: 'regular' | 'primary' }; trigger_request_id: string } | null;
   segment_id: string;
@@ -71,6 +72,7 @@ export function PlanQualityStage({ sample, modelName, activeRevision, language, 
         <p>{({ simple_task: text('简单任务', 'Simple task'), complex_task: text('复杂任务', 'Complex task'), low_competence: text('上一阶段低分保护', 'Protection after a low stage score'), degree_unavailable: text('程度判断失败', 'Degree decision unavailable'), single_group: text('本分支仅常规组', 'Regular group only'), decision_fallback: text('决策失败兜底', 'Decision failure fallback'), availability_relay: text('沿用本轮故障接力', 'Continue this turn’s fallback'), heuristic: text('启发式规则', 'Heuristic rules') })[sample.selection.selection_reason]} → {qualityGroupLabel(branch, sample.selection.execution_group, language)}</p>
         {sample.selection.simple_probability != null && <p>{text('本次简单概率', 'Simple probability')} {sample.selection.simple_probability.toFixed(3)} · {text('当时阈值', 'Threshold')} {sample.selection.simple_threshold_millis == null ? '—' : sample.selection.simple_threshold_millis / 1000}</p>}
         {sample.selection.competence_trigger && <p>{text('触发评分', 'Trigger score')} {sample.selection.competence_trigger.score} &lt; {sample.selection.competence_trigger.floor_millis / 1000}</p>}
+        {sample.selection.routing_observation && <RoutingDecisionDetail observation={sample.selection.routing_observation} language={language} />}
         {sample.branch_execution && sample.selection.execution_group !== sample.branch_execution.group && <p>{text('经候选故障接力后执行', 'Executed after candidate failover')} · {qualityGroupLabel(branch, sample.branch_execution.group, language)} · {text('候选 ', 'Candidate ')}{sample.branch_execution.candidate_index + 1}</p>}
         {sample.first_request_id && sample.execution_evidence_available && <button type="button" className="btn btn-quiet" disabled={!onOpenEvidence} onClick={() => onOpenEvidence?.(sample.session_id, sample.first_request_id!)}>{text('查看选择请求', 'View selection request')}</button>}
       </div>}

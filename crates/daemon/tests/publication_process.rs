@@ -9,6 +9,12 @@ fn real_process_decision_services_and_branch_publication() {
     run_script("decision_services_product.py");
 }
 
+/// Route actual model requests and inspect C facts through the existing product query.
+#[test]
+fn real_process_c_routing_execution_and_retained_observations() {
+    run_script_case("decision_services_product.py", Some("routed"));
+}
+
 /// Current released CLI point scan/preparation shares the native multi-model exact-save boundary.
 #[test]
 fn released_cli_connection_points_prepare_and_save_exact_models() {
@@ -70,6 +76,11 @@ fn real_process_plan_lifecycle_preserves_content_and_checks_references() {
 #[test]
 fn real_process_native_model_save_publishes_and_reaches_gateway() {
     run_script("model_connections_product.py");
+}
+
+#[test]
+fn real_process_custom_http_save_recheck_and_validation_errors() {
+    run_script("custom_http_product.py");
 }
 
 /// Branch execution identity must not replace current managed source membership.

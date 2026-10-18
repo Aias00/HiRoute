@@ -3,6 +3,7 @@ use crate::compiler::test_fixtures::compilation_facts;
 
 fn change() -> PlanContentChangeV2 {
     PlanContentChangeV2 {
+
         schema: PLAN_CONTENT_CHANGE_SCHEMA_V2.into(), target: PlanContentTargetV2::Create { creation_key: "editor-one".into() },
         editor: serde_json::from_value(serde_json::json!({
             "schema": PLAN_EDITOR_SCHEMA_V2, "display_name": "日常编码", "purpose": "辅助日常编码",
@@ -54,7 +55,7 @@ fn publication_requires_the_exact_saved_decision_revision_for_both_modes() {
         change.editor.smart.economy = change.editor.candidates.clone();
         change.editor.smart.primary = change.editor.candidates.clone();
         change.editor.smart.classifier = classifier.clone();
-        change.editor.branch_routing = Some(BranchRoutingV1 {
+        change.editor.branch_routing = Some(BranchRoutingEditorV1 {
             classifier,
             branches: ["writing", "review"]
                 .map(|id| RouteBranchV1 {
@@ -270,9 +271,82 @@ fn consumed_draft_binds_identity_and_revision_but_publishes_the_submitted_editor
 
 #[test]
 fn complete_content_operation_binds_the_version_head_and_publication() {
-    let change = change();
-    let state = state();
-    let preview = preview_plan_content(&change, &state).unwrap();
+    assert_complete_content_operation(false);
+}
+
+#[test]
+fn retained_native_operation_uses_frozen_semantics_and_still_rejects_tampering() {
+    assert_complete_content_operation(true);
+}
+
+fn assert_complete_content_operation(legacy_native: bool) {
+    let mut change = change();
+    let mut state = state();
+    if legacy_native {
+        let service = DecisionServiceV1 {
+            id: "decision/retained-operation".into(),
+            revision: 1,
+            name: "Retained native".into(),
+            connection: DecisionConnectionV1::SystemOne {
+                provider: "compatible".into(),
+                model: "synthetic".into(),
+                endpoint: "https://decision.example/systemone".into(),
+                timeout_ms: 3000,
+                auth_header: ClassifierAuthHeaderV1 {
+                    name: "Authorization".into(),
+                    value_secret_ref: "fixture".into(),
+                },
+            },
+        };
+        change.editor.mode = PlanEditorMode::SmartSaving;
+        change.editor.smart.economy = change.editor.candidates.clone();
+        change.editor.smart.primary = change.editor.candidates.clone();
+        change.editor.smart.classifier = ComplexityClassifierModeV1::DecisionService {
+            service: Box::new(service.clone()),
+        };
+        state.decision_service = Some(service);
+    }
+    let mut preview = preview_plan_content(&change, &state).unwrap();
+    if legacy_native {
+        // Construct the supported sealed legacy shape. The real released-producer
+        // acceptance additionally authenticates actual v0.3.1 Operations on reopen.
+        let mut configuration = preview.plan_version.configuration.clone();
+        let AgentPlanStrategyV2::SmartSaving {
+            native_protocol,
+            judgment,
+            ..
+        } = &mut configuration.strategy
+        else {
+            unreachable!()
+        };
+        *native_protocol = None;
+        *judgment = change.editor.smart.judgment.clone();
+        let compiled = crate::compiler::compile_agent_plan_v2(
+            preview.plan_version.compiled.body.identity.clone(),
+            preview.plan_version.reference.content_revision,
+            &configuration,
+            &state.facts,
+        )
+        .unwrap();
+        preview.plan_version =
+            PlanVersionV1::new(state.workspace.clone(), configuration, compiled).unwrap();
+        preview.plan_head.reference = preview.plan_version.reference.clone();
+        assert!(
+            change
+                .editor
+                .effective()
+                .unwrap()
+                .native_protocol()
+                .is_some()
+        );
+        assert!(
+            preview
+                .plan_version
+                .configuration
+                .native_protocol()
+                .is_none()
+        );
+    }
     let mut aliases = state.aliases.clone();
     aliases
         .allocate_custom(
@@ -332,6 +406,22 @@ fn complete_content_operation_binds_the_version_head_and_publication() {
     )
     .unwrap();
     assert_eq!(roundtrip.plan_content_control().unwrap().unwrap(), content);
+    if legacy_native {
+        let mut tampered = plan.spec().clone();
+        tampered.desired_state["editor"]["smart"]["judgment"]["competence"]["criteria"][0] =
+            serde_json::json!("Changed after sealing");
+        assert!(
+            TransactionPlanV1::from_registered_typed_planner(
+                tampered,
+                plan.control().clone(),
+                None,
+                vec![],
+                vec![],
+                plan.external().to_vec(),
+            )
+            .is_err()
+        );
+    }
     let mut changed = plan.control().clone();
     changed["plan_head"]["head_revision"] = serde_json::json!(99);
     assert!(
@@ -380,4 +470,85 @@ fn ordinary_publication_confirmation_binds_edit_target_versions_and_draft_intent
         digest,
         plan_content_confirmation_digest(&with_draft, &revisions).unwrap()
     );
+}
+
+#[test]
+fn ordinary_preview_resolves_defaults_and_seals_concrete_contents_without_review() {
+    let mut change = change();
+    let mut state = state();
+    let service = DecisionServiceV1 {
+        id: "decision/preview".into(),
+        revision: 1,
+        name: "Fixture".into(),
+        connection: DecisionConnectionV1::SystemOne {
+            provider: "compatible".into(),
+            model: "fixture".into(),
+            endpoint: "https://decision.example/systemone".into(),
+            timeout_ms: 3000,
+            auth_header: ClassifierAuthHeaderV1 {
+                name: "Authorization".into(),
+                value_secret_ref: "fixture".into(),
+            },
+        },
+    };
+    change.editor.mode = PlanEditorMode::SmartSaving;
+    change.editor.smart.classifier = ComplexityClassifierModeV1::DecisionService {
+        service: Box::new(service.clone()),
+    };
+    change.editor.smart.economy = change.editor.candidates.clone();
+    change.editor.smart.primary = change.editor.candidates.clone();
+    state.decision_service = Some(service);
+    let legacy = preview_plan_content(&change, &state).unwrap();
+    let old_bytes = serde_json::to_vec(&legacy.plan_version).unwrap();
+    assert_eq!(
+        legacy.change_digest,
+        plan_content_confirmation_digest(&change, &state.expected_revisions).unwrap()
+    );
+    let enabled = preview_plan_content(&change, &state).unwrap();
+    enabled.plan_version.validate().unwrap();
+    let encoded = serde_json::to_value(&enabled).unwrap();
+    assert!(encoded.get("assessment_transition").is_none());
+    assert!(
+        encoded["plan_version"]
+            .get("assessment_transition")
+            .is_none()
+    );
+    assert_eq!(
+        enabled.change_digest,
+        plan_content_confirmation_digest(&change, &state.expected_revisions).unwrap()
+    );
+    let route = &enabled
+        .plan_version
+        .compiled
+        .body
+        .materialized
+        .request_owned;
+    let RequestOwnedRouteV1::Classified {
+        native_protocol: Some(frozen),
+        ..
+    } = route
+    else {
+        panic!("native execution missing")
+    };
+    assert_eq!(frozen.scopes[SMART_SAVING_SCOPE_ID].standard, "default");
+    assert_eq!(
+        frozen.scopes[SMART_SAVING_SCOPE_ID].assessment,
+        stock_c_questions()["q1"]
+    );
+    assert_eq!(frozen.protocol.fixed, NativeFixedContentV1::c_v1());
+    let reopened = enabled.plan_version.configuration.editor(None).unwrap();
+    change.editor = reopened;
+    let off = preview_plan_content(&change, &state).unwrap();
+    off.plan_version.validate().unwrap();
+    assert_eq!(
+        off.plan_version.configuration.assessment_scopes()[SMART_SAVING_SCOPE_ID]
+            .competence
+            .instructions,
+        stock_c_questions()["q1"]["instructions"]
+            .as_str()
+            .unwrap()
+            .strip_prefix(&(NativeFixedContentV1::c_v1().assessment_wrapper + " "))
+            .unwrap()
+    );
+    assert_eq!(serde_json::to_vec(&legacy.plan_version).unwrap(), old_bytes);
 }

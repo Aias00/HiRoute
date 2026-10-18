@@ -13,6 +13,13 @@ The password field is uncontrolled. Its value is passed only to `registerProtect
 
 Each edit has a client `edit_revision`; every check has a unique `check_id`. A result is rendered only when those values, the candidate lineage, and both returned copies of `input_digest` agree. Save uses the backend `candidate_revision`, maps the enable checkbox to `save_ready`, and uses `save_disabled` for a disabled draft. `complete` facts still pass through backend Preview and Apply authorization.
 
+Explicit Custom API endpoints support HTTP and HTTPS for local, LAN and remote
+services. Each HTTP field shows a plaintext notice and recommends HTTPS without a
+confirmation gate. A missing directory path permits manual model check/save without
+network probing. Closed target-validation reasons survive the daemon error envelope
+as `message_key` values and become localized correction text; raw exception strings
+and provider bodies never become UI messages.
+
 The first inventory check selects no models. A tool check on an explicitly selected
 model preserves existing choices by exact upstream model identity within the same
 candidate and edit revision, using fresh selectable model references. Newly

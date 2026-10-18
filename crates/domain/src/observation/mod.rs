@@ -20,6 +20,8 @@ mod native_continuation;
 mod plan_quality;
 mod routing_timeline;
 pub use routing_timeline::*;
+mod routing_observations;
+pub use routing_observations::*;
 mod pricing;
 mod projection;
 mod query;

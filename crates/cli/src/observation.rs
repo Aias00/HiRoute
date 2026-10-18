@@ -29,6 +29,7 @@ pub(super) fn plan_quality_samples(options: &[String]) -> Result<Value, ErrorCod
         segment_ids: Vec::new(),
         executor: None,
         trust_row: None,
+        include_routing_observations: true,
         competence: None,
         plan_id: None,
         session_id: None,

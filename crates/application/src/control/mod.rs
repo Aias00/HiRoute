@@ -54,6 +54,14 @@ pub enum ControlReadAttempt<T> {
 }
 
 pub trait ClassifierDiagnosticPort: Send + Sync {
+    fn test_classifier_c(
+        &self,
+        _request: &hiroute_application_api::HistoricalApplicabilityTestRequestV1,
+        _service: &hiroute_domain::DecisionServiceV1,
+    ) -> Result<hiroute_application_api::HistoricalApplicabilityTestResultV1, ControlReadError>
+    {
+        Err(ControlReadError::Unavailable)
+    }
     fn test_classifier_decision(
         &self,
         request: &ClassifierDecisionTestRequestV1,
@@ -393,6 +401,10 @@ pub trait ComputeFactsPort: Send + Sync {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ComputeManagementControlError {
     Invalid,
+    InvalidModelConnectionUrl,
+    UnsafeModelConnectionPath,
+    UnsafeModelConnectionAuthenticationHeader,
+    UnsafeModelConnectionProtocolHeader,
     NotFound,
     Conflict,
     RegisteredOptionUnavailable,
@@ -521,6 +533,14 @@ pub trait ComputeManagementControlPort: Send + Sync {
 }
 
 pub trait RoutingFactsPort: Send + Sync {
+    fn decision_service(
+        &self,
+        _workspace: &WorkspaceId,
+        _id: &str,
+        _revision: u64,
+    ) -> Result<Option<hiroute_domain::DecisionServiceV1>, ControlReadError> {
+        Err(ControlReadError::Unavailable)
+    }
     fn publication_checkpoint_snapshot(
         &self,
         _workspace: &WorkspaceId,

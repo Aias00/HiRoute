@@ -180,8 +180,17 @@ execution is preferred; an absent protocol may use only an expressible existing
 conversion. Endpoint health is isolated; manual Key disable affects the source.
 
 Custom configuration supports name, base URL/path prefix, None/Bearer/specified
-Header authentication, and multiple manual models. Public endpoints require TLS;
-loopback may use plain HTTP. Target changes require revalidation. Credentials cannot
+Header authentication, and multiple manual models. A user may explicitly configure
+HTTP or HTTPS for a loopback, LAN or remote endpoint, whether its host is a literal
+address or a hostname. HTTP is not rejected solely because the destination is
+non-loopback. HTTPS is recommended; an HTTP selection explains that API keys and
+request/response content travel in plaintext without adding a mandatory confirmation.
+Target normalization preserves the configured hostname; DNS and connectivity are
+evaluated by bounded request transport, not by passive discovery or a syntactic check.
+The same transport policy applies to durable source validation, publication and
+actual Gateway execution. Registered catalog destinations remain bound to their
+exact HTTPS authority; managed CPA transport retains its numeric-loopback scope.
+Target changes require revalidation. Credentials cannot
 be redirected to an unauthorized destination; TLS failure never falls back to plain
 transport. Embedded URL passwords/query Keys must use protected input instead.
 
@@ -192,6 +201,26 @@ silently stripped. Missing canonical match, scores, or price alone cannot block
 an otherwise expressible model. Cost hints without currency/unit/product/region/time
 semantics are not PriceRate, free entitlement, or savings evidence. Metadata field
 closure and reference pricing follow [model facts](../model-catalog-price/spec.md).
+
+#### Scenario: Save an explicitly configured HTTP source without a directory
+
+- **WHEN** the owner configures a valid LAN or remote HTTP endpoint, leaves the model
+  directory path empty and supplies supported manual model declarations
+- **THEN** connection check, save and saved-source recheck accept that target without
+  DNS or directory/inference calls, preserve the exact target and authentication,
+  and do not claim reachability, account access or inference has been verified.
+
+#### Scenario: Correct an invalid connection target
+
+- **WHEN** a connection check rejects an invalid URL, unsafe path, authentication
+  header or protocol header, including an additional protocol endpoint
+- **THEN** the daemon/API retains a closed, specific reason in the existing error
+  envelope, with the released `INVALID_ARGUMENTS` machine code; Desktop presents
+  a localized correction and retains input. Errors never expose URL credentials,
+  protected keys or raw provider responses. Other URL/path/authentication checks,
+  redirect restrictions and HTTPS certificate validation remain enforced.
+
+Source Issue: https://github.com/higress-group/HiRoute/issues/154
 
 ### Requirement: Saved-source recheck reconstructs protected facts
 

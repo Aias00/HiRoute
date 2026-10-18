@@ -142,6 +142,7 @@ pub(crate) fn trial_context(threshold: u16) -> TrustContextV1 {
                 economy: vec![candidate.clone()],
                 primary: vec![candidate],
                 judgment,
+                native_protocol: None,
                 reselect_on_user_message: false,
                 complex_keywords: vec![],
                 classifier: ComplexityClassifierModeV1::DecisionService {

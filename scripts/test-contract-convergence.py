@@ -59,6 +59,16 @@ class ContractConvergenceTests(unittest.TestCase):
                 target.write_text(content)
             return MODULE.audit(root, value or registry(), files)
 
+    def test_live_legacy_adapter_is_scoped_and_requires_retirement_evidence(self):
+        value = registry()
+        legacy = value["subjects"][0]["legacy_support"][0]
+        legacy["mode"] = "legacy_adapter"
+        self.assertEqual(self.run_audit({"legacy.rs": '"hiroute.sample/v1"'}, value), [])
+        escaped = self.run_audit({"legacy.rs": '"hiroute.sample/v1"', "current.rs": '"hiroute.sample/v1"'}, value)
+        self.assertTrue(any("escapes registered support" in error for error in escaped), escaped)
+        legacy["removal_condition"] = ""
+        self.assertTrue(any("lacks owner" in error for error in self.run_audit({"legacy.rs": '"hiroute.sample/v1"'}, value)))
+
     def test_database_schema_change_is_not_hidden_by_a_fixture(self):
         for version in (17, 22, 23, 24, 25, 26, 27, 28, 30):
             with self.subTest(version=version):

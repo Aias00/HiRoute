@@ -62,7 +62,7 @@ pub struct PlanEditorStateV2 {
     pub smart: SmartEditorV2,
     pub free: FreeEditorV2,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub branch_routing: Option<super::BranchRoutingV1>,
+    pub branch_routing: Option<BranchRoutingEditorV1>,
     pub delegation_enabled: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub work: Option<WorkerPlanV1>,
@@ -83,7 +83,7 @@ impl PlanEditorStateV2 {
             || self
                 .branch_routing
                 .as_ref()
-                .is_some_and(|routing| !routing.validate(true))
+                .is_some_and(|routing| !routing.configuration().validate(true))
             || self
                 .smart
                 .complex_keywords
@@ -132,25 +132,75 @@ impl PlanEditorStateV2 {
     }
 
     pub fn effective(&self) -> Result<AgentPlanAuthoringV2, PlanAuthoringError> {
+        self.effective_with_native(Some(&super::NativeProtocolSelectionV1::default()))
+    }
+
+    /// Validate a retained operation against its already sealed configuration, not
+    /// against today's authoring default. This is never a new-publication entry.
+    pub(crate) fn effective_for_frozen_validation(
+        &self,
+        frozen: &AgentPlanAuthoringV2,
+    ) -> Result<AgentPlanAuthoringV2, PlanAuthoringError> {
+        self.effective_with_native(frozen.native_protocol())
+    }
+
+    fn effective_with_native(
+        &self,
+        protocol: Option<&super::NativeProtocolSelectionV1>,
+    ) -> Result<AgentPlanAuthoringV2, PlanAuthoringError> {
         self.validate_draft()?;
         let strategy = match self.mode {
-            PlanEditorMode::CustomBranches => AgentPlanStrategyV2::Branches {
-                routing: self
+            PlanEditorMode::CustomBranches => {
+                let mut routing = self
                     .branch_routing
-                    .clone()
-                    .ok_or(PlanAuthoringError::InvalidStrategy)?,
-            },
+                    .as_ref()
+                    .ok_or(PlanAuthoringError::InvalidStrategy)?
+                    .configuration();
+                routing.native_protocol = if super::native_mode(&routing.classifier) {
+                    protocol.cloned()
+                } else {
+                    None
+                };
+                {
+                    routing.judgment = routing
+                        .judgment
+                        .resolve_assessment(routing.native_protocol.as_ref())
+                        .map_err(PlanAuthoringError::NativeProtocol)?;
+                    for branch in &mut routing.branches {
+                        if let Some(j) = &branch.judgment {
+                            branch.judgment = Some(
+                                j.resolve_assessment(routing.native_protocol.as_ref())
+                                    .map_err(PlanAuthoringError::NativeProtocol)?,
+                            );
+                        }
+                    }
+                    AgentPlanStrategyV2::Branches { routing }
+                }
+            }
             PlanEditorMode::FixedModel => AgentPlanStrategyV2::Custom {
                 candidates: self.candidates.clone(),
             },
-            PlanEditorMode::SmartSaving => AgentPlanStrategyV2::SmartSaving {
-                economy: self.smart.economy.clone(),
-                primary: self.smart.primary.clone(),
-                judgment: self.smart.judgment.clone(),
-                reselect_on_user_message: self.smart.reselect_on_user_message,
-                classifier: self.smart.classifier.clone(),
-                complex_keywords: self.smart.complex_keywords.clone(),
-            },
+            PlanEditorMode::SmartSaving => {
+                let native_protocol = if super::native_mode(&self.smart.classifier) {
+                    protocol.cloned()
+                } else {
+                    None
+                };
+                let judgment = self
+                    .smart
+                    .judgment
+                    .resolve_assessment(native_protocol.as_ref())
+                    .map_err(PlanAuthoringError::NativeProtocol)?;
+                AgentPlanStrategyV2::SmartSaving {
+                    native_protocol,
+                    economy: self.smart.economy.clone(),
+                    primary: self.smart.primary.clone(),
+                    judgment,
+                    reselect_on_user_message: self.smart.reselect_on_user_message,
+                    classifier: self.smart.classifier.clone(),
+                    complex_keywords: self.smart.complex_keywords.clone(),
+                }
+            }
             PlanEditorMode::FreeFirst => AgentPlanStrategyV2::FreeFirst {
                 candidates: self.free.candidates.clone(),
                 primary_fallback: self.free.primary_fallback,
@@ -201,6 +251,8 @@ pub enum AgentPlanStrategyV2 {
         routing: super::BranchRoutingV1,
     },
     SmartSaving {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        native_protocol: Option<super::NativeProtocolSelectionV1>,
         economy: Vec<CandidateSelectionV1>,
         primary: Vec<CandidateSelectionV1>,
         judgment: super::JudgmentSettingsV1,
@@ -263,6 +315,9 @@ impl AgentPlanAuthoringV2 {
         };
         match (&self.mode, &self.strategy) {
             (PlanEditorMode::CustomBranches, AgentPlanStrategyV2::Branches { routing }) => {
+                routing
+                    .validate_native_protocol()
+                    .map_err(PlanAuthoringError::NativeProtocol)?;
                 if !routing.validate(false) {
                     return Err(PlanAuthoringError::InvalidStrategy);
                 }
@@ -275,12 +330,22 @@ impl AgentPlanAuthoringV2 {
                     classifier,
                     complex_keywords,
                     judgment,
+                    native_protocol,
                     ..
                 },
             ) => {
                 if !judgment.validate() {
                     return Err(PlanAuthoringError::InvalidStrategy);
                 }
+                if native_protocol.is_some() && !super::native_mode(classifier) {
+                    return Err(PlanAuthoringError::InvalidStrategy);
+                }
+                super::validate_assessment_scope(
+                    native_protocol.as_ref(),
+                    super::SMART_SAVING_SCOPE_ID,
+                    judgment,
+                )
+                .map_err(PlanAuthoringError::NativeProtocol)?;
                 validate(economy)?;
                 validate(primary)?;
                 classifier
@@ -315,6 +380,8 @@ impl AgentPlanAuthoringV2 {
 
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum PlanAuthoringError {
+    #[error(transparent)]
+    NativeProtocol(super::NativeProtocolError),
     #[error("plan authoring schema is unsupported")]
     UnsupportedSchema,
     #[error("plan draft exceeds bounds or contains unsafe metadata")]
@@ -328,4 +395,6 @@ pub enum PlanAuthoringError {
 #[cfg(test)]
 mod tests;
 
+mod branch_editor;
 mod editor;
+pub use branch_editor::BranchRoutingEditorV1;

@@ -1,5 +1,6 @@
 import { scenario, scenarioCatalog, runScenarios } from './scenario-selection.mjs';
 import { productShellRequired } from './scenario-requirements.mjs';
+import { cProtocolScenarios } from './c-protocol-scenarios.mjs';
 import { presentationScenarios } from './presentation-interactions.mjs';
 const c = () => window.productShell;
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -56,6 +57,7 @@ async function routing() {
   await until(() => document.querySelector('.plan-identity-fields input'), 'route editor');
 }
 const scenarios = [
+  ...cProtocolScenarios({ fresh, routing, click, until, all, text, calls, setInput, control: c }),
   ...presentationScenarios,
   scenario('desktop.routing.two-context-conflict', ['routing-editor'], 'A rival context revision refuses stale publication and preserves the current draft', async () => {
     await fresh(); await routing();
@@ -657,7 +659,7 @@ const scenarios = [
     assert(saved.change.expected_revision === 0 && saved.change.service.revision === 1, 'New connection did not use revision transaction');
     assert(saved.secret === 'synthetic-test-key', 'Built-in auth was incorrectly prefixed by UI');
     const tested = calls('test_classifier_decision').at(-1).payload.input.classifier.service;
-    assert(tested.revision === 1 && tested.connection.auth_header.value_secret_ref === 'protected/r1', 'Test used the unsaved editor or old credential');
+    assert(tested.revision === 1 && tested.id === saved.change.service.id && tested.connection.auth_header.value_secret_ref === 'protected/r1', 'Test used the unsaved editor or old credential');
     assert(text().includes('协议兼容性') && !text().includes('CLASSIFIER_INPUT_REJECTED'), 'Failure is not actionable or exposes raw code by default');
     await click('修改连接'); await click('更换');
     setInput(input('credential'), 'replacement-key');

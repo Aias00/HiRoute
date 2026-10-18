@@ -3,6 +3,11 @@ mod api_equivalent;
 use super::*;
 use hiroute_application_api::{ObservationReadIntentV2, ObservationReadRequestV2};
 use hiroute_domain::ObservationReaderContext;
+
+// This identity is part of released v2 cursor bindings, independently of the
+// transport's current grant admission. Renaming it invalidates old cursors.
+const RELEASED_LOCAL_QUERY_SUBJECT: &str = "protected-local-observer";
+
 impl ObservationControl {
     pub(crate) fn read_v2(
         &self,
@@ -74,7 +79,12 @@ impl ObservationControl {
         // validated on every page. Visibility, expiry and cursor scopes remain checked.
         let reader = ObservationReaderContext::local_user(
             self.workspace_id.clone(),
-            "local-observer".into(),
+            if analysis {
+                "local-observer"
+            } else {
+                RELEASED_LOCAL_QUERY_SUBJECT
+            }
+            .into(),
             generation,
             now.saturating_add(1000),
             content,
@@ -286,5 +296,32 @@ impl ObservationControl {
             self.clock.now_ms().map_err(map_control)?,
         )?)
         .map_err(|_| ObservationQueryError::Corrupt)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn released_local_query_binding_survives_renewal_without_widening_authority() {
+        // v0.3.1 binds workspace, subject, allowed runs, content/search and
+        // authorization generation in this order. Expiry is renewed per page.
+        let reader = |generation, expiry, content| {
+            ObservationReaderContext::local_user(
+                hiroute_domain::WorkspaceId::default(),
+                RELEASED_LOCAL_QUERY_SUBJECT.into(),
+                generation,
+                expiry,
+                content,
+                false,
+            )
+            .unwrap()
+        };
+        let released = "sha256:d583c78c0b0b28da9fd74d4e18e43f62970f10cb581b93dd9e3d0e0f60fe6bc0";
+        assert_eq!(reader(7, 1000, false).binding().unwrap(), released);
+        assert_eq!(reader(7, 2000, false).binding().unwrap(), released);
+        assert_ne!(reader(8, 2000, false).binding().unwrap(), released);
+        assert_ne!(reader(7, 2000, true).binding().unwrap(), released);
     }
 }

@@ -21,6 +21,7 @@ VALID_MODES = {
     "projection",
     "frozen_fixture",
     "recovery_read_only",
+    "legacy_adapter",
     "rejection_fixture",
 }
 OBSOLETE_LIVE_CONTRACT_FILES = {

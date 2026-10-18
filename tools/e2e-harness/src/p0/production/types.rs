@@ -30,7 +30,7 @@ pub const OTEL_SCHEMA: &str = "hiroute.otel.gen-ai-mapping/v1";
 pub const LEGACY_AGGREGATE_PORT_DIGEST: &str =
     "sha256:05755b4351c7c7bc3c33fbd2e8406c313b4231e50e28cce1b3e1f57c47f43cfa";
 pub const CURRENT_AGGREGATE_PORT_DIGEST: &str =
-    "sha256:5d0b1cafa66bfe816867c2fc68dfecccb4b8f7958506d25d19193c51475a34a6";
+    "sha256:61a6da3ec55f55305e0db72c79e0cb83bc6b4c95d9ecd405e85c39fd51b93a17";
 pub const SEALED_SUT_REVISION: &str = "8af977300795c467894371055f7fbfc9716252fa";
 pub const SEALED_SUT_TREE: &str = "5ed527f53fa4e8ba9395b5a89b155a1b67228e6e";
 pub const SEALED_SUT_BUILD_INPUT_DIGEST: &str =
@@ -42,7 +42,7 @@ pub const LEGACY_EXECUTION_SCHEMA_DIGEST: &str =
 pub const LEGACY_PRICED_EXECUTION_SCHEMA_DIGEST: &str =
     "sha256:a22fc62f35454021f1df21b2b9f0ce54cde325b3fc7b3aa2e990ab9ecba71292";
 pub const CURRENT_EXECUTION_SCHEMA_DIGEST: &str =
-    "sha256:f8b98014f3f7dae247ca3e6c5046691cbe43ccbe705f6441dfd3301af4a5af0d";
+    "sha256:fea37464cca67472fa6e14621451037de6156b9dd163ffea120a718b9fd307e5";
 pub const CONTENT_SCHEMA_DIGEST: &str =
     "sha256:6f17cd772a0fb322d25dd31dc95e34325cbabbd68912b32f5bb9bed526adfe44";
 pub const OTEL_SCHEMA_DIGEST: &str =

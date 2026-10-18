@@ -11,6 +11,7 @@ mod trust_cost;
 pub(crate) use plan_quality::routing_reason;
 mod relation;
 mod requests;
+mod routing_observations;
 pub(crate) mod routing_timeline;
 mod schema;
 mod search;

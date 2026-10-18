@@ -80,12 +80,16 @@ impl MaterializedBranchV1 {
 #[serde(tag = "strategy", rename_all = "snake_case", deny_unknown_fields)]
 pub enum RequestOwnedRouteV1 {
     Branches {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        native_protocol: Option<super::FrozenNativeProtocolV1>,
         classifier: ComplexityClassifierV1,
         branches: Vec<MaterializedBranchV1>,
         default_branch_id: String,
         reselect_on_user_message: bool,
     },
     Classified {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        native_protocol: Option<super::FrozenNativeProtocolV1>,
         classifier: ComplexityClassifierV1,
         judgment: super::JudgmentSettingsV1,
         reselect_on_user_message: bool,
@@ -560,11 +564,19 @@ fn validate_request_groups(
     };
     match request {
         RequestOwnedRouteV1::Branches {
+            native_protocol,
             classifier,
             branches,
             default_branch_id,
             ..
         } => {
+            if let Some(p) = native_protocol {
+                p.validate_branches(branches, default_branch_id)
+                    .map_err(CompiledPlanError::NativeProtocol)?;
+                if !super::native_mode(&classifier.mode) {
+                    return Err(CompiledPlanError::InvalidClassifier);
+                }
+            }
             classifier
                 .validate()
                 .map_err(|_| CompiledPlanError::InvalidClassifier)?;
@@ -591,12 +603,20 @@ fn validate_request_groups(
             Ok(())
         }
         RequestOwnedRouteV1::Classified {
+            native_protocol,
             classifier,
             judgment,
             simple_groups,
             complex_groups,
             ..
         } => {
+            if let Some(p) = native_protocol {
+                p.validate_smart(judgment)
+                    .map_err(CompiledPlanError::NativeProtocol)?;
+                if !super::native_mode(&classifier.mode) {
+                    return Err(CompiledPlanError::InvalidClassifier);
+                }
+            }
             classifier
                 .validate()
                 .map_err(|_| CompiledPlanError::InvalidClassifier)?;
@@ -800,6 +820,8 @@ fn invalid_digest(value: &CanonicalDigest) -> bool {
 
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum CompiledPlanError {
+    #[error(transparent)]
+    NativeProtocol(super::NativeProtocolError),
     #[error("compiled AgentPlan schema is unsupported")]
     UnsupportedSchema,
     #[error("compiled AgentPlan compiler revision is unsupported")]

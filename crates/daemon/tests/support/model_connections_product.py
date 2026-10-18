@@ -23,7 +23,7 @@ V2 = {'major': 2, 'minor': 0}
 
 
 class NativeUpstream:
-    def __init__(self):
+    def __init__(self, base_host=None):
         self.requests = []
         self.rejected_token = None
         self.reject_reasoning_history = False
@@ -50,6 +50,7 @@ class NativeUpstream:
                     owner.requests.append({
                         'method': self.command,
                         'path': self.path,
+                        'host': self.headers.get('Host'),
                         'authorization': self.headers.get('Authorization'),
                         'api_key': self.headers.get('x-api-key'),
                         'body': body,
@@ -97,7 +98,8 @@ class NativeUpstream:
         self.server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
-        self.base_url = 'http://%s:%d/v1' % self.server.server_address
+        address, port = self.server.server_address
+        self.base_url = 'http://%s:%d/v1' % (base_host or address, port)
 
     def close(self):
         self.server.shutdown()
@@ -169,7 +171,8 @@ def save_native_source(product, upstream, token=None, unknown=False,
                        protocol='responses', upstream_model_id=MODEL, variant='',
                        context_tokens=32768, cli_input=False,
                        source_display_name='Product Native API',
-                       model_display_name='Manual Native Model'):
+                       model_display_name='Manual Native Model',
+                       inventory_path='/v1/models'):
     status = control(product, 'GetClientServiceStatus', {})['data']
     suffix = ('-unknown' if unknown else '') + ('-' + variant if variant else '')
     candidate_ref = 'candidate/native/product' + suffix
@@ -200,7 +203,7 @@ def save_native_source(product, upstream, token=None, unknown=False,
         'base_url': upstream.base_url,
         'base_kind': 'api_root',
         'request_path_override': None,
-        'inventory_path_override': '/v1/models',
+        'inventory_path_override': inventory_path,
         'protocol': protocol,
         'protocol_profile_id': 'profile/custom/' + protocol,
         'protocol_profile_revision': 1,
@@ -246,8 +249,11 @@ def save_native_source(product, upstream, token=None, unknown=False,
         status['revisions'], 'native-check' + suffix)
     checked = control(
         product, 'CheckNativeModelConnection', check_request, grant)['data']
-    assert checked['directory'] == ('not_run' if unknown else 'unavailable'), checked
+    assert checked['directory'] == ('not_run' if unknown or inventory_path is None else 'unavailable'), checked
     assert checked['inference'] == 'not_run', checked
+    if inventory_path is None:
+        assert checked['reachability'] != 'reachable', checked
+        assert checked['authentication'] != 'verified', checked
     manual = next(model for model in checked['candidate']['models']
                   if model['upstream_model_id'] == upstream_model_id)
     assert manual['selectable'] and manual['membership'] == 'user_declared', manual
@@ -288,7 +294,8 @@ def save_compute_candidate(product, candidate, model_ref, idempotency_key):
     }
 
 
-def recheck_saved_native_source(product, saved, edit_revision, suffix, unknown=False):
+def recheck_saved_native_source(product, saved, edit_revision, suffix, unknown=False,
+                                directory='unavailable'):
     request = {
         'source_id': saved['source_id'],
         'expected_source_revision': saved['source_revision'],
@@ -302,7 +309,7 @@ def recheck_saved_native_source(product, saved, edit_revision, suffix, unknown=F
         product, 'CheckSavedModelConnection', digest, revisions,
         'saved-native-' + suffix)
     checked = control(product, 'CheckSavedModelConnection', request, grant)['data']
-    assert checked['directory'] == ('not_run' if unknown else 'unavailable'), checked
+    assert checked['directory'] == ('not_run' if unknown else directory), checked
     if unknown:
         assert checked['candidate']['models'][0]['fact_basis'] == 'unknown', checked
     assert checked['candidate']['candidate']['candidate_ref'] == saved['candidate_ref'], checked
@@ -666,7 +673,7 @@ def run(repository, expected_sha=None):
     if expected_sha is not None:
         assert actual_sha == expected_sha, (actual_sha, expected_sha)
     product = Product(repository)
-    upstream = NativeUpstream()
+    upstream = NativeUpstream(base_host='localhost')
     product.install_codex_fixture(
         MODEL, 'medium', upstream.base_url, NATIVE_TOKEN)
     started_ms = int(time.time() * 1000)
@@ -701,6 +708,8 @@ def run(repository, expected_sha=None):
         assert_session_record(product, started_ms, saved['binding_id'])
         with upstream.lock:
             requests = list(upstream.requests)
+        expected_host = 'localhost:%d' % upstream.server.server_address[1]
+        assert all(request['host'] == expected_host for request in requests), requests
         assert [request['path'] for request in requests] == [
             '/v1/models', '/v1/models', '/v1/responses', '/v1/responses',
             '/v1/responses', '/v1/models'], requests
