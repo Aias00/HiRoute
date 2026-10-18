@@ -137,10 +137,10 @@ async fn protocol_capability_toggle_preserves_defaults_and_custom_text_in_native
     editor.smart.classifier = ComplexityClassifierModeV1::DecisionService {
         service: Box::new(service),
     };
-    editor.smart.native_protocol = Some(NativeProtocolSelectionV1::default());
+    editor.smart.historical_applicability = Some(HistoricalApplicabilityV1::default());
     let mut current = original.clone();
     for enabled in [true, false, true] {
-        editor.smart.native_protocol = enabled.then(NativeProtocolSelectionV1::default);
+        editor.smart.historical_applicability = enabled.then(HistoricalApplicabilityV1::default);
         let confirmation = session
             .preview_editor(editor_input("publish", &current, &editor, None))
             .await
@@ -184,7 +184,7 @@ async fn protocol_capability_toggle_preserves_defaults_and_custom_text_in_native
     editor.smart.judgment.competence.criteria[1].push_str("  ");
     let custom = editor.smart.judgment.competence.clone();
     for enabled in [true, false] {
-        editor.smart.native_protocol = enabled.then(NativeProtocolSelectionV1::default);
+        editor.smart.historical_applicability = enabled.then(HistoricalApplicabilityV1::default);
         let confirmation = session
             .preview_editor(editor_input("publish", &current, &editor, None))
             .await

@@ -9,8 +9,7 @@ or query version.
 Statistics cover all retained matching decisions in the authorized scope,
 independently of stage pagination and model/score filters. Each current classifier
 decision records C, native legacy, custom-extension v1 or local rules. Known non-C
-counts stay separate from C denominators. Unmarked historical events, unknown
-scope, missing projections and bounded scans withhold rates while preserving counts.
+counts stay separate from C denominators. Authenticated supported pre-applicability envelopes also count as known non-C. The existing bounded projection refresh verifies each original carrier/digest and retains only safe format, routing and time evidence. Marker omission alone proves nothing. Unproven historical/current records, unknown scope, missing or invalid projections and bounded scans withhold rates while preserving counts. Already-deleted carriers cannot be reconstructed.
 Content-only deletion retains safe evidence; full fact deletion/expiry removes it
 through existing retention, without a new table, migration, view or permission.
 See [the contract](../../../../issue-spec/specs/session-history/spec.md) and
