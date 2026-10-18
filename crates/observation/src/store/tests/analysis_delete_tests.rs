@@ -38,7 +38,13 @@ fn read_at(
     let page = store
         .observed_analysis(&reader, &q, Some(&range), None, now)
         .unwrap();
-    assert_eq!(page.status, AnalysisStatusV1::Ready, "{page:?}");
+    assert!(
+        matches!(
+            page.status,
+            AnalysisStatusV1::Ready | AnalysisStatusV1::Partial
+        ),
+        "{page:?}"
+    );
     page
 }
 
@@ -61,6 +67,7 @@ fn check(store: &LocalObservationStore, groups: usize, requests: u64, gap: bool)
         requests
     );
     if gap {
+        assert_eq!(conversations.status, AnalysisStatusV1::Partial);
         assert!(
             conversations
                 .conversations
@@ -309,6 +316,75 @@ fn public_deletion_matrix_keeps_grouping_and_cost_in_sync_before_and_after_catch
                 if full { 2 } else { 3 },
                 full,
             );
+        }
+    }
+}
+
+#[test]
+fn pinned_conversation_and_cost_scopes_preserve_content_only_and_reject_full_deletion() {
+    for full in [false, true] {
+        let dir = tempfile::tempdir().unwrap();
+        let store = open_store(dir.path());
+        let [_, b, _] = chain(&store);
+        let initial = read(
+            &store,
+            ObservationAnalysisQueryV1::new(AnalysisViewV1::Conversations),
+        );
+        let reader = ObservationReaderContext::local_user(
+            WorkspaceId::default(),
+            "delete-analysis".into(),
+            1,
+            1_020_000,
+            true,
+            true,
+        )
+        .unwrap();
+        let mut costs = ObservationAnalysisQueryV1::new(AnalysisViewV1::CostRanking);
+        costs.currency = Some("USD".into());
+        costs.valuation_kind = Some(PriceValuationKindV1::UsageEstimate);
+        costs.analysis_scope = initial.analysis_scope.clone();
+        assert_eq!(
+            store
+                .observed_analysis(&reader, &costs, None, None, 20_000)
+                .unwrap()
+                .costs[0]
+                .known_sum_micros,
+            Some(351)
+        );
+        delete(
+            &store,
+            &b,
+            if full {
+                DeletionDataClass::FactsAndContent
+            } else {
+                DeletionDataClass::ContentOnly
+            },
+            false,
+            2000,
+        );
+        for phase in 0..2 {
+            if phase == 1 {
+                store.reconcile_analysis_batch(20_000).unwrap();
+            }
+            let mut conversations = ObservationAnalysisQueryV1::new(AnalysisViewV1::Conversations);
+            conversations.analysis_scope = initial.analysis_scope.clone();
+            for q in [&conversations, &costs] {
+                let result = store.observed_analysis(&reader, q, None, None, 20_000);
+                if full {
+                    assert!(
+                        matches!(result, Err(crate::query_v2::ObservationV2Error::Stale)),
+                        "{result:?}"
+                    );
+                } else {
+                    let p = result.unwrap();
+                    assert_eq!(p.status, AnalysisStatusV1::Ready);
+                    if q.view.monetary() {
+                        assert_eq!(p.costs[0].known_sum_micros, Some(351));
+                    } else {
+                        assert_eq!(p.conversations[0].request_count, 3);
+                    }
+                }
+            }
         }
     }
 }
