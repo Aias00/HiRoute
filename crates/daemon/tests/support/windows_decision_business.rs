@@ -27,18 +27,30 @@ pub fn roundtrip(product: &InstalledProduct) {
             panic!("decision service lost its version-owned credential")
         };
         assert_eq!(request.body["model"], "windows-decision-model");
-        let c = request.body["state"].get("assessment_stage").is_some();
-        if c {
-            assert!(
-                request.body["state"]["assessment_stage"]
-                    .as_array()
-                    .is_some_and(|a| !a.is_empty())
-            );
-        } else {
-            assert!(request.body["state"]["assessment_from"].is_null());
+        let state = request.body["state"].as_object().unwrap();
+        assert_eq!(state.len(), 4);
+        for field in [
+            "latest_user",
+            "prior_context",
+            "assessment_stage",
+            "history_partial",
+        ] {
+            assert!(state.contains_key(field), "current request lacks {field}");
         }
         let questions = request.body["questions"].as_object().unwrap();
-        assert!(questions.len() == 3 || c && questions.len() == 19);
+        let historical = questions
+            .values()
+            .any(|q| q["criteria"].get("applicable").is_some());
+        let target = state["assessment_stage"].as_array().unwrap();
+        if historical {
+            assert!(!target.is_empty());
+        } else {
+            assert!(
+                target.is_empty(),
+                "connection test fabricated historical work"
+            );
+        }
+        assert!(questions.len() == 3 || historical && questions.len() == 19);
         let answers=questions.iter().map(|(id,question)| {
             let vectors = response_vectors.load(Ordering::SeqCst);
             let answer=if vectors && question["criteria"].get("applicable").is_some() {
