@@ -2235,6 +2235,7 @@ dependencies = [
  "hiroute-host-runtime",
  "hiroute-integrations",
  "hiroute-local-storage",
+ "hiroute-observation",
  "hiroute-platform",
  "hiroute-platform-test-support",
  "nix",

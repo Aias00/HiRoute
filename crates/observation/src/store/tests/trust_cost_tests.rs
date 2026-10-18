@@ -401,6 +401,25 @@ fn review_trial_cost_rebuilds_ambiguous_old_turn_projection() {
             *history_partial = true;
         },
     );
+    let f = trial_request(&store, "old-conflict", 16, ExecutionGroupV1::Regular);
+    let mut conflicting = trial_turn(&f, 17, ExecutionGroupV1::Regular);
+    let ExecutionFactV1::AgentTurnFinished {
+        agent_turn_id,
+        segment_id,
+        finished_at_ms,
+        ..
+    } = &mut conflicting
+    else {
+        unreachable!()
+    };
+    *agent_turn_id = "migration-conflicting-turn".into();
+    *segment_id = "migration-conflicting-stage".into();
+    *finished_at_ms = 112;
+    let outcome = store
+        .ingest_fact(&f.fact(12, conflicting, 112), &[])
+        .unwrap();
+    assert!(matches!(outcome, IngestOutcome::Ack(_)), "{outcome:?}");
+    store.settle_pending_valuations(16).unwrap();
     store
         .connection
         .lock()
@@ -409,16 +428,67 @@ fn review_trial_cost_rebuilds_ambiguous_old_turn_projection() {
     drop(store);
     let store = open_store(dir.path());
     store.settle_pending_valuations(16).unwrap();
+    let report = trial_report(&store, 1000).unwrap();
     assert_eq!(
-        trial_report(&store, 1000).unwrap().compared_request_count,
-        1
+        (
+            report.request_count,
+            report.compared_request_count,
+            report.excluded_request_count
+        ),
+        (2, 1, 1)
     );
+    assert_eq!(report.coverage, ObservationMetricCoverageV2::Partial);
     drop(store);
     let store = open_store(dir.path());
     assert_eq!(
         trial_report(&store, 1000).unwrap().compared_request_count,
         1
     );
+}
+
+#[test]
+fn review_trial_cost_interrupted_request_remains_missing_with_known_stage() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    trial_request(
+        &store,
+        "normal-after-interruption",
+        17,
+        ExecutionGroupV1::Regular,
+    );
+    let f = Fixture::new("interrupted-prefix");
+    let mut prefix = facts(&f, UsageFrameKindV1::Cumulative);
+    prefix.pop(); // Client drop has no drained RequestFinished fact.
+    for event in prefix {
+        store.ingest_fact(&event, &[]).unwrap();
+    }
+    let mut turn = trial_turn(&f, 17, ExecutionGroupV1::Regular);
+    let ExecutionFactV1::AgentTurnFinished {
+        history_partial, ..
+    } = &mut turn
+    else {
+        unreachable!()
+    };
+    *history_partial = true;
+    let outcome = store.ingest_fact(&f.fact(10, turn, 110), &[]).unwrap();
+    assert!(matches!(outcome, IngestOutcome::Ack(_)), "{outcome:?}");
+    store.settle_pending_valuations(16).unwrap();
+    let report = trial_report(&store, 1000).unwrap();
+    assert_eq!(
+        (
+            report.request_count,
+            report.compared_request_count,
+            report.missing_request_count
+        ),
+        (2, 1, 1)
+    );
+    assert_eq!(
+        report.excluded_request_count, 0,
+        "stage identity is known; only request completeness is missing"
+    );
+    assert_eq!(report.coverage, ObservationMetricCoverageV2::Partial);
+    assert_eq!(report.estimated_savings_micros, None);
+    assert!(report.compared_routed_subtotal_micros.is_some());
 }
 
 #[test]
