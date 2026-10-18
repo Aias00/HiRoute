@@ -159,11 +159,10 @@ fn candidates_for(
 }
 
 pub(super) fn index_partial_sql(only_switch: bool) -> String {
-    // Repeated native history can put hundreds of thousands of occurrences in
-    // large metadata pages. First deduplicate through the covering digest index,
-    // then subtract ready sources before opening any occurrence metadata. A WHERE
-    // predicate alone lets SQLite load those pages before checking readiness.
-    // Only the remaining candidates undergo the full current visibility checks.
+    // Merge the ordered covering source indexes before opening any occurrence
+    // metadata. Materializing the complete live and ready sets first creates
+    // large temporary B-trees even when every source is ready. Only the usually
+    // small remainder needs materialization and current visibility checks.
     let filters = all_filters();
     let with = if only_switch {
         format!("{}, ", prefix(true))
@@ -171,12 +170,10 @@ pub(super) fn index_partial_sql(only_switch: bool) -> String {
         "WITH ".into()
     };
     format!(
-        "{with} sources AS MATERIALIZED (
+        "{with} unready_sources AS MATERIALIZED (
           SELECT DISTINCT content_blob_digest FROM content_instances_v2
           INDEXED BY content_instances_v2_live_blob WHERE workspace_id=?1 AND state='complete'
-        ), unready_sources AS MATERIALIZED (
-          SELECT content_blob_digest FROM sources WHERE content_blob_digest IS NULL
-            OR content_blob_digest NOT IN({READY_SOURCES})
+          EXCEPT {READY_SOURCES} ORDER BY 1
         ) SELECT EXISTS(
         SELECT 1 FROM unready_sources u
         CROSS JOIN content_instances_v2 c INDEXED BY content_instances_v2_search_blob

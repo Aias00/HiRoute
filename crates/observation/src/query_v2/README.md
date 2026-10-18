@@ -51,11 +51,11 @@ keywords avoid loading every content occurrence or folded body. Returned anchors
 always verify the exact folded substring and load original offset maps. Current
 reads use returned content identities. A partial covering index on ready-source
 identities keeps publication checks in metadata; it still requires the complete
-lookup publication marker. Gap detection first materializes distinct digests from
-the covering live-source index, then subtracts the ready-source set. Only unready
-digests open occurrence metadata under the reader's filters. This avoids loading
-large metadata pages for every repeated history occurrence; missing indexes or
-incomplete publication still report authorized gaps.
+lookup publication marker. Gap detection merges the ordered covering live-source
+and ready-source indexes with `EXCEPT`, materializing only unready digests before
+opening occurrence metadata under the reader's filters. It avoids both large
+temporary complete-source sets and large metadata pages for repeated history;
+missing indexes or incomplete publication still report authorized gaps.
 Scale regressions include distinct source digests and common short keywords;
 repeating many occurrences of a single blob does not cover these query costs.
 
