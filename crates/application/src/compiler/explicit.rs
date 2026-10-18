@@ -99,7 +99,10 @@ pub fn compile_agent_plan_v2(
                         .map(|p| {
                             FrozenNativeProtocolV1::freeze(
                                 p,
-                                branch_decision_definition(&branches, &routing.default_branch_id),
+                                c_v1_branch_decision_definition(
+                                    &branches,
+                                    &routing.default_branch_id,
+                                ),
                                 branches.iter().map(|b| (b.id.clone(), b.judgment.clone())),
                             )
                         })

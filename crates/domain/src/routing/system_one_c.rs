@@ -420,7 +420,7 @@ impl FrozenNativeProtocolV1 {
         self.validate()?;
         let expected = Self::freeze(
             &self.protocol,
-            branch_decision_definition(branches, default_id),
+            c_v1_branch_decision_definition(branches, default_id),
             branches.iter().map(|b| (b.id.clone(), b.judgment.clone())),
         )?;
         if *self != expected {
@@ -452,6 +452,14 @@ impl FrozenNativeProtocolV1 {
 }
 
 pub fn branch_decision_definition(
+    branches: &[MaterializedBranchV1],
+    default_id: &str,
+) -> DecisionDefinitionV1 {
+    c_v1_branch_decision_definition(branches, default_id)
+}
+
+/// Composition fixed by SYSTEM_ONE_C_V1, independently of future legacy defaults.
+pub fn c_v1_branch_decision_definition(
     branches: &[MaterializedBranchV1],
     default_id: &str,
 ) -> DecisionDefinitionV1 {
