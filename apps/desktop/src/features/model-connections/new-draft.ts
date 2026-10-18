@@ -1,3 +1,4 @@
+import { randomId } from '../../random-id.ts';
 import type { ModelConnectionDraft } from './types';
 
 export function newModelConnectionDraft(kind: 'known' | 'custom' | 'free' = 'custom'): ModelConnectionDraft {
@@ -5,7 +6,7 @@ export function newModelConnectionDraft(kind: 'known' | 'custom' | 'free' = 'cus
   return {
     entry_kind: kind === 'free' ? 'free_api_key' : known ? 'preset_api' : 'custom_api',
     candidate_ref: null,
-    lineage_ref: `lineage/native/${crypto.randomUUID()}`,
+    lineage_ref: `lineage/native/${randomId()}`,
     display_name: '',
     existing_source_id: null,
     expected_source_revision: null,

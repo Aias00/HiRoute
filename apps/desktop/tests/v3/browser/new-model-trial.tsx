@@ -4,7 +4,7 @@ import { NewModels } from '../../../src/features/trial/NewModels';
 import { TrustAttention } from '../../../src/features/trust/TrustAttention';
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { mockIPC } from '@tauri-apps/api/mocks';
+import { mockIPC } from './host-mock';
 import { Sessions } from '../../../src/features/Sessions';
 import { Models } from '../../../src/features/models/Models';
 import { PlanEditor } from '../../../src/plan-editor';
@@ -90,6 +90,8 @@ mockIPC(async (command, payload: any) => {
     if(view==='routing_timeline') {
       if(params.has('scope-error')) throw {code:'SCOPE_TOO_LARGE'};
       if(params.has('busy-read') && !busyReturned) {busyReturned=true;throw {source:'backend',envelope:{error:{code:'OBSERVATION_UNAVAILABLE',retryable:true,details_schema:'hiroute.observation.read-failure/v1',observation_read:{reason:'reader_busy',retry_after_ms:100}}}};}
+      if(params.has('timeline-error') && (window as any).timelineFail!==false) throw {code:'OBSERVATION_UNAVAILABLE'};
+      if(params.has('timeline-empty')) return {turns:[],watermark:'empty',complete:true};
       timelinePolls++;
       if(params.has('stale-timeline') && query.after_watermark==='watermark-1') throw {message_key:'application.error.change_preview_stale'};
       const turns=params.has('stale-timeline') && timelinePolls>1 && query.after_watermark===null ? [timelineTurn(1,true),timelineTurn(2),timelineTurn(3)] : timelinePolls===1?[timelineTurn(1),timelineTurn(2)]:timelinePolls===2?[timelineTurn(1,true)]:[];

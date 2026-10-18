@@ -1,4 +1,3 @@
-import type { CSSProperties } from 'react';
 import { Disclosure } from '../../ui';
 import { TrustReplayPreview, type ReplayScope } from './TrustReplayPreview';
 import { trustLevels, trustLevelLabel } from './levels';
@@ -22,7 +21,7 @@ export function TrustLevelControl({ value, onChange, language, id, complete, evi
   return <section className="trust-control" data-trust-control={id}>
     <div className="trust-control-head"><h3>{t('信任度 · 交给常规模型的程度', 'Trust · how much goes to Regular')}</h3><span className={`badge no-dot ${index < 0 ? 'warn' : 'info'}`}>{trustLevelLabel(threshold, language)}</span></div>
     <p className="trust-control-help">{t('越往右，越多任务交给常规模型。实际保存的是简单概率阈值：任务越简单，越先交给它。只改变路由，不影响 Agent 权限、工具审批和沙箱。', 'Further right sends more tasks to Regular. The saved value is a simple-probability threshold: simpler tasks go first. Only routing changes; agent permissions, tool approval and sandboxing do not.')}</p>
-    <input className={`trust-slider${index < 0 ? ' custom' : ''}`} style={{ '--fill': `${(index < 0 ? nearest : index) / (trustLevels.length - 1) * 100}%` } as CSSProperties} type="range" min={0} max={trustLevels.length - 1} step={1} value={index < 0 ? nearest : index} aria-label={t('信任度', 'Trust level')} aria-valuetext={trustLevelLabel(threshold, language)} onChange={event => change(trustLevels[Number(event.target.value)].threshold_millis)} />
+    <input className={`trust-slider${index < 0 ? ' custom' : ''}`} data-step={index < 0 ? nearest : index} type="range" min={0} max={trustLevels.length - 1} step={1} value={index < 0 ? nearest : index} aria-label={t('信任度', 'Trust level')} aria-valuetext={trustLevelLabel(threshold, language)} onChange={event => change(trustLevels[Number(event.target.value)].threshold_millis)} />
     <div className="trust-levels" role="group" aria-label={t('信任档位', 'Trust level')}>
       {trustLevels.map(level => <button key={level.id} type="button" aria-pressed={threshold === level.threshold_millis} onClick={() => change(level.threshold_millis)}><strong>{level.label[language]}</strong><span>≥ {(level.threshold_millis / 1000).toFixed(2)}</span></button>)}
     </div>

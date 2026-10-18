@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '../../host/index.ts';
 import type { Editor, Options, Plan } from '../../plan-editor';
 import { Dialog } from '../../ui';
 import { divisionDraft, divisionSource } from './division-draft';

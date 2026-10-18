@@ -1,5 +1,6 @@
+import { randomId } from '../../random-id.ts';
 import { useEffect, useRef, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '../../host/index.ts';
 import { Dialog, Disclosure, ProductPage, UiIcon } from '../../ui';
 import { requestEditorReplacement } from '../../ui/discard-guard';
 import { type Editor, type Options, type Plan, type Selection } from '../../plan-editor';
@@ -50,7 +51,7 @@ export function TrialQuickStart({ initialModelId, initialBindingId, language, mu
   const [mapped, setMapped] = useState(false);
   const initialized = useRef(false);
   const inFlight = useRef(false);
-  const [alias] = useState(() => `trial-${crypto.randomUUID().replaceAll('-', '').slice(0, 16)}`);
+  const [alias] = useState(() => `trial-${randomId().replaceAll('-', '').slice(0, 16)}`);
   async function refresh() {
     if (inFlight.current) return;
     inFlight.current = true; setLoading(true); setError('');
@@ -77,7 +78,7 @@ export function TrialQuickStart({ initialModelId, initialBindingId, language, mu
     finally { inFlight.current = false; setLoading(false); }
   }
   useEffect(() => { void refresh(); }, []);
-  const openDecision: OpenDecisionConnection = (kind, select) => { decisionSelect.current = select; setDecision({ key: crypto.randomUUID(), kind }); };
+  const openDecision: OpenDecisionConnection = (kind, select) => { decisionSelect.current = select; setDecision({ key: randomId(), kind }); };
   const operationRef = (value: OperationReference) => onOperation({ ...value, safe_error_code: null });
   type TrialModel = Pick<AvailableModel, 'model_configuration_id' | 'display_name' | 'identity_stability' | 'availability'> & { catalog?: AvailableModel };
   const models: TrialModel[] = (data?.availability.models ?? []).filter(m => m.origin.kind !== 'published').map(m => ({ ...m, catalog: m }));
@@ -90,7 +91,9 @@ export function TrialQuickStart({ initialModelId, initialBindingId, language, mu
   const selectedTrial = trialCandidates.find(c => c.binding_id === trialBinding) ?? (trialCandidates.length === 1 ? trialCandidates[0] : undefined);
   const selectedPrimary = primaryCandidates.find(c => c.binding_id === primaryBinding) ?? (primaryCandidates.length === 1 ? primaryCandidates[0] : undefined);
   const ready = !!data?.options.authoring && !!selectedTrial && !!selectedPrimary && trialId !== primaryId && classifier.kind === 'decision_service' && !!classifier.service.name && !!mapping.agentId && mapping.presets.length > 0 && !loading && !error;
-  const leave = () => void (async () => { if (persistencePending || await requestEditorReplacement('routing')) onClose(); })();
+  // The inline connection form owns protected input; its guard confirms, then releases and closes it.
+  const releaseConnection = async () => !connect || await requestEditorReplacement('models');
+  const leave = () => void (async () => { if (persistencePending || (await releaseConnection() && await requestEditorReplacement('routing'))) onClose(); })();
   const defaultName = trial && primary ? `${trial.display_name} + ${primary.display_name}` : '';
   const criteria = t('试用模型没有取得有效进展，反复失败且未能恢复，或用户在最新消息中明确指出它已完成的结果有误。请评价所引用的已完成阶段，并区分新增要求与纠错；重复、继续或沉默本身不代表失败。', 'The trial model made no effective progress, repeatedly failed without recovery, or the latest user message explicitly identifies its completed result as wrong. Judge the referenced completed stage and distinguish a new requirement from a correction; repetition, continuation or silence alone is not failure.');
   const featured = (data?.availability.featured ?? []).map(entry => entry.model_configuration_id);
@@ -117,7 +120,10 @@ export function TrialQuickStart({ initialModelId, initialBindingId, language, mu
     if (available.length < 2) return null;
     return <label className="field trial-connection-field"><span className="field-label">{t('使用的接入', 'Connection')}</span><select className="input" value={selected?.binding_id ?? ''} onChange={e => role === 'trial' ? setTrialBinding(e.target.value) : (setPrimaryBinding(e.target.value), setPrimarySelection(undefined))}><option value="">{t('请选择', 'Select')}</option>{available.map(c => <option key={c.binding_id} value={c.binding_id}>{source(c.binding_id) ?? c.display_name} · {c.billing_class}</option>)}</select></label>;
   }
-  const chooseTrial = (id: string) => { setTrialId(id); setTrialBinding(''); setConnect(null); if (id === primaryId) { setPrimaryId(''); setPrimaryBinding(''); setPrimarySelection(undefined); } };
+  const chooseTrial = (id: string) => void (async () => {
+    if (id === trialId || !(await releaseConnection())) return;
+    setTrialId(id); setTrialBinding(''); setConnect(null); if (id === primaryId) { setPrimaryId(''); setPrimaryBinding(''); setPrimarySelection(undefined); }
+  })();
   const step = mapped ? 4 : published ? 3 : review ? 2 : 1;
   const steps = [t('选择模型', 'Choose models'), t('核对并发布', 'Review and publish'), t('映射 Agent', 'Map the Agent'), t('开始使用', 'Start using it')];
   const setup = data && <fieldset disabled={loading || !mutable} className="trial-setup">

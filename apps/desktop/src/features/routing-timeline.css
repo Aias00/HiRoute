@@ -12,7 +12,10 @@
 .routing-tile > small { color: var(--text-muted); font-size: calc(12px * var(--hr-text-scale)); }
 .routing-lanes-card { display: grid; gap: 10px; min-width: 0; padding: 16px 16px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--panel-solid); }
 .routing-lanes-scroll { min-width: 0; overflow-x: auto; padding: 2px 2px 4px; }
-.routing-lanes { display: grid; gap: 10px; align-items: stretch; }
+.routing-lanes { display: grid; grid-auto-flow: column; grid-template-columns: var(--routing-label-width); grid-auto-columns: minmax(var(--routing-cell-width), 1fr); grid-template-rows: auto; gap: 10px; align-items: stretch; }
+.routing-lanes[data-lanes='1'] { grid-template-rows: repeat(2, auto); }
+.routing-lanes[data-lanes='2'] { grid-template-rows: repeat(3, auto); }
+.routing-lanes[data-lanes='3'] { grid-template-rows: repeat(4, auto); }
 .routing-lane-corner { position: sticky; left: 0; z-index: 1; background: var(--panel-solid); }
 .routing-turn-head { display: flex; align-items: center; gap: 8px; padding-inline: 4px; font-size: calc(13px * var(--hr-text-scale)); }
 .routing-lane-label { position: sticky; left: 0; z-index: 1; display: grid; align-content: center; gap: 2px; min-width: 0; padding-right: 8px; background: var(--panel-solid); color: var(--text-soft); font-size: calc(12px * var(--hr-text-scale)); overflow-wrap: anywhere; }

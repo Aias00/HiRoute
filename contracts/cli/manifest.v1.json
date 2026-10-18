@@ -5,9 +5,192 @@
   },
   "product_contract_revision": "487a807c8dc25cfb24e8b097882cd3bb9716a009",
   "proposal_map_revision": "ab4da93cc49c6ec56a01e046230411ff1ca82300",
-  "descriptor_digest": "sha256:87979b60b83d443c514ac633fc9eb597481a7c45d429ed30029de02fcdc06287",
+  "descriptor_digest": "sha256:08c7614ca430ac64b1c76e27f4166910753e3c55d67952c9efaa98527a36d384",
   "visibility": "release",
   "commands": [
+    {
+      "command_id": "console.open",
+      "path": [
+        "console",
+        "open"
+      ],
+      "operation_id": "CreateConsoleLaunch",
+      "trace_ids": [],
+      "scope": "p0",
+      "lifecycle": "released",
+      "kind": "action",
+      "request_schema": "hiroute.console-launch-request/v1",
+      "response_schema": "hiroute.console-launch/v1",
+      "effect": "typed_action",
+      "network": "local_control_only",
+      "model_call": "never",
+      "stdin_channels": [],
+      "idempotency": "not_applicable",
+      "help": {
+        "purpose": "Create a single-use owner console launch link.",
+        "usage": "hiroute console open [typed options] --non-interactive --output json",
+        "arguments_and_options": "Only the typed options declared by the generated request schema are accepted; arbitrary patches, URLs, shell, or plaintext Secret argv are forbidden.",
+        "effects": "Application-owned typed operation; side effects are recorded by the Operation and external ledgers.",
+        "network_and_model_use": "No model inference; external access, when required, is limited to registered typed ports.",
+        "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
+        "output": "One hiroute.machine-envelope/v2 JSON object on stdout; diagnostics belong on stderr.",
+        "exit_status": "0 success/accepted; 2 usage; 3 conflict/blocker; 4 capability denied; 5 not found; 6 unavailable; 7 action required; 8 needs attention.",
+        "examples": [
+          "hiroute console open --non-interactive --output json"
+        ],
+        "see_also": [
+          "hiroute schema show --command-id console.open"
+        ]
+      },
+      "positive": {
+        "scenario_id": "p0.console.open.positive",
+        "polarity": "positive",
+        "state": "executable"
+      },
+      "negative": {
+        "scenario_id": "p0.console.open.negative",
+        "polarity": "negative",
+        "state": "executable"
+      }
+    },
+    {
+      "command_id": "console.token.create",
+      "path": [
+        "console",
+        "token",
+        "create"
+      ],
+      "operation_id": "CreateConsoleToken",
+      "trace_ids": [],
+      "scope": "p0",
+      "lifecycle": "released",
+      "kind": "action",
+      "request_schema": "hiroute.console-token-create/v1",
+      "response_schema": "hiroute.console-token-result/v1",
+      "effect": "typed_action",
+      "network": "local_control_only",
+      "model_call": "never",
+      "stdin_channels": [],
+      "idempotency": "not_applicable",
+      "help": {
+        "purpose": "Create a named owner console access token, shown once.",
+        "usage": "hiroute console token create [typed options] --non-interactive --output json",
+        "arguments_and_options": "Only the typed options declared by the generated request schema are accepted; arbitrary patches, URLs, shell, or plaintext Secret argv are forbidden.",
+        "effects": "Application-owned typed operation; side effects are recorded by the Operation and external ledgers.",
+        "network_and_model_use": "No model inference; external access, when required, is limited to registered typed ports.",
+        "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
+        "output": "One hiroute.machine-envelope/v2 JSON object on stdout; diagnostics belong on stderr.",
+        "exit_status": "0 success/accepted; 2 usage; 3 conflict/blocker; 4 capability denied; 5 not found; 6 unavailable; 7 action required; 8 needs attention.",
+        "examples": [
+          "hiroute console token create --non-interactive --output json"
+        ],
+        "see_also": [
+          "hiroute schema show --command-id console.token.create"
+        ]
+      },
+      "positive": {
+        "scenario_id": "p0.console.token.create.positive",
+        "polarity": "positive",
+        "state": "executable"
+      },
+      "negative": {
+        "scenario_id": "p0.console.token.create.negative",
+        "polarity": "negative",
+        "state": "executable"
+      }
+    },
+    {
+      "command_id": "console.token.list",
+      "path": [
+        "console",
+        "token",
+        "list"
+      ],
+      "operation_id": "ListConsoleTokens",
+      "trace_ids": [],
+      "scope": "p0",
+      "lifecycle": "released",
+      "kind": "query",
+      "request_schema": "hiroute.empty-request/v1",
+      "response_schema": "hiroute.console-token-result/v1",
+      "effect": "none",
+      "network": "local_control_only",
+      "model_call": "never",
+      "stdin_channels": [],
+      "idempotency": "not_applicable",
+      "help": {
+        "purpose": "List console token metadata without credential secrets.",
+        "usage": "hiroute console token list [typed options] --non-interactive --output json",
+        "arguments_and_options": "Only the typed options declared by the generated request schema are accepted; arbitrary patches, URLs, shell, or plaintext Secret argv are forbidden.",
+        "effects": "Read-only; no product side effect.",
+        "network_and_model_use": "No model use; any external dependency is declared by the typed Application operation.",
+        "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
+        "output": "One hiroute.machine-envelope/v2 JSON object on stdout; diagnostics belong on stderr.",
+        "exit_status": "0 success/accepted; 2 usage; 3 conflict/blocker; 4 capability denied; 5 not found; 6 unavailable; 7 action required; 8 needs attention.",
+        "examples": [
+          "hiroute console token list --non-interactive --output json"
+        ],
+        "see_also": [
+          "hiroute schema show --command-id console.token.list"
+        ]
+      },
+      "positive": {
+        "scenario_id": "p0.console.token.list.positive",
+        "polarity": "positive",
+        "state": "executable"
+      },
+      "negative": {
+        "scenario_id": "p0.console.token.list.negative",
+        "polarity": "negative",
+        "state": "executable"
+      }
+    },
+    {
+      "command_id": "console.token.revoke",
+      "path": [
+        "console",
+        "token",
+        "revoke"
+      ],
+      "operation_id": "RevokeConsoleToken",
+      "trace_ids": [],
+      "scope": "p0",
+      "lifecycle": "released",
+      "kind": "action",
+      "request_schema": "hiroute.console-token-revoke/v1",
+      "response_schema": "hiroute.console-token-result/v1",
+      "effect": "typed_action",
+      "network": "local_control_only",
+      "model_call": "never",
+      "stdin_channels": [],
+      "idempotency": "not_applicable",
+      "help": {
+        "purpose": "Revoke a console access token and its sessions.",
+        "usage": "hiroute console token revoke [typed options] --non-interactive --output json",
+        "arguments_and_options": "Only the typed options declared by the generated request schema are accepted; arbitrary patches, URLs, shell, or plaintext Secret argv are forbidden.",
+        "effects": "Application-owned typed operation; side effects are recorded by the Operation and external ledgers.",
+        "network_and_model_use": "No model inference; external access, when required, is limited to registered typed ports.",
+        "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
+        "output": "One hiroute.machine-envelope/v2 JSON object on stdout; diagnostics belong on stderr.",
+        "exit_status": "0 success/accepted; 2 usage; 3 conflict/blocker; 4 capability denied; 5 not found; 6 unavailable; 7 action required; 8 needs attention.",
+        "examples": [
+          "hiroute console token revoke --non-interactive --output json"
+        ],
+        "see_also": [
+          "hiroute schema show --command-id console.token.revoke"
+        ]
+      },
+      "positive": {
+        "scenario_id": "p0.console.token.revoke.positive",
+        "polarity": "positive",
+        "state": "executable"
+      },
+      "negative": {
+        "scenario_id": "p0.console.token.revoke.negative",
+        "polarity": "negative",
+        "state": "executable"
+      }
+    },
     {
       "command_id": "schema.list",
       "path": [
@@ -2768,7 +2951,7 @@
         "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. Human options retain the v1 query. Fact-only listing is available to the same-UID Local Control peer; --query searches retained text and therefore still requires a separately delivered protected capability. --request-stdin accepts only a strict v2 sessions intent.",
         "effects": "Read-only; no product side effect.",
         "network_and_model_use": "No model use; any external dependency is declared by the typed Application operation.",
-        "automation": "Same-OS-user Local Control reads retained message/tool content and searches without a separate GUI ticket. Supplied capability FDs remain validated; Gateway keys grant no management authority.\n\nAnalysis journey (opt in; legacy views/cursors keep their meanings):\n  hiroute sessions list --view conversations --period 7d --limit 50\n  hiroute sessions list --view switches --day 2026-10-16\n  hiroute sessions show SESSION --view routing --analysis-scope TOKEN\n  hiroute sessions show SESSION --view conversation --request REQUEST --analysis-scope TOKEN\n\nUse --period today|yesterday|7d|30d, --day YYYY-MM-DD, or --from-ms N --to-ms N; choose one mode. Civil days follow this service host's local day (actual offsets are returned); absolute bounds are UTC milliseconds, half-open. Default is 7d. Analysis scopes return requested/effective bounds, expiry and relation/numeric/price watermarks. Retention may clip their start so used evidence stays retained for the token lifetime. No stable interval and missing native evidence are explicit gaps, not empty-success claims.\n\nRetain analysis_scope for ranking/switch/content drill-down; follow next_cursor with the same view/filters/limit and no new time selection. Follow-ups can narrow --session/--request, never widen the original Plan/Agent/query scope. New requests or unrelated lineage do not change a pinned range. Expired scope/cursor, withdrawal/full deletion or changed authority require a fresh initial query; do not silently compare totals across refreshed scopes. A page can be shorter than limit; its length is not the total.\n\n--query searches retained content in the conversations list. Pending/unavailable index is marked partial. --model-switch is invalid for new views; its legacy any|only|exclude behavior is unchanged. Recorded selection/competence stages explain routing; stage boundaries and credential relay are not user-turn model changes. Compare actual accepted endpoints and explicit reasoning settings. continuation_boundary marks a verified native compression boundary, including mid-turn compression; turn_context_reset/unknown/pending never establish adjacent user turns. Missing proof leaves physical sessions separate. Member previews include exact counts and partial markers. Request content is bounded; reference_only/partial entries supply content_id/request_id for typed V2 content pagination, never expose provider private state. Use sessions receipt RECEIPT for immutable routing facts and observation plan-quality samples for stage details. Missing/deleted/expired capture does not prove wrong routing.\n\nLegacy sessions list --include-unlinked --query TEXT and sessions show SESSION --content messages-and-tools remain available. Typed V2 accepts sessions/search/session_search, timeline/catalog/ancestry/content, and family-specific analysis requests. Read schema show --command-id sessions.show --include-schema for complete contracts. Observation errors opt in to timeout, reader_busy, index_unavailable or storage_unavailable diagnostics; retry the same scope where still valid. No read performs a classifier call or changes routing.",
+        "automation": "Same-OS-user Local Control reads retained message/tool content and searches without a separate GUI ticket. Supplied capability FDs remain validated; Gateway keys grant no management authority.\n\nAnalysis journey (opt in; legacy views/cursors keep their meanings):\n  hiroute sessions list --view conversations --period 7d --limit 50\n  hiroute sessions list --view switches --day 2026-10-16\n  hiroute sessions show SESSION --view routing --analysis-scope TOKEN\n  hiroute sessions show SESSION --view conversation --request REQUEST --analysis-scope TOKEN\n\nUse --period today|yesterday|7d|30d, --day YYYY-MM-DD, or --from-ms N --to-ms N; choose one mode. Civil days follow this service host's local day (actual offsets are returned); absolute bounds are UTC milliseconds, half-open. Default is 7d. Analysis scopes return requested/effective bounds, expiry and relation/numeric/price watermarks. Retention may clip their start so used evidence stays retained for the token lifetime. No stable interval and missing native evidence are explicit gaps, not empty-success claims.\n\nRetain analysis_scope for ranking/switch/content drill-down; follow next_cursor with the same view/filters/limit and no new time selection. Follow-ups can narrow --session/--request, never widen the original Plan/Agent/query scope. New requests or unrelated lineage do not change a pinned range. Expired scope/cursor, withdrawal/full deletion or changed authority require a fresh initial query; do not silently compare totals across refreshed scopes. A page can be shorter than limit; its length is not the total.\n\n--query searches retained content in the conversations list. Set it when creating a search scope; an existing scope rejects a new or different keyword. Start a separate search scope and retain the original comparison scope. Repeating its original keyword is allowed. Pending/unavailable index is marked partial. --model-switch is invalid for new views; its legacy any|only|exclude behavior is unchanged. Recorded selection/competence stages explain routing; stage boundaries and credential relay are not user-turn model changes. Compare actual accepted endpoints and explicit reasoning settings. continuation_boundary marks a verified native compression boundary, including mid-turn compression; turn_context_reset/unknown/pending never establish adjacent user turns. Missing proof leaves physical sessions separate. Member previews include exact counts and partial markers. Request content is bounded; reference_only/partial entries supply content_id/request_id for typed V2 content pagination, never expose provider private state. Use sessions receipt RECEIPT for immutable routing facts and observation plan-quality samples for stage details. Missing/deleted/expired capture does not prove wrong routing.\n\nLegacy sessions list --include-unlinked --query TEXT and sessions show SESSION --content messages-and-tools remain available. Typed V2 accepts sessions/search/session_search, timeline/catalog/ancestry/content, and family-specific analysis requests. Read schema show --command-id sessions.show --include-schema for complete contracts. Observation errors opt in to timeout, reader_busy, index_unavailable or storage_unavailable diagnostics; retry the same scope where still valid. No read performs a classifier call or changes routing.",
         "output": "One hiroute.machine-envelope/v2 JSON object on stdout; diagnostics belong on stderr.",
         "exit_status": "0 success/accepted; 2 usage; 3 conflict/blocker; 4 capability denied; 5 not found; 6 unavailable; 7 action required; 8 needs attention.",
         "examples": [
@@ -2820,7 +3003,7 @@
         "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. Human options retain the v1 lookup and content defaults to none. Same-UID facts/timeline reads need no extra token; messages, tool content, catalog, ancestry, content pages, and search still require an exact protected capability.",
         "effects": "Read-only; no product side effect.",
         "network_and_model_use": "No model use; any external dependency is declared by the typed Application operation.",
-        "automation": "Same-OS-user Local Control reads retained message/tool content and searches without a separate GUI ticket. Supplied capability FDs remain validated; Gateway keys grant no management authority.\n\nAnalysis journey (opt in; legacy views/cursors keep their meanings):\n  hiroute sessions list --view conversations --period 7d --limit 50\n  hiroute sessions list --view switches --day 2026-10-16\n  hiroute sessions show SESSION --view routing --analysis-scope TOKEN\n  hiroute sessions show SESSION --view conversation --request REQUEST --analysis-scope TOKEN\n\nUse --period today|yesterday|7d|30d, --day YYYY-MM-DD, or --from-ms N --to-ms N; choose one mode. Civil days follow this service host's local day (actual offsets are returned); absolute bounds are UTC milliseconds, half-open. Default is 7d. Analysis scopes return requested/effective bounds, expiry and relation/numeric/price watermarks. Retention may clip their start so used evidence stays retained for the token lifetime. No stable interval and missing native evidence are explicit gaps, not empty-success claims.\n\nRetain analysis_scope for ranking/switch/content drill-down; follow next_cursor with the same view/filters/limit and no new time selection. Follow-ups can narrow --session/--request, never widen the original Plan/Agent/query scope. New requests or unrelated lineage do not change a pinned range. Expired scope/cursor, withdrawal/full deletion or changed authority require a fresh initial query; do not silently compare totals across refreshed scopes. A page can be shorter than limit; its length is not the total.\n\n--query searches retained content in the conversations list. Pending/unavailable index is marked partial. --model-switch is invalid for new views; its legacy any|only|exclude behavior is unchanged. Recorded selection/competence stages explain routing; stage boundaries and credential relay are not user-turn model changes. Compare actual accepted endpoints and explicit reasoning settings. continuation_boundary marks a verified native compression boundary, including mid-turn compression; turn_context_reset/unknown/pending never establish adjacent user turns. Missing proof leaves physical sessions separate. Member previews include exact counts and partial markers. Request content is bounded; reference_only/partial entries supply content_id/request_id for typed V2 content pagination, never expose provider private state. Use sessions receipt RECEIPT for immutable routing facts and observation plan-quality samples for stage details. Missing/deleted/expired capture does not prove wrong routing.\n\nLegacy sessions list --include-unlinked --query TEXT and sessions show SESSION --content messages-and-tools remain available. Typed V2 accepts sessions/search/session_search, timeline/catalog/ancestry/content, and family-specific analysis requests. Read schema show --command-id sessions.show --include-schema for complete contracts. Observation errors opt in to timeout, reader_busy, index_unavailable or storage_unavailable diagnostics; retry the same scope where still valid. No read performs a classifier call or changes routing.",
+        "automation": "Same-OS-user Local Control reads retained message/tool content and searches without a separate GUI ticket. Supplied capability FDs remain validated; Gateway keys grant no management authority.\n\nAnalysis journey (opt in; legacy views/cursors keep their meanings):\n  hiroute sessions list --view conversations --period 7d --limit 50\n  hiroute sessions list --view switches --day 2026-10-16\n  hiroute sessions show SESSION --view routing --analysis-scope TOKEN\n  hiroute sessions show SESSION --view conversation --request REQUEST --analysis-scope TOKEN\n\nUse --period today|yesterday|7d|30d, --day YYYY-MM-DD, or --from-ms N --to-ms N; choose one mode. Civil days follow this service host's local day (actual offsets are returned); absolute bounds are UTC milliseconds, half-open. Default is 7d. Analysis scopes return requested/effective bounds, expiry and relation/numeric/price watermarks. Retention may clip their start so used evidence stays retained for the token lifetime. No stable interval and missing native evidence are explicit gaps, not empty-success claims.\n\nRetain analysis_scope for ranking/switch/content drill-down; follow next_cursor with the same view/filters/limit and no new time selection. Follow-ups can narrow --session/--request, never widen the original Plan/Agent/query scope. New requests or unrelated lineage do not change a pinned range. Expired scope/cursor, withdrawal/full deletion or changed authority require a fresh initial query; do not silently compare totals across refreshed scopes. A page can be shorter than limit; its length is not the total.\n\n--query searches retained content in the conversations list. Set it when creating a search scope; an existing scope rejects a new or different keyword. Start a separate search scope and retain the original comparison scope. Repeating its original keyword is allowed. Pending/unavailable index is marked partial. --model-switch is invalid for new views; its legacy any|only|exclude behavior is unchanged. Recorded selection/competence stages explain routing; stage boundaries and credential relay are not user-turn model changes. Compare actual accepted endpoints and explicit reasoning settings. continuation_boundary marks a verified native compression boundary, including mid-turn compression; turn_context_reset/unknown/pending never establish adjacent user turns. Missing proof leaves physical sessions separate. Member previews include exact counts and partial markers. Request content is bounded; reference_only/partial entries supply content_id/request_id for typed V2 content pagination, never expose provider private state. Use sessions receipt RECEIPT for immutable routing facts and observation plan-quality samples for stage details. Missing/deleted/expired capture does not prove wrong routing.\n\nLegacy sessions list --include-unlinked --query TEXT and sessions show SESSION --content messages-and-tools remain available. Typed V2 accepts sessions/search/session_search, timeline/catalog/ancestry/content, and family-specific analysis requests. Read schema show --command-id sessions.show --include-schema for complete contracts. Observation errors opt in to timeout, reader_busy, index_unavailable or storage_unavailable diagnostics; retry the same scope where still valid. No read performs a classifier call or changes routing.",
         "output": "One hiroute.machine-envelope/v2 JSON object on stdout; diagnostics belong on stderr.",
         "exit_status": "0 success/accepted; 2 usage; 3 conflict/blocker; 4 capability denied; 5 not found; 6 unavailable; 7 action required; 8 needs attention.",
         "examples": [

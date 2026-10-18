@@ -923,7 +923,7 @@ fn public_headless_business(include_claude: bool) {
             .starts_with("sha256:")
     );
     let commands = manifest["commands"].as_array().unwrap();
-    assert_eq!(commands.len(), 55);
+    assert_eq!(commands.len(), 59);
     for command_id in [
         "prices.effective",
         "prices.override.preview",

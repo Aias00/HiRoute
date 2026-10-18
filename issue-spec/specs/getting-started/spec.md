@@ -242,6 +242,147 @@ Suggestion failures SHALL be isolated per Plan: an oversized or unavailable Plan
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/140#issuecomment-6236472105
 
+### Requirement: Windows x64 Desktop installs per user and opens ready to use
+
+HiRoute SHALL provide a Windows x64 Desktop installer that a standard user can run without administrator rights, Python or a terminal. In this release it is the only supported Windows installation path. It SHALL verify the package, publish the user-owned Windows standalone installation (CLI, daemon, CPA and Skills), register the default Task Scheduler manager, add the Desktop shell, start the service and open the shell when the service is ready. Login start and tray residency SHALL be enabled by default and SHALL be optional during installation. An unattended mode SHALL install with the defaults without prompts. An existing Task Scheduler installation for the same user SHALL be upgraded in place with its data and Agent recovery references preserved. SCM service installation is not offered in this release: an existing SCM-managed installation SHALL be refused before writing, with an explanation, and SHALL remain unchanged. The installer SHALL refuse non-x64 systems before writing. A missing WebView2 runtime SHALL be installed or explained. An interrupted installation SHALL be repairable by running the installer again. Uninstall SHALL restore managed Agent access before removing the manager registration, shell and entries, and SHALL preserve business data unless the user explicitly selects its removal. When neither Agent storage nor its upgrade backup exists, first-install recovery SHALL NOT require a working daemon. If the service is unavailable and Agent state cannot be enumerated, recovery or uninstall SHALL offer a separate default-No interactive confirmation to stop the owned unresponsive Task and proceed with restoration unverified. It SHALL warn that affected Agents cannot be enumerated, configured Agents may need manual restoration and active work may be interrupted; this continuation SHALL retain all business data. Silent and passive modes SHALL refuse this continuation, and enumerated restore conflicts SHALL still block removal. Verified obsolete versioned packages SHALL be pruned only after both installation owners commit; rollback sources SHALL be retained until then. Uninstall SHALL remove its verified current package and preserve changed or foreign files.
+
+#### Scenario: Fresh standard-user installation
+
+- **WHEN** a standard user without Python runs the installer on Windows x64 and accepts the defaults
+- **THEN** installation completes without elevation, the HiRoute window opens with a healthy service, and `hiroute` in a new terminal reaches the same instance.
+
+#### Scenario: Existing user installation
+
+- **WHEN** the user already has a Task Scheduler installation of HiRoute with saved sources and plans
+- **THEN** installation keeps that data and manager, and the console shows the same sources and plans.
+
+#### Scenario: Existing SCM installation
+
+- **WHEN** the installer finds an SCM-managed HiRoute installation for the user
+- **THEN** it stops before writing any file, explains that SCM service installation is not offered in this release, and leaves that installation unchanged.
+
+#### Scenario: Unattended installation
+
+- **WHEN** an administrator or script runs the installer in its unattended mode on Windows x64
+- **THEN** installation completes with the default choices without prompts, and the service is healthy afterwards.
+
+#### Scenario: Unsupported architecture
+
+- **WHEN** the installer runs on a Windows ARM64 system
+- **THEN** it stops before writing any file and explains that only x64 is supported.
+
+#### Scenario: Interrupted installation
+
+- **WHEN** installation stops after files were partially published
+- **THEN** the service is not admitted with mixed files, and rerunning the installer repairs or completes the installation without losing data.
+
+#### Scenario: Unavailable service during recovery or uninstall
+
+- **WHEN** the service cannot start or Agent state cannot be enumerated
+- **THEN** recovery or uninstall requires separate explicit interactive consent to continue without verified restoration, explains the possible Agent and active-work effects, and retains all business data; silent/passive execution refuses this exception.
+
+#### Scenario: Restore conflict remains protected
+
+- **WHEN** a managed Agent has an enumerated restoration conflict
+- **THEN** uninstall stops before removal and reports the affected Agent; unavailable-service consent cannot bypass the conflict.
+
+#### Scenario: Versioned package cleanup
+
+- **WHEN** installation commits or uninstall removes its package
+- **THEN** verified obsolete payloads are removed, rollback sources survive until both owners commit, interrupted cleanup can resume, and changed or foreign entries remain untouched.
+
+#### Scenario: Replacement changes frontend resource names
+
+- **WHEN** an existing Windows Desktop installation is replaced by a verified package with different hashed frontend asset filenames
+- **THEN** the installer durably backs up the prior owned files before retiring obsolete payload paths, validates the complete new package without accepting foreign or modified content, and preserves the old versioned core until both installation owners commit.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/132#issuecomment-6219731276
+
+### Requirement: The Windows shell is a thin host for the console
+
+The Windows Desktop shell SHALL run as a single instance, show the console in an embedded WebView after the service is ready, and offer tray actions to open the window, open the console in the default browser and quit the shell. It SHALL obtain console sessions through the private named-pipe Local Control path and SHALL NOT persist session or launch credentials. Quitting the shell SHALL NOT stop the service. When the service is stopped or unhealthy, the shell SHALL start it through the installed manager and show progress, failure and the location of logs. The shell SHALL NOT execute business operations of its own; product actions go through the console and its HTTP control interface. Host-only features available in the shell, such as update and login-start preference, SHALL be exposed to the console as explicit host capabilities. If Control and Gateway are ready but no local console listener is bound, the shell SHALL identify the console-listener failure separately from service startup and show explicit owner CLI configuration and restart instructions. Retrying SHALL NOT change saved listener settings or start a temporary listener, and the owner SHALL retain the ability to disable the console.
+
+#### Scenario: Second launch
+
+- **WHEN** the user starts HiRoute again while the shell is running
+- **THEN** the existing window is focused and no second shell or service is started.
+
+#### Scenario: Service stopped
+
+- **WHEN** the shell starts while the background service is stopped
+- **THEN** the shell starts it through the manager and opens the console once Local Control and Gateway are ready, or shows the failure with its log location.
+
+#### Scenario: Quit the shell
+
+- **WHEN** the user quits from the tray
+- **THEN** the shell exits while the Gateway keeps serving configured Agents.
+
+#### Scenario: Open in browser
+
+- **WHEN** the user selects open in browser
+- **THEN** the default browser opens a fresh single-use launch link and reaches an authenticated console session.
+
+#### Scenario: Local console disabled or unable to bind
+
+- **WHEN** the service is healthy but the saved console is off or its explicit port could not bind
+- **THEN** the shell identifies the missing local console, shows how to save loopback with automatic port selection and restart the service, and warns that restart may interrupt active work. Retry only rechecks; it does not overwrite the owner configuration.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/132#issuecomment-6219733037
+
+### Requirement: Windows Desktop updates verify unsigned packages by catalog digest
+
+The Windows shell SHALL select a newer stable Windows x64 Desktop release from the trusted website release catalog and download it over HTTPS while the service keeps running. Before any stop it SHALL verify byte count and SHA-256 against the catalog. Windows packages are not code-signed; package origin SHALL be established by the HTTPS catalog and digest, and HiRoute SHALL NOT claim a publisher identity. Release pages SHALL publish each package SHA-256, and documentation SHALL guide users through the unknown-publisher prompt. Replacement SHALL follow the existing orderly-stop handoff: preflight, drain active requests and accepted Worker work with user cancellation, stop the shell and service, replace through the journaled installation transaction, run storage validation and migration, restart and report health. A failure before replacement SHALL restore the old running service; an interrupted replacement SHALL be repaired on the next start or installer run. A manually downloaded newer installer SHALL use the same transaction. The in-app passive update SHALL preserve the existing login-start and tray choices and SHALL NOT wait on an interactive options page. In this release, Windows publication SHALL consist only of the x64 Desktop installer named `HiRoute-<version>-<rev12>-windows-x86_64-setup.exe`. Windows standalone archives of any architecture and Windows ARM64 packages SHALL NOT be published, and release catalog validation SHALL reject a Windows standalone artifact. An unavailable or invalid catalog SHALL be reported as an update-check failure while the current application and service remain usable. A missing or retired Windows catalog SHALL NOT be presented as a failed installation or as proof that no update exists, and the shell SHALL NOT fall back to the released V2 catalog.
+
+#### Scenario: Digest mismatch
+
+- **WHEN** a downloaded package size or SHA-256 differs from the catalog
+- **THEN** the update fails before stopping the service and the existing version remains in use.
+
+#### Scenario: Cancel while draining
+
+- **WHEN** the user cancels while accepted Worker work is still running
+- **THEN** the work is neither killed nor resubmitted and normal admission resumes.
+
+#### Scenario: Replacement failure
+
+- **WHEN** file replacement fails after the service stopped
+- **THEN** the previous verified version is restored and restarted, and the failure stage is reported.
+
+#### Scenario: Successful update
+
+- **WHEN** an update completes
+- **THEN** the new version starts with existing sources, plans, Agent configuration and observations intact, and the shell reopens the console.
+
+#### Scenario: Windows standalone archive in a release
+
+- **WHEN** a release catalog candidate contains a Windows standalone archive or a Windows ARM64 package
+- **THEN** catalog validation rejects it before publication and released readers never receive it.
+
+#### Scenario: Passive update preserves preferences
+
+- **WHEN** the shell hands off a verified update to the passive installer
+- **THEN** installation proceeds without an interactive options page, retains the existing login-start and tray preferences, and returns to a healthy service.
+
+#### Scenario: Windows catalog not available
+
+- **WHEN** the trusted Windows catalog returns HTTP 404 or 410
+- **THEN** the page reports that the Windows update catalog is unavailable and offers retry, without claiming that installation failed or that the latest version is installed, changing product data, stopping the service or selecting a V2 artifact.
+
+#### Scenario: Shell replacement fails before the core changes
+
+- **WHEN** a prepared shell replacement fails while the standalone marker and verified Task still refer to the previous installation
+- **THEN** recovery restores the verified shell files and captured login/tray/listener settings without reinstalling or draining that unchanged core, retains active work and business data, and a subsequent installer run can proceed through the same ownership checks.
+
+#### Scenario: Manual repair supersedes a prior failure
+
+- **WHEN** recovery reported an earlier replacement failure and a subsequent manual installer commits the verified new core and shell
+- **THEN** the persisted startup and Settings outcome reflects the committed installation instead of claiming that the prior version was restored, and interrupted committed-phase reporting completes idempotently through recovery.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/132#issuecomment-6219734656
+
 ## Implementation references
 
 - [Native updater](../../../apps/desktop/src-tauri/src/updates.rs) and

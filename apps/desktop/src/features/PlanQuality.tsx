@@ -2,7 +2,7 @@ import { ExecutorOutcomes, TrustScopeNotes, TrustSessions, TrustSuggestions, Tru
 import { TrustCost } from './trust/TrustCost';
 import { usePlanTrust, type TrustGrouping } from './trust/use-plan-trust';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import type { TrustReport, TrustRow } from './trust/types';
+import type { TrustCounts, TrustReport, TrustRow } from './trust/types';
 import { UiIcon } from '../ui';
 import { ContentExcerpt } from './Sessions';
 import { safeDiagnosticCode } from '../error-code';
@@ -161,6 +161,11 @@ export function PlanQuality({
   }, [active, planId, report, groupBy, regularKey, revision, window, triggers]);
   const trustRowName = (row: TrustRow) => row.attribution !== 'single' ? text(row.attribution === 'mixed' ? '多个执行模型' : '执行模型未确认', row.attribution === 'mixed' ? 'Multiple execution models' : 'Execution model unknown') : modelNames.get(row.model_configuration_id ?? '') ?? row.model_configuration_id ?? text('未知模型', 'Unknown model');
   const groupTone = (group: 'regular' | 'primary' | null) => group === 'regular' ? 'cyan' : group === 'primary' ? 'purple' : '';
+  // Partial, awaiting and unscored stages stay distinct: none of them counts as complete evidence.
+  const stageStates = (counts: TrustCounts) => <span className="quality-stage-states">{([
+    ['complete', counts.complete, '完整评分', 'complete'], ['partial', counts.partial, '部分评分', 'partial'],
+    ['awaiting', counts.awaiting_assessment, '等待评分', 'awaiting assessment'], ['unscored', counts.unscored, '未评分', 'unscored'],
+  ] as const).map(([state, value, zh, en]) => <span key={state} data-state={state}>{text(`${value} ${zh}`, `${value} ${en}`)}</span>)}</span>;
   const columns = <div className="quality-table-head" aria-hidden="true"><span>{text('模型 / 思考设置', 'Model / reasoning')}</span><span>{text('平均阶段胜任度', 'Average stage competence')}</span><span>{text('胜任率', 'Competence rate')}</span><span>{text('阶段占比', 'Stage share')}</span><span>{text('阶段样本', 'Stage samples')}</span><span>{text('耗时中位数', 'Median duration')}</span><span /></div>;
   const stageSection = (compact || selected) && <section className="quality-stage-section">
     {!compact && <div className="quality-stage-heading"><div><h4>{selected?.label ?? (selectedRow ? rowName(selectedRow) : text('执行阶段', 'Execution stages'))}</h4><span>{text('按实际执行模型与推理配置查看', 'Stages for the actual execution and reasoning configuration')}</span></div><div className="quality-filters">{filter}<button type="button" className="btn btn-quiet" onClick={resetDetail}>{text('收起', 'Close')}</button></div></div>}
@@ -203,10 +208,10 @@ export function PlanQuality({
           <header className="quality-group-heading"><h4>{qualityRowSectionLabel(members[0], language)}{names.length === 1 ? ` → ${names[0]}` : ''}</h4><span>{text(members.length + ' 个模型配置', members.length + (members.length === 1 ? ' model configuration' : ' model configurations'))}</span></header>
           <div className="quality-table">{columns}{members.map(row => { const evidence = trustRow(row); const tone = groupTone(groupOf(row)); return <div className={'quality-model-row' + (selected?.key === row.key ? ' selected' : '')} key={row.key} data-model-configuration={row.configured?.model_configuration_id ?? row.summary?.execution.model_configuration_id ?? ''}>
             <div className="quality-model-name"><strong>{rowName(row)}</strong><span className="quality-model-tags"><span className={`badge no-dot ${tone}`}>{qualityGroupLabel(row.branch, groupOf(row), language)}</span><span>{qualityReasoningLabel(row.summary ? row.summary.reasoning_profile_id : row.configured?.reasoning_profile_id, language)}{version === 'all' && row.summary && text(' · 版本 ', ' · version ') + row.summary.execution.plan_revision}</span></span></div>
-            <div className="quality-model-average" data-label={text('平均阶段胜任度', 'Average stage competence')}>{row.summary?.average_score != null ? <><strong>{row.summary.average_score.toFixed(2)} <small>/ 1</small></strong><div className={`quality-score-bar ${tone}`} aria-hidden="true"><span style={{ width: (row.summary.average_score * 100) + '%' }} /></div></> : <span>{row.summary ? text('未评分', 'Unrated') : text('暂无记录', 'No records')}</span>}</div>
+            <div className="quality-model-average" data-label={text('平均阶段胜任度', 'Average stage competence')}>{row.summary?.average_score != null ? <><strong>{row.summary.average_score.toFixed(2)} <small>/ 1</small></strong><div className={`quality-score-bar ${tone}`} aria-hidden="true"><svg viewBox="0 0 100 4" preserveAspectRatio="none"><rect width={Math.max(0, Math.min(100, row.summary.average_score * 100))} height="4" /></svg></div></> : <span>{row.summary ? text('未评分', 'Unrated') : text('暂无记录', 'No records')}</span>}</div>
             <span data-label={text('胜任率', 'Competence rate')}>{percent(evidence?.competence_rate)}</span>
             <span data-label={text('阶段占比', 'Stage share')}>{percent(evidence?.execution_share)}</span>
-            <span className="quality-model-counts" data-label={text('阶段样本', 'Stage samples')}><span>{text((row.summary?.scored_stage_count ?? 0) + ' 已评分', (row.summary?.scored_stage_count ?? 0) + ' scored')}</span><span>{text((row.summary?.unrated_stage_count ?? 0) + ' 未评分', (row.summary?.unrated_stage_count ?? 0) + ' unrated')}</span></span>
+            <span className="quality-model-counts" data-label={text('阶段样本', 'Stage samples')}>{evidence ? <><span className="quality-row-coverage">{text(`评分覆盖 ${percent(evidence.scoring_coverage)}`, `${percent(evidence.scoring_coverage)} scoring coverage`)}</span>{stageStates(evidence.counts)}</> : <><span>{text((row.summary?.scored_stage_count ?? 0) + ' 已评分', (row.summary?.scored_stage_count ?? 0) + ' scored')}</span><span>{text((row.summary?.unrated_stage_count ?? 0) + ' 未评分', (row.summary?.unrated_stage_count ?? 0) + ' unrated')}</span></>}</span>
             <span data-label={text('耗时中位数', 'Median duration')}>{seconds(evidence?.duration_p50_ms)}</span>
             <button type="button" className="btn btn-quiet quality-view-stages" aria-expanded={selected?.key === row.key} onClick={() => { setScore('all'); setSelected(selected?.key === row.key ? null : { key: row.key, execution: row.summary?.execution ?? null }); }}>{selected?.key === row.key ? text('收起阶段', 'Hide stages') : text('查看阶段', 'View stages')}<UiIcon name="chevronRight" /></button>
           </div>; })}</div>
@@ -220,7 +225,7 @@ export function PlanQuality({
             <span data-label={text('评分覆盖', 'Scoring coverage')}>{percent(row.scoring_coverage)}</span>
             <span data-label={text('胜任率', 'Competence rate')}>{percent(row.competence_rate)}</span>
             <span data-label={text('阶段占比', 'Stage share')}>{percent(row.execution_share)}</span>
-            <span className="quality-model-counts" data-label={text('阶段样本', 'Stage samples')}><span>{text(`${row.counts.complete} 完整评分`, `${row.counts.complete} fully scored`)}</span><span>{text(`${row.counts.executed} 次执行`, `${row.counts.executed} executed`)}</span></span>
+            <span className="quality-model-counts" data-label={text('阶段样本', 'Stage samples')}><span>{text(`${row.counts.executed} 次执行`, `${row.counts.executed} executed`)}</span>{stageStates(row.counts)}</span>
             <span data-label={text('耗时中位数', 'Median duration')}>{seconds(row.duration_p50_ms)}</span>
             <button type="button" className="btn btn-quiet quality-view-stages" aria-expanded={selected?.key === key} onClick={() => selectTrustRow(row)}>{selected?.key === key ? text('收起阶段', 'Hide stages') : text('查看阶段', 'View stages')}<UiIcon name="chevronRight" /></button>
           </div>; })}

@@ -3,6 +3,40 @@
 [Code map](README.md) · [Agent/Worker map](worker-context.md) ·
 [Decision map](decision-foundation.md) · [Test map](testing.md)
 
+## Web console and Windows host
+
+`crates/daemon/src/console` owns the separate HTTP listener, origin/asset admission,
+credential stores and per-client product contexts. Service startup exclusively
+binds configured sockets, including the local companion in network mode; launch
+minting selects live state and never enables listening. Linux installer options
+and `console init` persist scope/port in the host-runtime listener store. A wildcard
+bind requires a concrete advertised IP for its one-use URL. Launch codes bind that
+origin and actual port; the Windows shell explicitly requests the local endpoint.
+Request deadlines cover each request independently of connection age; incomplete
+headers and bodies have their own bounds. Shared confirmation permits and broker
+prompts release on caller cancellation, without approving or affecting another context.
+The console transport reserves separate 64-connection pools for loopback and network
+peers. Socket writes close after 30 seconds without byte progress; successful writes
+reset that deadline, and operation/confirmation waits do not arm it.
+Its private in-process Client
+Core transport shares Local Control budgets, operation admission and upgrade
+drain; external Local Control retains its released-command gate. The frontend
+`apps/desktop/src/host` selects the Tauri, browser or Windows-shell transport and
+host capabilities. Browser product requests use explicit Bearer/context headers;
+native host actions stay in their host adapter.
+
+[`apps/shell`](../../apps/shell/README.md) owns the Windows Tauri window, exact-origin
+host IPC, startup/reconnect, tray/login preference and NSIS hooks. The
+[Rust standalone transaction](../../crates/host-runtime/src/standalone_install)
+owns architecture-matched Task installation and current-schema journal recovery; the shell's separate
+inventory/finisher owns its program files and update outcome. Neither owns business
+transactions or exposes Local Control to WebView. The
+[release catalog](../../apps/website/src/lib/releases.mjs) emits V3 and the registered
+Windows-free V2 projection for supported macOS readers. Public Windows artifacts
+are x64 NSIS installers only; headless x64/ARM64 archives stay internal. The
+installer and tests invoke `__windows-install` / `__windows-uninstall`, with no
+Python installer or offered SCM installation entry.
+
 ## Shared layers
 
 | Responsibility | Production owner | Boundary |
@@ -56,7 +90,7 @@ The name must fit any runtime root that supports `hiroute/control.sock`, includi
 | --- | --- | --- |
 | Add an API connection and choose its models | [Connection directory](../../apps/desktop/src/features/model-connections/ConnectionDirectory.tsx), [form and draft ownership](../../apps/desktop/src/features/model-connections/README.md), [registered check](../../crates/daemon/src/control/runtime/model_connections/registered.rs) | The executable catalog supplies the complete directory. A source name survives check/save; per-product credentials stay in the dialog and protected input. Released public registered probes may omit the name and use the authenticated option label; the current Desktop check requires an explicit label. |
 | Discover a native source without executing it | [Native model connections](../../crates/integrations/src/model_connections), [Pi reader](../../crates/integrations/src/agents/pi_sources.rs), [DSH reader](../../crates/integrations/src/agents/dsh_sources.rs), [Hermes reader](../../crates/integrations/src/agents/hermes_sources.rs) | Shared [point grouping](../../crates/integrations/src/agents/native_points.rs) keeps scope/provider/address/protocol/authentication distinct; static scan never executes helpers |
-| Display, prepare and save the selected source | [Safe Desktop projection](../../apps/desktop/src-tauri/src/bridge/model_connection_web.rs), [V2 points/catalog qualification](../../crates/daemon/src/control/runtime/model_connections/points.rs), [daemon preparation](../../crates/daemon/src/control/runtime/model_connections/pi_discovered.rs) | Exact native/catalog provenance and explicit model selection remain visible; privileged locators stay private; stale facts cannot expand an accepted selection; legacy one-model handles retain their meaning |
+| Display, prepare and save the selected source | [Safe shared product projection](../../crates/product-session/src/commands/model_connection_web.rs), [V2 points/catalog qualification](../../crates/daemon/src/control/runtime/model_connections/points.rs), [daemon preparation](../../crates/daemon/src/control/runtime/model_connections/pi_discovered.rs) | Exact native/catalog provenance and explicit model selection remain visible; privileged locators stay private; stale facts cannot expand an accepted selection; legacy one-model handles retain their meaning |
 | Rename a connection, append models or remove saved configuration | [Shared lifecycle planner](../../crates/application/src/compute_management/mutations/lifecycle.rs), [transactional reference guards](../../crates/local-storage/src/control/compute/management/references.rs), [Desktop lifecycle dialog](../../apps/desktop/src/features/models/ConnectionLifecycleDialog.tsx) | Templates do not own credentials. Explicit append preserves saved members; enabled/disabled routes and retained recovery versions block removal. Removing the last model requires explicit connection deletion; owned secrets follow the same recoverable operation. |
 | Save Key order or use current Keys with an older plan | [Single-save edits](../../apps/desktop/src/features/models/model-draft.ts), [request admission](../../crates/gateway/src/core_runtime/credentials.rs), [current pool authority](../../crates/local-storage/src/control/compute/management/runtime_pool.rs), [safe Key masks](../../crates/daemon/src/control/runtime/model_connections/key_masks.rs) | A request owns its admitted Key IDs and order; later exact leases enforce current source/Key eligibility and generation. Admission retains closed permission denials in the existing request summary. Shared Plan content stays frozen. Masks are a separate authenticated query; saved plaintext never reaches Desktop. |
 | Connect a native Codex or Claude subscription | [Source discovery](../../crates/integrations/src/agents/subscription_sources.rs), [credential adapters](../../crates/cpa-bridge/src), [shared lifecycle](../../crates/daemon/src/control/runtime/subscriptions.rs), [provider runtimes](../../crates/cpa-bridge/src/runtime_set.rs) | Native clients retain refresh authority; only access leases enter isolated CPA instances. Claude Keychain interaction is limited to an explicit check; discovery reads metadata only. Codex borrowing reads file storage only and rejects a configured non-file store even if stale auth.json remains. |
@@ -92,6 +126,8 @@ Follow discovery through an ordinary request using the saved source. The
 [Pi](../../tools/product-e2e/tests/PI_INTEGRATION.md) and
 [DSH](../../tools/product-e2e/tests/DSH_INTEGRATION.md) acceptance entries cover
 Scan → Prepare → Save → restart → native use, including stale-source rejection.
+
+The shared product-session layer in `crates/product-session` owns Preview composition, confirmation permits, retry identity and protected-input lifetime. Desktop supplies its inherited-channel `HostAuthority` adapter in `apps/desktop/src-tauri/src/bootstrap/authority.rs`; native startup, updater and window authority stay with the Desktop host.
 
 ## State and lifecycle boundaries
 

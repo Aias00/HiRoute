@@ -49,6 +49,7 @@ export async function quickStartInvoke(command:string,payload:any,params:URLSear
   return {preview:{applicable:true,blockers:[]},mutation:{state:'applied',operation:{operation_id:'operation/map',state:'succeeded',sequence:1,cancellable:false}}};
  }
  if(command==='observation_read') return {rows:[],branches:[],sessions:[],announcements:[]};
+ if(command==='compute_connection_options') { const value:any=await mockProductInvoke(command,payload,'ready'); for(const option of value.options) if(option.connection_option_id==='kimi.open-platform.cn.v1') option.model_configuration_ids=['model.trial']; return value; }
  return mockProductInvoke(command,payload,'ready');
 }
 export function TrialFixture({language}:{language:'zh'|'en'}) {

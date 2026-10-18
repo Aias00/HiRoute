@@ -1,5 +1,23 @@
 # Desktop behavior tests
 
+## Console and Windows host coverage
+
+The V3 browser runner accepts `HIROUTE_BROWSER_TRANSPORT=console` to execute the
+same required product scenarios through the browser host seam. `--console-only`
+checks the production login/session pages with synthetic HTTP, Bearer/context
+headers, plaintext warnings and host capabilities, and captures zh/en light/dark
+at 1200×813 and 755×600. These component scenarios do not establish real daemon,
+native authorization or installation acceptance.
+
+`--shell-host-only` adds the actual Windows startup HTML/styles and production
+shell settings/update states, host-only command routing and credential-free
+reconnect presentation. It uses synthetic host replies and captures the same
+language/theme/size matrix. Native origin ACLs, NSIS, Task/login effects and real
+upgrades keep their [installed gates](../../../docs/windows-desktop-installation.md#evidence-and-release-claims).
+It also distinguishes an unavailable Windows update catalog from installation
+recovery, and checks the bundled local-listener recovery instructions and usable
+Recheck action at both supported window sizes.
+
 Start with the user capability, then choose the smallest layer that can observe its
 contract. Node state tests explain decision rules; browser scenarios exercise the
 production React components and their wiring through synthetic IPC. Neither layer
@@ -35,6 +53,8 @@ proves native authorization, persistence, process cleanup or real model calls.
 | Inspect models used by branch routes | `desktop.models.branch-route-references` | General-model details include regular and upgrade candidates of enabled branch routes, omit disabled routes, and open the referenced route. |
 | Add a decision connection from an unfinished route | `desktop.decisions.route-detour` | The shell suspends the route draft, saves and returns the exact typed connection, preserves input on cancel, and never publishes automatically. |
 | Inspect a model or open its documentation | `desktop.models.documentation-retains-input`; [model-to-route scenario](v3/browser/model-to-route-scenarios.mjs) | Local readiness does not claim inference success; browser failure retains form input; web anchors retain their default action; route creation uses the selected model. |
+| Change model grouping or inspect page controls | `desktop.models.view-switch`, `desktop.presentation.control-layout`; [presentation scenarios](v3/browser/presentation-interactions.mjs) | Production styles preserve model/connection counts, selected model and visible selection. Chinese/English and light/dark checks reject browser-default buttons and horizontal overflow from long recent-session titles at the supported small window. |
+| Try a new model, judge its evidence and follow live routing | `timeline.initial-failure-retry-recovers.*`, `timeline.polls-only-while-displayed-and-visible`, `trust.scoring-states.both-groupings.*`, `quickstart.*.inline-connection-guard.model-change-and-back` in [trial scenarios](v3/visual/new-model-trial-active.mjs) | A failed timeline read keeps its tab, error and Retry until recovery, while only a confirmed empty read hides the tab; polling continues only while the timeline is shown and the window is visible, after one availability probe. Per-model and per-executor groupings both show scoring coverage and complete/partial/awaiting/unscored counts. Changing models, going back or leaving the quick start asks before discarding the inline connection form; Cancel keeps the model and input. `HIROUTE_BROWSER_TRANSPORT=console` runs the same scenarios over the console host. Real feed retrieval, saved trials and live sessions require native acceptance. |
 
 Task-route save scenarios also cover Pi and Qoder executor reselection: an explicit
 Messages choice survives clicking the selected executor and reaches the saved draft.
@@ -49,6 +69,11 @@ observation effects. It controls only IPC responses and records boundary calls;
 it does not call private component callbacks. In particular, browser checks of
 `save_classifier_openapi` and `open_external_url` verify UI dispatch/outcomes, not
 the native OS action.
+
+For an interactive presentation regression check, open
+`product-shell.html?checks=presentation` on the fixture server at 755×600 and
+click **Run presentation checks**. It runs the same two required presentation
+scenarios with production styles and reports each result; IPC remains mocked.
 
 ## Session quality presentation
 

@@ -3,7 +3,7 @@ use crate::{DigestAuthority, LocalObservationStore, text_index::TextIndexBuilder
 use hiroute_domain::*;
 use rusqlite::params;
 
-pub(super) fn source(store: &LocalObservationStore, text: &[u8]) -> String {
+pub(crate) fn source(store: &LocalObservationStore, text: &[u8]) -> String {
     let digest = store
         .authority
         .content_blob_digest("text/plain", text)
@@ -18,7 +18,7 @@ pub(super) fn source(store: &LocalObservationStore, text: &[u8]) -> String {
         VALUES(?1,'content','occurrence','request','request','fork',0,'text','text/plain',?2,0,?3,'complete',100000000)",params![WorkspaceId::DEFAULT,digest,text.len()]).unwrap();
     digest
 }
-pub(super) fn reader(content: bool) -> ObservationReaderContext {
+pub(crate) fn reader(content: bool) -> ObservationReaderContext {
     ObservationReaderContext::local_user(
         WorkspaceId::default(),
         "user".into(),
@@ -29,7 +29,7 @@ pub(super) fn reader(content: bool) -> ObservationReaderContext {
     )
     .unwrap()
 }
-pub(super) fn query(keyword: &str, limit: u16) -> ObservationSearchQueryV2 {
+pub(crate) fn query(keyword: &str, limit: u16) -> ObservationSearchQueryV2 {
     ObservationSearchQueryV2 {
         agent_id: None,
         plan_id: None,

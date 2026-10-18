@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '../../host/index.ts';
 import { ModelConnectionForm } from '../model-connections/ModelConnectionForm';
 import { modelConnectionBackend } from '../model-connections/backend';
 import { newModelConnectionDraft } from '../model-connections/new-draft';

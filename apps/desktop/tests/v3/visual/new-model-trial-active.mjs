@@ -6,9 +6,16 @@ const [port,base,output]=process.argv.slice(2);
 const client=await connectPage(Number(port));
 const keepAlive=setInterval(()=>{},1000);
 const results=[];
-const click=async(selector,text)=>{ await evaluate(client,`(()=>{const el=[...document.querySelectorAll(${JSON.stringify(selector)})].find(e=>e.getClientRects().length && !e.disabled && e.textContent.includes(${JSON.stringify(text)}));if(!el)throw Error('Missing control');el.click();return true;})()`); };
+const click=async(selector,text)=>{ const deadline=Date.now()+5000; for(;;){ const result=await evaluate(client,`(()=>{const el=[...document.querySelectorAll(${JSON.stringify(selector)})].find(e=>e.getClientRects().length && !e.disabled && e.textContent.includes(${JSON.stringify(text)}));if(!el)return JSON.stringify([...document.querySelectorAll(${JSON.stringify(selector)})].map(e=>[e.textContent.trim().slice(0,40),e.getClientRects().length,!!e.disabled]));el.click();return true;})()`); if(result===true)return; if(Date.now()>deadline)throw Error(`Missing control ${selector} "${text}": ${result}`); await new Promise(resolve=>setTimeout(resolve,50)); } };
 const shot=async name=>{await evaluate(client,`Promise.all(document.getAnimations().filter(a=>a.effect?.getComputedTiming().iterations!==Infinity).map(a=>a.finished.catch(()=>{}))).then(()=>true)`);const value=await client.send('Page.captureScreenshot',{format:'png'});await writeFile(path.join(output,`${name}.png`),Buffer.from(value.data,'base64'));};
-async function open(query,width=755,height=600){const url=`${base}new-model-trial.html?${query}`;await client.send('Page.enable');await client.send('Runtime.enable');await client.send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});await client.send('Page.navigate',{url});await waitFor(client,`location.href===${JSON.stringify(url)} && !!document.querySelector('.models-feature,.plan-editor,.sessions-page,.trust-attention,.new-models')`);await evaluate(client,'document.fonts.ready.then(()=>true)');}
+const hostTransport=process.env.HIROUTE_BROWSER_TRANSPORT??'tauri';
+if(!['tauri','console'].includes(hostTransport))throw new Error('Unknown browser host transport');
+async function open(query,width=755,height=600){const url=`${base}new-model-trial.html?${query}${hostTransport==='console'?'&transport=console':''}`;await client.send('Page.enable');await client.send('Runtime.enable');await client.send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});await client.send('Page.navigate',{url});await waitFor(client,`location.href===${JSON.stringify(url)} && !!document.querySelector('.models-feature,.plan-editor,.sessions-page,.trust-attention,.new-models')`);await evaluate(client,'document.fonts.ready.then(()=>true)');if(hostTransport==='console')assert.equal(await evaluate(client,'window.fixtureTransport'),'console');}
+const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const timelineReadsExpr=`trialTrace.filter(x=>x.command==='observation_read'&&x.payload.request.intent.view==='routing_timeline').length`;
+const timelineReads=()=>evaluate(client,timelineReadsExpr);
+const setVisibility=state=>evaluate(client,`(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,get:()=>${JSON.stringify(state)}});document.dispatchEvent(new Event('visibilitychange'));return true;})()`);
+const typeInto=(selector,value)=>evaluate(client,`(()=>{const input=document.querySelector(${JSON.stringify(selector)});if(!input)throw Error('Missing input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(value)});input.dispatchEvent(new Event('input',{bubbles:true}));return true;})()`);
 async function geometry(){return evaluate(client,`(()=>{const nodes=[...document.querySelectorAll('.model-feed-panel,.trust-control,.plan-quality,.trust-suggestion,.modal,.trial-wizard')].filter(e=>e.getClientRects().length);return nodes.map(e=>({class:e.className,width:e.clientWidth,scroll:e.scrollWidth,left:e.getBoundingClientRect().left,right:e.getBoundingClientRect().right}));})()`);}
 try {
  for(const lang of ['en','zh']) {
@@ -114,6 +121,20 @@ try {
  await open('lang=en&view=editor&empty=1');await waitFor(client,`!!document.querySelector('[data-trust-control="smart"]')`);assert.equal(await evaluate(client,`[...document.querySelectorAll('.trust-levels button')].some(e=>e.getAttribute('aria-pressed')==='true')`),false);assert.ok(await evaluate(client,`!!document.querySelector('.trust-control').textContent.includes('Custom 0.72')`));assert.ok(await evaluate(client,`!!document.querySelector('.trust-control').textContent.includes('No recorded evidence')`));await evaluate(client,`document.querySelector('.trust-control').scrollIntoView({block:'center'});true`);await shot('trust-custom-empty-en-755');await click('.trust-levels button','Trusted');assert.ok(await evaluate(client,`!!document.querySelector('.trust-control').textContent.includes('0.65')`));assert.equal(await evaluate(client,`trialTrace.filter(x=>x.command==='preview_plan_editor').length`),0);results.push({id:'trust.custom-threshold.explicit-change',status:'passed'});
  await open('lang=en&view=editor&replay-error=1');await waitFor(client,`document.querySelector('.trust-replay')?.textContent.includes('Replay could not be read')`);await click('.trust-replay button','Retry');await waitFor(client,`document.querySelector('.trust-replay')?.textContent.includes('At 0.72')`);await click('.trust-levels button','Trusted');await waitFor(client,`document.querySelector('.trust-replay')?.textContent.includes('At 0.65')`);assert.ok(await evaluate(client,`trialTrace.some(x=>x.command==='observation_read'&&x.payload.request.intent.view==='plan_trust_replay'&&x.payload.request.intent.query.thresholds_millis[0]===650&&x.payload.request.intent.query.branch_id==='smart_saving')`));assert.ok(await evaluate(client,`document.querySelector('.trust-replay').textContent.includes('Heuristic 2')`));await evaluate(client,`document.querySelector('.trust-replay').scrollIntoView({block:'center'});true`);await shot('replay-threshold-650-en');results.push({id:'replay.custom-threshold.retry-and-exclusions',status:'passed'});
  await open('lang=zh&view=editor&theme=dark',1200,813);await waitFor(client,`!!document.querySelector('[data-trust-control="smart"]')`);await click('[role="tab"]','模型表现');await waitFor(client,`!!document.querySelector('.quality-model-row') && !!document.querySelector('.trust-suggestion')`);await shot('trust-evidence-zh-dark-1200');for(const g of await geometry())assert.ok(g.scroll<=g.width+1,JSON.stringify(g));assert.ok(await evaluate(client,`document.querySelector('.trust-suggestion').textContent.includes('41 个评分完整的阶段')`));assert.ok(await evaluate(client,`document.querySelector('.trust-scope-notes').textContent.includes('2026-10-10')`));assert.equal(await evaluate(client,`/序号|发布修订版|client_version/.test(document.querySelector('.plan-quality').textContent)`),false);results.push({id:'trust.coverage-and-version-disclosure',status:'passed'});
+ for (const [lang,theme,width,height] of [['zh','dark',1200,813],['en','light',755,600]]) {
+  await open(`lang=${lang}&view=editor&theme=${theme}`,width,height);await waitFor(client,`!!document.querySelector('[data-trust-control="smart"]')`);await click('[role="tab"]',lang==='zh'?'模型表现':'Model performance');
+  const regular=`document.querySelector('.quality-model-row[data-model-configuration="qwen3-coder-plus"] .quality-model-counts')`;
+  await waitFor(client,`!!${regular}?.querySelector('.quality-stage-states')`);
+  for(const part of lang==='zh'?['评分覆盖 71%','41 完整评分','4 部分评分','1 等待评分','12 未评分']:['71% scoring coverage','41 complete','4 partial','1 awaiting assessment','12 unscored']) assert.ok(await evaluate(client,`${regular}.textContent.includes(${JSON.stringify(part)})`),`model view: ${part}`);
+  await evaluate(client,`${regular}.scrollIntoView({block:'center'});true`);await shot(`trust-scoring-states-model-${lang}-${width}`);
+  await click('.quality-tables-head button',lang==='zh'?'按执行 Agent':'By execution agent');
+  const executor=`document.querySelector('[data-execution-group="executor"] .quality-model-row')`;
+  await waitFor(client,`!!${executor}?.querySelector('.quality-stage-states')`);
+  for(const part of lang==='zh'?['71%','58 次执行','41 完整评分','4 部分评分','1 等待评分','12 未评分']:['71%','58 executed','41 complete','4 partial','1 awaiting assessment','12 unscored']) assert.ok(await evaluate(client,`${executor}.textContent.includes(${JSON.stringify(part)})`),`executor view: ${part}`);
+  for(const g of await evaluate(client,`[...document.querySelectorAll('.quality-model-row,.quality-table')].map(e=>({width:e.clientWidth,scroll:e.scrollWidth}))`)) assert.ok(g.scroll<=g.width+1,JSON.stringify(g));
+  await evaluate(client,`${executor}.scrollIntoView({block:'center'});true`);await shot(`trust-scoring-states-executor-${lang}-${width}`);
+  results.push({id:`trust.scoring-states.both-groupings.${lang}.${width}`,status:'passed'});
+ }
  for (const [lang,theme,width,height] of [['en','light',755,600],['zh','dark',755,600],['en','dark',1200,813],['zh','light',1200,813]]) {
   await open(`lang=${lang}&theme=${theme}&view=timeline`,width,height);
   await waitFor(client,`document.querySelectorAll('.routing-turn').length===2`);
@@ -136,6 +157,36 @@ try {
  assert.equal(await evaluate(client,`trialTrace.filter(x=>x.command==='observation_read'&&x.payload.request.intent.view==='routing_timeline')[2].payload.request.intent.query.after_watermark`),null);
  await shot('timeline-stale-cursor-recovered-en-755');
  results.push({id:'timeline.stale-cursor.rebuilds-and-appends-without-manual-refresh',status:'passed'});
+ for(const lang of ['en','zh']) {
+  await open(`lang=${lang}&view=timeline&timeline-error=1`);
+  await waitFor(client,`document.querySelector('.routing-timeline [role=alert]')?.getClientRects().length>0`);
+  assert.ok(await evaluate(client,`document.querySelector('.session-view-tabs')?.getClientRects().length>0`),'a failed first read keeps the timeline tab');
+  assert.ok(await evaluate(client,`document.querySelector('.routing-timeline [role=alert]').textContent.includes(${JSON.stringify(lang==='zh'?'更新暂时不可用':'temporarily unavailable')})`));
+  await shot(`timeline-initial-failure-${lang}-755`);
+  await evaluate(client,`window.timelineFail=false;true`);
+  const retriedAt=await evaluate(client,'performance.now()');
+  await click('.routing-timeline [role=alert] button',lang==='zh'?'重试':'Retry');
+  await waitFor(client,`document.querySelectorAll('.routing-turn').length===2`);
+  assert.equal(await evaluate(client,`document.querySelector('.routing-timeline [role=alert]')`),null);
+  assert.ok(await evaluate(client,`trialTrace.some(x=>x.command==='observation_read'&&x.payload.request.intent.view==='routing_timeline'&&x.at>=${retriedAt}&&x.at-${retriedAt}<1000)`),`Retry reads at once: ${retriedAt} ${await evaluate(client,`JSON.stringify(trialTrace.filter(x=>x.payload?.request?.intent?.view==='routing_timeline').map(x=>Math.round(x.at)))`)}`);
+  results.push({id:`timeline.initial-failure-retry-recovers.${lang}`,status:'passed'});
+ }
+ await open('lang=en&view=timeline&timeline-empty=1');
+ await waitFor(client,`document.querySelector('.routing-timeline')?.textContent.includes('No recorded turns yet')`);
+ assert.equal(await evaluate(client,`document.querySelector('.session-view-tabs')`),null);
+ assert.equal(await evaluate(client,`document.querySelector('.routing-conversation').hidden`),false);
+ const emptyReads=await timelineReads(); await sleep(2500); assert.equal(await timelineReads(),emptyReads);
+ results.push({id:'timeline.confirmed-empty-hides-tab-without-polling',status:'passed'});
+ await open('lang=en&view=timeline'); await waitFor(client,`document.querySelectorAll('.routing-turn').length===2`);
+ await click('.session-view-tabs button','Conversation'); await sleep(300);
+ const conversationReads=await timelineReads(); await sleep(4500);
+ assert.equal(await timelineReads(),conversationReads,'Conversation pauses timeline polling');
+ await click('.session-view-tabs button','Routing timeline'); await waitFor(client,`${timelineReadsExpr}>${conversationReads}`);
+ await setVisibility('hidden'); await sleep(300);
+ const hiddenReads=await timelineReads(); await sleep(4500);
+ assert.equal(await timelineReads(),hiddenReads,'a hidden window pauses timeline polling');
+ await setVisibility('visible'); await waitFor(client,`${timelineReadsExpr}>${hiddenReads}`);
+ results.push({id:'timeline.polls-only-while-displayed-and-visible',status:'passed'});
  await open('lang=en&view=editor&division=1',755,600);
  await click('[role="tab"]','Model performance');await waitFor(client,`!!document.querySelector('.trust-suggestion.cyan')`);await click('.trust-suggestion button','Review division draft');
  await waitFor(client,`!!document.querySelector('.division-draft-form') && document.querySelector('.division-draft-form').textContent.includes('DeepSeek trial')`);
@@ -144,7 +195,7 @@ try {
  assert.equal(await evaluate(client,`divisionDraft.branch_routing.branches[1].primary_candidates.length`),0);
  assert.equal(await evaluate(client,`divisionDraft.branch_routing.branches[0].candidates[0].binding_id`),'binding/codex/gpt-5.6-sol');
  await evaluate(client,`document.querySelector('.division-draft-form input[type=checkbox]').click();true`);await click('[role="dialog"] button','Review draft in editor');
- assert.equal(await evaluate(client,`divisionDraft.branch_routing.branches[1].primary_candidates[0].binding_id`),'binding/codex/gpt-5.6-sol');
+ await waitFor(client,`window.divisionDraft?.branch_routing?.branches?.[1]?.primary_candidates?.[0]?.binding_id==='binding/codex/gpt-5.6-sol'`);
  await click('[role="dialog"] button','Delegate to an agent');await waitFor(client,`document.querySelector('.division-executors').textContent.includes('Dependencies ready')`);
  assert.equal(await evaluate(client,`document.querySelectorAll('.division-executors input:checked').length`),0);
  assert.ok(await evaluate(client,`document.querySelector('.division-executors label').textContent.includes('DeepSeek Harness')`));
@@ -193,6 +244,40 @@ try {
   for(const g of await evaluate(client,`[...document.querySelectorAll('.trial-wizard,.trial-mapping')].map(e=>({width:e.clientWidth,scroll:e.scrollWidth,left:e.getBoundingClientRect().left,right:e.getBoundingClientRect().right}))`)) {assert.ok(g.scroll<=g.width+1,JSON.stringify(g));assert.ok(g.left>=-1&&g.right<=756,JSON.stringify(g));}
   await shot(`quickstart-complete-${lang}-${theme}`);
   results.push({id:`quickstart.${lang}.${lost?'lost-publication-response':'first-mapping'}.no-duplicate`,status:'passed'});
+ }
+ for(const lang of ['en','zh']) {
+  await open(`lang=${lang}&view=quickstart`,755,600);
+  await waitFor(client,`[...document.querySelectorAll('.new-models button')].some(e=>e.textContent.includes(${JSON.stringify(lang==='zh'?'试用':'Try')}))`);
+  await click('.new-models button',lang==='zh'?'试用':'Try');
+  await waitFor(client,`!!document.querySelector('.trial-page .trial-agent-choice')`);
+  await click('.trial-model-card','Kimi K3'); await click('.trial-connect-card button',lang==='zh'?'在此接入':'Connect here');
+  await waitFor(client,`!!document.querySelector('.trial-inline-connection .connection-flow')`);
+  await click('.trial-inline-connection button','Kimi');
+  await waitFor(client,`document.querySelector('#mc-connection-form')?.hidden===false`);
+  await typeInto('#mc-connection-form input[maxlength="60"]','Kimi trial edit');
+  const keep=lang==='zh'?'继续编辑':'Keep editing', discard=lang==='zh'?'放弃修改':'Discard changes';
+  const pressed=`document.querySelector('.trial-model-card[aria-pressed=true]')?.textContent`;
+  // The connection dialog makes the cards inert to the pointer; a scripted change must still meet the guard.
+  await evaluate(client,`(()=>{[...document.querySelectorAll('.trial-model-card')].find(e=>e.textContent.includes(trialModel.display_name)).click();return true;})()`);
+  await waitFor(client,`!!document.querySelector('.discard-dialog[open]')`); await shot(`quickstart-connection-guard-${lang}`);
+  await click('.discard-dialog button',keep);
+  await waitFor(client,`!document.querySelector('.discard-dialog')`);
+  assert.ok(await evaluate(client,`${pressed}.includes('Kimi K3')`),'cancel keeps the selected model');
+  assert.equal(await evaluate(client,`document.querySelector('#mc-connection-form input[maxlength="60"]').value`),'Kimi trial edit');
+  await evaluate(client,`(()=>{[...document.querySelectorAll('.trial-model-card')].find(e=>e.textContent.includes(trialModel.display_name)).click();return true;})()`);
+  await waitFor(client,`!!document.querySelector('.discard-dialog[open]')`); await click('.discard-dialog button',discard);
+  await waitFor(client,`!document.querySelector('.trial-inline-connection') && ${pressed}?.includes(trialModel.display_name)`);
+  await click('.trial-model-card','Kimi K3'); await click('.trial-connect-card button',lang==='zh'?'在此接入':'Connect here');
+  await waitFor(client,`!!document.querySelector('.trial-inline-connection .connection-flow')`); await click('.trial-inline-connection button','Kimi');
+  await waitFor(client,`document.querySelector('#mc-connection-form')?.hidden===false`); await typeInto('#mc-connection-form input[maxlength="60"]','Kimi back edit');
+  await evaluate(client,`(()=>{[...document.querySelectorAll('.trial-page .toolbar-actions button')].find(e=>e.textContent.includes(${JSON.stringify(lang==='zh'?'返回':'Back')})).click();return true;})()`);
+  await waitFor(client,`!!document.querySelector('.discard-dialog[open]')`); await click('.discard-dialog button',keep);
+  await waitFor(client,`!document.querySelector('.discard-dialog') && !!document.querySelector('.trial-page')`);
+  assert.equal(await evaluate(client,`document.querySelector('#mc-connection-form input[maxlength="60"]').value`),'Kimi back edit');
+  await evaluate(client,`(()=>{[...document.querySelectorAll('.trial-page .toolbar-actions button')].find(e=>e.textContent.includes(${JSON.stringify(lang==='zh'?'返回':'Back')})).click();return true;})()`);
+  await waitFor(client,`!!document.querySelector('.discard-dialog[open]')`); await click('.discard-dialog button',discard);
+  await waitFor(client,`!document.querySelector('.trial-page') && !!document.querySelector('.new-models')`);
+  results.push({id:`quickstart.${lang}.inline-connection-guard.model-change-and-back`,status:'passed'});
  }
  await writeFile(path.join(output,'report.json'),JSON.stringify({proof:'production components with synthetic IPC; no native or provider claim',results},null,2));console.log(JSON.stringify({passed:results.length,output}));
 } catch(error) {await shot('failure');await writeFile(path.join(output,'failure.json'),JSON.stringify(await evaluate(client,`({text:document.body.innerText,trace:trialTrace})`),null,2));throw error;} finally {clearInterval(keepAlive);client.close();}

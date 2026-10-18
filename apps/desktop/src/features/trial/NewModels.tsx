@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '../../host/index.ts';
 import type { Plan } from '../../plan-editor';
 import { UiIcon } from '../../ui';
 import type { AvailableModel, ModelAvailabilityResult } from '../model-feed/types';

@@ -28,6 +28,24 @@ export PATH="$HOME/.local/bin:$PATH"
 
 The installer downloads the latest stable Linux release and checks its architecture and file integrity before installation. Desktop and standalone must not manage the service in the same `HOME`.
 
+## Configure the optional Web console
+
+Linux keeps the console off unless configured. To choose scope and port during installation:
+
+```sh
+curl -fsSL https://hiroute.ai/install.sh | sh -s -- --console-mode loopback --console-port 5838
+```
+
+Or initialize it after installation, before starting the service:
+
+```sh
+hiroute console init --mode loopback --port 5838
+```
+
+For access from another computer, use `--mode network --listen 192.0.2.10 --port 5838 --allow-plaintext-network`, replacing the example IP with the host's reachable address. Wildcard binds such as `0.0.0.0` also require `--advertise-address IP`. The equivalent installer flags use the `--console-` prefix; plaintext consent remains `--allow-plaintext-network`. Upgrades without these options preserve the existing configuration.
+
+After service startup, `hiroute console open` prints a two-minute, single-use login URL for the actual local or remote listener. Open it on your computer; a server needs no desktop. The command never starts listening. Desired changes require a service restart. HTTP remote sessions display an unencrypted-traffic warning. Named CLI-created access tokens remain available for repeated login. See the [console guide](https://github.com/higress-group/HiRoute/blob/main/docs/web-console.md).
+
 ## 2. Start the service explicitly
 
 Installation never starts the service or replays a request automatically. After installation, run:

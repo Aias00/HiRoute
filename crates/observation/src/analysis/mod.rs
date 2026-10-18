@@ -14,6 +14,8 @@ mod native_origin;
 mod prices;
 mod projection;
 mod read;
+#[cfg(test)]
+mod read_admission_tests;
 mod routing;
 pub(crate) use routing::transitions as routing_transitions;
 pub(crate) use views::Row as RoutingRow;

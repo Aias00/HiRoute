@@ -26,6 +26,7 @@ export function TrustReplayPreview({ scope, threshold, language }: { scope: Repl
   const data = result?.key === key ? result.data : null;
   const row = data?.thresholds.find(r => r.threshold_millis === threshold);
   const share = (n: number | null | undefined) => n == null ? '—' : `${Math.round(n * 100)}%`;
+  const bar = (n: number | null | undefined) => Math.max(0, Math.min(100, (n ?? 0) * 100));
   const reasons: Record<string, string> = { heuristic: t('规则判断', 'Heuristic'), decision_fallback: t('决策回退', 'Decision fallback'), single_group: t('单组', 'Single group'), availability_relay: t('可用性接力', 'Availability relay'), degree_unavailable: t('概率未知', 'Probability unavailable') };
   const excluded = Object.entries(data?.excluded_by_reason ?? {}).filter(([, count]) => count > 0);
   const excludedTotal = excluded.reduce((sum, [, count]) => sum + count, 0);
@@ -35,7 +36,7 @@ export function TrustReplayPreview({ scope, threshold, language }: { scope: Repl
       : !data || !row ? <p className="trust-replay-state">{t('正在读取回放…', 'Reading replay…')}</p>
       : data.included === 0 ? <p className="trust-replay-state">{t('没有可用于回放的记录，不估算占比。', 'No usable recorded evidence; shares are not estimated.')}</p>
       : <>
-        <div className="trust-replay-bar" role="img" aria-label={t(`阈值 ${threshold / 1000}：常规 ${share(row.regular_share)}，主力 ${share(row.primary_share)}`, `At ${threshold / 1000}: Regular ${share(row.regular_share)}, Primary ${share(row.primary_share)}`)}><span className="regular" style={{ width: `${(row.regular_share ?? 0) * 100}%` }} /><span className="primary" style={{ width: `${(row.primary_share ?? 0) * 100}%` }} /></div>
+        <div className="trust-replay-bar" role="img" aria-label={t(`阈值 ${threshold / 1000}：常规 ${share(row.regular_share)}，主力 ${share(row.primary_share)}`, `At ${threshold / 1000}: Regular ${share(row.regular_share)}, Primary ${share(row.primary_share)}`)}><svg viewBox="0 0 100 14" preserveAspectRatio="none" aria-hidden="true"><rect className="regular" width={bar(row.regular_share)} height="14" /><rect className="primary" x={bar(row.regular_share)} width={bar(row.primary_share)} height="14" /></svg></div>
         <div className="trust-replay-legend">
           <span><i className="regular" />{t('常规', 'Regular')} <strong>{share(row.regular_share)}</strong> <span>{t(`（${row.regular} 个）`, `(${row.regular})`)}</span></span>
           <span><i className="primary" />{t('主力', 'Primary')} <strong>{share(row.primary_share)}</strong> <span>{t(`（${row.primary} 个）`, `(${row.primary})`)}</span></span>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { formatMoney } from '../ui';
 import { safeDiagnosticCode } from '../error-code';
 import { observationBusyRetryMs } from './observation-failure';
@@ -21,8 +21,8 @@ export type TimelineTurn = {
   cost_by_model: Cost[]; evidence_partial: boolean; content_digest: string;
 };
 type TimelinePage = { turns: TimelineTurn[]; watermark: string; complete: boolean };
-/** Whether the session has a routing view to show: recorded turns, or a definitive read limit. */
-export type TimelineAvailability = 'none' | 'turns' | 'blocked';
+/** What the latest read established. Only a successful read without turns is `empty`. */
+export type TimelineAvailability = 'loading' | 'empty' | 'turns' | 'blocked' | 'unavailable';
 type Lane = 'regular' | 'primary' | 'unknown';
 
 const laneOf = (turn: TimelineTurn): Lane => turn.group === 'regular' || turn.group === 'primary' ? turn.group : 'unknown';
@@ -31,8 +31,9 @@ const failed = (request: TimelineRequest) => request.outcome !== null && !['comp
 const TICKS = 18;
 const REQUESTS = 6;
 
-export function RoutingTimeline({ session, language, active, refreshVersion, requestId, onSelectRequest, onOpenPerformance, onViewConversation, onAvailability }: {
-  session: string; language: 'zh' | 'en'; active: boolean; refreshVersion: number; requestId: string | null;
+/** `active` allows reads at all; `displayed` adds continuing polling. Otherwise one probe settles availability. */
+export function RoutingTimeline({ session, language, active, displayed, refreshVersion, requestId, onSelectRequest, onOpenPerformance, onViewConversation, onAvailability }: {
+  session: string; language: 'zh' | 'en'; active: boolean; displayed: boolean; refreshVersion: number; requestId: string | null;
   onSelectRequest(request: TimelineRequest): void; onOpenPerformance(plan: string): void;
   onViewConversation?(request: TimelineRequest): void; onAvailability?(availability: TimelineAvailability): void;
 }) {
@@ -45,16 +46,18 @@ export function RoutingTimeline({ session, language, active, refreshVersion, req
   const [allRequests, setAllRequests] = useState(false);
   const watermark = useRef<string | null>(null);
   const blockedScope = useRef(false);
+  const probed = useRef(false);
+  const lastRead = useRef(-Infinity);
   const stored = useRef(new Map<string, TimelineTurn>());
   const scroller = useRef<HTMLDivElement>(null);
   useEffect(() => { blockedScope.current = false; setError(''); }, [session]);
-  useEffect(() => { watermark.current = null; stored.current.clear(); setTurns([]); setSelected(null); setLoaded(false); }, [session, refreshVersion]);
+  useEffect(() => { watermark.current = null; probed.current = false; lastRead.current = -Infinity; stored.current.clear(); setTurns([]); setSelected(null); setLoaded(false); }, [session, refreshVersion]);
   useEffect(() => {
     if (!active) return;
     const controller = new AbortController(); let inFlight = false; let timer = 0;
     const schedule = (delay: number) => { window.clearTimeout(timer); if (!controller.signal.aborted) timer = window.setTimeout(() => void load(), delay); };
     async function load() {
-      if (inFlight || blockedScope.current || controller.signal.aborted || document.visibilityState !== 'visible') return;
+      if (inFlight || blockedScope.current || controller.signal.aborted || document.visibilityState !== 'visible' || (!displayed && probed.current)) return;
       inFlight = true;
       try {
         const page = await observationRead<TimelinePage>('routing_timeline', { session_id: session, after_watermark: watermark.current, limit: 50 }, controller.signal);
@@ -63,7 +66,8 @@ export function RoutingTimeline({ session, language, active, refreshVersion, req
         for (const turn of page.turns) { if (stored.current.get(turn.turn_id)?.content_digest !== turn.content_digest) { stored.current.set(turn.turn_id, turn); changed = true; } }
         if (changed) setTurns([...stored.current.values()].sort((a, b) => a.started_at_ms - b.started_at_ms || a.turn_id.localeCompare(b.turn_id)));
         watermark.current = page.watermark; setError(''); setLoaded(true);
-        schedule(page.complete ? 2000 : 0);
+        if (!page.complete) schedule(0);
+        else { probed.current = true; if (displayed) schedule(2000); }
       } catch (e) {
         if (controller.signal.aborted) return;
         const code = safeDiagnosticCode(e, 'OBSERVATION_UNAVAILABLE');
@@ -72,17 +76,22 @@ export function RoutingTimeline({ session, language, active, refreshVersion, req
         blockedScope.current = code.toLowerCase().includes('scope_too_large');
         const stale = code.toLowerCase().includes('stale') && watermark.current !== null;
         if (stale) { watermark.current = null; stored.current.clear(); setTurns([]); setLoaded(false); }
-        setError(code); if (!blockedScope.current) schedule(stale ? 0 : 2000);
-      } finally { inFlight = false; }
+        setError(code);
+        if (stale) schedule(0);
+        else { probed.current = true; if (displayed && !blockedScope.current) schedule(2000); }
+      } finally { inFlight = false; lastRead.current = performance.now(); }
     }
     const visible = () => { if (document.visibilityState === 'visible') void load(); else window.clearTimeout(timer); };
-    const invalidate = () => { controller.abort(); stored.current.clear(); watermark.current = null; setTurns([]); setLoaded(false); setRetry(n => n + 1); };
-    document.addEventListener('visibilitychange', visible); window.addEventListener('hiroute-content-invalidated', invalidate); void load();
+    const invalidate = () => { controller.abort(); stored.current.clear(); watermark.current = null; probed.current = false; lastRead.current = -Infinity; setTurns([]); setLoaded(false); setRetry(n => n + 1); };
+    // Showing the pane continues the two-second cadence instead of repeating the probe that just ran.
+    const since = performance.now() - lastRead.current;
+    document.addEventListener('visibilitychange', visible); window.addEventListener('hiroute-content-invalidated', invalidate);
+    if (displayed && probed.current && since < 2000) schedule(2000 - since); else void load();
     return () => { controller.abort(); window.clearTimeout(timer); document.removeEventListener('visibilitychange', visible); window.removeEventListener('hiroute-content-invalidated', invalidate); };
-  }, [session, active, refreshVersion, retry]);
+  }, [session, active, displayed, refreshVersion, retry]);
   useEffect(() => { const turn = turns.find(t => t.requests.some(r => r.request_id === requestId)); if (turn) setSelected(turn.turn_id); }, [requestId, turns]);
   const blocked = error.toLowerCase().includes('scope_too_large');
-  const availability: TimelineAvailability = turns.length ? 'turns' : blocked ? 'blocked' : 'none';
+  const availability: TimelineAvailability = turns.length ? 'turns' : blocked ? 'blocked' : error ? 'unavailable' : loaded ? 'empty' : 'loading';
   useEffect(() => { onAvailability?.(availability); }, [availability]);
   // Follow the newest agent turn until the person picks one.
   useEffect(() => { if (!selected && scroller.current) scroller.current.scrollLeft = scroller.current.scrollWidth; }, [turns.length, selected]);
@@ -185,7 +194,7 @@ export function RoutingTimeline({ session, language, active, refreshVersion, req
 
   return <section className="routing-timeline" aria-label={text('路由时间线', 'Routing timeline')}>
     <div className="routing-live" role="status"><span className={`routing-live-dot${running ? ' running' : ''}`} />{running ? text(`实时 · 第 ${turns.length} 轮正在执行`, `Live · agent turn ${turns.length} is running`) : text('实时', 'Live')}<span className="muted">{text('可见时每 2 秒更新', 'Updates every 2 s while visible')}</span></div>
-    {error && <div className="callout warn" role="alert" data-error-code={error}><span>{blocked ? text('这条会话超出完整读取范围，暂时无法显示时间线。', 'This session exceeds the complete-read limit; its timeline is unavailable.') : text('更新暂时不可用，已读取内容保留。', 'Updates are temporarily unavailable. Loaded records are retained.')}</span><button className="btn" onClick={() => { blockedScope.current = false; setRetry(n => n + 1); }}>{text('重试', 'Retry')}</button></div>}
+    {error && <div className="callout warn" role="alert" data-error-code={error}><span>{blocked ? text('这条会话超出完整读取范围，暂时无法显示时间线。', 'This session exceeds the complete-read limit; its timeline is unavailable.') : text('更新暂时不可用，已读取内容保留。', 'Updates are temporarily unavailable. Loaded records are retained.')}</span><button className="btn" onClick={() => { blockedScope.current = false; lastRead.current = -Infinity; setRetry(n => n + 1); }}>{text('重试', 'Retry')}</button></div>}
     {!loaded && !error && <p className="muted" role="status">{text('正在读取轮次…', 'Reading turns…')}</p>}
     {loaded && !turns.length && <p className="muted">{text('还没有可显示的轮次。', 'No recorded turns yet.')}</p>}
     {turns.length > 0 && <div className="routing-tiles">
@@ -194,12 +203,13 @@ export function RoutingTimeline({ session, language, active, refreshVersion, req
     </div>}
     {turns.length > 0 && <div className="routing-lanes-card">
       <div className="routing-lanes-scroll" ref={scroller}>
-        <div className="routing-lanes" role="group" aria-label={text('Agent 轮次', 'Agent turns')} style={{ gridTemplateColumns: `var(--routing-label-width) repeat(${turns.length}, minmax(var(--routing-cell-width), 1fr))` }}>
-          <div className="routing-lane-corner" style={{ gridRow: 1, gridColumn: 1 }} />
-          {turns.map((turn, column) => <div className="routing-turn-head" key={turn.turn_id} style={{ gridRow: 1, gridColumn: column + 2 }} title={new Date(turn.started_at_ms).toLocaleString(language === 'zh' ? 'zh-CN' : 'en')}><strong>T{index(turn)}</strong><span className="badge no-dot">{boundary(turn)}</span></div>)}
-          {lanes.map((lane, row) => <div key={lane} className={`routing-lane-label ${tone(lane)}`} style={{ gridRow: row + 2, gridColumn: 1 }}><strong>{laneName(lane)}</strong>{laneModel(lane) && <span>{laneModel(lane)}</span>}</div>)}
-          {/* Cells are placed explicitly so focus and reading order follow time, not lanes. */}
-          {turns.map((turn, column) => lanes.map((lane, row) => { const place = { gridRow: row + 2, gridColumn: column + 2 }; return laneOf(turn) !== lane ? <div className="routing-cell-empty" key={`${turn.turn_id}/${lane}`} style={place} aria-hidden="true" /> : <button type="button" key={`${turn.turn_id}/${lane}`} style={place} className={`routing-turn ${tone(lane)}${selectedTurn?.turn_id === turn.turn_id ? ' selected' : ''}`} aria-pressed={selectedTurn?.turn_id === turn.turn_id} onClick={() => { setSelected(turn.turn_id); if (turn.requests[0]) onSelectRequest(turn.requests[0]); }}>
+        <div className="routing-lanes" role="group" aria-label={text('Agent 轮次', 'Agent turns')} data-lanes={lanes.length}>
+          <div className="routing-lane-corner" />
+          {lanes.map(lane => <div key={lane} className={`routing-lane-label ${tone(lane)}`}><strong>{laneName(lane)}</strong>{laneModel(lane) && <span>{laneModel(lane)}</span>}</div>)}
+          {/* One column per agent turn; the grid flows by column, so focus and reading order follow time. */}
+          {turns.map(turn => <Fragment key={turn.turn_id}>
+            <div className="routing-turn-head" title={new Date(turn.started_at_ms).toLocaleString(language === 'zh' ? 'zh-CN' : 'en')}><strong>T{index(turn)}</strong><span className="badge no-dot">{boundary(turn)}</span></div>
+            {lanes.map(lane => laneOf(turn) !== lane ? <div className="routing-cell-empty" key={lane} aria-hidden="true" /> : <button type="button" key={lane} className={`routing-turn ${tone(lane)}${selectedTurn?.turn_id === turn.turn_id ? ' selected' : ''}`} aria-pressed={selectedTurn?.turn_id === turn.turn_id} onClick={() => { setSelected(turn.turn_id); if (turn.requests[0]) onSelectRequest(turn.requests[0]); }}>
               <span className="sr-only">{text(`轮次 ${index(turn)}`, `Turn ${index(turn)}`)}</span>
               <strong className="routing-turn-reason">{reason(turn)}</strong>
               <span className="routing-turn-meta">{probability(turn)}</span>
@@ -211,7 +221,8 @@ export function RoutingTimeline({ session, language, active, refreshVersion, req
                 {turn.relays.length > 0 && <span className="badge no-dot">{text(`接力 ${turn.relays.length}`, `${turn.relays.length} relay${turn.relays.length === 1 ? '' : 's'}`)}</span>}
                 {turn.evidence_partial && <span className="badge warn no-dot">{text('证据不完整', 'Incomplete evidence')}</span>}
               </span>}
-            </button>; }))}
+            </button>)}
+          </Fragment>)}
         </div>
       </div>
       <p className="routing-legend"><span><i />{text('请求', 'Request')}</span><span><i className="failed" />{text('失败', 'Failed')}</span><span className="muted">{text('同一个 agent turn 内不换模型，保住缓存；只在新消息或压缩后重新判断。点一轮查看详情。', 'The model stays fixed within an agent turn to keep the cache; routing is decided again only after a new message or compaction. Select a turn for details.')}</span></p>

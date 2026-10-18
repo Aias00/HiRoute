@@ -150,6 +150,14 @@ No ready matches is complete empty only when no authorized index gap remains.
 Four reader permits and the real 500 ms SQLite deadline remain; timeout is retryable
 failure, never empty success. Failure clears continuation and retry starts fresh.
 
+#### Scenario: Search repeated native conversation history
+
+- **WHEN** retained native traffic contains many repeated content occurrences and
+  large request metadata, while authorized indexes are ready
+- **THEN** live and scoped conversation search check source readiness within the
+  existing query budget without reading every occurrence's metadata; genuinely
+  missing authorized indexes remain partial rather than complete empty results.
+
 ### Requirement: Completeness is independent of model success and preview text
 
 Fact and body failures cannot block the model response. Retain available portions

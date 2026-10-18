@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '../../host/index.ts';
 import type { ModelAvailabilityResult, ModelFeedStatus } from './types';
 import { rollingIdentity, shortDate } from './presentation';
 

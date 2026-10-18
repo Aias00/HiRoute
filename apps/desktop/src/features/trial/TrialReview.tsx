@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '../../host/index.ts';
 import { PlanEditor, type Draft, type Editor, type Plan, type PlanEditorHandle } from '../../plan-editor';
 import { resolvePersistedEditor, persistenceTargetWasSuperseded, type PersistenceIdentity, type PersistedEditor } from '../../plan-editor-persistence';
 import type { DesktopOperation, DesktopSnapshot } from '../../product/home-projections';

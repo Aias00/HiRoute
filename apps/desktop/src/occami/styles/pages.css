@@ -270,9 +270,9 @@ button.list-row { width: 100%; border-top: 0; border-right: 0; border-left: 0; c
 .inline-entry-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
 
 .source-tabs { display: flex; gap: 4px; overflow-x: auto; }
-.master-list > .model-list-view { width: fit-content; margin: 8px 12px 4px; }
 .source-tab { min-height: calc(30px * var(--hr-text-scale)); padding: 0 10px; border: 0; border-radius: 7px; background: transparent; color: var(--text-muted); font-size:calc(12px * var(--hr-text-scale)); font-weight: 620; white-space: nowrap; }
 .source-tab.active { background: var(--bg-active); color: var(--text); }
+.model-view-switch { justify-self: start; max-width: 100%; }
 
 .score-stars { color: var(--yellow); letter-spacing: 1px; }
 .price-unknown { color: var(--yellow); }
@@ -398,14 +398,16 @@ button.list-row { width: 100%; border-top: 0; border-right: 0; border-left: 0; c
 .quality-model-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; color: var(--text-muted); font-size: calc(12px * var(--hr-text-scale)); }
 .quality-model-tags > span:last-child { overflow-wrap: anywhere; }
 .quality-model-counts span { display: block; color: var(--text-muted); font-size: calc(12px * var(--hr-text-scale)); }
+.quality-model-counts { display: grid; gap: 2px; min-width: 0; }
+.quality-model-counts > .quality-row-coverage { color: var(--text); font-size: calc(13px * var(--hr-text-scale)); }
+.quality-stage-states > span { overflow-wrap: anywhere; }
 .quality-model-average { min-width: 0; }
 .quality-model-average > strong { font-size: calc(18px * var(--hr-text-scale)); }
 .quality-model-average small { color: var(--text-muted); font-size: calc(12px * var(--hr-text-scale)); font-weight: 400; }
 .quality-model-average > span { color: var(--text-muted); font-size: calc(12px * var(--hr-text-scale)); }
 .quality-score-bar { max-width: 140px; height: 6px; margin-top: 6px; overflow: hidden; border-radius: 99px; background: var(--bg-active); }
-.quality-score-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
-.quality-score-bar.cyan > span { background: var(--cyan); }
-.quality-score-bar.purple > span { background: var(--purple); }
+.quality-score-bar.cyan rect { fill: var(--cyan); }
+.quality-score-bar.purple rect { fill: var(--purple); }
 .quality-view-stages { justify-self: end; }
 @container (max-width: 720px) {
   .quality-table-head { display: none; }

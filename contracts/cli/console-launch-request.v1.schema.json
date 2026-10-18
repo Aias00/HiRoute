@@ -1,0 +1,12 @@
+{
+  "$id": "hiroute://contracts/cli/console-launch-request.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "loopback_only": {
+      "default": false,
+      "type": "boolean"
+    }
+  },
+  "type": "object"
+}

@@ -28,6 +28,24 @@ export PATH="$HOME/.local/bin:$PATH"
 
 安装脚本会下载最新稳定的 Linux 版本，并在安装前检查架构与文件完整性。桌面应用与独立服务版（standalone）不应在同一个 `HOME` 中同时管理服务。
 
+## 配置可选的 Web 控制台
+
+Linux 默认关闭控制台。安装时可选择监听范围和端口：
+
+```sh
+curl -fsSL https://hiroute.ai/install.sh | sh -s -- --console-mode loopback --console-port 5838
+```
+
+也可以安装后、启动服务前配置：
+
+```sh
+hiroute console init --mode loopback --port 5838
+```
+
+需要其他电脑访问时，使用 `--mode network --listen 192.0.2.10 --port 5838 --allow-plaintext-network`，把示例 IP 换成主机可达地址。监听 `0.0.0.0` 等通配地址时，还需 `--advertise-address IP` 指定链接中的实际地址。安装器对应参数以 `--console-` 开头，明文风险确认仍为 `--allow-plaintext-network`。升级时不传这些选项会保留已有配置。
+
+服务启动后，`hiroute console open` 为实际已监听的本地或远程地址生成两分钟有效、仅可使用一次的登录 URL。把链接放到自己的电脑上打开即可，服务器不需要桌面；这个命令不会启动监听。修改配置需要重启服务后生效。远程 HTTP 页面持续提示明文传输风险，也可使用 CLI 创建的具名 token 重复登录。详见 [控制台指南](https://github.com/higress-group/HiRoute/blob/main/docs/web-console.md)。
+
 ## 2. 启动服务
 
 安装不会自动启动服务或重放请求。安装完成后运行：

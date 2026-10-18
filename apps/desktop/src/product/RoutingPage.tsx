@@ -1,9 +1,10 @@
 import { TrialAgentMapping } from '../features/trial/TrialAgentMapping';
 import { Dialog } from '../ui';
 import { trustLevelLabel } from '../features/trust/levels';
+import { randomId } from '../random-id.ts';
 import type { OpenDecisionConnection } from '../features/decision-services/presentation';
 import { useEffect, useRef, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '../host/index.ts';
 import { PlanEditor, type Draft, type Editor, type Plan, type PlanEditorHandle, type PlanEditorMemory } from '../plan-editor';
 import { persistenceTargetWasSuperseded, resolvePersistedEditor, type PersistenceIdentity } from '../plan-editor-persistence';
 import { requestEditorReplacement } from '../ui/discard-guard';
@@ -115,7 +116,7 @@ export function RoutingPage({ language, active = true, refreshVersion = 0, snaps
     setDirty(false);
     setPendingPersistence(null);
     setPersistedNotice('');
-    setEditor({ key: crypto.randomUUID(), editingMemory: {} });
+    setEditor({ key: randomId(), editingMemory: {} });
     setShowList(false);
   }
   const usedBy = editor?.plan ? (agentSnapshot?.agents ?? []).flatMap(agent => {
@@ -147,7 +148,7 @@ export function RoutingPage({ language, active = true, refreshVersion = 0, snaps
     <PlanEditor ref={planEditor} key={`${editor.key}:${editor.draft?.revision ?? editor.plan?.head.head_revision ?? 'new'}`} creating={creating} plan={editor.plan} draft={editor.draft} initialBindingId={editor.initialBindingId} initialView={editor.initialView} initialDivisionBranch={editor.initialDivisionBranch} initialContent={editor.initialContent} onCreateDraft={async initialContent => {
       if (dirty && !(await requestEditorReplacement('routing'))) return false;
       returnEditor.current = editor; setPendingPersistence(null); setPersistedNotice(''); setDirty(false); setShowList(false);
-      setEditor({ key: crypto.randomUUID(), initialContent, editingMemory: {} });
+      setEditor({ key: randomId(), initialContent, editingMemory: {} });
       return true;
     }} editingMemory={editor.editingMemory} language={language} active={active} refreshVersion={refreshVersion} usedBy={usedBy} onOpenAgent={onOpenAgent} onOpenSession={onOpenSession} onOpenServices={onOpenServices} onDirty={next => { setDirty(next); if (next) setPersistedNotice(''); }} onEdit={() => setPendingPersistence(null)} onBusyChange={setEditorBusy} onOperation={onOperation} onPersisted={(next, action, identity, submitted) => { setPendingPersistence(next ? null : { action, identity, operationId: submitted?.operation_id ?? null }); if (next) { returnEditor.current = null; setEditor(current => ({ ...next, editingMemory: current?.editingMemory ?? {} })); setDirty(false); setPersistedNotice(action === 'save_draft' ? text('草稿已保存，可以继续编辑或发布。', 'Draft saved. Continue editing or publish.') : text('更改已发布，新请求将使用当前路由。', 'Changes published. New requests will use this routing.')); } }} onDone={onRefresh} onClose={closeEditor} />
   </fieldset> : null;

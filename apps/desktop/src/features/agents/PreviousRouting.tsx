@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '../../host/index.ts';
 import { Disclosure } from '../../ui';
 import type { AgentModelSelection } from './types';
 

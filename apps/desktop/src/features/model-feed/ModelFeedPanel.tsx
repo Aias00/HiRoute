@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '../../host/index.ts';
 import { Dialog, UiIcon } from '../../ui';
 import { safeDiagnosticCode } from '../../error-code';
 import type { FeedRemovalPreview, ModelFeedStatus } from './types';
