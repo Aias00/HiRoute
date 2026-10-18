@@ -494,6 +494,31 @@ class Runner(unittest.TestCase):
         self.assertEqual(base64.b64decode(command.split()[-1]).decode('utf-16le'), script)
         self.assertEqual(controller.ps_literal(value), "'C:/space '' $env:PATH ; directory/file.py'")
 
+    def test_long_remote_source_uses_stdin_before_windows_shell_command_limit(self):
+        remote = controller.Remote(dict(host='windows.example.test', identity_file='key'))
+        for script in ("Write-Output 'short'", "# 中文 ' $env:PATH ;\n" * 2000):
+            reply = controller.subprocess.CompletedProcess([], 0, stdout='observed', stderr='')
+            with patch.object(controller.subprocess, 'run', return_value=reply) as run:
+                self.assertEqual(remote.execute(script), 'observed')
+            command = run.call_args.args[0][-1]
+            self.assertLess(len(command), 6000)
+            payload = run.call_args.kwargs.get('input')
+            if len(controller.powershell(script)) > 6000:
+                self.assertEqual(base64.b64decode(payload).decode('utf-8'), script)
+                bridge = base64.b64decode(command.split()[-1]).decode('utf-16le')
+                self.assertIn('[Console]::In.ReadToEnd()', bridge)
+            else:
+                self.assertIsNone(payload)
+                self.assertEqual(base64.b64decode(command.split()[-1]).decode('utf-16le'), script)
+
+    def test_long_remote_submission_failure_is_not_replayed(self):
+        remote = controller.Remote(dict(host='windows.example.test', identity_file='key'))
+        reply = controller.subprocess.CompletedProcess([], 1, stdout='', stderr='unknown outcome')
+        with patch.object(controller.subprocess, 'run', return_value=reply) as run:
+            with self.assertRaisesRegex(RuntimeError, 'no automatic replay'):
+                remote.execute('# source\n' * 2000)
+        self.assertEqual(run.call_count, 1)
+
     def test_unknown_task_outcome_retains_owner_lock(self):
         archive = self.archive()
         value = host.stage(self.root, archive, controller.digest(archive))

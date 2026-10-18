@@ -136,8 +136,20 @@ class Remote:
                         '-i', config['identity_file']]
 
     def execute(self, script, timeout=65):
-        result = subprocess.run(['ssh', *self.options, self.config['host'], powershell(script)],
-                                capture_output=True, text=True, errors='replace', timeout=timeout)
+        command = powershell(script)
+        payload = None
+        if len(command) > 6000:
+            # Windows OpenSSH may enter through cmd.exe's 8191-character limit.
+            # Keep argv bounded; the encoded bridge reads source data to EOF.
+            payload = base64.b64encode(script.encode('utf-8')).decode()
+            command = powershell(
+                "$ErrorActionPreference='Stop';"
+                "$source=[Text.Encoding]::UTF8.GetString("
+                "[Convert]::FromBase64String([Console]::In.ReadToEnd()));"
+                "& ([ScriptBlock]::Create($source))")
+        result = subprocess.run(['ssh', *self.options, self.config['host'], command],
+                                input=payload, capture_output=True, text=True,
+                                errors='replace', timeout=timeout)
         if result.returncode:
             raise RuntimeError('Windows transport failed; no automatic replay was attempted: ' +
                                result.stderr[-2000:])

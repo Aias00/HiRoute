@@ -288,6 +288,9 @@ Transport uses SSH host-key verification, hashed uploaded scripts/JSON and encod
 PowerShell invocation. Interrupted submission is an unknown outcome: inspect its
 run/task/lock before retrying. Missing Python, clients, login session or account
 access is a prerequisite gap, not permission to substitute a different identity.
+Large bootstrap scripts use a bounded encoded bridge with source passed through
+stdin, so publishing a new helper cannot exceed the Windows SSH shell's command
+length limit. Helper hash checks and atomic publication still apply.
 
 #### Compilation and release boundary
 
