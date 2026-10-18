@@ -115,12 +115,14 @@ export function cProtocolScenarios({ fresh, routing, click, until, all, text, ca
     for (const language of ['zh', 'en']) {
       const t = (zh, en) => language === 'zh' ? zh : en;
       let partial = false, empty = false;
+      let releaseRefresh = null;
       const cohort = { protocol: 'hiroute.system-one-c/v1', content_digest: 'sha256:' + 'a'.repeat(64), bundle_digest: 'sha256:' + 'b'.repeat(64),
         scope_id: 'synthetic-category-with-long-visible-name', standard: 'custom', provider: 'fixture-provider', model: 'synthetic-c-model-with-long-name', simple_threshold_millis: 800, competence_floor_millis: 500 };
       await fresh(() => {
-        control().handlers.observation_read = payload => {
+        control().handlers.observation_read = async payload => {
           if (payload.request.intent.view !== 'plan_quality') return control().fixtureResponse('observation_read', payload);
           assert(payload.request.schema === 'hiroute.observation.query/v2' && payload.request.intent.query.include_routing_observations === true, 'Desktop did not use the current versioned query');
+          if (partial) await new Promise(resolve => { releaseRefresh = resolve; });
           return { samples: [], summary: { models: [], scored_stage_count: 0, unrated_stage_count: 0, session_count: 0, available_revisions: [8] }, next_cursor: null,
             routing_observations: { coverage: partial ? 'partial' : 'complete', covered_from_ms: 0, covered_to_ms: Date.now(), retained_decisions: empty ? 0 : 11,
               known_non_c_decisions: 1, legacy_or_unknown_decisions: partial ? 2 : 0, unknown_scope_decisions: 0, missing_projection_events: partial ? 1 : 0, scan_limited: partial,
@@ -140,10 +142,16 @@ export function cProtocolScenarios({ fresh, routing, click, until, all, text, ca
       for (const element of all('.routing-counts dt, .routing-counts dd, .routing-cohort strong, .quality-diagnostic-identity')) {
         assert(element.scrollWidth <= element.clientWidth + 1, 'C observation identity or count overflows');
       }
+      await until(() => !all('.quality-refresh')[0].disabled, 'initial quality read settled');
       partial = true; all('.quality-refresh')[0].click();
+      await until(() => releaseRefresh, 'pending observation refresh');
+      await until(() => !all('.routing-counts').length, 'stale counts cleared during refresh');
+      releaseRefresh(); releaseRefresh = null;
       await until(() => text().includes(t('覆盖不完整，比例不可用', 'Partial coverage; rates unavailable')), 'partial coverage');
+      assert(document.querySelector('.routing-observations').open, 'Refreshing collapsed the observation details');
       assert(text().includes(t('来源无法确认的决策 2', 'Decisions of unconfirmed origin 2')), 'Unconfirmed decision origins are not explained');
       assert(!all('.routing-counts')[0].textContent.includes('%') && all('.routing-counts')[0].textContent.includes('4 / 7'), 'Partial coverage hides counts or claims a rate');
+      await until(() => !all('.quality-refresh')[0].disabled, 'partial quality read settled');
       empty = true; partial = false; all('.quality-refresh')[0].click();
       await until(() => text().includes(t('此范围内暂无历史问题适用性决策记录', 'No historical problem applicability decisions are available')), 'empty retained scope');
     }

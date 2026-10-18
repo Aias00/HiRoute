@@ -138,7 +138,7 @@ export function PlanQuality({
     </div>
     {error && <div className="callout bad" role="alert" data-error-code={error}><UiIcon name="warning" /><span>{text('模型表现暂时无法读取。', 'Model performance is temporarily unavailable.')}</span><button className="btn" type="button" onClick={() => setReload(value => value + 1)}>{text('重试', 'Retry')}</button></div>}
     {!loaded && busy && <div className="oc-status-row" role="status"><span className="oc-spinner" /><p>{text('正在读取模型表现…', 'Reading model performance…')}</p></div>}
-    {routingSummary && <RoutingObservations summary={routingSummary} language={language} />}
+    <RoutingObservations key={planId ?? sessionId ?? ''} summary={routingSummary} language={language} />
     {!compact && <div className="quality-model-scope">{groups.map(branch => <section className="quality-group" key={branch} data-execution-group={branch}>
       <header className="quality-group-heading"><h4>{qualityRowSectionLabel(rows.find(row => qualityRowSection(row) === branch)!, language)}</h4><span>{text(rows.filter(row => qualityRowSection(row) === branch).length + ' 个模型配置', rows.filter(row => qualityRowSection(row) === branch).length + (rows.filter(row => qualityRowSection(row) === branch).length === 1 ? ' model configuration' : ' model configurations'))}</span></header>
       <div className="quality-model-columns" aria-hidden="true"><span>{text('模型 / 思考设置', 'Model / Reasoning')}</span><span>{text('平均阶段胜任度', 'Average stage competence')}</span><span>{text('阶段样本', 'Stage samples')}</span><span /></div>

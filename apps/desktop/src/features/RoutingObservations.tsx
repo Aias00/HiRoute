@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Disclosure } from '../ui';
 
 export type RoutingObservation = {
@@ -21,9 +21,11 @@ export type RoutingSummary = {
 };
 const rate = (value: number | null) => value == null ? '—' : (value * 100).toFixed(1) + '%';
 
-export function RoutingObservations({ summary, language }: { summary: RoutingSummary; language: 'zh' | 'en' }) {
+export function RoutingObservations({ summary, language }: { summary: RoutingSummary | null; language: 'zh' | 'en' }) {
+  const [expanded, setExpanded] = useState(false);
   const text = (zh: string, en: string) => language === 'zh' ? zh : en;
-  return <Disclosure className="routing-observations" label={text('历史问题适用性观测', 'Historical problem applicability observations')} language={language}>
+  if (!summary) return null;
+  return <Disclosure className="routing-observations" label={text('历史问题适用性观测', 'Historical problem applicability observations')} language={language} defaultOpen={expanded} onOpenChange={setExpanded}>
     <p className="oc-meta">{text('统计当前计划、版本与时间范围内所有保留的决策，不受模型、阶段评分或分页筛选影响。', 'Counts cover every retained decision in this plan, revision and time range, independently of model, stage-score and page filters.')}</p>
     <p className="oc-meta">{new Date(summary.covered_from_ms).toLocaleString()} – {new Date(summary.covered_to_ms).toLocaleString()} · {text('保留决策 ', 'Retained decisions ')}{summary.retained_decisions} · {text('早期发布及其他路由决策 ', 'Earlier publications and other routing decisions ')}{summary.known_non_c_decisions} · {summary.coverage === 'complete' ? text('覆盖完整', 'Complete coverage') : text('覆盖不完整，比例不可用', 'Partial coverage; rates unavailable')}</p>
     {(summary.legacy_or_unknown_decisions > 0 || summary.unknown_scope_decisions > 0 || summary.missing_projection_events > 0 || summary.scan_limited) && <p className="quality-coverage">{text('来源无法确认的决策 ', 'Decisions of unconfirmed origin ')}{summary.legacy_or_unknown_decisions} · {text('范围未知 ', 'Unknown scope ')}{summary.unknown_scope_decisions} · {text('缺少安全投影的事件 ', 'Events missing safe projection ')}{summary.missing_projection_events}{summary.scan_limited && text(' · 达到读取上限', ' · Read limit reached')}</p>}
