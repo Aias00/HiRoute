@@ -1,5 +1,9 @@
 //! Read projections over recorded execution facts. A watermark is opaque and scope-bound.
 use super::{BranchDecisionV1, PlanQualityAssessment};
+use crate::{
+    CanonicalDigest, ClassifierFallbackReasonV1, ComplexityDecisionSourceV1,
+    ComplexityReasonCodeV1, DecisionProtocolV1,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Serialize)]
@@ -44,7 +48,7 @@ pub struct RoutingTimelineTurnV1 {
     pub model_configuration_id: Option<String>,
     pub reasoning_profile_id: Option<String>,
     pub group: Option<crate::ExecutionGroupV1>,
-    pub selection: Option<BranchDecisionV1>,
+    pub selection: Option<RoutingTimelineSelectionV1>,
     pub tool_continuations: u64,
     pub relays: Vec<RoutingTimelineRelayV1>,
     #[serde(default)]
@@ -59,6 +63,109 @@ pub struct RoutingTimelineTurnV1 {
     pub evidence_partial: bool,
     /// Lets a reconnecting consumer discard an identical projection without hiding late scores.
     pub content_digest: String,
+}
+
+/// Opening-decision read view. Persisted BranchDecisionV1 remains unchanged.
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct RoutingTimelineSelectionV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decision_protocol: Option<DecisionProtocolV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub routing_observation: Option<crate::RoutingObservationV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub policy: Option<crate::BranchExecutionPolicyV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub competence_trigger: Option<crate::CompetenceProtectionV1>,
+    pub execution_group: crate::ExecutionGroupV1,
+    pub simple_probability: Option<serde_json::Number>,
+    pub simple_threshold_millis: Option<u16>,
+    pub selection_reason: crate::ModelGroupReasonV1,
+    pub strategy_id: String,
+    pub schema_version: String,
+    pub payload_digest: CanonicalDigest,
+    pub branch_id: String,
+    pub complexity_score: Option<u8>,
+    pub threshold: Option<u8>,
+    pub decision_source: ComplexityDecisionSourceV1,
+    pub reason_codes: Vec<ComplexityReasonCodeV1>,
+    pub matched_user_phrase_ids: Vec<String>,
+    pub fallback_used: bool,
+    pub classification_duration_micros: Option<u64>,
+    pub fallback_reason: Option<ClassifierFallbackReasonV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub historical_protection: Option<RoutingTimelineProtectionV1>,
+}
+
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct RoutingTimelineProtectionV1 {
+    pub outcome: crate::HistoricalProtectionActionV1,
+    pub previous_score: Option<serde_json::Number>,
+    pub competence_floor_millis: u16,
+    pub applicability_probability: Option<serde_json::Number>,
+    pub applicability_boundary_millis: u16,
+}
+
+impl From<BranchDecisionV1> for RoutingTimelineSelectionV1 {
+    fn from(value: BranchDecisionV1) -> Self {
+        let historical_protection =
+            value
+                .routing_observation
+                .as_ref()
+                .map(|observation| RoutingTimelineProtectionV1 {
+                    outcome: observation.protection_action,
+                    previous_score: observation.score.clone(),
+                    competence_floor_millis: observation.competence_floor_millis,
+                    applicability_probability: observation.applicability_probability.clone(),
+                    applicability_boundary_millis: observation.applicability_boundary_millis,
+                });
+        let BranchDecisionV1 {
+            decision_protocol,
+            routing_observation,
+            policy,
+            competence_trigger,
+            execution_group,
+            simple_probability,
+            simple_threshold_millis,
+            selection_reason,
+            strategy_id,
+            schema_version,
+            payload_digest,
+            branch_id,
+            complexity_score,
+            threshold,
+            decision_source,
+            reason_codes,
+            matched_user_phrase_ids,
+            fallback_used,
+            classification_duration_micros,
+            fallback_reason,
+        } = value;
+        Self {
+            decision_protocol,
+            routing_observation,
+            policy,
+            competence_trigger,
+            execution_group,
+            simple_probability,
+            simple_threshold_millis,
+            selection_reason,
+            strategy_id,
+            schema_version,
+            payload_digest,
+            branch_id,
+            complexity_score,
+            threshold,
+            decision_source,
+            reason_codes,
+            matched_user_phrase_ids,
+            fallback_used,
+            classification_duration_micros,
+            fallback_reason,
+            historical_protection,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

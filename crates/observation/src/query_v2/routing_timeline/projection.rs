@@ -453,7 +453,9 @@ fn make_turn(members: &[&Request]) -> Result<Projected, ObservationV2Error> {
         }
     }
     let decision = first.decision.as_ref();
-    let selection = decision.and_then(|d| d.complexity.clone());
+    let selection = decision
+        .and_then(|d| d.complexity.clone())
+        .map(RoutingTimelineSelectionV1::from);
     Ok(Projected {
         position,
         view: RoutingTimelineTurnV1 {

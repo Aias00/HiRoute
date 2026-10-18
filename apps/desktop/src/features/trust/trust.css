@@ -1,4 +1,7 @@
 .trust-control { display: grid; gap: 12px; min-width: 0; padding: 20px 22px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--panel); }
+.trust-release { margin: 14px 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--cyan) 5%, var(--panel)); overflow-wrap: anywhere; }
+.trust-release > strong { color: var(--text); }
+.trust-release > p { margin: 6px 0 0; }
 .trust-control-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; }
 .trust-control-head h3 { margin: 0; font-size: calc(16px * var(--hr-text-scale)); font-weight: 650; }
 .trust-control-help, .trust-control-evidence { margin: 0; color: var(--text-muted); font-size: calc(12px * var(--hr-text-scale)); line-height: 1.6; overflow-wrap: anywhere; }

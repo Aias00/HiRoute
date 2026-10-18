@@ -11,6 +11,23 @@
 .routing-tile > strong.purple { color: var(--purple); }
 .routing-tile > small { color: var(--text-muted); font-size: calc(12px * var(--hr-text-scale)); }
 .routing-lanes-card { display: grid; gap: 10px; min-width: 0; padding: 16px 16px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--panel-solid); }
+.routing-overview { min-width: 0; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.routing-overview-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; color: var(--text-muted); font-size: calc(11px * var(--hr-text-scale)); }
+.routing-overview-head strong { color: var(--text-soft); font-size: calc(12px * var(--hr-text-scale)); font-weight: 550; }
+.routing-overview-track { display: block; width: 100%; height: 38px; overflow: visible; }
+.routing-overview-turn { color: var(--text-faint); cursor: pointer; outline: none; }
+.routing-overview-turn.cyan { color: var(--cyan); }
+.routing-overview-turn.purple { color: var(--purple); }
+.routing-overview-mark { fill: currentColor; stroke: var(--panel-solid); stroke-width: 2; }
+.routing-overview-turn[aria-pressed=true] .routing-overview-mark, .routing-overview-turn:hover .routing-overview-mark, .routing-overview-turn:focus-visible .routing-overview-mark { stroke: var(--accent-bright); }
+.routing-overview-turn:focus-visible .routing-overview-mark { stroke-width: 3; }
+.routing-overview-problem { fill: var(--red); }
+.routing-overview-outcome { fill: var(--purple); font-size: 10px; }
+.routing-overview-outcome.released { fill: var(--green); }
+.routing-overview-window { fill: color-mix(in srgb, var(--accent) 10%, transparent); stroke: var(--text-soft); stroke-width: 1.5; pointer-events: none; }
+.routing-judgments { display: grid; gap: 4px; }
+.routing-judgments > strong { color: var(--text); font-size: calc(13px * var(--hr-text-scale)); font-weight: 600; }
+.routing-protection-badge { justify-self: start; max-width: 100%; white-space: normal; }
 .routing-lanes-scroll { min-width: 0; overflow-x: auto; padding: 2px 2px 4px; }
 .routing-lanes { display: grid; width: max-content; min-width: 100%; grid-auto-flow: column; grid-template-columns: var(--routing-label-width); grid-auto-columns: clamp(var(--routing-cell-width), 18vw, 232px); grid-template-rows: auto; gap: 10px; align-items: stretch; }
 .routing-lanes[data-lanes='1'] { grid-template-rows: repeat(2, auto); }

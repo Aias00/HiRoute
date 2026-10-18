@@ -10,11 +10,16 @@ import './routing-timeline.css';
 
 type Cost = { model_configuration_id: string | null; currency: string | null; valuation_kind: string | null; known_micros: number | null; unknown_contributions: number };
 export type TimelineRequest = { request_id: string; started_at_ms: number; duration_ms: number | null; native_model: string | null; input_tokens: number | null; output_tokens: number | null; cache_read_tokens: number | null; cache_read_share: number | null; costs: Cost[]; outcome: string | null };
+export type TimelineProtection = {
+  outcome: 'applied' | 'suppressed' | 'retained_unavailable' | 'not_needed' | 'not_considered';
+  previous_score: number | null; competence_floor_millis: number;
+  applicability_probability: number | null; applicability_boundary_millis: number;
+};
 export type TimelineTurn = {
   turn_id: string; agent_turn_id: string | null; segment_id: string | null; started_at_ms: number; finished_at_ms: number | null;
   boundary: 'new_user_message' | 'context_rebuild' | 'unknown'; plan_id: string | null; plan_revision: number | null;
   branch_id: string | null; model_configuration_id: string | null; reasoning_profile_id: string | null; group: string | null;
-  selection: { simple_probability: number | null; simple_threshold_millis: number | null; selection_reason: string; competence_trigger?: { score: number; floor_millis: number } | null } | null;
+  selection: { simple_probability: number | null; simple_threshold_millis: number | null; selection_reason: string; competence_trigger?: { score: number; floor_millis: number } | null; historical_protection?: TimelineProtection | null } | null;
   tool_continuations: number; relays: { request_id: string; from_model: string | null; to_model: string | null }[];
   assessment_state: string; assessment: { score: number; partial: boolean; target_from_ordinal: number; target_through_ordinal: number } | null;
   competence_floor_millis: number | null; protected_turn_ids: string[]; status: string; requests: TimelineRequest[];
@@ -47,6 +52,7 @@ export function RoutingTimeline({ session, language, active, displayed, refreshV
   const [allRequests, setAllRequests] = useState(false);
   const [arrivals, setArrivals] = useState(new Set<string>());
   const [unseen, setUnseen] = useState<string[]>([]);
+  const [viewport, setViewport] = useState({ from: 0, to: 1 });
   const watermark = useRef<string | null>(null);
   const blockedScope = useRef(false);
   const probed = useRef(false);
@@ -108,23 +114,31 @@ export function RoutingTimeline({ session, language, active, displayed, refreshV
     if (!pane || !pane.clientWidth) return;
     const viewport = pane.getBoundingClientRect();
     const labelWidth = pane.querySelector('.routing-lane-label')?.getBoundingClientRect().width ?? 0;
-    const visible = new Set([...pane.querySelectorAll<HTMLElement>('[data-turn-id]')].filter(element => {
+    const elements = [...pane.querySelectorAll<HTMLElement>('[data-turn-id]')];
+    const indices: number[] = [];
+    const visible = new Set(elements.filter((element, index) => {
       const bounds = element.getBoundingClientRect();
-      return bounds.right > viewport.left + labelWidth && bounds.left < viewport.right;
+      const inside = bounds.right > viewport.left + labelWidth && bounds.left < viewport.right;
+      if (inside) indices.push(index);
+      return inside;
     }).map(element => element.dataset.turnId));
+    if (indices.length) {
+      const from = indices[0], to = indices[indices.length - 1] + 1;
+      setViewport(previous => previous.from === from && previous.to === to ? previous : { from, to });
+    }
     setUnseen(previous => { const next = previous.filter(id => !visible.has(id)); return next.length === previous.length ? previous : next; });
   }, []);
   // Follow until a turn is selected; otherwise retain the reading position and acknowledge visible arrivals.
   useEffect(() => {
     if (!displayed || !scroller.current) return;
     if (!selected) { scroller.current.scrollLeft = scroller.current.scrollWidth; setUnseen([]); }
-    else markVisible();
+    markVisible();
   }, [turns.length, selected, displayed, markVisible]);
   useEffect(() => {
     if (!displayed || !scroller.current) return;
     const observer = new ResizeObserver(markVisible); observer.observe(scroller.current);
     return () => observer.disconnect();
-  }, [displayed, markVisible]);
+  }, [displayed, markVisible, turns.length > 0]);
   useEffect(() => setAllRequests(false), [selected]);
 
   const selectedTurn = turns.find(t => t.turn_id === selected) ?? turns[turns.length - 1];
@@ -157,6 +171,47 @@ export function RoutingTimeline({ session, language, active, displayed, refreshV
   }
   const last = turns[turns.length - 1];
   const running = last?.status === 'running';
+  const protectionLabel = (turn: TimelineTurn) => {
+    switch (turn.selection?.historical_protection?.outcome) {
+      case 'applied': return text('低分保护', 'Low-score protection');
+      case 'suppressed': return text('已解除保护', 'Protection released');
+      case 'retained_unavailable': return text('判断不可用，保留保护', 'Judgment unavailable; protection retained');
+      case 'not_needed': return text('无需低分保护', 'Protection not needed');
+      case 'not_considered': return text('未进入保护判断', 'Protection not considered');
+      default: return '';
+    }
+  };
+  function selectTurn(turn: TimelineTurn, navigate = false) {
+    setSelected(turn.turn_id);
+    if (turn.requests[0]) onSelectRequest(turn.requests[0]);
+    if (!navigate || !scroller.current) return;
+    const pane = scroller.current;
+    const element = [...pane.querySelectorAll<HTMLElement>('[data-turn-id]')].find(node => node.dataset.turnId === turn.turn_id);
+    if (!element) return;
+    const bounds = element.getBoundingClientRect(), outer = pane.getBoundingClientRect();
+    const labels = pane.querySelector('.routing-lane-label')?.getBoundingClientRect().width ?? 0;
+    const left = pane.scrollLeft + bounds.left - outer.left - labels - (pane.clientWidth - labels - bounds.width) / 2;
+    pane.scrollTo({ left, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  }
+
+  function historicalExplanation(turn: TimelineTurn) {
+    const history = turn.selection?.historical_protection;
+    if (!history) return <><p>{explanation(turn)}</p><p className="muted">{text('历史保护结果未记录。', 'Historical protection result was not recorded.')}</p></>;
+    const p = turn.selection?.simple_probability, threshold = turn.selection?.simple_threshold_millis;
+    const simple = p != null && threshold != null ? p * 1000 >= threshold : null;
+    const task = simple == null ? text('难度判断不可用', 'Difficulty judgment unavailable') : simple ? text('简单', 'Simple') : text('复杂', 'Complex');
+    const a = history.applicability_probability;
+    const applicability = history.outcome === 'applied' ? text('之前的问题仍相关', 'The earlier problem still matters')
+      : history.outcome === 'suppressed' ? text('之前的问题已修正或不再相关', 'The earlier problem was fixed or no longer matters')
+      : history.outcome === 'retained_unavailable' ? text('无法判断之前的问题，保留保护', 'Earlier problem judgment unavailable; protection retained')
+      : history.outcome === 'not_needed' ? text('无需历史低分保护', 'Historical protection not needed') : text('未进入历史低分保护判断', 'Historical protection was not considered');
+    return <div className="routing-judgments">
+      <p>{text('当前工作：', 'Current task: ')}{task}{p != null && <> ({p.toFixed(2)}{threshold != null && <> {simple ? '≥' : '<'} {fixed(threshold)}</>})</>}</p>
+      <p>{text('上一阶段：', 'Previous stage: ')}{history.previous_score == null ? text('评分未记录', 'Score not recorded') : history.previous_score.toFixed(2)} · {text('胜任下限 ', 'Competence floor ')}{fixed(history.competence_floor_millis)}</p>
+      <p>{history.outcome === 'not_needed' && a != null ? <>{text('之前的问题相关概率 ', 'Earlier problem relevance ')}{a.toFixed(2)} · {applicability}</> : <>{applicability}{a != null && <> ({a.toFixed(2)})</>}</>}</p>
+      <strong>→ {laneName(laneOf(turn))} · {modelOf(turn) ?? text('模型未记录', 'Model unknown')}</strong>
+    </div>;
+  }
 
   function explanation(turn: TimelineTurn) {
     const target = `${laneName(laneOf(turn))} · ${modelOf(turn) ?? text('模型未记录', 'model unknown')}`;
@@ -197,7 +252,7 @@ export function RoutingTimeline({ session, language, active, displayed, refreshV
           </span>
         </div>
         {selectedTurn.requests[0] && <blockquote className="routing-quote"><ContentExcerpt request={selectedTurn.requests[0].request_id} language={language} fallback={text('这一轮的消息未记录或已清理', 'This turn’s message is unrecorded or cleared')} limit={140} revision={selectedTurn.content_digest} /></blockquote>}
-        <div className="routing-detail-block"><span>{text('阶段开始时的模型选择', 'Model selection at the start of this stage')}</span><p>{explanation(selectedTurn)}</p></div>
+        <div className="routing-detail-block"><span>{text('阶段开始时的模型选择', 'Model selection at the start of this stage')}</span>{historicalExplanation(selectedTurn)}</div>
         <div className="routing-detail-block"><span>{text('胜任评分', 'Competence score')}</span><div><span className={`routing-score ${scoreTone(selectedTurn)}`}>{score(selectedTurn)}</span></div><p>{scoreExplanation(selectedTurn)}</p></div>
         <p className="routing-detail-facts">{[
           status(selectedTurn),
@@ -232,6 +287,26 @@ export function RoutingTimeline({ session, language, active, displayed, refreshV
       <div className="routing-tile"><span>{text('Agent 轮次', 'Agent turns')}</span><strong>{turns.length}</strong><small>{text(`${turns.reduce((n, turn) => n + turn.requests.length, 0)} 个请求`, `${turns.reduce((n, turn) => n + turn.requests.length, 0)} requests`)}</small></div>
     </div>}
     {turns.length > 0 && <div className="routing-lanes-card">
+      <div className="routing-overview">
+        <div className="routing-overview-head"><strong>{text(`${turns.length} 轮总览`, `${turns.length} turns at a glance`)}</strong><span>{text('● 低分 / 失败 · ◆ 保护 · ✓ 解除', '● Low score / failure · ◆ Protected · ✓ Released')}</span></div>
+        <svg className="routing-overview-track" role="group" aria-label={text('轮次总览，选择以定位', 'Turn overview; select to navigate')}>
+          {turns.map((turn, i) => {
+            const outcome = turn.selection?.historical_protection?.outcome;
+            const protectedTurn = outcome === 'applied' || outcome === 'retained_unavailable' || turn.selection?.selection_reason === 'low_competence';
+            const problem = below(turn) || turn.status === 'failed' || turn.requests.some(failed);
+            const label = [`T${i + 1}`, laneName(laneOf(turn)), problem ? text('低分或失败', 'Low score or failure') : '', protectionLabel(turn)].filter(Boolean).join(' · ');
+            return <g key={turn.turn_id} className={`routing-overview-turn ${tone(laneOf(turn))}`} role="button" tabIndex={0} aria-label={label} aria-pressed={selectedTurn?.turn_id === turn.turn_id} data-overview-turn={turn.turn_id} data-protection={outcome} data-problem={problem || undefined} onClick={() => selectTurn(turn, true)} onKeyDown={event => {
+              if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectTurn(turn, true); }
+            }}>
+              <title>{label}</title>
+              <rect className="routing-overview-mark" x={`${i * 100 / turns.length}%`} y="10" width={`${100 / turns.length}%`} height="16" rx="3" />
+              {problem && <circle className="routing-overview-problem" cx={`${(i + .5) * 100 / turns.length}%`} cy="5" r="2.5" />}
+              {(protectedTurn || outcome === 'suppressed') && <text className={`routing-overview-outcome${outcome === 'suppressed' ? ' released' : ''}`} x={`${(i + .5) * 100 / turns.length}%`} y="35" textAnchor="middle">{outcome === 'suppressed' ? '✓' : '◆'}</text>}
+            </g>;
+          })}
+          <rect className="routing-overview-window" x={`${Math.min(viewport.from, turns.length - 1) * 100 / turns.length}%`} y="8" width={`${Math.max(1, Math.min(viewport.to, turns.length) - Math.min(viewport.from, turns.length - 1)) * 100 / turns.length}%`} height="20" rx="4" />
+        </svg>
+      </div>
       {selected && unseen.length > 0 && <div className="routing-lanes-notice" role="status"><button type="button" className="btn routing-new-turns" onClick={() => {
         scroller.current?.scrollTo({ left: scroller.current.scrollWidth, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
         setUnseen([]);
@@ -243,10 +318,11 @@ export function RoutingTimeline({ session, language, active, displayed, refreshV
           {/* One column per agent turn; the grid flows by column, so focus and reading order follow time. */}
           {turns.map(turn => <Fragment key={turn.turn_id}>
             <div className="routing-turn-head" title={new Date(turn.started_at_ms).toLocaleString(language === 'zh' ? 'zh-CN' : 'en')}><strong>T{index(turn)}</strong><span className="badge no-dot">{boundary(turn)}</span></div>
-            {lanes.map(lane => <div className={`routing-lane-cell${laneOf(turn) !== lane ? ' routing-cell-empty' : ''}`} key={lane} aria-hidden={laneOf(turn) !== lane || undefined}>{laneOf(turn) === lane && <button type="button" className={`routing-turn ${tone(lane)}${selectedTurn?.turn_id === turn.turn_id ? ' selected' : ''}`} data-turn-id={turn.turn_id} data-new={arrivals.has(turn.turn_id) || undefined} aria-pressed={selectedTurn?.turn_id === turn.turn_id} onClick={() => { setSelected(turn.turn_id); if (turn.requests[0]) onSelectRequest(turn.requests[0]); }}>
+            {lanes.map(lane => <div className={`routing-lane-cell${laneOf(turn) !== lane ? ' routing-cell-empty' : ''}`} key={lane} aria-hidden={laneOf(turn) !== lane || undefined}>{laneOf(turn) === lane && <button type="button" className={`routing-turn ${tone(lane)}${selectedTurn?.turn_id === turn.turn_id ? ' selected' : ''}`} data-turn-id={turn.turn_id} data-new={arrivals.has(turn.turn_id) || undefined} aria-pressed={selectedTurn?.turn_id === turn.turn_id} onClick={() => selectTurn(turn)}>
               <span className="sr-only">{text(`轮次 ${index(turn)}`, `Turn ${index(turn)}`)}</span>
               <strong className="routing-turn-reason">{reason(turn)}</strong>
               <span className="routing-turn-meta">{probability(turn)}</span>
+              {['suppressed', 'retained_unavailable'].includes(turn.selection?.historical_protection?.outcome ?? '') && <span className={`badge no-dot routing-protection-badge ${turn.selection?.historical_protection?.outcome === 'suppressed' ? 'good' : 'warn'}`}>{protectionLabel(turn)}</span>}
               <span className="routing-ticks" aria-label={text(`${turn.requests.length} 个请求`, `${turn.requests.length} requests`)}>{turn.requests.slice(0, TICKS).map(request => <i key={request.request_id} className={failed(request) ? 'failed' : undefined} />)}{turn.requests.length > TICKS && <em>+{turn.requests.length - TICKS}</em>}</span>
               <span className={`routing-score ${scoreTone(turn)}`}>{score(turn)}</span>
               {(turn.selection?.competence_trigger || turn.protected_turn_ids.length > 0 || turn.evidence_partial || turn.relays.length > 0) && <span className="routing-turn-flags">

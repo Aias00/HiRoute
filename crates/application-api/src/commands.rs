@@ -1108,7 +1108,7 @@ const COMMANDS: &[StaticCommandDescriptor] = &[
         ["CLI-069", "APP-069"],
         Released,
         Query,
-        "Read agent turns with selection, score, requests and costs; --follow streams changed turns."
+        "Read agent turns with selection, historical protection, score, requests and costs; --follow streams changed turns."
     ),
     command!(
         "observation.plan-trust",

@@ -10,6 +10,7 @@ import { observationRead } from './observation-client';
 import { qualityExecutionModels } from './plan-quality-models';
 import { PlanQualityStage, type PlanQualitySample } from './PlanQualityStage';
 import { RoutingObservations, type RoutingSummary } from './RoutingObservations';
+import { releasedProtectionEvidence, type ReleasedProtectionEvidence } from './trust/protection-evidence';
 import { qualityRowSection, qualityRowSectionLabel, qualityGroupLabel, qualityModelRows, qualityNativeModelName, qualityReasoningLabel, type PlanQualityModel, type QualityExecution, type QualityModelRow, type QualitySummary } from './plan-quality-state';
 
 export type { PlanQualityModel } from './plan-quality-state';
@@ -244,7 +245,7 @@ export function PlanQuality({
     </section>}
     {stageSection}
     {report && groupBy === 'model' && <div className="trust-card-pair">
-      <ProtectionCard report={report} caught={caught} language={language} onShowLow={showLowStages || undefined} onOpenEvidence={onOpenEvidence} />
+      <ProtectionCard report={report} released={releasedProtectionEvidence(report, routingSummary)} caught={caught} language={language} onShowLow={showLowStages || undefined} onOpenEvidence={onOpenEvidence} />
       <TrustCost value={report.cost} language={language} />
     </div>}
     {report && groupBy === 'executor' && <ExecutorOutcomes report={report} language={language} />}
@@ -253,14 +254,27 @@ export function PlanQuality({
   </div>;
 }
 
-function ProtectionCard({ report, caught, language, onShowLow, onOpenEvidence }: { report: TrustReport; caught: PlanQualitySample[] | null; language: 'zh' | 'en'; onShowLow?: () => void; onOpenEvidence?: (sessionId: string, requestId: string) => void }) {
+function ProtectionCard({ report, released, caught, language, onShowLow, onOpenEvidence }: { report: TrustReport; released: ReleasedProtectionEvidence; caught: PlanQualitySample[] | null; language: 'zh' | 'en'; onShowLow?: () => void; onOpenEvidence?: (sessionId: string, requestId: string) => void }) {
   const text = (zh: string, en: string) => language === 'zh' ? zh : en;
   const protections = report.rows.reduce((total, row) => total + row.protections.length, 0);
   const relays = report.rows.reduce((total, row) => total + row.availability_relays, 0);
+  const releaseReason = released.kind === 'available' ? text('之前的问题已修正或与当前工作无关，允许新模型继续。', 'Earlier problems were fixed or unrelated, allowing Regular to continue.') : {
+    missing: text('历史保护记录尚不可用。', 'Historical protection records are not available yet.'),
+    partial: text('历史保护记录覆盖不完整。', 'Historical protection records have incomplete coverage.'),
+    plan: text('历史保护记录与当前路由范围不同。', 'Historical protection records cover a different route scope.'),
+    revision: text('历史保护记录与当前路由版本不同。', 'Historical protection records cover a different route version.'),
+    time: text('历史保护记录与当前时间范围不同。', 'Historical protection records cover a different time range.'),
+    branch: text('历史保护记录与当前分支范围不同。', 'Historical protection records cover different branches.'),
+  }[released.reason];
   const time = (ms: number) => new Date(ms).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
   return <section className="trust-card trust-protection">
     <h3>{text(`被拦下的 ${protections} 次`, `${protections} stages caught`)}</h3>
     <p>{protections ? text('这些轮次因低分保护而交给主力模型，计数来自实际发生的记录。', 'These turns went to Primary through low-score protection; the count comes from recorded routing.') : text('还没有因为低分转交主力的阶段。', 'No stage has been handed to Primary after a low score yet.')}</p>
+    <div className="trust-release" data-release-state={released.kind}>
+      <strong>{released.kind === 'available' ? text(`解除 ${released.count} 次`, `${released.count} protections released`) : text('解除次数 —', 'Protections released —')}</strong>
+      <p>{releaseReason}</p>
+      {released.kind === 'available' && <p className="field-help">{text('解除按路由判断次数统计，与上方保护阶段数分开。', 'Releases count routing decisions; protections above count stages.')}</p>}
+    </div>
     {caught && caught.length > 0 && <ul className="trust-caught">{caught.map(sample => <li key={sample.segment_id}>
       <div><strong><ContentExcerpt session={sample.session_id} language={language} fallback={text('会话记录', 'Session')} limit={40} /></strong>
         <span>{time(sample.first_at_ms)} · {text(`评分 ${sample.assessment?.score.toFixed(2) ?? '—'}`, `score ${sample.assessment?.score.toFixed(2) ?? '—'}`)}{sample.assessment?.reason ? text(`（${sample.assessment.reason}）`, ` (${sample.assessment.reason})`) : ''} → {text('下一轮主力', 'next turn Primary')}</span></div>
