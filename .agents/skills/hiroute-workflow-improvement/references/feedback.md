@@ -16,6 +16,11 @@ whole feedback set and the category for grouping; do not add per-session, per-ag
 or per-week labels. GitHub timestamps and the dated observations below support
 interval analysis. Existing unrelated labels remain intact.
 
+Priority is separate from category. Use `priority/high` for the recurrence promotion
+below; do not invent another improvement-specific priority label. Reuse its existing
+definition. If missing, provision it only when a qualifying promotion needs it, with
+description `High-priority issue` and suggested color `d73a4a`.
+
 ## Body fields
 
 Use these fields in ordinary Markdown; they are analysis conventions, not typed
@@ -29,8 +34,9 @@ issue-spec artifacts. Omit unavailable revisions with an explicit reason.
   for workflow reports, explain the project-independent or project-specific boundary.
 - **Observation:** minimal sanitized command/task sequence, expected versus actual
   behavior, and concrete impact. Mark hypotheses explicitly.
-- **Recurrence:** observed count and distinct task contexts, or `unknown`; never infer
-  frequency from repeated tool retries or count one report per label as occurrences.
+- **Recurrence:** confirmed count or lower bound, distinct task contexts and links to
+  the original evidence, or `unknown` when independence cannot be established. Use
+  the counting rules below rather than comment totals or a previous summary's number.
 - **Suggested improvement:** smallest useful correction and any known workaround.
 - **Acceptance and resumption:** observable outcome, minimal sanitized scenario,
   necessary prerequisites and stable evidence references for a future session.
@@ -39,8 +45,7 @@ issue-spec artifacts. Omit unavailable revisions with an explicit reason.
 
 For new evidence on an existing Issue, append the observation date, source revision,
 new reproduction/impact and what differs. Do not overwrite its original evidence.
-Record a recurrence only for a distinct observed occurrence, not another search or
-retry of the same event.
+A distinct occurrence is useful new evidence even when its symptom is unchanged.
 
 When a correction becomes available, append its public fix/release link and revision.
 When HiRoute adopts it, append the adoption PR/commit, installed CLI or generated
@@ -49,6 +54,56 @@ Otherwise record why benefit remains unverified or the scenario no longer applie
 these distinct from occurrence counts. A useful review separates reported findings,
 upstream fixes available, adopted fixes, verified benefit and remaining friction;
 Issue open/closed state alone cannot represent that progression.
+
+## Count independent occurrences and promote
+
+Count evidence for the same unresolved cause across tasks, without resetting at a
+new session or date. The original report counts as **1** when it records observed
+friction. Each later independent encounter counts once, including one by the same
+person or agent in a different task. A new agent, author, session or comment alone
+does not prove independence: require a distinct task/run context, observation date
+and sanitized scenario/impact with applicable source revisions.
+
+Do not count retries, repeated searches, handoffs, copied reports, acknowledgements,
+design discussion, or fix/adoption validation of the original scenario as additional
+occurrences. Legacy comments can count if their evidence establishes a distinct
+encounter; no new template is required retroactively. Deduplicate evidence referenced
+from multiple comments or Issues. Summaries and reported totals point to evidence;
+they are not additional occurrences. If history is incomplete, report a confirmed
+lower bound; promote only when at least 3 distinct occurrences are supported.
+
+Before posting, reread the Issue and relevant comments so a retry or concurrent
+report of the same event does not create another occurrence comment. A new comment
+records the current context, links the earlier counted evidence and states the
+count before and after this observation. For example:
+
+```markdown
+### Independent recurrence
+- Observed on: YYYY-MM-DD (timezone).
+- Source and context: originating task/PR, applicable revisions, and the distinct task sequence.
+- Observation and impact: sanitized expected/actual behavior and concrete cost.
+- Recurrence: 2 confirmed before this observation; at least 3 including this occurrence.
+- Earlier evidence: original Issue body (1); linked independent recurrence comment (2).
+- Priority: recurrence threshold reached; promote to `priority/high`.
+```
+
+When recording a new occurrence on an **open, unresolved** feedback Issue and the
+confirmed count reaches or exceeds **3**, apply `priority/high` automatically after
+the comment is persisted. The original report plus one independent recurrence
+comment plus the current independent encounter qualifies; an Issue with two ordinary
+discussion comments does not. A newly filed report with 3 independently evidenced
+encounters also qualifies. Verify the recorded evidence, current state and labels
+before promotion; reread after writing to confirm the result.
+
+If already high or higher, preserve that priority. On promotion replace only
+`priority/low` and `priority/medium` when present, preserving category and unrelated
+labels. Do not override an explicit maintainer decision against escalation or a
+closed/wontfix decision; record the new evidence and explain why automatic promotion
+was skipped. A newly filed regression after a fix starts its own count and links the
+old Issue; do not inherit its resolved occurrences. Lower counts do not trigger an
+automatic downgrade, and frequency alone does not assign critical priority or a
+delivery deadline. Reconcile uncertain writes by reading the Issue; retry only a
+missing comment or label operation, without counting the same event again.
 
 ## Resume after a gap
 
@@ -104,6 +159,21 @@ Issue, attach missing labels with `gh issue edit --add-label`, preserving unrela
 labels. Inspect the Issue before retrying an uncertain create; if it exists, repair
 only missing labels rather than submitting again.
 
+For a qualifying promotion, ensure `priority/high` exists, then add it. Include
+`--remove-label 'priority/low'` and/or `--remove-label 'priority/medium'` in the same
+edit command only for lower labels actually present:
+
+```sh
+# Create only when missing; preserve any existing definition:
+gh label create 'priority/high' --repo OWNER/REPO --color d73a4a --description 'High-priority issue'
+gh issue edit NUMBER --repo OWNER/REPO --add-label 'priority/high'
+gh issue view NUMBER --repo OWNER/REPO --json url,state,labels
+```
+
+If the recurrence comment succeeds but promotion fails, keep its URL and confirmed
+count, report the pending priority update, and repair only labeling. Do not repost
+the occurrence or claim promotion succeeded from the intended-action line alone.
+
 This provider choice covers ordinary feedback, not issue-spec planning artifacts.
 For a non-GitHub target use its supported issue-spec Issue/label operations. If
 labeling is unavailable, keep the feedback draft or report an already-created Issue
@@ -121,8 +191,10 @@ gh issue list --repo OWNER/REPO --label 'improvement/feedback' --state all --sea
 This selects new Issues, not all occurrences. Also discover older Issues updated in
 the interval (`updated:START..END`), then read their discussions through issue-spec
 and count only explicitly dated observations in the interval. An update can be a
-label edit or closure and is not evidence of recurrence. Page through results when
-limits are reached, or split the date range and deduplicate by repository + number;
+label edit or closure and is not evidence of recurrence. Use the same independence
+rules above; distinguish occurrences in the interval from the cumulative confirmed
+count used for promotion. Page through results when limits are reached, or split
+the date range and deduplicate by repository + number;
 state incomplete coverage if it cannot be exhausted. Use the user's timezone and
 explicit inclusive start/end dates in the summary. Include relevant fix/adoption
 updates from that window and distinguish verified benefits from untested upgrades
