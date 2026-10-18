@@ -568,7 +568,7 @@ fn permission_effect_hardens_only_pinned_identity_and_never_reverts_mode() {
         ),
         scanner,
         artifacts,
-        catalog_fallback: model_feed::FallbackCatalog::default(),
+        catalog_fallback: crate::control::runtime::model_feed::FallbackCatalog::default(),
         model_feed: None,
         protected_inputs: Mutex::new(BTreeMap::new()),
         manual_protected_inputs: Mutex::new(BTreeMap::new()),

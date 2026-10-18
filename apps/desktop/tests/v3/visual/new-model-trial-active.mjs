@@ -47,6 +47,35 @@ try {
  assert.equal(await evaluate(client,`document.querySelector('.trust-attention-item button').disabled`),false);await shot('suggestion-partial-failure-en-755');
  results.push({id:'suggestions.five-minute-cadence-publish-home-visible-partial-failure',status:'passed'});
  if(!process.env.TRIAL_QUICK_ONLY) {
+ for(const lang of ['en','zh']) {
+  await open(`lang=${lang}&view=feed-home`); await waitFor(client,`!!document.querySelector('.model-feed-disclosure')`);
+  assert.ok(await evaluate(client,`document.querySelector('.model-feed-disclosure').textContent.includes('hiroute.ai')`));
+  await shot(`feed-first-home-${lang}-755`);
+  await click('.model-feed-disclosure button',lang==='zh'?'关闭自动获取':'Turn off automatic retrieval');
+  await waitFor(client,`!document.querySelector('.model-feed-disclosure')`);
+  assert.equal(await evaluate(client,`trialTrace.find(x=>x.command==='model_feed_settings_apply').payload.input.retrieval_enabled`),false);
+  results.push({id:`feed.first-home-disclosure.${lang}`,status:'passed'});
+ }
+ await open('lang=en&recovery=1'); await click('summary','Model feed'); await waitFor(client,`document.body.textContent.includes('Saved feed state is damaged')`);
+ await click('button','Reset damaged cache…'); await waitFor(client,`!!document.querySelector('[role=dialog]')`); await shot('feed-reset-damaged-cache-en-755');
+ assert.ok(await evaluate(client,`document.querySelector('[role=dialog]').textContent.includes('will not decrease')`));
+ await click('[role=dialog] button','Confirm reset'); await waitFor(client,`!document.querySelector('[role=dialog]')`);
+ assert.equal(await evaluate(client,`[...document.querySelectorAll('.model-feed-actions button')].find(b=>b.textContent.includes('Check now')).disabled`),false);
+ results.push({id:'feed.confirmed-corrupt-state-recovery',status:'passed'});
+ await open('lang=en&view=timeline&scope-error=1'); await waitFor(client,`!!document.querySelector('.routing-timeline [role=alert]')`);
+ const scopeReads=await evaluate(client,`trialTrace.filter(x=>x.command==='observation_read'&&x.payload.request.intent.view==='routing_timeline').length`);
+ await new Promise(resolve=>setTimeout(resolve,2200));
+ assert.equal(await evaluate(client,`trialTrace.filter(x=>x.command==='observation_read'&&x.payload.request.intent.view==='routing_timeline').length`),scopeReads);
+ await click('.routing-timeline button','Retry'); await waitFor(client,`trialTrace.filter(x=>x.command==='observation_read'&&x.payload.request.intent.view==='routing_timeline').length===${scopeReads+1}`);
+ results.push({id:'timeline.scope-error-stops-until-explicit-retry',status:'passed'});
+ await open('lang=en&view=timeline&busy-read=1'); await waitFor(client,`document.querySelectorAll('.routing-turn').length===2`);
+ assert.equal(await evaluate(client,`document.querySelector('.routing-timeline [role=alert]')`),null);
+ results.push({id:'timeline.busy-retries-quietly',status:'passed'});
+ await open('lang=en&view=editor&cost=1'); await waitFor(client,`!!document.querySelector('[data-trust-control="smart"]')`); await click('[role=tab]','Model performance');
+ await waitFor(client,`document.body.textContent.includes('Additional cost')`); await evaluate(client,`document.querySelector('[aria-label="Regular cost comparison"]').scrollIntoView({block:'center'});true`); await shot('trust-cost-positive-en-755');
+ assert.ok(await evaluate(client,`document.querySelector('[aria-label="Regular cost comparison"]').textContent.includes('+')`));
+ results.push({id:'trust.cost-positive-difference-disclosure',status:'passed'});
+
  for(const [lang,theme,width,height] of [['en','light',755,600],['zh','dark',755,600],['en','dark',1200,813],['zh','light',1200,813]]){
   await open(`lang=${lang}&theme=${theme}`,width,height);
   await click('summary',lang==='zh'?'模型信息更新':'Model feed');

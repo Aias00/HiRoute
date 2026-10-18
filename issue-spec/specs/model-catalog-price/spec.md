@@ -334,3 +334,21 @@ Source SPEC comments:
   [source price contract](../../../crates/domain/src/compute/source_price/mod.rs).
 - [Price persistence scenarios](../../../crates/local-storage/src/control/prices/tests.rs).
 - [Current subscription/model query](../../../crates/application/src/compute_management/query_v3.rs).
+
+### Requirement: Model feed cache recovery preserves acceptance
+
+The service SHALL keep its highest accepted feed sequence and payload digest in a private, bounded, atomically written checkpoint outside the removable model-feed cache directory. The acceptance checkpoint SHALL be durable before the cache state names a newly accepted publication. Missing or rolled-back cache state SHALL recover using this checkpoint, discard held/ETag references, use embedded facts and leave automatic retrieval off until explicitly changed. If only the activated control-store sequence survives and its digest is unknown, the service SHALL accept only a strictly greater sequence. It SHALL never adopt an unreferenced envelope as a held publication.
+
+A corrupt owned cache state with a valid independent checkpoint MAY be reset only through the existing confirmed removal flow, preserving the damaged file and acceptance checkpoint. Status SHALL disclose the reason and whether this recovery is available. A newer schema, unreadable or unsafe file, invalid checkpoint, or corruption without a trusted checkpoint SHALL remain preserved and refuse mutation. If feed activation fails atomically, the previous catalog snapshot SHALL remain available for catalog-dependent controls, further feed mutations SHALL be refused, and restart SHALL reconcile durable state with control dependencies.
+
+#### Scenario: Removing the entire cache cannot reset acceptance
+
+- **GIVEN** a verified publication has been accepted and its independent checkpoint is durable
+- **WHEN** the cache directory is removed and the service restarts
+- **THEN** it uses embedded facts with automatic retrieval off, retains the highest accepted sequence and digest, rejects older publications, and permits only an identical same-sequence restoration or a higher sequence
+
+#### Scenario: Corrupt cache reset preserves evidence and anti-rollback
+
+- **GIVEN** corrupt owned cache state and a valid independent acceptance checkpoint
+- **WHEN** the user reviews the removal impact and confirms a reset
+- **THEN** the damaged state file is preserved, new cache state retains the acceptance checkpoint, and published Plans and their execution remain usable

@@ -698,7 +698,7 @@ export function DesktopApp() {
             operation={homeOperation}
             trustSuggestions={trustSuggestions}
             onTrustAction={(plan, branch) => void reviewTrustAction(plan, branch)}
-            newModels={<NewModels language={language} active={page === 'home'} plans={home.desktopSnapshot?.catalog.plans ?? []} refreshVersion={refreshVersion} onTry={modelId => setTrialIntent({ modelId })} />}
+            newModels={<NewModels language={language} mutable={Boolean(home.desktopSnapshot?.trusted_authority && home.desktopSnapshot.service.mutation_available)} active={page === 'home'} plans={home.desktopSnapshot?.catalog.plans ?? []} refreshVersion={refreshVersion} onTry={modelId => setTrialIntent({ modelId })} />}
             hasTasks={taskRead.status === 'ready' && taskRead.tasks.length > 0}
             onAction={handleHomeAction}
           /></div>

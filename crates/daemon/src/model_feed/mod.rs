@@ -390,11 +390,9 @@ impl ModelFeedService {
         install: impl FnOnce(u64, u64) -> Result<(), String>,
     ) -> Result<&'static str, String> {
         if verified.payload.sequence <= guard.state.sequence_floor
-            && !guard
-                .state
-                .highest_accepted
-                .as_ref()
-                .is_some_and(|h| h.sequence == verified.payload.sequence)
+            && !guard.state.highest_accepted.as_ref().is_some_and(|h| {
+                h.sequence >= guard.state.sequence_floor && h.sequence == verified.payload.sequence
+            })
         {
             return Err("older_sequence".into());
         }

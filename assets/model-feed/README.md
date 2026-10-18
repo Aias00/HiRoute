@@ -31,10 +31,12 @@ carries inclusion dates forward from the committed payload, and omits models wai
 for a compatible release. A model's minimum version requires its executable capability
 and offer together. CI passes `--base <revision>` to reject changed publication bytes
 without a higher sequence and changed first-inclusion dates for retained records.
-The payload's `source_revision` identifies the source facts in Git history; it is
-provenance, not an instruction to replace it with each website deployment's SHA.
+The payload's `source_revision` is the Git tree ID of the committed
+`assets/release-facts/current/bundle` directory. It survives squash merges and
+reproduces a file with `git show <tree-id>:model-data.json`; it is provenance,
+not each website deployment's commit SHA.
 One sequence identifies one immutable payload digest and source revision. Keep the
-referenced bundle tree reachable from main history in repository history. Node structural checks
+referenced bundle tree reachable from main history. Node structural checks
 and signature checks complement, and never replace, Rust admission validation.
 
 Before a feed-capable release is recorded, `payload.json` contains `null` followed

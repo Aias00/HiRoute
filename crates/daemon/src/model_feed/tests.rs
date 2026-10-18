@@ -419,3 +419,23 @@ fn model_feed_acceptance_commit_precedes_state_and_never_adopts_orphan_blob() {
     assert_eq!(fetch(&reopened, 19).unwrap_err(), "older_sequence");
     fetch(&reopened, 20).unwrap();
 }
+
+#[test]
+fn model_feed_unknown_digest_floor_requires_a_strictly_higher_sequence() {
+    let root = tempfile::tempdir().unwrap();
+    let service = ModelFeedService::open_with_verifier(
+        root.path(),
+        crate::release_catalog::current_fixture_catalog(),
+        4,
+        11,
+        verify_fixture,
+    )
+    .unwrap();
+    assert_eq!(
+        service.status().unwrap().highest_accepted_sequence,
+        Some(11)
+    );
+    assert!(!service.status().unwrap().retrieval_enabled);
+    assert_eq!(fetch(&service, 11).unwrap_err(), "older_sequence");
+    fetch(&service, 12).unwrap();
+}

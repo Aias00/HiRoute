@@ -174,3 +174,5 @@ and unique failure assertions. Keep recovery, cancellation, authorization and
 foreign-file preservation tests. Assign shared contracts and generated registries
 to one convergence owner. Use the [test map](testing.md) to select evidence; neither
 file size nor test churn alone justifies another abstraction or a broad rewrite.
+
+Trial cost reads use the internal admitted `TrustCostScopeV1`, joining retained analysis stage identity to Plan/revision/category/group before calling the shared per-attempt comparison engine. They preserve the general value query and frozen settlement contracts. Live timeline transition presentation adapts the same endpoint/time membership and classifier used by retained analysis; cache mutexes cover only taking and returning snapshots, never SQL or projection.
