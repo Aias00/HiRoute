@@ -54,7 +54,7 @@ path = "src/control/bin.rs"
 
 [dev-dependencies]
 hiroute-client-core = { path = "../client-core" }
-tokio.workspace = true
+tokio = { workspace = true, features = ["test-util"] }
 tokio-util.workspace = true
 
 [target.'cfg(unix)'.dev-dependencies]

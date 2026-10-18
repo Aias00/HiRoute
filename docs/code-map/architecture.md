@@ -10,6 +10,9 @@ credential stores and per-client product contexts.
 Request deadlines cover each request independently of connection age; incomplete
 headers and bodies have their own bounds. Shared confirmation permits and broker
 prompts release on caller cancellation, without approving or affecting another context.
+The console transport reserves separate 64-connection pools for loopback and network
+peers. Socket writes close after 30 seconds without byte progress; successful writes
+reset that deadline, and operation/confirmation waits do not arm it.
 Its private in-process Client
 Core transport shares Local Control budgets, operation admission and upgrade
 drain; external Local Control retains its released-command gate. The frontend

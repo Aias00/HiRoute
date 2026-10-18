@@ -3,6 +3,7 @@ use super::{
     auth::AuthError,
     contexts::Contexts,
     control::{ConsoleControl, ConsoleEndpoint},
+    transport::Connections,
 };
 use hiroute_diagnostics::context::DiagnosticHandle;
 use hiroute_host_runtime::{
@@ -30,7 +31,7 @@ pub(super) struct Server {
     pub layout: StandaloneLayout,
     pub diagnostic_runtime: Option<Arc<hiroute_diagnostics::runtime::DiagnosticRuntime>>,
     pub stop: CancellationToken,
-    pub connections: Arc<tokio::sync::Semaphore>,
+    pub connections: Connections,
     runtime: tokio::runtime::Handle,
     running: AtomicBool,
     loopback: Mutex<Option<SocketAddr>>,
@@ -72,7 +73,7 @@ impl ConsoleService {
             layout,
             diagnostic_runtime: diagnostics,
             stop: stop.clone(),
-            connections: Arc::new(tokio::sync::Semaphore::new(128)),
+            connections: Connections::default(),
             runtime: runtime.handle().clone(),
             running: AtomicBool::new(true),
             loopback: Mutex::new(None),
@@ -174,16 +175,12 @@ impl Server {
             loop{
                 let connection=tokio::select!{_ = endpoint.stop.cancelled()=>break,result=listener.accept()=>result};
                 let Ok((stream,peer))=connection else{break;};
-                let Ok(permit)=endpoint.connections.clone().try_acquire_owned()else{continue;};
+                let Ok(permit)=endpoint.connections.acquire(peer.ip())else{continue;};
                 let Ok(local)=stream.local_addr()else{continue;};let state=endpoint.clone();
                 tokio::spawn(async move{
                     let _permit=permit;
                     let service=hyper::service::service_fn(move|request|super::http::handle(state.clone(),request,peer,local));
-                    let connection=hyper::server::conn::http1::Builder::new()
-                        .timer(hyper_util::rt::TokioTimer::new())
-                        .header_read_timeout(Duration::from_secs(10))
-                        .max_buf_size(64*1024).serve_connection(hyper_util::rt::TokioIo::new(stream),service);
-                    let _=connection.await;
+                    let _=super::transport::serve(stream,service).await;
                 });
             }
         });

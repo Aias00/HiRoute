@@ -7,6 +7,7 @@ pub mod control;
 mod host_settings;
 mod http;
 mod server;
+mod transport;
 pub use server::ConsoleService;
 
 #[cfg(all(test, unix))]

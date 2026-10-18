@@ -71,7 +71,12 @@ cannot cancel a newer prompt or another context. The
 [console composition cases](../../crates/daemon/src/console/tests.rs) exercise the
 real role-all dispatcher while preserving the external Local Control Released
 gate. [Authentication cases](../../crates/daemon/src/console/auth/tests.rs) cover
-launch replay, revocation, hash-only storage and rate limits. Browser scenarios
+launch replay, revocation, hash-only storage and rate limits.
+The [console transport cases](../../crates/daemon/src/console/transport/tests.rs)
+exercise independent peer admission, stalled-write permit release, progressing
+responses, bounded idle headers and confirmations on aged keep-alive connections
+through the production Hyper connection owner and shared confirmation broker.
+Browser scenarios
 run through both host transports; their production CSS screenshots include the
 console and Windows startup/update pages, without establishing native effects.
 
