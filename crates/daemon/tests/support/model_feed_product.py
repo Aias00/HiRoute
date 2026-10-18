@@ -189,7 +189,8 @@ def run(repository):
         created, _, _ = apply_plan(product, plan_change('create', editor, creation_key='feed-product'), 'feed-publish')
         plan = created['plan_head']['reference']['plan_id']
         frozen = product.cli('routing', 'show', plan)['data']
-        # Prices become effective with the published catalog generation, not a saved source alone.
+        # Source changes can leave prices pending. Normal startup activates their snapshot.
+        restart(product)
         prices = product.cli('prices', 'effective', '--request-stdin', payload={'targets': [
             {'query_id': kind, 'target_locator': {'kind': 'binding', 'binding_id': binding},
              'currency': 'USD', 'valuation_kind': kind} for kind in ['usage_estimate', 'api_equivalent']]})['data']
