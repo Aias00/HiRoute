@@ -277,3 +277,47 @@ fn missing_or_corrupt_released_carriers_cannot_create_format_evidence() {
         assert!(summary.unknown_scope_decisions + summary.legacy_or_unknown_decisions > 0);
     }
 }
+
+#[test]
+fn evidence_refresh_preserves_released_facts_cursor_and_flag_binding() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = open_store(directory.path());
+    let input: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../tests/fixtures/released-v0.3.1-route-pagination.json"
+    ))
+    .unwrap();
+    let events: Vec<(ExecutionFactEnvelopeV1, CanonicalDigest)> = input["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| {
+            let event: ExecutionFactEnvelopeV1 =
+                serde_json::from_value(row["envelope"].clone()).unwrap();
+            let digest = CanonicalDigest::parse(row["envelope_digest"].as_str().unwrap()).unwrap();
+            event.validate_persisted_contract().unwrap();
+            assert_eq!(CanonicalDigest::of(&event).unwrap(), digest);
+            (event, digest)
+        })
+        .collect();
+    for (event, digest) in &events {
+        retain_released(&store, event, digest);
+    }
+    let (reader, _, now) = scoped(&events[0].0);
+    let mut query = ObservationFactsQueryV2 {
+        include_routing_observations: false,
+        request_id: events[0].0.correlation.request_id.clone(),
+        limit: 1,
+        cursor: None,
+    };
+    let first = store.observed_facts(&reader, &query, now).unwrap();
+    query.cursor = Some(first.next_cursor.unwrap());
+    assert!(store.backfill_inline_payloads().unwrap() > 0);
+    let next = store.observed_facts(&reader, &query, now).unwrap();
+    assert_eq!(next.facts[0].original_digest, events[1].1.as_str());
+    assert!(next.next_cursor.is_none());
+    query.include_routing_observations = true;
+    assert!(matches!(
+        store.observed_facts(&reader, &query, now),
+        Err(crate::query_v2::ObservationV2Error::Stale)
+    ));
+}
