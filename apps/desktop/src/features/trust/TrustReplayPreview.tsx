@@ -27,11 +27,25 @@ export function TrustReplayPreview({ scope, threshold, language }: { scope: Repl
   const row = data?.thresholds.find(r => r.threshold_millis === threshold);
   const share = (n: number | null | undefined) => n == null ? '—' : `${Math.round(n * 100)}%`;
   const reasons: Record<string, string> = { heuristic: t('规则判断', 'Heuristic'), decision_fallback: t('决策回退', 'Decision fallback'), single_group: t('单组', 'Single group'), availability_relay: t('可用性接力', 'Availability relay'), degree_unavailable: t('概率未知', 'Probability unavailable') };
-  return <div className="trust-replay" aria-live="polite"><strong>{t('历史回放估算', 'Historical replay estimate')}</strong><p className="field-help">{t(`发布修订版 ${scope.revision} · 最近 7 天的保留记录`, `Published revision ${scope.revision} · Retained records from the last 7 days`)}</p>
-    {failed === key ? <p role="alert">{t('暂时无法读取回放。', 'Replay could not be read.')} <button type="button" className="btn" onClick={() => setRetry(n => n + 1)}>{t('重试', 'Retry')}</button></p> : !data || !row ? <p>{t('正在读取回放…', 'Reading replay…')}</p> : <>
-      {data.included === 0 ? <p>{t('没有可用于回放的记录，不估算占比。', 'No usable recorded evidence; shares are not estimated.')}</p> : <p>{t(`阈值 ${threshold / 1000}：常规 ${row.regular}（${share(row.regular_share)}），主力 ${row.primary}（${share(row.primary_share)}），其中 ${row.protected_as_primary} 个仍由主力保护。原记录常规占比 ${share(data.recorded_share_at_current)}。`, `At ${threshold / 1000}: Regular ${row.regular} (${share(row.regular_share)}), Primary ${row.primary} (${share(row.primary_share)}), including ${row.protected_as_primary} protected stages. Recorded Regular share: ${share(data.recorded_share_at_current)}.`)}</p>}
-      {Object.entries(data.excluded_by_reason).length > 0 && <p className="field-help">{t('未纳入', 'Excluded')}: {Object.entries(data.excluded_by_reason).map(([reason, count]) => `${reasons[reason] ?? reason} ${count}`).join(' · ')}</p>}
-      <p className="field-help">{t(`这是历史分配估算，不是预测。${row.newly_regular} 个阶段将首次交给常规组，原来由主力处理，没有常规胜任证据。`, `This estimates historical allocation, not future results. ${row.newly_regular} stages would newly go to Regular; Primary handled them, so they provide no Regular competence evidence.`)}</p>
-    </>}
+  const excluded = Object.entries(data?.excluded_by_reason ?? {}).filter(([, count]) => count > 0);
+  const excludedTotal = excluded.reduce((sum, [, count]) => sum + count, 0);
+  return <div className="trust-replay" aria-live="polite">
+    <div className="trust-replay-head"><strong>{t('用你的记录回放这一档', 'Replay this level on your records')}</strong><span>{t(`当前发布的版本 · 最近 7 天${data ? ` · ${data.included + excludedTotal} 个阶段` : ''}`, `Active version · last 7 days${data ? ` · ${data.included + excludedTotal} stages` : ''}`)}</span></div>
+    {failed === key ? <p className="trust-replay-state" role="alert">{t('暂时无法读取回放。', 'Replay could not be read.')} <button type="button" className="btn btn-quiet" onClick={() => setRetry(n => n + 1)}>{t('重试', 'Retry')}</button></p>
+      : !data || !row ? <p className="trust-replay-state">{t('正在读取回放…', 'Reading replay…')}</p>
+      : data.included === 0 ? <p className="trust-replay-state">{t('没有可用于回放的记录，不估算占比。', 'No usable recorded evidence; shares are not estimated.')}</p>
+      : <>
+        <div className="trust-replay-bar" role="img" aria-label={t(`阈值 ${threshold / 1000}：常规 ${share(row.regular_share)}，主力 ${share(row.primary_share)}`, `At ${threshold / 1000}: Regular ${share(row.regular_share)}, Primary ${share(row.primary_share)}`)}><span className="regular" style={{ width: `${(row.regular_share ?? 0) * 100}%` }} /><span className="primary" style={{ width: `${(row.primary_share ?? 0) * 100}%` }} /></div>
+        <div className="trust-replay-legend">
+          <span><i className="regular" />{t('常规', 'Regular')} <strong>{share(row.regular_share)}</strong> <span>{t(`（${row.regular} 个）`, `(${row.regular})`)}</span></span>
+          <span><i className="primary" />{t('主力', 'Primary')} <strong>{share(row.primary_share)}</strong> <span>{t(`（${row.primary} 个）`, `(${row.primary})`)}</span></span>
+          <span className="muted">{t(`当前档位实际 ${share(data.recorded_share_at_current)} 交给常规`, `Recorded at the current level: ${share(data.recorded_share_at_current)} Regular`)}</span>
+        </div>
+      </>}
+    {data && row && data.included > 0 && <p className="field-help">{[
+      t(`阈值 ${threshold / 1000}：计入 ${data.included} 个阶段，其中 ${row.protected_as_primary} 个低分保护按主力计算`, `At ${threshold / 1000}: ${data.included} stages included; ${row.protected_as_primary} low-score protections count as Primary`),
+      excluded.length ? t(`未计入 ${excludedTotal} 个：${excluded.map(([reason, count]) => `${reasons[reason] ?? reason} ${count}`).join('、')}`, `${excludedTotal} not included: ${excluded.map(([reason, count]) => `${reasons[reason] ?? reason} ${count}`).join(', ')}`) : '',
+      row.newly_regular > 0 ? t(`${row.newly_regular} 个阶段会首次交给常规模型，之前由主力处理，没有常规模型的胜任证据`, `${row.newly_regular} stages would newly go to Regular; Primary handled them, so they carry no Regular competence evidence`) : '',
+    ].filter(Boolean).join(t('；', '. '))}{t('。这是基于历史分配的估算，不是预测。', '. This estimates historical allocation; it is not a prediction.')}</p>}
   </div>;
 }

@@ -139,6 +139,84 @@
           "display_name": {
             "type": "string"
           },
+          "facts": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "context_tokens": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "publisher_id": {
+                    "type": "string"
+                  },
+                  "reasoning": {
+                    "anyOf": [
+                      {
+                        "oneOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "enum": [
+                                  "toggle",
+                                  "budget"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "kind"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "profiles"
+                              },
+                              "profiles": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "profiles"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "tool": {
+                    "type": "boolean"
+                  },
+                  "vision": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "publisher_id",
+                  "context_tokens",
+                  "tool",
+                  "vision",
+                  "reasoning"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "identity_stability": {
             "anyOf": [
               {
@@ -212,7 +290,8 @@
           "origin",
           "identity_stability",
           "availability",
-          "binding_ids"
+          "binding_ids",
+          "facts"
         ],
         "type": "object"
       },

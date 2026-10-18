@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Dialog } from '../../ui';
+import { Dialog, Disclosure, ProductPage, UiIcon } from '../../ui';
 import { requestEditorReplacement } from '../../ui/discard-guard';
 import { type Editor, type Options, type Plan, type Selection } from '../../plan-editor';
 import type { DesktopOperation, DesktopSnapshot } from '../../product/home-projections';
@@ -15,11 +15,13 @@ import { DecisionServicesPage } from '../decision-services/DecisionServicesPage'
 import { emptyService, type Classifier, type DecisionService } from '../decision-services/types';
 import type { DecisionIntent, OpenDecisionConnection } from '../decision-services/presentation';
 import { trustLevels } from '../trust/levels';
+import { agentEcosystem } from '../agents/ecosystems';
 import { TrialConnectModel } from './TrialConnectModel';
 import { TrialAgentChoice, TrialAgentMapping } from './TrialAgentMapping';
 import { TrialReview } from './TrialReview';
 import { currentPrimary, initialTrialMapping, trialSelection, type TrialMapping } from './model';
 import { FeedDisclosure } from '../model-feed/FeedDisclosure';
+import { factTags, originLabel, publisherName, rollingIdentity, shortDate } from '../model-feed/presentation';
 import './trial.css';
 
 export function TrialQuickStart({ initialModelId, initialBindingId, language, mutable, snapshot, operation, onOperation, onRefresh, onClose, onOpenAgent, onOpenPerformance, onOpenSessions }: {
@@ -43,6 +45,9 @@ export function TrialQuickStart({ initialModelId, initialBindingId, language, mu
   const [persistencePending, setPersistencePending] = useState(false);
   const [review, setReview] = useState<Editor | null>(null), [published, setPublished] = useState<Plan | null>(null);
   const [loading, setLoading] = useState(true), [error, setError] = useState('');
+  const [name, setName] = useState<string | null>(null);
+  const [choosingPrimary, setChoosingPrimary] = useState(false), [allPrimary, setAllPrimary] = useState(false);
+  const [mapped, setMapped] = useState(false);
   const initialized = useRef(false);
   const inFlight = useRef(false);
   const [alias] = useState(() => `trial-${crypto.randomUUID().replaceAll('-', '').slice(0, 16)}`);
@@ -85,43 +90,108 @@ export function TrialQuickStart({ initialModelId, initialBindingId, language, mu
   const selectedTrial = trialCandidates.find(c => c.binding_id === trialBinding) ?? (trialCandidates.length === 1 ? trialCandidates[0] : undefined);
   const selectedPrimary = primaryCandidates.find(c => c.binding_id === primaryBinding) ?? (primaryCandidates.length === 1 ? primaryCandidates[0] : undefined);
   const ready = !!data?.options.authoring && !!selectedTrial && !!selectedPrimary && trialId !== primaryId && classifier.kind === 'decision_service' && !!classifier.service.name && !!mapping.agentId && mapping.presets.length > 0 && !loading && !error;
-  function modelField(role: 'trial' | 'primary') {
-    const model = role === 'trial' ? trial : primary;
-    const id = role === 'trial' ? trialId : primaryId;
+  const leave = () => void (async () => { if (persistencePending || await requestEditorReplacement('routing')) onClose(); })();
+  const defaultName = trial && primary ? `${trial.display_name} + ${primary.display_name}` : '';
+  const criteria = t('试用模型没有取得有效进展，反复失败且未能恢复，或用户在最新消息中明确指出它已完成的结果有误。请评价所引用的已完成阶段，并区分新增要求与纠错；重复、继续或沉默本身不代表失败。', 'The trial model made no effective progress, repeatedly failed without recovery, or the latest user message explicitly identifies its completed result as wrong. Judge the referenced completed stage and distinguish a new requirement from a correction; repetition, continuation or silence alone is not failure.');
+  const featured = (data?.availability.featured ?? []).map(entry => entry.model_configuration_id);
+  const cards = [...new Set([...(initialModelId ? [initialModelId] : []), ...featured, ...(trialId ? [trialId] : [])])].flatMap(id => models.filter(m => m.model_configuration_id === id)).slice(0, 6);
+  const others = models.filter(m => !cards.includes(m));
+  const primaryOptions = models.filter(m => m.model_configuration_id !== trialId && candidates(m.model_configuration_id).length > 0);
+  const source = (binding?: string) => data?.management.sources.find(s => s.models.some(m => m.binding_id === binding))?.display_name;
+  const mappedAgent = data?.agents.agents.find(a => a.agent_id === mapping.agentId);
+  const floor = (review?.smart.judgment.competence.floor_millis ?? data?.options.authoring?.editor.smart.judgment.competence.floor_millis ?? 500) / 1000;
+  const missing = loading ? '' : !trialId ? t('先选择要试用的模型', 'Choose a model to try')
+    : !selectedTrial ? trial?.availability.kind === 'needs_newer_client' ? t('这个模型需要更新 HiRoute', 'This model needs a newer HiRoute') : trialCandidates.length > 1 ? t('选择试用模型使用的接入', 'Choose the connection for the trial model') : t(`先接入 ${trial?.display_name ?? ''}`, `Connect ${trial?.display_name ?? ''} first`)
+    : !selectedPrimary ? t('选择主力模型', 'Choose a Primary model')
+    : classifier.kind !== 'decision_service' || !classifier.service.name ? t('选择决策模型', 'Choose a decision model')
+    : !mapping.agentId ? t('选择要接入的 Agent', 'Choose an Agent')
+    : !mapping.presets.length && agentEcosystem(mapping.agentId) === 'claude' ? t('至少选择一个预设', 'Choose at least one preset') : '';
+  function cardState(model: TrialModel) {
+    if (model.availability.kind === 'needs_newer_client') return { tone: 'warn', text: t(`需要 HiRoute ${model.availability.version}`, `Requires HiRoute ${model.availability.version}`) };
+    if (candidates(model.model_configuration_id).length) return { tone: 'good', text: t('已连接', 'Connected') };
+    return { tone: '', text: t('需要先连接，下面可以直接完成', 'Connect it first, right below') };
+  }
+  function connectionPicker(role: 'trial' | 'primary') {
     const available = role === 'trial' ? trialCandidates : primaryCandidates;
     const selected = role === 'trial' ? selectedTrial : selectedPrimary;
-    return <section className="editor-section"><label className="field"><span className="field-label">{role === 'trial' ? t('试用模型（常规）', 'Trial model (Regular)') : t('主力模型', 'Primary model')}</span><select className="input" value={id} onChange={e => {
-      if (role === 'trial') { setTrialId(e.target.value); setTrialBinding(''); }
-      else { setPrimaryId(e.target.value); setPrimaryBinding(''); setPrimarySelection(undefined); }
-    }}><option value="">{t('选择模型', 'Select a model')}</option>{models.map(m => <option key={m.model_configuration_id} value={m.model_configuration_id} disabled={m.availability.kind === 'needs_newer_client'}>{m.display_name}{m.availability.kind === 'needs_newer_client' ? ` · HiRoute ${m.availability.version}+` : ''}</option>)}</select></label>
-      {model && available.length > 1 && <label className="field"><span className="field-label">{t('使用的接入', 'Connection')}</span><select className="input" value={selected?.binding_id ?? ''} onChange={e => role === 'trial' ? setTrialBinding(e.target.value) : (setPrimaryBinding(e.target.value), setPrimarySelection(undefined))}><option value="">{t('请选择', 'Select')}</option>{available.map(c => <option key={c.binding_id} value={c.binding_id}>{data?.management.sources.find(s => s.models.some(m => m.binding_id === c.binding_id))?.display_name ?? c.display_name} · {c.billing_class}</option>)}</select></label>}
-      {model?.catalog && !available.length && model.availability.kind !== 'needs_newer_client' && <button className="btn" onClick={() => setConnect(model.catalog!)}>{t('在此接入', 'Connect here')} {model.display_name}</button>}
-      {role === 'primary' && <><p className="field-help">{t('仅在已保存配置明确指向单个模型时，才自动填入当前主力；原生预设名称不会被猜成某个模型版本。', 'The current Primary is prefilled only when saved settings identify a single model. A native preset name does not prove a model version.')}</p><button className="btn btn-quiet" onClick={() => setSubscriptions(true)}>{t('复用本机订阅', 'Reuse a local subscription')}</button></>}
-      {model && ['rolling-alias', 'dynamic-route', 'unknown'].includes(model.identity_stability ?? 'unknown') && <p className="field-help">{t('供应商可能更新同名模型；后续证据可能混合多个版本。', 'The provider may update this model alias; later evidence may mix versions.')}</p>}
-    </section>;
+    if (available.length < 2) return null;
+    return <label className="field trial-connection-field"><span className="field-label">{t('使用的接入', 'Connection')}</span><select className="input" value={selected?.binding_id ?? ''} onChange={e => role === 'trial' ? setTrialBinding(e.target.value) : (setPrimaryBinding(e.target.value), setPrimarySelection(undefined))}><option value="">{t('请选择', 'Select')}</option>{available.map(c => <option key={c.binding_id} value={c.binding_id}>{source(c.binding_id) ?? c.display_name} · {c.billing_class}</option>)}</select></label>;
   }
-  return <Dialog open title={t('试用新模型', 'Try a new model')} description={t('保留主力保护，从自己的任务中积累证据。', 'Keep Primary protection and build evidence from your own tasks.')} closeLabel={t('关闭', 'Close')} onClose={() => void (async () => { if (persistencePending || await requestEditorReplacement('routing')) onClose(); })()} className="trial-dialog">
-    {data?.availability.models.some(model => model.origin.kind === 'feed') && <FeedDisclosure language={language} mutable={mutable} />}
-    {error && <div className="callout warn" role="alert"><p>{error}</p><button className="btn" onClick={() => void refresh()}>{t('重试', 'Retry')}</button></div>}
-    {savedConnections.length > 0 && <p role="status">{t('本次已保存接入：', 'Connections saved in this flow: ')}{savedConnections.join(' · ')}</p>}
-    {published ? <TrialAgentMapping onOpenPerformance={() => onOpenPerformance?.(published)} onOpenSessions={onOpenSessions} plan={published} initial={mapping} language={language} mutable={mutable} onOperation={operationRef} onChanged={() => void onRefresh()} onOpenAgent={onOpenAgent} /> : review ? <><p>{t('将映射', 'Mapping to review')}: {agentDisplayName(mapping.agentId, language)} · {mapping.presets.join(', ')}</p><TrialReview editor={review} language={language} mutable={mutable} snapshot={snapshot} operation={operation} onOperation={onOperation} onRefresh={onRefresh} onPublished={setPublished} onPendingChange={setPersistencePending} onClose={onClose} onOpenServices={openDecision} /></> : connect && data ? <TrialConnectModel key={connect.model_configuration_id} model={connect} language={language} management={data.management} mutable={mutable} onOperation={operationRef} onBack={() => { setConnect(null); void refresh(); }} onSaved={(_result, model) => { setSavedConnections(values => [...new Set([...values, model.display_name])]); setConnect(null); void refresh(); void onRefresh(); }} /> : data ? <fieldset disabled={loading || !mutable}>
-      {modelField('trial')}{modelField('primary')}
-      <DecisionSelector classifier={classifier} smart allowHeuristic={false} services={services} language={language} onChange={setClassifier} onOpenServices={openDecision} />
-      <TrialAgentChoice snapshot={data.agents} value={mapping} onChange={setMapping} language={language} />
-      <p>{t('起始档位为“试用”0.90。完整评分、评分覆盖率和会话分布会影响升档建议；保持当前档位也是正常结果。', 'Start at Trial 0.90. Complete scores, scoring coverage and session diversity inform upward suggestions. Staying at this level is a normal outcome.')}</p>
-      <div className="actions"><button className="btn" onClick={() => void refresh()}>{t('刷新可用状态', 'Refresh availability')}</button><button className="btn btn-primary" disabled={!ready} onClick={() => {
+  const chooseTrial = (id: string) => { setTrialId(id); setTrialBinding(''); setConnect(null); if (id === primaryId) { setPrimaryId(''); setPrimaryBinding(''); setPrimarySelection(undefined); } };
+  const step = mapped ? 4 : published ? 3 : review ? 2 : 1;
+  const steps = [t('选择模型', 'Choose models'), t('核对并发布', 'Review and publish'), t('映射 Agent', 'Map the Agent'), t('开始使用', 'Start using it')];
+  const setup = data && <fieldset disabled={loading || !mutable} className="trial-setup">
+    <section className="trial-card">
+      <div className="trial-card-head"><h3>{t('要试用的模型', 'Model to try')}</h3>{featured.length > 0 && <span>{t('来自 hiroute.ai 模型目录和内置目录', 'From the hiroute.ai model directory and the built-in catalog')}</span>}</div>
+      <div className="trial-model-grid" role="group" aria-label={t('要试用的模型', 'Model to try')}>{cards.map(model => { const state = cardState(model); const facts = model.catalog?.facts ?? null; return <button type="button" key={model.model_configuration_id} className={`trial-model-card${trialId === model.model_configuration_id ? ' selected' : ''}`} aria-pressed={trialId === model.model_configuration_id} disabled={model.availability.kind === 'needs_newer_client'} onClick={() => chooseTrial(model.model_configuration_id)}>
+        <strong>{model.display_name}</strong>
+        <span className="trial-model-meta">{[facts ? publisherName(facts.publisher_id, language) : '', model.catalog ? originLabel(model.catalog.origin, language) : [...new Set(candidates(model.model_configuration_id).map(c => source(c.binding_id)).filter(Boolean))].join(' · ')].filter(Boolean).join(' · ')}</span>
+        <span className={`trial-model-state ${state.tone}`}>{state.text}</span>
+      </button>; })}</div>
+      {others.length > 0 && <label className="trial-other-model"><span>{t('试用其他模型', 'Try another model')}</span><select className="input" value={cards.some(m => m.model_configuration_id === trialId) ? '' : trialId} onChange={e => e.target.value && chooseTrial(e.target.value)}><option value="">{t('从全部模型中选择', 'Choose from all models')}</option>{others.map(m => <option key={m.model_configuration_id} value={m.model_configuration_id} disabled={m.availability.kind === 'needs_newer_client'}>{m.display_name}{m.availability.kind === 'needs_newer_client' ? ` · HiRoute ${m.availability.version}+` : ''}</option>)}</select></label>}
+      {trial && <div className="trial-model-facts">
+        {trial.catalog?.facts && <div className="model-fact-tags">{factTags(trial.catalog.facts, language).map(tag => <span key={tag} className="badge no-dot">{tag}</span>)}</div>}
+        {trial.catalog?.origin.kind === 'feed' && <p className="field-help">{t(`模型信息来源：hiroute.ai 模型目录（${shortDate(trial.catalog.origin.included_on, language)} 收录，签名已校验）。`, `Model information: the hiroute.ai model directory (added ${shortDate(trial.catalog.origin.included_on, language)}, signature verified).`)}</p>}
+        {rollingIdentity(trial.identity_stability) && <p className="field-help">{t('供应商可能更新同名模型；后续证据可能混合多个版本。', 'The provider may update this model alias; later evidence may mix versions.')}</p>}
+      </div>}
+      {connectionPicker('trial')}
+      {trial?.catalog && !trialCandidates.length && trial.availability.kind !== 'needs_newer_client' && data && (connect?.model_configuration_id === trial.model_configuration_id
+        ? <div className="trial-connect-card"><TrialConnectModel key={connect.model_configuration_id} model={connect} language={language} management={data.management} mutable={mutable} onOperation={operationRef} onBack={() => { setConnect(null); void refresh(); }} onSaved={(_result, model) => { setSavedConnections(values => [...new Set([...values, model.display_name])]); setConnect(null); void refresh(); void onRefresh(); }} /></div>
+        : <div className="trial-connect-card"><div><strong>{t(`先接入 ${trial.display_name}`, `Connect ${trial.display_name} first`)}</strong><p className="field-help">{t('只读取这个服务的模型目录，不会发起付费推理。API Key 保存在本机。', 'Only the service model list is read; no paid inference runs. The API key stays on this device.')}</p></div><button type="button" className="btn btn-primary" onClick={() => setConnect(trial.catalog!)}>{t('在此接入', 'Connect here')}</button></div>)}
+      <div className="callout trial-rule"><UiIcon name="info" /><span>{t('不论新模型更便宜还是更强，都先放进常规组：常规模型拿到低分，下一轮会回到主力；主力拿到低分不会再回退。熟悉之后，可以用分工把难的任务交给它。', 'Whether the new model is cheaper or stronger, it starts in the Regular group: after a low Regular score the next turn returns to Primary, and Primary does not fall back. Once you know it, divide work to give it harder tasks.')}</span></div>
+    </section>
+    <section className="trial-card trial-card-pair">
+      <div className="trial-column">
+        <h3>{t('主力模型', 'Primary model')}</h3>
+        {selectedPrimary && primary && !choosingPrimary ? <button type="button" className="trial-choice selected" aria-expanded={false} onClick={() => setChoosingPrimary(true)}><strong>{primary.display_name}</strong><span>{[source(selectedPrimary.binding_id), primarySelection && mappedAgent ? t(`来自 ${agentDisplayName(mappedAgent.agent_id, language)} 现在使用的模型`, `What ${agentDisplayName(mappedAgent.agent_id, language)} uses now`) : ''].filter(Boolean).join(' · ')}</span><em>{t('更换', 'Change')}</em></button>
+          : <div className="trial-choice-list" role="group" aria-label={t('主力模型', 'Primary model')}>{(allPrimary ? primaryOptions : primaryOptions.slice(0, 4)).map(model => <button type="button" key={model.model_configuration_id} className={`trial-choice${primaryId === model.model_configuration_id ? ' selected' : ''}`} aria-pressed={primaryId === model.model_configuration_id} onClick={() => { setPrimaryId(model.model_configuration_id); setPrimaryBinding(''); setPrimarySelection(undefined); setChoosingPrimary(false); }}><strong>{model.display_name}</strong><span>{[...new Set(candidates(model.model_configuration_id).map(c => source(c.binding_id)).filter(Boolean))].join(' · ')}</span></button>)}{!allPrimary && primaryOptions.length > 4 && <button type="button" className="btn btn-quiet trial-inline-action" onClick={() => setAllPrimary(true)}>{t(`显示全部 ${primaryOptions.length} 个已连接模型`, `Show all ${primaryOptions.length} connected models`)}</button>}{!primaryOptions.length && <p className="field-help">{t('还没有其他已连接的模型。', 'No other connected model yet.')}</p>}</div>}
+        {connectionPicker('primary')}
+        <p className="field-help">{t('复杂任务，以及常规模型没做好之后的下一轮，交给它。仅在已保存配置明确指向单个模型时，才自动填入当前主力。', 'It takes complex tasks and the turn after Regular falls short. It is prefilled only when saved settings identify a single model.')}</p>
+        <button type="button" className="btn btn-quiet trial-inline-action" onClick={() => setSubscriptions(true)}>{t('复用本机订阅', 'Reuse a local subscription')}</button>
+      </div>
+      <div className="trial-column trial-decision">
+        <DecisionSelector classifier={classifier} smart allowHeuristic={false} services={services} language={language} onChange={setClassifier} onOpenServices={openDecision} />
+        <p className="field-help">{t('试用需要给每个阶段打胜任分，所以不提供启发式规则。', 'A trial needs a competence score for every stage, so heuristic rules are not offered.')}</p>
+      </div>
+    </section>
+    <section className="trial-card trial-card-pair">
+      <div className="trial-column"><h3>{t('接入的 Agent', 'Agent')}</h3><TrialAgentChoice snapshot={data.agents} value={mapping} onChange={setMapping} language={language} /></div>
+      <div className="trial-column">
+        <h3>{t('名称与起始信任度', 'Name and starting trust')}</h3>
+        <label className="field"><span className="field-label">{t('路由名称', 'Route name')}</span><input className="input" value={name ?? defaultName} placeholder={t('选好模型后自动填写', 'Filled in after choosing models')} maxLength={80} onChange={e => setName(e.target.value)} /></label>
+        <p className="trial-level"><span className="badge no-dot cyan">{trustLevels[0].label[language]}</span>{t(`简单概率 ≥ ${(trustLevels[0].threshold_millis / 1000).toFixed(2)} · 安全网 ${floor}`, `P(simple) ≥ ${(trustLevels[0].threshold_millis / 1000).toFixed(2)} · safety net ${floor}`)}</p>
+        <p className="field-help">{t('评分完整的阶段、评分覆盖和会话分布会影响升档建议；保持这一档也是正常结果。', 'Fully scored stages, scoring coverage and session spread inform suggestions to step up. Staying at this level is a normal outcome.')}</p>
+        <Disclosure className="trial-criteria" label={t('胜任评分标准', 'Competence criteria')} language={language}><p>{criteria}</p><p className="field-help">{t('下一步核对时可以修改。', 'You can edit it in the next step.')}</p></Disclosure>
+      </div>
+    </section>
+    <div className="trial-footer">
+      <span className="trial-footer-hint" role="status">{missing}</span>
+      <button type="button" className="btn btn-quiet" onClick={() => void refresh()}>{t('刷新可用状态', 'Refresh availability')}</button>
+      <button type="button" className="btn" onClick={leave}>{t('取消', 'Cancel')}</button>
+      <button type="button" className="btn btn-primary" disabled={!ready} onClick={() => {
         if (!ready || !selectedTrial || !selectedPrimary || classifier.kind !== 'decision_service') return;
         if (!data?.options.authoring) return;
         const editor = structuredClone(data.options.authoring.editor); editor.mode = 'smart_saving'; editor.custom_alias = alias;
-        editor.display_name = `${trial!.display_name} + ${primary!.display_name}`;
+        editor.display_name = (name ?? defaultName).trim() || defaultName;
         editor.purpose = t('在主力保护下试用新模型，根据自己的任务证据调整路由。', 'Try a new model with Primary protection and adjust routing using evidence from your own tasks.');
         editor.smart.economy = [trialSelection(selectedTrial)]; editor.smart.primary = [primarySelection?.binding_id === selectedPrimary.binding_id ? primarySelection : trialSelection(selectedPrimary)];
-        editor.smart.judgment.competence.criteria[0] = t('试用模型没有取得有效进展，反复失败且未能恢复，或用户在最新消息中明确指出它已完成的结果有误。请评价所引用的已完成阶段，并区分新增要求与纠错；重复、继续或沉默本身不代表失败。', 'The trial model made no effective progress, repeatedly failed without recovery, or the latest user message explicitly identifies its completed result as wrong. Judge the referenced completed stage and distinguish a new requirement from a correction; repetition, continuation or silence alone is not failure.');
+        editor.smart.judgment.competence.criteria[0] = criteria;
         editor.smart.classifier = structuredClone(classifier); editor.smart.judgment.degree.simple_threshold_millis = trustLevels[0].threshold_millis;
         setReview(editor);
-      }}>{t('核对路由与映射', 'Review route and mapping')}</button></div>
-    </fieldset> : <p role="status">{t('正在读取配置…', 'Reading configuration…')}</p>}
+      }}>{t('检查改动', 'Review changes')}</button>
+    </div>
+  </fieldset>;
+  return <ProductPage className="trial-page" title={t('试用新模型', 'Try a new model')} subtitle={t('新模型先上，主力兜底。发布前会列出全部改动。', 'The new model goes first and Primary catches what it misses. Every change is listed before publishing.')} actions={<button type="button" className="btn btn-quiet" onClick={leave}><UiIcon name="arrowLeft" />{t('返回', 'Back')}</button>}>
+    <div className="trial-wizard">
+      <ol className="trial-steps" aria-label={t('试用步骤', 'Trial steps')}>{steps.map((label, i) => <li key={label} className={i + 1 < step ? 'done' : i + 1 === step ? 'current' : undefined} aria-current={i + 1 === step ? 'step' : undefined}><span>{i + 1}</span>{label}</li>)}</ol>
+      {data?.availability.models.some(model => model.origin.kind === 'feed') && <FeedDisclosure language={language} mutable={mutable} />}
+      {error && <div className="callout warn" role="alert"><p>{error}</p><button className="btn" onClick={() => void refresh()}>{t('重试', 'Retry')}</button></div>}
+      {savedConnections.length > 0 && <p className="trial-saved" role="status">{t('本次已保存接入：', 'Connections saved in this flow: ')}{savedConnections.join(' · ')}</p>}
+      {published ? <section className="trial-card"><TrialAgentMapping onConfirmed={() => setMapped(true)} onOpenPerformance={() => onOpenPerformance?.(published)} onOpenSessions={onOpenSessions} plan={published} initial={mapping} language={language} mutable={mutable} onOperation={operationRef} onChanged={() => void onRefresh()} onOpenAgent={onOpenAgent} /></section>
+        : review ? <section className="trial-card trial-review-card"><div className="trial-card-head"><h3>{t('核对改动', 'Review changes')}</h3><span>{t('将映射', 'Mapping to review')}: {agentDisplayName(mapping.agentId, language)}{agentEcosystem(mapping.agentId) === 'claude' ? ` · ${mapping.presets.join(', ')}` : ''}</span></div><TrialReview editor={review} language={language} mutable={mutable} snapshot={snapshot} operation={operation} onOperation={onOperation} onRefresh={onRefresh} onPublished={setPublished} onPendingChange={setPersistencePending} onClose={onClose} onOpenServices={openDecision} /></section>
+        : setup || (!error && <p role="status">{t('正在读取配置…', 'Reading configuration…')}</p>)}
+    </div>
     {decision && <Dialog open title={t('接入决策连接', 'Connect a decision service')} closeLabel={t('返回试用', 'Back to trial')} onClose={() => void (async () => { if (await requestEditorReplacement('decisions')) setDecision(null); })()} className="trial-dialog"><DecisionServicesPage language={language} active mutable={mutable} intent={decision} plans={snapshot?.catalog.plans} drafts={snapshot?.catalog.drafts} onChanged={() => void refresh()} onReturn={() => setDecision(null)} onUse={service => { decisionSelect.current?.(service); setDecision(null); void refresh(); }} /></Dialog>}
     {subscriptions && <Dialog open title={t('复用本机订阅', 'Reuse a local subscription')} closeLabel={t('返回试用', 'Back to trial')} onClose={() => void (async () => { if (await requestEditorReplacement('models')) { setSubscriptions(false); void refresh(); } })()} className="trial-dialog"><ModelManagementPage language={language} active trustedAuthority={mutable} startScanning onOperation={operationRef} onRecoveryRefresh={() => void refresh()} onChanged={() => { void refresh(); void onRefresh(); }} plans={snapshot?.catalog.plans} agents={data?.agents.agents} /></Dialog>}
-  </Dialog>;
+  </ProductPage>;
 }

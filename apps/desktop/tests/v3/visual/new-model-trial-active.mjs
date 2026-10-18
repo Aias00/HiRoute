@@ -9,7 +9,7 @@ const results=[];
 const click=async(selector,text)=>{ await evaluate(client,`(()=>{const el=[...document.querySelectorAll(${JSON.stringify(selector)})].find(e=>e.getClientRects().length && !e.disabled && e.textContent.includes(${JSON.stringify(text)}));if(!el)throw Error('Missing control');el.click();return true;})()`); };
 const shot=async name=>{await evaluate(client,`Promise.all(document.getAnimations().filter(a=>a.effect?.getComputedTiming().iterations!==Infinity).map(a=>a.finished.catch(()=>{}))).then(()=>true)`);const value=await client.send('Page.captureScreenshot',{format:'png'});await writeFile(path.join(output,`${name}.png`),Buffer.from(value.data,'base64'));};
 async function open(query,width=755,height=600){const url=`${base}new-model-trial.html?${query}`;await client.send('Page.enable');await client.send('Runtime.enable');await client.send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});await client.send('Page.navigate',{url});await waitFor(client,`location.href===${JSON.stringify(url)} && !!document.querySelector('.models-feature,.plan-editor,.sessions-page,.trust-attention,.new-models')`);await evaluate(client,'document.fonts.ready.then(()=>true)');}
-async function geometry(){return evaluate(client,`(()=>{const nodes=[...document.querySelectorAll('.model-feed-panel,.trust-control,.trust-evidence,.dialog')].filter(e=>e.getClientRects().length);return nodes.map(e=>({class:e.className,width:e.clientWidth,scroll:e.scrollWidth,left:e.getBoundingClientRect().left,right:e.getBoundingClientRect().right}));})()`);}
+async function geometry(){return evaluate(client,`(()=>{const nodes=[...document.querySelectorAll('.model-feed-panel,.trust-control,.plan-quality,.trust-suggestion,.modal,.trial-wizard')].filter(e=>e.getClientRects().length);return nodes.map(e=>({class:e.className,width:e.clientWidth,scroll:e.scrollWidth,left:e.getBoundingClientRect().left,right:e.getBoundingClientRect().right}));})()`);}
 try {
  for(const lang of ['en','zh']) {
   await open(`lang=${lang}&view=handoff`,755,600);
@@ -56,11 +56,11 @@ try {
   assert.equal(await evaluate(client,`trialTrace.find(x=>x.command==='model_feed_settings_apply').payload.input.retrieval_enabled`),false);
   results.push({id:`feed.first-home-disclosure.${lang}`,status:'passed'});
  }
- await open('lang=en&recovery=1'); await click('summary','Model feed'); await waitFor(client,`document.body.textContent.includes('Saved feed state is damaged')`);
+ await open('lang=en&recovery=1'); await waitFor(client,`document.body.textContent.includes('Saved feed state is damaged') && !!document.querySelector('.model-feed-details')`);
  await click('button','Reset damaged cache…'); await waitFor(client,`!!document.querySelector('[role=dialog]')`); await shot('feed-reset-damaged-cache-en-755');
- assert.ok(await evaluate(client,`document.querySelector('[role=dialog]').textContent.includes('will not decrease')`));
+ assert.ok(await evaluate(client,`document.querySelector('[role=dialog]').textContent.includes('damaged state file will be preserved')`));
  await click('[role=dialog] button','Confirm reset'); await waitFor(client,`!document.querySelector('[role=dialog]')`);
- assert.equal(await evaluate(client,`[...document.querySelectorAll('.model-feed-actions button')].find(b=>b.textContent.includes('Check now')).disabled`),false);
+ assert.equal(await evaluate(client,`[...document.querySelectorAll('.model-feed-actions button')].find(b=>b.textContent.includes('Refresh')).disabled`),false);
  results.push({id:'feed.confirmed-corrupt-state-recovery',status:'passed'});
  await open('lang=en&view=timeline&scope-error=1'); await waitFor(client,`!!document.querySelector('.routing-timeline [role=alert]')`);
  const scopeReads=await evaluate(client,`trialTrace.filter(x=>x.command==='observation_read'&&x.payload.request.intent.view==='routing_timeline').length`);
@@ -97,11 +97,12 @@ try {
 
  for(const [lang,theme,width,height] of [['en','light',755,600],['zh','dark',755,600],['en','dark',1200,813],['zh','light',1200,813]]){
   await open(`lang=${lang}&theme=${theme}`,width,height);
-  await click('summary',lang==='zh'?'模型信息更新':'Model feed');
   await waitFor(client,`!!document.querySelector('.model-feed-actions')`);
+  await click('.model-feed-actions button',lang==='zh'?'详情':'Details');
+  await waitFor(client,`!!document.querySelector('.model-feed-details')`);
   await shot(`feed-${lang}-${theme}-${width}`);
   for(const g of await geometry()){assert.ok(g.scroll<=g.width+1,JSON.stringify(g));assert.ok(g.left>=-1 && g.right<=width+1,JSON.stringify(g));}
-  await click('button',lang==='zh'?'移除副本…':'Remove copy…');
+  await click('button',lang==='zh'?'移除本机缓存…':'Remove local copy…');
   await waitFor(client,`!!document.querySelector('[role="dialog"]')`);
   assert.equal(await evaluate(client,`document.querySelector('.model-feed-checkbox input').checked`),true);
   await shot(`feed-removal-${lang}-${theme}-${width}`);
@@ -109,10 +110,10 @@ try {
   assert.equal(await evaluate(client,`trialTrace.filter(x=>x.command==='model_feed_remove_apply').length`),0);
   results.push({id:`feed.review.${lang}.${theme}.${width}`,status:'passed'});
  }
- await open('lang=en&stale=1');await click('summary','Model feed');await click('button','Remove copy…');await waitFor(client,`!!document.querySelector('[role="dialog"]')`);await click('[role="dialog"] button','Remove copy');await waitFor(client,`document.body.textContent.includes('Review the impact again')`);assert.equal(await evaluate(client,`document.querySelector('[role="dialog"]')===null`),true);results.push({id:'feed.stale-removal.repreview',status:'passed'});
+ await open('lang=en&stale=1');await waitFor(client,`!!document.querySelector('.model-feed-actions')`);await click('.model-feed-actions button','Details');await click('button','Remove local copy…');await waitFor(client,`!!document.querySelector('[role="dialog"]')`);await click('[role="dialog"] .btn-primary','Remove');await waitFor(client,`document.body.textContent.includes('Review the impact again')`);assert.equal(await evaluate(client,`document.querySelector('[role="dialog"]')===null`),true);results.push({id:'feed.stale-removal.repreview',status:'passed'});
  await open('lang=en&view=editor&empty=1');await waitFor(client,`!!document.querySelector('[data-trust-control="smart"]')`);assert.equal(await evaluate(client,`[...document.querySelectorAll('.trust-levels button')].some(e=>e.getAttribute('aria-pressed')==='true')`),false);assert.ok(await evaluate(client,`!!document.querySelector('.trust-control').textContent.includes('Custom 0.72')`));assert.ok(await evaluate(client,`!!document.querySelector('.trust-control').textContent.includes('No recorded evidence')`));await evaluate(client,`document.querySelector('.trust-control').scrollIntoView({block:'center'});true`);await shot('trust-custom-empty-en-755');await click('.trust-levels button','Trusted');assert.ok(await evaluate(client,`!!document.querySelector('.trust-control').textContent.includes('0.65')`));assert.equal(await evaluate(client,`trialTrace.filter(x=>x.command==='preview_plan_editor').length`),0);results.push({id:'trust.custom-threshold.explicit-change',status:'passed'});
  await open('lang=en&view=editor&replay-error=1');await waitFor(client,`document.querySelector('.trust-replay')?.textContent.includes('Replay could not be read')`);await click('.trust-replay button','Retry');await waitFor(client,`document.querySelector('.trust-replay')?.textContent.includes('At 0.72')`);await click('.trust-levels button','Trusted');await waitFor(client,`document.querySelector('.trust-replay')?.textContent.includes('At 0.65')`);assert.ok(await evaluate(client,`trialTrace.some(x=>x.command==='observation_read'&&x.payload.request.intent.view==='plan_trust_replay'&&x.payload.request.intent.query.thresholds_millis[0]===650&&x.payload.request.intent.query.branch_id==='smart_saving')`));assert.ok(await evaluate(client,`document.querySelector('.trust-replay').textContent.includes('Heuristic 2')`));await evaluate(client,`document.querySelector('.trust-replay').scrollIntoView({block:'center'});true`);await shot('replay-threshold-650-en');results.push({id:'replay.custom-threshold.retry-and-exclusions',status:'passed'});
- await open('lang=zh&view=editor&theme=dark',1200,813);await waitFor(client,`!!document.querySelector('[data-trust-control="smart"]')`);await click('[role="tab"]','模型表现');await waitFor(client,`!!document.querySelector('.trust-evidence-row')`);await shot('trust-evidence-zh-dark-1200');for(const g of await geometry())assert.ok(g.scroll<=g.width+1,JSON.stringify(g));assert.ok(await evaluate(client,`!!document.querySelector('.trust-evidence').textContent.includes('41 完整评分')`));results.push({id:'trust.coverage-and-version-disclosure',status:'passed'});
+ await open('lang=zh&view=editor&theme=dark',1200,813);await waitFor(client,`!!document.querySelector('[data-trust-control="smart"]')`);await click('[role="tab"]','模型表现');await waitFor(client,`!!document.querySelector('.quality-model-row') && !!document.querySelector('.trust-suggestion')`);await shot('trust-evidence-zh-dark-1200');for(const g of await geometry())assert.ok(g.scroll<=g.width+1,JSON.stringify(g));assert.ok(await evaluate(client,`document.querySelector('.trust-suggestion').textContent.includes('41 个评分完整的阶段')`));assert.ok(await evaluate(client,`document.querySelector('.trust-scope-notes').textContent.includes('2026-10-10')`));assert.equal(await evaluate(client,`/序号|发布修订版|client_version/.test(document.querySelector('.plan-quality').textContent)`),false);results.push({id:'trust.coverage-and-version-disclosure',status:'passed'});
  for (const [lang,theme,width,height] of [['en','light',755,600],['zh','dark',755,600],['en','dark',1200,813],['zh','light',1200,813]]) {
   await open(`lang=${lang}&theme=${theme}&view=timeline`,width,height);
   await waitFor(client,`document.querySelectorAll('.routing-turn').length===2`);
@@ -136,7 +137,7 @@ try {
  await shot('timeline-stale-cursor-recovered-en-755');
  results.push({id:'timeline.stale-cursor.rebuilds-and-appends-without-manual-refresh',status:'passed'});
  await open('lang=en&view=editor&division=1',755,600);
- await click('[role="tab"]','Model performance');await waitFor(client,`!!document.querySelector('.trust-evidence-row')`);await click('summary','Level suggestions');await click('button','Review division draft');
+ await click('[role="tab"]','Model performance');await waitFor(client,`!!document.querySelector('.trust-suggestion.cyan')`);await click('.trust-suggestion button','Review division draft');
  await waitFor(client,`!!document.querySelector('.division-draft-form') && document.querySelector('.division-draft-form').textContent.includes('DeepSeek trial')`);
  assert.equal(await evaluate(client,`document.querySelector('.division-draft-form input[type=checkbox]').checked`),false);
  await click('[role="dialog"] button','Review draft in editor');
@@ -152,20 +153,25 @@ try {
  assert.equal(await evaluate(client,`divisionDraft.delegation_enabled&&divisionDraft.work.harness==='deepseek_harness'&&divisionDraft.branch_routing.branches.every(b=>b.primary_candidates.length===0&&b.candidates[0].binding_id==='binding/bailian/qwen-coder')`),true);
  assert.equal(await evaluate(client,`trialTrace.filter(x=>x.command==='preview_plan_editor').length`),0);
  await shot('division-worker-en-755');results.push({id:'division.optional-primary-and-explicit-executor.no-publication',status:'passed'});
- await open('lang=zh&view=attention&theme=dark');await shot('attention-zh-dark-755');await click('.trust-attention .btn-primary','查看');assert.equal(await evaluate(client,`trialTrace.filter(x=>x.command==='review-trust-action').length`),1);await click('button','查看证据与选项');assert.equal(await evaluate(client,`trialTrace.filter(x=>x.command==='review-trust').length`),1);results.push({id:'attention.optional-evidence-review',status:'passed'});
+ await open('lang=zh&view=attention&theme=dark');await shot('attention-zh-dark-755');await click('.trust-attention .btn-primary','打开调整草稿');assert.equal(await evaluate(client,`trialTrace.filter(x=>x.command==='review-trust-action').length`),1);await click('.trust-attention button','查看依据');assert.equal(await evaluate(client,`trialTrace.filter(x=>x.command==='review-trust').length`),1);results.push({id:'attention.optional-evidence-review',status:'passed'});
  await open('lang=en&view=attention&empty=1');assert.ok(await evaluate(client,`document.querySelector('.trust-attention').textContent.includes('No routing adjustments are suggested')`));assert.equal(await evaluate(client,`document.querySelectorAll('.trust-attention button').length`),0);results.push({id:'attention.empty-is-normal',status:'passed'});
- await open('lang=en&view=attention&error=1');assert.ok(await evaluate(client,`document.querySelector('.trust-attention [role=alert]').textContent.includes('retry before deciding')`));assert.equal(await evaluate(client,`[...document.querySelectorAll('.trust-attention button')].find(e=>e.textContent.includes('Review evidence')).disabled`),true);await click('button','Retry');assert.equal(await evaluate(client,`trialTrace.filter(x=>x.command==='retry-suggestions').length`),1);results.push({id:'attention.failed-read-is-not-empty',status:'passed'});
+ await open('lang=en&view=attention&error=1');assert.ok(await evaluate(client,`document.querySelector('.trust-attention [role=alert]').textContent.includes('retry before deciding')`));assert.equal(await evaluate(client,`[...document.querySelectorAll('.trust-attention button')].find(e=>e.textContent.includes('View evidence')).disabled`),true);await click('button','Retry');assert.equal(await evaluate(client,`trialTrace.filter(x=>x.command==='retry-suggestions').length`),1);results.push({id:'attention.failed-read-is-not-empty',status:'passed'});
  }
  for(const [lang,theme,lost] of [['en','light',false],['zh','dark',true]]) {
   await open(`lang=${lang}&theme=${theme}&view=quickstart${lost?'&lost=1&saved-only=1':''}`,755,600);
   await click('.new-models button',lang==='zh'?'试用':'Try');
-  await waitFor(client,`!!document.querySelector('.trial-agent-choice')`);
+  await waitFor(client,`!!document.querySelector('.trial-page .trial-agent-choice')`);
+  assert.equal(await evaluate(client,`document.querySelector('.trial-steps [aria-current=step]').textContent.includes(${JSON.stringify(lang==='zh'?'选择模型':'Choose models')})`),true);
   assert.equal(await evaluate(client,`[...document.querySelectorAll('.trial-presets input:checked')].length`),1);
-  assert.equal(await evaluate(client,`document.querySelectorAll('.trial-dialog .editor-section select')[1].value`),'');
-  await evaluate(client,`(()=>{const el=document.querySelectorAll('.trial-dialog .editor-section select')[1];el.value=primaryModel.model_configuration_id;el.dispatchEvent(new Event('change',{bubbles:true}));return true;})()`);
+  assert.equal(await evaluate(client,`document.querySelector('.trial-choice-list .trial-choice[aria-pressed=true]')`),null);
+  assert.equal(await evaluate(client,`document.querySelector('.trial-footer .btn-primary').disabled`),true);
+  await evaluate(client,`(()=>{const el=[...document.querySelectorAll('.trial-choice-list .trial-choice')].find(e=>e.textContent.includes(primaryModel.display_name));if(!el)throw Error('Missing primary choice');el.click();return true;})()`);
+  await waitFor(client,`!!document.querySelector('.trial-choice.selected[aria-expanded=false]')`);
   await shot(`quickstart-setup-${lang}-${theme}`);
-  await evaluate(client,`document.querySelector('.trial-dialog .modal-body').scrollTop=100000;true`);await shot(`quickstart-actions-${lang}-${theme}`);
-  await click('.trial-dialog button',lang==='zh'?'核对路由与映射':'Review route and mapping');
+  await evaluate(client,`document.querySelector('.trial-footer').scrollIntoView({block:'end'});true`);
+  assert.ok(await evaluate(client,`(()=>{const r=document.querySelector('.trial-footer .btn-primary').getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight+1;})()`));
+  await shot(`quickstart-actions-${lang}-${theme}`);
+  await click('.trial-footer button',lang==='zh'?'检查改动':'Review changes');
   await waitFor(client,`!!document.querySelector('.trial-review .trust-control')`);
   assert.ok(await evaluate(client,`document.querySelector('.trial-review .trust-levels [aria-pressed=true]').textContent.includes('0.9')`));
   await waitFor(client,`!!document.querySelector('.trial-review > .actions .btn-primary:not(:disabled)')`);
@@ -181,9 +187,10 @@ try {
   await click('.trial-mapping button',lang==='zh'?'检查并映射 Agent':'Review and map Agent');
   await waitFor(client,`document.querySelector('.trial-mapping').textContent.includes(${JSON.stringify(lang==='zh'?'映射已确认':'Mapping confirmed')})`);
   assert.equal(await evaluate(client,`trialTrace.filter(x=>x.command==='preview_agent_settings').length`),1);
+  assert.ok(await evaluate(client,`document.querySelector('.trial-steps [aria-current=step]').textContent.includes(${JSON.stringify(lang==='zh'?'开始使用':'Start using it')})`));
   assert.equal(await evaluate(client,`trialTrace.find(x=>x.command==='preview_agent_settings').payload.input.spec.model.settings.preset_mappings.sonnet.kind`),'preserve_native');
   assert.equal(await evaluate(client,`trialTrace.find(x=>x.command==='preview_agent_settings').payload.input.spec.collaboration.intent`),'keep');
-  for(const g of await evaluate(client,`[...document.querySelectorAll('.trial-dialog,.trial-mapping')].map(e=>({width:e.clientWidth,scroll:e.scrollWidth,left:e.getBoundingClientRect().left,right:e.getBoundingClientRect().right}))`)) {assert.ok(g.scroll<=g.width+1,JSON.stringify(g));assert.ok(g.left>=-1&&g.right<=756,JSON.stringify(g));}
+  for(const g of await evaluate(client,`[...document.querySelectorAll('.trial-wizard,.trial-mapping')].map(e=>({width:e.clientWidth,scroll:e.scrollWidth,left:e.getBoundingClientRect().left,right:e.getBoundingClientRect().right}))`)) {assert.ok(g.scroll<=g.width+1,JSON.stringify(g));assert.ok(g.left>=-1&&g.right<=756,JSON.stringify(g));}
   await shot(`quickstart-complete-${lang}-${theme}`);
   results.push({id:`quickstart.${lang}.${lost?'lost-publication-response':'first-mapping'}.no-duplicate`,status:'passed'});
  }

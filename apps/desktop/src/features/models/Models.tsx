@@ -339,7 +339,7 @@ export function Models(props: Props) {
     : null;
 
   return <section className="models-feature" aria-label={text('我的模型', 'My models')}>
-    <Disclosure className="model-feed-section" label={text('模型信息更新', 'Model feed')} language={props.language}><ModelFeedPanel language={props.language} mutable={props.mutable} onChanged={() => { void props.onRefresh(); }} /></Disclosure>
+    <ModelFeedPanel language={props.language} mutable={props.mutable} onChanged={() => { void props.onRefresh(); }} />
     <div className={`split-view oc-models${detailOpen ? ' oc-model-detail-open' : ''}`}>
       <aside className="master-pane" aria-label={text('模型列表', 'Model list')}>
         <div className="master-toolbar">
@@ -358,9 +358,9 @@ export function Models(props: Props) {
           </div>
         </div>
         <nav className="master-list native-list" aria-label={text('模型', 'Models')}>
-          <div className="filter-row" role="group" aria-label={text('查看方式', 'View')}>
-            <button className="filter-chip" type="button" aria-pressed={view === 'models'} onClick={() => setView('models')}>{text('按模型', 'Models')}</button>
-            <button className="filter-chip" type="button" aria-pressed={view === 'connections'} onClick={() => setView('connections')}>{text('按接入', 'Connections')}</button>
+          <div className="segmented model-list-view" role="group" aria-label={text('查看方式', 'View')}>
+            <button className={`segment${view === 'models' ? ' active' : ''}`} type="button" aria-pressed={view === 'models'} onClick={() => setView('models')}>{text('按模型', 'Models')}</button>
+            <button className={`segment${view === 'connections' ? ' active' : ''}`} type="button" aria-pressed={view === 'connections'} onClick={() => setView('connections')}>{text('按接入', 'Connections')}</button>
           </div>
           {entries.map(item => {
             const active = source?.source_id === item.source.source_id && model?.model_ref === item.model?.model_ref;

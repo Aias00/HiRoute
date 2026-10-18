@@ -92,6 +92,24 @@ pub enum ModelAvailabilityV1 {
     NeedsNewerClient { version: String },
     UsedByPublishedPlans { count: usize },
 }
+/// Selection-time reasoning shape. Native parameter names stay internal.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum AvailableModelReasoningV1 {
+    Toggle,
+    Profiles { profiles: Vec<String> },
+    Budget,
+}
+/// Catalog facts for presenting a model before it is connected.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AvailableModelFactsV1 {
+    pub publisher_id: String,
+    pub context_tokens: u64,
+    pub tool: bool,
+    pub vision: bool,
+    pub reasoning: Option<AvailableModelReasoningV1>,
+}
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AvailableModelV1 {
@@ -101,6 +119,8 @@ pub struct AvailableModelV1 {
     pub identity_stability: Option<String>,
     pub availability: ModelAvailabilityV1,
     pub binding_ids: Vec<String>,
+    /// Absent for models known only from published Plans.
+    pub facts: Option<AvailableModelFactsV1>,
 }
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]

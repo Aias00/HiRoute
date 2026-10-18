@@ -149,6 +149,7 @@
 .badge.bad { border-color: color-mix(in srgb, var(--red) 24%, transparent); background: var(--red-soft); color: var(--red); }
 .badge.info { border-color: color-mix(in srgb, var(--accent) 24%, transparent); background: var(--accent-soft); color: var(--accent-bright); }
 .badge.cyan { border-color: color-mix(in srgb, var(--cyan) 24%, transparent); background: var(--cyan-soft); color: var(--cyan); }
+.badge.purple { border-color: color-mix(in srgb, var(--purple) 24%, transparent); background: var(--purple-soft); color: var(--purple); }
 
 .status-dot {
   width: 8px;

@@ -12,7 +12,9 @@ export type ModelFeedStatus = {
 };
 export type ModelAvailability = { kind: 'executable' | 'needs_connection' } | { kind: 'needs_newer_client'; version: string } | { kind: 'used_by_published_plans'; count: number };
 export type ModelOrigin = { kind: 'embedded'; client_version: string } | { kind: 'feed'; sequence: number; included_on: string } | { kind: 'published' };
-export type AvailableModel = { model_configuration_id: string; display_name: string; origin: ModelOrigin; identity_stability: string | null; availability: ModelAvailability; binding_ids: string[] };
+export type ModelReasoning = { kind: 'toggle' | 'budget' } | { kind: 'profiles'; profiles: string[] };
+export type ModelFacts = { publisher_id: string; context_tokens: number; tool: boolean; vision: boolean; reasoning: ModelReasoning | null };
+export type AvailableModel = { model_configuration_id: string; display_name: string; origin: ModelOrigin; identity_stability: string | null; availability: ModelAvailability; binding_ids: string[]; facts: ModelFacts | null };
 export type ModelAnnouncement = { id: string; kind: 'new_model' | 'model_update'; model_configuration_id: string; headline: { en: string; zh: string }; note: { en: string; zh: string }; links: string[]; included_on: string };
 export type ModelAvailabilityResult = { featured: ModelAnnouncement[]; models: AvailableModel[] };
 export type FeedRemovalPreview = {

@@ -86,8 +86,19 @@ pub(super) fn files() -> Vec<(&'static str, String)> {
     );
     let origin = json!({"oneOf":[object(json!({"kind":{"const":"embedded"},"client_version":text()}),&["kind","client_version"]),object(json!({"kind":{"const":"feed"},"sequence":number(),"included_on":text()}),&["kind","sequence","included_on"]),object(json!({"kind":{"const":"published"}}),&["kind"])]});
     let availability = json!({"oneOf":[object(json!({"kind":{"enum":["executable","needs_connection"]}}),&["kind"]),object(json!({"kind":{"const":"needs_newer_client"},"version":text()}),&["kind","version"]),object(json!({"kind":{"const":"used_by_published_plans"},"count":number()}),&["kind","count"])]});
+    let reasoning = json!({"oneOf":[object(json!({"kind":{"enum":["toggle","budget"]}}),&["kind"]),object(json!({"kind":{"const":"profiles"},"profiles":array(text())}),&["kind","profiles"])]});
+    let facts = object(
+        json!({"publisher_id":text(),"context_tokens":number(),"tool":{"type":"boolean"},"vision":{"type":"boolean"},"reasoning":nullable(reasoning)}),
+        &[
+            "publisher_id",
+            "context_tokens",
+            "tool",
+            "vision",
+            "reasoning",
+        ],
+    );
     let models = object(
-        json!({"model_configuration_id":text(),"display_name":text(),"origin":origin,"identity_stability":nullable(text()),"availability":availability,"binding_ids":array(text())}),
+        json!({"model_configuration_id":text(),"display_name":text(),"origin":origin,"identity_stability":nullable(text()),"availability":availability,"binding_ids":array(text()),"facts":nullable(facts)}),
         &[
             "model_configuration_id",
             "display_name",
@@ -95,6 +106,7 @@ pub(super) fn files() -> Vec<(&'static str, String)> {
             "identity_stability",
             "availability",
             "binding_ids",
+            "facts",
         ],
     );
     vec![

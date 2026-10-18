@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Dialog } from '../../ui';
+import { Dialog, UiIcon } from '../../ui';
 import { safeDiagnosticCode } from '../../error-code';
 import type { FeedRemovalPreview, ModelFeedStatus } from './types';
 import './model-feed.css';
@@ -16,7 +16,7 @@ export function ModelFeedPanel({ language, mutable = true, onChanged }: { langua
   const live = useRef(true);
   const load = useCallback(async () => {
     try { const result = await invoke<ModelFeedStatus>('model_feed_status'); if (live.current) { setStatus(result); setError(''); } }
-    catch { if (live.current) setError(zh ? '暂时无法读取模型信息更新状态。' : 'Model feed status is unavailable.'); }
+    catch { if (live.current) setError(zh ? '暂时无法读取官网模型目录的状态。' : 'Model directory status is unavailable.'); }
   }, [zh]);
   useEffect(() => { live.current = true; void load(); return () => { live.current = false; }; }, [load]);
   async function change(command: string, input?: unknown) {
@@ -44,22 +44,40 @@ export function ModelFeedPanel({ language, mutable = true, onChanged }: { langua
     : refusal === 'feed_state_newer_schema' ? (zh ? '保存的状态来自更新版本，请使用相应版本打开。' : 'Saved state uses a newer format. Open it with a compatible client.')
     : refusal === 'feed_activation_requires_restart' ? (zh ? '更新未能完成激活。当前目录仍可使用，请重启后恢复更新。' : 'Activation did not finish. The previous catalog remains usable; restart to resume updates.')
     : refusal ? (zh ? '无法安全修改保存的更新状态。请保留现有文件并检查本地存储。' : 'Saved feed state cannot be safely changed. Preserve the files and check local storage.') : '';
-  const date = (value: number | string | undefined) => value === undefined ? '—' : new Date(value).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US');
-  const resultLabel: Record<string, string> = zh ? { ok: '已更新', not_modified: '没有新发布', already_current: '已是最新', not_published: '暂无发布', network: '获取失败', size: '内容超出限制', signature: '签名验证失败', schema: '格式不支持', validation: '内容校验失败', older_sequence: '已拒绝旧发布' } : { ok: 'Updated', not_modified: 'No new publication', already_current: 'Already current', not_published: 'No publication yet', network: 'Retrieval failed', size: 'Content exceeds limit', signature: 'Signature verification failed', schema: 'Unsupported format', validation: 'Content validation failed', older_sequence: 'Older publication rejected' };
-  return <section className="model-feed-panel" aria-label={zh ? '模型信息更新' : 'Model feed'}>
-    <div className="model-feed-heading"><div><h3>{zh ? '模型信息更新' : 'Model feed'}</h3><p>{zh ? '从 hiroute.ai 获取新模型信息，沿用你已配置的接入方式。' : 'New model information from hiroute.ai, using your configured connections.'}</p></div><span>{status ? status.retrieval_enabled ? (zh ? '自动获取已开启' : 'Automatic retrieval on') : (zh ? '自动获取已关闭' : 'Automatic retrieval off') : (zh ? '正在读取' : 'Loading')}</span></div>
-    {status && <>
-      {!status.disclosure_acknowledged && <div className="model-feed-disclosure"><p>{zh ? '模型信息由 hiroute.ai 提供，自动获取时不发送账户或使用标识。你可以在这里关闭自动获取。' : status.disclosure}</p><button className="btn btn-quiet" disabled={busy || !mutable} onClick={() => void change('model_feed_settings_apply', { acknowledge_disclosure: true })}>{zh ? '知道了' : 'Got it'}</button></div>}
-      <dl className="model-feed-facts"><div><dt>{zh ? '当前副本' : 'Held publication'}</dt><dd>{status.held ? `${zh ? '序号' : 'Sequence'} ${status.held.sequence}` : (zh ? '未保存副本' : 'No held copy')}</dd></div><div><dt>{zh ? '验证状态' : 'Verification'}</dt><dd>{status.verification.kind === 'verified' ? (zh ? '已验证签名' : 'Signature verified') : status.verification.kind === 'discarded' ? (zh ? '副本未被采用' : 'Copy discarded') : (zh ? '暂无副本' : 'No copy')}</dd></div><div><dt>{zh ? '发布于' : 'Issued'}</dt><dd>{date(status.held?.issued_at)}</dd></div><div><dt>{zh ? '上次检查' : 'Last checked'}</dt><dd>{date(status.last_attempt?.at)}{status.last_attempt && <small>{resultLabel[status.last_attempt.result] ?? (zh ? '检查未完成' : 'Check incomplete')}</small>}</dd></div></dl>
-      {status.held && <p className="field-help">{zh ? `已采用 ${status.counts.applied} 条 · 沿用内置 ${status.counts.ignored_embedded} 条 · 需新版本 ${status.counts.newer_client} 条 · 未能匹配 ${status.counts.unresolved} 条` : `${status.counts.applied} applied · ${status.counts.ignored_embedded} already embedded · ${status.counts.newer_client} need a newer client · ${status.counts.unresolved} unresolved`}</p>}
-      {refusalText && <p className="callout warn" role="status">{refusalText}{status.recovery_available ? (zh ? '可确认重置缓存，保留损坏文件和最高已接受序号。' : 'You can confirm a cache reset. The damaged file and highest accepted sequence are preserved.') : ''}</p>}
-      <div className="model-feed-actions"><button className="btn" disabled={busy || !mutable || !!refusal} onClick={() => void change('model_feed_refresh')}>{busy ? (zh ? '处理中…' : 'Working…') : (zh ? '立即检查' : 'Check now')}</button><button className="btn btn-quiet" disabled={busy || !mutable || !!refusal} onClick={() => void change('model_feed_settings_apply', { retrieval_enabled: !status.retrieval_enabled })}>{status.retrieval_enabled ? (zh ? '关闭自动获取' : 'Turn off automatic retrieval') : (zh ? '开启自动获取' : 'Turn on automatic retrieval')}</button><button className="btn btn-quiet" disabled={busy || !mutable || (!status.held && !status.recovery_available)} onClick={() => void removePreview()}>{status.recovery_available ? (zh ? '重置损坏缓存…' : 'Reset damaged cache…') : (zh ? '移除副本…' : 'Remove copy…')}</button></div>
-    </>}
+  const [open, setOpen] = useState(false);
+  const day = (value: number | string | undefined) => value === undefined ? '' : new Date(value).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US', { month: zh ? 'numeric' : 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+  const resultLabel: Record<string, string> = zh ? { ok: '已更新', not_modified: '没有新内容', already_current: '已是最新', not_published: '暂无发布', network: '获取失败', size: '内容超出限制', signature: '签名验证失败', schema: '格式不支持', validation: '内容校验失败', older_sequence: '已拒绝旧目录' } : { ok: 'Updated', not_modified: 'Nothing new', already_current: 'Already current', not_published: 'Nothing published yet', network: 'Retrieval failed', size: 'Content exceeds limit', signature: 'Signature verification failed', schema: 'Unsupported format', validation: 'Content validation failed', older_sequence: 'Older directory rejected' };
+  const failedCheck = status?.last_attempt && !['ok', 'not_modified', 'already_current', 'not_published'].includes(status.last_attempt.result);
+  const summary = !status ? (error ? '' : zh ? '正在读取…' : 'Loading…')
+    : [
+      'hiroute.ai',
+      status.held ? (zh ? `更新于 ${day(status.held.issued_at)}` : `Updated ${day(status.held.issued_at)}`) : (zh ? '还没有获取到目录' : 'No directory retrieved yet'),
+      status.verification.kind === 'verified' ? (zh ? '签名已校验' : 'Signature verified') : status.verification.kind === 'discarded' ? (zh ? '目录未被采用' : 'Directory not used') : '',
+      status.held ? (zh ? '离线时使用本机缓存' : 'Cached for offline use') : '',
+      failedCheck ? (zh ? '上次检查失败' : 'Last check failed') : '',
+    ].filter(Boolean).join(' · ');
+  return <section className="model-feed-panel" aria-label={zh ? '官网模型目录' : 'Model directory'}>
+    <div className="model-feed-bar">
+      <div className="model-feed-title"><strong>{zh ? '官网模型目录' : 'Model directory'}</strong><span>{summary}</span></div>
+      {status && <div className="model-feed-actions">
+        <label className="model-feed-toggle"><input type="checkbox" checked={status.retrieval_enabled} disabled={busy || !mutable || !!refusal} onChange={event => void change('model_feed_settings_apply', { retrieval_enabled: event.target.checked })} /><span>{zh ? '自动获取' : 'Automatic'}</span></label>
+        <button className="btn btn-quiet" disabled={busy || !mutable || !!refusal} onClick={() => void change('model_feed_refresh')}>{busy ? (zh ? '处理中…' : 'Working…') : (zh ? '刷新' : 'Refresh')}</button>
+        <button className="btn btn-quiet" aria-expanded={open} onClick={() => setOpen(value => !value)}>{zh ? '详情' : 'Details'}<UiIcon name="chevron" /></button>
+      </div>}
+    </div>
+    {status && !status.disclosure_acknowledged && <div className="model-feed-disclosure"><p>{zh ? '模型信息由 hiroute.ai 提供，自动获取时不发送账户或使用标识。你可以在这里关闭自动获取。' : status.disclosure}</p><button className="btn btn-quiet" disabled={busy || !mutable} onClick={() => void change('model_feed_settings_apply', { acknowledge_disclosure: true })}>{zh ? '知道了' : 'Got it'}</button></div>}
+    {refusalText && <p className="callout warn" role="status">{refusalText}{status?.recovery_available ? (zh ? '可确认重置缓存，损坏的文件会保留。' : 'You can confirm a cache reset; the damaged file is preserved.') : ''}</p>}
     {error && <p role="alert" className="field-error">{error} <button className="btn btn-quiet" disabled={busy} onClick={() => void load()}>{zh ? '重新读取' : 'Reload'}</button></p>}
-    <Dialog open={Boolean(preview)} title={status?.recovery_available ? (zh ? '重置损坏缓存' : 'Reset damaged cache') : (zh ? '移除模型信息副本' : 'Remove model feed copy')} closeLabel={zh ? '取消' : 'Cancel'} closeDisabled={busy} onClose={() => setPreview(null)} footer={<><button className="btn" disabled={busy} onClick={() => setPreview(null)}>{zh ? '取消' : 'Cancel'}</button><button className="btn btn-primary" disabled={busy || !preview} onClick={() => preview && void change('model_feed_remove_apply', { accepted_digest: preview.digest, also_disable_retrieval: disable })}>{status?.recovery_available ? (zh ? '确认重置' : 'Confirm reset') : (zh ? '移除副本' : 'Remove copy')}</button></>}>
-      {status?.recovery_available && <p>{zh ? '将保留损坏的状态文件并新建缓存状态。最高已接受序号不会降低。' : 'The damaged state file will be preserved and cache state recreated. The highest accepted sequence will not decrease.'}</p>}
-      <p>{zh ? '这些来源中的新增模型将不能再用于检查、保存或发布新的路由。已发布路由及其会话和 Worker 继续运行。' : 'Feed models in these sources will no longer be available for checks, saves or publishing new routing plans. Published plans, sessions and Workers keep running.'}</p>
-      {preview && <>{preview.sources.length ? <ul>{preview.sources.map(source => <li key={source.source_id}><strong>{source.display_name}</strong><span> · {source.model_configuration_ids.length} {zh ? '个模型' : 'models'}</span></li>)}</ul> : <p>{zh ? '没有保存的来源依赖此副本。' : 'No saved sources depend on this copy.'}</p>}<p>{zh ? `已发布的 ${preview.published_revisions.length} 个路由版本保持可用。最高已接受序号 ${preview.retained_sequence ?? '—'} 会保留，防止回滚。` : `${preview.published_revisions.length} published plan versions remain usable. Highest accepted sequence ${preview.retained_sequence ?? '—'} is retained to prevent rollback.`}</p></>}
+    {status && (open || status.recovery_available) && <div className="model-feed-details">
+      <p>{zh ? '官网目录只补充模型信息：能力、思考设置和推荐说明。接入地址、认证方式和请求格式只来自 HiRoute 内置的服务目录，官网目录改不了；目录更新也不会改变已保存的接入和已发布的路由。' : 'The directory only adds model information: capabilities, reasoning settings and recommendations. Endpoints, authentication and request formats come only from the service catalog built into HiRoute, and directory updates never change saved connections or published routes.'}</p>
+      {status.held && <p className="field-help">{zh ? `已采用 ${status.counts.applied} 个模型 · ${status.counts.ignored_embedded} 个内置目录已包含 · ${status.counts.newer_client} 个需要更新 HiRoute · ${status.counts.unresolved} 个未能匹配` : `${status.counts.applied} models added · ${status.counts.ignored_embedded} already built in · ${status.counts.newer_client} need a newer HiRoute · ${status.counts.unresolved} unresolved`}</p>}
+      {status.last_attempt && <p className="field-help">{zh ? '上次检查' : 'Last checked'} {day(status.last_attempt.at)} · {resultLabel[status.last_attempt.result] ?? (zh ? '检查未完成' : 'Check incomplete')}</p>}
+      <button className="btn btn-quiet" disabled={busy || !mutable || (!status.held && !status.recovery_available)} onClick={() => void removePreview()}>{status.recovery_available ? (zh ? '重置损坏缓存…' : 'Reset damaged cache…') : (zh ? '移除本机缓存…' : 'Remove local copy…')}</button>
+    </div>}
+    <Dialog open={Boolean(preview)} title={status?.recovery_available ? (zh ? '重置损坏缓存' : 'Reset damaged cache') : (zh ? '移除本机缓存的模型目录' : 'Remove the local model directory')} closeLabel={zh ? '取消' : 'Cancel'} closeDisabled={busy} onClose={() => setPreview(null)} footer={<><button className="btn" disabled={busy} onClick={() => setPreview(null)}>{zh ? '取消' : 'Cancel'}</button><button className="btn btn-primary" disabled={busy || !preview} onClick={() => preview && void change('model_feed_remove_apply', { accepted_digest: preview.digest, also_disable_retrieval: disable })}>{status?.recovery_available ? (zh ? '确认重置' : 'Confirm reset') : (zh ? '移除' : 'Remove')}</button></>}>
+      {status?.recovery_available && <p>{zh ? '将保留损坏的状态文件并新建缓存状态。' : 'The damaged state file will be preserved and cache state recreated.'}</p>}
+      <p>{zh ? '这些接入中由官网目录补充的模型将不能再用于检查、保存或发布新的路由。已发布路由及其会话和 Worker 继续运行。' : 'Directory models in these connections will no longer be available for checks, saves or publishing new routes. Published routes, sessions and Workers keep running.'}</p>
+      {preview && <>{preview.sources.length ? <ul>{preview.sources.map(source => <li key={source.source_id}><strong>{source.display_name}</strong><span> · {source.model_configuration_ids.length} {zh ? '个模型' : 'models'}</span></li>)}</ul> : <p>{zh ? '没有保存的接入依赖这份目录。' : 'No saved connection depends on this directory.'}</p>}<p>{zh ? `${preview.published_revisions.length} 个已发布路由保持可用。HiRoute 会记住已接受的最新目录，不会退回更旧的目录。` : `${preview.published_revisions.length} published routes remain usable. HiRoute remembers the newest accepted directory and will not fall back to an older one.`}</p></>}
       <label className="model-feed-checkbox"><input type="checkbox" checked={disable} disabled={busy} onChange={event => setDisable(event.target.checked)} /><span>{zh ? '同时关闭自动获取' : 'Also turn off automatic retrieval'}</span></label>
     </Dialog>
   </section>;

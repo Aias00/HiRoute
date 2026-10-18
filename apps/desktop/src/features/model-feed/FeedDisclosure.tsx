@@ -28,7 +28,7 @@ export function FeedDisclosure({ language, mutable = true }: { language: 'zh' | 
   }
   if (status?.disclosure_acknowledged) return null;
   return <aside className="model-feed-disclosure" aria-label={zh ? '模型信息来源' : 'Model information source'}>
-    <p>{zh ? '模型信息由 hiroute.ai 提供，自动获取时不发送账户或使用标识。可在这里或“模型信息更新”中关闭自动获取。' : 'Model information comes from hiroute.ai. Automatic retrieval sends no account or usage identifiers. Turn it off here or in Model feed settings.'}</p>
+    <p>{zh ? '模型信息由 hiroute.ai 提供，自动获取时不发送账户或使用标识。可在这里或模型页的“官网模型目录”中关闭自动获取。' : 'Model information comes from hiroute.ai. Automatic retrieval sends no account or usage identifiers. Turn it off here or under Model directory on the Models page.'}</p>
     <div className="actions"><button className="btn btn-quiet" disabled={busy || !mutable || !status} onClick={() => void apply({ acknowledge_disclosure: true })}>{zh ? '知道了' : 'Got it'}</button>{status?.retrieval_enabled && <button className="btn btn-quiet" disabled={busy || !mutable} onClick={() => void apply({ retrieval_enabled: false, acknowledge_disclosure: true })}>{zh ? '关闭自动获取' : 'Turn off automatic retrieval'}</button>}{failed && <button className="btn btn-quiet" disabled={busy} onClick={() => void load()}>{zh ? '重新读取设置' : 'Reload settings'}</button>}</div>
   </aside>;
 }

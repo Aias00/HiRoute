@@ -261,6 +261,40 @@ fn candidates(
         .flat_map(|group| &group.candidates)
 }
 
+fn model_facts(
+    publisher_id: &str,
+    capabilities: &hiroute_domain::CapabilityFactsV1,
+    reasoning: Option<AvailableModelReasoningV1>,
+) -> AvailableModelFactsV1 {
+    AvailableModelFactsV1 {
+        publisher_id: publisher_id.into(),
+        context_tokens: capabilities.context_tokens,
+        tool: capabilities.tool,
+        vision: capabilities.vision,
+        reasoning,
+    }
+}
+
+/// A fixed native profile is adaptation metadata, not a choice, so it is not presented.
+fn reasoning(
+    facts: &[hiroute_domain::ModelNativeReasoningV1],
+    id: &str,
+) -> Option<AvailableModelReasoningV1> {
+    use hiroute_domain::NativeReasoningCapabilityV1 as Native;
+    match &facts
+        .iter()
+        .find(|fact| fact.model_configuration_id == id)?
+        .capability
+    {
+        Native::Fixed { .. } => None,
+        Native::Toggle { .. } => Some(AvailableModelReasoningV1::Toggle),
+        Native::Discrete { profiles, .. } => Some(AvailableModelReasoningV1::Profiles {
+            profiles: profiles.clone(),
+        }),
+        Native::Budget { .. } => Some(AvailableModelReasoningV1::Budget),
+    }
+}
+
 fn availability(adapter: &LocalControlAdapter) -> Result<ModelAvailabilityResultV1, ErrorCode> {
     use hiroute_integrations::model_feed::ModelFactOrigin;
     let catalog = adapter
@@ -343,6 +377,11 @@ fn availability(adapter: &LocalControlAdapter) -> Result<ModelAvailabilityResult
                 ModelAvailabilityV1::Executable
             },
             binding_ids: executable,
+            facts: Some(model_facts(
+                &model.publisher_id,
+                &model.capabilities,
+                reasoning(catalog.native_reasoning(), id),
+            )),
         });
     }
     for newer in catalog.newer_feed_models() {
@@ -358,6 +397,7 @@ fn availability(adapter: &LocalControlAdapter) -> Result<ModelAvailabilityResult
                 version: newer.minimum_client.clone(),
             },
             binding_ids: vec![],
+            facts: Some(model_facts(&newer.publisher_id, &newer.capabilities, None)),
         });
     }
     let mut historical: BTreeMap<String, usize> = BTreeMap::new();
@@ -382,6 +422,7 @@ fn availability(adapter: &LocalControlAdapter) -> Result<ModelAvailabilityResult
             identity_stability: None,
             availability: ModelAvailabilityV1::UsedByPublishedPlans { count },
             binding_ids: vec![],
+            facts: None,
         });
     }
     models.sort_by(|a, b| a.model_configuration_id.cmp(&b.model_configuration_id));
@@ -414,4 +455,56 @@ fn availability(adapter: &LocalControlAdapter) -> Result<ModelAvailabilityResult
         })
         .collect();
     Ok(ModelAvailabilityResultV1 { models, featured })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use hiroute_domain::{ModelNativeReasoningV1, NativeReasoningCapabilityV1 as Native};
+
+    fn fact(id: &str, capability: Native) -> ModelNativeReasoningV1 {
+        ModelNativeReasoningV1 {
+            model_configuration_id: id.into(),
+            capability,
+            native_render_convention: None,
+        }
+    }
+
+    #[test]
+    fn presented_reasoning_hides_native_parameters_and_fixed_profiles() {
+        let facts = [
+            fact(
+                "model.profiles",
+                Native::Discrete {
+                    parameter: "output_config.effort".into(),
+                    profiles: vec!["low".into(), "high".into()],
+                    default_profile: None,
+                },
+            ),
+            fact(
+                "model.toggle",
+                Native::Toggle {
+                    parameter: "thinking".into(),
+                },
+            ),
+            fact(
+                "model.fixed",
+                Native::Fixed {
+                    profile: "none".into(),
+                },
+            ),
+        ];
+        assert_eq!(
+            reasoning(&facts, "model.profiles"),
+            Some(AvailableModelReasoningV1::Profiles {
+                profiles: vec!["low".into(), "high".into()]
+            })
+        );
+        assert_eq!(
+            reasoning(&facts, "model.toggle"),
+            Some(AvailableModelReasoningV1::Toggle)
+        );
+        assert_eq!(reasoning(&facts, "model.fixed"), None);
+        assert_eq!(reasoning(&facts, "model.unknown"), None);
+    }
 }

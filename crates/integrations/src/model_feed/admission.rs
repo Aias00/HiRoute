@@ -52,6 +52,8 @@ pub enum ModelFactOrigin {
 pub struct NewerFeedModel {
     pub model_configuration_id: String,
     pub display_name: String,
+    pub publisher_id: String,
+    pub capabilities: hiroute_domain::CapabilityFactsV1,
     pub minimum_client: String,
     pub included_on: String,
     pub identity_stability: String,
@@ -297,6 +299,8 @@ impl TrustedReleaseCatalog {
                                 .model_configuration_id
                                 .clone(),
                             display_name: record.definition.display_name.clone(),
+                            publisher_id: record.definition.publisher_id.clone(),
+                            capabilities: record.definition.capabilities.clone(),
                             minimum_client: min_client_version.clone(),
                             included_on: included_on.clone(),
                             identity_stability: record.canonical.identity_stability.clone(),

@@ -109,6 +109,7 @@ export function DesktopApp() {
   const { language } = preferences;
   const home = useDesktopHome();
   const [trialIntent, setTrialIntent] = useState<{ modelId?: string; bindingId?: string } | null>(null);
+  const trialOpen = Boolean(trialIntent);
   const [page, setPage] = useState<Page>('home');
   const [modelTab, setModelTab] = useState<'general' | 'decisions'>('general');
   const [decisionIntent, setDecisionIntent] = useState<DecisionIntent | null>(null);
@@ -309,9 +310,18 @@ export function DesktopApp() {
     setOperationError('');
   }, [home.desktopSnapshot?.pending?.idempotency_key, home.desktopSnapshot?.pending?.operation_id, operation]);
 
+  // The trial wizard is a full page: leaving it through navigation follows its discard guard.
+  async function leaveTrial() {
+    if (!trialIntent) return true;
+    if (!await requestEditorReplacement('routing')) return false;
+    setTrialIntent(null);
+    return true;
+  }
+
   async function navigate(id: string) {
     if (!navigation.some(item => item.id === id)) return;
     setNotice('');
+    if (!await leaveTrial()) return;
     await openPageSafely(id as Page);
   }
 
@@ -659,7 +669,7 @@ export function DesktopApp() {
       }}>
         <div className="window-controls" data-tauri-drag-region aria-hidden="true" />
         <div className="titlebar-main" data-tauri-drag-region>
-          <div className="window-title"><span>{text.pages[page]}</span></div>
+          <div className="window-title"><span>{trialOpen ? (language === 'zh' ? '试用新模型' : 'Try a new model') : text.pages[page]}</span></div>
         </div>
       </header>
       <HomeNavigation
@@ -670,7 +680,7 @@ export function DesktopApp() {
         serviceLabel={navigationLabel}
         serviceReady={serviceOperational}
         onNavigate={id => void navigate(id)}
-        onOpenSettings={() => void openPageSafely('settings')}
+        onOpenSettings={() => void (async () => { if (await leaveTrial()) await openPageSafely('settings'); })()}
       />
       <main className="main">
         {notice && <div className="toast-stack" aria-live="polite"><div className="toast" role="status"><UiIcon name="info" /><span>{notice}</span></div></div>}
@@ -691,18 +701,18 @@ export function DesktopApp() {
           </div>
         </div>}
 
-        {trialIntent && <TrialQuickStart onOpenPerformance={plan => { setTrialIntent(null); void showRouting({ key: `trial/${crypto.randomUUID()}`, plan, initialView: 'performance' }); }} onOpenSessions={sessionId => { void (async () => { if (!await allowPageChange('sessions')) return; setTrialIntent(null); setSessionIntent({ key: `sessions/${crypto.randomUUID()}`, sessionId }); openPage('sessions'); })(); }} initialModelId={trialIntent.modelId} initialBindingId={trialIntent.bindingId} language={language} mutable={Boolean(home.desktopSnapshot?.trusted_authority && home.desktopSnapshot.service.mutation_available)} snapshot={home.desktopSnapshot} operation={operation} onOperation={value => acceptOperation(value, { kind: 'routing' })} onRefresh={async () => { setObserving(true); await home.refreshAll(); setRefreshVersion(value => value + 1); }} onClose={() => setTrialIntent(null)} onOpenAgent={id => { setTrialIntent(null); setAgentIntent({ key: `agents/${crypto.randomUUID()}`, agentId: id }); openPage('agents'); }} />}
-        <div hidden={page !== 'home'}><Home
+        {trialIntent && <div className="trial-page-host"><TrialQuickStart onOpenPerformance={plan => { setTrialIntent(null); void showRouting({ key: `trial/${crypto.randomUUID()}`, plan, initialView: 'performance' }); }} onOpenSessions={sessionId => { void (async () => { if (!await allowPageChange('sessions')) return; setTrialIntent(null); setSessionIntent({ key: `sessions/${crypto.randomUUID()}`, sessionId }); openPage('sessions'); })(); }} initialModelId={trialIntent.modelId} initialBindingId={trialIntent.bindingId} language={language} mutable={Boolean(home.desktopSnapshot?.trusted_authority && home.desktopSnapshot.service.mutation_available)} snapshot={home.desktopSnapshot} operation={operation} onOperation={value => acceptOperation(value, { kind: 'routing' })} onRefresh={async () => { setObserving(true); await home.refreshAll(); setRefreshVersion(value => value + 1); }} onClose={() => setTrialIntent(null)} onOpenAgent={id => { setTrialIntent(null); setAgentIntent({ key: `agents/${crypto.randomUUID()}`, agentId: id }); openPage('agents'); }} /></div>}
+        <div hidden={trialOpen || page !== 'home'}><Home
             language={language}
             reads={home.reads}
             operation={homeOperation}
             trustSuggestions={trustSuggestions}
             onTrustAction={(plan, branch) => void reviewTrustAction(plan, branch)}
-            newModels={<NewModels language={language} mutable={Boolean(home.desktopSnapshot?.trusted_authority && home.desktopSnapshot.service.mutation_available)} active={page === 'home'} plans={home.desktopSnapshot?.catalog.plans ?? []} refreshVersion={refreshVersion} onTry={modelId => setTrialIntent({ modelId })} />}
+            newModels={<NewModels language={language} mutable={Boolean(home.desktopSnapshot?.trusted_authority && home.desktopSnapshot.service.mutation_available)} active={page === 'home'} plans={home.desktopSnapshot?.catalog.plans ?? []} refreshVersion={refreshVersion} onTry={modelId => setTrialIntent({ modelId })} onOpenPlan={planId => { const plan = home.desktopSnapshot?.catalog.plans.find(item => item.agent_plan_id === planId); if (plan) void showRouting({ key: `models/${crypto.randomUUID()}`, plan, initialView: 'performance' }); }} />}
             hasTasks={taskRead.status === 'ready' && taskRead.tasks.length > 0}
             onAction={handleHomeAction}
           /></div>
-        {visited.has('models') && <div hidden={page !== 'models' || modelTab !== 'general'}><ModelManagementPage
+        {visited.has('models') && <div hidden={trialOpen || page !== 'models' || modelTab !== 'general'}><ModelManagementPage
             key={modelIntent.key}
             language={language}
             active={page === 'models' && modelTab === 'general'}
@@ -725,7 +735,7 @@ export function DesktopApp() {
             onTryModel={(modelId, bindingId) => setTrialIntent({ modelId, bindingId })}
             onCreatePlan={bindingId => void showRouting({ key: `routing/${crypto.randomUUID()}`, initialBindingId: bindingId })}
           /></div>}
-        {visited.has('models') && <div hidden={page !== 'models' || modelTab !== 'decisions'}><DecisionServicesPage
+        {visited.has('models') && <div hidden={trialOpen || page !== 'models' || modelTab !== 'decisions'}><DecisionServicesPage
           language={language} active={page === 'models' && modelTab === 'decisions'}
           mutable={!!home.desktopSnapshot?.trusted_authority && !!home.desktopSnapshot?.service.mutation_available}
           tabs={modelTabs} intent={decisionIntent}
@@ -735,7 +745,7 @@ export function DesktopApp() {
           onReturn={returningToRoute ? () => void openPageSafely('routing') : undefined}
           onUse={returningToRoute ? useDecisionInRoute : undefined}
         /></div>}
-        {visited.has('routing') && <div hidden={page !== 'routing'}><RoutingPage
+        {visited.has('routing') && <div hidden={trialOpen || page !== 'routing'}><RoutingPage
             key={routingIntent.key}
             language={language}
             active={page === 'routing'}
@@ -755,7 +765,7 @@ export function DesktopApp() {
             onOpenSession={(sessionId, requestId) => { void (async () => { if (!await allowPageChange('sessions')) return; setSessionIntent({ key: `sessions/${crypto.randomUUID()}`, sessionId, requestId, returnToQuality: true }); openPage('sessions'); })(); }}
             onOperation={value => acceptOperation(value, { kind: 'routing' })}
           /></div>}
-        {visited.has('agents') && <div hidden={page !== 'agents'}><Agents
+        {visited.has('agents') && <div hidden={trialOpen || page !== 'agents'}><Agents
             key={agentIntent.key}
             language={language}
             active={page === 'agents'}
@@ -788,7 +798,7 @@ export function DesktopApp() {
               })();
             }}
           /></div>}
-        {visited.has('sessions') && <div hidden={page !== 'sessions'}><Sessions
+        {visited.has('sessions') && <div hidden={trialOpen || page !== 'sessions'}><Sessions
             key={sessionIntent.key}
             active={page === 'sessions'}
             initialSession={sessionIntent.sessionId ?? null}
@@ -798,7 +808,7 @@ export function DesktopApp() {
             language={language}
             onOpenAgents={() => void openPageSafely('agents')}
           /></div>}
-        <div hidden={page !== 'settings'}><SettingsPage
+        <div hidden={trialOpen || page !== 'settings'}><SettingsPage
           active={page === 'settings'}
           language={language}
           languagePreference={preferences.languagePreference}

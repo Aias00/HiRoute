@@ -1,9 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { formatMoney } from '../ui';
 import { safeDiagnosticCode } from '../error-code';
 import { observationBusyRetryMs } from './observation-failure';
 import { observationRead } from './observation-client';
 import { formatTokenCount } from './usage-presentation';
+import { ContentExcerpt } from './Sessions';
+import './routing-timeline.css';
 
 type Cost = { model_configuration_id: string | null; currency: string | null; valuation_kind: string | null; known_micros: number | null; unknown_contributions: number };
 export type TimelineRequest = { request_id: string; started_at_ms: number; duration_ms: number | null; native_model: string | null; input_tokens: number | null; output_tokens: number | null; cache_read_tokens: number | null; cache_read_share: number | null; costs: Cost[]; outcome: string | null };
@@ -11,7 +13,7 @@ export type TimelineTurn = {
   turn_id: string; agent_turn_id: string | null; segment_id: string | null; started_at_ms: number; finished_at_ms: number | null;
   boundary: 'new_user_message' | 'context_rebuild' | 'unknown'; plan_id: string | null; plan_revision: number | null;
   branch_id: string | null; model_configuration_id: string | null; reasoning_profile_id: string | null; group: string | null;
-  selection: { simple_probability: number | null; simple_threshold_millis: number | null; selection_reason: string; competence_trigger?: unknown } | null;
+  selection: { simple_probability: number | null; simple_threshold_millis: number | null; selection_reason: string; competence_trigger?: { score: number; floor_millis: number } | null } | null;
   tool_continuations: number; relays: { request_id: string; from_model: string | null; to_model: string | null }[];
   assessment_state: string; assessment: { score: number; partial: boolean; target_from_ordinal: number; target_through_ordinal: number } | null;
   competence_floor_millis: number | null; protected_turn_ids: string[]; status: string; requests: TimelineRequest[];
@@ -19,10 +21,20 @@ export type TimelineTurn = {
   cost_by_model: Cost[]; evidence_partial: boolean; content_digest: string;
 };
 type TimelinePage = { turns: TimelineTurn[]; watermark: string; complete: boolean };
+/** Whether the session has a routing view to show: recorded turns, or a definitive read limit. */
+export type TimelineAvailability = 'none' | 'turns' | 'blocked';
+type Lane = 'regular' | 'primary' | 'unknown';
 
-export function RoutingTimeline({ session, language, active, refreshVersion, requestId, onSelectRequest, onOpenPerformance }: {
+const laneOf = (turn: TimelineTurn): Lane => turn.group === 'regular' || turn.group === 'primary' ? turn.group : 'unknown';
+const modelOf = (turn: TimelineTurn) => [...turn.requests].reverse().find(request => request.native_model)?.native_model ?? turn.model_configuration_id;
+const failed = (request: TimelineRequest) => request.outcome !== null && !['completed', 'success', 'succeeded'].includes(request.outcome);
+const TICKS = 18;
+const REQUESTS = 6;
+
+export function RoutingTimeline({ session, language, active, refreshVersion, requestId, onSelectRequest, onOpenPerformance, onViewConversation, onAvailability }: {
   session: string; language: 'zh' | 'en'; active: boolean; refreshVersion: number; requestId: string | null;
   onSelectRequest(request: TimelineRequest): void; onOpenPerformance(plan: string): void;
+  onViewConversation?(request: TimelineRequest): void; onAvailability?(availability: TimelineAvailability): void;
 }) {
   const text = (zh: string, en: string) => language === 'zh' ? zh : en;
   const [turns, setTurns] = useState<TimelineTurn[]>([]);
@@ -30,9 +42,11 @@ export function RoutingTimeline({ session, language, active, refreshVersion, req
   const [error, setError] = useState('');
   const [loaded, setLoaded] = useState(false);
   const [retry, setRetry] = useState(0);
+  const [allRequests, setAllRequests] = useState(false);
   const watermark = useRef<string | null>(null);
   const blockedScope = useRef(false);
   const stored = useRef(new Map<string, TimelineTurn>());
+  const scroller = useRef<HTMLDivElement>(null);
   useEffect(() => { blockedScope.current = false; setError(''); }, [session]);
   useEffect(() => { watermark.current = null; stored.current.clear(); setTurns([]); setSelected(null); setLoaded(false); }, [session, refreshVersion]);
   useEffect(() => {
@@ -67,40 +81,141 @@ export function RoutingTimeline({ session, language, active, refreshVersion, req
     return () => { controller.abort(); window.clearTimeout(timer); document.removeEventListener('visibilitychange', visible); window.removeEventListener('hiroute-content-invalidated', invalidate); };
   }, [session, active, refreshVersion, retry]);
   useEffect(() => { const turn = turns.find(t => t.requests.some(r => r.request_id === requestId)); if (turn) setSelected(turn.turn_id); }, [requestId, turns]);
-  const selectedTurn = turns.find(t => t.turn_id === selected) ?? turns[0];
-  const boundary = (turn: TimelineTurn) => turn.boundary === 'new_user_message' ? text('新用户消息', 'New user message') : turn.boundary === 'context_rebuild' ? text('上下文重建', 'Context rebuilt') : text('边界未确认', 'Boundary unknown');
-  const group = (turn: TimelineTurn) => turn.group === 'primary' ? text('主力', 'Primary') : turn.group === 'regular' ? text('常规', 'Regular') : text('分组未记录', 'Group unknown');
-  const score = (turn: TimelineTurn) => turn.assessment ? `${text('阶段评分', 'Stage score')} ${turn.assessment.score.toFixed(2)}${turn.assessment.partial ? text(' · 部分评分', ' · Partial') : ''}` : turn.assessment_state === 'pending' ? text('等待评估', 'Awaiting assessment') : text('未评分', 'Unscored');
-  const selectionReason = (reason: string | undefined) => ({simple_task:text('简单任务', 'Simple task'),complex_task:text('复杂任务', 'Complex task'),low_competence:text('低胜任度保护', 'Low-competence protection'),degree_unavailable:text('难度判断不可用', 'Difficulty unavailable'),single_group:text('单组分类', 'Single group'),decision_fallback:text('决策失败后回退', 'Decision fallback'),availability_relay:text('可用性接力', 'Availability relay'),heuristic:text('启发式判断', 'Heuristic judgment')} as Record<string,string>)[reason ?? ''] ?? text('选择原因未知', 'Selection reason unknown');
-  const amount = (cost: Cost) => cost.known_micros === null || !cost.currency ? text('金额未知', 'Amount unknown') : `${formatMoney(cost.currency, (cost.known_micros / 1_000_000).toFixed(4))}${cost.unknown_contributions ? text(' + 未知部分', ' + unknown portion') : ''}`;
+  const blocked = error.toLowerCase().includes('scope_too_large');
+  const availability: TimelineAvailability = turns.length ? 'turns' : blocked ? 'blocked' : 'none';
+  useEffect(() => { onAvailability?.(availability); }, [availability]);
+  // Follow the newest agent turn until the person picks one.
+  useEffect(() => { if (!selected && scroller.current) scroller.current.scrollLeft = scroller.current.scrollWidth; }, [turns.length, selected]);
+  useEffect(() => setAllRequests(false), [selected]);
+
+  const selectedTurn = turns.find(t => t.turn_id === selected) ?? turns[turns.length - 1];
+  const index = (turn: TimelineTurn) => turns.indexOf(turn) + 1;
+  const boundary = (turn: TimelineTurn) => turn.boundary === 'new_user_message' ? text('新消息', 'New message') : turn.boundary === 'context_rebuild' ? text('压缩后', 'After compaction') : text('边界未确认', 'Boundary unknown');
+  const laneName = (lane: Lane) => lane === 'primary' ? text('主力', 'Primary') : lane === 'regular' ? text('常规', 'Regular') : text('分组未记录', 'Group unknown');
+  const tone = (lane: Lane) => lane === 'regular' ? 'cyan' : lane === 'primary' ? 'purple' : '';
+  const reason = (turn: TimelineTurn) => ({ simple_task: text('简单任务', 'Simple task'), complex_task: text('复杂任务', 'Complex task'), low_competence: text('低分保护', 'Low-score protection'), degree_unavailable: text('难度判断不可用', 'Difficulty unavailable'), single_group: text('只有一组', 'Single group'), decision_fallback: text('决策失败兜底', 'Decision fallback'), availability_relay: text('故障接力', 'Availability relay'), heuristic: text('启发式判断', 'Heuristic') } as Record<string, string>)[turn.selection?.selection_reason ?? ''] ?? text('选择原因未知', 'Selection reason unknown');
+  const fixed = (millis: number | null | undefined) => millis == null ? '—' : (millis / 1000).toFixed(2);
+  const probability = (turn: TimelineTurn) => turn.selection?.simple_probability == null ? text('简单概率未知', 'P(simple) unknown') : `${text('简单概率', 'P(simple)')} ${turn.selection.simple_probability.toFixed(2)}`;
+  const below = (turn: TimelineTurn) => Boolean(turn.assessment && turn.competence_floor_millis != null && turn.assessment.score * 1000 < turn.competence_floor_millis);
+  const scoreTone = (turn: TimelineTurn) => turn.assessment ? below(turn) ? 'bad' : turn.assessment.partial ? 'warn' : 'good' : '';
+  const score = (turn: TimelineTurn) => turn.assessment ? `${turn.assessment.partial ? text('部分评分', 'Partial') : text('评分', 'Score')} ${turn.assessment.score.toFixed(2)}`
+    : turn.status === 'running' ? text('进行中…', 'Running…') : turn.assessment_state === 'pending' ? text('等待评分', 'Awaiting score') : text('未评分', 'Unscored');
+  const amount = (micros: number | null, currency: string | null) => micros === null || !currency ? text('金额未知', 'Amount unknown') : formatMoney(currency, (micros / 1_000_000).toFixed(micros >= 10_000 ? 3 : 4));
+  const percent = (share: number | null) => share === null ? text('未知', 'unknown') : `${Math.round(share * 100)}%`;
+  const tokens = (count: number | null) => count === null ? '—' : formatTokenCount(count, language);
+
+  const grouped = turns.some(turn => laneOf(turn) !== 'unknown');
+  const lanes = (['regular', 'primary', 'unknown'] as Lane[]).filter(lane => lane === 'unknown' ? turns.some(turn => laneOf(turn) === 'unknown') : grouped);
+  const laneModel = (lane: Lane) => { const latest = [...turns].reverse().find(turn => laneOf(turn) === lane); return latest ? modelOf(latest) : null; };
+  const names = new Map<string, string>();
+  for (const turn of turns) if (turn.model_configuration_id) names.set(turn.model_configuration_id, modelOf(turn) ?? turn.model_configuration_id);
+  const totals = new Map<string, { cost: Cost; lane: Lane }>();
+  for (const turn of turns) for (const cost of turn.cost_by_model) {
+    const key = `${cost.model_configuration_id}\u0000${cost.currency}\u0000${cost.valuation_kind}`;
+    const total = totals.get(key);
+    if (!total) totals.set(key, { cost: { ...cost }, lane: laneOf(turn) });
+    else total.cost = { ...total.cost, known_micros: total.cost.known_micros === null || cost.known_micros === null ? null : total.cost.known_micros + cost.known_micros, unknown_contributions: total.cost.unknown_contributions + cost.unknown_contributions };
+  }
+  const last = turns[turns.length - 1];
+  const running = last?.status === 'running';
+
+  function explanation(turn: TimelineTurn) {
+    const target = `${laneName(laneOf(turn))} · ${modelOf(turn) ?? text('模型未记录', 'model unknown')}`;
+    const p = turn.selection?.simple_probability, threshold = turn.selection?.simple_threshold_millis;
+    const trigger = turn.selection?.competence_trigger;
+    switch (turn.selection?.selection_reason) {
+      case 'simple_task': return text(`简单概率 ${p?.toFixed(2) ?? '—'} ≥ 阈值 ${fixed(threshold)}，没有适用的低分 → ${target}。`, `P(simple) ${p?.toFixed(2) ?? '—'} ≥ threshold ${fixed(threshold)} with no applicable low score → ${target}.`);
+      case 'complex_task': return text(`简单概率 ${p?.toFixed(2) ?? '—'} < 阈值 ${fixed(threshold)} → ${target}。`, `P(simple) ${p?.toFixed(2) ?? '—'} < threshold ${fixed(threshold)} → ${target}.`);
+      case 'low_competence': return trigger ? text(`上一阶段评分 ${trigger.score.toFixed(2)} 低于下限 ${fixed(trigger.floor_millis)} → ${target}。`, `The previous stage scored ${trigger.score.toFixed(2)}, below the ${fixed(trigger.floor_millis)} floor → ${target}.`) : text(`上一阶段低于胜任下限 → ${target}。`, `The previous stage was below the competence floor → ${target}.`);
+      default: return `${reason(turn)}${p != null ? ` · ${text('简单概率', 'P(simple)')} ${p.toFixed(2)}` : ''}${threshold != null ? ` · ${text('阈值', 'threshold')} ${fixed(threshold)}` : ''} → ${target}${text('。', '.')}`;
+    }
+  }
+  function scoreExplanation(turn: TimelineTurn) {
+    if (turn.assessment) {
+      const covered = text(`覆盖轮次 ${turn.assessment.target_from_ordinal}–${turn.assessment.target_through_ordinal}`, `covers turns ${turn.assessment.target_from_ordinal}–${turn.assessment.target_through_ordinal}`);
+      const floor = turn.competence_floor_millis != null ? text(`，下限 ${fixed(turn.competence_floor_millis)}`, `, floor ${fixed(turn.competence_floor_millis)}`) : '';
+      const protectedNext = turn.protected_turn_ids.length ? text('低于下限，下一轮交给主力。', ' Below the floor, so the next agent turn went to Primary.') : '';
+      return text(`阶段评分${covered}${floor}。${turn.assessment.partial ? '证据不完整。' : ''}${protectedNext}`, `This stage score ${covered}${floor}.${turn.assessment.partial ? ' Evidence is incomplete.' : ''}${protectedNext}`);
+    }
+    if (turn.status === 'running') return text('这一轮还在进行，结束后才评分。', 'This agent turn is still running; it is scored after it ends.');
+    if (turn.assessment_state === 'pending') return text('下一轮开始后，根据你的反馈给这一轮评分。', 'Scored from your feedback once the next agent turn starts.');
+    return text('这一轮没有评分。', 'This agent turn was not scored.');
+  }
+  const status = (turn: TimelineTurn) => ({ running: text('运行中', 'Running'), completed: text('完成', 'Completed'), failed: text('失败', 'Failed'), interrupted: text('中断', 'Interrupted') } as Record<string, string>)[turn.status] ?? text('状态未知', 'Status unknown');
+  const transition = (kind: string) => ({ initial_selection: text('首次选择', 'Initial selection'), between_turn_change: text('跨轮模型切换', 'Between-turn model change'), continuation_boundary: text('续接边界', 'Continuation boundary'), within_request_fallback: text('请求内模型回退', 'Within-request fallback'), credential_relay: text('凭据接力', 'Credential relay'), reasoning_change: text('推理设置变化', 'Reasoning change'), unknown: text('切换证据尚不完整', 'Transition evidence incomplete') } as Record<string, string>)[kind] ?? text('切换类型未知', 'Unknown transition');
+
+  const detail = selectedTurn && (() => {
+    const lane = laneOf(selectedTurn);
+    const requests = allRequests ? selectedTurn.requests : selectedTurn.requests.slice(0, REQUESTS);
+    const changes = (selectedTurn.transitions ?? []).filter(change => !['unchanged', 'initial_selection'].includes(change.kind));
+    return <div className="routing-turn-detail">
+      <div className="routing-detail-main">
+        <div className="routing-detail-head">
+          <strong>T{index(selectedTurn)}</strong><span className="badge no-dot">{boundary(selectedTurn)}</span><span className={`badge no-dot ${tone(lane)}`}>{modelOf(selectedTurn) ?? text('模型未记录', 'Model unknown')}</span>
+          <span className="routing-detail-actions">
+            {onViewConversation && selectedTurn.requests[0] && <button type="button" className="btn btn-quiet" onClick={() => onViewConversation(selectedTurn.requests[0])}>{text('查看对话', 'View conversation')}</button>}
+            {selectedTurn.plan_id && <button type="button" className="btn btn-quiet" onClick={() => onOpenPerformance(selectedTurn.plan_id!)}>{text('查看模型表现', 'View model performance')}</button>}
+          </span>
+        </div>
+        {selectedTurn.requests[0] && <blockquote className="routing-quote"><ContentExcerpt request={selectedTurn.requests[0].request_id} language={language} fallback={text('这一轮的消息未记录或已清理', 'This turn’s message is unrecorded or cleared')} limit={140} revision={selectedTurn.content_digest} /></blockquote>}
+        <div className="routing-detail-block"><span>{text('阶段开始时的模型选择', 'Model selection at the start of this stage')}</span><p>{explanation(selectedTurn)}</p></div>
+        <div className="routing-detail-block"><span>{text('胜任评分', 'Competence score')}</span><div><span className={`routing-score ${scoreTone(selectedTurn)}`}>{score(selectedTurn)}</span></div><p>{scoreExplanation(selectedTurn)}</p></div>
+        <p className="routing-detail-facts">{[
+          status(selectedTurn),
+          text(`${selectedTurn.tool_continuations} 次工具续轮`, `${selectedTurn.tool_continuations} tool continuation${selectedTurn.tool_continuations === 1 ? '' : 's'}`),
+          selectedTurn.relays.length ? text(`${selectedTurn.relays.length} 次请求内接力`, `${selectedTurn.relays.length} relay${selectedTurn.relays.length === 1 ? '' : 's'} within requests`) : '',
+          selectedTurn.reasoning_profile_id ? text(`思考 ${selectedTurn.reasoning_profile_id}`, `reasoning ${selectedTurn.reasoning_profile_id}`) : '',
+          selectedTurn.evidence_partial ? text('证据不完整', 'Incomplete evidence') : '',
+        ].filter(Boolean).join(' · ')}</p>
+        {changes.map((change, i) => <p key={`transition-${i}`} className="routing-detail-facts">{transition(change.kind)}{change.previous_model?.native_model && ` · ${change.previous_model.native_model} → ${change.model.native_model ?? '?'}`}</p>)}
+        {selectedTurn.relays.map((relay, i) => <p key={`relay-${i}`} className="routing-detail-facts">{text('接力', 'Relay')} · {relay.from_model ?? '?'} → {relay.to_model ?? '?'}</p>)}
+      </div>
+      <div className="routing-detail-requests">
+        <span className="routing-detail-label">{text(`请求（${selectedTurn.requests.length}）`, `Requests (${selectedTurn.requests.length})`)}</span>
+        <div className="routing-turn-requests">{requests.map((request, i) => <button className={`routing-request${request.request_id === requestId ? ' selected' : ''}${failed(request) ? ' failed' : ''}`} type="button" key={request.request_id} onClick={() => onSelectRequest(request)}>
+          <span className="routing-request-index">#{i + 1}</span>
+          <span className="routing-request-main"><span>{text('输入', 'In')} {tokens(request.input_tokens)} · {text('输出', 'Out')} {tokens(request.output_tokens)}</span><small>{[request.native_model ?? text('模型未记录', 'Model unknown'), request.duration_ms === null ? '' : `${(request.duration_ms / 1000).toFixed(1)} s`, request.costs.map(cost => amount(cost.known_micros, cost.currency) + (cost.unknown_contributions ? text(' + 未知部分', ' + unknown') : '')).join(' · '), failed(request) ? text('失败', 'Failed') : ''].filter(Boolean).join(' · ')}</small></span>
+          <span className={`badge no-dot ${request.cache_read_share !== null && request.cache_read_share >= 0.5 ? 'good' : ''}`}>{text('缓存', 'Cache')} {percent(request.cache_read_share)}</span>
+        </button>)}</div>
+        {!allRequests && selectedTurn.requests.length > REQUESTS && <button type="button" className="btn btn-quiet" onClick={() => setAllRequests(true)}>{text(`显示全部 ${selectedTurn.requests.length} 个请求`, `Show all ${selectedTurn.requests.length} requests`)}</button>}
+        {selectedTurn.cost_by_model.length > 0 && <p className="routing-detail-facts">{text('这一轮按模型估算：', 'This turn by model: ')}{selectedTurn.cost_by_model.map(cost => `${names.get(cost.model_configuration_id ?? '') ?? cost.model_configuration_id ?? text('模型未知', 'unknown model')} ${amount(cost.known_micros, cost.currency)}${cost.unknown_contributions ? text(' + 未知部分', ' + unknown') : ''}`).join(' · ')}</p>}
+      </div>
+    </div>;
+  })();
+
   return <section className="routing-timeline" aria-label={text('路由时间线', 'Routing timeline')}>
-    <header className="routing-timeline-heading"><h3>{text('路由时间线', 'Routing timeline')}</h3><span className="muted">{text('可见时每 2 秒更新', 'Updates every 2 s while visible')}</span></header>
-    {error && <div className="callout warn" role="alert" data-error-code={error}><span>{error.toLowerCase().includes('scope_too_large') ? text('这条会话超出完整读取范围，暂时无法显示时间线。', 'This session exceeds the complete-read limit; its timeline is unavailable.') : text('更新暂时不可用，已读取内容保留。', 'Updates are temporarily unavailable. Loaded records are retained.')}</span><button className="btn" onClick={() => { blockedScope.current = false; setRetry(n => n + 1); }}>{text('重试', 'Retry')}</button></div>}
-    {!loaded && !error && <p role="status">{text('正在读取轮次…', 'Reading turns…')}</p>}
+    <div className="routing-live" role="status"><span className={`routing-live-dot${running ? ' running' : ''}`} />{running ? text(`实时 · 第 ${turns.length} 轮正在执行`, `Live · agent turn ${turns.length} is running`) : text('实时', 'Live')}<span className="muted">{text('可见时每 2 秒更新', 'Updates every 2 s while visible')}</span></div>
+    {error && <div className="callout warn" role="alert" data-error-code={error}><span>{blocked ? text('这条会话超出完整读取范围，暂时无法显示时间线。', 'This session exceeds the complete-read limit; its timeline is unavailable.') : text('更新暂时不可用，已读取内容保留。', 'Updates are temporarily unavailable. Loaded records are retained.')}</span><button className="btn" onClick={() => { blockedScope.current = false; setRetry(n => n + 1); }}>{text('重试', 'Retry')}</button></div>}
+    {!loaded && !error && <p className="muted" role="status">{text('正在读取轮次…', 'Reading turns…')}</p>}
     {loaded && !turns.length && <p className="muted">{text('还没有可显示的轮次。', 'No recorded turns yet.')}</p>}
-    <div className="routing-turn-list" aria-label={text('Agent 轮次', 'Agent turns')}>
-      {turns.map((turn, index) => <button type="button" className={`routing-turn${selectedTurn?.turn_id === turn.turn_id ? ' selected' : ''}`} key={turn.turn_id} aria-current={selectedTurn?.turn_id === turn.turn_id ? 'true' : undefined} onClick={() => { setSelected(turn.turn_id); if (turn.requests[0]) onSelectRequest(turn.requests[0]); }}>
-        <span className="routing-turn-top"><strong>{text('轮次', 'Turn')} {index + 1}</strong><span className="muted">{new Date(turn.started_at_ms).toLocaleTimeString(language === 'zh' ? 'zh-CN' : 'en')}</span></span>
-        <span>{boundary(turn)} · {group(turn)}</span><span className="muted">{selectionReason(turn.selection?.selection_reason)}</span><strong>{turn.model_configuration_id ?? text('模型未记录', 'Model unknown')}</strong>
-        <span className="muted">{turn.selection?.simple_probability == null ? text('简单概率未知', 'Simple probability unknown') : `p = ${turn.selection.simple_probability.toFixed(2)}`}{turn.selection?.simple_threshold_millis != null && ` · ${text('阈值', 'Threshold')} ${(turn.selection.simple_threshold_millis / 1000).toFixed(2)}`}</span>
-        <span>{score(turn)}{turn.competence_floor_millis != null && ` · ${text('底线', 'Floor')} ${(turn.competence_floor_millis / 1000).toFixed(2)}`}</span>
-        {turn.selection?.competence_trigger != null && <span className="badge warn no-dot">{text('胜任度保护', 'Competence protection')}</span>}
-        {turn.protected_turn_ids.length > 0 && <span className="muted">{text('此阶段评分触发了后续保护', 'This stage score triggered later protection')}</span>}
-        {turn.evidence_partial && <span className="badge warn no-dot">{text('证据不完整', 'Incomplete evidence')}</span>}
-      </button>)}
-    </div>
-    {selectedTurn && <div className="routing-turn-detail">
-      <div className="routing-timeline-heading"><h4>{text('所选轮次', 'Selected turn')}</h4>{selectedTurn.plan_id && <button className="btn btn-quiet" onClick={() => onOpenPerformance(selectedTurn.plan_id!)}>{text('查看 Plan 模型表现', 'View Plan model performance')}</button>}</div>
-      <p className="muted">{selectedTurn.tool_continuations} {text('次工具续轮', 'tool continuations')} · {selectedTurn.relays.length} {text('次请求内模型接力', 'model relays within requests')}{selectedTurn.reasoning_profile_id && ` · ${selectedTurn.reasoning_profile_id}`} · {text('状态', 'Status')}: {({ running: text('运行中', 'Running'), completed: text('完成', 'Completed'), failed: text('失败', 'Failed'), interrupted: text('中断', 'Interrupted') } as Record<string, string>)[selectedTurn.status] ?? text('未知', 'Unknown')}</p>
-      {selectedTurn.assessment && <p className="muted">{text('这是阶段评分，覆盖轮次', 'This stage assessment covers turns')} {selectedTurn.assessment.target_from_ordinal}–{selectedTurn.assessment.target_through_ordinal}{text('。', '.')}</p>}
-      {(selectedTurn.transitions ?? []).filter(change => change.kind !== 'unchanged').map((change, index) => <p key={`transition-${index}`} className="field-help">{({ initial_selection: text('首次选择', 'Initial selection'), between_turn_change: text('跨轮模型切换', 'Between-turn model change'), continuation_boundary: text('续接边界', 'Continuation boundary'), within_request_fallback: text('请求内模型回退', 'Within-request fallback'), credential_relay: text('凭据接力', 'Credential relay'), reasoning_change: text('推理设置变化', 'Reasoning change'), unknown: text('切换证据尚不完整', 'Transition evidence incomplete') } as Record<string, string>)[change.kind] ?? text('切换类型未知', 'Unknown transition')}{change.previous_model?.native_model && ` · ${change.previous_model.native_model} → ${change.model.native_model ?? '?'}`}</p>)}
-      {selectedTurn.relays.map((relay, index) => <p key={index}>{relay.from_model ?? '?'} → {relay.to_model ?? '?'}</p>)}
-      <div className="routing-turn-requests">{selectedTurn.requests.map((request, index) => <button className={`routing-request${request.request_id === requestId ? ' selected' : ''}`} type="button" key={request.request_id} onClick={() => onSelectRequest(request)}>
-        <strong>{text('请求', 'Request')} {index + 1} · {request.native_model ?? text('模型未记录', 'Model unknown')}</strong>
-        <span>{text('输入', 'Input')} {request.input_tokens === null ? '—' : formatTokenCount(request.input_tokens, language)} · {text('输出', 'Output')} {request.output_tokens === null ? '—' : formatTokenCount(request.output_tokens, language)} · {text('缓存读取', 'Cache read')} {request.cache_read_share === null ? text('未知', 'Unknown') : `${(request.cache_read_share * 100).toFixed(1)}%`} · {request.duration_ms === null ? text('耗时未知', 'Duration unknown') : `${(request.duration_ms / 1000).toFixed(2)} s`}</span>
-        <span>{request.costs.map(amount).join(' · ') || text('未计入估算', 'Excluded from estimate')}</span>
-      </button>)}</div>
-      <div className="routing-turn-costs"><strong>{text('按模型估算', 'Estimates by model')}</strong>{selectedTurn.cost_by_model.map((cost, index) => <p key={index}>{cost.model_configuration_id ?? text('模型未知', 'Unknown model')} · {cost.valuation_kind === 'api_equivalent' ? text('API 等价值', 'API-equivalent value') : text('估算调用成本', 'Estimated call cost')}: {amount(cost)}</p>)}</div>
+    {turns.length > 0 && <div className="routing-tiles">
+      {[...totals.values()].map(({ cost, lane }) => <div className="routing-tile" key={`${cost.model_configuration_id}/${cost.currency}/${cost.valuation_kind}`}><span>{names.get(cost.model_configuration_id ?? '') ?? cost.model_configuration_id ?? text('模型未知', 'Unknown model')} · {cost.valuation_kind === 'api_equivalent' ? text('API 等价', 'API equivalent') : text('估算', 'estimate')}</span><strong className={tone(lane)}>{amount(cost.known_micros, cost.currency)}</strong>{cost.unknown_contributions > 0 && <small>{text('另有未知部分', 'Plus an unknown portion')}</small>}</div>)}
+      <div className="routing-tile"><span>{text('Agent 轮次', 'Agent turns')}</span><strong>{turns.length}</strong><small>{text(`${turns.reduce((n, turn) => n + turn.requests.length, 0)} 个请求`, `${turns.reduce((n, turn) => n + turn.requests.length, 0)} requests`)}</small></div>
     </div>}
+    {turns.length > 0 && <div className="routing-lanes-card">
+      <div className="routing-lanes-scroll" ref={scroller}>
+        <div className="routing-lanes" role="group" aria-label={text('Agent 轮次', 'Agent turns')} style={{ gridTemplateColumns: `var(--routing-label-width) repeat(${turns.length}, minmax(var(--routing-cell-width), 1fr))` }}>
+          <div className="routing-lane-corner" style={{ gridRow: 1, gridColumn: 1 }} />
+          {turns.map((turn, column) => <div className="routing-turn-head" key={turn.turn_id} style={{ gridRow: 1, gridColumn: column + 2 }} title={new Date(turn.started_at_ms).toLocaleString(language === 'zh' ? 'zh-CN' : 'en')}><strong>T{index(turn)}</strong><span className="badge no-dot">{boundary(turn)}</span></div>)}
+          {lanes.map((lane, row) => <div key={lane} className={`routing-lane-label ${tone(lane)}`} style={{ gridRow: row + 2, gridColumn: 1 }}><strong>{laneName(lane)}</strong>{laneModel(lane) && <span>{laneModel(lane)}</span>}</div>)}
+          {/* Cells are placed explicitly so focus and reading order follow time, not lanes. */}
+          {turns.map((turn, column) => lanes.map((lane, row) => { const place = { gridRow: row + 2, gridColumn: column + 2 }; return laneOf(turn) !== lane ? <div className="routing-cell-empty" key={`${turn.turn_id}/${lane}`} style={place} aria-hidden="true" /> : <button type="button" key={`${turn.turn_id}/${lane}`} style={place} className={`routing-turn ${tone(lane)}${selectedTurn?.turn_id === turn.turn_id ? ' selected' : ''}`} aria-pressed={selectedTurn?.turn_id === turn.turn_id} onClick={() => { setSelected(turn.turn_id); if (turn.requests[0]) onSelectRequest(turn.requests[0]); }}>
+              <span className="sr-only">{text(`轮次 ${index(turn)}`, `Turn ${index(turn)}`)}</span>
+              <strong className="routing-turn-reason">{reason(turn)}</strong>
+              <span className="routing-turn-meta">{probability(turn)}</span>
+              <span className="routing-ticks" aria-label={text(`${turn.requests.length} 个请求`, `${turn.requests.length} requests`)}>{turn.requests.slice(0, TICKS).map(request => <i key={request.request_id} className={failed(request) ? 'failed' : undefined} />)}{turn.requests.length > TICKS && <em>+{turn.requests.length - TICKS}</em>}</span>
+              <span className={`routing-score ${scoreTone(turn)}`}>{score(turn)}</span>
+              {(turn.selection?.competence_trigger || turn.protected_turn_ids.length > 0 || turn.evidence_partial || turn.relays.length > 0) && <span className="routing-turn-flags">
+                {turn.selection?.competence_trigger && <span className="badge warn no-dot">{text('胜任度保护', 'Competence protection')}</span>}
+                {turn.protected_turn_ids.length > 0 && <span className="badge no-dot">{text('触发下一轮保护', 'Protected the next turn')}</span>}
+                {turn.relays.length > 0 && <span className="badge no-dot">{text(`接力 ${turn.relays.length}`, `${turn.relays.length} relay${turn.relays.length === 1 ? '' : 's'}`)}</span>}
+                {turn.evidence_partial && <span className="badge warn no-dot">{text('证据不完整', 'Incomplete evidence')}</span>}
+              </span>}
+            </button>; }))}
+        </div>
+      </div>
+      <p className="routing-legend"><span><i />{text('请求', 'Request')}</span><span><i className="failed" />{text('失败', 'Failed')}</span><span className="muted">{text('同一个 agent turn 内不换模型，保住缓存；只在新消息或压缩后重新判断。点一轮查看详情。', 'The model stays fixed within an agent turn to keep the cache; routing is decided again only after a new message or compaction. Select a turn for details.')}</span></p>
+    </div>}
+    {detail}
   </section>;
 }

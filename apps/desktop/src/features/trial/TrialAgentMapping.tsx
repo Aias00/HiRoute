@@ -16,15 +16,28 @@ export function TrialAgentChoice({ snapshot, value, onChange, language, disabled
   snapshot: AgentSnapshot; value: TrialMapping; onChange(value: TrialMapping): void; language: 'zh' | 'en'; disabled?: boolean;
 }) {
   const t = (zh: string, en: string) => language === 'zh' ? zh : en;
-  return <fieldset disabled={disabled} className="trial-agent-choice"><label className="field"><span className="field-label">Agent</span><select className="input" value={value.agentId} onChange={e => onChange({ ...value, agentId: e.target.value })}><option value="">{t('选择 Agent', 'Select an Agent')}</option>{snapshot.agents.filter(agent => agent.context_id && agentEditorSeed(agent, 'model', []).known).map(agent => <option key={agent.agent_id} value={agent.agent_id}>{agentDisplayName(agent.agent_id, language)}</option>)}</select></label>
-    {agentEcosystem(value.agentId) === 'claude' ? <div className="trial-presets" role="group" aria-label={t('应用到哪些预设', 'Presets to change')}>{(['opus', 'sonnet', 'haiku'] as const).map(preset => <label key={preset}><input type="checkbox" checked={value.presets.includes(preset)} onChange={e => onChange({ ...value, presets: e.target.checked ? [...value.presets, preset] : value.presets.filter(p => p !== preset) })} /> {preset}</label>)}</div> : <p className="field-help">{agentEcosystem(value.agentId) === 'codex' ? t('将此路由设为默认模型；保留已有可用路由。', 'Use this route as the default model and retain existing allowed routes.') : t('将此路由加入可用路由。', 'Add this route to the allowed routes.')}</p>}
+  const usable = snapshot.agents.filter(agent => agent.context_id && agentEditorSeed(agent, 'model', []).known);
+  const agent = snapshot.agents.find(item => item.agent_id === value.agentId);
+  const selection = agent && agentModelStatus(agent)?.current_selection;
+  const current = (preset: 'opus' | 'sonnet' | 'haiku') => {
+    const choice = selection?.mode === 'claude_launcher' ? selection.preset_mappings[preset] : null;
+    if (choice?.kind === 'plan') return snapshot.plans.plans.find(plan => plan.agent_plan_id === choice.plan_id)?.desired.display_name ?? t('已删除的路由', 'A removed route');
+    return t('原生模型', 'Native model');
+  };
+  return <fieldset disabled={disabled} className="trial-agent-choice">
+    {usable.length > 1 ? <label className="field"><span className="field-label">Agent</span><select className="input" value={value.agentId} onChange={e => onChange({ ...value, agentId: e.target.value })}><option value="">{t('选择 Agent', 'Select an Agent')}</option>{usable.map(item => <option key={item.agent_id} value={item.agent_id}>{agentDisplayName(item.agent_id, language)}</option>)}</select></label>
+      : !usable.length && <p className="field-help">{t('还没有可以修改模型设置的 Agent。发布后可以到 Agent 页面接入。', 'No Agent with editable model settings yet. You can connect one from Agents after publishing.')}</p>}
+    {agentEcosystem(value.agentId) === 'claude' ? <div className="trial-presets" role="group" aria-label={t('应用到哪些预设', 'Presets to change')}>
+      <span className="trial-presets-title">{t(`${agentDisplayName(value.agentId, language)} 的模型预设`, `${agentDisplayName(value.agentId, language)} model presets`)}</span>
+      {(['opus', 'sonnet', 'haiku'] as const).map(preset => <label key={preset} className="trial-preset"><input type="checkbox" checked={value.presets.includes(preset)} onChange={e => onChange({ ...value, presets: e.target.checked ? [...value.presets, preset] : value.presets.filter(p => p !== preset) })} /><strong>{preset[0].toUpperCase() + preset.slice(1)}</strong><span>{t('现在：', 'Now: ')}{current(preset)}</span></label>)}
+    </div> : value.agentId && <p className="field-help">{agentDisplayName(value.agentId, language)} · {agentEcosystem(value.agentId) === 'codex' ? t('将此路由设为默认模型；保留已有可用路由。', 'Use this route as the default model and retain existing allowed routes.') : t('将此路由加入可用路由。', 'Add this route to the allowed routes.')}</p>}
     <p className="field-help">{t('只调整选中的模型路由。权限、工具审批和任务协作不变。', 'Only the selected model routing changes. Permissions, tool approval and task collaboration stay unchanged.')}</p>
   </fieldset>;
 }
 
 /** A published Plan survives every mapping failure and can be mapped here after reload. */
-export function TrialAgentMapping({ plan, initial, language, mutable, onOperation, onChanged, onOpenAgent, onOpenPerformance, onOpenSessions }: {
-  onOpenPerformance?(): void; onOpenSessions?(sessionId?: string): void;
+export function TrialAgentMapping({ plan, initial, language, mutable, onOperation, onChanged, onOpenAgent, onOpenPerformance, onOpenSessions, onConfirmed }: {
+  onOpenPerformance?(): void; onOpenSessions?(sessionId?: string): void; onConfirmed?(): void;
   plan: Plan; initial?: TrialMapping; language: 'zh' | 'en'; mutable: boolean;
   onOperation(operation: OperationReference): void; onChanged(): void; onOpenAgent?(id: string): void;
 }) {
@@ -60,6 +73,7 @@ export function TrialAgentMapping({ plan, initial, language, mutable, onOperatio
     finally { inFlight.current = false; }
   }
   useEffect(() => { void refresh(); }, []);
+  useEffect(() => { if (done !== null) onConfirmed?.(); }, [done]);
   useEffect(() => {
     if (!pending) return;
     const timer = window.setInterval(() => { if (!document.hidden) void refresh(); }, 2000);
@@ -103,13 +117,12 @@ export function TrialAgentMapping({ plan, initial, language, mutable, onOperatio
       setError(t('映射尚未确认。已发布路由会保留，请刷新结果或到 Agent 页面处理。', 'Mapping is unconfirmed. The published route is retained; refresh the result or inspect the Agent page.'));
     } finally { setBusy(false); }
   }
-  return <section className="trial-mapping"><h3>{t('路由已发布，接下来映射 Agent', 'Route published. Map an Agent next.')}</h3><p>{plan.desired.display_name} · {t('即使离开，也可从智能路由页面继续映射。', 'You can resume mapping from Routing after leaving this flow.')}</p>
+  return <section className="trial-mapping"><h3>{done ? t('路由已发布，Agent 已映射', 'Route published and Agent mapped') : t('路由已发布，接下来映射 Agent', 'Route published. Map an Agent next.')}</h3><p className="trial-mapping-note">{plan.desired.display_name}{!done && <> · {t('即使离开，也可从智能路由页面继续映射。', 'You can resume mapping from Routing after leaving this flow.')}</>}</p>
     {error && <p role="alert" className="callout warn">{error}</p>}
-    {done ? <p role="status" className="callout good">{mapping && <strong>{agentDisplayName(mapping.agentId, language)} · {mapping.presets.join(', ')} — </strong>}{t('映射已确认。回到 Agent 发起新会话，在会话路由时间线中观察试用结果。', 'Mapping confirmed. Start a new session in your Agent and inspect the routing timeline for trial results.')}</p> : snapshot && mapping && <TrialAgentChoice snapshot={snapshot} value={mapping} onChange={setMapping} language={language} disabled={busy || !!pending} />}
+    {done ? <p role="status" className="callout good"><span>{mapping && <strong>{agentDisplayName(mapping.agentId, language)} · {mapping.presets.join(', ')} — </strong>}{t('映射已确认。回到 Agent 发起新会话，在会话路由时间线中观察试用结果。', 'Mapping confirmed. Start a new session in your Agent and inspect the routing timeline for trial results.')}</span></p> : snapshot && mapping && <TrialAgentChoice snapshot={snapshot} value={mapping} onChange={setMapping} language={language} disabled={busy || !!pending} />}
     {preview && <AgentSettingsFeedback preview={preview} language={language} facet="model" defaultChoice={{ kind: 'plan', plan_id: plan.agent_plan_id }} disabled={busy || !!pending} onCheck={() => void apply()} />}
     {pending && <p role="status">{t('正在核实本次映射；刷新不会重复提交。', 'Verifying this mapping; refresh does not resubmit.')}</p>}
     {done !== null && <TrialSessionHandoff planId={plan.agent_plan_id} confirmedAt={done} language={language} onWatch={onOpenSessions} />}
-    {done && <div className="actions">{onOpenPerformance && <button className="btn" onClick={onOpenPerformance}>{t('查看模型表现', 'View model performance')}</button>}{onOpenSessions && <button className="btn" onClick={() => onOpenSessions()}>{t('查看会话时间线', 'View session timelines')}</button>}</div>}
-    <div className="actions"><button className="btn" disabled={busy} onClick={() => void refresh()}>{t('刷新结果', 'Refresh result')}</button>{!done && <button className="btn btn-primary" disabled={busy || !!pending || !mutable || !snapshot?.trusted_authority || !mapping?.agentId || (agentEcosystem(mapping.agentId) === 'claude' && !mapping.presets.length)} onClick={() => void apply()}>{t('检查并映射 Agent', 'Review and map Agent')}</button>}{mapping?.agentId && onOpenAgent && <button className="btn" onClick={() => onOpenAgent(mapping.agentId)}>{t('查看 Agent 配置', 'Inspect Agent settings')}</button>}</div>
+    <div className="actions">{done && onOpenPerformance && <button className="btn" onClick={onOpenPerformance}>{t('查看模型表现', 'View model performance')}</button>}{done && onOpenSessions && <button className="btn" onClick={() => onOpenSessions()}>{t('查看会话时间线', 'View session timelines')}</button>}<button className="btn btn-quiet" disabled={busy} onClick={() => void refresh()}>{t('刷新结果', 'Refresh result')}</button>{!done && <button className="btn btn-primary" disabled={busy || !!pending || !mutable || !snapshot?.trusted_authority || !mapping?.agentId || (agentEcosystem(mapping.agentId) === 'claude' && !mapping.presets.length)} onClick={() => void apply()}>{t('检查并映射 Agent', 'Review and map Agent')}</button>}{mapping?.agentId && onOpenAgent && <button className="btn btn-quiet" onClick={() => onOpenAgent(mapping.agentId)}>{t('查看 Agent 配置', 'Inspect Agent settings')}</button>}</div>
   </section>;
 }
