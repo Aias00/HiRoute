@@ -47,6 +47,8 @@ pub struct RoutingTimelineTurnV1 {
     pub selection: Option<BranchDecisionV1>,
     pub tool_continuations: u64,
     pub relays: Vec<RoutingTimelineRelayV1>,
+    #[serde(default)]
+    pub transitions: Vec<crate::AnalysisTransitionV1>,
     pub assessment_state: String,
     pub assessment: Option<PlanQualityAssessment>,
     pub competence_floor_millis: Option<u16>,

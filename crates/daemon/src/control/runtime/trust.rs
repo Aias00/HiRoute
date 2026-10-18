@@ -92,25 +92,15 @@ impl LocalControlAdapter {
         use hiroute_domain::*;
         let plan = AgentPlanId::parse(plan_id).map_err(|_| ControlReadError::NotFound)?;
         let stores = self.stores_lock().map_err(map_port)?;
-        let versions = if let Some(content_revision) = revision {
-            vec![
-                stores
-                    .control()
-                    .lookup_exact_plan_version(&PlanExecutionRef {
-                        plan_id: plan,
-                        content_revision,
-                    })
-                    .map_err(map_port)?,
-            ]
-        } else {
-            stores
-                .control()
-                .published_plan_versions(workspace)
-                .map_err(map_port)?
-                .into_iter()
-                .filter(|v| v.reference.plan_id == plan)
-                .collect()
-        };
+        let versions = stores
+            .control()
+            .published_plan_versions(workspace)
+            .map_err(|_| ControlReadError::Unavailable)?
+            .into_iter()
+            .filter(|v| {
+                v.reference.plan_id == plan
+                    && revision.is_none_or(|n| v.reference.content_revision == n)
+            });
         let mut bindings = std::collections::BTreeSet::new();
         for version in versions {
             match &version.configuration.strategy {

@@ -26,9 +26,14 @@ pub(super) fn hydrate(requests: &mut BTreeMap<String, Request>, facts: &[Fact]) 
             ExecutionFactV1::AttemptStarted {
                 ordinal,
                 request_model,
+                credential_ref,
+                key_id,
                 ..
             } => {
                 request.models.insert(*ordinal, request_model.clone());
+                request
+                    .credentials
+                    .insert(*ordinal, (credential_ref.clone(), key_id.clone()));
             }
             ExecutionFactV1::RequestFinished {
                 accepted_attempt_ordinal,
@@ -51,6 +56,7 @@ pub(super) fn hydrate(requests: &mut BTreeMap<String, Request>, facts: &[Fact]) 
 }
 
 pub(super) fn project(
+    session: &str,
     requests: &BTreeMap<String, Request>,
     facts: &[Fact],
     previous: Position,
@@ -69,6 +75,7 @@ pub(super) fn project(
     let mut covered = std::collections::BTreeSet::new();
     let mut result = Vec::new();
     let mut ordinals = BTreeMap::new();
+    let mut identities = BTreeMap::new();
     let mut finished = BTreeMap::new();
     for fact in facts {
         if let ExecutionFactV1::AgentTurnFinished { agent_turn_id, .. } = &fact.value {
@@ -111,7 +118,21 @@ pub(super) fn project(
         if first > last {
             return Err(ObservationV2Error::Unavailable);
         }
-        let members = &ordered[*first..=*last];
+        let opening = ordered[*first];
+        let closing = ordered[*last];
+        // Use the same endpoint/time rule as retained analysis. Timestamp ties
+        // outside the recorded endpoints remain unassigned in both readers.
+        let members: Vec<_> = ordered
+            .iter()
+            .copied()
+            .filter(|r| {
+                r.view.request_id == opening.view.request_id
+                    || r.view.request_id == closing.view.request_id
+                    || r.view.started_at_ms > opening.view.started_at_ms
+                        && r.view.started_at_ms < closing.view.started_at_ms
+            })
+            .collect();
+        let members = members.as_slice();
         if members
             .iter()
             .any(|r| covered.contains(r.view.request_id.as_str()))
@@ -128,6 +149,7 @@ pub(super) fn project(
             position.include(r.position);
         }
         let key = &members[0].view.request_id;
+        identities.insert(key.clone(), (*ordinal, fact.producer_epoch.clone()));
         if !position.newer_than(previous)
             && let Some(turn) = bases.get(key)
         {
@@ -344,6 +366,15 @@ pub(super) fn project(
             .flatten()
             .map(|(id, _)| id.clone())
             .collect();
+        turn.view.transitions = transitions::classify(
+            session,
+            &turn.view,
+            identities.get(&turn.view.turn_id),
+            index
+                .checked_sub(1)
+                .map(|i| (&result[i].view, identities.get(&result[i].view.turn_id))),
+            requests,
+        );
         turn.view.content_digest = CanonicalDigest::of(&turn.view)
             .map_err(|_| ObservationV2Error::Unavailable)?
             .to_string();
@@ -443,6 +474,7 @@ fn make_turn(members: &[&Request]) -> Result<Projected, ObservationV2Error> {
                 .filter(|r| held(r, LedgerReasonCodeV1::ContextHoldApplied))
                 .count() as u64,
             relays,
+            transitions: Vec::new(),
             assessment_state: "pending".into(),
             assessment: None,
             protected_turn_ids: Vec::new(),

@@ -3,6 +3,7 @@
 pub(crate) mod cache;
 mod projection;
 mod read;
+mod transitions;
 
 use super::{ObservationReaderContext, ObservationV2Error, QueryDeadline, identifier};
 use hiroute_domain::*;
@@ -43,6 +44,7 @@ struct Cursor {
 struct Fact {
     position: i64,
     event_id: String,
+    producer_epoch: String,
     request_id: String,
     value: ExecutionFactV1,
 }
@@ -56,6 +58,7 @@ struct Request {
     decision: Option<RouteDecisionFactV1>,
     candidate: Option<(String, Option<String>)>,
     models: BTreeMap<u32, String>,
+    credentials: BTreeMap<u32, (String, String)>,
     partial: bool,
     body_bytes: usize,
     request_bytes: usize,

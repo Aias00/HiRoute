@@ -91,7 +91,7 @@ impl LocalControlAdapter {
         }
         if descriptor.field_selector == "env.ANTHROPIC_AUTH_TOKEN" {
             let sources = self
-                .claude_api_point_sources()
+                .claude_api_point_sources(&catalog)
                 .map_err(|_| ControlReadError::SnapshotChanged)?;
             if hiroute_integrations::native_api_connection_points(sources)
                 .iter()

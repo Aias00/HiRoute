@@ -183,9 +183,9 @@ impl LocalControlAdapter {
                             .native_scope
                             .as_str()[7..]
                     ),
-                    connection_option_id: super::point_catalog::qualified_point(catalog, first)
+                    connection_option_id: super::point_catalog::qualified_point(&catalog, first)
                         .map(|(r, _)| r.option.connection_option_id),
-                    endpoint_profile_id: super::point_catalog::qualified_point(catalog, first)
+                    endpoint_profile_id: super::point_catalog::qualified_point(&catalog, first)
                         .map(|(r, _)| r.endpoint_profile.endpoint_profile_id),
                     target,
                     connection_ref: format!("connection-point/{}", &point.key_digest.as_str()[7..]),

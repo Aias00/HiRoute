@@ -14,6 +14,7 @@ export type TimelineTurn = {
   tool_continuations: number; relays: { request_id: string; from_model: string | null; to_model: string | null }[];
   assessment_state: string; assessment: { score: number; partial: boolean; target_from_ordinal: number; target_through_ordinal: number } | null;
   competence_floor_millis: number | null; protected_turn_ids: string[]; status: string; requests: TimelineRequest[];
+  transitions?: { kind: string; request_id: string; model: { native_model: string | null }; previous_model: { native_model: string | null } | null; completeness: string }[];
   cost_by_model: Cost[]; evidence_partial: boolean; content_digest: string;
 };
 type TimelinePage = { turns: TimelineTurn[]; watermark: string; complete: boolean };
@@ -91,6 +92,7 @@ export function RoutingTimeline({ session, language, active, refreshVersion, req
       <div className="routing-timeline-heading"><h4>{text('所选轮次', 'Selected turn')}</h4>{selectedTurn.plan_id && <button className="btn btn-quiet" onClick={() => onOpenPerformance(selectedTurn.plan_id!)}>{text('查看 Plan 模型表现', 'View Plan model performance')}</button>}</div>
       <p className="muted">{selectedTurn.tool_continuations} {text('次工具续轮', 'tool continuations')} · {selectedTurn.relays.length} {text('次请求内模型接力', 'model relays within requests')}{selectedTurn.reasoning_profile_id && ` · ${selectedTurn.reasoning_profile_id}`} · {text('状态', 'Status')}: {({ running: text('运行中', 'Running'), completed: text('完成', 'Completed'), failed: text('失败', 'Failed'), interrupted: text('中断', 'Interrupted') } as Record<string, string>)[selectedTurn.status] ?? text('未知', 'Unknown')}</p>
       {selectedTurn.assessment && <p className="muted">{text('这是阶段评分，覆盖轮次', 'This stage assessment covers turns')} {selectedTurn.assessment.target_from_ordinal}–{selectedTurn.assessment.target_through_ordinal}{text('。', '.')}</p>}
+      {(selectedTurn.transitions ?? []).filter(change => change.kind !== 'unchanged').map((change, index) => <p key={`transition-${index}`} className="field-help">{({ initial_selection: text('首次选择', 'Initial selection'), between_turn_change: text('跨轮模型切换', 'Between-turn model change'), continuation_boundary: text('续接边界', 'Continuation boundary'), within_request_fallback: text('请求内模型回退', 'Within-request fallback'), credential_relay: text('凭据接力', 'Credential relay'), reasoning_change: text('推理设置变化', 'Reasoning change'), unknown: text('切换证据尚不完整', 'Transition evidence incomplete') } as Record<string, string>)[change.kind] ?? text('切换类型未知', 'Unknown transition')}{change.previous_model?.native_model && ` · ${change.previous_model.native_model} → ${change.model.native_model ?? '?'}`}</p>)}
       {selectedTurn.relays.map((relay, index) => <p key={index}>{relay.from_model ?? '?'} → {relay.to_model ?? '?'}</p>)}
       <div className="routing-turn-requests">{selectedTurn.requests.map((request, index) => <button className={`routing-request${request.request_id === requestId ? ' selected' : ''}`} type="button" key={request.request_id} onClick={() => onSelectRequest(request)}>
         <strong>{text('请求', 'Request')} {index + 1} · {request.native_model ?? text('模型未记录', 'Model unknown')}</strong>

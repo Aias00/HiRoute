@@ -129,6 +129,7 @@ pub(super) fn read(
                 decision: None,
                 candidate: None,
                 models: BTreeMap::new(),
+                credentials: BTreeMap::new(),
                 partial: conflicted == Some(true),
                 body_bytes: request_bytes,
                 request_bytes,
@@ -137,7 +138,7 @@ pub(super) fn read(
             },
         );
     }
-    let mut statement = tx.prepare("SELECT e.rowid,e.request_id,e.event_id,CASE WHEN length(CAST(p.body_json AS BLOB))<=1048576 THEN json_extract(p.body_json,'$.fact') END,COALESCE(length(CAST(p.body_json AS BLOB)),0)>1048576
+    let mut statement = tx.prepare("SELECT e.rowid,e.request_id,e.event_id,CASE WHEN length(CAST(p.body_json AS BLOB))<=1048576 THEN json_extract(p.body_json,'$.fact') END,COALESCE(length(CAST(p.body_json AS BLOB)),0)>1048576,e.producer_epoch
         FROM execution_fact_events e LEFT JOIN observation_sensitive_payloads_v2 p ON p.id='fact:'||e.envelope_digest
         WHERE e.workspace_id=?1 AND e.session_id=?2 AND e.rowid<=?3 AND (?4 IS NULL OR e.request_id IN(SELECT value FROM json_each(?4))) ORDER BY e.rowid LIMIT 50001")?;
     let rows = statement.query_map(
@@ -149,12 +150,13 @@ pub(super) fn read(
                 r.get::<_, String>(2)?,
                 r.get::<_, Option<String>>(3)?,
                 r.get::<_, bool>(4)?,
+                r.get::<_, String>(5)?,
             ))
         },
     )?;
     let mut facts = Vec::new();
     for (index, row) in rows.enumerate() {
-        let (position, request_id, event_id, value, oversized) = row?;
+        let (position, request_id, event_id, value, oversized, producer_epoch) = row?;
         if index >= 50_000 {
             return Err(ObservationV2Error::ScopeTooLarge);
         }
@@ -179,6 +181,7 @@ pub(super) fn read(
         facts.push(Fact {
             position,
             event_id,
+            producer_epoch,
             request_id,
             value: serde_json::from_str(&value).map_err(|_| ObservationV2Error::Unavailable)?,
         });

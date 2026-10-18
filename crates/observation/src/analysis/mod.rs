@@ -15,6 +15,8 @@ mod prices;
 mod projection;
 mod read;
 mod routing;
+pub(crate) use routing::transitions as routing_transitions;
+pub(crate) use views::Row as RoutingRow;
 mod schema;
 mod scope;
 mod selection;

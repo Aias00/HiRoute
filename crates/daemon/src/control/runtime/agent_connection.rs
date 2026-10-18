@@ -343,6 +343,8 @@ impl AgentConnectionControlPort for LocalControlAdapter {
             context_id: context_id.clone(),
             model: Default::default(),
             collaboration: Default::default(),
+            management_skill: Default::default(),
+            native_target: None,
             restore_native_model: None,
             protected_native_model_ids: Vec::new(),
             access_token: Default::default(),

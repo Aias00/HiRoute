@@ -121,6 +121,7 @@ impl Snapshot {
             .min()
             .unwrap_or(i64::MAX);
         let turns = projection::project(
+            session,
             &self.requests,
             &self.facts,
             previous,
