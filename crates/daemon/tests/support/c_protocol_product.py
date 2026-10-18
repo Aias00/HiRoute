@@ -243,7 +243,7 @@ def execute_and_inspect(product, endpoint, saved):
     strict = read({**query, 'include_routing_observations': False})
     assert 'schema' not in strict and 'routing_observations' not in strict
     assert strict['samples'], 'strict nested-shape regression selected no stage samples'
-    assert all('routing_observation' not in (sample.get('selection') or {}) and 'protocol' not in (sample.get('selection') or {}) for sample in strict['samples'])
+    assert all('routing_observation' not in (sample.get('selection') or {}) and 'decision_protocol' not in (sample.get('selection') or {}) for sample in strict['samples'])
     endpoint.c_score, endpoint.c_applicability = 1.0, 0.75
     print(json.dumps({'scenario': 'c-real-gateway-to-retained-product-observations', 'state': 'green',
                       'routing_calls': 2, 'requested': 1, 'protection_opportunities': 1, 'suppressed': 1}), flush=True)

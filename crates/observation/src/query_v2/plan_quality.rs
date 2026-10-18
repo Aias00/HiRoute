@@ -238,7 +238,7 @@ impl LocalObservationStore {
             for row in &mut rows {
                 if let Some(selection) = row.selection.as_mut() {
                     selection.routing_observation = None;
-                    selection.protocol = None;
+                    selection.decision_protocol = None;
                 }
             }
         }
