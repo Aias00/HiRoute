@@ -345,11 +345,14 @@ pub(super) fn validate_stream_coordinates(
     Ok(())
 }
 
+// Finish only visits its request/direction/fork before sorting the small result.
+// The workspace/content-ID ordering index otherwise makes some planner estimates
+// scan all retained content while holding the ingestion writer.
 const ACKNOWLEDGED_BLOBS_SQL: &str =
-    "SELECT content_id, content_blob_digest FROM content_instances_v2
+    "SELECT content_id, content_blob_digest FROM content_instances_v2 INDEXED BY content_instances_v2_request
      WHERE workspace_id=?1 AND request_id=?2 AND direction=?3 AND fork_id=?4 AND state='complete'
      ORDER BY content_id";
-const MISSING_BLOBS_SQL: &str = "SELECT content_id, content_blob_digest FROM content_instances_v2
+const MISSING_BLOBS_SQL: &str = "SELECT content_id, content_blob_digest FROM content_instances_v2 INDEXED BY content_instances_v2_request
      WHERE workspace_id=?1 AND request_id=?2 AND direction=?3 AND fork_id=?4 AND state!='complete'
      ORDER BY content_id";
 

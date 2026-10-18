@@ -71,6 +71,10 @@ Idle physical blob collection also merges covering identities on a separate read
 connection. Only selected unreferenced candidates take the writer, and current
 references and paths are rechecked before deleting a file. The batch bound stays
 in the candidate merge, including a large orphan backlog.
+Terminal content acknowledgement and missing-blob checks use the existing request
+index to select their request/direction/fork before sorting content IDs. An ordering
+index must not make these capture writes scan unrelated retained history while
+analysis waits for the writer.
 
 The released `search` intent retains occurrence pagination and its V2 response
 shape. It is a distinct supported interface, not the Desktop session-list query.
