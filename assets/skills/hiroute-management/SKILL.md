@@ -26,7 +26,7 @@ this Skill. Recover the existing service using status/doctor/bounded logs; never
 
 ## Contracts and result capture
 
-Use offline --help and schema show --command-id COMMAND --include-schema. Planned handlers are
+Use family/leaf --help and schema show --command-id COMMAND --include-schema. Planned handlers are
 unavailable; get IDs/revisions from options/Preview.
 
 Save full stdout JSON, separate stderr and actual exit privately. Exit 2 means invalid input;
