@@ -104,7 +104,9 @@ try {
       assert.equal(await evaluate(client,`document.activeElement.dataset.turnId`),'request-2');
       await choose(5);await evaluate(client,'appendTrialTurns(1);true');await waitFor(client,`document.querySelectorAll('.routing-overview-turn').length===41`);
       assert.equal(await evaluate(client,`document.querySelector('.routing-overview-turn[aria-pressed=true]').dataset.overviewTurn`),'request-5');await waitFor(client,range);
-      await evaluate(client,`document.querySelector('.routing-lanes-card').scrollIntoView({block:'center'});true`);await shot(`overview-${name}`);assert.ok(await evaluate(client,fits));
+      await evaluate(client,`document.querySelector('.routing-overview').scrollIntoView({block:'center'});true`);
+      await waitFor(client,`(()=>{const e=document.querySelector('.routing-overview'),r=e.getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight&&e.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2));})()`);
+      await shot(`overview-${name}`);assert.ok(await evaluate(client,fits));
       await client.send('Emulation.setEmulatedMedia',{features:[]});
     });
   }
