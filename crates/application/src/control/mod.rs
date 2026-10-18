@@ -3,7 +3,7 @@
 //! These ports expose facts and durable records. Command validation, Preview digests, authority
 //! decisions, and machine-envelope semantics stay in [`crate::ApplicationService`].
 
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use hiroute_application_api::{
     AgentConnectSpecV1, AgentConnectionStatusRequestV1, AgentConnectionStatusV1,
@@ -109,6 +109,15 @@ pub trait ControlStatePort: Send + Sync {
         _workspace: &WorkspaceId,
         _plan_id: &str,
     ) -> Result<crate::trust::context::TrustContextV1, ControlReadError> {
+        Err(ControlReadError::Unavailable)
+    }
+    fn trust_primary_bindings(
+        &self,
+        _workspace: &WorkspaceId,
+        _plan_id: &str,
+        _revision: Option<u64>,
+        _branch_id: Option<&str>,
+    ) -> Result<Vec<String>, ControlReadError> {
         Err(ControlReadError::Unavailable)
     }
     fn trust_task_population(

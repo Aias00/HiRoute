@@ -1,3 +1,4 @@
+import { TrustCost } from './TrustCost';
 import { ContentExcerpt } from '../Sessions';
 import { agentDisplayName } from '../agents/ecosystems';
 import { useEffect, useState } from 'react';
@@ -64,7 +65,7 @@ export function TrustEvidencePanel({ planId, revision, fromMs, toMs, active, lan
         {report.branches.map(branch => <div key={branch.branch_id}><strong>{trustLevelLabel(branch.threshold_millis, language)} · {branch.branch_id}</strong><p>{t(`全部历史：${branch.full_history.complete}/${branch.full_history.executed} 完整评分；升档证据：${branch.upward_cohort.complete}/${branch.upward_cohort.executed}，来自 ${branch.upward_cohort.sessions} 个评分会话。`, `Full history: ${branch.full_history.complete}/${branch.full_history.executed} complete; upward cohort: ${branch.upward_cohort.complete}/${branch.upward_cohort.executed}, from ${branch.upward_cohort.sessions} scored sessions.`)}</p>{branchSuggestion(branch)}</div>)}
         <p className="field-help">{t('这是基于你历史记录的估算，不是预测。建议不会自动修改或发布路由。', 'Estimate from your history, not a prediction. Suggestions do not automatically change or publish routing.')}</p>
       </Disclosure>
-      <p className="field-help">{t('成本对比暂不可用：比较基准尚未接入。', 'Cost comparison is unavailable: the comparison basis is not available yet.')}</p>
+      <TrustCost value={report.cost} language={language} />
       <p className="field-help">{t(`证据来自 ${report.session_total} 个会话。`, `Evidence comes from ${report.session_total} sessions.`)}</p>
       {report.sessions.length > 0 && <Disclosure label={t('贡献证据的会话', 'Contributing sessions')} language={language}><div className="native-list">{report.sessions.slice(0, sessionLimit).map(session => <button className="list-row" key={session.session_id} disabled={!onOpenSession} onClick={() => onOpenSession?.(session.session_id)}><span className="row-main"><ContentExcerpt session={session.session_id} language={language} fallback={t('会话记录', 'Session')} limit={64} /></span><span>{session.stages} {t('个阶段', 'stages')}</span></button>)}</div>{sessionLimit < report.sessions.length && <button className="btn" onClick={() => setSessionLimit(n => n + 12)}>{t('查看更多', 'Show more')}</button>}</Disclosure>}
       {onDivision && report.branches.length > 0 && <Disclosure label={t('尝试任务分工', 'Explore task division')} language={language}><p className="field-help">{t('可以随时查看分工草稿；打开草稿不代表已有证据支持扩大试用范围。', 'You can review division drafts at any time. Opening a draft does not establish evidence for broader use.')}</p>{report.branches.map(branch => <button className="btn" key={branch.branch_id} onClick={() => onDivision(branch.branch_id)}>{t('查看分工草稿', 'Review division draft')} · {branch.branch_id}</button>)}</Disclosure>}

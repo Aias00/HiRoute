@@ -7,6 +7,7 @@ mod catalog;
 mod content;
 mod facts;
 mod plan_quality;
+mod trust_cost;
 pub(crate) use plan_quality::routing_reason;
 mod relation;
 mod requests;

@@ -1207,6 +1207,15 @@ impl ControlStatePort for LocalControlAdapter {
     ) -> Result<hiroute_application::trust::context::TrustContextV1, ControlReadError> {
         self.read_trust_context(workspace, plan_id)
     }
+    fn trust_primary_bindings(
+        &self,
+        workspace: &WorkspaceId,
+        plan_id: &str,
+        revision: Option<u64>,
+        branch_id: Option<&str>,
+    ) -> Result<Vec<String>, ControlReadError> {
+        self.read_trust_primary_bindings(workspace, plan_id, revision, branch_id)
+    }
     fn trust_task_population(
         &self,
         workspace: &WorkspaceId,

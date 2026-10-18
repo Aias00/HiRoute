@@ -1,4 +1,5 @@
 mod trust;
+mod trust_cost;
 #[cfg(test)]
 mod trust_tests;
 mod v2;

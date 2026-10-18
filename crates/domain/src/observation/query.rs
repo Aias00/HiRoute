@@ -272,6 +272,17 @@ pub trait ObservationQueryPort: Send + Sync {
         Err(ObservationQueryError::Unavailable)
     }
 
+    fn observed_trust_cost(
+        &self,
+        _reader: &super::ObservationReaderContext,
+        _scope: &super::TrustCostScopeV1,
+        _reference: &super::ApiEquivalentPriceV1,
+        _prices: &[super::ApiEquivalentPriceV1],
+        _now_ms: i64,
+    ) -> Result<super::ApiEquivalentValueReportV1, ObservationQueryError> {
+        Err(ObservationQueryError::Unavailable)
+    }
+
     fn observed_api_equivalent_value(
         &self,
         _reader: &super::ObservationReaderContext,

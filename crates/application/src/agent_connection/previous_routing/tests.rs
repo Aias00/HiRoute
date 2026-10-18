@@ -20,6 +20,8 @@ fn fixture(id: &str, previous: Option<&str>, opus: &str, sonnet: &str) -> Node {
                 settings: settings.clone(),
             },
             collaboration: Default::default(),
+            management_skill: Default::default(),
+            native_target: None,
             restore_native_model: None,
             protected_native_model_ids: vec![],
             access_token: AgentAccessTokenIntentV1::Regenerate,

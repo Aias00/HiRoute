@@ -145,3 +145,15 @@ pub enum TrustSuggestionV1 {
     ChangeRegularModel,
     ExploreDivision,
 }
+
+/// Application-admitted estimate scope; never changes general value or settlement semantics.
+#[derive(Clone, Debug)]
+pub struct TrustCostScopeV1 {
+    pub plan_id: String,
+    pub revision: Option<u64>,
+    pub branch_id: Option<String>,
+    pub group: crate::ExecutionGroupV1,
+    pub from_ms: i64,
+    pub to_ms: i64,
+    pub currency: String,
+}

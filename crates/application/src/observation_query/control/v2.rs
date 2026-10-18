@@ -1,4 +1,4 @@
-mod analysis;
+pub(super) mod analysis;
 mod api_equivalent;
 use super::*;
 use hiroute_application_api::{ObservationReadIntentV2, ObservationReadRequestV2};

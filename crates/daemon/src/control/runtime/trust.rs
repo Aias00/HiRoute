@@ -82,6 +82,65 @@ impl LocalControlAdapter {
             generation,
         })
     }
+    pub(super) fn read_trust_primary_bindings(
+        &self,
+        workspace: &WorkspaceId,
+        plan_id: &str,
+        revision: Option<u64>,
+        branch_id: Option<&str>,
+    ) -> Result<Vec<String>, ControlReadError> {
+        use hiroute_domain::*;
+        let plan = AgentPlanId::parse(plan_id).map_err(|_| ControlReadError::NotFound)?;
+        let stores = self.stores_lock().map_err(map_port)?;
+        let versions = if let Some(content_revision) = revision {
+            vec![
+                stores
+                    .control()
+                    .lookup_exact_plan_version(&PlanExecutionRef {
+                        plan_id: plan,
+                        content_revision,
+                    })
+                    .map_err(map_port)?,
+            ]
+        } else {
+            stores
+                .control()
+                .published_plan_versions(workspace)
+                .map_err(map_port)?
+                .into_iter()
+                .filter(|v| v.reference.plan_id == plan)
+                .collect()
+        };
+        let mut bindings = std::collections::BTreeSet::new();
+        for version in versions {
+            match &version.configuration.strategy {
+                AgentPlanStrategyV2::SmartSaving { primary, .. }
+                    if branch_id.is_none_or(|b| b == SMART_SAVING_SCOPE_ID) =>
+                {
+                    bindings.extend(primary.iter().map(|c| c.binding_id.clone()))
+                }
+                AgentPlanStrategyV2::Branches { routing } => {
+                    for branch in routing
+                        .branches
+                        .iter()
+                        .filter(|b| branch_id.is_none_or(|id| id == b.id))
+                    {
+                        if !branch.candidates.is_empty() && branch.primary_candidates.is_empty() {
+                            return Ok(Vec::new());
+                        }
+                        bindings.extend(
+                            branch
+                                .primary_candidates
+                                .iter()
+                                .map(|c| c.binding_id.clone()),
+                        );
+                    }
+                }
+                _ => return Ok(Vec::new()),
+            }
+        }
+        Ok(bindings.into_iter().collect())
+    }
     pub(super) fn read_trust_runs(
         &self,
         workspace: &WorkspaceId,

@@ -273,6 +273,14 @@ impl ObservationControl {
         }
         let mut report =
             crate::trust::report::report(query, &context, &population, &runs, &tasks.tasks);
+        report.cost = self.trust_cost(
+            reader,
+            query,
+            revision,
+            population.from_ms,
+            population.to_ms,
+            now,
+        );
         let mut targets = Vec::new();
         if report.branches.iter().any(|branch| {
             matches!(
