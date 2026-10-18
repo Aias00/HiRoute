@@ -657,6 +657,7 @@ mod tests {
                 "planned-manifest.v1.json",
                 "prepare-discovered-model-connection-request.v1.schema.json",
                 "publication-checkpoint-change.v1.schema.json",
+                "routing-timeline-selection.v1.schema.json",
                 "session-list-query.v1.schema.json",
                 "session-lookup.v1.schema.json",
                 "setup-apply-request.v1.schema.json",
