@@ -47,9 +47,11 @@ try {
   for (const [lang, theme, width, height] of matrix) {
     const name = `${lang}-${theme}-${width}`;
     const load = query => open(query,width,height,theme,lang);
+    const visible = i => `(()=>{const p=document.querySelector('.routing-lanes-scroll'),v=p.getBoundingClientRect(),l=p.querySelector('.routing-lane-label').getBoundingClientRect().width,r=p.querySelector('[data-turn-id="request-${i}"]').getBoundingClientRect();return r.left>=v.left+l-1&&r.right<=v.right+1;})()`;
     const choose = async i => {
       await evaluate(client,`document.querySelector('[data-overview-turn="request-${i}"]').dispatchEvent(new MouseEvent('click',{bubbles:true}));true`);
       await waitFor(client,`document.querySelector('.routing-detail-head > strong')?.textContent==='T${i}'`);
+      await waitFor(client,visible(i));
     };
     const fits = `document.documentElement.scrollWidth<=innerWidth+1 && [...document.querySelectorAll('.routing-overview,.routing-turn-detail,.trust-protection')].filter(e=>e.getClientRects().length).every(e=>e.scrollWidth<=e.clientWidth+1)`;
     const range = `(()=>{const p=document.querySelector('.routing-lanes-scroll'),v=p.getBoundingClientRect(),l=p.querySelector('.routing-lane-label').getBoundingClientRect().width,es=[...p.querySelectorAll('[data-turn-id]')],is=es.map((e,i)=>({i,r:e.getBoundingClientRect()})).filter(({r})=>r.right>v.left+l&&r.left<v.right).map(({i})=>i),w=document.querySelector('.routing-overview-window');return is.length&&Math.abs(parseFloat(w.getAttribute('x'))*es.length/100-is[0])<.01&&Math.abs(parseFloat(w.getAttribute('width'))*es.length/100-(is.at(-1)-is[0]+1))<.01;})()`;
@@ -94,7 +96,7 @@ try {
       await client.send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
       await evaluate(client,`document.querySelector('[data-overview-turn="request-5"]').focus();true`);
       for(const type of ['keyDown','keyUp'])await client.send('Input.dispatchKeyEvent',{type,key:'Enter',code:'Enter'});
-      await waitFor(client,`document.querySelector('.routing-detail-head > strong')?.textContent==='T5'`);await waitFor(client,range);
+      await waitFor(client,`document.querySelector('.routing-detail-head > strong')?.textContent==='T5'`);await waitFor(client,visible(5));await waitFor(client,range);
       await client.send('Emulation.setDeviceMetricsOverride',{width:width===755?1200:755,height:height===600?813:600,deviceScaleFactor:1,mobile:false});await waitFor(client,range);assert.ok(await evaluate(client,fits));
       await client.send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});await waitFor(client,range);
       await evaluate(client,`document.querySelector('[data-turn-id="request-1"]').focus();true`);
