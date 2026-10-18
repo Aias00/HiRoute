@@ -227,6 +227,28 @@ User-facing Desktop text, website guides, README files and user documentation SH
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/140#issuecomment-6236473660
 
+### Requirement: The trust view distinguishes released historical protection
+
+The Plan model-performance protection card MUST show how many historical low-score protections were released because the previous problem was fixed or unrelated and Regular continued. This count describes retained routing decisions and remains separate from the trust report's protected-stage count. A numeric count is permitted only when routing-observation coverage is complete and its Plan, published-revision selection, effective time interval and branch scopes match the protection card's trust report. Model and score filters must not relabel a Plan-wide count as a filtered-model count. Cohorts may be aggregated only within the matching branch scopes. A complete matching recorded cohort with no releases shows zero. Missing observations, incomplete coverage or any unproven scope alignment MUST show an unavailable value and a plain-language reason; unknown evidence MUST NOT become zero. The observation disclosure remains available with its own scope when a count cannot be placed beside protections. The release explanation uses capability language and MUST NOT display internal protocol labels, digests or question identifiers. No route, assessment, suggestion threshold or stored record changes through this view.
+
+#### Scenario: Aligned complete evidence
+
+- **WHEN** a trust report and complete routing observations match Plan, revision, time and branches and matching cohorts contain five released protections
+- **THEN** the protection card shows five releases separately from its protected-stage count and explains that Regular continued after the earlier problem stopped mattering
+
+#### Scenario: Incomplete or mismatched scope
+
+- **WHEN** observations have partial coverage or a different Plan, revision, interval or branch scope
+- **THEN** the protection card shows an unavailable value with the corresponding reason, while the observation disclosure retains its actual scope
+
+#### Scenario: Missing and zero evidence differ
+
+- **WHEN** there are no recorded historical-protection observations, or a complete matching recorded cohort has zero releases
+- **THEN** missing evidence is unavailable with a reason, whereas the complete matching recorded cohort shows zero
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/140#issuecomment-6253018308
+
 ## Implementation references
 
 - [Two-group policy](../../../crates/gateway/src/core_runtime/classification/group_policy.rs)

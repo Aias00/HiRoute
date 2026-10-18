@@ -481,6 +481,55 @@ For a model and reasoning configuration in scope, the model performance view SHA
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/140#issuecomment-6236472910
 
+### Requirement: Routing timelines explain historical protection at the opening selection
+
+The session routing-timeline read and public CLI follow output MUST expose the opening selection's recorded historical-protection outcome, previous stage score and competence floor when available, and applicability probability when valid. The result distinguishes applied protection, released protection, protection retained because judgment was unavailable, and protection not needed. Unconsidered or unrecorded evidence remains explicit; it MUST NOT imply a release or zero probability. The lane marks released protection distinctly from an ordinary simple-task selection. Selected-turn details explain the current task's simple probability and threshold, the previous stage score and floor, and whether the earlier problem still matters, ending with the actual recorded group. The previous score comes from the opening decision, not the selected turn's later assessment. Continuations inherit the opening selection and are not additional protection decisions. Existing selection, read and follow meanings remain unchanged. This view does not alter routing, stored facts or assessment semantics. Labels use plain capability names and exclude internal protocol labels, digests and question identifiers.
+
+#### Scenario: Protection applied
+
+- **WHEN** an opening selection records simple probability 0.94 at threshold 0.90, previous score 0.30 below floor 0.50, applicability probability 0.99 and applied protection
+- **THEN** the timeline marks protection and explains that the problem still matters and this turn went to Primary
+
+#### Scenario: Protection released
+
+- **WHEN** the same simple and low-score inputs have applicability probability 0.05 and recorded released protection
+- **THEN** the lane marks released protection and explains that the problem no longer matters and Regular continued
+
+#### Scenario: Judgment unavailable
+
+- **WHEN** the record retains protection because applicability judgment was unavailable
+- **THEN** the timeline explains the unavailable judgment and retained Primary protection without inventing a probability
+
+#### Scenario: No protection and missing evidence differ
+
+- **WHEN** a record says protection was not needed, or historical-protection evidence is absent or unconsidered
+- **THEN** the view distinguishes those states and never calls missing evidence released protection
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/140#issuecomment-6253018980
+
+### Requirement: Long routing timelines provide a navigable overview
+
+Above the routing lanes, session detail MUST provide a compact overview with one chronological mark per retained agent turn. Marks use the same Regular and Primary colors as the lanes and identify recorded low scores or failures, protection, and released protection. An outline shows the visible lane interval and follows scrolling, resizing and newly received turns. Activating a mark scrolls its turn into the lane viewport and selects it without changing routing or calling a model. The overview stays within the supported small window and preserves chronological keyboard access through the lanes; it is not the sole accessible path to a turn. Unknown groups and unavailable evidence remain distinct. Existing live-arrival handling, explicit-selection retention and reduced-motion preferences still apply.
+
+#### Scenario: Forty-turn overview
+
+- **WHEN** a session has forty retained Regular and Primary turns with low-score, failure, protection and release evidence
+- **THEN** forty chronological marks reflect that evidence and the visible-interval outline matches the lanes
+
+#### Scenario: Navigate and resize
+
+- **WHEN** a user activates an offscreen mark and resizes to the smallest supported window
+- **THEN** the selected turn becomes visible, details match it, the outline follows the viewport and the page has no horizontal overflow
+
+#### Scenario: Keyboard and live append
+
+- **WHEN** turns arrive while the user navigates lane controls by keyboard
+- **THEN** chronological focus and live-follow or explicit-selection behavior remain available and the overview adds matching marks
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/140#issuecomment-6253019758
+
 ## Implementation references
 
 - [Native identity resolver](../../../crates/gateway/src/context_hold/identity.rs) and
