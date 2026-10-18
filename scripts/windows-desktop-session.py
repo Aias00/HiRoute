@@ -344,10 +344,15 @@ def ui_action(run, request, shell, pid, element=None, observed=None):
     return observed
 
 
-def codex_gateway(document, profile):
+def codex_config_path(home, profile):
     if profile not in (None, 'hiroute'):
         raise ValueError('Only the product-owned Codex profile is accepted')
-    selected = document.get('profiles', {}).get(profile, {}) if profile else document
+    return home / '.codex' / ('hiroute.config.toml' if profile else 'config.toml')
+
+
+def codex_gateway(document, profile):
+    codex_config_path(Path.home(), profile)
+    selected = document
     target = document.get('model_providers', {}).get('hiroute', {}).get('base_url', '')
     address = urlsplit(target)
     if (selected.get('model_provider') != 'hiroute' or address.scheme != 'http'
@@ -374,10 +379,10 @@ def codex_call(run, request, helper):
     if any(environment.get(name) for name in ('CODEX_HOME', 'OPENAI_API_KEY', 'OPENAI_BASE_URL', 'CODEX_API_KEY')):
         raise ValueError('Native acceptance requires saved configuration without auth or routing environment overrides')
     import tomllib  # This optional native scenario requires the configured Python 3.11+ runtime.
-    config = helper.plain(Path.home() / '.codex/config.toml')
+    profile = request.get('codex_profile')
+    config = helper.plain(codex_config_path(Path.home(), profile))
     if config.stat().st_size > 4 * 1024 * 1024:
         raise ValueError('Native configuration exceeds evidence bound')
-    profile = request.get('codex_profile')
     endpoint = codex_gateway(tomllib.loads(config.read_text(encoding='utf-8-sig')), profile)
     binary = helper.plain(Path(environment['HIROUTE_WORKER_CODEX_BINARY']))
     checksum = helper.digest(binary)
@@ -511,7 +516,7 @@ def execute(request, run, product, pm, helper, activity, manifest, root):
         return dict(native_entry='read-only input desktop inspection', state=desktop_state())
     if action == 'native-files':
         files = {}
-        for relative in ('.codex/config.toml', '.claude/settings.json',
+        for relative in ('.codex/config.toml', '.codex/hiroute.config.toml', '.claude/settings.json',
                          '.agents/skills/hiroute-collaboration', '.claude/skills/hiroute-collaboration',
                          '.agents/skills/hiroute-management', '.claude/skills/hiroute-management'):
             path = helper.plain(Path.home() / relative)

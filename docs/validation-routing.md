@@ -189,7 +189,9 @@ event to that foreground window. `codex-call` runs the configured real Codex CLI
 with a fixed arithmetic-tool prompt, a read-only sandbox and no approvals. It
 requires saved configuration selecting the local HiRoute Gateway and rejects
 authentication/routing environment overrides. Use `--codex-profile hiroute` for
-the product-owned profile, or omit it for the default configuration. This optional
+the product-owned standalone `hiroute.config.toml`, or omit it for the default
+`config.toml`. The native inventory records both files independently; root config
+preservation is expected when using the standalone profile. This optional
 scenario needs Python 3.11+ and verifies the completed tool output and nonce-bearing
 answer; process exit alone is insufficient. Preserve its actual client image hash,
 product revision and native output. It does not alter sandbox configuration or

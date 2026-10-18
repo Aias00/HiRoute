@@ -179,6 +179,18 @@ class Runner(unittest.TestCase):
             with self.subTest(changes=changes,profile=profile), self.assertRaises(ValueError):
                 desktop.codex_gateway({**document,**changes},profile)
 
+    def test_codex_profile_call_reads_the_standalone_native_file_and_preserves_root(self):
+        original = self.root / '.codex/config.toml'
+        original.parent.mkdir()
+        original.write_bytes(b'model_provider = "openai"\n')
+        selected = desktop.codex_config_path(self.root, 'hiroute')
+        self.assertEqual(selected, original.with_name('hiroute.config.toml'))
+        self.assertEqual(desktop.codex_config_path(self.root, None), original)
+        document = {'model_provider':'hiroute', 'model_providers':{'hiroute':{'base_url':'http://127.0.0.1:8317/v1'}}}
+        self.assertEqual(desktop.codex_gateway(document, 'hiroute'), 'http://127.0.0.1:8317/v1')
+        self.assertEqual(original.read_bytes(), b'model_provider = "openai"\n')
+        self.assertFalse(selected.exists())
+
     def test_codex_real_call_requires_completed_turn_tool_and_exact_nonce(self):
         expected = 'HiRoute-Windows-test:42'
         events = [{'type':'item.completed','item':{'type':'command_execution','status':'completed','exit_code':0,'aggregated_output':'42\n'}},
