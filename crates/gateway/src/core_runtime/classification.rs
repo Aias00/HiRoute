@@ -428,7 +428,7 @@ impl ProductionGatewayRuntime {
                 Ok(ClassificationOutcome {
                     diagnostic_failure: None,
                     decision: BranchDecisionV1 {
-                        decision_protocol: None,
+                        decision_protocol: Some(hiroute_domain::DecisionProtocolV1::LocalRules),
                         routing_observation,
                         policy: None,
                         competence_trigger: None,

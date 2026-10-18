@@ -19,7 +19,7 @@ use super::{
 /// through `validate_persisted_contract`; they are never accepted by live ingestion.
 pub const EXECUTION_FACT_SCHEMA_V2: &str = "hiroute.observation.product-execution-envelope/v2";
 pub const EXECUTION_FACT_PORT_DIGEST_V2: &str =
-    "sha256:96dd8ab8015702bb151143337b94381defffa169fa3dcdf8f0a44446c052224c";
+    "sha256:7ff01a649de96b1f62e069b872b23609d64a3734b5ad42c337324d3eb7cfc9f2";
 
 /// Gateway profile digests are canonical except on its explicit degraded-observation path.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -242,7 +242,12 @@ pub enum ComplexityReasonCodeV1 {
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum DecisionProtocolV1 { SystemOneLegacy, SystemOneC, CustomExtensionV1, LocalRules }
+pub enum DecisionProtocolV1 {
+    SystemOneLegacy,
+    SystemOneC,
+    CustomExtensionV1,
+    LocalRules,
+}
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]

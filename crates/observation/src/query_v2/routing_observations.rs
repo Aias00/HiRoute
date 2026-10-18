@@ -106,8 +106,14 @@ pub(super) fn summarize(
         }
         match fact.decision_protocol {
             Some(DecisionProtocolV1::SystemOneC) => {}
-            Some(_) => { result.known_non_c_decisions += 1; continue; }
-            None => { result.legacy_or_unknown_decisions += 1; continue; }
+            Some(_) => {
+                result.known_non_c_decisions += 1;
+                continue;
+            }
+            None => {
+                result.legacy_or_unknown_decisions += 1;
+                continue;
+            }
         }
         let Some(record) = fact.routing_observation else {
             result.legacy_or_unknown_decisions += 1;

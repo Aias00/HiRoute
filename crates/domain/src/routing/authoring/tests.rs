@@ -213,7 +213,7 @@ fn retired_follow_up_field_can_be_omitted_without_rewriting_legacy_values() {
 }
 
 #[test]
-fn c_rollback_requires_destination_review_and_copied_history_does_not_depend_on_old_rows() {
+fn protocol_transitions_use_choices_without_client_hashes_and_same_protocol_edits_need_none() {
     use crate::*;
     let mut draft = editor();
     draft.mode = PlanEditorMode::SmartSaving;
@@ -236,82 +236,93 @@ fn c_rollback_requires_destination_review_and_copied_history_does_not_depend_on_
             },
         }),
     };
-    let p = NativeProtocolV1::default();
-    p.stock_assessment(&mut draft.smart.judgment);
+    let old = draft.effective().unwrap();
+    draft.smart.native_protocol = Some(NativeProtocolV1::default());
     draft.smart.judgment.degree.simple_threshold_millis = 913;
     draft.smart.judgment.competence.floor_millis = 612;
-    draft.smart.native_protocol = Some(p.clone());
-    draft.smart.assessment_review = Some(std::collections::BTreeMap::from([(
-        SMART_SAVING_SCOPE_ID.into(),
-        AssessmentReviewV1::new(
-            Some(&p),
-            &draft.smart.judgment,
-            AssessmentAdoptionV1::Stock,
-            None,
-        )
-        .unwrap(),
-    )]));
-    let before = draft.effective().unwrap();
-    draft.smart.native_protocol = None;
+    let (_, pending) =
+        preview_assessment_transition(&draft, Some(&old), None, &[], &Default::default()).unwrap();
     assert!(
-        draft.effective().is_err(),
-        "C review cannot approve the legacy wrapper"
+        matches!(pending.require_acknowledged(), Err(NativeProtocolError::Review {scope, ..}) if scope == SMART_SAVING_SCOPE_ID)
     );
-    draft.smart.assessment_review = None;
-    let unreviewed = draft.effective().unwrap();
-    assert_eq!(
-        validate_assessment_transition(&unreviewed, Some(&before), None, &[]),
-        Err(NativeProtocolError::Review)
-    );
-    let source = AssessmentRollbackOptionV1 {
-        source: HistoricalAssessmentSourceV1 {
-            plan: PlanExecutionRef {
-                workspace_id: WorkspaceId::default(),
-                plan_id: AgentPlanId::parse("plan/transition").unwrap(),
-                content_revision: 1,
-                content_digest: CanonicalDigest::of_bytes(b"historical source"),
-            },
-            scope: SMART_SAVING_SCOPE_ID.into(),
-        },
-        instructions: "A retained pre-C custom assessment".into(),
-        criteria: ["Failed".into(), "Partial".into(), "Delivered".into()],
-    };
-    draft.smart.judgment.competence.instructions = source.instructions.clone();
-    draft.smart.judgment.competence.criteria = source.criteria.clone();
-    let review = AssessmentReviewV1::new(
-        None,
-        &draft.smart.judgment,
-        AssessmentAdoptionV1::Historical,
-        Some(source.source.clone()),
-    )
-    .unwrap();
-    draft.smart.assessment_review = Some(std::collections::BTreeMap::from([(
+    let choice = std::collections::BTreeMap::from([(
         SMART_SAVING_SCOPE_ID.into(),
-        review,
-    )]));
-    let restored = draft.effective().unwrap();
+        AssessmentChoiceV1 {
+            method: AssessmentAdoptionV1::Stock,
+            source: None,
+        },
+    )]);
+    let (adopted, ready) =
+        preview_assessment_transition(&draft, Some(&old), None, &[], &choice).unwrap();
+    ready.require_acknowledged().unwrap();
     assert_eq!(
-        validate_assessment_transition(&restored, Some(&before), None, &[]),
-        Err(NativeProtocolError::HistoricalUnavailable)
+        ready.scopes[0].assessment,
+        composed_assessment(
+            adopted.smart.native_protocol.as_ref(),
+            &adopted.smart.judgment
+        )
     );
-    validate_assessment_transition(&restored, Some(&before), None, &[source]).unwrap();
-    validate_assessment_transition(&restored, Some(&restored), None, &[]).unwrap();
-    assert_eq!(draft.smart.judgment.degree.simple_threshold_millis, 913);
-    assert_eq!(draft.smart.judgment.competence.floor_millis, 612);
-    draft
+    assert_eq!(adopted.smart.judgment.degree.simple_threshold_millis, 913);
+    assert_eq!(adopted.smart.judgment.competence.floor_millis, 612);
+    assert!(
+        serde_json::to_value(&adopted).unwrap()["smart"]
+            .get("assessment_review")
+            .is_none()
+    );
+    let before = adopted.effective().unwrap();
+    let mut later = adopted.clone();
+    later
         .smart
         .judgment
         .competence
         .instructions
-        .push_str(" edited");
-    assert!(draft.effective().is_err());
-    // A later edit may discard obsolete provenance after rollback has completed.
-    // The same removal must never bypass the C -> legacy transition itself.
-    draft.smart.assessment_review = None;
-    let later = draft.effective().unwrap();
-    validate_assessment_transition(&later, Some(&restored), None, &[]).unwrap();
+        .push_str(" custom change");
+    let (_, same) =
+        preview_assessment_transition(&later, Some(&before), None, &[], &Default::default())
+            .unwrap();
+    assert!(same.scopes.is_empty());
+    later.smart.native_protocol = None;
+    let (_, rollback) =
+        preview_assessment_transition(&later, Some(&before), None, &[], &Default::default())
+            .unwrap();
+    assert!(rollback.require_acknowledged().is_err());
+    let (rolled_back, ready) =
+        preview_assessment_transition(&later, Some(&before), None, &[], &choice).unwrap();
+    ready.require_acknowledged().unwrap();
     assert_eq!(
-        validate_assessment_transition(&later, Some(&before), None, &[]),
-        Err(NativeProtocolError::Review)
+        rolled_back.smart.judgment.competence.instructions,
+        JudgmentSettingsV1::default().competence.instructions
+    );
+    let restored = rolled_back.effective().unwrap();
+    let mut edit = rolled_back;
+    edit.smart
+        .judgment
+        .competence
+        .instructions
+        .push_str(" ordinary edit");
+    assert!(
+        preview_assessment_transition(&edit, Some(&restored), None, &[], &Default::default())
+            .unwrap()
+            .1
+            .scopes
+            .is_empty()
+    );
+    let invalid = std::collections::BTreeMap::from([(
+        SMART_SAVING_SCOPE_ID.into(),
+        AssessmentChoiceV1 {
+            method: AssessmentAdoptionV1::Historical,
+            source: Some(HistoricalAssessmentSourceV1 {
+                plan: PlanExecutionRef {
+                    workspace_id: WorkspaceId::default(),
+                    plan_id: AgentPlanId::parse("plan/transition").unwrap(),
+                    content_revision: 1,
+                    content_digest: CanonicalDigest::of_bytes(b"missing"),
+                },
+                scope: SMART_SAVING_SCOPE_ID.into(),
+            }),
+        },
+    )]);
+    assert!(
+        matches!(preview_assessment_transition(&later, Some(&before), None, &[], &invalid), Err(NativeProtocolError::HistoricalUnavailable {scope}) if scope == SMART_SAVING_SCOPE_ID)
     );
 }

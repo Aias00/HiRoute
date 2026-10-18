@@ -263,7 +263,6 @@ fn late_usage_after_request_finish_is_queryable_and_does_not_poison_the_fact_str
         .observed_facts(
             &reader,
             &ObservationFactsQueryV2 {
-
                 request_id: fixture.request.clone(),
                 limit: 20,
                 cursor: None,

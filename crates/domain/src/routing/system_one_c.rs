@@ -176,8 +176,17 @@ impl AssessmentReviewV1 {
     ) -> Result<(), NativeProtocolError> {
         let mut expected = Self::new(protocol, judgment, self.method, self.source.clone())?;
         expected.from_protocol = self.from_protocol.clone();
-        if *self != expected {
-            return Err(NativeProtocolError::Review { scope: "assessment".into(), reason: "invalid published transition provenance".into() });
+        if self
+            .from_protocol
+            .as_deref()
+            .is_some_and(|p| p != SYSTEM_ONE_LEGACY && p != SYSTEM_ONE_C_V1)
+            || self.from_protocol.as_deref() == Some(self.protocol.as_str())
+            || *self != expected
+        {
+            return Err(NativeProtocolError::Review {
+                scope: "assessment".into(),
+                reason: "invalid published transition provenance".into(),
+            });
         }
         if (self.method == AssessmentAdoptionV1::Historical) != self.source.is_some()
             || self.source.as_ref().is_some_and(|s| {
@@ -186,7 +195,10 @@ impl AssessmentReviewV1 {
                     || !super::strategy::valid_reference(&s.scope)
             })
         {
-            return Err(NativeProtocolError::Review { scope: "assessment".into(), reason: "invalid published transition provenance".into() });
+            return Err(NativeProtocolError::Review {
+                scope: "assessment".into(),
+                reason: "invalid published transition provenance".into(),
+            });
         }
         if self.method == AssessmentAdoptionV1::Stock {
             let mut stock = JudgmentSettingsV1::default();
@@ -196,7 +208,10 @@ impl AssessmentReviewV1 {
             if judgment.competence.instructions != stock.competence.instructions
                 || judgment.competence.criteria != stock.competence.criteria
             {
-                return Err(NativeProtocolError::Review { scope: "assessment".into(), reason: "invalid published transition provenance".into() });
+                return Err(NativeProtocolError::Review {
+                    scope: "assessment".into(),
+                    reason: "invalid published transition provenance".into(),
+                });
             }
         }
         Ok(())
@@ -434,8 +449,6 @@ impl FrozenNativeProtocolV1 {
         });
         policy
     }
-
-
 }
 
 pub fn branch_decision_definition(
@@ -458,9 +471,9 @@ pub fn c_v1_branch_decision_definition(
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum NativeProtocolError {
     #[error(
-        "selected historical assessment is stale, unavailable, or does not match the selected scope"
+        "assessment scope {scope}: selected historical assessment is stale, unavailable, or mismatched"
     )]
-    HistoricalUnavailable,
+    HistoricalUnavailable { scope: String },
     #[error("native protocol semantic version is unsupported")]
     Unsupported,
     #[error("native protocol fixed bundle is unsupported; select a supported bundle")]
@@ -490,7 +503,7 @@ impl NativeProtocolError {
             Self::FixedContent => "native.protocol.fixed_content_invalid",
             Self::HistoryCap => "native.protocol.history_cap_invalid",
             Self::Review { .. } => "native.assessment.review_required",
-            Self::HistoricalUnavailable => "native.assessment.source_unavailable",
+            Self::HistoricalUnavailable { .. } => "native.assessment.source_unavailable",
             Self::StateReference(_) => "native.protocol.state_reference_invalid",
             Self::DigestMismatch => "native.protocol.digest_mismatch",
             Self::ContentMismatch => "native.protocol.content_mismatch",

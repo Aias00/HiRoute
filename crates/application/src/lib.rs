@@ -588,62 +588,7 @@ impl ApplicationService {
     }
 
     fn test_classifier_decision(&self, request: LocalControlRequestV2) -> MachineEnvelopeV2<Value> {
-        if request
-            .protected_grant
-            .as_ref()
-            .is_some_and(|grant| grant.principal_kind.is_collaboration())
-            || (request.protected_grant.is_none()
-                && !request
-                    .principal
-                    .capabilities
-                    .iter()
-                    .any(|c| c == "same-os-user:query-preview"))
-        {
-            return failed(ErrorCode::CapabilityDenied, request.request_id);
-        }
-        let Some(ports) = self.ports.as_ref() else {
-            return failed(ErrorCode::DaemonUnavailable, request.request_id);
-        };
-        if request.payload.get("schema").and_then(Value::as_str)
-            == Some(hiroute_application_api::CLASSIFIER_DECISION_TEST_SCHEMA_V2)
-        {
-            return self.test_classifier_decision_c(request);
-        }
-        let Ok(test) = serde_json::from_value::<
-            hiroute_application_api::ClassifierDecisionTestRequestV1,
-        >(request.payload) else {
-            return failed(ErrorCode::InvalidArguments, request.request_id);
-        };
-        if !test.validate() {
-            return failed(ErrorCode::InvalidArguments, request.request_id);
-        }
-        let digest = match CanonicalDigest::of(&test) {
-            Ok(digest) => digest,
-            Err(_) => return failed(ErrorCode::InvalidArguments, request.request_id),
-        };
-        let revisions = match ports.control.snapshot(&WorkspaceId::default()) {
-            Ok(snapshot) => snapshot.revisions,
-            Err(error) => return failed(map_control_error(error), request.request_id),
-        };
-        if let Some(grant) = request.protected_grant.as_ref()
-            && let Err(error) = ports.control.validate_protected_capability(
-                &grant.capability,
-                &WorkspaceId::default(),
-                grant.principal_kind,
-                "TestClassifierDecision",
-                &digest,
-                &revisions,
-            )
-        {
-            return failed(map_control_error(error), request.request_id);
-        }
-        let Some(diagnostic) = ports.classifier_diagnostic.as_deref() else {
-            return failed(ErrorCode::GatewayUnavailable, request.request_id);
-        };
-        match diagnostic.test_classifier_decision(&test) {
-            Ok(result) => succeeded(result, request.request_id),
-            Err(_) => failed(ErrorCode::GatewayUnavailable, request.request_id),
-        }
+        self.test_classifier_current(request)
     }
 
     fn observation(

@@ -36,12 +36,13 @@ test('explicit saved-service probes bind the standard and maximum branch shapes'
   const service = { id: 'saved-fixture', revision: 7 };
   const standard = await stockProbe(service, 'standard');
   const maximum = await stockProbe(service, 'max_branches');
-  assert.equal(standard.service_revision, 7);
-  assert.equal(standard.protocol.decision.kind, 'ordinal');
-  assert.equal(maximum.protocol.decision.options.length, 16);
-  assert.equal(maximum.protocol.decision.options.filter(o => o.refinement).length + 3, 19);
-  assert.equal(Object.keys(maximum.protocol.scopes).length, 16);
-  assert.notEqual(standard.protocol.digest, maximum.protocol.digest);
+  assert.equal(standard.target.service_revision, 7);
+  assert.equal(standard.target.protocol.decision.kind, 'ordinal');
+  assert.equal(maximum.target.protocol.decision.options.length, 16);
+  assert.equal(maximum.target.protocol.decision.options.filter(o => o.refinement).length + 3, 19);
+  assert.equal(Object.keys(maximum.target.protocol.scopes).length, 16);
+  assert.ok(Object.values(maximum.target.protocol.scopes).every(s => s.standard === 'custom')); 
+  assert.notEqual(standard.target.protocol.digest, maximum.target.protocol.digest);
   assert.equal(nativeReferenceIssue(true, 'Use state.visible_conversation'), true);
   assert.equal(nativeReferenceIssue(false, 'Use state.assessment_stage'), true);
 });
@@ -49,8 +50,8 @@ test('explicit saved-service probes bind the standard and maximum branch shapes'
 test('native category v1 composition is pinned independently of current defaults', async () => {
   const { default: categoryV1 } = await import('../../../crates/domain/src/routing/fixtures/native_category_v1.json', { with: { type: 'json' } });
   const p = await stockProbe({ id: 'fixture', revision: 1 }, 'max_branches');
-  assert.equal(p.protocol.decision.instructions, categoryV1.category_prefix + 'probe-1' + categoryV1.category_suffix);
-  const option = p.protocol.decision.options[0];
+  assert.equal(p.target.protocol.decision.instructions, categoryV1.category_prefix + 'probe-1' + categoryV1.category_suffix);
+  const option = p.target.protocol.decision.options[0];
   assert.ok(option.refinement.instructions.startsWith(categoryV1.degree_prefix));
   assert.ok(option.refinement.instructions.includes(categoryV1.degree_suffix));
 });

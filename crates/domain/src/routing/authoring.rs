@@ -288,7 +288,7 @@ impl AgentPlanAuthoringV2 {
                     complex_keywords,
                     judgment,
                     native_protocol,
-                        ..
+                    ..
                 },
             ) => {
                 if !judgment.validate() {

@@ -63,6 +63,13 @@ impl ExecutionFactEnvelopeV1 {
         }
         self.trust.validate()?;
         self.fact.validate()?;
+        if current
+            && matches!(&self.fact, ExecutionFactV1::RouteDecision(route)
+            if route.complexity.as_ref().is_some_and(|d| d.decision_protocol.is_none()
+                || (d.decision_protocol != Some(DecisionProtocolV1::SystemOneC) && d.routing_observation.is_some())))
+        {
+            return Err(ExecutionFactError::InvalidFact);
+        }
         if !current
             && matches!(&self.fact, ExecutionFactV1::RouteDecision(route)
                 if route.complexity.as_ref().is_some_and(|decision| decision.routing_observation.is_some()))

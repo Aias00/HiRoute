@@ -230,46 +230,46 @@ Source SPEC comments:
 
 ### Requirement: Native protocol adoption and rollback require effective-scope review
 
-Native C MUST be an explicit route-level selection for smart-saving or custom
-branches, never a connection/branch-judgment setting or global creation default.
-Absent native_protocol means legacy. New optional protocol/review/detail members
-MUST default and skip omission, preserving supported legacy drafts, authoring,
-sealed identities and bytes without a bulk rewrite. C nested content requires
-matching current consumers; unsupported content fails explicitly rather than
-silently becoming legacy. Existing released admission/recovery adapters remain.
+Historical problem applicability MUST remain an explicit route-level native
+selection for smart-saving or custom branches in this increment. It is neither a
+connection/branch-judgment setting nor the global creation default. Absent native
+protocol means legacy. Supported old drafts, authoring, publications and canonical
+identities remain unchanged through their owning released adapters; no bulk rewrite
+or global relaxation of strict decoding is permitted. Freeze actual fixed/effective
+questions, criteria, thresholds, context cap and content identity, never a preset
+name resolved to later binary defaults. Unsupported/corrupt/mismatched content
+fails explicitly while preserving the active/last-known-good publication.
 
-Every effective assessment scope MUST explicitly adopt stock C suffix/three
-criteria or retain/edit a custom standard and review the full composed question.
-Bind review to destination protocol and composition digest outside the C object.
-Inherited branches may share their plan-default scope; independent whole-setting
-overrides retain stable branch identity. Adoption changes only selected assessment
-text/criteria and preserves degree/category text, numeric thresholds, candidate
-order, unselected overrides and parked modes. Reject known incompatible history
-field references with the affected scope/field. Save/publish freezes actual
-effective text, thresholds, content identity and context cap, not a preset name.
-Custom-extension/local effective modes omit parked native semantics; incompatible
-effective C objects fail rather than changing those codecs. Restoring native mode
-restores parked edits for review.
+Protocol transition acknowledgment MUST belong to Preview/Apply, outside editable
+configuration. Preview lists each transitioning effective assessment scope with
+server-composed destination text, its digest and available stock, reviewed-custom
+or retained historical choices. New applicability scopes require acknowledgment.
+Inherited branches share the effective default scope; complete independent
+overrides retain stable IDs. Choices contain only method and pinned source, never
+a caller-computed digest. The server copies only selected assessment text/criteria,
+refreshes the final Preview, and preserves thresholds, degree/category settings,
+candidates and unrelated/parked edits. Apply binds the complete final choice,
+scope/protocol/content and observed revisions to the accepted server Preview.
+Changing any of these invalidates confirmation. Missing/invalid choices identify
+the affected scope and reason. Save/publication never tests a provider implicitly.
 
-Rollback MUST also select and review each effective scope under the legacy wrapper.
-A protocol toggle or C review cannot approve the C suffix under that wrapper.
-Choices are: restore the latest retained published non-C assessment from the same
-Plan before adoption, matched by stable scope; explicitly adopt the legacy default;
-or retain/edit custom text and review its new composition. Historical selection
-pins the exact source PlanExecutionRef/digest and scope in Preview/Apply; missing,
-reclaimed or mismatched sources fail stale rather than substituting. A route born
-in C, a new/removed scope or reclaimed history may have no source; disable that
-choice with explanation while keeping default/custom choices. Copy only accepted
-assessment instructions/criteria into a new current revision. No permanent hold,
-backup promise, whole-Plan restoration or runtime dependency on the source row is
-introduced. An already-published copied review remains usable after reclamation.
+The chosen method, exact source and server-composed digest MUST be sealed with the
+published revision and inspectable through existing Plan reads. Later editor state
+carries no review record or review-removal control. Same-protocol ordinary edits
+require no protocol re-review while retaining normal publication confirmation.
+Known incompatible state references and dangling stock-C suffixes remain explicit
+Preview diagnostics. A bare C-to-legacy toggle, including C stock text without
+state-path literals, cannot acknowledge rollback. Draft/mode changes cannot bypass
+a required transition. Stock adoption never silently follows string equality.
 
-After rollback has completed, later ordinary legacy edits MAY explicitly remove
-retained assessment-review provenance without changing judgment text or thresholds.
-A present review still MUST match the current protocol and complete composition;
-removal MUST NOT bypass any scope's adoption/rollback transition review obligation.
-Desktop exposes removal for a retained published legacy review and omits an empty
-review map after its last scope is removed.
+Rollback MUST offer retained pre-C assessment restoration, legacy defaults, or
+reviewed custom text per scope. Historical selection binds an exact validated Plan
+reference/scope and copies only its instructions/criteria. A missing, stale or
+reclaimed source identifies the scope and fails rather than substituting content.
+A new/removed scope can lack history; the remaining explicit alternatives stay
+available. Introduce no permanent hold, new backup promise, whole-Plan restore or
+runtime dependency on the source. Old observations and published execution retain
+their meanings. This is configuration rollback, not old-binary downgrade support.
 
 #### Scenario: Edit after completed rollback
 

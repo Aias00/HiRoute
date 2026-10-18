@@ -70,6 +70,7 @@ fn routing_stats_use_all_decisions_and_preserve_safe_evidence_after_content_dele
             unreachable!()
         };
         let c = decision.complexity.as_mut().unwrap();
+        c.decision_protocol = Some(DecisionProtocolV1::SystemOneC);
         c.routing_observation = Some(observation(variant));
         c.decision_source = if variant == 6 {
             ComplexityDecisionSourceV1::Inherited
@@ -112,7 +113,6 @@ fn routing_stats_use_all_decisions_and_preserve_safe_evidence_after_content_dele
         WriterCycleOutcome::Ack(_)
     ));
     let mut q = query(Some(17));
-    q.include_routing_observations = true;
     q.model_configuration_id = Some("does-not-match".into());
     q.limit = 1;
     let page = store
@@ -144,18 +144,18 @@ fn routing_stats_use_all_decisions_and_preserve_safe_evidence_after_content_dele
         request_id: fixture.request.clone(),
         limit: 1,
         cursor: None,
-
     };
     let facts = store.observed_facts(&reader(), &fq, 5000).unwrap();
     assert!(facts.facts[0].routing_observation.is_some());
     fq.cursor = facts.next_cursor;
-    fq.include_routing_observations = false;
     assert!(matches!(
-        store.observed_facts(&reader(), &fq, 5000),
+        store.observed_facts(&reader().with_legacy_query_v2(), &fq, 5000),
         Err(crate::query_v2::ObservationV2Error::Stale)
     ));
     fq.cursor = None;
-    let old = store.observed_facts(&reader(), &fq, 5000).unwrap();
+    let old = store
+        .observed_facts(&reader().with_legacy_query_v2(), &fq, 5000)
+        .unwrap();
     assert!(
         serde_json::to_value(&old.facts[0])
             .unwrap()
@@ -251,7 +251,7 @@ fn impossible_applicability_combinations_are_rejected() {
 }
 
 #[test]
-fn known_plan_identity_without_c_metadata_keeps_mixed_revision_rates_partial() {
+fn known_current_non_c_protocol_keeps_mixed_revision_rates_complete() {
     let directory = tempfile::tempdir().unwrap();
     let store = open_store(directory.path());
     let fixture = Fixture::new("c-mixed-retained-revisions");
@@ -269,7 +269,13 @@ fn known_plan_identity_without_c_metadata_keeps_mixed_revision_rates_partial() {
         let ExecutionFactV1::RouteDecision(decision) = &mut fact else {
             unreachable!()
         };
-        decision.complexity.as_mut().unwrap().routing_observation = is_c.then(|| observation(3));
+        let complexity = decision.complexity.as_mut().unwrap();
+        complexity.decision_protocol = Some(if is_c {
+            DecisionProtocolV1::SystemOneC
+        } else {
+            DecisionProtocolV1::SystemOneLegacy
+        });
+        complexity.routing_observation = is_c.then(|| observation(3));
         let verdict = offer_fact(&writer, &channel, request.fact(sequence, fact, 1000));
         assert!(
             matches!(verdict, WriterCycleOutcome::Ack(_)),
@@ -277,7 +283,6 @@ fn known_plan_identity_without_c_metadata_keeps_mixed_revision_rates_partial() {
         );
     }
     let mut q = query(None);
-    q.include_routing_observations = true;
     let report = store
         .observed_plan_quality_samples(&reader(), &q, 5000)
         .unwrap()
@@ -288,8 +293,9 @@ fn known_plan_identity_without_c_metadata_keeps_mixed_revision_rates_partial() {
         report.unknown_scope_decisions, 0,
         "both decisions have known Plan identity"
     );
-    assert_eq!(report.legacy_or_unknown_decisions, 1);
-    assert_eq!(report.coverage, "partial");
+    assert_eq!(report.known_non_c_decisions, 1);
+    assert_eq!(report.legacy_or_unknown_decisions, 0);
+    assert_eq!(report.coverage, "complete");
     assert_eq!(report.cohorts.len(), 1);
     let c = &report.cohorts[0].counts;
     assert_eq!(
@@ -301,7 +307,7 @@ fn known_plan_identity_without_c_metadata_keeps_mixed_revision_rates_partial() {
         ),
         (1, 1, 1, 1)
     );
-    assert_eq!(c.suppressed_per_opportunity, None);
-    assert_eq!(c.unavailable_per_requested, None);
-    assert_eq!(c.suppressed_per_c_decision, None);
+    assert_eq!(c.suppressed_per_opportunity, Some(1.0));
+    assert_eq!(c.unavailable_per_requested, Some(0.0));
+    assert_eq!(c.suppressed_per_c_decision, Some(1.0));
 }

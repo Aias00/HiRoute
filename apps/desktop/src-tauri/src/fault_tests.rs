@@ -63,7 +63,7 @@ async fn independent_change(session: &mut Session, key: String) -> String {
         .unwrap();
     editor.purpose = "Independently updated purpose".into();
     let change = PlanContentChangeV2 {
-            assessment_choices: Default::default(),
+        assessment_choices: Default::default(),
         schema: PLAN_CONTENT_CHANGE_SCHEMA_V2.into(),
         target: PlanContentTargetV2::Update {
             plan_id: current.agent_plan_id,

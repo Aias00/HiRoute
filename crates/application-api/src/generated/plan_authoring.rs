@@ -6,6 +6,29 @@ fn object(required: &[&str], properties: Value) -> Value {
 fn reference(name: &str) -> Value {
     json!({"$ref":format!("#/$defs/{name}")})
 }
+pub(super) fn classifier_definition() -> Value {
+    let auth = object(
+        &["name", "value_secret_ref"],
+        json!({"name":{"type":"string","minLength":1,"maxLength":128},"value_secret_ref":{"type":"string","minLength":1,"maxLength":256}}),
+    );
+    let endpoint = json!({"type":"string","maxLength":2048});
+    let timeout = json!({"type":"integer","minimum":1,"maximum":3600000});
+    let service = object(
+        &["id", "revision", "name", "connection"],
+        json!({
+            "id":{"type":"string","maxLength":128},"revision":{"type":"integer","minimum":1},"name":{"type":"string","maxLength":128},
+            "connection":{"oneOf":[
+                object(&["kind","provider","model","endpoint","timeout_ms","auth_header"],json!({"kind":{"const":"system_one"},"provider":{"type":"string","maxLength":128},"model":{"type":"string","maxLength":256},"endpoint":endpoint,"timeout_ms":timeout,"auth_header":auth})),
+                object(&["kind","endpoint","timeout_ms"],json!({"kind":{"const":"custom"},"endpoint":endpoint,"timeout_ms":timeout,"auth_header":{"oneOf":[{"type":"null"},auth]}}))
+            ]}
+        }),
+    );
+    json!({"oneOf":[
+        object(&["kind"], json!({"kind":{"const":"local_rules"}})),
+        object(&["kind","service"],json!({"kind":{"const":"decision_service"},"service":service}))
+    ]})
+}
+
 fn definitions() -> Value {
     let selection = object(
         &["binding_id"],
@@ -31,26 +54,7 @@ fn definitions() -> Value {
         "context_window_tokens":{"type":"integer","minimum":1,"maximum":9223372036854775807u64},
         "maximum_attempts":{"type":"integer","minimum":1,"maximum":64},"request_timeout_ms":{"type":"integer","minimum":1000,"maximum":3600000},"attempt_timeout_ms":{"type":"integer","minimum":1000,"maximum":3600000}}),
     );
-    let auth = object(
-        &["name", "value_secret_ref"],
-        json!({"name":{"type":"string","minLength":1,"maxLength":128},"value_secret_ref":{"type":"string","minLength":1,"maxLength":256}}),
-    );
-    let endpoint = json!({"type":"string","maxLength":2048});
-    let timeout = json!({"type":"integer","minimum":1,"maximum":3600000});
-    let service = object(
-        &["id", "revision", "name", "connection"],
-        json!({
-            "id":{"type":"string","maxLength":128},"revision":{"type":"integer","minimum":1},"name":{"type":"string","maxLength":128},
-            "connection":{"oneOf":[
-                object(&["kind","provider","model","endpoint","timeout_ms","auth_header"],json!({"kind":{"const":"system_one"},"provider":{"type":"string","maxLength":128},"model":{"type":"string","maxLength":256},"endpoint":endpoint,"timeout_ms":timeout,"auth_header":auth})),
-                object(&["kind","endpoint","timeout_ms"],json!({"kind":{"const":"custom"},"endpoint":endpoint,"timeout_ms":timeout,"auth_header":{"oneOf":[{"type":"null"},auth]}}))
-            ]}
-        }),
-    );
-    let classifier = json!({"oneOf":[
-        object(&["kind"], json!({"kind":{"const":"local_rules"}})),
-        object(&["kind","service"],json!({"kind":{"const":"decision_service"},"service":service}))
-    ]});
+    let classifier = classifier_definition();
     let prompt = json!({"type":"string"});
     let threshold = json!({"type":"integer","minimum":0,"maximum":1000});
     let judgment = object(
@@ -74,11 +78,11 @@ fn definitions() -> Value {
         }),
     );
     let native = super::native_protocol::authoring();
-    let reviews = super::native_protocol::reviews();
+    let choices = super::native_protocol::choices();
     let routing = object(
         &["classifier", "branches", "default_branch_id", "judgment"],
         json!({
-            "native_protocol":native,"assessment_review":reviews,"classifier":classifier,"branches":{"type":"array","maxItems":16,"items":branch},"default_branch_id":{"type":"string","maxLength":128},"judgment":reference("judgment"),"reselect_on_user_message":{"type":"boolean","deprecated":true,"description":"Compatibility-only no-op. Follow-ups always prefer a valid held candidate within the newly selected group."}
+            "native_protocol":native,"classifier":classifier,"branches":{"type":"array","maxItems":16,"items":branch},"default_branch_id":{"type":"string","maxLength":128},"judgment":reference("judgment"),"reselect_on_user_message":{"type":"boolean","deprecated":true,"description":"Compatibility-only no-op. Follow-ups always prefer a valid held candidate within the newly selected group."}
         }),
     );
     let smart = object(
@@ -89,7 +93,7 @@ fn definitions() -> Value {
             "classifier",
             "complex_keywords",
         ],
-        json!({"native_protocol":native,"assessment_review":reviews,"economy":reference("candidates"),"primary":reference("candidates"),"judgment":reference("judgment"),"reselect_on_user_message":{"type":"boolean","deprecated":true,"description":"Compatibility-only no-op. Follow-ups always prefer a valid held candidate within the newly selected group."},"classifier":classifier,"complex_keywords":{"type":"array","maxItems":64,"items":{"type":"string","maxLength":64}}}),
+        json!({"native_protocol":native,"economy":reference("candidates"),"primary":reference("candidates"),"judgment":reference("judgment"),"reselect_on_user_message":{"type":"boolean","deprecated":true,"description":"Compatibility-only no-op. Follow-ups always prefer a valid held candidate within the newly selected group."},"classifier":classifier,"complex_keywords":{"type":"array","maxItems":64,"items":{"type":"string","maxLength":64}}}),
     );
     let free = object(
         &["candidates", "primary", "primary_fallback"],
@@ -125,7 +129,7 @@ fn definitions() -> Value {
         json!({"schema":{"const":"hiroute.plan-content-change/v2"},"target":{"oneOf":[
         object(&["intent","creation_key"],json!({"intent":{"const":"create"},"creation_key":{"type":"string","minLength":1,"maxLength":128}})),
         object(&["intent","plan_id","expected_head_revision"],json!({"intent":{"const":"update"},"plan_id":{"type":"string","minLength":1},"expected_head_revision":{"type":"integer","minimum":1}}))]},
-        "editor":reference("editor"),"consumed_draft":{"oneOf":[{"type":"null"},object(&["draft_id","revision"],json!({"draft_id":{"type":"string","minLength":1},"revision":{"type":"integer","minimum":1}}))]}}),
+        "editor":reference("editor"),"assessment_choices":choices,"consumed_draft":{"oneOf":[{"type":"null"},object(&["draft_id","revision"],json!({"draft_id":{"type":"string","minLength":1},"revision":{"type":"integer","minimum":1}}))]}}),
     );
     let lifecycle = object(
         &["schema", "plan_id", "expected_head_revision", "status"],

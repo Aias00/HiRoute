@@ -16,11 +16,17 @@ fn stock_questions_and_composition_are_the_public_frozen_c_full() {
     );
     let review = AssessmentReviewV1::new(Some(&p), &j, AssessmentAdoptionV1::Stock, None).unwrap();
     review.validate(Some(&p), &j).unwrap();
-    assert_eq!(review.validate(None, &j), Err(NativeProtocolError::Review));
+    assert!(matches!(
+        review.validate(None, &j),
+        Err(NativeProtocolError::Review { .. })
+    ));
     j.competence.instructions.push_str(" changed");
     assert_eq!(
         review.validate(Some(&p), &j),
-        Err(NativeProtocolError::Review)
+        Err(NativeProtocolError::Review {
+            scope: "assessment".into(),
+            reason: "invalid published transition provenance".into()
+        })
     );
 }
 
@@ -100,7 +106,6 @@ fn legacy_omission_and_rubric_digest_remain_byte_stable() {
             .is_none()
     );
     assert!(editor.smart.native_protocol.is_none());
-    assert!(editor.smart.assessment_review.is_none());
     let j = JudgmentSettingsV1::default();
     assert_eq!(
         j.execution_policy("old").criteria_digest,
@@ -137,8 +142,8 @@ fn categorical_stock_wording_is_not_the_stock_experimental_question_shape() {
     )
     .unwrap();
     let before = serde_json::to_vec(&frozen).unwrap();
-    // Preserve the existing frozen provenance and digest; qualify the actual request.
-    assert_eq!(frozen.scopes["writing"].standard, "stock");
+    // The frozen value is the actual shape; no runtime relabeling is needed.
+    assert_eq!(frozen.scopes["writing"].standard, "custom");
     assert_eq!(
         crate::RoutingObservationV1::not_dispatched(&frozen, "writing").standard,
         "custom"

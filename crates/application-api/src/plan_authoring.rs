@@ -304,8 +304,6 @@ pub enum CodexClientCapabilityPreviewV1 {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanEditorOptionsRequestV1 {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub assessment_review_plan: Option<PublishedPlanCapabilityRequestV1>,
     /// Opt in so released strict response readers keep their original field set.
     #[serde(default)]
     pub include_unavailable: bool,
@@ -327,8 +325,6 @@ pub struct PlanEditorOptionsRequestV1 {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanEditorOptionsV1 {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub assessment_sources: Option<Vec<AssessmentRollbackOptionV1>>,
     /// Present only when opted-in explanations are bounded to the first page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unavailable_candidate_count: Option<usize>,

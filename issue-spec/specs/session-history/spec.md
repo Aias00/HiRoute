@@ -213,46 +213,47 @@ Competence is stage performance, not task acceptance rate or universal model ran
 
 ### Requirement: C observations cover all retained decisions
 
-C decision evidence MUST reuse existing route events, bounded safe-field storage
-and authorized query entrances, with no dedicated table, SQL migration, view or
-permission. Record protocol/full-content/bundle identities, standard, actual
-provider/model, target/completeness/eligibility, third-question requested/state/
-reason/probability, P/T, raw s/F, fixed 0.5 applicability boundary, protection action,
-request bytes, and retained/removed background/target counts. Existing selection
-and execution evidence preserve actual groups and relay separately. Never persist
-prompt, conversation, tool-result or credential text in this safe detail.
+Routing evidence MUST reuse existing route events, bounded safe-field storage
+and authorized query entrances, with no new table, SQL migration, view or permission.
+Every current routed classifier decision records its selected protocol (native
+legacy, applicability C v1, custom extension v1 or local rules), independently of
+inherited/fallback source; project that marker into safe facts. Known non-C counts
+are separate and never enter C denominators. Absent historical protocol evidence
+remains unknown; do not infer it from Plan identity or rewrite authenticated facts.
 
-Facts and plan-quality reads MUST add detail/summary only when the default-false
-include_routing_observations flag is true, including stripping nested selection
-detail by default for released strict readers. The flag binds continuation cursors
-without changing old omitted-call bindings. Current CLI/Desktop opt in through
-these existing reads. A stage-opening sample is not an all-decision denominator.
+C detail records full-content/bundle identity, actual shape standard, provider/model,
+target/completeness/eligibility, applicability dispatch/state/reason/probability,
+P/T, s/F, fixed 0.5 applicability boundary, action and bounded byte/turn counts.
+Selection and actual execution/relay remain separate. Safe metadata includes no
+prompt, conversation, tool-result, credential or free-form diagnostic text.
 
-In one authorized snapshot, summaries MUST cover every retained matching decision
-event for the requested Plan, optional revision/session and fixed time interval,
-deduplicated by producer/epoch/stream/event. Stage paging, selected model and score
-filters do not restrict that population. Keep protocol, exact content/bundle,
-scope/standard, provider/model, T and F in separate cohorts. Count fresh C decisions,
-actually requested third questions, requested-unavailable results, no-target and
-partial-target omissions, inherited decisions, internally missing required
-questions, eligible low-score protection opportunities and actual suppression.
-Whole-call failures after dispatch count as requested-unavailable. Inherited
-decisions create neither request nor protection opportunity. Internal missing
-questions are anomalies outside the provider denominator.
+One current versioned observation request/result MUST include facts routing detail
+and plan-quality summaries through existing read operations, without include flags.
+A registered released-query adapter with owner/removal conditions preserves old
+strict fields, nested selections, errors, authorization and exact cursor bindings.
+Normalize old input into the current business path. Current and old-version
+cursors cannot be substituted across result contracts. Current CLI/Desktop use the
+current version; a stage-opening sample is not an all-decision denominator.
 
-Expose unavailable/requested, suppressed/opportunity and suppressed/fresh-C-decision
-ratios with raw counts. Zero denominators are unavailable, not zero. Declare query
-scope, covered time, retained population, legacy/unknown and unknown-scope records,
-missing safe projections and bounded-scan truncation. Gaps/limits invalidate rates
-rather than certifying complete coverage. A known Plan identity without C metadata MUST NOT certify that the decision was
-non-C. Mixed retained revisions with such gaps retain their known counts but report
-partial coverage and unavailable exact rates; callers may narrow the revision/time
-scope. A separate confirmed-non-C count requires protocol evidence beyond identity.
-These statistics describe routing
-behavior, not correctness, accuracy, quality gain or universal provider support.
-Content-only deletion MUST retain safe routing evidence under existing fact
-retention. Full fact deletion/expiry removes it and aggregates cannot reconstruct
-deleted bodies. Existing authorization, run-conflict and deletion rules still apply.
+Summaries MUST cover all matching authorized retained route decisions independently
+of page, model/score/grade filters, scoped by Plan/session, time, configured
+thresholds, protocol/content/standard and provider/model. Exclude inherited records
+as new dispatches and deduplicate originating event identity. Report retained and
+covered scopes, missing projections, old unknown markers and scan limits. Mixed
+current C/non-C scopes can report complete coverage and C rates; old unknown or
+incomplete evidence withholds exact-population rates while preserving known counts.
+Deleted data is outside retained scope and its missing population cannot be invented.
+
+Q3 unavailable/requested uses actual dispatch as denominator. No-target/partial
+omissions and inherited decisions are separate. Eligible low history and simple
+current work define protection opportunities; suppressed/opportunities and
+suppressed/fresh C decisions show actual group changes. Required-question-missing
+violations retain protection and count separately as internal anomalies, excluded
+from provider-unavailable/requested totals. Zero denominators are unavailable.
+These rates describe behavior, not ground-truth accuracy or task quality.
+Content-only deletion preserves safe evidence under existing retention; facts-and-
+content deletion/expiry removes it. Existing reader authorization, run conflicts,
+idempotency and deletion boundaries remain effective.
 
 #### Scenario: All decisions, not open stages
 

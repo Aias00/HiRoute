@@ -38,7 +38,10 @@ pub(crate) fn project(
     };
     match &envelope.fact {
         ExecutionFactV1::RouteDecision(decision) => {
-            fact.decision_protocol = decision.complexity.as_ref().and_then(|c| c.decision_protocol);
+            fact.decision_protocol = decision
+                .complexity
+                .as_ref()
+                .and_then(|c| c.decision_protocol);
             if let Some(complexity) = &decision.complexity
                 && let Some(observation) = &complexity.routing_observation
             {

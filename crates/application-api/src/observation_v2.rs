@@ -129,22 +129,44 @@ pub struct ObservationValueReportOptionsV2 {
 
 /// Released V2 is a wire adapter; all intents execute the one current business model.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ObservationWireVersion { Current, LegacyV2 }
+pub enum ObservationWireVersion {
+    Current,
+    LegacyV2,
+}
 
-pub fn decode_observation_read(value: serde_json::Value) -> Result<(ObservationReadRequestV3, ObservationWireVersion), serde_json::Error> {
-    let legacy = value.get("schema").and_then(serde_json::Value::as_str) == Some("hiroute.observation.query/v2");
-    if !legacy { return serde_json::from_value(value).map(|r| (r, ObservationWireVersion::Current)); }
+pub fn decode_observation_read(
+    value: serde_json::Value,
+) -> Result<(ObservationReadRequestV3, ObservationWireVersion), serde_json::Error> {
+    let legacy = value.get("schema").and_then(serde_json::Value::as_str)
+        == Some("hiroute.observation.query/v2");
+    if !legacy {
+        return serde_json::from_value(value).map(|r| (r, ObservationWireVersion::Current));
+    }
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
-    struct Legacy { schema: LegacySchema, intent: ObservationReadIntentV3 }
+    struct Legacy {
+        schema: LegacySchema,
+        intent: ObservationReadIntentV3,
+    }
     #[derive(Deserialize)]
-    enum LegacySchema { #[serde(rename="hiroute.observation.query/v2")] V2 }
+    enum LegacySchema {
+        #[serde(rename = "hiroute.observation.query/v2")]
+        V2,
+    }
     let old: Legacy = serde_json::from_value(value)?;
     let _ = old.schema;
-    Ok((ObservationReadRequestV3::new(old.intent), ObservationWireVersion::LegacyV2))
+    Ok((
+        ObservationReadRequestV3::new(old.intent),
+        ObservationWireVersion::LegacyV2,
+    ))
 }
-pub fn observation_wire_value(request: &ObservationReadRequestV3, version: ObservationWireVersion) -> Result<serde_json::Value, serde_json::Error> {
+pub fn observation_wire_value(
+    request: &ObservationReadRequestV3,
+    version: ObservationWireVersion,
+) -> Result<serde_json::Value, serde_json::Error> {
     let mut value = serde_json::to_value(request)?;
-    if version == ObservationWireVersion::LegacyV2 { value["schema"] = "hiroute.observation.query/v2".into(); }
+    if version == ObservationWireVersion::LegacyV2 {
+        value["schema"] = "hiroute.observation.query/v2".into();
+    }
     Ok(value)
 }

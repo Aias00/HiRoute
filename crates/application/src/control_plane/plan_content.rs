@@ -22,7 +22,8 @@ fn preview(
             error.message_key = native.diagnostic_key().into();
             error.details_schema = "hiroute.native-protocol-diagnostic/v1".into();
             let field = match &native { hiroute_domain::NativeProtocolError::StateReference(field) => Some(field), _ => None };
-            (Box::new(error),Some(serde_json::json!({"schema":"hiroute.native-protocol-diagnostic/v1","reason":native.diagnostic_key(),"field":field})))
+            let scope = match &native { hiroute_domain::NativeProtocolError::Review { scope, .. } | hiroute_domain::NativeProtocolError::HistoricalUnavailable {scope} => Some(scope), _ => None };
+            (Box::new(error),Some(serde_json::json!({"schema":"hiroute.native-protocol-diagnostic/v1","reason":native.diagnostic_key(),"field":field,"scope":scope,"message":native.to_string()})))
         } else { (Box::new(ErrorV1::new(map_preview_error(e))),None) }
     })
 }
@@ -30,7 +31,7 @@ fn map_preview_error(error: PlanPreviewError) -> ErrorCode {
     match error {
         PlanPreviewError::Stale
         | PlanPreviewError::NativeProtocol(
-            hiroute_domain::NativeProtocolError::HistoricalUnavailable,
+            hiroute_domain::NativeProtocolError::HistoricalUnavailable { .. },
         ) => ErrorCode::ChangePreviewStale,
         PlanPreviewError::Compiler(
             crate::compiler::AgentPlanCompilerError::CandidateNotRoutable(_),
@@ -98,12 +99,22 @@ pub(super) fn dispatch_apply(
                     let mut error = ErrorV1::new(ErrorCode::InvalidArguments);
                     error.message_key = native.diagnostic_key().into();
                     error.details_schema = "hiroute.native-protocol-diagnostic/v1".into();
-                    return MachineEnvelopeV2::failed_with_data(error, serde_json::json!({"schema":"hiroute.native-protocol-diagnostic/v1","reason":native.to_string()}), Some(request.request_id));
+                    return MachineEnvelopeV2::failed_with_data(
+                        error,
+                        serde_json::json!({"schema":"hiroute.native-protocol-diagnostic/v1","reason":native.diagnostic_key(),"scope":match &native { hiroute_domain::NativeProtocolError::Review {scope,..} => Some(scope), _ => None },"message":native.to_string()}),
+                        Some(request.request_id),
+                    );
                 }
             }
-            if value.change_digest != payload.accept_digest || value.expected_revisions != payload.expected_revisions { return failed(ErrorCode::ChangePreviewStale, request.request_id); }
+            if value.change_digest != payload.accept_digest
+                || value.expected_revisions != payload.expected_revisions
+            {
+                return failed(ErrorCode::ChangePreviewStale, request.request_id);
+            }
         }
-        Err((error, Some(data))) => return MachineEnvelopeV2::failed_with_data(*error, data, Some(request.request_id)),
+        Err((error, Some(data))) => {
+            return MachineEnvelopeV2::failed_with_data(*error, data, Some(request.request_id));
+        }
         Err((error, None)) => return MachineEnvelopeV2::failed(*error, Some(request.request_id)),
     }
     let prepared = (|| {
@@ -158,7 +169,9 @@ fn reproduce_plan(
         .map_err(map_control_error)?;
     let reproduced = preview_plan_content(&payload.change, &state).map_err(map_preview_error)?;
     if let Some(transition) = &reproduced.assessment_transition {
-        transition.require_acknowledged().map_err(|_| ErrorCode::InvalidArguments)?;
+        transition
+            .require_acknowledged()
+            .map_err(|_| ErrorCode::InvalidArguments)?;
     }
     if reproduced.change_digest != payload.accept_digest
         || reproduced.expected_revisions != payload.expected_revisions

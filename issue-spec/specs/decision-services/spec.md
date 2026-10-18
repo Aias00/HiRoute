@@ -158,17 +158,20 @@ historical Score and applicability fit the supported nineteen-question shape in
 one call. Unused malformed degree answers do not poison the selected path.
 
 C category and category-conditioned degree templates MUST be immutable versioned
-content. Domain compilation, Gateway legacy composition and Desktop preview share
+content. Domain compilation, C Gateway execution and Desktop C preview share
 the supported v1 template. Editing current defaults MUST NOT alter a supported
 publication's questions or make it unloadable. C request construction and answer
 bindings consume the stored frozen decision, while authoring/compiled consistency,
 fixed-content validation and digest checks remain mandatory.
 
-The frozen scope standard records preset-wording provenance covered by the sealed
-identity. Preserve those bytes on reopen. A categorical request adds category-specific
-degree context and MUST report its effective standard as custom, even when its base
-wording is stock. Only the unchanged stock ordinal question shape may report stock;
-content digests and thresholds continue to separate statistical conditions.
+The frozen scope standard MUST describe the actual effective question shape.
+Categorical questions are custom; only the unchanged exact stock ordinal
+question/criteria shape may be stock. Set this value before sealing and use it
+directly in observations and presentation. Keep C category wording in its fixed
+v1 fixture; legacy native wording has its own current source, independent of that
+fixture. Pure composition logic may be shared. Disposable unreleased C encodings
+need no support adapter; supported released data and retained authenticated
+historical evidence preserve their existing compatibility treatment.
 
 #### Scenario: Frozen C questions
 
@@ -281,23 +284,27 @@ Source SPEC comments:
 
 ### Requirement: C capability evidence is explicit and session scoped
 
-The existing protected TestClassifierDecision operation MUST retain V1 connectivity
-testing and accept explicit V2 C capability requests. V1 success is not C support.
-C tests resolve an exact saved service revision and bind service, endpoint/model,
-frozen protocol content/digest and standard or maximum-branch request shape. They
-use the production constructor, transport, parser and synthetic complete stage,
-checking every required binary degree vector, historical raw Score and two-label
-Choice vector without requiring a particular semantic answer. Maximum shape has
-sixteen dual-group categories and nineteen questions, never silently fewer.
+The classifier diagnostic boundary MUST have one current request/result. A
+request targets an unsaved classifier value for connectivity only, or an exact
+saved connection revision with optional frozen protocol content and explicitly
+selected shape. Results report verified shapes and their exact identity;
+connectivity success is not applicability capability. A saved applicability test
+uses production construction, transport and parsing with synthetic input; standard
+and maximum categorical requests preserve their actual 3/19-question shapes.
+Released v1 requests/results remain supported by an explicit registered adapter
+with owner and removal conditions, normalized to the current business path.
 
-Results distinguish verified, unsupported, not tested and test failed. Desktop
-MUST show missing evidence as Not tested in this session and discard evidence for
-a changed connection revision, content or shape. Caller-supplied status cannot
-authorize publication. Missing evidence does not block saving/publishing. Each
-explicit test discloses its one synthetic request and possible quota consumption;
-ordinary navigation, save, adoption and publication MUST NOT probe. A test reads
-no real conversation, invokes no business model, creates no stage sample and
-cannot establish answer quality or universal provider capacity.
+Capability evidence MUST bind saved service revision, endpoint/model, frozen
+content and selected shape. A response must verify exact two-label applicability
+probabilities and required category/Score outputs; no question may be silently
+removed or split into a dependent call. Results distinguish verified, unsupported,
+not tested and test failed. Desktop shows missing evidence as Not tested in this
+session and discards evidence after connection/content/shape changes. Caller status
+cannot authorize publication. Missing evidence does not block saving/publishing.
+Each context presents one explicit test action with a selected shape; it discloses
+one synthetic request and possible quota use. Navigation/save/adoption/publication
+MUST NOT probe, read a real conversation, invoke a business model, create a stage
+sample or claim task quality/universal provider capacity.
 
 #### Scenario: Only category Choice is returned
 

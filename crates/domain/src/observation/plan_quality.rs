@@ -6,7 +6,6 @@ use super::AgentTurnAttributionV1;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanQualitySamplesQuery {
-
     #[serde(default)]
     pub competence: Option<PlanCompetenceFilter>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -108,7 +107,6 @@ pub struct PlanQualitySamplesPage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_cursor: Option<String>,
 }
-
 
 /// Full authorized scope, independent of the stage page and detail filters.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

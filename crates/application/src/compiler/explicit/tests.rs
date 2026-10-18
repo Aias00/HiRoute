@@ -580,11 +580,8 @@ fn c_native_publication_freezes_content_and_rejects_authoring_compiled_disagreem
     p.stock_assessment(&mut judgment);
     judgment.degree.simple_threshold_millis = 870;
     judgment.competence.floor_millis = 620;
-    let review =
-        AssessmentReviewV1::new(Some(&p), &judgment, AssessmentAdoptionV1::Stock, None).unwrap();
     desired.strategy = AgentPlanStrategyV2::SmartSaving {
         native_protocol: Some(p),
-        assessment_review: Some(BTreeMap::from([(SMART_SAVING_SCOPE_ID.into(), review)])),
         economy: vec![selection("economy-a")],
         primary: vec![selection("primary-a")],
         judgment,

@@ -111,8 +111,13 @@ impl ObservationReaderContext {
     }
 
     /// Only the explicit released-query adapter selects legacy cursor bindings.
-    pub fn with_legacy_query_v2(mut self) -> Self { self.legacy_query_v2 = true; self }
-    pub fn is_legacy_query_v2(&self) -> bool { self.legacy_query_v2 }
+    pub fn with_legacy_query_v2(mut self) -> Self {
+        self.legacy_query_v2 = true;
+        self
+    }
+    pub fn is_legacy_query_v2(&self) -> bool {
+        self.legacy_query_v2
+    }
 
     pub fn binding(&self) -> Result<String, ObservationQueryError> {
         crate::CanonicalDigest::of(&(
@@ -541,7 +546,6 @@ pub struct ObservationTextChunkV2 {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ObservationFactsQueryV2 {
-
     pub request_id: LogicalRequestId,
     pub limit: u16,
     pub cursor: Option<String>,

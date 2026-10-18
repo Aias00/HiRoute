@@ -23,7 +23,6 @@ pub(super) fn plan_quality_samples(options: &[String]) -> Result<Value, ErrorCod
         );
     }
     let mut query = hiroute_application_api::PlanQualitySamplesQuery {
-
         competence: None,
         plan_id: None,
         session_id: None,
@@ -238,7 +237,8 @@ fn observation_value_payload(
     command: ObservationCommand,
     value: Value,
 ) -> Result<Value, ErrorCode> {
-    let (request, version) = hiroute_application_api::decode_observation_read(value).map_err(|_| ErrorCode::InvalidArguments)?;
+    let (request, version) = hiroute_application_api::decode_observation_read(value)
+        .map_err(|_| ErrorCode::InvalidArguments)?;
     let matches_command = match (command, &request.intent) {
         (ObservationCommand::Sessions, ObservationReadIntentV3::Sessions(_)) => true,
         (ObservationCommand::Facts, ObservationReadIntentV3::Facts(_)) => true,
@@ -259,7 +259,8 @@ fn observation_value_payload(
     if !matches_command {
         return Err(ErrorCode::InvalidArguments);
     }
-    hiroute_application_api::observation_wire_value(&request, version).map_err(|_| ErrorCode::Internal)
+    hiroute_application_api::observation_wire_value(&request, version)
+        .map_err(|_| ErrorCode::Internal)
 }
 
 fn parse_i64(options: &[String], index: &mut usize) -> Result<i64, ErrorCode> {
@@ -332,7 +333,7 @@ mod tests {
             .map(str::to_owned),
         )
         .unwrap();
-        assert_eq!(payload["schema"], "hiroute.observation.query/v2");
+        assert_eq!(payload["schema"], "hiroute.observation.query/v3");
         assert_eq!(payload["intent"]["view"], "value_report");
         let request: ObservationReadRequestV3 = serde_json::from_value(payload).unwrap();
         let ObservationReadIntentV3::ValueReport(q) = request.intent else {

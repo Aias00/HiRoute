@@ -285,8 +285,8 @@ impl BranchRoutingV1 {
                 || self.branches.iter().any(|b| {
                     super::validate_assessment_scope(
                         self.native_protocol.as_ref(),
-                                &b.id,
-                                self.judgment_for(b),
+                        &b.id,
+                        self.judgment_for(b),
                     )
                     .is_err()
                         || self.native_protocol.is_some()

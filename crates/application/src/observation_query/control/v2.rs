@@ -10,7 +10,8 @@ impl ObservationControl {
     ) -> Result<Value, ObservationQueryError> {
         let (request, version) = hiroute_application_api::decode_observation_read(payload)
             .map_err(|_| ObservationQueryError::InvalidQuery)?;
-        let wire = hiroute_application_api::observation_wire_value(&request, version).map_err(|_| ObservationQueryError::InvalidQuery)?;
+        let wire = hiroute_application_api::observation_wire_value(&request, version)
+            .map_err(|_| ObservationQueryError::InvalidQuery)?;
         if request.operation() != operation {
             return Err(ObservationQueryError::InvalidQuery);
         }
@@ -47,8 +48,16 @@ impl ObservationControl {
             content,
             search,
         )?;
-        let reader = if version == hiroute_application_api::ObservationWireVersion::LegacyV2 { reader.with_legacy_query_v2() } else { reader };
-        let legacy_fields = match &request.intent { ObservationReadIntentV3::Facts(_) => Some("facts"), ObservationReadIntentV3::PlanQuality(_) => Some("quality"), _ => None };
+        let reader = if version == hiroute_application_api::ObservationWireVersion::LegacyV2 {
+            reader.with_legacy_query_v2()
+        } else {
+            reader
+        };
+        let legacy_fields = match &request.intent {
+            ObservationReadIntentV3::Facts(_) => Some("facts"),
+            ObservationReadIntentV3::PlanQuality(_) => Some("quality"),
+            _ => None,
+        };
         let mut result = match request.intent {
             ObservationReadIntentV3::Status(_) => {
                 serde_json::to_value(self.service.observed_maintenance_status(&reader, now)?)
@@ -155,8 +164,13 @@ impl ObservationControl {
             ),
         }
         .map_err(|_| ObservationQueryError::Corrupt)?;
-        if version == hiroute_application_api::ObservationWireVersion::LegacyV2 && legacy_fields.is_some() {
-            if let Some(object) = result.as_object_mut() { object.remove("schema"); object.remove("routing_observations"); }
+        if version == hiroute_application_api::ObservationWireVersion::LegacyV2
+            && legacy_fields.is_some()
+        {
+            if let Some(object) = result.as_object_mut() {
+                object.remove("schema");
+                object.remove("routing_observations");
+            }
         }
         if serde_json::to_vec(&result)
             .map_err(|_| ObservationQueryError::Corrupt)?

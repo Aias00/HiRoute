@@ -53,3 +53,16 @@ pub enum ClassifierDecisionTestOutcomeV1 {
     Passed,
     Failed,
 }
+
+/// Internal production connectivity probe/result, shared by current and legacy wire adapters.
+#[derive(Clone, Debug)]
+pub struct ClassifierConnectivityProbeV1 {
+    pub classifier: ComplexityClassifierModeV1,
+}
+#[derive(Clone, Debug)]
+pub struct ClassifierConnectivityResultV1 {
+    pub outcome: ClassifierDecisionTestOutcomeV1,
+    pub branch_id: Option<String>,
+    pub duration_millis: Option<u64>,
+    pub failure_code: Option<String>,
+}

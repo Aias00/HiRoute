@@ -50,6 +50,8 @@ pub struct AgentPlanStatusV2 {
     pub protocol_advice: hiroute_domain::AgentProtocolAdviceV1,
     pub agent_plan_id: AgentPlanId,
     pub desired: AgentPlanAuthoringV2,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assessment_transition: Option<hiroute_domain::AssessmentReviewsV1>,
     pub head: PlanHeadV1,
     pub editable_route_digest: CanonicalDigest,
     pub agent_plan_revision: u64,

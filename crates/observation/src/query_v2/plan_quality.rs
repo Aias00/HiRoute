@@ -87,8 +87,8 @@ impl LocalObservationStore {
         } else {
             CanonicalDigest::of(&(reader.binding()?, &normalized, 3u8))
         }
-            .map_err(|_| ObservationV2Error::Invalid)?
-            .to_string();
+        .map_err(|_| ObservationV2Error::Invalid)?
+        .to_string();
         let mut connection =
             Connection::open_with_flags(&self.activity_path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
         let _deadline = QueryDeadline::start_for(&connection, reader)?;

@@ -508,7 +508,7 @@ mod classifier_codec_tests {
             options.into_iter().map(|o| (o.id, judgment.clone())),
         )
         .unwrap();
-        let request = json!({"schema":"hiroute.classifier-decision-test/v2","service_id":"saved-fixture","service_revision":7,"shape":"max_branches","protocol":frozen});
+        let request = json!({"schema":"hiroute.classifier-decision-test/v2","target":{"kind":"saved","service_id":"saved-fixture","service_revision":7,"shape":"max_branches","protocol":frozen}});
         let decoded: hiroute_application_api::ClassifierDecisionTestRequestV2 =
             serde_json::from_value(request.clone()).unwrap();
         assert!(decoded.validate());

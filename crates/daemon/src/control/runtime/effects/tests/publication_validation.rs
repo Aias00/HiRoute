@@ -378,7 +378,7 @@ fn authored_plan_is_recovered_from_stable_publication_and_updated() {
     assert_eq!(historical_record.bytes, historical_bytes);
 
     let update = PlanContentChangeV2 {
-            assessment_choices: Default::default(),
+        assessment_choices: Default::default(),
         schema: PLAN_CONTENT_CHANGE_SCHEMA_V2.into(),
         target: PlanContentTargetV2::Update {
             plan_id: authored.plan_head.reference.plan_id.clone(),

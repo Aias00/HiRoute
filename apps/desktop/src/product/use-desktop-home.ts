@@ -44,7 +44,7 @@ function errorCode(error: unknown): string {
 function observationRequest(view: string, query: object) {
   return {
     request: {
-      schema: 'hiroute.observation.query/v2',
+      schema: 'hiroute.observation.query/v3',
       intent: { view, query },
     },
   };

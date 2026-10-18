@@ -24,6 +24,8 @@ pub struct EditorInput {
     pub expected_draft_revision: Option<u64>,
     pub editor: PlanEditorStateV2,
     pub language: String,
+    #[serde(default)]
+    pub assessment_choices: hiroute_domain::AssessmentChoicesV1,
 }
 impl EditorAction {
     pub(super) fn requires_confirmation(&self) -> bool {
@@ -166,7 +168,7 @@ impl Session {
                         revision: d.revision,
                     });
                 serde_json::to_value(PlanContentChangeV2 {
-            assessment_choices: Default::default(),
+                    assessment_choices: input.assessment_choices.clone(),
                     schema: PLAN_CONTENT_CHANGE_SCHEMA_V2.into(),
                     target,
                     editor: input.editor.clone(),

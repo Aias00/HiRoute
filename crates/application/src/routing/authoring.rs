@@ -58,9 +58,13 @@ pub fn preview_plan_content(
         }
     }
     let (resolved_editor, transition) = preview_assessment_transition(
-        &change.editor, state.previous_configuration.as_ref(),
-        state.draft.as_ref().map(|d| &d.editor), &state.assessment_sources, &change.assessment_choices,
-    ).map_err(PlanPreviewError::NativeProtocol)?;
+        &change.editor,
+        state.previous_configuration.as_ref(),
+        state.draft.as_ref().map(|d| &d.editor),
+        &state.assessment_sources,
+        &change.assessment_choices,
+    )
+    .map_err(PlanPreviewError::NativeProtocol)?;
     let configuration = resolved_editor.effective().map_err(|e| match e {
         PlanAuthoringError::NativeProtocol(e) => PlanPreviewError::NativeProtocol(e),
         _ => PlanPreviewError::Invalid,
@@ -160,8 +164,13 @@ pub fn preview_plan_content(
         &configuration,
         &state.facts,
     )?;
-    let plan_version = PlanVersionV1::with_assessment_transition(state.workspace.clone(), configuration, compiled, transition.records())
-        .map_err(|_| PlanPreviewError::Invalid)?;
+    let plan_version = PlanVersionV1::with_assessment_transition(
+        state.workspace.clone(),
+        configuration,
+        compiled,
+        transition.records(),
+    )
+    .map_err(|_| PlanPreviewError::Invalid)?;
     let plan_head = PlanHeadV1 {
         reference: plan_version.reference.clone(),
         head_revision,
@@ -174,7 +183,9 @@ pub fn preview_plan_content(
         .map_err(|_| PlanPreviewError::Invalid)?;
     let assessment_transition = (!transition.scopes.is_empty()).then_some(transition);
     let change_digest = match &assessment_transition {
-        Some(value) => CanonicalDigest::of(&(&base_digest, value)).map_err(|_| PlanPreviewError::Invalid)?,
+        Some(value) => {
+            CanonicalDigest::of(&(&base_digest, value)).map_err(|_| PlanPreviewError::Invalid)?
+        }
         None => base_digest,
     };
     Ok(PlanContentPreviewV2 {

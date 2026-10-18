@@ -7,12 +7,13 @@ export const LEGACY_PROTOCOL = 'hiroute.system-one-legacy/v1';
 export type NativeProtocol = { schema: string; fixed: { degree_prefix: string; assessment_wrapper: string; applicability: typeof stock.q2 }; prior_context_max_turns: number };
 export type AssessmentSource = { plan: { workspace_id: string; plan_id: string; content_revision: number; content_digest: string }; scope: string };
 export type RollbackOption = { source: AssessmentSource; instructions: string; criteria: [string, string, string] };
-export type AssessmentReview = { protocol: string; assessment_digest: string; method: 'stock' | 'reviewed_custom' | 'historical'; source?: AssessmentSource };
-export type AssessmentReviews = Record<string, AssessmentReview>;
+export type AssessmentChoice = { method: 'stock' | 'reviewed_custom' | 'historical'; source?: AssessmentSource };
+export type AssessmentChoices = Record<string, AssessmentChoice>;
+export type AssessmentTransition = { scopes: { scope: string; protocol: string; from_protocol: string | null; assessment: ReturnType<typeof composedAssessment>; assessment_digest: string; available_methods: AssessmentChoice['method'][]; historical_sources: RollbackOption[]; choice: AssessmentChoice | null }[] };
 export type FrozenNativeProtocol = { protocol: NativeProtocol; context_layout: string; decision: Record<string, unknown>; scopes: Record<string, { assessment: ReturnType<typeof composedAssessment>; simple_threshold_millis: number; competence_floor_millis: number; standard: string }>; digest: string };
 export type CapabilityShape = 'standard' | 'max_branches';
-export type CCapability = { schema: string; state: 'verified' | 'unsupported' | 'not_tested' | 'test_failed'; service_id: string; service_revision: number; endpoint_digest: string; model: string; protocol_digest: string; shape: CapabilityShape; question_count: number; tested_at_unix_ms: number; duration_millis: number; reason: string };
-export type CTestRequest = { schema: string; service_id: string; service_revision: number; protocol: FrozenNativeProtocol; shape: CapabilityShape };
+export type CCapability = { verified_shapes: string[]; schema: string; state: 'verified' | 'unsupported' | 'not_tested' | 'test_failed'; service_id: string; service_revision: number; endpoint_digest: string; model: string; protocol_digest: string; shape: CapabilityShape; question_count: number; tested_at_unix_ms: number; duration_millis: number; reason: string };
+export type CTestRequest = { schema: string; target: { kind: 'saved'; service_id: string; service_revision: number; protocol: FrozenNativeProtocol; shape: CapabilityShape } };
 
 const wrapper = stock.q1.instructions.split(' Distinguish those meanings')[0];
 const legacyWrapper = 'Evaluate only the completed stage from state.visible_conversation[state.assessment_from] through the end. state.latest_user may supply explicit feedback, but is not yet executed.';
@@ -48,7 +49,7 @@ export async function freezeNative(protocol: NativeProtocol, judgment: Judgment,
   } : { kind: 'ordinal', ...degree(judgment) };
   const scopes = Object.fromEntries((branches ? branches.map(b => [b.id, b.judgment ?? judgment] as const) : [['smart_saving', judgment] as const]).map(([id, j]) => [id, {
     assessment: composedAssessment(protocol, j), simple_threshold_millis: j.degree.simple_threshold_millis, competence_floor_millis: j.competence.floor_millis,
-    standard: JSON.stringify(composedAssessment(protocol, j)) === JSON.stringify(stock.q1) && `${protocol.fixed.degree_prefix} ${j.degree.instructions}` === stock.q0.instructions && j.degree.simple === stock.q0.criteria[0] && j.degree.complex === stock.q0.criteria[1] ? 'stock' : 'custom',
+    standard: !branches && JSON.stringify(composedAssessment(protocol, j)) === JSON.stringify(stock.q1) && `${protocol.fixed.degree_prefix} ${j.degree.instructions}` === stock.q0.instructions && j.degree.simple === stock.q0.criteria[0] && j.degree.complex === stock.q0.criteria[1] ? 'stock' : 'custom',
   }]));
   const context_layout = 'hiroute.partitioned-history/v1';
   return { protocol, context_layout, decision, scopes, digest: await contentDigest([protocol, context_layout, decision, scopes]) };
@@ -56,5 +57,5 @@ export async function freezeNative(protocol: NativeProtocol, judgment: Judgment,
 export async function stockProbe(service: DecisionService, shape: CapabilityShape): Promise<CTestRequest> {
   const protocol = nativeProtocol(), judgment = stockAssessment(defaultJudgment, protocol);
   const branches = shape === 'max_branches' ? Array.from({ length: 16 }, (_, i): RouteBranch => ({ id: `probe-${i + 1}`, name: `probe-${i + 1}`, condition: `Synthetic category ${i + 1}`, candidates: [], primary_candidates: [{ binding_id: 'synthetic' }] })) : undefined;
-  return { schema: 'hiroute.classifier-decision-test/v2', service_id: service.id, service_revision: service.revision, protocol: await freezeNative(protocol, judgment, branches, branches?.[0].id), shape };
+  return { schema: 'hiroute.classifier-decision-test/v2', target: { kind: 'saved', service_id: service.id, service_revision: service.revision, protocol: await freezeNative(protocol, judgment, branches, branches?.[0].id), shape } };
 }

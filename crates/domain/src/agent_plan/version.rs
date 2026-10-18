@@ -73,7 +73,8 @@ impl PlanVersionV1 {
         ))
         .map_err(|_| PlanVersionError::Invalid)?;
         let content_digest = match &assessment_transition {
-            Some(records) => CanonicalDigest::of(&(&base_digest, records)).map_err(|_| PlanVersionError::Invalid)?,
+            Some(records) => CanonicalDigest::of(&(&base_digest, records))
+                .map_err(|_| PlanVersionError::Invalid)?,
             None => base_digest,
         };
         let value = Self {
@@ -109,11 +110,15 @@ impl PlanVersionV1 {
         .map_err(|_| PlanVersionError::Invalid)?;
         let expected = match &self.assessment_transition {
             Some(records) => {
-                if records.is_empty() { return Err(PlanVersionError::Invalid); }
+                if records.is_empty() {
+                    return Err(PlanVersionError::Invalid);
+                }
                 let scopes = self.configuration.assessment_scopes();
                 for (scope, record) in records {
                     let judgment = scopes.get(scope).ok_or(PlanVersionError::Invalid)?;
-                    record.validate(self.configuration.native_protocol(), judgment).map_err(|_| PlanVersionError::Invalid)?;
+                    record
+                        .validate(self.configuration.native_protocol(), judgment)
+                        .map_err(|_| PlanVersionError::Invalid)?;
                 }
                 CanonicalDigest::of(&(&expected, records)).map_err(|_| PlanVersionError::Invalid)?
             }
