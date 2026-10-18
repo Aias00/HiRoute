@@ -224,3 +224,86 @@ fn model_feed_bootstrap_rejects_invalid_editorial_inputs_before_release_lookup()
         "schema validation must run in bootstrap: {error}"
     );
 }
+
+#[test]
+fn feed_payload_check_survives_a_bundle_changing_squash_merge() {
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    for relative in [
+        "assets/release-facts/current/bundle/manifest.json",
+        "assets/release-facts/current/bundle/connector-registry.json",
+        "assets/release-facts/current/bundle/model-data.json",
+        "assets/model-feed/publication.json",
+        "assets/model-feed/featured.json",
+        "assets/model-feed/payload.json",
+        "assets/model-data/current/inputs/metadata-catalog.json",
+        "contracts/releases/v0.3.1.json",
+    ] {
+        let target = root.join(relative);
+        std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+        std::fs::copy(source.join(relative), target).unwrap();
+    }
+    std::fs::write(
+        root.join("assets/model-feed/policy.json"),
+        br#"{"minimum_feed_client":"0.3.1"}"#,
+    )
+    .unwrap();
+    let run = |args: &[&str]| {
+        let out = Command::new("git")
+            .current_dir(root)
+            .args(args)
+            .env("GIT_AUTHOR_NAME", "Feed test")
+            .env("GIT_AUTHOR_EMAIL", "test@example.invalid")
+            .env("GIT_COMMITTER_NAME", "Feed test")
+            .env("GIT_COMMITTER_EMAIL", "test@example.invalid")
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "git operation failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8(out.stdout).unwrap().trim().to_owned()
+    };
+    run(&["init", "-b", "main"]);
+    run(&["add", "."]);
+    run(&["commit", "-m", "Supported catalog"]);
+    let revision = run(&["rev-parse", "HEAD"]);
+    let snapshot = std::fs::read(root.join("contracts/releases/v0.3.1.json")).unwrap();
+    std::fs::write(root.join("contracts/releases/index.v1.json"), serde_json::to_vec(&serde_json::json!({
+        "schema":"hiroute.release-contract-index/v1", "releases":[{"channel":"stable","file":"v0.3.1.json","tag":"v0.3.1","revision":revision,"sha256":&CanonicalDigest::of_bytes(&snapshot).as_str()[7..]}]
+    })).unwrap()).unwrap();
+    run(&["add", "."]);
+    run(&["commit", "-m", "Record supported source"]);
+    run(&["checkout", "-b", "trial"]);
+    std::fs::write(
+        root.join("assets/release-facts/current/bundle/source-note.txt"),
+        "A committed bundle update.\n",
+    )
+    .unwrap();
+    run(&["add", "."]);
+    run(&["commit", "-m", "Update bundle"]);
+    build(root, false).unwrap();
+    run(&["add", "."]);
+    run(&["commit", "-m", "Project publication"]);
+    run(&["checkout", "main"]);
+    run(&["merge", "--squash", "trial"]);
+    run(&["commit", "-m", "Land catalog and publication"]);
+    build(root, true).unwrap();
+    let payload: FeedPayload = serde_json::from_slice(
+        &std::fs::read(root.join("assets/model-feed/payload.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        git_bytes(
+            root,
+            &[
+                "show",
+                &format!("{}:model-data.json", payload.source_revision)
+            ]
+        )
+        .unwrap(),
+        std::fs::read(root.join("assets/release-facts/current/bundle/model-data.json")).unwrap()
+    );
+}

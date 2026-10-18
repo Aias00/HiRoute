@@ -1265,4 +1265,75 @@ mod tests {
         );
         assert_eq!(calls.load(Ordering::SeqCst), 1);
     }
+    #[test]
+    fn saved_embedded_fact_changes_do_not_block_rename_or_removing_another_member() {
+        use hiroute_application_api::*;
+        const NAME: &str = "control::runtime::model_connections::saved::tests::saved_embedded_fact_changes_do_not_block_rename_or_removing_another_member";
+        if crate::test_support::isolated_agent_home(NAME) {
+            return;
+        }
+        let root = tempfile::tempdir().unwrap();
+        let catalog = crate::release_catalog::current_fixture_catalog();
+        let runtime = super::super::super::ProductionControlRuntime::open_with_release_catalog(
+            root.path(),
+            catalog.clone(),
+        )
+        .unwrap();
+        let mut source = source_from_registered_draft(
+            &runtime
+                .adapter
+                .trusted_registered_draft(&registered_request(&catalog))
+                .unwrap(),
+        );
+        attach_saved_credential(&runtime, &mut source);
+        source.models[0].capabilities.context_tokens.value = Some(123_456);
+        let mut other = source.models[0].clone();
+        other.model_ref = "model/second-saved-member".into();
+        other.binding_id = "binding/second-saved-member".into();
+        other.upstream_model_id = "second-native-model".into();
+        other.catalog_configuration_id = None;
+        source.models.push(other.clone());
+        source.validate().unwrap();
+        let connection = rusqlite::Connection::open(root.path().join("live/control.db")).unwrap();
+        let digest = CanonicalDigest::of_bytes(b"saved-lifecycle-owner");
+        let owner = "op_51515151515151515151515151515151";
+        connection.execute("INSERT INTO operations(operation_id,workspace_id,principal,operation_kind,idempotency_key,request_digest,accepted_change_digest,state,generation,operation_json,created_at,updated_at)
+            VALUES(?1,?2,'desktop','fixture.management','saved-lifecycle',?3,?3,'succeeded',0,'{}',0,0)", rusqlite::params![owner,WorkspaceId::default().as_str(),digest.as_str()]).unwrap();
+        connection.execute("INSERT INTO compute_management_sources(workspace_id,source_id,lineage_digest,revision,source_json,owner_operation_id,updated_at)
+            VALUES(?1,?2,?3,?4,?5,?6,0)",rusqlite::params![WorkspaceId::default().as_str(),source.source_id,source.lineage_digest.as_str(),source.revision,serde_json::to_string(&source).unwrap(),owner]).unwrap();
+        drop(connection);
+        for (edit, selected_model_refs) in [
+            (
+                ComputeManagementEditV1::Rename {
+                    display_name: "Renamed saved connection".into(),
+                },
+                vec![],
+            ),
+            (
+                ComputeManagementEditV1::RemoveModels,
+                vec![other.model_ref.clone()],
+            ),
+        ] {
+            let snapshot = runtime
+                .adapter
+                .compute_management_snapshot(&ComputeManagementQueryV2::default())
+                .unwrap();
+            let change = ComputeManagementChangeV2 {
+                schema: COMPUTE_MANAGEMENT_CHANGE_SCHEMA_V2.into(),
+                subject: ComputeManagementSubjectV2::SavedSource {
+                    source_id: source.source_id.clone(),
+                },
+                expected_revisions: snapshot.revisions,
+                selected_model_refs,
+                intent: ComputeManagementIntentV2::SaveReady,
+                edit: Some(edit),
+                key_edits: vec![],
+                validation: None,
+            };
+            assert!(
+                runtime.adapter.preview_compute_save(change).is_ok(),
+                "unchanged embedded members retain their saved facts"
+            );
+        }
+    }
 }

@@ -52,7 +52,7 @@ fn append(
                     attempted_model_count: models
                         .iter()
                         .collect::<std::collections::BTreeSet<_>>()
-                        .len() as u64,
+                        .len() as u32,
                     within_request_fallback: (!models.is_empty())
                         .then(|| models.windows(2).any(|p| p[0] != p[1])),
                     final_native_model: view.native_model.clone(),

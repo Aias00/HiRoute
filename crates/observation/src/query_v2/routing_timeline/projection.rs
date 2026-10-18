@@ -72,6 +72,8 @@ pub(super) fn project(
         .enumerate()
         .map(|(i, r)| (r.view.request_id.as_str(), i))
         .collect();
+    let mut by_time = ordered.clone();
+    by_time.sort_by_key(|r| (r.view.started_at_ms, &r.view.request_id));
     let mut covered = std::collections::BTreeSet::new();
     let mut result = Vec::new();
     let mut ordinals = BTreeMap::new();
@@ -122,16 +124,18 @@ pub(super) fn project(
         let closing = ordered[*last];
         // Use the same endpoint/time rule as retained analysis. Timestamp ties
         // outside the recorded endpoints remain unassigned in both readers.
-        let members: Vec<_> = ordered
-            .iter()
-            .copied()
-            .filter(|r| {
-                r.view.request_id == opening.view.request_id
-                    || r.view.request_id == closing.view.request_id
-                    || r.view.started_at_ms > opening.view.started_at_ms
-                        && r.view.started_at_ms < closing.view.started_at_ms
-            })
-            .collect();
+        let start = by_time.partition_point(|r| r.view.started_at_ms <= opening.view.started_at_ms);
+        let end = by_time.partition_point(|r| r.view.started_at_ms < closing.view.started_at_ms);
+        let mut members = if start < end {
+            by_time[start..end].to_vec()
+        } else {
+            Vec::new()
+        };
+        members.push(opening);
+        if opening.view.request_id != closing.view.request_id {
+            members.push(closing);
+        }
+        members.sort_by_key(|r| (r.first_fact, &r.view.request_id));
         let members = members.as_slice();
         if members
             .iter()

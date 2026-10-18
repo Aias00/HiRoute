@@ -274,10 +274,17 @@ mod tests {
                         limit: 50,
                     };
                     store.routing_timeline_inner(&reader, &query, 5000, || {
-                        assert!(
-                            store.timeline_cache.try_lock().is_some(),
-                            "SQL and projection must not hold the cache mutex"
-                        );
+                        let probe = std::time::Instant::now();
+                        loop {
+                            if store.timeline_cache.try_lock().is_some() {
+                                break;
+                            }
+                            assert!(
+                                probe.elapsed() < std::time::Duration::from_millis(10),
+                                "SQL and projection must not hold the cache mutex"
+                            );
+                            std::thread::yield_now();
+                        }
                         entered.send(()).unwrap();
                         let (lock, wake) = &*gate;
                         let held = lock.lock().unwrap();

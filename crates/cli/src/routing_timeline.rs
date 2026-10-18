@@ -204,6 +204,35 @@ fn emit(
 mod tests {
     use super::*;
     #[test]
+    fn follow_retries_busy_and_bounded_transients_but_stops_for_scope_and_authorization() {
+        let mut count = 0;
+        let mut busy = hiroute_application_api::ErrorV1::new(ErrorCode::DaemonUnavailable);
+        busy.observation_read = Some(hiroute_application_api::ObservationReadFailureV1 {
+            reason: hiroute_application_api::ObservationReadFailureReasonV1::ReaderBusy,
+            retry_after_ms: 100,
+            action: "retry".into(),
+        });
+        assert_eq!(
+            retry_delay(Some(&busy), &mut count),
+            Some(std::time::Duration::from_millis(100))
+        );
+        let transient = hiroute_application_api::ErrorV1::new(ErrorCode::DaemonUnavailable);
+        for _ in 0..3 {
+            assert!(retry_delay(Some(&transient), &mut count).is_some());
+        }
+        assert!(retry_delay(Some(&transient), &mut count).is_none());
+        for code in [
+            ErrorCode::ScopeTooLarge,
+            ErrorCode::InvalidArguments,
+            ErrorCode::InvalidArguments,
+        ] {
+            assert!(
+                retry_delay(Some(&hiroute_application_api::ErrorV1::new(code)), &mut 0).is_none()
+            );
+        }
+    }
+
+    #[test]
     fn watch_requires_a_session_and_bounded_scope() {
         let args = |s: &str| s.split_whitespace().map(str::to_owned).collect::<Vec<_>>();
         assert!(parse(&args("--follow")).is_err());
