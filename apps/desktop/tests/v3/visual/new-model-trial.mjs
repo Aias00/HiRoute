@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -57,8 +57,12 @@ const profile = await mkdtemp(path.join(os.tmpdir(), 'hiroute-v3-new-model-trial
 await mkdir(outputRoot, { recursive: true });
 let vite;
 let chrome;
+let viteLog = '';
+const captureVite = chunk => { viteLog = (viteLog + chunk.toString()).slice(-65536); };
 try {
   vite = spawn(path.join(desktopRoot, 'node_modules/.bin/vite'), ['tests/v3/browser', '--host', '127.0.0.1', '--port', String(httpPort), '--strictPort'], { cwd: desktopRoot, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  vite.stdout.on('data', captureVite);
+  vite.stderr.on('data', captureVite);
   await new Promise((resolve, reject) => { vite.once('spawn', resolve); vite.once('error', reject); });
   await waitFor(`http://127.0.0.1:${httpPort}/`);
   const chromeExecutable = process.env.CHROME_BIN || (process.platform === 'darwin' ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : 'google-chrome');
@@ -71,5 +75,6 @@ try {
 } finally {
   await terminate(chrome);
   await terminate(vite);
+  await writeFile(path.join(outputRoot, 'vite.log'), viteLog);
   await removeProfile(profile);
 }
