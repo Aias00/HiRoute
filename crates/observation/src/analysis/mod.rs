@@ -11,6 +11,8 @@ mod native_origin;
 mod prices;
 mod projection;
 mod read;
+#[cfg(test)]
+mod read_admission_tests;
 mod routing;
 mod schema;
 mod scope;

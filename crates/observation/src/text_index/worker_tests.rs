@@ -1,6 +1,131 @@
 use super::*;
 use rusqlite::StatementStatus;
 
+thread_local! {
+    static STATEMENTS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+fn count_statement(_: &str) {
+    STATEMENTS.with(|count| count.set(count.get() + 1));
+}
+
+#[test]
+fn idle_indexer_does_not_rescan_ready_history_after_settlement_or_analysis_reads() {
+    let root = tempfile::tempdir().unwrap();
+    let store =
+        LocalObservationStore::open(root.path(), crate::DigestAuthority::new([2; 32])).unwrap();
+    store.connection.lock().execute_batch(
+        "WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<8192)
+         INSERT INTO content_blobs_v2 SELECT 'workspace','blob-'||i,'unused',0,'text/plain','complete',1 FROM n;
+         INSERT INTO observation_text_index_v2 SELECT workspace_id,blob_digest,'ready',rowid FROM content_blobs_v2;
+         INSERT INTO observation_text_lookup_sources_v1 SELECT workspace,digest FROM observation_text_index_v2;",
+    ).unwrap();
+    store.settle_pending_valuations(16).unwrap();
+    store.reconcile_analysis_batch(500).unwrap();
+    let mut builder = TextIndexBuilder::new(&store).unwrap();
+    store.connection.lock().trace(Some(count_statement));
+    for _ in 0..32 {
+        builder.cycle(&store).unwrap();
+        if builder.idle_checkpoint.is_some() {
+            break;
+        }
+    }
+    assert!(builder.idle_checkpoint.is_some());
+    for _ in 0..3 {
+        // These are the ordinary idle maintenance and query paths that share
+        // the production store; neither changes content needing an index.
+        let before = store.connection.lock().total_changes();
+        assert_eq!(store.settle_pending_valuations(16).unwrap(), 0);
+        assert_eq!(store.reconcile_analysis_batch(500).unwrap(), 0);
+        assert_eq!(store.connection.lock().total_changes(), before);
+        let reader = crate::query_v2::search_tests::reader(true);
+        let q = hiroute_domain::ObservationAnalysisQueryV1::new(
+            hiroute_domain::AnalysisViewV1::Conversations,
+        );
+        let range = hiroute_domain::AnalysisTimeRangeV1 {
+            requested_from_ms: 0,
+            requested_to_ms: 500,
+            effective_from_ms: 0,
+            effective_to_ms: 500,
+            from_utc_offset_seconds: 0,
+            to_utc_offset_seconds: 0,
+            clipped_for_retention: false,
+        };
+        store
+            .observed_analysis(&reader, &q, Some(&range), None, 500)
+            .unwrap();
+        STATEMENTS.with(|count| count.set(0));
+        assert_eq!(builder.cycle(&store).unwrap(), 0);
+        assert!(STATEMENTS.with(|count| count.get()) < 8);
+    }
+    // A real source revision wakes the same bounded scanner. This control
+    // demonstrates the work an unconditional idle rescan would repeat.
+    crate::store::increment_store_revision(&store.connection.lock()).unwrap();
+    STATEMENTS.with(|count| count.set(0));
+    for _ in 0..32 {
+        builder.cycle(&store).unwrap();
+        if builder.idle_checkpoint.is_some() {
+            break;
+        }
+    }
+    assert!(STATEMENTS.with(|count| count.get()) > 32);
+}
+
+#[test]
+fn indexer_rechecks_a_late_live_source_changed_by_a_peer_writer() {
+    let root = tempfile::tempdir().unwrap();
+    let store =
+        LocalObservationStore::open(root.path(), crate::DigestAuthority::new([2; 32])).unwrap();
+    crate::query_v2::search_tests::source(&store, b"late needle");
+    store
+        .connection
+        .lock()
+        .execute("UPDATE content_instances_v2 SET state='installing'", [])
+        .unwrap();
+    let mut builder = TextIndexBuilder::new(&store).unwrap();
+    assert_eq!(builder.cycle(&store).unwrap(), 0);
+    assert!(builder.idle_checkpoint.is_some());
+    let peer = rusqlite::Connection::open(&store.activity_path).unwrap();
+    peer.execute("UPDATE content_instances_v2 SET state='complete'", [])
+        .unwrap();
+    crate::store::increment_store_revision(&peer).unwrap();
+    assert_eq!(builder.cycle(&store).unwrap(), 1);
+    let hits = store
+        .search_observed_text(
+            &crate::query_v2::search_tests::reader(true),
+            &crate::query_v2::search_tests::query("needle", 10),
+            500,
+        )
+        .unwrap();
+    assert_eq!(hits.hits.len(), 1);
+}
+
+#[test]
+fn indexer_does_not_declare_idle_when_a_source_changes_behind_the_cursor() {
+    let root = tempfile::tempdir().unwrap();
+    let store =
+        LocalObservationStore::open(root.path(), crate::DigestAuthority::new([2; 32])).unwrap();
+    crate::query_v2::search_tests::source(&store, b"late needle");
+    store
+        .connection
+        .lock()
+        .execute("UPDATE content_instances_v2 SET state='installing'", [])
+        .unwrap();
+    let mut builder = TextIndexBuilder::new(&store).unwrap();
+    // Resume a bounded pass after it visited the old source. Completion raced
+    // that pass, so its final checkpoint must not cover the unvisited change.
+    builder.scan_checkpoint = Some(source_checkpoint(&store).unwrap());
+    builder.scan_after = 1;
+    store
+        .connection
+        .lock()
+        .execute("UPDATE content_instances_v2 SET state='complete'", [])
+        .unwrap();
+    assert_eq!(builder.cycle(&store).unwrap(), 0);
+    assert!(builder.idle_checkpoint.is_none());
+    assert_eq!(builder.cycle(&store).unwrap(), 1);
+}
+
 #[test]
 fn index_selection_bounds_database_work_even_after_a_large_indexed_history() {
     let root = tempfile::tempdir().unwrap();
