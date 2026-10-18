@@ -202,6 +202,22 @@ class Runner(unittest.TestCase):
             desktop.codex_call(self.root,request,profiles)
         run.assert_not_called()
 
+    def test_inspection_keeps_bounded_transaction_and_diagnostic_evidence_without_mutation(self):
+        home = self.root / 'home'
+        local = self.root / 'local'
+        journal = home / '.local/share/hiroute/service/install-journal.json'
+        journal.parent.mkdir(parents=True)
+        journal.write_text('{"phase":"prepared","schema":"current"}')
+        log = local / 'HiRoute/cli/diagnostics/daemon/current.jsonl'
+        log.parent.mkdir(parents=True)
+        log.write_bytes(b'x' * 70000 + b'\n{"code":"EXPECTED_INSTALL_FAILURE"}\n')
+        original = (journal.read_bytes(), log.read_bytes())
+        result = profiles.inspect_installation(home,local)
+        self.assertEqual(result['install-journal.json']['record']['phase'],'prepared')
+        self.assertEqual(result['diagnostics_tail']['daemon/current.jsonl']['records'],
+                         [{'code':'EXPECTED_INSTALL_FAILURE'}])
+        self.assertEqual(original,(journal.read_bytes(),log.read_bytes()))
+
     def test_bootstrap_publishes_once_and_preserves_changed_content(self):
         destination = self.root / 'helper.py'
         temporary = self.root / 'upload'

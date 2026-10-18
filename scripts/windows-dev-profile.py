@@ -80,6 +80,31 @@ def inspect_installation(native_home, local_app_data):
                                modified_unix=path.stat().st_mtime)
             if path.stat().st_size <= 64 * 1024:
                 facts[name]['record'] = json.loads(path.read_text(encoding='utf-8'))
+    journal = plain(paths['data'] / 'service/install-journal.json')
+    if journal.is_file():
+        facts['install-journal.json'] = dict(sha256=digest(journal), bytes=journal.stat().st_size)
+        if journal.stat().st_size <= 64 * 1024:
+            facts['install-journal.json']['record'] = json.loads(journal.read_text(encoding='utf-8'))
+    diagnostics = plain(paths['state'] / 'diagnostics')
+    tails = {}
+    if diagnostics.is_dir():
+        for path in diagnostics.rglob('*.jsonl'):
+            plain(path)
+            if len(tails) == 16:
+                break
+            if path.is_file():
+                size = path.stat().st_size
+                with path.open('rb') as stream:
+                    stream.seek(max(0, size - 64 * 1024))
+                    lines = stream.read(64 * 1024).decode('utf-8', errors='replace').splitlines()
+                records = []
+                for line in lines:
+                    try:
+                        records.append(json.loads(line))
+                    except ValueError:
+                        pass  # A concurrently written or clipped first/last record is incomplete.
+                tails[str(path.relative_to(diagnostics))] = dict(bytes=size, records=records)
+    facts['diagnostics_tail'] = tails
     expected = facts.get('shell-package.json', {}).get('record', {}).get('files', {})
     mismatches = []
     for name, wanted in expected.items():
