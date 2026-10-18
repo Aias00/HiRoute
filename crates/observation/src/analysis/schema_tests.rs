@@ -1,5 +1,6 @@
 use super::*;
 use crate::store::tests::support::*;
+use crate::writer::ObservationCommitPort;
 use hiroute_domain::*;
 
 fn ingest(store: &crate::LocalObservationStore, suffix: &str) -> Fixture {
