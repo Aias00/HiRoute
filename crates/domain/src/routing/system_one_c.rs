@@ -192,7 +192,14 @@ impl FrozenNativeProtocolV1 {
     ) -> Result<Self, NativeProtocolError> {
         protocol.validate()?;
         let mut scopes = BTreeMap::new();
+        let selection = super::NativeProtocolSelectionV1 {
+            schema: protocol.schema.clone(),
+            prior_context_max_turns: protocol.prior_context_max_turns,
+        };
         for (id, judgment) in judgments {
+            // Freezing is also used directly by compiler/diagnostic callers. Resolve
+            // default intent here rather than relying on an editor to replace text.
+            let judgment = judgment.resolve_assessment(Some(&selection))?;
             if !judgment.validate() {
                 return Err(NativeProtocolError::ContentMismatch);
             }

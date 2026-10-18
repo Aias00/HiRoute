@@ -51,6 +51,8 @@ def frozen_from(preview):
 def exercise(product, cli, service, endpoint, selection):
     protocol, stock = native_protocol(product.repo)
     smart = copy.deepcopy(product.editor['smart'])
+    released = json.loads((product.repo / 'crates/domain/src/routing/authoring/fixtures/released-default-assessment.v1.json').read_text())
+    smart['judgment']['competence'].update(released['assessment'])
     smart.update(economy=[selection], primary=[selection], classifier={'kind': 'decision_service', 'service': service})
     smart['judgment']['degree']['simple_threshold_millis'] = 817
     smart['judgment']['competence']['floor_millis'] = 317

@@ -1615,7 +1615,8 @@
         "crates/domain/src/routing/decision.rs",
         "crates/domain/src/routing/authoring/tests.rs",
         "crates/domain/src/routing/system_one_c_tests.rs",
-        "crates/domain/src/routing/authoring/fixtures/released-plan-editor.v2.json"
+        "crates/domain/src/routing/authoring/fixtures/released-plan-editor.v2.json",
+        "crates/domain/src/routing/authoring/fixtures/released-default-assessment.v1.json"
       ]
     }
   ]

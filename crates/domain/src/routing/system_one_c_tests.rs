@@ -163,3 +163,42 @@ fn native_category_v1_text_is_immutable_supported_publication_content() {
         "sha256:b3bdc8c141db782c4e405557bcde84945c3401f1443e35dac023daf57a29086d"
     );
 }
+
+#[test]
+fn direct_freezing_resolves_default_intent_and_preserves_explicit_custom_bytes() {
+    let protocol = NativeProtocolV1::default();
+    let original = JudgmentSettingsV1::default();
+    let freeze = |judgment: JudgmentSettingsV1| {
+        FrozenNativeProtocolV1::freeze(
+            &protocol,
+            judgment.degree.definition().into(),
+            [(super::super::SMART_SAVING_SCOPE_ID.into(), judgment)],
+        )
+        .unwrap()
+    };
+    let default = freeze(original.clone());
+    assert_eq!(
+        default.scopes[super::super::SMART_SAVING_SCOPE_ID].assessment,
+        stock_c_questions()["q1"]
+    );
+    assert_eq!(
+        default.scopes[super::super::SMART_SAVING_SCOPE_ID].standard,
+        "default"
+    );
+    let mut custom = original.clone();
+    custom.competence.standard = Some(super::super::AssessmentStandardV1::Custom);
+    let frozen = freeze(custom.clone());
+    assert_eq!(
+        frozen.scopes[super::super::SMART_SAVING_SCOPE_ID].assessment,
+        composed_assessment(Some(&protocol), &custom)
+    );
+    assert_eq!(
+        frozen.scopes[super::super::SMART_SAVING_SCOPE_ID].standard,
+        "custom"
+    );
+    assert_eq!(
+        original,
+        JudgmentSettingsV1::default(),
+        "freezing mutated authored input"
+    );
+}

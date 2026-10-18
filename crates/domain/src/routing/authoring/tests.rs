@@ -242,6 +242,19 @@ fn native_editor() -> PlanEditorStateV2 {
 fn default_assessment_follows_both_directions_without_changing_thresholds_or_old_bytes() {
     use crate::*;
     let mut value = native_editor();
+    let released: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/released-default-assessment.v1.json")).unwrap();
+    value.smart.judgment.competence.instructions = released["assessment"]["instructions"]
+        .as_str()
+        .unwrap()
+        .into();
+    value.smart.judgment.competence.criteria = std::array::from_fn(|i| {
+        released["assessment"]["criteria"][i]
+            .as_str()
+            .unwrap()
+            .into()
+    });
+    assert_eq!(value.smart.judgment.competence.standard, None);
     let old = serde_json::to_vec(&value).unwrap();
     value.smart.judgment.degree.simple_threshold_millis = 913;
     value.smart.judgment.competence.floor_millis = 612;

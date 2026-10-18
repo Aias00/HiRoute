@@ -620,7 +620,7 @@ const scenarios = [
         saved.connection.auth_header.value_secret_ref = `protected/r${saved.revision}`;
         services = [saved]; return { state: 'succeeded' };
       };
-      c().handlers.test_classifier_decision = () => ({ state: 'test_failed', verified_shapes: [], failure_code: 'CLASSIFIER_INPUT_REJECTED', duration_millis: 12 });
+      c().handlers.test_classifier_decision = () => ({ outcome: 'failed', failure_code: 'CLASSIFIER_INPUT_REJECTED', duration_millis: 12 });
     });
     await click('模型'); await click('决策模型'); await click('添加决策模型');
     const form = () => all('.decision-connection-form')[0];
@@ -634,8 +634,8 @@ const scenarios = [
     const saved = calls('save_decision_service').at(-1).payload.input;
     assert(saved.change.expected_revision === 0 && saved.change.service.revision === 1, 'New connection did not use revision transaction');
     assert(saved.secret === 'synthetic-test-key', 'Built-in auth was incorrectly prefixed by UI');
-    const tested = calls('test_classifier_decision').at(-1).payload.input.request.target;
-    assert(tested.kind === 'saved' && tested.service_revision === 1 && tested.service_id === saved.change.service.id, 'Test used the unsaved editor or old credential');
+    const tested = calls('test_classifier_decision').at(-1).payload.input.classifier.service;
+    assert(tested.revision === 1 && tested.id === saved.change.service.id && tested.connection.auth_header.value_secret_ref === 'protected/r1', 'Test used the unsaved editor or old credential');
     assert(text().includes('协议兼容性') && !text().includes('CLASSIFIER_INPUT_REJECTED'), 'Failure is not actionable or exposes raw code by default');
     await click('修改连接'); await click('更换');
     setInput(input('credential'), 'replacement-key');
@@ -648,9 +648,9 @@ const scenarios = [
     setInput(input('credential'), 'replacement-key'); await pause(30);
     await click('仅保存'); await until(() => !form(), 'saved edited revision');
     assert(calls('test_classifier_decision').length === 1 && text().includes('本次打开尚未测试'), 'Old test status leaked to new revision or save-only tested');
-    c().handlers.test_classifier_decision = () => ({ state: 'verified', verified_shapes: ['connectivity'], duration_millis: 20 });
+    c().handlers.test_classifier_decision = () => ({ outcome: 'passed', duration_millis: 20 });
     await click('测试连接'); await until(() => text().includes('连接测试通过'), 'test repaired connection');
-    assert(calls('test_classifier_decision').at(-1).payload.input.request.target.service_revision === 2, 'Repair tested a stale revision');
+    assert(calls('test_classifier_decision').at(-1).payload.input.classifier.service.revision === 2, 'Repair tested a stale revision');
     await click('编辑'); setInput(input('name'), 'Saved while readback fails'); await pause(40);
     c().handlers.decision_services = () => { throw new Error('DAEMON_UNAVAILABLE'); };
     await click('保存并测试'); await until(() => text().includes('配置已保存，但未能核实新版本'), 'acknowledged save readback failure');
