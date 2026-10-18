@@ -477,7 +477,7 @@ mod classifier_codec_tests {
             [(SMART_SAVING_SCOPE_ID.into(), judgment)],
         )
         .unwrap();
-        let request = json!({"schema":"hiroute.classifier-decision-test/v2","service_id":"saved-fixture","service_revision":7,"shape":"standard","protocol":frozen});
+        let request = json!({"schema":"hiroute.classifier-decision-test/v2","target":{"kind":"saved","service_id":"saved-fixture","service_revision":7,"shape":"standard","protocol":frozen}});
         assert_eq!(classifier_value(request.clone()).unwrap(), request);
         let mut injected = request.clone();
         injected["state"] = json!("verified");

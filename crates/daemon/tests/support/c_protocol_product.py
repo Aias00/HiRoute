@@ -186,6 +186,9 @@ def exercise(product, cli, service, endpoint, selection):
     _, saved = publish(editor, 'legacy-ordinary-edit-without-protocol-review')
     assert saved['desired']['strategy']['judgment'] == rollback['judgment']
     assert 'assessment_transition' not in saved
+    if product.cpa_args:
+        calls += inspect_mixed_after_rollback(product, endpoint)
+        routing_calls += 1
     endpoint.c_vectors = False
     print(json.dumps({'scenario': 'server-preview-adoption-same-protocol-edit-restart-legacy-adapter-3-and-19-question-diagnostics-exact-rollback',
                       'state': 'green', 'explicit_calls': 5, 'routing_calls': routing_calls, 'implicit_calls': 0}), flush=True)
@@ -194,6 +197,7 @@ def exercise(product, cli, service, endpoint, selection):
 def execute_and_inspect(product, endpoint, saved):
     """Actual Gateway -> event ingestion -> existing retained query, with local upstreams."""
     started = int(time.time() * 1000)
+    product.c_observation_from_ms = started - 1
     before = len(endpoint.requests)
     endpoint.c_score = 0.2
     endpoint.c_applicability = 0.25
@@ -260,3 +264,39 @@ def execute_and_inspect(product, endpoint, saved):
     print(json.dumps({'scenario': 'c-real-gateway-to-retained-product-observations', 'state': 'green',
                       'routing_calls': 2, 'requested': 1, 'protection_opportunities': 1, 'suppressed': 1}), flush=True)
     return 2
+
+
+def inspect_mixed_after_rollback(product, endpoint):
+    """A current legacy decision and C decisions share one complete retained Plan scope."""
+    before = len(endpoint.requests)
+    client = http.client.HTTPConnection('127.0.0.1', product.port, timeout=30)
+    try:
+        client.request('POST', '/v1/responses', encoded({'model': product.model_alias,
+            'input': 'Execute the deterministic step after explicit rollback.', 'stream': True}),
+            {'Content-Type': 'application/json', 'X-HiRoute-Token': product.bearer(product.agent_connection),
+             'session-id': 'c-protocol-product-retained'})
+        response = client.getresponse(); body = response.read()
+        assert response.status == 200, (response.status, body[:500])
+    finally:
+        client.close()
+    assert len(endpoint.requests) == before + 1
+    query = {'plan_id': product.plan_id, 'from_ms': product.c_observation_from_ms,
+             'to_ms': int(time.time() * 1000) + 60000, 'limit': 20}
+    deadline = time.monotonic() + 30
+    while True:
+        result = product.control('GetPlanQualitySamples', {'schema': 'hiroute.observation.query/v3',
+            'intent': {'view': 'plan_quality', 'query': query}}, success=False)
+        if result.get('error'):
+            assert result['error']['code'] == 'CHANGE_PREVIEW_STALE', result
+        else:
+            summary = result['data']['routing_observations']
+            if summary['retained_decisions'] >= 3:
+                break
+        assert time.monotonic() < deadline, 'Rolled-back native decision did not reach retained observations'
+        time.sleep(.05)
+    assert summary['coverage'] == 'complete' and summary['known_non_c_decisions'] == 1 and summary['legacy_or_unknown_decisions'] == 0, summary
+    counts = summary['cohorts'][0]['counts']
+    assert counts['c_decisions'] == 2 and counts['suppressed_per_opportunity'] == 1.0 and counts['suppressed_per_c_decision'] == 0.5, counts
+    print(json.dumps({'scenario':'current-c-and-legacy-all-revisions-product-query','state':'green',
+                      'known_non_c_decisions':1,'c_decisions':2,'coverage':'complete'}), flush=True)
+    return 1
