@@ -342,6 +342,10 @@ pub trait ComputeFactsPort: Send + Sync {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ComputeManagementControlError {
     Invalid,
+    InvalidModelConnectionUrl,
+    UnsafeModelConnectionPath,
+    UnsafeModelConnectionAuthenticationHeader,
+    UnsafeModelConnectionProtocolHeader,
     NotFound,
     Conflict,
     RegisteredOptionUnavailable,

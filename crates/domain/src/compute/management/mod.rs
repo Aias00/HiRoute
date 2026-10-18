@@ -211,15 +211,7 @@ pub struct ComputeManagementTargetV2 {
 
 impl ComputeManagementTargetV2 {
     pub fn validate(&self) -> Result<(), ComputeManagementErrorV2> {
-        let https = self.scheme.eq_ignore_ascii_case("https");
-        let loopback_http = self.scheme.eq_ignore_ascii_case("http")
-            && self
-                .authority
-                .trim_start_matches('[')
-                .trim_end_matches(']')
-                .parse::<std::net::IpAddr>()
-                .is_ok_and(|address| address.is_loopback());
-        if (!https && !loopback_http)
+        if (!self.scheme.eq_ignore_ascii_case("https") && !self.scheme.eq_ignore_ascii_case("http"))
             || self.port == 0
             || !valid_authority(&self.authority)
             || !valid_request_path(&self.request_path)

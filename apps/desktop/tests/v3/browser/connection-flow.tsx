@@ -26,6 +26,9 @@ function Harness() {
     const invoke = async (command: string, payload?: Record<string, unknown>) => mockProductInvoke(command, payload, kind === 'custom' && !appendTo ? 'unknown_model' : 'ready') as any;
     const check = async (command: string, request: any) => {
       if (params.get('hold_check')) await new Promise<void>(resolve => pendingChecks.push(resolve));
+      if (params.has('check_error')) throw { source: 'backend', envelope: {
+        error: { code: 'INVALID_ARGUMENTS', message_key: params.get('check_error') },
+      } };
       const result = await invoke(command, { request });
       const ref = request.input_candidate?.candidate_ref ?? 'candidate/no-auth';
       return { ...result, candidate: { ...result.candidate, candidate: { candidate_ref: ref, candidate_revision: 2 },

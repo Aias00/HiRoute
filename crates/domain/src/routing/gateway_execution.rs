@@ -104,13 +104,16 @@ fn valid_user_configured_native_endpoint(value: &str) -> bool {
     if valid_executable_endpoint(value) || valid_numeric_loopback_http(value) {
         return true;
     }
-    let Some(rest) = value.strip_prefix("https://") else {
+    let Some(rest) = value
+        .strip_prefix("https://")
+        .or_else(|| value.strip_prefix("http://"))
+    else {
         return false;
     };
     let Some((authority, path)) = rest.split_once('/') else {
         return false;
     };
-    valid_user_configured_https_authority(authority)
+    valid_user_configured_authority(authority)
         && !path.is_empty()
         && !path.starts_with('/')
         && !path.contains(['?', '#', '\\', '%'])
@@ -121,7 +124,7 @@ fn valid_user_configured_native_endpoint(value: &str) -> bool {
         })
 }
 
-fn valid_user_configured_https_authority(value: &str) -> bool {
+fn valid_user_configured_authority(value: &str) -> bool {
     if value.is_empty()
         || value.len() > 253
         || value.contains(['@', '/', '?', '#'])
@@ -832,6 +835,62 @@ fn valid_numeric_loopback_http(value: &str) -> bool {
 mod tests {
     use super::*;
     use crate::ReasoningRenderModeV1;
+
+    #[test]
+    fn explicit_http_gateway_targets_keep_exact_user_and_connector_scopes() {
+        for uri in [
+            "http://192.0.2.10/v1/responses",
+            "http://192.168.1.10:8123/v1/responses",
+            "http://gateway.invalid:8123/v1/responses",
+            "http://localhost:8123/v1/responses",
+            "http://127.0.0.1:8123/v1/responses",
+            "http://[::1]:8123/v1/responses",
+            "http://[2001:db8::10]:8123/v1/responses",
+            "https://gateway.invalid/v1/responses",
+        ] {
+            let target = GatewayOperationalTargetV1::UserConfiguredNative { uri: uri.into() };
+            assert!(
+                target.validate_for(ConnectorRuntimeKind::BuiltinNative, uri),
+                "{uri}"
+            );
+            assert!(!target.validate_for(ConnectorRuntimeKind::CpaBridge, uri));
+            assert!(!target.validate_for(
+                ConnectorRuntimeKind::BuiltinNative,
+                "http://other.invalid/v1/responses"
+            ));
+        }
+        for uri in [
+            "http://192.0.2.10:8123/v1/responses",
+            "http://gateway.invalid/v1/responses",
+        ] {
+            assert!(
+                !GatewayOperationalTargetV1::RegisteredHttps { uri: uri.into() }
+                    .validate_for(ConnectorRuntimeKind::BuiltinNative, uri)
+            );
+            assert!(
+                !GatewayOperationalTargetV1::ManagedCpaLoopback {
+                    uri: uri.into(),
+                    runtime_epoch: 1,
+                    target_epoch: 1
+                }
+                .validate_for(ConnectorRuntimeKind::CpaBridge, uri)
+            );
+        }
+        for uri in [
+            "ftp://gateway.invalid/v1/responses",
+            "http://user:key@gateway.invalid/v1/responses",
+            "http://gateway.invalid/v1/responses?key=secret",
+            "http://gateway.invalid/v1/../responses",
+            "http://gateway.invalid/v1/%2e%2e/responses",
+            "http://gateway.invalid:0/v1/responses",
+        ] {
+            assert!(
+                !GatewayOperationalTargetV1::UserConfiguredNative { uri: uri.into() }
+                    .validate_for(ConnectorRuntimeKind::BuiltinNative, uri),
+                "{uri}"
+            );
+        }
+    }
 
     #[test]
     fn registered_protocol_path_keeps_authority_and_user_target_stays_exact() {

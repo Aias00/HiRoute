@@ -74,6 +74,18 @@ module before extending it; a local feature does not require a facade-wide rewri
 
 ## Model sources and native configuration
 
+Custom API [target normalization](../../crates/integrations/src/model_connections/target.rs)
+is pure for HTTP and HTTPS, retaining the configured hostname until bounded request
+transport resolves it. Explicit LAN/remote HTTP uses the ordinary check/save flow.
+The [durable target](../../crates/domain/src/compute/management/mod.rs) and
+[user-configured Gateway target](../../crates/domain/src/routing/gateway_execution.rs)
+admit the same explicit transports while retaining exact credential destinations
+and the separate registered/managed-connector scopes.
+[Control error translation](../../crates/daemon/src/control/runtime/model_connections/error.rs)
+retains closed target reasons in the existing error envelope; the Desktop form owns
+localized corrections and plaintext notices. The [real-process regression](../../crates/daemon/tests/support/custom_http_product.py)
+covers omitted-directory save/restart/recheck and safe error propagation.
+
 Branch execution keys distinguish reasoning selections. The derived Gateway candidate
 also retains its original source binding for current credential membership and exact
 leases; routing, retry and context identities continue using the execution key.

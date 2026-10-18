@@ -181,15 +181,66 @@ fn custom_header_rejects_reserved_or_injected_names() {
 }
 
 #[test]
-fn only_https_or_loopback_http_targets_are_accepted() {
+fn explicit_http_and_https_targets_survive_source_serialization() {
+    for scheme in ["http", "https"] {
+        for authority in [
+            "192.0.2.10",
+            "192.168.1.10",
+            "gateway.invalid",
+            "localhost",
+            "127.0.0.1",
+            "::1",
+            "2001:db8::10",
+        ] {
+            let mut value = source(GatewayAuthenticationSemanticsV1::None);
+            value.target.scheme = scheme.into();
+            value.target.authority = authority.into();
+            value.target.port = 8123;
+            assert_eq!(value.validate(), Ok(()));
+            let reopened: ComputeManagementSourceV2 =
+                serde_json::from_slice(&serde_json::to_vec(&value).unwrap()).unwrap();
+            assert_eq!(reopened, value);
+            assert_eq!(reopened.validate(), Ok(()));
+        }
+    }
+}
+
+#[test]
+fn explicit_http_retains_target_and_credential_scope_guards() {
     let mut value = source(GatewayAuthenticationSemanticsV1::None);
+    for scheme in ["ftp", "file", "ws", ""] {
+        value.target.scheme = scheme.into();
+        assert_eq!(
+            value.validate(),
+            Err(ComputeManagementErrorV2::InvalidTarget)
+        );
+    }
     value.target.scheme = "http".into();
+    for authority in [
+        "",
+        "user:secret@gateway.invalid",
+        "gateway.invalid/path",
+        "gateway.invalid?key=secret",
+    ] {
+        value.target.authority = authority.into();
+        assert_eq!(
+            value.validate(),
+            Err(ComputeManagementErrorV2::InvalidTarget)
+        );
+    }
+    value.target.authority = "gateway.invalid".into();
+    value.target.port = 0;
     assert_eq!(
         value.validate(),
         Err(ComputeManagementErrorV2::InvalidTarget)
     );
-    value.target.authority = "127.0.0.1".into();
-    assert_eq!(value.validate(), Ok(()));
+
+    // Expanding supported transport must not give a saved HTTPS key authority
+    // over a different HTTP destination. The save planner must bind it afresh.
+    let mut authenticated = source(GatewayAuthenticationSemanticsV1::Bearer);
+    authenticated.target.scheme = "http".into();
+    assert!(authenticated.target.validate().is_ok());
+    assert!(authenticated.validate().is_err());
 }
 
 #[test]
