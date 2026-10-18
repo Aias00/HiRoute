@@ -196,6 +196,39 @@ fn real_role_all_keeps_external_gate_and_console_auth_authority_separate() {
     );
     assert_eq!(status, 200);
     assert_eq!(snapshot["trusted_authority"], true);
+    // The same optional native-target arguments used by Desktop must reach the
+    // shared session over HTTP, rather than being dropped by the host adapter.
+    let missing_profile = directory.path().join("missing-hermes");
+    let target = serde_json::to_value(hiroute_domain::AgentNativeTargetV1::Hermes {
+        config_root: missing_profile.to_str().unwrap().into(),
+    })
+    .unwrap();
+    let (status, agents, _) = http(
+        address,
+        "/api/console/v1/command/agent_snapshot",
+        Some(json!({"nativeTargets":[target]})),
+        Some(bearer),
+        "",
+    );
+    assert_eq!(status, 200, "{agents}");
+    let unavailable = agents["agents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|agent| agent["native_target"] == target)
+        .expect("the selected unavailable profile must not fall back");
+    assert_eq!(unavailable["configuration_state"], "profile_unavailable");
+    assert!(!missing_profile.exists());
+    let (status, scan, _) = http(
+        address,
+        "/api/console/v1/command/compute_scan",
+        Some(json!({"nativeTarget":null})),
+        Some(bearer),
+        "",
+    );
+    assert_eq!(status, 200, "{scan}");
+    assert!(scan["connections"].is_array(), "{scan}");
+    assert!(scan.get("sources").is_none());
     let secret = "console-fixture-secret-must-not-be-logged";
     let (status, input, _) = http(
         address,
