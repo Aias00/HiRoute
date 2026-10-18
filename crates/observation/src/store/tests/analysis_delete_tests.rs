@@ -3,9 +3,14 @@
 use super::*;
 use rusqlite::params;
 
-fn read(
+fn read(store: &LocalObservationStore, q: ObservationAnalysisQueryV1) -> ObservationAnalysisPageV1 {
+    read_at(store, q, 20_000)
+}
+
+fn read_at(
     store: &LocalObservationStore,
     mut q: ObservationAnalysisQueryV1,
+    now: i64,
 ) -> ObservationAnalysisPageV1 {
     q.currency = q.view.monetary().then(|| "USD".into());
     q.valuation_kind = q
@@ -16,22 +21,22 @@ fn read(
         WorkspaceId::default(),
         "delete-analysis".into(),
         1,
-        1_000_000,
+        now + 1_000_000,
         true,
         true,
     )
     .unwrap();
     let range = AnalysisTimeRangeV1 {
         requested_from_ms: 0,
-        requested_to_ms: 20_000,
+        requested_to_ms: now,
         effective_from_ms: 0,
-        effective_to_ms: 20_000,
+        effective_to_ms: now,
         from_utc_offset_seconds: 0,
         to_utc_offset_seconds: 0,
         clipped_for_retention: false,
     };
     let page = store
-        .observed_analysis(&reader, &q, Some(&range), None, 20_000)
+        .observed_analysis(&reader, &q, Some(&range), None, now)
         .unwrap();
     assert_eq!(page.status, AnalysisStatusV1::Ready, "{page:?}");
     page
@@ -185,14 +190,97 @@ fn unaware_delete(store: &LocalObservationStore, f: &Fixture, full: bool, rollup
 }
 
 fn new_request(store: &LocalObservationStore, session: &SessionId, suffix: &str) -> Fixture {
+    new_request_at(store, session, suffix, 5000)
+}
+
+fn new_request_at(
+    store: &LocalObservationStore,
+    session: &SessionId,
+    suffix: &str,
+    offset: u64,
+) -> Fixture {
     let mut f = Fixture::new(suffix);
     f.session = session.clone();
     for mut e in facts(&f, UsageFrameKindV1::Cumulative) {
-        e.occurred_at_unix_nanos += 5_000_000_000;
+        e.occurred_at_unix_nanos += offset * 1_000_000;
         store.ingest_fact(&e, &[]).unwrap();
     }
     store.settle_pending_valuations(16).unwrap();
     f
+}
+
+#[test]
+fn actual_expiry_leaves_a_neutral_gap_without_fabricating_a_full_delete() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    let a = new_request_at(
+        &store,
+        &Fixture::new("expiry-a").session,
+        "expiry-a",
+        7_200_000,
+    );
+    let b = native(&store, "expiry-b");
+    let c = new_request_at(
+        &store,
+        &Fixture::new("expiry-c").session,
+        "expiry-c",
+        7_200_000,
+    );
+    store.settle_pending_valuations(16).unwrap();
+    let mut proof = event(
+        &c,
+        vec![
+            a.session.to_string(),
+            b.session.to_string(),
+            c.session.to_string(),
+        ],
+        1,
+    );
+    proof.ingress_at_ms = 8_000_000;
+    store.ingest_native_continuation(&proof).unwrap();
+    let now = SEVEN_DAYS_MILLIS + 200;
+    assert_eq!(store.expire_request_details(now, 200).unwrap(), 1);
+    for phase in 0..2 {
+        if phase == 1 {
+            store.reconcile_analysis_batch(now).unwrap();
+        }
+        let p = read_at(
+            &store,
+            ObservationAnalysisQueryV1::new(AnalysisViewV1::Conversations),
+            now,
+        );
+        assert_eq!(p.conversations.len(), 2);
+        assert!(
+            p.conversations
+                .iter()
+                .flat_map(|c| &c.members)
+                .any(|m| m.gap_before.as_deref() == Some("predecessor_unavailable"))
+        );
+        let p = read_at(
+            &store,
+            ObservationAnalysisQueryV1::new(AnalysisViewV1::CostRanking),
+            now,
+        );
+        assert_eq!(
+            p.costs
+                .iter()
+                .filter_map(|c| c.known_sum_micros)
+                .sum::<u64>(),
+            234
+        );
+        assert_eq!(
+            store
+                .connection
+                .lock()
+                .query_row(
+                    "SELECT COUNT(*) FROM observation_analysis_cuts_v1",
+                    [],
+                    |r| r.get::<_, u64>(0)
+                )
+                .unwrap(),
+            0
+        );
+    }
 }
 
 #[test]
