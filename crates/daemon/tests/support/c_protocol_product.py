@@ -209,10 +209,21 @@ def execute_and_inspect(product, endpoint, saved):
     query = {'plan_id': product.plan_id, 'plan_revision': saved['head']['reference']['content_revision'],
              'from_ms': started - 1, 'to_ms': int(time.time() * 1000) + 60000, 'limit': 20,
              'include_routing_observations': True}
-    def read(options):
-        return product.control('GetPlanQualitySamples', {'schema': 'hiroute.observation.query/v2',
-            'intent': {'view': 'plan_quality', 'query': options}})['data']
     deadline = time.monotonic() + 30
+    def read(options):
+        # Ingestion can advance generation after a read transaction commits. A
+        # fresh first page may then report stale; never retry other errors or an
+        # old cursor, and keep the original acceptance deadline.
+        assert not options.get('cursor')
+        while True:
+            result = product.control('GetPlanQualitySamples', {'schema': 'hiroute.observation.query/v2',
+                'intent': {'view': 'plan_quality', 'query': options}}, success=False)
+            error = result.get('error')
+            if error is None:
+                return result['data']
+            assert error['code'] == 'CHANGE_PREVIEW_STALE', result
+            assert time.monotonic() < deadline, 'Observation generation did not settle before the existing deadline'
+            time.sleep(.05)
     while True:
         page = read(query)
         summary = page['routing_observations']
