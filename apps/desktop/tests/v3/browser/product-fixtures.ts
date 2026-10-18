@@ -626,6 +626,7 @@ export function mockProductInvoke(command: string, payload: Record<string, any> 
     : { preview: { applicable: true, blockers: [] }, mutation: { state: 'applied', operation: { state: 'succeeded' } } };
   if (command === 'check_agent_authentication') { agentPrerequisiteChecked = true; return true; }
   if (command === 'check_agent_live') return { accepted: true, scope: 'live', model_call: true, state: 'passed', call_count: 1, requested_call_count: 1 };
+  if (command === 'plan_editor_transition_preview') return {};
   if (command === 'preview_plan_editor') {
     if (payload?.input?.action === 'publish' && fixtureTrace.planPublicationError) {
       throw { source: 'backend', envelope: { error: { code: fixtureTrace.planPublicationError } } };

@@ -1,5 +1,5 @@
 use super::*;
-use hiroute_application_api::{ObservationReadIntentV3, ObservationReadRequestV3};
+use hiroute_application_api::ObservationReadIntentV3;
 use hiroute_domain::ObservationReaderContext;
 impl ObservationControl {
     pub(super) fn read_v2(

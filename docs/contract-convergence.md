@@ -1,9 +1,9 @@
 # Contract convergence and compatibility
 
 Every production boundary has one current write or ingestion contract. Older bytes may remain
-only for an explicit recovery reader, a separately named frozen fixture, or a rejection test. A
+only for an explicit recovery reader, a registered legacy request/result adapter, a separately named frozen fixture, or a rejection test. A
 legacy decoder authenticates the original bytes before conversion and never becomes a second live
-producer.
+producer. A `legacy_adapter` preserves supported caller bytes, authorization and response/cursor semantics while normalizing at the boundary into the one current business model; it has an owner, exact paths and a support-policy removal condition.
 
 Routing authoring accepts only `hiroute.plan-content-change/v2`; the former V1 create/update DTO
 has no public codec or planner and remains solely as an exact rejection fixture. Publication

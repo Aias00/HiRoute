@@ -21,11 +21,23 @@ impl LocalControlAdapter {
             None,
             None,
             || {
-                let selected_service = change
-                    .editor
-                    .effective()
-                    .ok()
-                    .and_then(|configuration| configuration.decision_service().cloned());
+                // The transition choice may replace incompatible assessment text. Resolve the
+                // selected saved connection without prematurely validating that text.
+                let classifier = match change.editor.mode {
+                    hiroute_domain::PlanEditorMode::SmartSaving => {
+                        Some(&change.editor.smart.classifier)
+                    }
+                    hiroute_domain::PlanEditorMode::CustomBranches => {
+                        change.editor.branch_routing.as_ref().map(|r| &r.classifier)
+                    }
+                    _ => None,
+                };
+                let selected_service = classifier.and_then(|c| match c {
+                    hiroute_domain::ComplexityClassifierModeV1::DecisionService { service } => {
+                        Some(service.as_ref().clone())
+                    }
+                    _ => None,
+                });
                 let before = self.routing_compilation_snapshot(workspace)?;
                 let read_rows = || {
                     let stores = self.stores_lock().map_err(super::map_port)?;

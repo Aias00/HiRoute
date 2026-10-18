@@ -157,7 +157,7 @@ impl ApplicationService {
             duration_millis: result.duration_millis.unwrap_or(0),
         };
         if let Some(service) = service {
-            current.endpoint_digest = CanonicalDigest::of(service.connection.transport().0).ok();
+            current.endpoint_digest = CanonicalDigest::of(&service.connection.transport().0).ok();
             current.model = match service.connection {
                 hiroute_domain::DecisionConnectionV1::SystemOne { model, .. } => Some(model),
                 _ => None,

@@ -250,10 +250,12 @@
     "hiroute.observation.execution-fact-envelope/v1",
     "hiroute.observation.execution-fact-envelope/v3",
     "hiroute.observation.execution-pricing/v1",
+    "hiroute.observation.facts/v3",
     "hiroute.observation.gap-heartbeat/v1",
     "hiroute.observation.nack/v1",
     "hiroute.observation.product-execution-envelope/v2",
     "hiroute.observation.query/v2",
+    "hiroute.observation.query/v3",
     "hiroute.observation.run-link/v1",
     "hiroute.observation.serialization-failure/v1",
     "hiroute.observation.valuation-summary/v2",
@@ -289,6 +291,7 @@
     "hiroute.plan-lifecycle-change/v1",
     "hiroute.plan-lifecycle-preview/v1",
     "hiroute.plan-quality-samples-page/v1",
+    "hiroute.plan-quality.samples/v2",
     "hiroute.plan-version/v2",
     "hiroute.planner-candidate-facts/v1",
     "hiroute.planner-input-facts-digest/v1",
@@ -986,14 +989,19 @@
       ]
     },
     {
-      "subject": "value_read_entry",
+      "subject": "observation_read_entry",
       "audited_prefixes": [
         "hiroute.value-query",
         "hiroute.value-view",
-        "hiroute.observation.value-report"
+        "hiroute.observation.value-report",
+        "hiroute.observation.query",
+        "hiroute.observation.facts",
+        "hiroute.plan-quality.samples"
       ],
       "current_contracts": [
-        "hiroute.observation.query/v2",
+        "hiroute.observation.query/v3",
+        "hiroute.observation.facts/v3",
+        "hiroute.plan-quality.samples/v2",
         "hiroute.observation.value-report/v2"
       ],
       "legacy_support": [
@@ -1021,6 +1029,35 @@
             "crates/application-api/src/protocol.rs",
             "crates/application-api/src/lib.rs",
             "crates/daemon/src/control/runtime_observation_tests.rs"
+          ]
+        },
+        {
+          "contract": "hiroute.observation.query/v2",
+          "mode": "legacy_adapter",
+          "owner": "observation-storage",
+          "reason": "Released queries use the current authorized business reader through an explicit wire adapter. Facts/quality responses retain their strict released field set and original cursor binding; current v3 includes protocol/routing evidence and versioned results.",
+          "removal_condition": "Remove only when the published CLI/API support policy retires released v2 callers and their outstanding pagination support, with released-input authorization/result/cursor regressions retained until then.",
+          "allowed_paths": [
+            "contracts/cli/manifest.v1.json",
+            "contracts/cli/planned-manifest.v1.json",
+            "crates/application-api/src/observation_v2.rs",
+            "crates/application/src/observation_query/control.rs",
+            "crates/cli/src/observation.rs",
+            "crates/cli/tests/request_input.rs",
+            "crates/daemon/tests/support/c_protocol_product.py",
+            "crates/daemon/tests/support/cpa_luna_gateway_live.py",
+            "crates/daemon/tests/support/delegation_product.py",
+            "crates/daemon/tests/support/model_connections_product.py",
+            "crates/daemon/tests/support/usage_query_gateway_product.py",
+            "crates/daemon/tests/support/windows_background_upgrade_business.rs",
+            "crates/daemon/tests/support/windows_native_protocols_receipts.rs",
+            "crates/daemon/tests/support/windows_routing_modes_observation.rs",
+            "crates/daemon/tests/support/windows_routing_observation.rs",
+            "crates/daemon/tests/support/windows_user_model_receipts.rs",
+            "docs/standalone-cli.md",
+            "docs/standalone-cli.zh-CN.md",
+            "scripts/cpa-managed-login-evidence.py",
+            "scripts/test-cpa-real-subscriptions.py"
           ]
         }
       ]
@@ -1082,12 +1119,43 @@
         "hiroute.classifier-decision-test-result"
       ],
       "current_contracts": [
-        "hiroute.classifier-decision-test/v1",
         "hiroute.classifier-decision-test/v2",
-        "hiroute.classifier-decision-test-result/v1",
         "hiroute.classifier-decision-test-result/v2"
       ],
-      "legacy_support": []
+      "legacy_support": [
+        {
+          "contract": "hiroute.classifier-decision-test/v1",
+          "mode": "legacy_adapter",
+          "owner": "decision-foundation",
+          "reason": "Released v1 connectivity requests normalize to the one current diagnostic business path; the adapter encodes the exact released result and preserves authorization payload identity.",
+          "removal_condition": "Remove only after the published CLI/API support policy explicitly retires all released v1 diagnostic callers, with a replacement path and retained regression evidence.",
+          "allowed_paths": [
+            "apps/website/content/guides/cli.en.md",
+            "apps/website/content/guides/cli.zh.md",
+            "contracts/cli/manifest.v1.json",
+            "contracts/cli/planned-manifest.v1.json",
+            "crates/application-api/src/classifier_diagnostic.rs",
+            "crates/cli/src/control_plane.rs",
+            "crates/daemon/tests/support/decision_services_product.py",
+            "crates/daemon/tests/support/windows_decision_business.rs",
+            "docs/standalone-cli.md",
+            "docs/standalone-cli.zh-CN.md"
+          ]
+        },
+        {
+          "contract": "hiroute.classifier-decision-test-result/v1",
+          "mode": "legacy_adapter",
+          "owner": "decision-foundation",
+          "reason": "Released v1 connectivity requests normalize to the one current diagnostic business path; the adapter encodes the exact released result and preserves authorization payload identity.",
+          "removal_condition": "Remove only after the published CLI/API support policy explicitly retires all released v1 diagnostic callers, with a replacement path and retained regression evidence.",
+          "allowed_paths": [
+            "contracts/cli/manifest.v1.json",
+            "contracts/cli/planned-manifest.v1.json",
+            "crates/application-api/src/classifier_diagnostic.rs",
+            "crates/daemon/tests/support/windows_decision_business.rs"
+          ]
+        }
+      ]
     }
   ],
   "forbidden_contracts": [
@@ -1163,7 +1231,7 @@
       "field": "context_window_tokens",
       "mode": "recovery_read_only",
       "owner": "agent-connections",
-      "reason": "A descriptor reconstructed from a pre-window immutable settings operation has no managed context policy. It retains that operation’s behavior until settings are saved again.",
+      "reason": "A descriptor reconstructed from a pre-window immutable settings operation has no managed context policy. It retains that operation\u2019s behavior until settings are saved again.",
       "removal_condition": "Retire with the pre-window settings operation recovery reader.",
       "allowed_paths": [
         "crates/domain/src/agents/managed_launch.rs",
@@ -1578,16 +1646,15 @@
     },
     {
       "contract": "hiroute.system-one-c/v1",
-      "field": "immutable native category v1 templates and frozen preset-wording provenance",
+      "field": "immutable native category v1 templates",
       "mode": "frozen_fixture",
       "owner": "decision-foundation",
-      "reason": "Keep supported published category/degree composition independent of later current defaults, and retain sealed scope standard bytes while reporting category-conditioned requests as custom. The shared template exactly preserves the existing v1 wording; it is not an editable current preset.",
+      "reason": "Keep supported published C category/degree composition independent of current defaults. Categorical scopes seal standard=custom before hashing; legacy native wording is owned separately.",
       "removal_condition": "Retire only after an explicit supported-bundle retirement or versioned adapter preserves retained C v1 publications and their immutable question identity.",
       "allowed_paths": [
         "crates/domain/src/routing/fixtures/native_category_v1.json",
         "crates/domain/src/routing/system_one_c.rs",
         "crates/domain/src/routing/system_one_c_tests.rs",
-        "crates/domain/src/routing/c_observation.rs",
         "crates/gateway/src/publication/compiler.rs",
         "crates/gateway/src/core_runtime/classification/system_one.rs",
         "apps/desktop/src/features/decision-services/native-protocol.ts"

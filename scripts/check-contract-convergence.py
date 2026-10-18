@@ -20,6 +20,7 @@ INTERNAL_CONTRACT = re.compile(r"hiroute(?:\.[a-z0-9][a-z0-9-]*)+/v[0-9]+")
 VALID_MODES = {
     "frozen_fixture",
     "recovery_read_only",
+    "legacy_adapter",
     "rejection_fixture",
 }
 OBSOLETE_LIVE_CONTRACT_FILES = {
