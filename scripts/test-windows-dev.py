@@ -191,6 +191,15 @@ class Runner(unittest.TestCase):
         self.assertEqual(original.read_bytes(), b'model_provider = "openai"\n')
         self.assertFalse(selected.exists())
 
+    def test_codex_timeout_preserves_both_partial_streams_before_propagating(self):
+        failure = desktop.subprocess.TimeoutExpired(['measured-codex'], 150,
+            output=b'{"type":"thread.started"}\n', stderr=b'bounded native failure\n')
+        with patch.object(desktop.subprocess, 'run', side_effect=failure), \
+                self.assertRaises(desktop.subprocess.TimeoutExpired):
+            desktop.codex_process(self.root, ['measured-codex'], {})
+        self.assertEqual((self.root / 'codex.stdout').read_bytes(), failure.stdout)
+        self.assertEqual((self.root / 'codex.stderr').read_bytes(), failure.stderr)
+
     def test_codex_real_call_requires_completed_turn_tool_and_exact_nonce(self):
         expected = 'HiRoute-Windows-test:42'
         events = [{'type':'item.completed','item':{'type':'command_execution','status':'completed','exit_code':0,'aggregated_output':'42\n'}},

@@ -196,6 +196,10 @@ scenario needs Python 3.11+ and verifies the completed tool output and nonce-bea
 answer; process exit alone is insufficient. Preserve its actual client image hash,
 product revision and native output. It does not alter sandbox configuration or
 substitute a model fixture for a real upstream.
+The runner records the actual client version before the call and preserves partial
+stdout/stderr when its bounded wait expires. Such a timeout is a failed attempt,
+not an inference verdict. The bounded public-CLI action also accepts `sessions`
+for product receipt readback; protected content still uses the product's authority.
 For a failed NSIS attempt with a prepared shell transaction, `installer-resume`
 captures the actual post-install adapter's output. It requires the matching
 recent inspection in `--observation-run`, the exact retained `--from-product`,

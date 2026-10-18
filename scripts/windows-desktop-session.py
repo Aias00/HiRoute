@@ -372,6 +372,19 @@ def codex_call_evidence(stdout, expected):
                                and re.search(r'\b42\b', item.get('aggregated_output', '')) for item in items))
 
 
+def codex_process(run, command, environment):
+    try:
+        done = subprocess.run(command, cwd=run, stdin=subprocess.DEVNULL, capture_output=True,
+                              timeout=150, env=environment, creationflags=0x08000000)
+    except subprocess.TimeoutExpired as error:
+        (run / 'codex.stdout').write_bytes(error.stdout or b'')
+        (run / 'codex.stderr').write_bytes(error.stderr or b'')
+        raise
+    (run / 'codex.stdout').write_bytes(done.stdout)
+    (run / 'codex.stderr').write_bytes(done.stderr)
+    return done
+
+
 def codex_call(run, request, helper):
     environment = os.environ.copy()
     environment.update(request['config']['environment'])
@@ -386,6 +399,15 @@ def codex_call(run, request, helper):
     endpoint = codex_gateway(tomllib.loads(config.read_text(encoding='utf-8-sig')), profile)
     binary = helper.plain(Path(environment['HIROUTE_WORKER_CODEX_BINARY']))
     checksum = helper.digest(binary)
+    version = subprocess.run([str(binary), '--version'], stdin=subprocess.DEVNULL,
+        capture_output=True, timeout=15, env=environment, creationflags=0x08000000)
+    (run / 'codex-version.stdout').write_bytes(version.stdout)
+    (run / 'codex-version.stderr').write_bytes(version.stderr)
+    if version.returncode or not version.stdout.strip() or len(version.stdout) > 1024:
+        raise RuntimeError('The configured native client version could not be measured')
+    identity = dict(binary_sha256=checksum, client_version=version.stdout.decode('utf-8-sig').strip(),
+                    profile=profile, gateway_endpoint=endpoint)
+    (run / 'codex-input.json').write_text(json.dumps(identity, indent=2), encoding='utf-8')
     expected = 'HiRoute-Windows-' + request['run_id'] + ':42'
     prompt = ('Do not read or modify any files. Use your shell tool to evaluate the PowerShell arithmetic '
               'expression (19 + 23). Then reply with exactly ' + expected)
@@ -394,13 +416,10 @@ def codex_call(run, request, helper):
     if profile:
         command += ['--profile', profile]
     command.append(prompt)
-    done = subprocess.run(command, cwd=run, stdin=subprocess.DEVNULL, capture_output=True,
-                          timeout=150, env=environment, creationflags=0x08000000)
-    (run / 'codex.stdout').write_bytes(done.stdout)
-    (run / 'codex.stderr').write_bytes(done.stderr)
+    done = codex_process(run, command, environment)
     evidence = codex_call_evidence(done.stdout, expected)
-    evidence.update(exit_code=done.returncode, binary_sha256=checksum, profile=profile,
-                    gateway_endpoint=endpoint, native_entry='configured Codex exec; read-only sandbox')
+    evidence.update(identity, exit_code=done.returncode,
+                    native_entry='configured Codex exec; read-only sandbox')
     (run / 'codex-call.json').write_text(json.dumps(evidence, indent=2), encoding='utf-8')
     if (helper.digest(binary) != checksum or done.returncode != 0
             or not all(evidence[key] for key in ('turn_completed', 'answer', 'shell_tool'))):
@@ -563,7 +582,7 @@ def execute(request, run, product, pm, helper, activity, manifest, root):
         args = request['cli_args']
         if (not isinstance(args, list) or not args or len(args) > 40
                 or any(not isinstance(a, str) or len(a) > 64 * 1024 or '\x00' in a for a in args)
-                or args[0] not in ('system', 'service', 'agents', 'agent', 'plans', 'routing', 'gateway', 'compute', 'operations', 'console')):
+                or args[0] not in ('system', 'service', 'agents', 'agent', 'plans', 'routing', 'gateway', 'compute', 'operations', 'console', 'sessions')):
             raise ValueError('Only bounded public product CLI families are accepted')
         environment = os.environ.copy()
         environment.update(request['config']['environment'])
