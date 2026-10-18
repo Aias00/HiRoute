@@ -552,3 +552,48 @@ fn unknown_old_near_cut_or_skewed_origin_is_not_new_compression_proof() {
         check(&store, 4, 4, true);
     }
 }
+
+#[test]
+fn a_reused_native_id_with_older_retained_requests_is_not_a_new_child() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    let [_, b, c] = chain(&store);
+    delete(&store, &b, DeletionDataClass::FactsAndContent, false, 2000);
+    new_request(&store, &b.session, "reused-id-parent");
+    let reused = new_request(&store, &c.session, "reused-id-child");
+    let mut proof = event(
+        &reused,
+        vec![b.session.to_string(), c.session.to_string()],
+        60,
+    );
+    proof.ingress_at_ms = 10_000;
+    proof.current_state = Some(NativeCurrentStateV1 {
+        value: NativeSessionStateV1::Open,
+        observation: NativeProofObservationV1 {
+            observer_id: "reused-id".into(),
+            sequence: 60,
+            observed_at_ms: 10_000,
+            age_ms: 0,
+        },
+        started_at_ms: Some(5000),
+    });
+    store.ingest_native_continuation(&proof).unwrap();
+    for phase in 0..2 {
+        if phase == 1 {
+            store.reconcile_analysis_batch(20_000).unwrap();
+        }
+        check(&store, 3, 4, true);
+        let p = read(
+            &store,
+            ObservationAnalysisQueryV1::new(AnalysisViewV1::Conversations),
+        );
+        assert_eq!(
+            p.conversations
+                .iter()
+                .find(|g| g.analysis_session_id == b.session.as_str())
+                .unwrap()
+                .request_count,
+            1
+        );
+    }
+}

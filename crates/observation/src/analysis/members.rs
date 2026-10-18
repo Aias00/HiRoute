@@ -173,6 +173,7 @@ pub(super) fn edge_usable(
       AND NOT EXISTS(SELECT 1 FROM observation_session_barriers_v2 b WHERE b.workspace_id=?1 AND b.session_id IN(?2,?3)
         AND NOT EXISTS(SELECT 1 FROM logical_requests r WHERE r.workspace_id=b.workspace_id AND r.session_id=b.session_id AND r.started_at_ms<=b.through_ms)
         AND NOT EXISTS(SELECT 1 FROM observation_analysis_cuts_v1 c WHERE c.workspace_id=b.workspace_id AND c.session_id=b.session_id)
-        AND NOT EXISTS(SELECT 1 FROM observation_native_origins_v1 o WHERE o.workspace_id=b.workspace_id AND o.session_id=?3 AND o.not_before_ms>b.through_ms))",params![w,parent,child,request,stable_from],|r|r.get(0))?;
+        AND NOT EXISTS(SELECT 1 FROM observation_native_origins_v1 o WHERE o.workspace_id=b.workspace_id AND o.session_id=?3 AND o.not_before_ms>b.through_ms
+          AND NOT EXISTS(SELECT 1 FROM logical_requests r WHERE r.workspace_id=o.workspace_id AND r.session_id=o.session_id AND r.started_at_ms<o.not_before_ms)))",params![w,parent,child,request,stable_from],|r|r.get(0))?;
     Ok(usable && super::native_origin::edge_retained(db, w, parent, child)?)
 }

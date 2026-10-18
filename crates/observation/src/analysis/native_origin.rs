@@ -23,7 +23,9 @@ pub(super) fn record(db: &Connection, e: &NativeContinuationEvidenceV1) -> Resul
         return Ok(());
     }
     db.execute(
-        "INSERT OR IGNORE INTO observation_native_origins_v1 VALUES(?1,?2,?3)",
+        "INSERT OR IGNORE INTO observation_native_origins_v1
+         SELECT ?1,?2,?3 WHERE NOT EXISTS(SELECT 1 FROM logical_requests
+           WHERE workspace_id=?1 AND session_id=?2 AND started_at_ms<?3)",
         params![
             e.workspace_id,
             e.current_session_id,
@@ -39,10 +41,15 @@ pub(super) fn edge_retained(
     parent: &str,
     child: &str,
 ) -> Result<bool, Error> {
-    Ok(db.query_row("SELECT NOT EXISTS(
+    Ok(db.query_row(
+        "SELECT NOT EXISTS(
         SELECT 1 FROM observation_analysis_cuts_v1 c
         WHERE c.workspace_id=?1 AND c.session_id IN(?2,?3)
           AND NOT EXISTS(SELECT 1 FROM observation_native_origins_v1 o
-            WHERE o.workspace_id=c.workspace_id AND o.session_id=?3 AND o.not_before_ms>c.through_ms))",
-        params![w,parent,child], |r|r.get(0))?)
+            WHERE o.workspace_id=c.workspace_id AND o.session_id=?3 AND o.not_before_ms>c.through_ms
+              AND NOT EXISTS(SELECT 1 FROM logical_requests r WHERE r.workspace_id=o.workspace_id
+                AND r.session_id=o.session_id AND r.started_at_ms<o.not_before_ms)))",
+        params![w, parent, child],
+        |r| r.get(0),
+    )?)
 }
