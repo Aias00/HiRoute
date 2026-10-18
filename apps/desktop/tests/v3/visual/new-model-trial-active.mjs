@@ -162,7 +162,7 @@ try {
   for(const part of lang==='zh'?['71%','58 次执行','41 完整评分','4 部分评分','1 等待评分','12 未评分']:['71%','58 executed','41 complete','4 partial','1 awaiting assessment','12 unscored']) assert.ok(await evaluate(client,`${executor}.textContent.includes(${JSON.stringify(part)})`),`executor view: ${part}`);
   for(const g of await evaluate(client,`[...document.querySelectorAll('.quality-model-row,.quality-table')].map(e=>({width:e.clientWidth,scroll:e.scrollWidth}))`)) assert.ok(g.scroll<=g.width+1,JSON.stringify(g));
   await evaluate(client,`${executor}.scrollIntoView({block:'center'});true`);await shot(`trust-scoring-states-executor-${lang}-${width}`);
-  results.push({id:`trust.scoring-states.both-groupings.${lang}.${width}.${theme}`,status:'passed'});
+  results.push({id:`trust.scoring-states.both-groupings.${lang}.${width}`,status:'passed'});
  }
  for (const [lang,theme,width,height] of [['en','light',755,600],['zh','dark',755,600],['en','dark',1200,813],['zh','light',1200,813]]) {
   await open(`lang=${lang}&theme=${theme}&view=timeline`,width,height);
