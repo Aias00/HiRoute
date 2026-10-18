@@ -248,14 +248,6 @@ impl Session {
         }
     }
 
-    pub async fn test_classifier_decision(
-        &mut self,
-        classifier: hiroute_domain::ComplexityClassifierModeV1,
-    ) -> Result<ClassifierDecisionTestResultV2, DesktopFailure> {
-        self.test_classifier_c(ClassifierDecisionTestRequestV2::value(classifier))
-            .await
-    }
-
     pub async fn save_classifier_header_secret(
         &mut self,
         secret_id: String,

@@ -66,7 +66,7 @@ export function DecisionServicesPage({ language, active, mutable, tabs, intent, 
   async function test(service: DecisionService): Promise<boolean> {
     let next: DecisionTest;
     try {
-      const value = await invoke<{ state: string; failure_code?: string; duration_millis?: number }>('test_classifier_decision', { input: { classifier: { kind: 'decision_service', service } } });
+      const value = await invoke<{ state: string; failure_code?: string; duration_millis?: number }>('test_classifier_decision', { input: { request: { schema: 'hiroute.classifier-decision-test/v2', target: { kind: 'saved', service_id: service.id, service_revision: service.revision } } } });
       next = { passed: value.state === 'verified', code: value.state === 'verified' ? undefined : planErrorCode(value.failure_code ?? 'DECISION_TEST_FAILED'), duration: value.duration_millis, at: Date.now() };
     } catch (cause) { next = { passed: false, code: planErrorCode(cause), at: Date.now() }; }
     setTests(current => ({ ...current, [testKey(service)]: next }));

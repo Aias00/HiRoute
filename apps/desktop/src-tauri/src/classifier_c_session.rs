@@ -2,7 +2,7 @@ use super::*;
 use hiroute_application_api::{ClassifierDecisionTestRequestV2, ClassifierDecisionTestResultV2};
 
 impl Session {
-    pub async fn test_classifier_c(
+    pub async fn test_classifier_decision(
         &mut self,
         request: ClassifierDecisionTestRequestV2,
     ) -> Result<ClassifierDecisionTestResultV2, DesktopFailure> {

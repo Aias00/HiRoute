@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Disclosure } from '../../ui';
 import type { DecisionService, Judgment, RouteBranch } from './types';
@@ -13,6 +13,7 @@ export function NativeProtocolEditor({ protocol, scopes, service, branches, defa
   const [result, setResult] = useState<{ key: string; value: CCapability }>();
   const [busy, setBusy] = useState(false), [failure, setFailure] = useState('');
   const key = JSON.stringify([protocol, scopes, service, branches, defaultId]);
+  useEffect(() => { setResult(undefined); setFailure(''); }, [key]);
   const current = useRef(key); current.current = key;
   const capability = result?.key === key ? result.value : undefined;
   async function test() {

@@ -1,5 +1,5 @@
 import { Disclosure, UiIcon } from '../../ui';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { stockProbe, contentDigest, type CCapability, type CapabilityShape } from './native-protocol';
 import type { Draft, Plan } from '../../plan-editor';
@@ -18,7 +18,8 @@ export function DecisionConnectionDetail({ service, language, mutable, busy, res
   const [cResult, setCResult] = useState<{ key: string; value: CCapability }>();
   const [selectedShape, setSelectedShape] = useState<CapabilityShape | 'connectivity'>('connectivity');
   const [cBusy, setCBusy] = useState(false), [cError, setCError] = useState('');
-  const cKey = JSON.stringify(service);
+  const cKey = JSON.stringify([service, selectedShape]);
+  useEffect(() => { setCResult(undefined); setCError(''); }, [cKey]);
   const capability = cResult?.key === cKey ? cResult.value : undefined;
   async function testC(shape: CapabilityShape) {
     setCBusy(true); setCError('');

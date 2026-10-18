@@ -83,6 +83,9 @@ export function cProtocolScenarios({ fresh, routing, click, until, all, text, ca
       setInput(document.querySelector('.native-protocol-editor input[type="number"]'),'0');
       await until(() => text().includes(t('背景为 0','With zero background')), 'zero background warning');
       assert(text().includes(t('本次打开尚未测试历史问题适用性','Not tested in this session')), 'Changed content reused evidence');
+      setInput(document.querySelector('.native-protocol-editor input[type="number"]'),'8');
+      await until(() => !text().includes(t('适用性请求形状已验证','Applicability request shape verified')), 'returning to old content does not resurrect evidence');
+      setInput(document.querySelector('.native-protocol-editor input[type="number"]'),'0');
       await click(t('保存草稿','Save draft'));
       await until(() => calls('preview_plan_editor').length && !all('.plan-editor fieldset')[0].disabled, 'draft submitted');
       const saved = calls('preview_plan_editor').at(-1).payload.input.editor.smart;
@@ -141,6 +144,32 @@ export function cProtocolScenarios({ fresh, routing, click, until, all, text, ca
       assert(!input.editor.branch_routing.native_protocol&&!('assessment_review' in input.editor.branch_routing),'Rollback persisted editable review');
       assert(calls('test_classifier_decision').length===0,'Rollback implicitly called a provider');
       document.querySelector('[data-assessment-transition]').scrollIntoView({block:'start'});
+    }
+  }), scenario('desktop.decisions.diagnostic-shapes', ['decision-services','c-protocol'], 'One diagnostic action selects a shape and discards evidence after changing it', async () => {
+    for(const language of ['zh','en']) {
+      const t=(zh,en)=>language==='zh'?zh:en;
+      await fresh(() => {
+        control().handlers.decision_services=()=>({services:[service]});
+        control().handlers.test_classifier_decision=async({input})=>{
+          const target=input.request.target;
+          assert(target.kind==='saved'&&target.service_revision===7,'Diagnostic lost exact saved revision');
+          const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(service.connection.endpoint)));
+          return {schema:'hiroute.classifier-decision-test-result/v2',state:'verified',verified_shapes:['degree','historical_assessment','applicability'],service_id:service.id,service_revision:7,model:service.connection.model,endpoint_digest:'sha256:'+ [...new Uint8Array(bytes)].map(b=>b.toString(16).padStart(2,'0')).join(''),protocol_digest:target.protocol.digest,shape:target.shape,question_count:3,tested_at_unix_ms:Date.now(),duration_millis:1,reason:'complete'};
+        };
+      });
+      localStorage.setItem('hiroute.language',language);control().remount();
+      await click(t('模型','Models'));await click(t('决策模型','Decision models'));
+      await until(()=>document.querySelector('.decision-test-actions select'),'diagnostic shape selector');
+      const select=()=>document.querySelector('.decision-test-actions select');
+      assert(all('button').filter(b=>[t('测试连接','Test connection'),t('测试所选形状','Test selected shape')].includes(b.textContent.trim())).length===1,'Parallel diagnostic actions remain');
+      choose(select(),'standard');await click(t('测试所选形状','Test selected shape'));
+      await until(()=>text().includes(t('适用性请求形状已验证','Applicability request shape verified')),'shape evidence');
+      choose(select(),'max_branches');
+      await until(()=>!text().includes(t('适用性请求形状已验证','Applicability request shape verified')),'shape change discards evidence');
+      choose(select(),'standard');
+      await until(()=>text().includes(t('本次打开尚未测试历史问题适用性','Not tested in this session')),'old shape cannot resurrect evidence');
+      assert(calls('test_classifier_decision').length===1,'Changing shape implicitly tested');
+      geometry();
     }
   }), scenario('desktop.quality.c-observations', ['routing-editor', 'sessions', 'c-protocol'], 'Retained C counts, denominators, partial coverage and empty states remain readable', async () => {
     for (const language of ['zh', 'en']) {
