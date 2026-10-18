@@ -169,6 +169,19 @@ impl LocalObservationStore {
             .transpose()
             .map_err(|_| ObservationV2Error::Invalid)?;
         let summary = summarize(&transaction, reader, query, from_ms, to_ms, &runs)?;
+        let routing_observations = query
+            .include_routing_observations
+            .then(|| {
+                super::routing_observations::summarize(
+                    &transaction,
+                    reader,
+                    query,
+                    from_ms,
+                    to_ms,
+                    &runs,
+                )
+            })
+            .transpose()?;
         let execution = query
             .execution
             .as_ref()
@@ -223,6 +236,14 @@ impl LocalObservationStore {
         };
         let more = rows.len() > usize::from(query.limit);
         rows.truncate(usize::from(query.limit));
+        if !query.include_routing_observations {
+            for row in &mut rows {
+                if let Some(selection) = row.selection.as_mut() {
+                    selection.routing_observation = None;
+                    selection.decision_protocol = None;
+                }
+            }
+        }
         let next_cursor = if more {
             let last = rows.last().ok_or(ObservationV2Error::Unavailable)?;
             Some(self.encode_observation_cursor(&Cursor {
@@ -245,6 +266,7 @@ impl LocalObservationStore {
         }
         reader.check(now_ms, false, false)?;
         Ok(PlanQualitySamplesPage {
+            routing_observations,
             samples: rows,
             summary,
             next_cursor,

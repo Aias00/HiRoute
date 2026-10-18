@@ -177,6 +177,18 @@ impl RoutingFactsPort for LocalControlAdapter {
             .decision_services(workspace)
             .map_err(super::map_port)
     }
+    fn decision_service(
+        &self,
+        workspace: &WorkspaceId,
+        id: &str,
+        revision: u64,
+    ) -> Result<Option<hiroute_domain::DecisionServiceV1>, ControlReadError> {
+        self.stores_lock()
+            .map_err(super::map_port)?
+            .control()
+            .decision_service(workspace, id, revision)
+            .map_err(super::map_port)
+    }
     fn claude_client_capability_preview(
         &self,
         plan: &hiroute_domain::CompiledAgentPlanV1,

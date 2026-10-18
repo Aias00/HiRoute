@@ -49,6 +49,7 @@ pub(crate) fn fixture() -> PlannerInputV1 {
         request(IngressProtocol::Responses, "Fix a bug"),
         policy(
             MaterializedRouteV1::Branches {
+                native_protocol: None,
                 branches,
                 default_branch_id: "writing".into(),
                 reselect_on_user_message: false,
@@ -133,6 +134,7 @@ fn fresh_decisions_keep_valid_in_group_holds_for_both_retired_values() {
             let mut input = fixture();
             if smart {
                 input.policy.route = MaterializedRouteV1::SmartSaving {
+                    native_protocol: None,
                     judgment: Default::default(),
                     simple_group_id: "branch_0".into(),
                     simple_fallback_group_ids: vec!["branch_primary_0".into()],

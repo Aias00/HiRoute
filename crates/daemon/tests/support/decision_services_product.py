@@ -12,12 +12,19 @@ from publication_process import bootstrap, plan_change, judgment_fixture
 
 class DecisionEndpoint(BaseHTTPRequestHandler):
     requests = []
+    c_vectors = False
+    c_applicability = 0.75
+    c_score = 1.0
 
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
         self.requests.append((self.headers.get('Authorization'), body))
         if 'questions' in body:
-            result = {'answers': {key: ({'type': 'choice', 'choice': next(iter(question['criteria']))}
+            result = {'answers': {key: ({'type': 'choice', 'probabilities': {'applicable': self.c_applicability, 'not_established': 1 - self.c_applicability}}
+                if self.c_vectors and question['type'] == 'choice' and set(question['criteria']) == {'applicable', 'not_established'}
+                else {'type': 'score', 'score': self.c_score}
+                if self.c_vectors and question['type'] == 'score' and len(question['criteria']) == 3
+                else {'type': 'choice', 'choice': next(iter(question['criteria']))}
                 if question['type'] == 'choice' else {'type': 'score', 'probabilities': {'0': 0.9, '1': 0.1}})
                 for key, question in body['questions'].items()}}
         else:
@@ -34,9 +41,11 @@ class DecisionEndpoint(BaseHTTPRequestHandler):
         pass
 
 
-def scenario(repository):
+def scenario(repository, routed=False):
     product = Product(repository)
-    product.collaboration_only = True
+    product.collaboration_only = not routed
+    if routed:
+        product.enable_cpa()
     product.enable_debug_diagnostics()
     endpoint = ThreadingHTTPServer(('127.0.0.1', 0), DecisionEndpoint)
     worker = threading.Thread(target=endpoint.serve_forever, daemon=True)
@@ -90,13 +99,20 @@ def scenario(repository):
         mutate({'id': service['id'], 'expected_revision': 0, 'service': service,
                 'input_slot': 'candidate/decision-fixture'}, 'decision-create')
         assert cli('decision services list')['data']['services'] == [service]
+        if routed:
+            from c_protocol_product import exercise
+            exercise(product, cli, service, DecisionEndpoint, product.editor['candidates'][0])
+            return
         tested = cli('decision services test', {'schema': 'hiroute.classifier-decision-test/v1',
             'classifier': {'kind': 'decision_service', 'service': service}})
         assert tested['data']['outcome'] == 'passed', tested
         assert DecisionEndpoint.requests[-1][0] == token
         assert DecisionEndpoint.requests[-1][1]['model'] == 'fixture-jev'
         assert len(DecisionEndpoint.requests[-1][1]['questions']) == 3
-        assert DecisionEndpoint.requests[-1][1]['state']['assessment_from'] is None
+        state = DecisionEndpoint.requests[-1][1]['state']
+        assert state['assessment_stage'] == []
+        assert state['prior_context'] == []
+        assert 'assessment_from' not in state and 'visible_conversation' not in state
         # A shared API Key may back independent immutable service versions.
         shared = copy.deepcopy(service)
         shared.update(id='decision-shared', name='Same key, independent connection')
@@ -125,6 +141,8 @@ def scenario(repository):
         routing = {'classifier': {'kind': 'decision_service', 'service': copy.deepcopy(service)},
                    'branches': branches, 'default_branch_id': 'docs',
                    'judgment': judgment_fixture(), 'reselect_on_user_message': False}
+        # This lifecycle case deliberately owns custom text; publication must retain it.
+        routing['judgment']['competence']['standard'] = 'custom'
         routing['judgment']['degree']['instructions'] = 'A complete degree standard.\n' * 1000
         routing['branches'][0]['condition'] = 'Programming tasks with supplied requirements.\n' * 500
         change = plan_change(product, 'update', mode='custom_branches', branch_routing=routing)
@@ -192,6 +210,8 @@ def scenario(repository):
                 assert config['judgment'] == editor['branch_routing' if mode == 'custom_branches' else 'smart']['judgment']
         print(json.dumps({'scenario': 'retired-follow-up-legacy-and-omitted-real-cli-publication-restart',
                           'state': 'green', 'cases': 6}), flush=True)
+        from c_protocol_product import exercise
+        exercise(product, cli, service, DecisionEndpoint, selection)
         custom = {'id': 'custom-fixture', 'revision': 1, 'name': 'Custom decision', 'connection': {
             'kind': 'custom', 'endpoint': service['connection']['endpoint'], 'timeout_ms': 3000}}
         mutate({'id': custom['id'], 'expected_revision': 0, 'service': custom}, 'custom-create')
@@ -210,4 +230,4 @@ def scenario(repository):
 
 
 if __name__ == '__main__':
-    scenario(sys.argv[1])
+    scenario(sys.argv[1], routed=sys.argv[2:] == ['routed'])

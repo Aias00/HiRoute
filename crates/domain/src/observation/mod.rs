@@ -18,6 +18,8 @@ mod identity;
 mod lifecycle;
 mod native_continuation;
 mod plan_quality;
+mod routing_observations;
+pub use routing_observations::*;
 mod pricing;
 mod projection;
 mod query;

@@ -16,12 +16,23 @@ pub(super) fn validate_execution(
             (
                 AgentPlanStrategyV2::Branches { routing },
                 RequestOwnedRouteV1::Branches {
+                    native_protocol,
                     classifier,
                     branches,
                     default_branch_id,
                     reselect_on_user_message,
                 },
             ) => {
+                if routing
+                    .native_protocol
+                    .as_ref()
+                    .map(|p| p.resolve())
+                    .transpose()
+                    .map_err(|_| PlanVersionError::Invalid)?
+                    != native_protocol.as_ref().map(|p| p.protocol.clone())
+                {
+                    return Err(PlanVersionError::Invalid);
+                }
                 if routing.branches.len() != branches.len()
                     || classifier.mode != routing.classifier
                     || &routing.default_branch_id != default_branch_id
@@ -59,6 +70,8 @@ pub(super) fn validate_execution(
             ) if ordered_groups == &[G::Custom] => vec![(G::Custom, candidates)],
             (
                 AgentPlanStrategyV2::SmartSaving {
+                    native_protocol,
+
                     economy,
                     primary,
                     judgment,
@@ -67,6 +80,7 @@ pub(super) fn validate_execution(
                     complex_keywords,
                 },
                 RequestOwnedRouteV1::Classified {
+                    native_protocol: frozen_native,
                     classifier,
                     judgment: materialized_judgment,
                     reselect_on_user_message: materialized_reselect,
@@ -74,6 +88,15 @@ pub(super) fn validate_execution(
                     complex_groups,
                 },
             ) => {
+                if native_protocol
+                    .as_ref()
+                    .map(|p| p.resolve())
+                    .transpose()
+                    .map_err(|_| PlanVersionError::Invalid)?
+                    != frozen_native.as_ref().map(|p| p.protocol.clone())
+                {
+                    return Err(PlanVersionError::Invalid);
+                }
                 if simple_groups != &[G::Economy, G::Primary]
                     || judgment != materialized_judgment
                     || reselect_on_user_message != materialized_reselect

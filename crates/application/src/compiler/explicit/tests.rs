@@ -72,6 +72,8 @@ fn branches_publish_distinct_reasoning_and_freeze_whole_judgment_overrides() {
     desired.mode = PlanEditorMode::CustomBranches;
     desired.strategy = AgentPlanStrategyV2::Branches {
         routing: BranchRoutingV1 {
+            native_protocol: None,
+
             classifier: ComplexityClassifierModeV1::DecisionService {
                 service: Box::new(hiroute_domain::DecisionServiceV1 {
                     id: "decision-fixture".into(),
@@ -266,6 +268,8 @@ fn smart_regular_failover_always_includes_primary_group() {
     let mut desired = desired();
     desired.mode = PlanEditorMode::SmartSaving;
     desired.strategy = AgentPlanStrategyV2::SmartSaving {
+        native_protocol: None,
+
         economy: vec![selection("economy-b"), selection("economy-a")],
         primary: vec![selection("primary-b"), selection("primary-a")],
         judgment: JudgmentSettingsV1::default(),
@@ -295,6 +299,8 @@ fn saved_classifier_is_preserved_in_the_materialized_route() {
     let mut desired = desired();
     desired.mode = PlanEditorMode::SmartSaving;
     desired.strategy = AgentPlanStrategyV2::SmartSaving {
+        native_protocol: None,
+
         economy: vec![selection("economy-a")],
         primary: vec![selection("primary-a")],
         judgment: JudgmentSettingsV1::default(),
@@ -334,6 +340,8 @@ fn retired_follow_up_values_preserve_sealed_plan_and_route_digests() {
     let mut desired = desired();
     desired.mode = PlanEditorMode::SmartSaving;
     desired.strategy = AgentPlanStrategyV2::SmartSaving {
+        native_protocol: None,
+
         economy: vec![selection("economy-a")],
         primary: vec![selection("primary-a")],
         judgment: JudgmentSettingsV1::default(),
@@ -584,4 +592,69 @@ fn context_window_is_bounded_persisted_and_changes_the_route_digest() {
         candidates[0].binding_id = changed.candidates[0].binding.binding_id.clone();
     }
     assert!(compile(&desired, &changed).is_err());
+}
+
+#[test]
+fn c_native_publication_freezes_content_and_rejects_authoring_compiled_disagreement() {
+    let mut desired = desired();
+    desired.mode = PlanEditorMode::SmartSaving;
+    let p = NativeProtocolV1::default();
+    let mut judgment = JudgmentSettingsV1::default();
+    p.stock_assessment(&mut judgment);
+    judgment.degree.simple_threshold_millis = 870;
+    judgment.competence.floor_millis = 620;
+    desired.strategy = AgentPlanStrategyV2::SmartSaving {
+        native_protocol: Some(NativeProtocolSelectionV1::default()),
+        economy: vec![selection("economy-a")],
+        primary: vec![selection("primary-a")],
+        judgment,
+        reselect_on_user_message: false,
+        complex_keywords: vec![],
+        classifier: ComplexityClassifierModeV1::DecisionService {
+            service: Box::new(DecisionServiceV1 {
+                id: "decision-c".into(),
+                revision: 1,
+                name: "C fixture".into(),
+                connection: DecisionConnectionV1::SystemOne {
+                    provider: "compatible".into(),
+                    model: "fixture-model".into(),
+                    endpoint: "https://decision.example/systemone".into(),
+                    timeout_ms: 3000,
+                    auth_header: ClassifierAuthHeaderV1 {
+                        name: "Authorization".into(),
+                        value_secret_ref: "decision/c".into(),
+                    },
+                },
+            }),
+        },
+    };
+    let compiled = compile(&desired, &compilation_facts()).unwrap();
+    let frozen = StoredPlanV1::freeze(&compiled).unwrap();
+    let rebuilt = frozen.build().unwrap();
+    assert_eq!(
+        rebuilt.body.materialized.request_owned,
+        compiled.body.materialized.request_owned
+    );
+    assert_eq!(StoredPlanV1::freeze(&rebuilt).unwrap(), frozen);
+    let version =
+        PlanVersionV1::new(WorkspaceId::default(), desired.clone(), compiled.clone()).unwrap();
+    let bytes = serde_json::to_vec(&version).unwrap();
+    let reopened: PlanVersionV1 = serde_json::from_slice(&bytes).unwrap();
+    reopened.validate().unwrap();
+    assert_eq!(serde_json::to_vec(&reopened).unwrap(), bytes);
+    let editor = reopened.configuration.editor(None).unwrap();
+    assert_eq!(editor.smart.judgment.degree.simple_threshold_millis, 870);
+    assert_eq!(editor.smart.judgment.competence.floor_millis, 620);
+    let mut changed = desired;
+    let AgentPlanStrategyV2::SmartSaving {
+        native_protocol, ..
+    } = &mut changed.strategy
+    else {
+        unreachable!()
+    };
+    native_protocol.as_mut().unwrap().prior_context_max_turns = 2;
+    assert!(
+        PlanVersionV1::new(WorkspaceId::default(), changed, compiled).is_err(),
+        "a valid independent digest cannot replace authoring/compiled consistency"
+    );
 }

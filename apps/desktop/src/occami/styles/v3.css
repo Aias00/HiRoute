@@ -130,5 +130,12 @@ button:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outli
 
 .decision-judgment-fields{border:0;padding:0;margin:0;min-width:0;display:grid;gap:12px;}
 .decision-thresholds{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;}
+.decision-thresholds > .field{min-width:0;margin:0;align-content:start;}
 .decision-judgment-fields:disabled{opacity:.8;}
 @media(max-width:720px){.decision-thresholds{grid-template-columns:minmax(0,1fr);}}
+.routing-observations, .routing-decision-detail { margin-block: 12px; }
+.routing-cohort { padding-block: 12px; border-top: 1px solid var(--border); min-width: 0; overflow-wrap: anywhere; }
+.routing-counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 12px 20px; }
+.routing-counts div { min-width: 0; }
+.routing-counts dt { color: var(--text-muted); font-size: calc(12px * var(--hr-text-scale)); }
+.routing-counts dd { margin: 4px 0 0; font-variant-numeric: tabular-nums; }

@@ -211,3 +211,236 @@ fn retired_follow_up_field_can_be_omitted_without_rewriting_legacy_values() {
     omitted["smart"]["reselect_on_user_message"] = serde_json::json!("true");
     assert!(serde_json::from_value::<PlanEditorStateV2>(omitted).is_err());
 }
+
+fn native_editor() -> PlanEditorStateV2 {
+    use crate::*;
+    let mut value = editor();
+    value.mode = PlanEditorMode::SmartSaving;
+    value.smart.economy = value.candidates.clone();
+    value.smart.primary = value.candidates.clone();
+    value.smart.classifier = ComplexityClassifierModeV1::DecisionService {
+        service: Box::new(DecisionServiceV1 {
+            id: "decision/defaults".into(),
+            revision: 1,
+            name: "Fixture".into(),
+            connection: DecisionConnectionV1::SystemOne {
+                provider: "compatible".into(),
+                model: "fixture".into(),
+                endpoint: "https://decision.example/systemone".into(),
+                timeout_ms: 3000,
+                auth_header: ClassifierAuthHeaderV1 {
+                    name: "Authorization".into(),
+                    value_secret_ref: "fixture".into(),
+                },
+            },
+        }),
+    };
+    value
+}
+
+#[test]
+fn released_defaults_move_only_at_next_publication_without_editor_controls() {
+    use crate::*;
+    let mut editor = native_editor();
+    let released: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/released-default-assessment.v1.json")).unwrap();
+    editor.smart.judgment.competence.instructions = released["assessment"]["instructions"]
+        .as_str()
+        .unwrap()
+        .into();
+    editor.smart.judgment.competence.criteria = std::array::from_fn(|i| {
+        released["assessment"]["criteria"][i]
+            .as_str()
+            .unwrap()
+            .into()
+    });
+    editor.smart.judgment.degree.simple_threshold_millis = 913;
+    editor.smart.judgment.competence.floor_millis = 612;
+    let before = serde_json::to_vec(&editor).unwrap();
+    let current = editor.effective().unwrap();
+    let j = current.assessment_scopes()[SMART_SAVING_SCOPE_ID];
+    assert_eq!(
+        composed_assessment(Some(&NativeProtocolV1::default()), j),
+        stock_c_questions()["q1"]
+    );
+    assert_eq!(j.competence.standard, Some(AssessmentStandardV1::Default));
+    assert_eq!(
+        (j.degree.simple_threshold_millis, j.competence.floor_millis),
+        (913, 612)
+    );
+    assert_eq!(
+        current.native_protocol(),
+        Some(&NativeProtocolSelectionV1::default())
+    );
+    assert_eq!(serde_json::to_vec(&editor).unwrap(), before);
+    let readback = current.editor(None).unwrap();
+    assert_eq!(readback.effective().unwrap(), current);
+    let json = serde_json::to_value(&readback).unwrap();
+    for field in [
+        "native_protocol",
+        "historical_applicability",
+        "prior_context_max_turns",
+    ] {
+        assert!(json["smart"].get(field).is_none(), "{field}");
+        let mut invalid = json.clone();
+        invalid["smart"][field] = serde_json::json!({"prior_context_max_turns":8});
+        assert!(
+            serde_json::from_value::<PlanEditorStateV2>(invalid).is_err(),
+            "{field}"
+        );
+    }
+    // A sealed earlier publication is not normalized on read, but its next edit is current.
+    let mut legacy = current;
+    if let AgentPlanStrategyV2::SmartSaving {
+        native_protocol,
+        judgment,
+        ..
+    } = &mut legacy.strategy
+    {
+        *native_protocol = None;
+        *judgment = JudgmentSettingsV1::default();
+    }
+    let old = serde_json::to_vec(&legacy).unwrap();
+    let reopened: AgentPlanAuthoringV2 = serde_json::from_slice(&old).unwrap();
+    assert_eq!(serde_json::to_vec(&reopened).unwrap(), old);
+    assert_eq!(
+        native_editor()
+            .effective_for_frozen_validation(&reopened)
+            .unwrap(),
+        reopened
+    );
+    let next = reopened.editor(None).unwrap().effective().unwrap();
+    assert!(next.native_protocol().is_some());
+    assert_eq!(serde_json::to_vec(&legacy).unwrap(), old);
+}
+
+#[test]
+fn custom_text_and_criteria_remain_byte_exact_even_when_equal_to_a_default() {
+    use crate::*;
+    for equal_default in [false, true] {
+        let mut value = native_editor();
+        value.smart.judgment.competence.standard = Some(AssessmentStandardV1::Custom);
+        if !equal_default {
+            value.smart.judgment.competence.instructions =
+                "  Preserve this line.\nSecond line.  ".into();
+            value.smart.judgment.competence.criteria[1] = " criterion with spaces  ".into();
+        }
+        let original = value.smart.judgment.competence.clone();
+        for _ in 0..3 {
+            let authored = value.effective().unwrap();
+            assert_eq!(
+                authored.assessment_scopes()[SMART_SAVING_SCOPE_ID].competence,
+                original
+            );
+            value = authored.editor(None).unwrap();
+        }
+    }
+    let mut value = native_editor();
+    value.smart.judgment.competence.criteria[2].push(' ');
+    assert_eq!(
+        value.effective().unwrap().assessment_scopes()[SMART_SAVING_SCOPE_ID]
+            .competence
+            .standard,
+        Some(AssessmentStandardV1::Custom)
+    );
+    value.smart.judgment.competence.instructions =
+        "Use state.visible_conversation as evidence".into();
+    assert!(
+        matches!(value.effective(),Err(PlanAuthoringError::NativeProtocol(NativeProtocolError::StateReference(field))) if field=="smart_saving.competence.instructions")
+    );
+}
+
+#[test]
+fn inherited_defaults_and_independent_custom_overrides_resolve_separately() {
+    use crate::*;
+    let mut value = native_editor();
+    value.mode = PlanEditorMode::CustomBranches;
+    let mut custom = JudgmentSettingsV1::default();
+    custom.competence.criteria[0].push_str(" Custom.");
+    value.branch_routing = Some(BranchRoutingEditorV1 {
+        classifier: value.smart.classifier.clone(),
+        default_branch_id: "code".into(),
+        judgment: JudgmentSettingsV1::default(),
+        reselect_on_user_message: false,
+        branches: [("code", None), ("default", Some(custom.clone()))]
+            .into_iter()
+            .map(|(id, judgment)| RouteBranchV1 {
+                id: id.into(),
+                name: id.into(),
+                condition: format!("Handle {id}"),
+                candidates: value.candidates.clone(),
+                primary_candidates: vec![],
+                judgment,
+            })
+            .collect(),
+    });
+    let authored = value.effective().unwrap();
+    let internal = serde_json::to_value(&authored).unwrap();
+    assert_eq!(
+        internal["strategy"]["routing"]["native_protocol"]["schema"],
+        SYSTEM_ONE_C_V1
+    );
+    let editor = serde_json::to_value(authored.editor(None).unwrap()).unwrap();
+    assert!(
+        editor["branch_routing"]
+            .get("historical_applicability")
+            .is_none()
+    );
+    let mut invalid = editor.clone();
+    invalid["branch_routing"]["historical_applicability"] =
+        serde_json::json!({"prior_context_max_turns":8});
+    assert!(serde_json::from_value::<PlanEditorStateV2>(invalid).is_err());
+    assert!(editor["branch_routing"].get("native_protocol").is_none());
+    assert_eq!(
+        serde_json::from_value::<PlanEditorStateV2>(editor)
+            .unwrap()
+            .effective()
+            .unwrap(),
+        authored
+    );
+    let scopes = authored.assessment_scopes();
+    assert_eq!(
+        scopes["default"].competence.standard,
+        Some(AssessmentStandardV1::Default)
+    );
+    assert_eq!(
+        scopes["branch/default"].competence.criteria,
+        custom.competence.criteria
+    );
+    assert_eq!(
+        scopes["branch/default"].competence.standard,
+        Some(AssessmentStandardV1::Custom)
+    );
+}
+
+#[test]
+fn local_rules_and_custom_extensions_keep_their_assessment_and_omission() {
+    use crate::*;
+    let mut editor = native_editor();
+    let mut service = match &editor.smart.classifier {
+        ComplexityClassifierModeV1::DecisionService { service } => service.clone(),
+        _ => unreachable!(),
+    };
+    service.connection = DecisionConnectionV1::Custom {
+        endpoint: "https://decision.example/v1/decisions".into(),
+        timeout_ms: 3000,
+        auth_header: None,
+    };
+    for classifier in [
+        ComplexityClassifierModeV1::LocalRules,
+        ComplexityClassifierModeV1::DecisionService { service },
+    ] {
+        editor.smart.classifier = classifier;
+        let current = editor.effective().unwrap();
+        assert!(current.native_protocol().is_none());
+        assert_eq!(
+            current.assessment_scopes()[SMART_SAVING_SCOPE_ID],
+            &editor.smart.judgment
+        );
+        assert!(
+            serde_json::to_value(&current).unwrap()["strategy"]
+                .get("native_protocol")
+                .is_none()
+        );
+    }
+}

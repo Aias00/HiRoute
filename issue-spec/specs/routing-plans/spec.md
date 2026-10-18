@@ -228,6 +228,60 @@ in current CLI schemas. Fixed-model, ordered and free-first behavior is unchange
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/133#issuecomment-6220134774
 
+### Requirement: Default assessments follow the active route configuration
+
+Historical problem applicability is the sole authoring behavior for built-in System One routes. Desktop, CLI and plan-editor.v2 MUST offer no protocol/capability switch, native_protocol/historical_applicability editor field or background setting. Background is fixed at eight turns. Local rules and custom-extension v1 retain their behavior.
+
+At the next edit and publication of an existing native route, default assessments MUST resolve silently to the current default through ordinary Preview/Apply. Custom instructions and all criteria MUST remain byte-for-byte unchanged. Every effective scope records default/custom intent. Editing text makes it custom; Reset to default restores the current default while preserving thresholds and unrelated settings. Inherited scopes and independent branch overrides keep their existing meaning.
+
+Supported released input without intent uses only exact built-in legacy instructions and all three criteria to recognize default text, including v0.3.1. Any difference means custom. Do not trim, normalize whitespace or infer custom intent from threshold changes. Explicit custom intent wins even when the text equals a default.
+
+The compiler MUST freeze actual fixed/effective prompts, criteria, thresholds, eight-turn background, per-scope standard and content digest. Existing frozen PlanVersions, canonical identities and historical evidence MUST NOT be reinterpreted or rewritten on read, reopen or execution. The next publication is a new immutable version. Unsupported identities, mismatches and corruption fail explicitly, preserving active/last-known-good behavior. Legacy native composition is only retained frozen-execution support, registered with an owner and removal condition; authoring cannot select it. A bare preset name is insufficient for execution.
+
+Known unavailable state paths in custom text MUST fail Preview with the affected scope and field, preserving edits and the active publication. There are no state aliases, semantic extraction or suffix-based migration. No assessment review record/digest, adoption choice, historical restoration, assessment_review_plan, dangling_c or extra confirmation exists. Saving, inspecting and publishing never probe a provider.
+
+Desktop uses the capability name and default/custom labels without protocol/assessment revision, question number or digest. Existing unrelated connection/publication versions remain visible; machine output retains internal identities and digests. No startup rewrite, SQL migration, new retention promise or binary downgrade guarantee is implied.
+
+Retained supported Plan-content Operations MUST validate their original editor against the protocol already sealed in that Operation, without applying current authoring defaults, rewriting identities or replaying completed effects. This recovery validation cannot select legacy behavior for a new publication.
+
+#### Scenario: Existing native route moves at its next publication
+
+- **WHEN** an owner opens and republishes a released native route with default assessment text
+- **THEN** The next publication MUST use the current applicability protocol with eight background turns and unchanged thresholds; its old publication retains its exact content and identity.
+
+#### Scenario: Released literal default
+
+- **WHEN** an actual released v0.3.1 Plan stores exact legacy default instructions and all criteria without intent
+- **THEN** The next edit MUST recognize default intent without changing the old sealed Plan, execution or digests.
+
+#### Scenario: Custom text remains exact
+
+- **WHEN** custom instructions or any criterion differs, including whitespace or explicit custom text equal to defaults
+- **THEN** Opening and new publication MUST preserve every custom byte and its scope.
+
+#### Scenario: Reset to current default
+
+- **WHEN** the user edits assessment text or chooses Reset to default
+- **THEN** Editing MUST mark custom intent; reset MUST restore the current default and default intent while preserving thresholds.
+
+#### Scenario: Invalid custom state field
+
+- **WHEN** custom text references a state path unavailable in the current native protocol
+- **THEN** Preview MUST identify the scope and field and preserve edits and the active publication.
+
+#### Scenario: No native selection in editor input
+
+- **WHEN** Desktop or CLI submits native routing input
+- **THEN** The editor MUST contain no protocol/capability or background field; ordinary Preview/Apply freezes full current native contents without caller-supplied preset text or digest.
+
+#### Scenario: Restore a retained native content Operation
+
+- **WHEN** startup reconstructs an authenticated supported older Operation after the native authoring default changed
+- **THEN** Validation MUST use its already sealed native settings, preserving original content/identities and completed effects; new publication still uses the current default.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/139#issuecomment-6235110836
+
 ## Implementation references
 
 - [Plan domain](../../../crates/domain/src/routing/authoring.rs),

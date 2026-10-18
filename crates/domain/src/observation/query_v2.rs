@@ -562,6 +562,8 @@ pub struct ObservationTextChunkV2 {
 #[derive(schemars::JsonSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ObservationFactsQueryV2 {
+    #[serde(default, skip_serializing_if = "routing_observations_disabled")]
+    pub include_routing_observations: bool,
     pub request_id: LogicalRequestId,
     pub limit: u16,
     pub cursor: Option<String>,
@@ -569,6 +571,13 @@ pub struct ObservationFactsQueryV2 {
 #[derive(schemars::JsonSchema, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ObservationSafeFactV2 {
+    /// Internal supported-format evidence. Never exposed by the public facts reader.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pre_applicability_schema_digest: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decision_protocol: Option<super::DecisionProtocolV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub routing_observation: Option<super::ObservationRoutingDecisionV1>,
     pub event_id: String,
     pub sequence: u64,
     pub original_digest: String,
@@ -587,6 +596,10 @@ pub struct ObservationSafeFactV2 {
     pub reasoning_tokens: Option<u64>,
     pub outcome: Option<String>,
     pub sensitive_fields_deleted: bool,
+}
+
+fn routing_observations_disabled(value: &bool) -> bool {
+    !value
 }
 #[derive(schemars::JsonSchema, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

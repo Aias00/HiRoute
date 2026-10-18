@@ -59,6 +59,10 @@ export const focusedRequirements = {
 };
 
 export const productShellRequired = [
+  'desktop.routing.native-default',
+  'desktop.decisions.connectivity-test',
+  'desktop.routing.custom-assessment',
+  'desktop.quality.c-observations',
   'desktop.models.view-switch',
   'desktop.presentation.control-layout',
   'desktop.routing.two-context-conflict',

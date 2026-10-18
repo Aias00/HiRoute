@@ -6,6 +6,29 @@ fn object(required: &[&str], properties: Value) -> Value {
 fn reference(name: &str) -> Value {
     json!({"$ref":format!("#/$defs/{name}")})
 }
+pub(super) fn classifier_definition() -> Value {
+    let auth = object(
+        &["name", "value_secret_ref"],
+        json!({"name":{"type":"string","minLength":1,"maxLength":128},"value_secret_ref":{"type":"string","minLength":1,"maxLength":256}}),
+    );
+    let endpoint = json!({"type":"string","maxLength":2048});
+    let timeout = json!({"type":"integer","minimum":1,"maximum":3600000});
+    let service = object(
+        &["id", "revision", "name", "connection"],
+        json!({
+            "id":{"type":"string","maxLength":128},"revision":{"type":"integer","minimum":1},"name":{"type":"string","maxLength":128},
+            "connection":{"oneOf":[
+                object(&["kind","provider","model","endpoint","timeout_ms","auth_header"],json!({"kind":{"const":"system_one"},"provider":{"type":"string","maxLength":128},"model":{"type":"string","maxLength":256},"endpoint":endpoint,"timeout_ms":timeout,"auth_header":auth})),
+                object(&["kind","endpoint","timeout_ms"],json!({"kind":{"const":"custom"},"endpoint":endpoint,"timeout_ms":timeout,"auth_header":{"oneOf":[{"type":"null"},auth]}}))
+            ]}
+        }),
+    );
+    json!({"oneOf":[
+        object(&["kind"], json!({"kind":{"const":"local_rules"}})),
+        object(&["kind","service"],json!({"kind":{"const":"decision_service"},"service":service}))
+    ]})
+}
+
 fn definitions() -> Value {
     let selection = object(
         &["binding_id"],
@@ -31,33 +54,14 @@ fn definitions() -> Value {
         "context_window_tokens":{"type":"integer","minimum":1,"maximum":9223372036854775807u64},
         "maximum_attempts":{"type":"integer","minimum":1,"maximum":64},"request_timeout_ms":{"type":"integer","minimum":1000,"maximum":3600000},"attempt_timeout_ms":{"type":"integer","minimum":1000,"maximum":3600000}}),
     );
-    let auth = object(
-        &["name", "value_secret_ref"],
-        json!({"name":{"type":"string","minLength":1,"maxLength":128},"value_secret_ref":{"type":"string","minLength":1,"maxLength":256}}),
-    );
-    let endpoint = json!({"type":"string","maxLength":2048});
-    let timeout = json!({"type":"integer","minimum":1,"maximum":3600000});
-    let service = object(
-        &["id", "revision", "name", "connection"],
-        json!({
-            "id":{"type":"string","maxLength":128},"revision":{"type":"integer","minimum":1},"name":{"type":"string","maxLength":128},
-            "connection":{"oneOf":[
-                object(&["kind","provider","model","endpoint","timeout_ms","auth_header"],json!({"kind":{"const":"system_one"},"provider":{"type":"string","maxLength":128},"model":{"type":"string","maxLength":256},"endpoint":endpoint,"timeout_ms":timeout,"auth_header":auth})),
-                object(&["kind","endpoint","timeout_ms"],json!({"kind":{"const":"custom"},"endpoint":endpoint,"timeout_ms":timeout,"auth_header":{"oneOf":[{"type":"null"},auth]}}))
-            ]}
-        }),
-    );
-    let classifier = json!({"oneOf":[
-        object(&["kind"], json!({"kind":{"const":"local_rules"}})),
-        object(&["kind","service"],json!({"kind":{"const":"decision_service"},"service":service}))
-    ]});
+    let classifier = classifier_definition();
     let prompt = json!({"type":"string"});
     let threshold = json!({"type":"integer","minimum":0,"maximum":1000});
     let judgment = object(
         &["degree", "competence"],
         json!({
             "degree":object(&["simple_threshold_millis","instructions","simple","complex"],json!({"simple_threshold_millis":threshold,"instructions":prompt,"simple":prompt,"complex":prompt})),
-            "competence":object(&["floor_millis","instructions","criteria"],json!({"floor_millis":threshold,"instructions":prompt,"criteria":{"type":"array","minItems":3,"maxItems":3,"items":prompt}}))
+            "competence":object(&["floor_millis","instructions","criteria"],json!({"standard":{"enum":["default","custom"]},"floor_millis":threshold,"instructions":prompt,"criteria":{"type":"array","minItems":3,"maxItems":3,"items":prompt}}))
         }),
     );
     let branch = object(

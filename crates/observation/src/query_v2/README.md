@@ -1,7 +1,23 @@
 # Session content search
 
-`session_search` is the Desktop conversation-search intent on the protected V2
-observation transport. It uses the existing search filters and returns one
+Current `hiroute.observation.query/v2` retains the optional
+`include_routing_observations` flag for facts and plan-quality reads. Omitted/false
+preserves released strict fields, authorization encoding and cursor bindings.
+Opt-in adds bounded routing evidence; it does not add a read permission, SQL table
+or query version.
+
+Statistics cover all retained matching decisions in the authorized scope,
+independently of stage pagination and model/score filters. Each current classifier
+decision records C, native legacy, custom-extension v1 or local rules. Known non-C
+counts stay separate from C denominators. Authenticated supported pre-applicability envelopes also count as known non-C. The existing bounded projection refresh verifies each original carrier/digest and retains only safe format, routing and time evidence. Marker omission alone proves nothing. Unproven historical/current records, unknown scope, missing or invalid projections and bounded scans withhold rates while preserving counts. Already-deleted carriers cannot be reconstructed.
+Content-only deletion retains safe evidence; full fact deletion/expiry removes it
+through existing retention, without a new table, migration, view or permission.
+See [the contract](../../../../issue-spec/specs/session-history/spec.md) and
+[all-decision query](routing_observations.rs). The remaining sections describe
+independent session search.
+
+`session_search` is the Desktop conversation-search intent on the existing protected
+observation operation. It uses the existing search filters and returns one
 `ObservationTextAnchorV2` per matching session, newest matching request first,
 then session ID ascending. Within that request it chooses the first matching
 content occurrence/block. `limit` counts sessions, and `next_cursor` means there

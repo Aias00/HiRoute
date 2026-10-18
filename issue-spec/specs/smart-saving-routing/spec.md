@@ -36,11 +36,25 @@ primary; there is no third group. Missing/partial scores are unrated, not zero.
 Judgment settings may be collapsed with a threshold summary but invalid hidden
 fields must expand on publish failure.
 
+Native routes published with the applicability protocol use the same unchanged T=0.8 and F=0.5 defaults. Its third question
+MUST only control whether an otherwise eligible historical low score applies to the
+current work, using the fixed 0.5 applicability boundary and the shared
+[decision policy](../decision-services/spec.md). It never tunes T/F, changes the
+raw assessment anchors, merges current difficulty with historical performance or
+overrides a complex current task. Research thresholds are not product defaults.
+
 #### Scenario: Exactly at both thresholds
 
 - **WHEN** simple probability is 0.8 and a complete applicable score is 0.5
-- **THEN** default policy MUST allow economy; strict low-score protection cannot
-  interpret equality as incompetence.
+- **THEN** Default policy MUST allow economy; equality is not incompetence.
+
+#### Scenario: C suppression with unchanged thresholds
+
+- **WHEN** simple probability meets the configured threshold, a complete eligible score is strictly below the floor and valid applicability is below 0.5
+- **THEN** Economy MUST be allowed by suppressing only that historical trigger, without changing either threshold or score.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/139#issuecomment-6235629301
 
 ### Requirement: Every new user turn can return to economy
 

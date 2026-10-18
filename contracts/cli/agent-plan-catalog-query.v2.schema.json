@@ -850,6 +850,12 @@
             },
             "instructions": {
               "type": "string"
+            },
+            "standard": {
+              "enum": [
+                "default",
+                "custom"
+              ]
             }
           },
           "required": [

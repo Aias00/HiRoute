@@ -131,6 +131,85 @@ struct GatewayClassifierDiagnostic {
 }
 
 impl ClassifierDiagnosticPort for GatewayClassifierDiagnostic {
+    fn test_classifier_c(
+        &self,
+        request: &hiroute_application_api::HistoricalApplicabilityTestRequestV1,
+        service: &hiroute_domain::DecisionServiceV1,
+    ) -> Result<hiroute_application_api::HistoricalApplicabilityTestResultV1, ControlReadError>
+    {
+        use hiroute_application_api::{
+            CCapabilityStateV1 as S, HISTORICAL_APPLICABILITY_TEST_RESULT_SCHEMA_V1,
+            HistoricalApplicabilityTestResultV1,
+        };
+        let hiroute_domain::DecisionConnectionV1::SystemOne {
+            model, endpoint, ..
+        } = &service.connection
+        else {
+            return Err(ControlReadError::Denied);
+        };
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|_| ControlReadError::Unavailable)?;
+        let started = std::time::Instant::now();
+        let mode = hiroute_domain::ComplexityClassifierModeV1::DecisionService {
+            service: Box::new(service.clone()),
+        };
+        let result = runtime.block_on(self.runtime.test_classifier_c(&mode, &request.protocol));
+        let (state, reason, count) = match result {
+            Ok(o) => (
+                if o.shape_complete {
+                    S::Verified
+                } else {
+                    S::Unsupported
+                },
+                if o.shape_complete {
+                    "complete_shape"
+                } else {
+                    "incomplete_shape"
+                }
+                .into(),
+                o.question_count,
+            ),
+            Err(e) => (
+                if matches!(
+                    e,
+                    hiroute_gateway::server::core_runtime::ClassifierDiagnosticError::InvalidOutput
+                ) {
+                    S::Unsupported
+                } else {
+                    S::TestFailed
+                },
+                e.code().to_owned(),
+                match &request.protocol.decision {
+                    hiroute_domain::DecisionDefinitionV1::Ordinal { .. } => 3,
+                    hiroute_domain::DecisionDefinitionV1::Categorical { options, .. } => {
+                        3 + options.iter().filter(|o| o.refinement.is_some()).count() as u16
+                    }
+                },
+            ),
+        };
+        Ok(HistoricalApplicabilityTestResultV1 {
+            schema: HISTORICAL_APPLICABILITY_TEST_RESULT_SCHEMA_V1.into(),
+            state,
+            reason,
+            question_count: count,
+            service_id: service.id.clone(),
+            service_revision: service.revision,
+            endpoint_digest: hiroute_domain::CanonicalDigest::of(endpoint)
+                .map_err(|_| ControlReadError::Corrupt)?,
+            model: model.clone(),
+            protocol_digest: request.protocol.digest.clone(),
+            shape: request.shape,
+            tested_at_unix_ms: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|_| ControlReadError::Unavailable)?
+                .as_millis()
+                .try_into()
+                .unwrap_or(u64::MAX),
+            duration_millis: started.elapsed().as_millis().try_into().unwrap_or(u64::MAX),
+        })
+    }
     fn test_classifier_decision(
         &self,
         request: &ClassifierDecisionTestRequestV1,

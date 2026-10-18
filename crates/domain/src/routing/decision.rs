@@ -110,6 +110,8 @@ impl DecisionServiceV1 {
 #[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CompetencePolicyV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub standard: Option<super::AssessmentStandardV1>,
     /// Integer thousandths keep published policy canonical and comparable.
     pub floor_millis: u16,
     pub instructions: String,
@@ -119,6 +121,7 @@ pub struct CompetencePolicyV1 {
 impl Default for CompetencePolicyV1 {
     fn default() -> Self {
         Self {
+            standard: None,
             floor_millis: 500,
             instructions: DEFAULT_COMPETENCE_INSTRUCTIONS.into(),
             criteria: DEFAULT_COMPETENCE_CRITERIA.map(str::to_owned),
@@ -255,6 +258,9 @@ pub struct RouteBranchV1 {
 #[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct BranchRoutingV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_protocol: Option<super::NativeProtocolSelectionV1>,
+
     pub classifier: ComplexityClassifierModeV1,
     pub branches: Vec<RouteBranchV1>,
     pub default_branch_id: String,
@@ -264,7 +270,49 @@ pub struct BranchRoutingV1 {
     pub reselect_on_user_message: bool,
 }
 impl BranchRoutingV1 {
+    pub fn validate_native_protocol(&self) -> Result<(), super::NativeProtocolError> {
+        if self.native_protocol.is_some() && !super::native_mode(&self.classifier) {
+            return Err(super::NativeProtocolError::ContentMismatch);
+        }
+        for b in &self.branches {
+            super::validate_assessment_scope(
+                self.native_protocol.as_ref(),
+                &b.id,
+                self.judgment_for(b),
+            )?;
+            if self.native_protocol.is_some()
+                && super::incompatible_native_reference(
+                    self.native_protocol.is_some(),
+                    &b.condition,
+                )
+            {
+                return Err(super::NativeProtocolError::StateReference(format!(
+                    "{}.condition",
+                    b.id
+                )));
+            }
+        }
+        Ok(())
+    }
     pub fn validate(&self, draft: bool) -> bool {
+        if !draft
+            && (self.native_protocol.is_some() && !super::native_mode(&self.classifier)
+                || self.branches.iter().any(|b| {
+                    super::validate_assessment_scope(
+                        self.native_protocol.as_ref(),
+                        &b.id,
+                        self.judgment_for(b),
+                    )
+                    .is_err()
+                        || self.native_protocol.is_some()
+                            && super::incompatible_native_reference(
+                                self.native_protocol.is_some(),
+                                &b.condition,
+                            )
+                }))
+        {
+            return false;
+        }
         if self.branches.len() > 16
             || (!draft && self.branches.len() < 2)
             || !(if draft {

@@ -18,6 +18,10 @@ impl ExecutionFactEnvelopeV1 {
     fn validate_contract(&self, allow_persisted_v1: bool) -> Result<(), ExecutionFactError> {
         let current = self.schema_version == EXECUTION_FACT_SCHEMA_V2
             && self.schema_digest.as_str() == EXECUTION_FACT_PORT_DIGEST_V2;
+        let persisted_pre_c = allow_persisted_v1
+            && self.schema_version == EXECUTION_FACT_SCHEMA_V2
+            && self.schema_digest.as_str()
+                == "sha256:4f0dbcc9f7862133e73e451f64d7a6d6e5de146d958ac8bf3a4d1acc885b6b1d";
         let persisted_v1 = allow_persisted_v1
             && self.schema_version == "hiroute.observation.execution-fact-envelope/v1"
             && self.schema_digest.as_str()
@@ -30,7 +34,11 @@ impl ExecutionFactEnvelopeV1 {
             && self.schema_version == EXECUTION_FACT_SCHEMA_V2
             && self.schema_digest.as_str()
                 == "sha256:80b4ff13af8abc79d7721fea42141300beade2acf1d2659983ceaafcdc6e4799";
-        if !(current || persisted_v1 || persisted_pre_branch || persisted_function_only)
+        if !(current
+            || persisted_v1
+            || persisted_pre_branch
+            || persisted_function_only
+            || persisted_pre_c)
             || self.channel != ExecutionFactChannelV1::ExecutionFact
         {
             return Err(ExecutionFactError::UnsupportedSchema);
@@ -55,7 +63,20 @@ impl ExecutionFactEnvelopeV1 {
         }
         self.trust.validate()?;
         self.fact.validate()?;
+        if current
+            && matches!(&self.fact, ExecutionFactV1::RouteDecision(route)
+            if route.complexity.as_ref().is_some_and(|d| d.decision_protocol.is_none()
+                || (d.decision_protocol != Some(DecisionProtocolV1::SystemOneC) && d.routing_observation.is_some())))
+        {
+            return Err(ExecutionFactError::InvalidFact);
+        }
         if !current
+            && matches!(&self.fact, ExecutionFactV1::RouteDecision(route)
+                if route.complexity.as_ref().is_some_and(|decision| decision.routing_observation.is_some()))
+        {
+            return Err(ExecutionFactError::InvalidFact);
+        }
+        if !(current || persisted_pre_c)
             && matches!(
                 &self.fact,
                 ExecutionFactV1::RouteDecision(route)
@@ -75,7 +96,7 @@ impl ExecutionFactEnvelopeV1 {
             return Err(ExecutionFactError::InvalidFact);
         }
         if let Some(pricing) = &self.pricing {
-            if !(current || persisted_function_only)
+            if !(current || persisted_function_only || persisted_pre_c)
                 || !matches!(self.fact, ExecutionFactV1::AttemptStarted { .. })
             {
                 return Err(ExecutionFactError::InvalidFact);

@@ -1,3 +1,4 @@
+import { resolveAssessment } from '../../../src/features/decision-services/native-protocol.ts';
 import { defaultJudgment } from '../../../src/features/decision-services/types';
 import type { AgentSnapshot } from '../../../src/agents';
 import type { HomeReads } from '../../../src/features/home';
@@ -282,12 +283,20 @@ export function fixturePlanAuthoring(plan?: Plan): AuthoringOptions {
     const { strategy, ...desired } = structuredClone(plan.desired);
     Object.assign(editor, desired, { custom_alias: plan.model_alias });
     if (desired.mode === 'smart_saving') {
-      Object.assign(editor.smart, strategy);
+      const { native_protocol: _protocol, ...editable } = strategy;
+      Object.assign(editor.smart, editable);
+      editor.smart.judgment = resolveAssessment(editor.smart.judgment, editor.smart.classifier.kind === 'decision_service' && editor.smart.classifier.service.connection.kind === 'system_one');
       // The current options response is authoritative, including an omitted optional field.
       if (!Object.hasOwn(strategy, 'reselect_on_user_message')) delete editor.smart.reselect_on_user_message;
     }
     else if (desired.mode === 'free_first') Object.assign(editor.free, strategy);
-    else if (desired.mode === 'custom_branches') editor.branch_routing = strategy.routing;
+    else if (desired.mode === 'custom_branches' && strategy.routing) {
+      const { native_protocol: _protocol, ...routing } = strategy.routing;
+      const native = routing.classifier.kind === 'decision_service' && routing.classifier.service.connection.kind === 'system_one';
+      routing.judgment = resolveAssessment(routing.judgment, native);
+      routing.branches = routing.branches.map(b => b.judgment ? { ...b, judgment: resolveAssessment(b.judgment, native) } : b);
+      editor.branch_routing = routing;
+    }
     else editor.candidates = strategy.candidates ?? [];
   }
   return { editor, plan_id: plan?.agent_plan_id ?? null, expected_head_revision: plan?.head.head_revision ?? null,
@@ -657,6 +666,7 @@ export function mockProductInvoke(command: string, payload: Record<string, any> 
     : { preview: { applicable: true, blockers: [] }, mutation: { state: 'applied', operation: { state: 'succeeded' } } };
   if (command === 'check_agent_authentication') { agentPrerequisiteChecked = true; return true; }
   if (command === 'check_agent_live') return { accepted: true, scope: 'live', model_call: true, state: 'passed', call_count: 1, requested_call_count: 1 };
+  if (command === 'plan_editor_transition_preview') return {};
   if (command === 'preview_plan_editor') {
     if (payload?.input?.action === 'publish' && fixtureTrace.planPublicationError) {
       throw { source: 'backend', envelope: { error: { code: fixtureTrace.planPublicationError } } };

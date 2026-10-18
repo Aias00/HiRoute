@@ -25,9 +25,13 @@ impl crate::LocalObservationStore {
         if query.limit == 0 || query.limit > 200 {
             return Err(ObservationV2Error::Invalid);
         }
-        let binding = CanonicalDigest::of(&(reader.binding()?, &query.request_id, query.limit))
-            .map_err(|_| ObservationV2Error::Invalid)?
-            .to_string();
+        let binding = if query.include_routing_observations {
+            CanonicalDigest::of(&(reader.binding()?, &query.request_id, query.limit, true))
+        } else {
+            CanonicalDigest::of(&(reader.binding()?, &query.request_id, query.limit))
+        }
+        .map_err(|_| ObservationV2Error::Invalid)?
+        .to_string();
         let mut connection =
             Connection::open_with_flags(&self.activity_path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
         let _deadline = super::QueryDeadline::start_for(&connection, reader)?;
@@ -98,6 +102,11 @@ impl crate::LocalObservationStore {
             // Routing identity is an internal durable projection consumed by the request
             // timeline. Keep the public safe-facts surface unchanged.
             fact.routing_context = None;
+            fact.pre_applicability_schema_digest = None;
+            if !query.include_routing_observations {
+                fact.routing_observation = None;
+                fact.decision_protocol = None;
+            }
             fact.sensitive_fields_deleted = deleted;
             facts.push(fact);
             cursor.after = id;

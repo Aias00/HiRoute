@@ -1,3 +1,4 @@
+import { assessmentStandard, resolveAssessment, stockAssessment } from './native-protocol';
 import { Disclosure } from '../../ui';
 import { defaultJudgment, type Judgment } from './types';
 
@@ -6,9 +7,10 @@ export function judgmentSummary(value: Judgment, dual: boolean, language: 'zh' |
     ? `${dual ? `简单概率 ≥ ${value.degree.simple_threshold_millis / 1000} · ` : ''}胜任度 ≥ ${value.competence.floor_millis / 1000}`
     : `${dual ? `P(simple) ≥ ${value.degree.simple_threshold_millis / 1000} · ` : ''}Competence ≥ ${value.competence.floor_millis / 1000}`;
 }
-export function JudgmentFields({ value, onChange, id, dual = true, disabled = false, language }: {
-  value: Judgment; onChange(value: Judgment): void; id: string; dual?: boolean; disabled?: boolean; language: 'zh' | 'en';
+export function JudgmentFields({ value, onChange, id, dual = true, disabled = false, language, native = false }: {
+  value: Judgment; onChange(value: Judgment): void; id: string; dual?: boolean; disabled?: boolean; language: 'zh' | 'en'; native?: boolean;
 }) {
+  value = resolveAssessment(value, native);
   const t = (zh: string, en: string) => language === 'zh' ? zh : en;
   const prompt = (key: string, label: string, content: string, change: (text: string) => void) => <label className="field" key={key}><span className="field-label">{label}</span><textarea className="input" rows={3} value={content} data-decision-field={`${id}-${key}`} onChange={e => change(e.target.value)} /></label>;
   return <fieldset className="decision-judgment-fields" disabled={disabled}>
@@ -20,12 +22,13 @@ export function JudgmentFields({ value, onChange, id, dual = true, disabled = fa
       {prompt('degree-instructions', t('判断要求', 'Decision instructions'), value.degree.instructions, instructions => onChange({ ...value, degree: { ...value.degree, instructions } }))}
       {prompt('simple', t('简单任务', 'Simple tasks'), value.degree.simple, simple => onChange({ ...value, degree: { ...value.degree, simple } }))}
       {prompt('complex', t('复杂任务', 'Complex tasks'), value.degree.complex, complex => onChange({ ...value, degree: { ...value.degree, complex } }))}
-      <button className="btn" type="button" onClick={() => onChange({ ...value, degree: { ...structuredClone(defaultJudgment.degree), simple_threshold_millis: value.degree.simple_threshold_millis } })}>{t('恢复默认提示词', 'Restore default prompts')}</button>
+      <button className="btn" type="button" onClick={() => onChange({ ...value, degree: { ...structuredClone(defaultJudgment.degree), simple_threshold_millis: value.degree.simple_threshold_millis } })}>{t('恢复默认', 'Reset to default')}</button>
     </Disclosure>}
     <Disclosure label={t('如何判断胜任', 'How competence is assessed')} language={language}>
-      {prompt('competence-instructions', t('评分要求', 'Assessment instructions'), value.competence.instructions, instructions => onChange({ ...value, competence: { ...value.competence, instructions } }))}
-      {value.competence.criteria.map((criterion, index) => prompt(`criterion-${index}`, [t('不胜任 · 0', 'Not competent · 0'), t('部分胜任 · 0.5', 'Partly competent · 0.5'), t('胜任 · 1', 'Competent · 1')][index], criterion, text => onChange({ ...value, competence: { ...value.competence, criteria: value.competence.criteria.map((c, i) => i === index ? text : c) as Judgment['competence']['criteria'] } })))}
-      <button className="btn" type="button" onClick={() => onChange({ ...value, competence: { ...structuredClone(defaultJudgment.competence), floor_millis: value.competence.floor_millis } })}>{t('恢复默认提示词', 'Restore default prompts')}</button>
+      <p className="field-help">{assessmentStandard(value) === 'default' ? t('默认评分', 'Default assessment') : t('自定义评分', 'Custom assessment')}</p>
+      {prompt('competence-instructions', t('评分要求', 'Assessment instructions'), value.competence.instructions, instructions => onChange({ ...value, competence: { ...value.competence, standard: 'custom', instructions } }))}
+      {value.competence.criteria.map((criterion, index) => prompt(`criterion-${index}`, [t('不胜任 · 0', 'Not competent · 0'), t('部分胜任 · 0.5', 'Partly competent · 0.5'), t('胜任 · 1', 'Competent · 1')][index], criterion, text => onChange({ ...value, competence: { ...value.competence, standard: 'custom', criteria: value.competence.criteria.map((c, i) => i === index ? text : c) as Judgment['competence']['criteria'] } })))}
+      <button className="btn" type="button" onClick={() => onChange(stockAssessment(value, native))}>{t('恢复默认', 'Reset to default')}</button>
     </Disclosure>
   </fieldset>;
 }

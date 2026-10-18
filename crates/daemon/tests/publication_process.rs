@@ -9,6 +9,12 @@ fn real_process_decision_services_and_branch_publication() {
     run_script("decision_services_product.py");
 }
 
+/// Route actual model requests and inspect C facts through the existing product query.
+#[test]
+fn real_process_c_routing_execution_and_retained_observations() {
+    run_script_case("decision_services_product.py", Some("routed"));
+}
+
 /// Current released CLI point scan/preparation shares the native multi-model exact-save boundary.
 #[test]
 fn released_cli_connection_points_prepare_and_save_exact_models() {

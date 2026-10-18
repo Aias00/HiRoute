@@ -6,6 +6,8 @@ use super::AgentTurnAttributionV1;
 #[derive(schemars::JsonSchema, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanQualitySamplesQuery {
+    #[serde(default, skip_serializing_if = "routing_observations_disabled")]
+    pub include_routing_observations: bool,
     #[serde(default)]
     pub competence: Option<PlanCompetenceFilter>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -98,10 +100,16 @@ pub struct PlanQualitySample {
 #[derive(schemars::JsonSchema, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanQualitySamplesPage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub routing_observations: Option<super::RoutingObservationsSummaryV1>,
     pub samples: Vec<PlanQualitySample>,
     pub summary: PlanQualitySummary,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_cursor: Option<String>,
+}
+
+fn routing_observations_disabled(value: &bool) -> bool {
+    !value
 }
 
 /// Full authorized scope, independent of the stage page and detail filters.

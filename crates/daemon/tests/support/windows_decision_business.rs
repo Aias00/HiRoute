@@ -3,6 +3,7 @@ use super::windows_business_http as http;
 use super::windows_headless_business::{self as business, cli};
 use super::{InstalledProduct, SECRET};
 use serde_json::{Value, json};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 pub fn roundtrip(product: &InstalledProduct) {
@@ -13,6 +14,8 @@ pub fn roundtrip(product: &InstalledProduct) {
     super::track_secret(first.as_bytes());
     super::track_secret(second.as_bytes());
     let original = first.clone();
+    let c_vectors = Arc::new(AtomicBool::new(false));
+    let response_vectors = c_vectors.clone();
     let upstream = http::Server::start(move |request| {
         assert_eq!(request.method, "POST");
         assert_eq!(request.path, "/systemone");
@@ -24,11 +27,37 @@ pub fn roundtrip(product: &InstalledProduct) {
             panic!("decision service lost its version-owned credential")
         };
         assert_eq!(request.body["model"], "windows-decision-model");
-        assert!(request.body["state"]["assessment_from"].is_null());
+        let state = request.body["state"].as_object().unwrap();
+        assert_eq!(state.len(), 4);
+        for field in [
+            "latest_user",
+            "prior_context",
+            "assessment_stage",
+            "history_partial",
+        ] {
+            assert!(state.contains_key(field), "current request lacks {field}");
+        }
         let questions = request.body["questions"].as_object().unwrap();
-        assert_eq!(questions.len(), 3);
+        let historical = questions
+            .values()
+            .any(|q| q["criteria"].get("applicable").is_some());
+        let target = state["assessment_stage"].as_array().unwrap();
+        if historical {
+            assert!(!target.is_empty());
+        } else {
+            assert!(
+                target.is_empty(),
+                "connection test fabricated historical work"
+            );
+        }
+        assert!(questions.len() == 3 || historical && questions.len() == 19);
         let answers=questions.iter().map(|(id,question)| {
-            let answer=if question["type"]=="choice" {
+            let vectors = response_vectors.load(Ordering::SeqCst);
+            let answer=if vectors && question["criteria"].get("applicable").is_some() {
+                json!({"type":"choice","probabilities":{"applicable":0.7,"not_established":0.3}})
+            } else if vectors && question["type"]=="score" && question["criteria"].as_array().is_some_and(|a| a.len()==3) {
+                json!({"type":"score","score":1.0})
+            } else if question["type"]=="choice" {
                 json!({"type":"choice","choice":question["criteria"].as_object().unwrap().keys().next().unwrap()})
             } else {
                 assert_eq!(question["type"],"score");
@@ -120,6 +149,10 @@ pub fn roundtrip(product: &InstalledProduct) {
         cli(product, &["decision", "services", "list"], None)["data"]["services"],
         json!([service])
     );
+    test_c(product, &historical, false, "unsupported");
+    c_vectors.store(true, Ordering::SeqCst);
+    test_c(product, &historical, false, "verified");
+    test_c(product, &service, true, "verified");
     mutate(
         product,
         &json!({"id":service["id"],"expected_revision":2,"service":null}),
@@ -131,7 +164,47 @@ pub fn roundtrip(product: &InstalledProduct) {
             .unwrap()
             .is_empty()
     );
-    assert_eq!(seen.lock().unwrap().len(), 3);
+    assert_eq!(seen.lock().unwrap().len(), 6);
+}
+
+fn test_c(product: &InstalledProduct, service: &Value, maximum: bool, expected: &str) {
+    use hiroute_domain::*;
+    let p = NativeProtocolV1::default();
+    let mut j = JudgmentSettingsV1::default();
+    p.stock_assessment(&mut j);
+    let scopes: Vec<_> = if maximum {
+        (0..16).map(|i| (format!("probe-{i}"), j.clone())).collect()
+    } else {
+        vec![(SMART_SAVING_SCOPE_ID.into(), j.clone())]
+    };
+    let decision = if maximum {
+        DecisionDefinitionV1::Categorical {
+            instructions: "Choose a synthetic category.".into(),
+            options: scopes
+                .iter()
+                .map(|(id, _)| CategoryOptionV1 {
+                    id: id.clone(),
+                    criterion: id.clone(),
+                    refinement: Some(j.degree.definition()),
+                })
+                .collect(),
+        }
+    } else {
+        j.degree.definition().into()
+    };
+    let frozen = FrozenNativeProtocolV1::freeze(&p, decision, scopes).unwrap();
+    let request = json!({"schema":"hiroute.historical-applicability-test/v1","service_id":service["id"],"service_revision":service["revision"],"protocol":frozen,"shape":if maximum {"max_branches"} else {"standard"}});
+    let tested = cli(product, &["decision", "services", "test"], Some(&request));
+    assert_eq!(tested["data"]["state"], expected);
+    assert_eq!(tested["data"]["service_revision"], service["revision"]);
+    assert_eq!(
+        tested["data"]["protocol_digest"],
+        request["protocol"]["digest"]
+    );
+    assert_eq!(
+        tested["data"]["question_count"],
+        if maximum { 19 } else { 3 }
+    );
 }
 pub(crate) fn mutate(product: &InstalledProduct, change: &Value, key: &str) {
     let version = json!({"major":1,"minor":0});

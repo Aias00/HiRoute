@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 mod compute_discovery;
 mod delegation;
+mod native_protocol;
 mod plan_authoring;
 mod subscription_login;
 mod worker;
@@ -560,6 +561,7 @@ pub fn generated_contract_files() -> Vec<GeneratedContractFile> {
     ]);
 
     files.extend(plan_authoring::files());
+    files.extend(native_protocol::files());
     files.extend(compute_discovery::files());
     let file_digests = files
         .iter()
@@ -621,6 +623,8 @@ mod tests {
                 "delegation-start-request.v1.schema.json",
                 "delegation-wait-request.v1.schema.json",
                 "empty-request.v1.schema.json",
+                "historical-applicability-test-result.v1.schema.json",
+                "historical-applicability-test.v1.schema.json",
                 "local-control-hello.v2.schema.json",
                 "local-control.v2.schema.json",
                 "machine-envelope.v2.schema.json",
