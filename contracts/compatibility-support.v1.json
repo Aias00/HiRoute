@@ -1217,7 +1217,7 @@
       "field": "context_window_tokens",
       "mode": "recovery_read_only",
       "owner": "agent-connections",
-      "reason": "A descriptor reconstructed from a pre-window immutable settings operation has no managed context policy. It retains that operation\u2019s behavior until settings are saved again.",
+      "reason": "A descriptor reconstructed from a pre-window immutable settings operation has no managed context policy. It retains that operation’s behavior until settings are saved again.",
       "removal_condition": "Retire with the pre-window settings operation recovery reader.",
       "allowed_paths": [
         "crates/domain/src/agents/managed_launch.rs",
@@ -1678,12 +1678,13 @@
       "field": "released v0.3.1 route-decision carrier and exact original digest",
       "mode": "frozen_fixture",
       "owner": "observation-storage",
-      "reason": "Captured from the checksum-verified public v0.3.1 x86_64 Linux artifact at source 13856abd873da5b4373d39322493b4cc105c4867, using a local deterministic decision service. Verifies authenticated supported-format refresh, mixed upgrade coverage, unchanged carrier/digest and content-only versus full deletion. No current serializer regenerates this old input. The pagination fixture preserves two same-request released events to verify that internal evidence refresh cannot invalidate a previously issued facts cursor.",
+      "reason": "Captured from the checksum-verified public v0.3.1 x86_64 Linux artifact at source 13856abd873da5b4373d39322493b4cc105c4867, using a local deterministic decision service. Verifies authenticated supported-format refresh, mixed upgrade coverage, unchanged carrier/digest and content-only versus full deletion. No current serializer regenerates this old input. The pagination fixture preserves two same-request released events to verify that internal evidence refresh cannot invalidate a previously issued facts cursor. Existing production Local Control queries retain the released reader identity in cursor bindings; current same-OS-user admission and the separate analysis scope remain unchanged.",
       "removal_condition": "Retire only when the release support policy retires the supported pre-applicability carrier reader and its retained backup inputs.",
       "allowed_paths": [
         "crates/observation/tests/fixtures/released-v0.3.1-route-decision.json",
         "crates/observation/src/store/tests/plan_quality/routing_observations_released.rs",
-        "crates/observation/tests/fixtures/released-v0.3.1-route-pagination.json"
+        "crates/observation/tests/fixtures/released-v0.3.1-route-pagination.json",
+        "crates/application/src/observation_query/control/v2.rs"
       ]
     },
     {

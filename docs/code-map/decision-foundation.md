@@ -113,7 +113,7 @@ assessments do not enter averages.
 [All-decision C summaries](../../crates/observation/src/query_v2/routing_observations.rs)
 read the existing route events and safe-fact projection, independently of stage
 pages and score/model filters. The existing observation query v2 opts in with `include_routing_observations`;
-omission preserves released fields, authorization and cursor bindings.
+omission preserves released fields, authorization and cursor bindings. The [Application reader](../../crates/application/src/observation_query/control/v2.rs) retains the released identity for existing queries under current Local Control admission.
 [Product presentation](../../apps/desktop/src/features/RoutingObservations.tsx)
 shows counts, denominators, cohorts and coverage; it does not infer accuracy.
 Every current classifier decision records its protocol. Known non-C decisions stay
