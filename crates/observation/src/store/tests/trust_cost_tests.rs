@@ -6,13 +6,42 @@ fn trial_request(
     revision: u64,
     group: ExecutionGroupV1,
 ) -> Fixture {
+    trial_request_with(store, suffix, revision, group, |_| {})
+}
+
+fn trial_request_with(
+    store: &LocalObservationStore,
+    suffix: &str,
+    revision: u64,
+    group: ExecutionGroupV1,
+    edit: impl FnOnce(&mut ExecutionFactV1),
+) -> Fixture {
     let f = Fixture::new(suffix);
     let mut all = facts(&f, UsageFrameKindV1::Cumulative);
     let mut terminal = all.pop().unwrap();
     for e in all {
         store.ingest_fact(&e, &[]).unwrap();
     }
-    let turn = ExecutionFactV1::AgentTurnFinished {
+    let mut turn = trial_turn(&f, revision, group);
+    edit(&mut turn);
+    assert!(matches!(
+        store.ingest_fact(&f.fact(10, turn, 110), &[]).unwrap(),
+        IngestOutcome::Ack(_)
+    ));
+    terminal.sequence = 11;
+    terminal.event_id = EventId::parse("fact-event-11").unwrap();
+    terminal.occurred_at_unix_nanos = 111_000_000;
+    assert!(matches!(
+        store.ingest_fact(&terminal, &[]).unwrap(),
+        IngestOutcome::Ack(_)
+    ));
+    store.settle_pending_valuations(16).unwrap();
+    f
+}
+
+fn trial_turn(f: &Fixture, revision: u64, group: ExecutionGroupV1) -> ExecutionFactV1 {
+    let suffix = f.request.as_str();
+    ExecutionFactV1::AgentTurnFinished {
         branch_execution: Some(BranchExecutionV1 {
             policy: BranchExecutionPolicyV1 {
                 name: "Trial".into(),
@@ -40,20 +69,7 @@ fn trial_request(
         history_partial: false,
         first_request_id: Some(f.request.clone()),
         last_request_id: Some(f.request.clone()),
-    };
-    assert!(matches!(
-        store.ingest_fact(&f.fact(10, turn, 110), &[]).unwrap(),
-        IngestOutcome::Ack(_)
-    ));
-    terminal.sequence = 11;
-    terminal.event_id = EventId::parse("fact-event-11").unwrap();
-    terminal.occurred_at_unix_nanos = 111_000_000;
-    assert!(matches!(
-        store.ingest_fact(&terminal, &[]).unwrap(),
-        IngestOutcome::Ack(_)
-    ));
-    store.settle_pending_valuations(16).unwrap();
-    f
+    }
 }
 #[test]
 fn trial_comparison_scopes_revision_and_group_and_keeps_missing_prices_unknown() {
@@ -124,5 +140,175 @@ fn trial_comparison_scopes_revision_and_group_and_keeps_missing_prices_unknown()
                 rusqlite::params![f.workspace.as_str(), f.request.as_str()]
             )
             .is_ok()
+    );
+}
+
+fn trial_report(
+    store: &LocalObservationStore,
+    now: i64,
+) -> Result<ApiEquivalentValueReportV1, crate::query_v2::ObservationV2Error> {
+    let reader = ObservationReaderContext::local_user(
+        WorkspaceId::default(),
+        "trial-cost".into(),
+        1,
+        now + 1000,
+        false,
+        false,
+    )
+    .unwrap();
+    store.observed_trust_cost(
+        &reader,
+        &TrustCostScopeV1 {
+            plan_id: "plan/codex-daily".into(),
+            revision: Some(17),
+            branch_id: Some("smart_saving".into()),
+            group: ExecutionGroupV1::Regular,
+            from_ms: 0,
+            to_ms: 1000,
+            currency: "USD".into(),
+        },
+        &current_price("reference", "model-ref", 4_000_000),
+        &[current_price("actual", "model-a", 1_000_000)],
+        now,
+    )
+}
+
+#[test]
+fn review_trial_cost_partial_capture_preserves_proven_membership() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    trial_request(&store, "normal", 17, ExecutionGroupV1::Regular);
+    trial_request_with(
+        &store,
+        "after-interruption",
+        17,
+        ExecutionGroupV1::Regular,
+        |turn| {
+            let ExecutionFactV1::AgentTurnFinished {
+                history_partial, ..
+            } = turn
+            else {
+                unreachable!()
+            };
+            *history_partial = true;
+        },
+    );
+    let report = trial_report(&store, 1000).unwrap();
+    assert_eq!(report.request_count, 2);
+    assert_eq!(report.compared_request_count, 2);
+    assert_eq!(report.coverage, ObservationMetricCoverageV2::Complete);
+    assert_eq!(report.excluded_request_count, 0);
+}
+
+#[test]
+fn review_trial_cost_mixed_attribution_is_a_counted_gap() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    trial_request(&store, "normal", 17, ExecutionGroupV1::Regular);
+    trial_request_with(&store, "mixed", 17, ExecutionGroupV1::Regular, |turn| {
+        let ExecutionFactV1::AgentTurnFinished {
+            attribution,
+            branch_execution,
+            executed_branch_id,
+            model_configuration_id,
+            profile_digest,
+            history_partial,
+            ..
+        } = turn
+        else {
+            unreachable!()
+        };
+        *attribution = AgentTurnAttributionV1::Mixed;
+        *branch_execution = None;
+        *executed_branch_id = None;
+        *model_configuration_id = None;
+        *profile_digest = None;
+        *history_partial = true;
+    });
+    let report = trial_report(&store, 1000).unwrap();
+    assert_eq!(
+        (report.request_count, report.compared_request_count),
+        (2, 1)
+    );
+    assert_eq!(
+        (report.missing_request_count, report.excluded_request_count),
+        (1, 1)
+    );
+    assert_eq!(report.coverage, ObservationMetricCoverageV2::Partial);
+    assert_eq!(report.estimated_savings_micros, None);
+    assert!(report.compared_routed_subtotal_micros.is_some());
+}
+
+#[test]
+fn review_trial_cost_unclosed_turn_ages_into_gap_and_late_evidence_recovers() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    trial_request(&store, "normal", 17, ExecutionGroupV1::Regular);
+    let f = ingest(&store, "unclosed");
+    let updated: i64 = store
+        .connection
+        .lock()
+        .query_row(
+            "SELECT updated_at_ms FROM sessions WHERE workspace_id=?1 AND session_id=?2",
+            rusqlite::params![f.workspace.as_str(), f.session.as_str()],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let boundary = updated + 300_000;
+    assert!(matches!(
+        trial_report(&store, boundary - 1),
+        Err(crate::query_v2::ObservationV2Error::Unavailable)
+    ));
+    let report = trial_report(&store, boundary).unwrap();
+    assert_eq!(
+        (report.request_count, report.compared_request_count),
+        (2, 1)
+    );
+    assert_eq!(
+        (report.missing_request_count, report.excluded_request_count),
+        (1, 1)
+    );
+    assert_eq!(report.coverage, ObservationMetricCoverageV2::Partial);
+    assert_eq!(report.routed_estimate_micros, None);
+    assert_eq!(report.reference_estimate_micros, None);
+    assert_eq!(report.estimated_savings_micros, None);
+    drop(store);
+    let store = open_store(dir.path());
+    assert_eq!(
+        trial_report(&store, boundary)
+            .unwrap()
+            .excluded_request_count,
+        1
+    );
+    let event = f.fact(
+        11,
+        trial_turn(&f, 17, ExecutionGroupV1::Regular),
+        boundary + 1,
+    );
+    assert!(matches!(
+        store.ingest_fact(&event, &[]).unwrap(),
+        IngestOutcome::Ack(_)
+    ));
+    store.settle_pending_valuations(16).unwrap();
+    let recovered = trial_report(&store, boundary + 2).unwrap();
+    assert_eq!(
+        (recovered.request_count, recovered.compared_request_count),
+        (2, 2)
+    );
+    assert_eq!(
+        (
+            recovered.missing_request_count,
+            recovered.excluded_request_count
+        ),
+        (0, 0)
+    );
+    assert_eq!(recovered.coverage, ObservationMetricCoverageV2::Complete);
+    drop(store);
+    let store = open_store(dir.path());
+    assert_eq!(
+        trial_report(&store, boundary + 3)
+            .unwrap()
+            .compared_request_count,
+        2
     );
 }
