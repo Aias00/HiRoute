@@ -138,7 +138,8 @@ async fn native_default_preserves_custom_text_across_publication_and_restart() {
         service: Box::new(service),
     };
     let mut current = original.clone();
-    for _ in 0..2 {
+    for iteration in 0..2 {
+        editor.purpose = format!("Native default publication {iteration}");
         let confirmation = session
             .preview_editor(editor_input("publish", &current, &editor, None))
             .await
@@ -174,7 +175,8 @@ async fn native_default_preserves_custom_text_across_publication_and_restart() {
         "  Preserve custom text.\nSecond line.  ".into();
     editor.smart.judgment.competence.criteria[1].push_str("  ");
     let custom = editor.smart.judgment.competence.clone();
-    for _ in 0..2 {
+    for iteration in 0..2 {
+        editor.purpose = format!("Native custom publication {iteration}");
         let confirmation = session
             .preview_editor(editor_input("publish", &current, &editor, None))
             .await

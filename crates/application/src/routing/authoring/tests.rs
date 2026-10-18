@@ -406,6 +406,22 @@ fn assert_complete_content_operation(legacy_native: bool) {
     )
     .unwrap();
     assert_eq!(roundtrip.plan_content_control().unwrap().unwrap(), content);
+    if legacy_native {
+        let mut tampered = plan.spec().clone();
+        tampered.desired_state["editor"]["smart"]["judgment"]["competence"]["criteria"][0] =
+            serde_json::json!("Changed after sealing");
+        assert!(
+            TransactionPlanV1::from_registered_typed_planner(
+                tampered,
+                plan.control().clone(),
+                None,
+                vec![],
+                vec![],
+                plan.external().to_vec(),
+            )
+            .is_err()
+        );
+    }
     let mut changed = plan.control().clone();
     changed["plan_head"]["head_revision"] = serde_json::json!(99);
     assert!(
