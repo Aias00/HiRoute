@@ -868,11 +868,11 @@ hiroute decision services test --request-stdin --output json < decision-test-req
 不读取真实会话、不运行业务模型、不产生胜任样本；通过不保证任务质量或持续健康。
 保存连接与测试是独立动作，两者都不会发布路由。
 
-历史问题适用性是默认关闭的路由功能。在 `smart` 或 `branch_routing` 中设置 `historical_applicability:{prior_context_max_turns:8}`，通过普通 Preview/Apply 发布。该字段存在即启用，HiRoute 在内部选择协议。编辑输入及编辑器读回不含协议标识、固定提示词或摘要；编译器将完整实际内容冻结进发布版本。省略时保持原行为，全局创建默认不变。
+历史问题适用性是内置 System One 路由新发布时的默认行为。编辑输入与读回没有协议开关、背景设置，也不接受 `native_protocol` 或 `historical_applicability` 字段。背景固定最多 8 轮；普通 Preview/Apply 会冻结实际提示词、标准、阈值及内容摘要。已有冻结路由继续原样执行，到下次发布才切换。本地规则和自定义扩展保持原行为。
 
-评分区分默认和自定义。`judgment.competence.standard:"default"` 采用当前功能状态的默认文字；`"custom"` 逐字保留输入的 instructions 和全部 criteria。旧输入没有此字段时，只有文字及三条标准精确匹配内置默认才归为默认，阈值变化不影响这一判断。界面编辑会记录自定义意图，“恢复默认”恢复当前默认；双向切换均通过普通 Preview/Apply。自定义文字引用不可用状态路径会指出字段并报错。已有发布版本不重新解释。
+评分区分默认和自定义。`judgment.competence.standard:"default"` 在下次编辑、发布时解析为当前默认；`"custom"` 逐字保留 instructions 和全部 criteria。旧输入缺少意图时，仅文字及三条标准精确匹配旧内置默认才归为默认，阈值变化不影响判断。“恢复默认”恢复当前默认并保留阈值。引用不可用上下文字段的自定义文字会在 Preview 指出具体范围和字段；旧发布继续有效。
 
-连接测试保留 `hiroute.classifier-decision-test/v1` 和原结果结构。独立的[适用性测试](../contracts/cli/historical-applicability-test.v1.schema.json)使用 `schema:"hiroute.historical-applicability-test/v1"`，并提供 `service_id`、`service_revision`、`protocol:<实际冻结路由>` 和 `shape:"standard"|"max_branches"`。冻结对象来自发布预览，其 context_layout 为 `hiroute.partitioned-history/v1`。检查结果状态与准确内容标识；16 个双组分支一次发送 19 个问题，较小形状通过不代表最大容量通过。路由编辑器测试实际配置，连接页只有原来的连接测试。显式测试发送 1 次合成请求，可能消耗配额；保存和发布不会探测，也不要求具备测试证据。
+连接页保留原有单一“测试连接”及 `hiroute.classifier-decision-test/v1` 契约，固定示例采用当前默认请求格式。独立的 `hiroute.historical-applicability-test/v1` 仅供 CLI 和验收诊断，输入包含已保存的 service_id、service_revision、Preview 返回的完整冻结 protocol，以及 standard 或 max_branches 形状。最大 16 个双组类别使用一次 19 问请求。应检查结果状态及精确机器标识；较小形状通过不证明最大容量。显式测试可能消耗配额；打开、保存和发布不会探测。路由编辑器没有独立测试或额外确认步骤。
 
 观测查询保留 `hiroute.observation.query/v2`。facts 和 plan_quality 请求可设置 `include_routing_observations:true`；省略或 false 保持旧严格字段、授权编码和游标绑定。协议标识、摘要及形状计数仍保留在机器输出中。
 

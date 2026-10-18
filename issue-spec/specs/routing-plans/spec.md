@@ -230,45 +230,47 @@ Source SPEC comments:
 
 ### Requirement: Default assessments follow the active route configuration
 
-Historical problem applicability MUST remain a route-level capability, off by default; old routes, global creation defaults, local rules and custom-extension v1 keep their behavior. Each effective scope's assessment is default or custom. Defaults resolve at compilation from the active configuration and silently follow enabling or disabling the capability through ordinary Preview/Apply. User-authored custom instructions and all criteria MUST survive both directions byte-for-byte. Editing assessment text makes it custom; Reset to default returns to the active default while preserving thresholds and unrelated settings. Inherited branch assessments retain existing inheritance; independent overrides retain their identity.
+Historical problem applicability is the sole authoring behavior for built-in System One routes. Desktop, CLI and plan-editor.v2 MUST offer no protocol/capability switch, native_protocol/historical_applicability editor field or background setting. Background is fixed at eight turns. Local rules and custom-extension v1 retain their behavior.
 
-Current authoring MUST record default/custom intent rather than repeatedly infer user intent from equality. Supported released input without that marker uses a bounded adapter: exact built-in legacy instructions and all three criteria mean default, including v0.3.1 Plans; any differing text means custom. Do not trim or normalize text, or use changed thresholds as evidence of custom text. Explicit custom intent remains custom even if its bytes equal a default. Existing frozen PlanVersions, canonical identities and historical evidence are never reinterpreted or rewritten on read; the new behavior takes effect at the next edit and publication.
+At the next edit and publication of an existing native route, default assessments MUST resolve silently to the current default through ordinary Preview/Apply. Custom instructions and all criteria MUST remain byte-for-byte unchanged. Every effective scope records default/custom intent. Editing text makes it custom; Reset to default restores the current default while preserving thresholds and unrelated settings. Inherited scopes and independent branch overrides keep their existing meaning.
 
-Editor input, saved drafts and editor readback use only the optional historical_applicability object with prior_context_max_turns (default 8, range 0–8); presence enables the capability. This editor option MUST NOT require or accept a protocol identity, fixed bundle or digest. HiRoute selects and records the protocol internally in effective authoring and stored PlanVersion configuration, preserving exact publication consistency. The compiler MUST freeze actual fixed/effective prompts, criteria, thresholds, context layout/cap, assessment standard and content digest into the publication. Unsupported identities, mismatches and corrupt contents fail explicitly while preserving the active/last-known-good publication. A bare preset ID is insufficient for published execution.
+Supported released input without intent uses only exact built-in legacy instructions and all three criteria to recognize default text, including v0.3.1. Any difference means custom. Do not trim, normalize whitespace or infer custom intent from threshold changes. Explicit custom intent wins even when the text equals a default.
 
-There MUST be no assessment review record/digest, per-scope adoption choice, historical revision restoration, assessment_review_plan opt-in, dangling_c rule or special omission rule. Ordinary Preview/Apply remains the only confirmation for toggles and edits. Known unavailable native state paths in custom text remain ordinary validation errors naming the scope and field; user confirmation cannot waive them. No semantic extraction, state alias or C-suffix migration is introduced. Save, reopen and publication never send implicit provider probes.
+The compiler MUST freeze actual fixed/effective prompts, criteria, thresholds, eight-turn background, per-scope standard and content digest. Existing frozen PlanVersions, canonical identities and historical evidence MUST NOT be reinterpreted or rewritten on read, reopen or execution. The next publication is a new immutable version. Unsupported identities, mismatches and corruption fail explicitly, preserving active/last-known-good behavior. Legacy native composition is only retained frozen-execution support, registered with an owner and removal condition; authoring cannot select it. A bare preset name is insufficient for execution.
 
-Desktop authoring, testing and observations MUST use the capability name and default/custom wording, with no protocol/assessment revision, experiment letter, question number or content digest. Existing connection configuration and route publication versions remain as before. Machine output retains versioned identities and digests. No startup adoption, SQL migration, new retention promise or old-binary downgrade support is implied.
+Known unavailable state paths in custom text MUST fail Preview with the affected scope and field, preserving edits and the active publication. There are no state aliases, semantic extraction or suffix-based migration. No assessment review record/digest, adoption choice, historical restoration, assessment_review_plan, dangling_c or extra confirmation exists. Saving, inspecting and publishing never probe a provider.
 
-#### Scenario: Default silently follows the active configuration
+Desktop uses the capability name and default/custom labels without protocol/assessment revision, question number or digest. Existing unrelated connection/publication versions remain visible; machine output retains internal identities and digests. No startup rewrite, SQL migration, new retention promise or binary downgrade guarantee is implied.
 
-- **WHEN** a never-edited native route is enabled and disabled
-- **THEN** Each direction MUST be one ordinary Preview/Apply, resolve the matching default, and preserve thresholds and independent settings without adoption/review steps.
+#### Scenario: Existing native route moves at its next publication
+
+- **WHEN** an owner opens and republishes a released native route with default assessment text
+- **THEN** The next publication MUST use the current applicability protocol with eight background turns and unchanged thresholds; its old publication retains its exact content and identity.
 
 #### Scenario: Released literal default
 
-- **WHEN** an actual released v0.3.1 Plan stores built-in legacy assessment text
-- **THEN** The next edit MUST recognize default intent and switch silently; the existing PlanVersion, execution content and digests remain unchanged.
+- **WHEN** an actual released v0.3.1 Plan stores exact legacy default instructions and all criteria without intent
+- **THEN** The next edit MUST recognize default intent without changing the old sealed Plan, execution or digests.
 
 #### Scenario: Custom text remains exact
 
-- **WHEN** custom instructions or any criterion exists and the capability changes in either direction
-- **THEN** The compiler MUST preserve every custom byte, including whitespace and explicit custom text equal to defaults.
+- **WHEN** custom instructions or any criterion differs, including whitespace or explicit custom text equal to defaults
+- **THEN** Opening and new publication MUST preserve every custom byte and its scope.
 
-#### Scenario: Reset to active default
+#### Scenario: Reset to current default
 
-- **WHEN** the user edits assessment text or selects Reset to default
-- **THEN** Editing MUST record custom intent; reset MUST restore the active default and default intent, preserving thresholds.
+- **WHEN** the user edits assessment text or chooses Reset to default
+- **THEN** Editing MUST mark custom intent; reset MUST restore the current default and default intent while preserving thresholds.
 
 #### Scenario: Invalid custom state field
 
-- **WHEN** custom text references a state field unavailable in the destination configuration
-- **THEN** Preview MUST reject with the affected scope/field and preserve edits and the active publication.
+- **WHEN** custom text references a state path unavailable in the current native protocol
+- **THEN** Preview MUST identify the scope and field and preserve edits and the active publication.
 
-#### Scenario: Compact authoring freezes full publication
+#### Scenario: No native selection in editor input
 
-- **WHEN** CLI input enables historical_applicability using only the background cap
-- **THEN** Preview/Apply MUST freeze complete actual contents and digest without caller-supplied protocol identity, fixed content or review state; editor readback MUST remain capability-only and internally frozen identities stay exact.
+- **WHEN** Desktop or CLI submits native routing input
+- **THEN** The editor MUST contain no protocol/capability or background field; ordinary Preview/Apply freezes full current native contents without caller-supplied preset text or digest.
 
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/139#issuecomment-6235110836

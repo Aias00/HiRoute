@@ -142,7 +142,7 @@ full-history gaps and assessed-stage gaps remain independent. Missing pre-integr
 prefix may set `history_partial` without making a completely captured target stage
 partial; missing target response or target trimming still invalidates protection.
 
-The explicitly selected native C protocol MUST freeze its actual fixed bundle,
+The native applicability protocol MUST freeze its actual fixed bundle,
 effective degree/category definitions, every composed per-scope assessment,
 thresholds, context cap and content digest in the published route. Execution uses
 that content without substituting binary defaults. Stock C_full questions and
@@ -250,11 +250,10 @@ using the same [quality queries](../session-history/spec.md).
 
 C MUST partition safe supplied content into prior_context, assessment_stage and
 latest_user. Background is the newest contiguous whole-turn suffix before the actual assessment
-target, capped at eight by default and configurable from zero through eight.
+target, capped at eight with no setting.
 Preserve bounded interrupted/unknown turns and their recorded status; execution
 status alone MUST NOT erase earlier user requirements or cut off older background.
-This admission does not certify assessment-target completeness or score eligibility. Zero warns
-that prior requirements/references are unavailable. The complete actual target
+This admission does not certify assessment-target completeness or score eligibility. The complete actual target
 stage is not limited by that turn cap. Latest user input remains separately
 represented; tool-result bodies, goal parsing, semantic extraction and invented
 provider-only history are excluded.
@@ -264,8 +263,7 @@ targets reserve all required question bytes, including applicability, before
 admitting a suffix of the target and then optional background. Remove background
 before losing target content. If that reserved allocation makes the target
 partial, omit applicability and never refill target or background with the freed
-bytes. Initially partial targets omit applicability from the start. No admitted
-target omits historical Score and applicability together. Latest user content and
+bytes. Initially partial targets omit applicability from the start. When no target is admitted, omit historical Score and applicability together. Latest user content and
 question text cannot be truncated; reject a final over-budget request. Repeated
 equal inputs and frozen content MUST yield identical prepared requests.
 
@@ -289,19 +287,19 @@ Source SPEC comments:
 
 ### Requirement: C capability evidence is explicit and session scoped
 
-The released hiroute.classifier-decision-test/v1 connectivity request/result and connection-page test MUST remain unchanged. The capability probe MUST have its own purpose-named current request/result contract, hiroute.historical-applicability-test/v1 and hiroute.historical-applicability-test-result/v1, registered as a separate subject. It reuses the existing protected diagnostic operation and production transport/parser, targets an exact saved service revision and frozen route, and checks the actual question shape, including the nineteen-question maximum categorical shape.
+The connection page MUST retain one hiroute.classifier-decision-test/v1 test with unchanged request/result contract and a fixed example using the current native request shape. There is no route-editor applicability test. Save, inspect and publication send no provider request.
 
-Capability evidence MUST bind saved service revision, endpoint/model, frozen content and shape, verify required Choice probability vectors and Score outputs, and distinguish verified, unsupported, not tested and test failed. Connectivity is not applicability support. Desktop has one route capability test, no shape selector or question numbers, and discards session evidence after connection/content/shape changes even if reverted. Missing evidence shows Not tested in this session and does not block saving/publication. CLI and acceptance diagnostics retain machine identities, counts and shape names. Navigation/save/publication MUST NOT probe, read real conversations, create stage samples or claim task quality or universal provider capacity.
+The separately named hiroute.historical-applicability-test/v1 and its result remain CLI/acceptance diagnostics under the existing protected operation, not connectivity v2 or a new permission. Bind the exact saved service revision, endpoint/model, frozen content digest and requested standard/maximum shape. Use the production transport/parser and synthetic complete history. Maximum shape is one category, sixteen degree, one historical score and one applicability question in one call. Validate all bound answer types and probability vectors without prescribing semantic answers. Missing saved revisions cannot dispatch. Report verified/unsupported/not_tested/test_failed and bounded duration/reason; machine output retains identities and digests. Do not infer quality or universal provider certification from shape success. No automatic retries or implicit calls are introduced.
 
-#### Scenario: Only category Choice is returned
+#### Scenario: One current connection test
 
-- **WHEN** a provider returns a probability-free applicability Choice during a C test
-- **THEN** The result MUST be unsupported, while a separate V1 connectivity result retains its meaning.
+- **WHEN** a user explicitly tests a saved native connection from Desktop
+- **THEN** The existing v1 contract MUST exercise the current default request shape through one call, without a route test or new permission.
 
-#### Scenario: Saved revision remains exact
+#### Scenario: Maximum native diagnostic
 
-- **WHEN** the saved service has a newer current revision than the one selected for a test
-- **THEN** The test MUST use the exact selected retained revision and its credential.
+- **WHEN** the CLI/acceptance probe selects the sixteen-category maximum shape
+- **THEN** One production request MUST contain all nineteen questions and validate their complete results against the saved identity and frozen contents.
 
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/139#issuecomment-6235109346

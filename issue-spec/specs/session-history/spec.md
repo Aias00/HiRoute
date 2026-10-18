@@ -222,68 +222,6 @@ body stays unavailable and cannot be rebuilt from a score explanation. Public
 read-only facts, help/schema discovery, and cursor without content/model calls.
 Competence is stage performance, not task acceptance rate or universal model ranking.
 
-### Requirement: C observations cover all retained decisions
-
-Routing evidence MUST reuse existing route events, bounded safe-field storage
-and authorized query entrances, with no new table, SQL migration, view or permission.
-Every current routed classifier decision records its selected protocol (native
-legacy, applicability C v1, custom extension v1 or local rules), independently of
-inherited/fallback source; project that marker into safe facts. Known non-C counts
-are separate and never enter C denominators. An authenticated supported pre-applicability envelope proves a known non-C decision without identifying its classifier family. Retain only its bounded format evidence in the existing safe projection, with routing/time identity, after verifying the original digest through the supported reader. Missing markers alone remain unknown; never infer protocol from Plan identity or rewrite authenticated facts. Missing, invalid, unsupported or already-deleted source evidence cannot be invented.
-
-C detail records full-content/bundle identity, authored default/custom assessment standard, provider/model,
-target/completeness/eligibility, applicability dispatch/state/reason/probability,
-P/T, s/F, fixed 0.5 applicability boundary, action and bounded byte/turn counts.
-Selection and actual execution/relay remain separate. Safe metadata includes no
-prompt, conversation, tool-result, credential or free-form diagnostic text.
-
-Existing observation query versions and the optional include_routing_observations flag MUST remain. Omitted/false preserves released strict request/result fields, nested selections, errors, authorization encoding and cursor bindings. True exposes bounded facts detail and plan-quality summaries through the same protected operations, with the flag bound to opt-in cursors. Do not add a query version or separate legacy-v2 business path. A stage-opening sample is not an all-decision denominator.
-
-Summaries MUST cover all matching authorized retained route decisions independently
-of page, model/score/grade filters, scoped by Plan/session, time, configured
-thresholds, protocol/content/standard and provider/model. Exclude inherited records
-as new dispatches and deduplicate originating event identity. Report retained and
-covered scopes, missing projections, old unknown markers and scan limits. Mixed current C/non-C scopes, including proven supported pre-applicability records, can report complete coverage and C rates; unproven old/current records or incomplete evidence withholds exact-population rates while preserving known counts.
-Deleted data is outside retained scope and its missing population cannot be invented.
-
-Q3 unavailable/requested uses actual dispatch as denominator. No-target/partial
-omissions and inherited decisions are separate. Eligible low history and simple
-current work define protection opportunities; suppressed/opportunities and
-suppressed/fresh C decisions show actual group changes. Required-question-missing
-violations retain protection and count separately as internal anomalies, excluded
-from provider-unavailable/requested totals. Zero denominators are unavailable.
-These rates describe behavior, not ground-truth accuracy or task quality.
-Content-only deletion preserves safe evidence under existing retention; facts-and-
-content deletion/expiry removes it. Existing reader authorization, run conflicts,
-idempotency and deletion boundaries remain effective.
-
-#### Scenario: All decisions, not open stages
-
-- **WHEN** several C decisions occur inside one stage and a stage-score filter or page is selected
-- **THEN** Counts MUST include all matching retained decision events while keeping inherited and omitted cases out of the requested denominator.
-
-#### Scenario: Content deletion
-
-- **WHEN** only captured content is deleted and safe facts remain within retention
-- **THEN** Safe C detail/counts MUST remain queryable without restoring body content; full fact deletion removes them.
-
-#### Scenario: Released read
-
-- **WHEN** a facts or plan-quality request omits the new opt-in flag
-- **THEN** The response MUST preserve its prior field set, including nested stage selection.
-
-#### Scenario: Proven pre-applicability format
-
-- **WHEN** supported pre-applicability decisions with authenticated format evidence share a scope with current applicability decisions
-- **THEN** Known non-C counts MUST include only the proven older decisions, outside applicability denominators; complete scopes retain rates before and after content-only deletion and reopen.
-
-#### Scenario: Missing evidence stays partial
-
-- **WHEN** a current marker is lost or a source/projection is missing, invalid, unsupported or already deleted without retained proof
-- **THEN** Coverage MUST remain partial and exact-population rates unavailable; Plan identity and marker omission cannot replace evidence.
-
-Source SPEC comments:
-- https://github.com/higress-group/HiRoute/issues/139#issuecomment-6235111513
 ### Requirement: Expose Hermes connection state and recorded execution models
 
 HiRoute SHALL expose the managed Hermes profile's saved connection scope/Plan/protocol and preparation/operation state through existing CLI status queries and Desktop views. Routed Hermes requests SHALL be readable through the existing public execution queries with their recorded Plan, branch and actual execution model. Saved configuration, configuration-operation state and recorded execution SHALL remain distinguishable; the current Plan or an installed adapter SHALL NOT substitute for historical execution or unobserved live conversation selection. Existing session-history attribution and query-access contracts remain authoritative.
@@ -367,6 +305,69 @@ HiRoute SHALL retain the physical identity and exact request/receipt attribution
 
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/125#issuecomment-6229104803
+
+### Requirement: C observations cover all retained decisions
+
+Routing evidence MUST reuse existing route events, bounded safe-field storage
+and authorized query entrances, with no new table, SQL migration, view or permission.
+Every current routed classifier decision records its selected protocol (native
+legacy, applicability C v1, custom extension v1 or local rules), independently of
+inherited/fallback source; project that marker into safe facts. Known non-C counts
+are separate and never enter C denominators. An authenticated supported pre-applicability envelope proves a known non-C decision without identifying its classifier family. Retain only its bounded format evidence in the existing safe projection, with routing/time identity, after verifying the original digest through the supported reader. Missing markers alone remain unknown; never infer protocol from Plan identity or rewrite authenticated facts. Missing, invalid, unsupported or already-deleted source evidence cannot be invented.
+
+C detail records full-content/bundle identity, authored default/custom assessment standard, provider/model,
+target/completeness/eligibility, applicability dispatch/state/reason/probability,
+P/T, s/F, fixed 0.5 applicability boundary, action and bounded byte/turn counts.
+Selection and actual execution/relay remain separate. Safe metadata includes no
+prompt, conversation, tool-result, credential or free-form diagnostic text.
+
+Existing observation query versions and the optional include_routing_observations flag MUST remain. Omitted/false preserves released strict request/result fields, nested selections, errors, authorization encoding and cursor bindings. True exposes bounded facts detail and plan-quality summaries through the same protected operations, with the flag bound to opt-in cursors. Do not add a query version or separate legacy-v2 business path. A stage-opening sample is not an all-decision denominator.
+
+Summaries MUST cover all matching authorized retained route decisions independently
+of page, model/score/grade filters, scoped by Plan/session, time, configured
+thresholds, protocol/content/standard and provider/model. Exclude inherited records
+as new dispatches and deduplicate originating event identity. Report retained and
+covered scopes, missing projections, old unknown markers and scan limits. Mixed current C/non-C scopes, including proven supported pre-applicability records, can report complete coverage and C rates; unproven old/current records or incomplete evidence withholds exact-population rates while preserving known counts.
+Deleted data is outside retained scope and its missing population cannot be invented.
+
+Q3 unavailable/requested uses actual dispatch as denominator. No-target/partial
+omissions and inherited decisions are separate. Eligible low history and simple
+current work define protection opportunities; suppressed/opportunities and
+suppressed/fresh C decisions show actual group changes. Required-question-missing
+violations retain protection and count separately as internal anomalies, excluded
+from provider-unavailable/requested totals. Zero denominators are unavailable.
+These rates describe behavior, not ground-truth accuracy or task quality.
+Content-only deletion preserves safe evidence under existing retention; facts-and-
+content deletion/expiry removes it. Existing reader authorization, run conflicts,
+idempotency and deletion boundaries remain effective.
+
+#### Scenario: All decisions, not open stages
+
+- **WHEN** several C decisions occur inside one stage and a stage-score filter or page is selected
+- **THEN** Counts MUST include all matching retained decision events while keeping inherited and omitted cases out of the requested denominator.
+
+#### Scenario: Content deletion
+
+- **WHEN** only captured content is deleted and safe facts remain within retention
+- **THEN** Safe C detail/counts MUST remain queryable without restoring body content; full fact deletion removes them.
+
+#### Scenario: Released read
+
+- **WHEN** a facts or plan-quality request omits the new opt-in flag
+- **THEN** The response MUST preserve its prior field set, including nested stage selection.
+
+#### Scenario: Proven pre-applicability format
+
+- **WHEN** supported pre-applicability decisions with authenticated format evidence share a scope with current applicability decisions
+- **THEN** Known non-C counts MUST include only the proven older decisions, outside applicability denominators; complete scopes retain rates before and after content-only deletion and reopen.
+
+#### Scenario: Missing evidence stays partial
+
+- **WHEN** a current marker is lost or a source/projection is missing, invalid, unsupported or already deleted without retained proof
+- **THEN** Coverage MUST remain partial and exact-population rates unavailable; Plan identity and marker omission cannot replace evidence.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/139#issuecomment-6235111513
 
 ## Implementation references
 

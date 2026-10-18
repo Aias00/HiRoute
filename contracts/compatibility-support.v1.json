@@ -1663,8 +1663,7 @@
         "crates/domain/src/routing/system_one_c.rs",
         "crates/domain/src/routing/system_one_c_tests.rs",
         "crates/gateway/src/publication/compiler.rs",
-        "crates/gateway/src/core_runtime/classification/system_one.rs",
-        "apps/desktop/src/features/decision-services/native-protocol.ts"
+        "crates/gateway/src/core_runtime/classification/system_one.rs"
       ]
     },
     {
@@ -1766,6 +1765,25 @@
         "crates/observation/src/analysis/native.rs",
         "crates/observation/src/analysis/native_origin.rs",
         "crates/observation/src/store/tests/analysis_delete_tests.rs"
+      ]
+    },
+    {
+      "contract": "hiroute.system-one-legacy/v1",
+      "field": "omitted native_protocol in supported frozen native publications",
+      "mode": "recovery_read_only",
+      "owner": "decision-foundation",
+      "reason": "Supported released v0.3.x native publications retain their original flat state, independent legacy category/assessment composition, policy and identities until replaced by a new publication. Current plan-editor authoring has no selector and always freezes the applicability protocol for built-in decision models. Reads and runtime execution never upgrade old publications.",
+      "removal_condition": "Remove only after the release support policy explicitly retires every supported frozen legacy publication and retained backup, or an authenticated versioned migration preserves their original execution meaning. New publication defaults alone do not retire execution support.",
+      "allowed_paths": [
+        "crates/domain/src/routing/legacy_category.rs",
+        "crates/domain/src/routing/assessment.rs",
+        "crates/domain/src/routing/authoring/editor.rs",
+        "crates/domain/src/routing/authoring/tests.rs",
+        "crates/domain/src/routing/system_one_c.rs",
+        "crates/application/src/compiler/explicit.rs",
+        "crates/gateway/src/core_runtime/classification/system_one.rs",
+        "crates/gateway/src/core_runtime/classification/protocol.rs",
+        "crates/gateway/src/publication/compiler.rs"
       ]
     }
   ]

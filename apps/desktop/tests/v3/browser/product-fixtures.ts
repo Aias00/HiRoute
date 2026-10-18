@@ -1,4 +1,4 @@
-import { resolveAssessment } from '../../../src/features/decision-services/native-protocol';
+import { resolveAssessment } from '../../../src/features/decision-services/native-protocol.ts';
 import { defaultJudgment } from '../../../src/features/decision-services/types';
 import type { AgentSnapshot } from '../../../src/agents';
 import type { HomeReads } from '../../../src/features/home';

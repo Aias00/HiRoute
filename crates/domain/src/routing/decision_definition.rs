@@ -3,14 +3,14 @@ use serde::{Deserialize, Serialize};
 
 use super::DegreePolicyV1;
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct OrdinalLevelV1 {
     pub id: String,
     pub criterion: String,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename = "ordinal", deny_unknown_fields)]
 pub struct OrdinalDefinitionV1 {
     pub instructions: String,
@@ -22,13 +22,13 @@ pub struct OrdinalDefinitionV1 {
 // retaining the untagged form accepted by the existing v1 reader.
 impl<'de> Deserialize<'de> for OrdinalDefinitionV1 {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        #[derive(Default, Deserialize)]
+        #[derive(schemars::JsonSchema, Default, Deserialize)]
         #[serde(rename_all = "snake_case")]
         enum Kind {
             #[default]
             Ordinal,
         }
-        #[derive(Deserialize)]
+        #[derive(schemars::JsonSchema, Deserialize)]
         #[serde(deny_unknown_fields)]
         struct Wire {
             #[serde(default, rename = "kind")]
@@ -48,7 +48,7 @@ impl<'de> Deserialize<'de> for OrdinalDefinitionV1 {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CategoryOptionV1 {
     pub id: String,
@@ -57,7 +57,7 @@ pub struct CategoryOptionV1 {
     pub refinement: Option<OrdinalDefinitionV1>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum DecisionDefinitionV1 {
     Ordinal {

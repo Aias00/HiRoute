@@ -35,21 +35,19 @@ Category conditions, degree criteria and assessment criteria are separate inputs
 Existing plan/session views show actual group/model/profile, frozen thresholds and selection reasons
 separately from latest competence. Draft edits cannot reinterpret published evidence.
 
-For a built-in decision connection, enable **Historical problem applicability** on
-the route. It is off by default and changes the draft until ordinary publication.
-Enabling changes how history is supplied and the default assessment. Default
-assessments follow the switch silently. Editing assessment text makes it custom;
-custom instructions and every criterion remain unchanged in either direction.
-**Reset to default** restores the active default and preserves thresholds.
-Published versions and historical evidence stay frozen. Unsupported context
-references remain field-specific validation errors. Simple probability remains
-0.8 and the competence floor remains 0.5 unless explicitly configured otherwise.
+Historical problem applicability is the default for newly published built-in System
+One routes. There is no switch or background setting. An existing frozen route
+continues unchanged until its next publication. Default assessments then resolve
+silently to the current default; custom instructions and every criterion remain
+byte-for-byte identical. Reset to default restores current text while preserving
+thresholds. Unsupported context references fail Preview with the scope and field.
+Local rules and custom extensions remain unchanged. Simple probability remains
+0.8 and the competence floor remains 0.5 unless configured otherwise.
 
 The applicability protocol supplies separate `prior_context`, `assessment_stage`
-and `latest_user`. Background defaults to eight whole turns before the actual
+and `latest_user`. Background is fixed at eight whole turns before the actual
 assessed stage, preserving bounded interrupted/unknown turns and their status.
-The complete stage can be longer. Zero background warns that earlier requirements
-and references are absent. Wire-budget trimming marks the target partial and
+The complete stage can be longer. Wire-budget trimming marks the target partial and
 omits the applicability judgment without refilling history; partial scores cannot trigger
 historical protection. Current input is never silently truncated; tool-result bodies
 are excluded.
@@ -59,20 +57,18 @@ at least 0.5 retains protection and a lower value suppresses it. Unavailable ans
 retain protection conservatively. Attribution, version, category, score/rubric
 validity, same-turn inheritance and availability relay retain their existing rules.
 
-The connection page keeps its original connectivity test. The route editor has a
-separate **Test route applicability** action for its actual configuration. It
-reports capability outcomes without exposing protocol identities, digests or
-question numbers. **Not tested in this session** remains visible without evidence;
-changing connection, content or shape discards it even if later reverted. An
-explicit test sends one synthetic request and may consume quota. Saving and
-publishing never probe and remain available without capability evidence. CLI and
-acceptance diagnostics can separately exercise the maximum supported shape.
+The connection page retains one connectivity test with the existing contract and a
+current-default synthetic example. There is no route-editor test. CLI and
+acceptance diagnostics can explicitly test the full nineteen-question maximum
+shape through the production transport/parser. Explicit testing may consume
+quota; opening, saving and publication never probe a provider.
 
 Plan/session quality includes counts from all retained matching decisions,
 independent of stage pages and score/model filters. Current events mark all four
 classifier protocols; known non-applicability decisions are counted separately and
-do not make mixed scopes partial. Unmarked old events, missing projections and
-bounded scans remain coverage gaps: counts stay visible, while exact rates are
+do not make mixed scopes partial. Authenticated supported older formats also count as known earlier-publication
+decisions. Unproven unmarked events, missing projections and bounded scans remain
+coverage gaps: counts stay visible, while exact rates are
 unavailable. Content-only deletion keeps safe evidence; full fact deletion/expiry
 removes it. Every scope records its authored default/custom assessment intent before sealing. Rates describe
 routing behavior and do not claim accuracy or quality improvement.

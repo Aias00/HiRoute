@@ -1064,31 +1064,33 @@ fields, reads no real conversation, runs no execution model and produces no comp
 A pass is not a task-quality or continuing-health guarantee. Saving a connection and testing
 it are separate actions; neither publishes a route.
 
-Historical problem applicability is a route capability, off by default. In `smart`
-or `branch_routing`, select `historical_applicability:{prior_context_max_turns:8}`.
-Presence enables the capability; HiRoute selects the protocol internally. Editor input and editor readback contain no protocol identity, fixed bundle or digest. Use the normal Preview/Apply flow;
-the compiler freezes complete effective contents into the publication. Omission
-keeps the current behavior and global defaults do not change.
+Historical problem applicability is the built-in default for newly published native
+System One routes. Editor input and readback have no protocol/capability switch,
+background setting or `native_protocol`/`historical_applicability` field. Background
+is fixed at eight turns. Use ordinary Preview/Apply; the compiler freezes complete
+actual prompts, criteria, thresholds and content digest into the publication.
+Existing frozen routes continue unchanged until their next publication. Local
+rules and custom extensions retain their existing behavior.
 
 Assessments are default or custom. `judgment.competence.standard:"default"`
-resolves the active default; `"custom"` preserves the supplied instructions and all
-criteria exactly. Released input without this field recognizes exact built-in
-default text, including all criteria, as default. Threshold changes alone do not
-customize text. UI edits record custom intent; Reset to default restores active
-defaults. Both toggle directions use one ordinary Preview/Apply. Incompatible custom state paths name
-the field and fail validation. Existing PlanVersions remain frozen.
+resolves the current default at the next edit/publication; `"custom"` preserves
+instructions and all criteria byte-for-byte. Released input without intent
+recognizes only exact legacy built-in instructions and all three criteria as
+default. Threshold changes do not customize text. Reset to default restores the
+current default and keeps thresholds. Unsupported state references in custom text
+fail Preview with their scope and field; existing publications stay active.
 
 Connectivity keeps `hiroute.classifier-decision-test/v1` and its original result.
-The separate [applicability probe](../contracts/cli/historical-applicability-test.v1.schema.json)
-uses `schema:"hiroute.historical-applicability-test/v1"`, `service_id`,
+The connection page has one test, using a current-default synthetic example.
+The separate [applicability diagnostic](../contracts/cli/historical-applicability-test.v1.schema.json)
+is available through CLI and acceptance tooling, using
+`schema:"hiroute.historical-applicability-test/v1"`, `service_id`,
 `service_revision`, `protocol:<actual frozen route>` and `shape:"standard"` or
-`"max_branches"`. Read the frozen object from the publication Preview; its context
-layout is `hiroute.partitioned-history/v1`. Inspect result state and exact evidence
-identity. A sixteen-category dual-group maximum uses nineteen questions in one
-call; a smaller success proves no maximum capacity. The route editor tests its
-actual shape; the connection page keeps its one connectivity test. All explicit
-tests send one synthetic request and may consume quota. Saving/publication never
-probe and do not require capability evidence.
+`"max_branches"`. Read the frozen object from publication Preview. A maximum
+sixteen-category dual-group shape has nineteen questions in one request; a smaller
+success proves no maximum capacity. Inspect result state and exact machine
+identity. Explicit tests may consume quota. Opening, saving and publication never
+probe. The route editor has no separate test or additional confirmation.
 
 Observation queries retain `hiroute.observation.query/v2`. Facts and plan-quality
 requests may set `include_routing_observations:true`; omission/false preserves the

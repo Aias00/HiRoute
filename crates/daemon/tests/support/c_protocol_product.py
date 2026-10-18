@@ -224,5 +224,3 @@ def execute_and_inspect(product, endpoint, saved):
     print(json.dumps({'scenario': 'c-real-gateway-to-retained-product-observations', 'state': 'green',
                       'routing_calls': 2, 'requested': 1, 'protection_opportunities': 1, 'suppressed': 1}), flush=True)
     return 2
-
-

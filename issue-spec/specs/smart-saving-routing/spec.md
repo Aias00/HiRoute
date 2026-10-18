@@ -36,7 +36,7 @@ primary; there is no third group. Missing/partial scores are unrated, not zero.
 Judgment settings may be collapsed with a threshold summary but invalid hidden
 fields must expand on publish failure.
 
-Opt-in native C uses the same unchanged T=0.8 and F=0.5 defaults. Its third question
+Native routes published with the applicability protocol use the same unchanged T=0.8 and F=0.5 defaults. Its third question
 MUST only control whether an otherwise eligible historical low score applies to the
 current work, using the fixed 0.5 applicability boundary and the shared
 [decision policy](../decision-services/spec.md). It never tunes T/F, changes the

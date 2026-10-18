@@ -16,7 +16,7 @@ with no current runtime or product entry.
 | Discover CLI presets, securely connect, edit, test or delete a decision model/custom extension | [CLI journey](../../crates/cli/src/quickstart/decision.rs), [shared presets](../../assets/decision-services/providers.v1.json), [terminal credential input](../../crates/cli/src/protected_prompt.rs), [Connection UI](../../apps/desktop/src/features/decision-services/DecisionServicesPage.tsx), [native transaction](../../apps/desktop/src-tauri/src/session/decision_services.rs), [store](../../crates/local-storage/src/control/decision_services.rs) | [Desktop shell scenarios](../../apps/desktop/tests/v3/browser/product-shell-scenarios.mjs), [real CLI lifecycle](../../crates/daemon/tests/support/decision_services_product.py), [installed secure onboarding](../../crates/daemon/tests/support/quickstart_decision.py) |
 | Create a connection while editing a route | [DesktopApp](../../apps/desktop/src/product/DesktopApp.tsx), [selector](../../apps/desktop/src/features/decision-services/DecisionSelector.tsx) | Preserve route edits and select the exact saved revision without implicit publication |
 | Configure categories, degree and competence | [Plan editor](../../apps/desktop/src/plan-editor.tsx), [branch editor](../../apps/desktop/src/features/decision-services/BranchRoutingEditor.tsx), [judgment controls](../../apps/desktop/src/features/decision-services/JudgmentSettings.tsx), [domain](../../crates/domain/src/routing/decision.rs) | Existing model picker, collapsed advanced settings, complete overrides and publish validation |
-| Enable historical problem applicability and edit default/custom assessments | [Assessment intent and released-input adapter](../../crates/domain/src/routing/assessment.rs), [frozen protocol](../../crates/domain/src/routing/system_one_c.rs), [capability editor](../../apps/desktop/src/features/decision-services/NativeProtocolEditor.tsx), [judgment fields](../../apps/desktop/src/features/decision-services/JudgmentSettings.tsx) | [Real CLI default/custom toggles and restart](../../crates/daemon/tests/support/c_protocol_product.py), [native Session publication/reopen](../../apps/desktop/src-tauri/src/editor_publication_tests.rs), [Desktop interaction](../../apps/desktop/tests/v3/browser/c-protocol-scenarios.mjs) |
+| Edit native default/custom assessments | [Assessment intent and released-input adapter](../../crates/domain/src/routing/assessment.rs), [frozen protocol](../../crates/domain/src/routing/system_one_c.rs), [judgment fields](../../apps/desktop/src/features/decision-services/JudgmentSettings.tsx) | [Real CLI next-publication default/custom and restart](../../crates/daemon/tests/support/c_protocol_product.py), [native Session publication/reopen](../../apps/desktop/src-tauri/src/editor_publication_tests.rs), [Desktop interaction](../../apps/desktop/tests/v3/browser/c-protocol-scenarios.mjs) |
 | Explicitly test connectivity or applicability | [Purpose-named applicability contract](../../crates/application-api/src/classifier_diagnostic_c.rs), [Application](../../crates/application/src/classifier_c.rs), [production diagnostic](../../crates/gateway/src/core_runtime/classification/c_capability.rs), [native session](../../apps/desktop/src-tauri/src/classifier_c_session.rs) | [CLI request boundary](../../crates/cli/src/control_plane.rs), [focused Windows case](../../crates/daemon/tests/windows_headless.rs): standard and nineteen-question shapes through the existing protected command; no implicit provider call |
 | Freeze connection, definition and rubric | [Authoring snapshot](../../crates/daemon/src/control/runtime/plan_content_snapshot.rs), [Application compiler](../../crates/application/src/compiler), [Gateway compiler](../../crates/gateway/src/publication/compiler.rs) | [Decision publication contracts](../../crates/gateway/src/publication/tests/decision_contracts.rs), [real publication/restart](../../crates/daemon/tests/publication_process.rs) |
 | Judge the current task and preceding actual stage | [Call lifetime](../../crates/gateway/src/core_runtime/classification.rs), [safe transport diagnostics](../../crates/gateway/src/core_runtime/classification/diagnostic.rs), [System One adapter](../../crates/gateway/src/core_runtime/classification/system_one.rs), [custom codec](../../crates/gateway/src/core_runtime/classification/protocol.rs) | [Provider mapping](../../crates/gateway/src/core_runtime/classification/system_one_tests.rs), [protocol/replay tests](../../crates/gateway/src/core_runtime/classification/protocol_tests.rs) |
@@ -41,16 +41,19 @@ Desktop calls connections decision models or custom extensions; CLI retains
 `decision services list/apply/test`. Writes reuse Operations, protected input and
 existing Secret storage. Custom HTTP belongs to a saved connection, not inline
 `rest` authoring. Current development v1 replaces the earlier decision shape;
-the custom-extension v1 shape has no old-format negotiation. Native C is a separate,
-explicit route semantic carried by the existing System One wire envelope.
+the custom-extension v1 shape has no old-format negotiation. New native publications freeze historical problem applicability in the existing System One
+wire envelope. Earlier frozen publications keep their original execution semantics.
 
-Editor input/readback carries the historical_applicability option and background cap; effective authoring records the internally selected protocol. Compiled
-execution carries actual fixed/effective content and digest. Omission preserves
-legacy encoding. Default assessments resolve for the active configuration during
-ordinary Preview/Apply. Custom text remains exact. Current intent is explicit;
-the released-input adapter recognizes exact legacy default instructions and all
-criteria without rewriting existing publications. Assessment inheritance and
-thresholds retain their existing owners.
+Editor input/readback has no native protocol or background selection. Effective
+native authoring records the current internal protocol, with a fixed eight-turn
+background. Compiled execution freezes actual fixed/effective content and digest.
+Legacy omission remains frozen execution support only and is registered for
+supported old publications. Default assessments resolve to the current default at
+the next edit/publication; custom text stays exact. The released-input adapter
+recognizes exact legacy default instructions and all criteria. Existing
+publications are never rewritten; assessment inheritance and thresholds keep
+their existing owners. Desktop has one connection test with the current request
+example; CLI/acceptance retains the explicit maximum-shape diagnostic.
 
 ## Provider and routing policy
 
@@ -74,7 +77,7 @@ never refills history after a partial target frees question bytes. Already-bound
 interrupted/unknown turns stay in the continuous background suffix; execution
 status and target-score eligibility are separate. The shared immutable
 [native category v1 template](../../crates/domain/src/routing/fixtures/native_category_v1.json)
-feeds compilation and Desktop preview; C transport consumes the frozen decision.
+feeds native compilation; transport consumes the frozen decision.
 Freeze records default/custom assessment intent for every scope before hashing. Legacy native wording
 has [its own current definition](../../crates/domain/src/routing/legacy_category.rs), independent of the C fixture. C applicability
 only gates an otherwise eligible low-score protection opportunity. Invalid or

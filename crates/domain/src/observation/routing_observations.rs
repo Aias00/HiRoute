@@ -2,7 +2,7 @@
 use crate::{CanonicalDigest, ExecutionGroupV1, ModelGroupReasonV1, RoutingObservationV1};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ObservationRoutingDecisionV1 {
     pub plan_id: String,
@@ -14,7 +14,9 @@ pub struct ObservationRoutingDecisionV1 {
     pub observation: RoutingObservationV1,
 }
 
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(
+    schemars::JsonSchema, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize,
+)]
 #[serde(deny_unknown_fields)]
 pub struct RoutingObservationCohortV1 {
     pub protocol: String,
@@ -28,7 +30,7 @@ pub struct RoutingObservationCohortV1 {
     pub competence_floor_millis: u16,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RoutingObservationCountsV1 {
     /// Fresh C decisions only; inherited decisions are counted separately.
@@ -46,14 +48,14 @@ pub struct RoutingObservationCountsV1 {
     pub suppressed_per_c_decision: Option<f64>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RoutingObservationCohortSummaryV1 {
     pub cohort: RoutingObservationCohortV1,
     pub counts: RoutingObservationCountsV1,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RoutingObservationsSummaryV1 {
     pub schema: String,
