@@ -57,6 +57,15 @@ export function cProtocolScenarios({ fresh, routing, click, until, all, text, ca
   function geometry(){
     assert(!document.querySelector('.native-protocol-editor'),'Retired capability section remains');
     for(const e of all('.decision-judgment-fields .field-label,.decision-judgment-fields textarea,.decision-judgment-fields button'))assert(e.scrollWidth<=e.clientWidth+1,'Judgment content overflows');
+    for(const row of all('.decision-thresholds')){
+      const inputs=[...row.querySelectorAll('input')].map(e=>e.getBoundingClientRect()).filter(r=>r.width&&r.height);
+      if(inputs.length===2&&inputs[1].left>inputs[0].left){
+        assert(Math.abs(inputs[0].top-inputs[1].top)<=1,'Side-by-side threshold inputs are vertically misaligned');
+        assert(Math.abs(inputs[0].height-inputs[1].height)<=1,'Threshold input height depends on helper wrapping');
+        const help=[...row.querySelectorAll('.field-help')].map(e=>e.getBoundingClientRect());
+        assert(Math.abs(help[0].top-help[1].top)<=1,'Threshold helper text does not start on the same row');
+      }
+    }
   }
   async function publish(t){
     const before=calls('preview_plan_editor').length;
