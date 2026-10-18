@@ -3,14 +3,14 @@ use super::PlanQualitySample;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TrustRevisionNameV1 {
     #[default]
     Active,
     All,
 }
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum TrustRevisionV1 {
     Number(u64),
@@ -21,14 +21,16 @@ impl Default for TrustRevisionV1 {
         Self::Name(TrustRevisionNameV1::Active)
     }
 }
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    schemars::JsonSchema, Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum TrustGroupByV1 {
     #[default]
     Model,
     Executor,
 }
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanTrustQueryV1 {
     pub plan_id: String,
@@ -43,7 +45,7 @@ pub struct PlanTrustQueryV1 {
     #[serde(default)]
     pub group_by: TrustGroupByV1,
 }
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanTrustReplayQueryV1 {
     #[serde(flatten)]

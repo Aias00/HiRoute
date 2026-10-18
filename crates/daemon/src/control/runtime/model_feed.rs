@@ -2,17 +2,24 @@
 use super::*;
 use crate::model_feed::ReleaseCatalogSnapshot;
 
+/// Embedded fallback is private to this module; runtime consumers capture current_catalog().
+#[derive(Default)]
+pub(super) struct FallbackCatalog(Option<Arc<ReleaseCatalogSnapshot>>);
+impl FallbackCatalog {
+    pub(super) fn new(catalog: TrustedReleaseCatalog) -> Self {
+        Self(Some(Arc::new(ReleaseCatalogSnapshot {
+            catalog,
+            generation: 0,
+            accepted_sequence: 0,
+        })))
+    }
+}
+
 impl LocalControlAdapter {
     pub(super) fn current_catalog(&self) -> Option<Arc<ReleaseCatalogSnapshot>> {
         match &self.model_feed {
             Some(feed) => feed.available_catalog(),
-            None => self.release_catalog.as_ref().map(|catalog| {
-                Arc::new(ReleaseCatalogSnapshot {
-                    catalog: catalog.clone(),
-                    generation: 0,
-                    accepted_sequence: 0,
-                })
-            }),
+            None => self.catalog_fallback.0.clone(),
         }
     }
 
@@ -85,6 +92,7 @@ impl ModelFeedPort for LocalControlAdapter {
             },
         };
         Ok(ModelFeedStatusV1 {
+            recovery_available: status.recovery_available,
             retrieval_enabled: status.retrieval_enabled,
             held: status.held.map(|held| ModelFeedHeldV1 {
                 sequence: held.sequence,
@@ -187,8 +195,7 @@ impl LocalControlAdapter {
                 .iter()
                 .filter(|model| {
                     model.catalog_configuration_id.as_ref().is_some_and(|id| {
-                        feed.embedded.model_data().model(id).is_none()
-                            && catalog.model_data().model(id).is_some()
+                        !feed.is_embedded_model(id) && catalog.model_data().model(id).is_some()
                     })
                 })
                 .collect::<Vec<_>>();

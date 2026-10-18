@@ -9,19 +9,38 @@ use std::{
 #[derive(Default)]
 pub(crate) struct TimelineCache {
     pub(super) entries: BTreeMap<String, Snapshot>,
-    order: VecDeque<String>,
+    order: VecDeque<(String, std::time::Instant)>,
 }
 impl TimelineCache {
+    pub(super) fn take(&mut self, key: &str) -> Option<Snapshot> {
+        self.prune_idle();
+        self.order.retain(|(k, _)| k != key);
+        self.entries.remove(key)
+    }
+    fn prune_idle(&mut self) {
+        while self
+            .order
+            .front()
+            .is_some_and(|(_, at)| at.elapsed() >= std::time::Duration::from_secs(60))
+        {
+            if let Some((key, _)) = self.order.pop_front() {
+                self.entries.remove(&key);
+            }
+        }
+    }
     pub(super) fn insert(&mut self, key: String, value: Snapshot) {
-        self.order.retain(|k| k != &key);
+        self.prune_idle();
+        self.order.retain(|(k, _)| k != &key);
+        self.entries.remove(&key);
         while self.entries.len() >= 2 {
-            if let Some(old) = self.order.pop_front() {
+            if let Some((old, _)) = self.order.pop_front() {
                 self.entries.remove(&old);
             } else {
                 self.entries.clear();
             }
         }
-        self.order.push_back(key.clone());
+        self.order
+            .push_back((key.clone(), std::time::Instant::now()));
         self.entries.insert(key, value);
     }
 }
@@ -119,5 +138,23 @@ impl Snapshot {
         self.turns = turns;
         self.position = Some(target);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn idle_snapshots_are_retired_and_replacing_a_key_keeps_other_readers() {
+        let mut cache = TimelineCache::default();
+        cache.insert("a".into(), Snapshot::default());
+        cache.insert("b".into(), Snapshot::default());
+        cache.insert("a".into(), Snapshot::default());
+        assert_eq!(cache.entries.len(), 2);
+        cache.order.front_mut().unwrap().1 =
+            std::time::Instant::now() - std::time::Duration::from_secs(61);
+        cache.prune_idle();
+        assert!(!cache.entries.contains_key("b"));
+        assert!(cache.entries.contains_key("a"));
     }
 }

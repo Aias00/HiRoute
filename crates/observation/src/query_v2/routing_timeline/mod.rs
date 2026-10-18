@@ -84,6 +84,23 @@ impl crate::LocalObservationStore {
         query: &RoutingTimelineQueryV1,
         now_ms: i64,
     ) -> Result<RoutingTimelinePageV1, ObservationV2Error> {
+        self.routing_timeline_inner(reader, query, now_ms, || {})
+            .map_err(|error| {
+                if matches!(error, ObservationV2Error::Timeout) {
+                    ObservationV2Error::ScopeTooLarge
+                } else {
+                    error
+                }
+            })
+    }
+
+    fn routing_timeline_inner(
+        &self,
+        reader: &ObservationReaderContext,
+        query: &RoutingTimelineQueryV1,
+        now_ms: i64,
+        after_take: impl FnOnce(),
+    ) -> Result<RoutingTimelinePageV1, ObservationV2Error> {
         reader.check(now_ms, false, false)?;
         if !identifier(&query.session_id) || query.limit == 0 || query.limit > 200 {
             return Err(ObservationV2Error::Invalid);
@@ -93,6 +110,7 @@ impl crate::LocalObservationStore {
         let mut connection =
             Connection::open_with_flags(&self.activity_path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
         let _deadline = QueryDeadline::start_for(&connection, reader)?;
+        connection.pragma_update(None, "cache_size", -16_384)?;
         let tx = connection.transaction()?;
         let visibility: u64 = tx.query_row("SELECT CAST(value AS INTEGER) FROM observation_meta WHERE key='query_visibility_generation'", [], |r| r.get(0))?;
         let binding = CanonicalDigest::of(&(reader.binding()?, &query.session_id, query.limit))
@@ -124,15 +142,13 @@ impl crate::LocalObservationStore {
             Some(value) => value,
             None => read::position(&tx)?,
         };
-        let mut caches = self
-            .timeline_cache
-            .try_lock()
-            .ok_or(ObservationV2Error::Busy)?;
         let key = cursor.binding.clone();
-        let cached = caches
-            .entries
-            .remove(&key)
+        let cached = self
+            .timeline_cache
+            .lock()
+            .take(&key)
             .filter(|c| c.visibility == visibility && now_ms < c.expires_at);
+        after_take();
         let mut state = cached.unwrap_or_default();
         let frozen = cursor.snapshot.is_some();
         if frozen && state.position != Some(target) {
@@ -166,8 +182,10 @@ impl crate::LocalObservationStore {
                     changed.as_ref(),
                 )
                 .map_err(|error| {
-                    if error == ObservationV2Error::Unavailable
-                        && started.elapsed() >= std::time::Duration::from_millis(500)
+                    if matches!(
+                        error,
+                        ObservationV2Error::Unavailable | ObservationV2Error::Timeout
+                    ) && started.elapsed() >= std::time::Duration::from_millis(500)
                     {
                         ObservationV2Error::ScopeTooLarge
                     } else {
@@ -217,7 +235,7 @@ impl crate::LocalObservationStore {
         }
         tx.commit()?;
         super::check_visibility(&connection, visibility)?;
-        caches.insert(key, state);
+        self.timeline_cache.lock().insert(key, state);
         Ok(result)
     }
 }
@@ -225,6 +243,93 @@ impl crate::LocalObservationStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn concurrent_readers_do_not_hold_the_shared_cache_lock_during_projection() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = crate::query_v2::tests::open(dir.path());
+        let (entered, receive) = std::sync::mpsc::channel();
+        let gate = std::sync::Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new()));
+        std::thread::scope(|scope| {
+            let mut handles = Vec::new();
+            for id in ["session/a", "session/b"] {
+                let store = &store;
+                let entered = entered.clone();
+                let gate = gate.clone();
+                handles.push(scope.spawn(move || {
+                    let reader = ObservationReaderContext::local_user(
+                        WorkspaceId::default(),
+                        "user".into(),
+                        1,
+                        10_000,
+                        false,
+                        false,
+                    )
+                    .unwrap();
+                    let query = RoutingTimelineQueryV1 {
+                        session_id: id.into(),
+                        after_watermark: None,
+                        limit: 50,
+                    };
+                    store.routing_timeline_inner(&reader, &query, 5000, || {
+                        assert!(
+                            store.timeline_cache.try_lock().is_some(),
+                            "SQL and projection must not hold the cache mutex"
+                        );
+                        entered.send(()).unwrap();
+                        let (lock, wake) = &*gate;
+                        let held = lock.lock().unwrap();
+                        let (ready, _) = wake
+                            .wait_timeout_while(
+                                held,
+                                std::time::Duration::from_millis(300),
+                                |ready| !*ready,
+                            )
+                            .unwrap();
+                        assert!(*ready, "the second reader did not enter concurrently");
+                    })
+                }));
+            }
+            receive
+                .recv_timeout(std::time::Duration::from_millis(250))
+                .unwrap();
+            receive
+                .recv_timeout(std::time::Duration::from_millis(250))
+                .unwrap();
+            *gate.0.lock().unwrap() = true;
+            gate.1.notify_all();
+            for handle in handles {
+                assert!(handle.join().unwrap().is_ok());
+            }
+        });
+    }
+
+    #[test]
+    fn expired_timeline_deadline_is_a_scope_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = crate::query_v2::tests::open(dir.path());
+        let reader = ObservationReaderContext::local_user(
+            WorkspaceId::default(),
+            "user".into(),
+            1,
+            10_000,
+            false,
+            false,
+        )
+        .unwrap()
+        .with_query_deadline(std::time::Instant::now() - std::time::Duration::from_millis(1));
+        let query = RoutingTimelineQueryV1 {
+            session_id: "session/test".into(),
+            after_watermark: None,
+            limit: 50,
+        };
+        assert_eq!(
+            store
+                .observed_routing_timeline(&reader, &query, 5000)
+                .unwrap_err(),
+            ObservationV2Error::ScopeTooLarge
+        );
+    }
+
     #[test]
     fn old_signed_cursor_requires_a_fresh_snapshot() {
         let dir = tempfile::tempdir().unwrap();

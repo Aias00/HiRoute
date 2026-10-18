@@ -74,34 +74,108 @@ pub(super) fn follow(options: &[String], globals: Globals) -> CliExecution {
         Err(_) => return failure(ErrorCode::Internal, globals.request_id),
     };
     runtime.block_on(async {
-        let interrupt = tokio::signal::ctrl_c(); tokio::pin!(interrupt);
+        let interrupt = tokio::signal::ctrl_c();
+        tokio::pin!(interrupt);
         let mut seen = BTreeMap::new();
-        let mut wait = false;
+        let mut wait = std::time::Duration::ZERO;
+        let mut transient_failures = 0;
         let mut reset_once = false;
         loop {
-            if wait { tokio::select! { _ = &mut interrupt => break, _ = tokio::time::sleep(std::time::Duration::from_secs(2)) => {} } }
+            if !wait.is_zero() {
+                tokio::select! { _ = &mut interrupt => break, _ = tokio::time::sleep(wait) => {} }
+            }
             let request_id = next_request_id();
             let request = LocalControlWireRequestV2 {
-                schema_version:LOCAL_CONTROL_SCHEMA_V2, request_id:request_id.clone(),operation_id:"GetRoutingTimeline".into(), protected_grant:None,
-                payload:serde_json::to_value(ObservationReadRequestV2::new(ObservationReadIntentV2::RoutingTimeline(query.clone()))).expect("serializable query"),
+                schema_version: LOCAL_CONTROL_SCHEMA_V2,
+                request_id: request_id.clone(),
+                operation_id: "GetRoutingTimeline".into(),
+                protected_grant: None,
+                payload: serde_json::to_value(ObservationReadRequestV2::new(
+                    ObservationReadIntentV2::RoutingTimeline(query.clone()),
+                ))
+                .expect("serializable query"),
             };
             let timeout = globals.timeout.unwrap_or(std::time::Duration::from_secs(5));
-            let call = tokio::task::spawn_blocking(move || LocalControlClient::cli_from_environment().and_then(|client| client.with_timeout(timeout).call(request)));
-            let response = tokio::select! { _ = &mut interrupt => break, response = call => response };
-            let response = match response { Ok(Ok(r)) => r, _ => return failure(ErrorCode::DaemonUnavailable,Some(request_id)) };
+            let call = tokio::task::spawn_blocking(move || {
+                LocalControlClient::cli_from_environment()
+                    .and_then(|client| client.with_timeout(timeout).call(request))
+            });
+            let response =
+                tokio::select! { _ = &mut interrupt => break, response = call => response };
+            let response = match response {
+                Ok(Ok(r)) => r,
+                _ if transient_failures < 3 => {
+                    transient_failures += 1;
+                    wait = std::time::Duration::from_secs(2);
+                    continue;
+                }
+                _ => return failure(ErrorCode::DaemonUnavailable, Some(request_id)),
+            };
             if response.status != hiroute_application_api::MachineStatus::Succeeded {
-                if response.error.as_ref().is_some_and(|e| e.code == ErrorCode::ChangePreviewStale) && !reset_once {
-                    query.after_watermark = None; reset_once = true; wait = false; continue;
+                if response
+                    .error
+                    .as_ref()
+                    .is_some_and(|e| e.code == ErrorCode::ChangePreviewStale)
+                    && !reset_once
+                {
+                    query.after_watermark = None;
+                    reset_once = true;
+                    wait = std::time::Duration::ZERO;
+                    continue;
+                }
+                if let Some(delay) = retry_delay(response.error.as_ref(), &mut transient_failures) {
+                    wait = delay;
+                    continue;
                 }
                 return render(response);
             }
-            let Some(page) = response.data.and_then(|v| serde_json::from_value::<RoutingTimelinePageV1>(v).ok()) else { return failure(ErrorCode::Internal,Some(request_id)); };
+            let Some(page) = response
+                .data
+                .and_then(|v| serde_json::from_value::<RoutingTimelinePageV1>(v).ok())
+            else {
+                return failure(ErrorCode::Internal, Some(request_id));
+            };
             reset_once = false;
-            if emit(&page,&mut seen,&mut std::io::stdout().lock()).is_err() { break; }
-            query.after_watermark = Some(page.watermark); wait = page.complete;
+            transient_failures = 0;
+            if emit(&page, &mut seen, &mut std::io::stdout().lock()).is_err() {
+                break;
+            }
+            query.after_watermark = Some(page.watermark);
+            wait = if page.complete {
+                std::time::Duration::from_secs(2)
+            } else {
+                std::time::Duration::ZERO
+            };
         }
-        CliExecution { exit_code:0,stdout:String::new(),stderr:String::new() }
+        CliExecution {
+            exit_code: 0,
+            stdout: String::new(),
+            stderr: String::new(),
+        }
     })
+}
+
+fn retry_delay(
+    error: Option<&hiroute_application_api::ErrorV1>,
+    failures: &mut u32,
+) -> Option<std::time::Duration> {
+    let error = error?;
+    if error.observation_read.as_ref().is_some_and(|r| {
+        r.reason == hiroute_application_api::ObservationReadFailureReasonV1::ReaderBusy
+    }) {
+        return Some(std::time::Duration::from_millis(u64::from(
+            error
+                .observation_read
+                .as_ref()?
+                .retry_after_ms
+                .clamp(100, 1000),
+        )));
+    }
+    if error.code == ErrorCode::DaemonUnavailable && *failures < 3 {
+        *failures += 1;
+        return Some(std::time::Duration::from_secs(2));
+    }
+    None
 }
 
 fn emit(

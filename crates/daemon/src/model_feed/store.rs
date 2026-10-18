@@ -16,6 +16,13 @@ pub struct HighestAccepted {
     pub payload_digest: CanonicalDigest,
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct AcceptanceCheckpoint {
+    schema: String,
+    highest: HighestAccepted,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct HeldPublication {
@@ -42,6 +49,8 @@ pub struct FeedState {
     pub retrieval_enabled: bool,
     pub disclosure_acknowledged: bool,
     pub highest_accepted: Option<HighestAccepted>,
+    #[serde(default)]
+    pub sequence_floor: u64,
     pub generation: u64,
     pub held: Option<HeldPublication>,
     pub last_attempt: Option<FeedAttempt>,
@@ -59,6 +68,7 @@ impl Default for FeedState {
             retrieval_enabled: true,
             disclosure_acknowledged: false,
             highest_accepted: None,
+            sequence_floor: 0,
             generation: 0,
             held: None,
             last_attempt: None,
@@ -70,13 +80,17 @@ impl Default for FeedState {
 
 pub struct FeedStore {
     root: PathBuf,
+    acceptance: PathBuf,
 }
 impl FeedStore {
     pub fn open(storage_root: &Path) -> Result<Self, String> {
         let root = storage_root.join("model-feed");
         private_directory(&root)?;
         private_directory(&root.join("envelopes"))?;
-        Ok(Self { root })
+        Ok(Self {
+            root,
+            acceptance: storage_root.join("model-feed-acceptance.json"),
+        })
     }
     pub fn read_state(&self) -> Result<FeedState, String> {
         let bytes = match bounded_read(&self.root.join("state.json"), MAX_STATE_BYTES) {
@@ -86,8 +100,16 @@ impl FeedStore {
             }
             Err(_) => return Err("feed_state_unreadable".into()),
         };
-        let state: FeedState =
-            serde_json::from_slice(&bytes).map_err(|_| "feed_state_invalid_or_newer_schema")?;
+        let value: serde_json::Value =
+            serde_json::from_slice(&bytes).map_err(|_| "feed_state_invalid")?;
+        if value
+            .get("schema")
+            .and_then(|v| v.as_str())
+            .is_some_and(|schema| schema != STATE_SCHEMA)
+        {
+            return Err("feed_state_newer_schema".into());
+        }
+        let state: FeedState = serde_json::from_value(value).map_err(|_| "feed_state_invalid")?;
         if state.schema != STATE_SCHEMA {
             return Err("feed_state_newer_schema".into());
         }
@@ -112,8 +134,57 @@ impl FeedStore {
         if bytes.len() > MAX_STATE_BYTES {
             return Err("feed_state_too_large".into());
         }
+        if let Some(highest) = &state.highest_accepted {
+            self.retain_acceptance(highest)?;
+        }
         hiroute_platform::durable::write_private_atomic(&self.root.join("state.json"), &bytes)
             .map_err(|_| "feed_state_commit_failed".into())
+    }
+    pub fn read_acceptance(&self) -> Result<Option<HighestAccepted>, String> {
+        let bytes = match bounded_read(&self.acceptance, MAX_STATE_BYTES) {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(_) => return Err("feed_acceptance_unreadable".into()),
+        };
+        let record: AcceptanceCheckpoint =
+            serde_json::from_slice(&bytes).map_err(|_| "feed_acceptance_invalid")?;
+        if record.schema != "hiroute.model-feed.acceptance/v1"
+            || record.highest.sequence == 0
+            || CanonicalDigest::parse(record.highest.payload_digest.as_str()).is_err()
+        {
+            return Err("feed_acceptance_invalid".into());
+        }
+        Ok(Some(record.highest))
+    }
+    pub(super) fn retain_acceptance(&self, next: &HighestAccepted) -> Result<(), String> {
+        if let Some(old) = self.read_acceptance()? {
+            if old.sequence > next.sequence
+                || old.sequence == next.sequence && old.payload_digest != next.payload_digest
+            {
+                return Err("feed_acceptance_conflict".into());
+            }
+            if old.sequence == next.sequence {
+                return Ok(());
+            }
+        }
+        let record = AcceptanceCheckpoint {
+            schema: "hiroute.model-feed.acceptance/v1".into(),
+            highest: next.clone(),
+        };
+        let bytes = serde_json::to_vec(&record).map_err(|_| "feed_acceptance_encoding")?;
+        hiroute_platform::durable::write_private_atomic(&self.acceptance, &bytes)
+            .map_err(|_| "feed_acceptance_commit_failed".into())
+    }
+    pub fn quarantine_state(&self) -> Result<(), String> {
+        let path = self.root.join("state.json");
+        bounded_read(&path, MAX_STATE_BYTES).map_err(|_| "feed_state_unreadable")?;
+        let mut nonce = [0u8; 8];
+        getrandom::fill(&mut nonce).map_err(|_| "feed_quarantine_unavailable")?;
+        let target = self.root.join(format!(
+            "state.quarantined-{}.json",
+            u64::from_le_bytes(nonce)
+        ));
+        hiroute_platform::durable::rename(path, target).map_err(|_| "feed_quarantine_failed".into())
     }
     fn blob_path(&self, digest: &CanonicalDigest) -> Result<PathBuf, String> {
         CanonicalDigest::parse(digest.as_str()).map_err(|_| "feed_blob_invalid_digest")?;

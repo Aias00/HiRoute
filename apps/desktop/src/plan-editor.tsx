@@ -99,7 +99,7 @@ export type PlanEditorProps = { plan?: Plan; draft?: Draft; creating?: boolean; 
 
 export const PlanEditor = forwardRef<PlanEditorHandle, PlanEditorProps>(function PlanEditor(props, ref) {
   const [seed, setSeed] = useState<{ editor: Editor; head: number | null } | null>(() => props.draft
-    ? { editor: structuredClone(props.draft.editor), head: props.draft.base_head_revision ?? null } : props.initialContent ? { editor: structuredClone(props.initialContent), head: null } : null);
+    ? { editor: structuredClone(props.draft.editor), head: props.draft.base_head_revision ?? null } : props.initialContent && !props.plan ? { editor: structuredClone(props.initialContent), head: null } : null);
   const [failure, setFailure] = useState<unknown>(null);
   const [retry, setRetry] = useState(0);
   useEffect(() => {
@@ -109,7 +109,8 @@ export const PlanEditor = forwardRef<PlanEditorHandle, PlanEditorProps>(function
     void invoke<Options>('plan_editor_options', { input: { authoring: props.plan ? { plan_id: props.plan.agent_plan_id } : {}, include_unavailable: true } })
       .then(value => {
         if (!value.authoring) throw { code: 'SCHEMA_INCOMPATIBLE' };
-        if (current) setSeed({ editor: value.authoring.editor, head: value.authoring.expected_head_revision });
+        if (props.initialContent && props.plan && value.authoring.expected_head_revision !== props.plan.head.head_revision) throw { code: 'CHANGE_PREVIEW_STALE' };
+        if (current) setSeed({ editor: structuredClone(props.initialContent ?? value.authoring.editor), head: value.authoring.expected_head_revision });
       }).catch(cause => { if (current) setFailure(cause); });
     return () => { current = false; };
   }, [seed, props.active, props.plan?.agent_plan_id, retry]);
@@ -471,7 +472,7 @@ const LoadedPlanEditor = forwardRef<PlanEditorHandle, PlanEditorProps & { initia
       setView('configuration');
     }} /></section>}
     </fieldset>
-    {plan && divisionBranch && onCreateDraft && <DivisionDraftDialog plan={plan} branch={divisionBranch} options={options} language={language} onClose={() => setDivisionBranch(null)} onDraft={onCreateDraft} />}
+    {plan && divisionBranch && onCreateDraft && <DivisionDraftDialog plan={plan} editor={initialEditor} branch={divisionBranch} options={options} language={language} onClose={() => setDivisionBranch(null)} onDraft={onCreateDraft} />}
     {effort && <ReasoningDialog
       name={effort.name}
       native={effort.native}

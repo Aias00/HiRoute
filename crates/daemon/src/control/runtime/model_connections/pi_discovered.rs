@@ -108,7 +108,17 @@ impl LocalControlAdapter {
     ) -> Result<ComputeCandidateViewV2, ComputeManagementControlError> {
         let discovery = pi_discovery(&source);
         let evidence = source.evidence_digest.clone();
-        self.prepare_native_source_candidate(vec![source], discovery, evidence, prepare_id, false)
+        let catalog = self
+            .current_catalog()
+            .ok_or(ComputeManagementControlError::Unavailable)?;
+        self.prepare_native_source_candidate(
+            vec![source],
+            discovery,
+            evidence,
+            prepare_id,
+            false,
+            &catalog,
+        )
     }
 
     pub(super) fn prepare_native_point_candidate(
@@ -117,12 +127,18 @@ impl LocalControlAdapter {
         prepare_id: &str,
     ) -> Result<ComputeCandidateViewV2, ComputeManagementControlError> {
         let catalog = self
-            .release_catalog
-            .as_ref()
+            .current_catalog()
             .ok_or(ComputeManagementControlError::Unavailable)?;
-        let discovery = super::points::point_discovery(&point, catalog);
-        let evidence = super::point_catalog::point_evidence(catalog, &point)?;
-        self.prepare_native_source_candidate(point.sources, discovery, evidence, prepare_id, true)
+        let discovery = super::points::point_discovery(&point, &catalog);
+        let evidence = super::point_catalog::point_evidence(&catalog, &point)?;
+        self.prepare_native_source_candidate(
+            point.sources,
+            discovery,
+            evidence,
+            prepare_id,
+            true,
+            &catalog,
+        )
     }
 
     fn prepare_native_source_candidate(
@@ -132,6 +148,7 @@ impl LocalControlAdapter {
         evidence: hiroute_domain::CanonicalDigest,
         prepare_id: &str,
         grouped: bool,
+        catalog: &TrustedReleaseCatalog,
     ) -> Result<ComputeCandidateViewV2, ComputeManagementControlError> {
         let source = sources
             .first()
@@ -226,13 +243,7 @@ impl LocalControlAdapter {
             .map_err(|_| ComputeManagementControlError::Conflict)?;
         let models = sources.iter().map(native_source_declaration).collect();
         let models = if grouped {
-            super::point_catalog::expand_models(
-                self.release_catalog
-                    .as_ref()
-                    .ok_or(ComputeManagementControlError::Unavailable)?,
-                &sources,
-                models,
-            )?
+            super::point_catalog::expand_models(catalog, &sources, models)?
         } else {
             models
         };

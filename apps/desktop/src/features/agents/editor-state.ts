@@ -24,6 +24,7 @@ export type AgentEditorValues = {
 /** Apply a recovered selection to the ordinary editor without touching collaboration. */
 export function withModelSelection(values: AgentEditorValues, selection: import('./types').AgentModelSelection): AgentEditorValues {
   if (selection.mode === 'claude_launcher') return { ...values, fixedModels: selection.fixed_models, claudePresets: selection.preset_mappings };
+  if (selection.mode === 'hermes_default') return { ...values, hermesPlanId: selection.plan_id, hermesProtocol: selection.protocol };
   if (selection.mode === 'codex_default') return { ...values, fixedModels: selection.fixed_models, nativeModelMode: selection.native_model_mode, allowedPlanIds: selection.allowed_plan_ids, defaultChoice: selection.default_selection };
   return { ...values, allowedPlanIds: selection.allowed_plan_ids, planProtocols: selection.plan_protocols ?? {} };
 }

@@ -34,7 +34,7 @@ without a higher sequence and changed first-inclusion dates for retained records
 The payload's `source_revision` identifies the source facts in Git history; it is
 provenance, not an instruction to replace it with each website deployment's SHA.
 One sequence identifies one immutable payload digest and source revision. Keep the
-referenced source revision available in repository history. Node structural checks
+referenced bundle tree reachable from main history in repository history. Node structural checks
 and signature checks complement, and never replace, Rust admission validation.
 
 Before a feed-capable release is recorded, `payload.json` contains `null` followed

@@ -33,10 +33,10 @@ export function RoutingTimeline({ session, language, active, refreshVersion, req
   useEffect(() => { watermark.current = null; stored.current.clear(); setTurns([]); setSelected(null); setLoaded(false); }, [session, refreshVersion]);
   useEffect(() => {
     if (!active) return;
-    const controller = new AbortController(); let inFlight = false; let timer = 0;
+    const controller = new AbortController(); let inFlight = false; let timer = 0; let stopped = false;
     const schedule = (delay: number) => { window.clearTimeout(timer); if (!controller.signal.aborted) timer = window.setTimeout(() => void load(), delay); };
     async function load() {
-      if (inFlight || controller.signal.aborted || document.visibilityState !== 'visible') return;
+      if (inFlight || stopped || controller.signal.aborted || document.visibilityState !== 'visible') return;
       inFlight = true;
       try {
         const page = await observationRead<TimelinePage>('routing_timeline', { session_id: session, after_watermark: watermark.current, limit: 50 }, controller.signal);
@@ -49,9 +49,14 @@ export function RoutingTimeline({ session, language, active, refreshVersion, req
       } catch (e) {
         if (controller.signal.aborted) return;
         const code = safeDiagnosticCode(e, 'OBSERVATION_UNAVAILABLE');
+        const failure = e as { observation_read?: { reason?: string; retry_after_ms?: number } };
+        if (failure?.observation_read?.reason === 'reader_busy' || code === 'OBSERVATION_QUERY_BUSY') {
+          schedule(Math.min(1000, Math.max(100, failure?.observation_read?.retry_after_ms ?? 100))); return;
+        }
+        stopped = code.toLowerCase().includes('scope_too_large');
         const stale = code.toLowerCase().includes('stale') && watermark.current !== null;
         if (stale) { watermark.current = null; stored.current.clear(); setTurns([]); setLoaded(false); }
-        setError(code); schedule(stale ? 0 : 2000);
+        setError(code); if (!stopped) schedule(stale ? 0 : 2000);
       } finally { inFlight = false; }
     }
     const visible = () => { if (document.visibilityState === 'visible') void load(); else window.clearTimeout(timer); };
@@ -85,7 +90,7 @@ export function RoutingTimeline({ session, language, active, refreshVersion, req
     {selectedTurn && <div className="routing-turn-detail">
       <div className="routing-timeline-heading"><h4>{text('所选轮次', 'Selected turn')}</h4>{selectedTurn.plan_id && <button className="btn btn-quiet" onClick={() => onOpenPerformance(selectedTurn.plan_id!)}>{text('查看 Plan 模型表现', 'View Plan model performance')}</button>}</div>
       <p className="muted">{selectedTurn.tool_continuations} {text('次工具续轮', 'tool continuations')} · {selectedTurn.relays.length} {text('次请求内模型接力', 'model relays within requests')}{selectedTurn.reasoning_profile_id && ` · ${selectedTurn.reasoning_profile_id}`} · {text('状态', 'Status')}: {({ running: text('运行中', 'Running'), completed: text('完成', 'Completed'), failed: text('失败', 'Failed'), interrupted: text('中断', 'Interrupted') } as Record<string, string>)[selectedTurn.status] ?? text('未知', 'Unknown')}</p>
-      {selectedTurn.assessment && <p className="muted">{text('这是阶段评分，覆盖轮次', 'This stage assessment covers turns')} {selectedTurn.assessment.target_from_ordinal}–{selectedTurn.assessment.target_through_ordinal}。</p>}
+      {selectedTurn.assessment && <p className="muted">{text('这是阶段评分，覆盖轮次', 'This stage assessment covers turns')} {selectedTurn.assessment.target_from_ordinal}–{selectedTurn.assessment.target_through_ordinal}{text('。', '.')}</p>}
       {selectedTurn.relays.map((relay, index) => <p key={index}>{relay.from_model ?? '?'} → {relay.to_model ?? '?'}</p>)}
       <div className="routing-turn-requests">{selectedTurn.requests.map((request, index) => <button className={`routing-request${request.request_id === requestId ? ' selected' : ''}`} type="button" key={request.request_id} onClick={() => onSelectRequest(request)}>
         <strong>{text('请求', 'Request')} {index + 1} · {request.native_model ?? text('模型未记录', 'Model unknown')}</strong>

@@ -6,9 +6,9 @@ import { divisionDraft, divisionSource } from './division-draft';
 
 type Harness = NonNullable<Editor['work']>['harness'];
 const harnessNames: Record<Harness, string> = { codex_cli: 'Codex CLI', claude_code: 'Claude Code', deepseek_harness: 'DeepSeek Harness', pi: 'Pi', qoder_cli: 'Qoder CLI' };
-export function DivisionDraftDialog({ plan, branch, language, options, onClose, onDraft }: { plan: Plan; branch: string; language: 'zh' | 'en'; options: Options | null; onClose(): void; onDraft(editor: Editor): Promise<boolean> }) {
+export function DivisionDraftDialog({ plan, editor, branch, language, options, onClose, onDraft }: { plan: Plan; editor: Editor; branch: string; language: 'zh' | 'en'; options: Options | null; onClose(): void; onDraft(editor: Editor): Promise<boolean> }) {
   const text = (zh: string, en: string) => language === 'zh' ? zh : en;
-  const source = useMemo(() => divisionSource(plan, branch), [plan, branch]);
+  const source = useMemo(() => divisionSource(editor, branch), [editor, branch]);
   const [kind, setKind] = useState<'branches' | 'worker'>('branches');
   const [keepPrimary, setKeepPrimary] = useState(false);
   const [harness, setHarness] = useState<Harness | null>(null);
@@ -36,7 +36,9 @@ export function DivisionDraftDialog({ plan, branch, language, options, onClose, 
     if (!source || busy || (kind === 'worker' && !harness)) return;
     setBusy(true);
     try {
-      const draft = divisionDraft(plan, source, kind, keepPrimary, [design, implementation], [text('设计与规划', 'Design and planning'), text('实现', 'Implementation')], harness ? { harness, protocol: harness === 'claude_code' ? 'messages' : 'responses' } : undefined);
+      const fresh = await invoke<Options>('plan_editor_options', { input: { authoring: {} } });
+      if (!fresh.authoring) throw Error('SCHEMA_INCOMPATIBLE');
+      const draft = divisionDraft(plan, source, kind, keepPrimary, [design, implementation], [text('设计与规划', 'Design and planning'), text('实现', 'Implementation')], harness ? { harness, protocol: harness === 'claude_code' ? 'messages' : 'responses' } : undefined, fresh.authoring.editor);
       if (await onDraft(draft)) onClose();
     } catch { setError(text('草稿暂时无法打开，请重试。', 'The draft could not be opened. Try again.')); } finally { setBusy(false); }
   }

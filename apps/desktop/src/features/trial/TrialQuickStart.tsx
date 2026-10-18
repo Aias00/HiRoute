@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Dialog } from '../../ui';
 import { requestEditorReplacement } from '../../ui/discard-guard';
-import { emptyEditor, type Editor, type Options, type Plan, type Selection } from '../../plan-editor';
+import { type Editor, type Options, type Plan, type Selection } from '../../plan-editor';
 import type { DesktopOperation, DesktopSnapshot } from '../../product/home-projections';
 import { ModelManagementPage } from '../../product/ModelManagementPage';
 import type { ManagementSnapshot } from '../models/types';
@@ -19,6 +19,7 @@ import { TrialConnectModel } from './TrialConnectModel';
 import { TrialAgentChoice, TrialAgentMapping } from './TrialAgentMapping';
 import { TrialReview } from './TrialReview';
 import { currentPrimary, initialTrialMapping, trialSelection, type TrialMapping } from './model';
+import { FeedDisclosure } from '../model-feed/FeedDisclosure';
 import './trial.css';
 
 export function TrialQuickStart({ initialModelId, initialBindingId, language, mutable, snapshot, operation, onOperation, onRefresh, onClose, onOpenAgent, onOpenPerformance, onOpenSessions }: {
@@ -51,7 +52,7 @@ export function TrialQuickStart({ initialModelId, initialBindingId, language, mu
     try {
       const [availability, options, management, agents, decisions] = await Promise.all([
         invoke<ModelAvailabilityResult>('model_availability'),
-        invoke<Options>('plan_editor_options', { input: { requirements: {}, native_selections: {}, suggest_free: false } }),
+        invoke<Options>('plan_editor_options', { input: { authoring: {}, requirements: {}, native_selections: {}, suggest_free: false } }),
         invoke<ManagementSnapshot>('compute_management_snapshot'), invoke<AgentSnapshot>('agent_snapshot'),
         invoke<{ services: DecisionService[] }>('decision_services'),
       ]);
@@ -83,7 +84,7 @@ export function TrialQuickStart({ initialModelId, initialBindingId, language, mu
   const trialCandidates = candidates(trialId), primaryCandidates = candidates(primaryId);
   const selectedTrial = trialCandidates.find(c => c.binding_id === trialBinding) ?? (trialCandidates.length === 1 ? trialCandidates[0] : undefined);
   const selectedPrimary = primaryCandidates.find(c => c.binding_id === primaryBinding) ?? (primaryCandidates.length === 1 ? primaryCandidates[0] : undefined);
-  const ready = !!selectedTrial && !!selectedPrimary && trialId !== primaryId && classifier.kind === 'decision_service' && !!classifier.service.name && !!mapping.agentId && mapping.presets.length > 0 && !loading && !error;
+  const ready = !!data?.options.authoring && !!selectedTrial && !!selectedPrimary && trialId !== primaryId && classifier.kind === 'decision_service' && !!classifier.service.name && !!mapping.agentId && mapping.presets.length > 0 && !loading && !error;
   function modelField(role: 'trial' | 'primary') {
     const model = role === 'trial' ? trial : primary;
     const id = role === 'trial' ? trialId : primaryId;
@@ -100,6 +101,7 @@ export function TrialQuickStart({ initialModelId, initialBindingId, language, mu
     </section>;
   }
   return <Dialog open title={t('试用新模型', 'Try a new model')} description={t('保留主力保护，从自己的任务中积累证据。', 'Keep Primary protection and build evidence from your own tasks.')} closeLabel={t('关闭', 'Close')} onClose={() => void (async () => { if (persistencePending || await requestEditorReplacement('routing')) onClose(); })()} className="trial-dialog">
+    {data?.availability.models.some(model => model.origin.kind === 'feed') && <FeedDisclosure language={language} mutable={mutable} />}
     {error && <div className="callout warn" role="alert"><p>{error}</p><button className="btn" onClick={() => void refresh()}>{t('重试', 'Retry')}</button></div>}
     {savedConnections.length > 0 && <p role="status">{t('本次已保存接入：', 'Connections saved in this flow: ')}{savedConnections.join(' · ')}</p>}
     {published ? <TrialAgentMapping onOpenPerformance={() => onOpenPerformance?.(published)} onOpenSessions={onOpenSessions} plan={published} initial={mapping} language={language} mutable={mutable} onOperation={operationRef} onChanged={() => void onRefresh()} onOpenAgent={onOpenAgent} /> : review ? <><p>{t('将映射', 'Mapping to review')}: {agentDisplayName(mapping.agentId, language)} · {mapping.presets.join(', ')}</p><TrialReview editor={review} language={language} mutable={mutable} snapshot={snapshot} operation={operation} onOperation={onOperation} onRefresh={onRefresh} onPublished={setPublished} onPendingChange={setPersistencePending} onClose={onClose} onOpenServices={openDecision} /></> : connect && data ? <TrialConnectModel key={connect.model_configuration_id} model={connect} language={language} management={data.management} mutable={mutable} onOperation={operationRef} onBack={() => { setConnect(null); void refresh(); }} onSaved={(_result, model) => { setSavedConnections(values => [...new Set([...values, model.display_name])]); setConnect(null); void refresh(); void onRefresh(); }} /> : data ? <fieldset disabled={loading || !mutable}>
@@ -109,11 +111,12 @@ export function TrialQuickStart({ initialModelId, initialBindingId, language, mu
       <p>{t('起始档位为“试用”0.90。完整评分、评分覆盖率和会话分布会影响升档建议；保持当前档位也是正常结果。', 'Start at Trial 0.90. Complete scores, scoring coverage and session diversity inform upward suggestions. Staying at this level is a normal outcome.')}</p>
       <div className="actions"><button className="btn" onClick={() => void refresh()}>{t('刷新可用状态', 'Refresh availability')}</button><button className="btn btn-primary" disabled={!ready} onClick={() => {
         if (!ready || !selectedTrial || !selectedPrimary || classifier.kind !== 'decision_service') return;
-        const editor = emptyEditor(); editor.mode = 'smart_saving'; editor.custom_alias = alias;
+        if (!data?.options.authoring) return;
+        const editor = structuredClone(data.options.authoring.editor); editor.mode = 'smart_saving'; editor.custom_alias = alias;
         editor.display_name = `${trial!.display_name} + ${primary!.display_name}`;
         editor.purpose = t('在主力保护下试用新模型，根据自己的任务证据调整路由。', 'Try a new model with Primary protection and adjust routing using evidence from your own tasks.');
         editor.smart.economy = [trialSelection(selectedTrial)]; editor.smart.primary = [primarySelection?.binding_id === selectedPrimary.binding_id ? primarySelection : trialSelection(selectedPrimary)];
-        editor.smart.judgment.competence.criteria[0] = 'The trial model made no effective progress, repeatedly failed without recovery, or the latest user message explicitly identifies its completed result as wrong. Judge the referenced completed stage and distinguish a new requirement from a correction; repetition, continuation or silence alone is not failure.';
+        editor.smart.judgment.competence.criteria[0] = t('试用模型没有取得有效进展，反复失败且未能恢复，或用户在最新消息中明确指出它已完成的结果有误。请评价所引用的已完成阶段，并区分新增要求与纠错；重复、继续或沉默本身不代表失败。', 'The trial model made no effective progress, repeatedly failed without recovery, or the latest user message explicitly identifies its completed result as wrong. Judge the referenced completed stage and distinguish a new requirement from a correction; repetition, continuation or silence alone is not failure.');
         editor.smart.classifier = structuredClone(classifier); editor.smart.judgment.degree.simple_threshold_millis = trustLevels[0].threshold_millis;
         setReview(editor);
       }}>{t('核对路由与映射', 'Review route and mapping')}</button></div>

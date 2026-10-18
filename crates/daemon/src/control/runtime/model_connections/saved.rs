@@ -872,8 +872,7 @@ mod tests {
                 ..
             } if registry_version == reopened
                 .adapter
-                .release_catalog
-                .as_ref()
+                .current_catalog()
                 .unwrap()
                 .registry()
                 .registry_version

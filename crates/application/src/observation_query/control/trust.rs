@@ -23,10 +23,13 @@ impl ObservationControl {
             .state
             .trust_plan_ids(&self.workspace_id)
             .map_err(map_control)?;
-        let mut cache = self
-            .trust_suggestion_cache
-            .try_lock()
-            .map_err(|_| ObservationQueryError::Unavailable)?;
+        let mut cache = {
+            let mut guard = self
+                .trust_suggestion_cache
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            std::mem::take(&mut *guard)
+        };
         cache.entries.retain(|id, _| ids.contains(id));
         if !ids.is_empty() {
             let offset = cache.next % ids.len();
@@ -177,6 +180,15 @@ impl ObservationControl {
             != generation
         {
             return Err(ObservationQueryError::StalePreview);
+        }
+        {
+            let mut guard = self
+                .trust_suggestion_cache
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            guard.entries.extend(cache.entries);
+            guard.entries.retain(|id, _| ids.contains(id));
+            guard.next = cache.next;
         }
         Ok(json!({"suggestions":suggestions,"unavailable":unavailable}))
     }

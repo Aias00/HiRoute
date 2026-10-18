@@ -139,29 +139,21 @@ pub fn build_against(root: &Path, check: bool, base: Option<&str>) -> Result<(),
         }
         b"null\n".to_vec()
     } else {
-        // Commit the metadata inputs/bundle first. The generated payload then points to an exact,
-        // reproducible source commit instead of depending on its own changing commit hash.
+        // A committed bundle tree survives a squash merge while the PR commit ID does not.
         let revision = git(
             root,
-            &[
-                "log",
-                "-1",
-                "--format=%H",
-                "--",
-                "assets/model-data/current/inputs/metadata-catalog.json",
-                "assets/release-facts/current/bundle",
-            ],
+            &["rev-parse", "HEAD:assets/release-facts/current/bundle"],
         )?;
         let revision = revision.trim();
-        if revision.len() != 40 {
-            return Err("metadata source commit is unavailable".into());
+        if revision.len() != 40 || !revision.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err("metadata source tree is unavailable".into());
         }
         let unchanged = Command::new("git")
             .current_dir(root)
             .args([
                 "diff",
                 "--quiet",
-                revision,
+                "HEAD",
                 "--",
                 "assets/model-data/current/inputs/metadata-catalog.json",
                 "assets/release-facts/current/bundle",

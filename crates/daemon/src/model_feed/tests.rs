@@ -231,7 +231,9 @@ fn model_feed_crash_after_commit_recovers_catalog_and_generation() {
             )
             .is_err()
     );
-    assert!(service.available_catalog().is_none());
+    assert_eq!(service.available_catalog().unwrap().generation, 1);
+    assert!(service.settings(Some(true), None).is_err());
+    assert!(fetch(&service, 7).is_err());
     drop(service);
     let reopened = open(root.path(), 1);
     assert_eq!(reopened.current().generation, 2);
@@ -304,4 +306,116 @@ fn model_feed_invalid_cache_retains_high_water_on_reopen() {
     );
     assert!(fetch(&reopened, 4).is_err());
     fetch(&reopened, 5).unwrap();
+}
+
+#[test]
+fn model_feed_missing_state_recovers_floor_from_independent_checkpoint() {
+    let root = tempfile::tempdir().unwrap();
+    let service = open(root.path(), 0);
+    fetch(&service, 17).unwrap();
+    drop(service);
+    std::fs::remove_dir_all(root.path().join("model-feed")).unwrap();
+    let reopened = open(root.path(), 0);
+    assert_eq!(
+        reopened.status().unwrap().highest_accepted_sequence,
+        Some(17)
+    );
+    assert!(reopened.status().unwrap().held.is_none());
+    assert!(!reopened.status().unwrap().retrieval_enabled);
+    assert_eq!(fetch(&reopened, 16).unwrap_err(), "older_sequence");
+    fetch(&reopened, 17).unwrap();
+}
+
+#[test]
+fn model_feed_corrupt_state_can_be_explicitly_quarantined_without_resetting_acceptance() {
+    let root = tempfile::tempdir().unwrap();
+    let service = open(root.path(), 0);
+    fetch(&service, 18).unwrap();
+    drop(service);
+    let path = root.path().join("model-feed/state.json");
+    std::fs::write(&path, b"broken owned state").unwrap();
+    let reopened = open(root.path(), 1);
+    assert!(reopened.status().unwrap().recovery_available);
+    assert_eq!(
+        reopened.status().unwrap().highest_accepted_sequence,
+        Some(18)
+    );
+    reopened
+        .remove(&reopened.removal_digest().unwrap(), true, |_, sequence| {
+            assert_eq!(sequence, 18);
+            Ok(())
+        })
+        .unwrap();
+    assert!(!reopened.status().unwrap().recovery_available);
+    let saved = std::fs::read_dir(path.parent().unwrap())
+        .unwrap()
+        .flatten()
+        .find(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with("state.quarantined-")
+        })
+        .unwrap();
+    assert_eq!(std::fs::read(saved.path()).unwrap(), b"broken owned state");
+    assert_eq!(fetch(&reopened, 17).unwrap_err(), "older_sequence");
+    fetch(&reopened, 18).unwrap();
+}
+
+#[test]
+fn model_feed_newer_schema_and_corruption_without_checkpoint_cannot_be_reset() {
+    for (contents, checkpoint) in [
+        (
+            br#"{"schema":"hiroute.model-feed.state/v99"}"#.as_slice(),
+            true,
+        ),
+        (b"broken".as_slice(), false),
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        let service = open(root.path(), 0);
+        if checkpoint {
+            fetch(&service, 19).unwrap();
+        }
+        drop(service);
+        let path = root.path().join("model-feed/state.json");
+        std::fs::write(&path, contents).unwrap();
+        let reopened = open(root.path(), 0);
+        assert!(!reopened.status().unwrap().recovery_available);
+        assert!(
+            reopened
+                .remove(&reopened.removal_digest().unwrap(), true, |_, _| Ok(()))
+                .is_err()
+        );
+        assert_eq!(std::fs::read(path).unwrap(), contents);
+    }
+}
+
+#[test]
+fn model_feed_acceptance_commit_precedes_state_and_never_adopts_orphan_blob() {
+    let root = tempfile::tempdir().unwrap();
+    let service = open(root.path(), 0);
+    fetch(&service, 5).unwrap();
+    let bytes = payload(20);
+    let verified = verify_fixture(&bytes).unwrap();
+    service
+        .store
+        .persist_blob(&bytes, &verified.envelope_digest)
+        .unwrap();
+    // Crash after high-water commit but before the state/activation commit.
+    service
+        .store
+        .retain_acceptance(&HighestAccepted {
+            sequence: 20,
+            payload_digest: verified.payload_digest,
+        })
+        .unwrap();
+    drop(service);
+    let reopened = open(root.path(), 1);
+    assert_eq!(
+        reopened.status().unwrap().highest_accepted_sequence,
+        Some(20)
+    );
+    assert!(reopened.status().unwrap().held.is_none());
+    assert_eq!(fetch(&reopened, 19).unwrap_err(), "older_sequence");
+    fetch(&reopened, 20).unwrap();
 }

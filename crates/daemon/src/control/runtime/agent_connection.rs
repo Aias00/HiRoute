@@ -737,7 +737,7 @@ mod tests {
             ),
             scanner,
             artifacts,
-            release_catalog: None,
+            catalog_fallback: Default::default(),
             model_feed: None,
             protected_inputs: Mutex::new(BTreeMap::new()),
             manual_protected_inputs: Mutex::new(BTreeMap::new()),

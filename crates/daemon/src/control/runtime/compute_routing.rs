@@ -61,6 +61,9 @@ impl LocalControlAdapter {
             .get(input_slot)
             .cloned()
             .ok_or(ControlReadError::NotFound)?;
+        let catalog = self
+            .current_catalog()
+            .ok_or(ControlReadError::Unavailable)?;
         if descriptor.field_selector == "hermes.api-key" {
             let sources = self
                 .hermes_source_facts()
@@ -69,8 +72,7 @@ impl LocalControlAdapter {
             return if hiroute_integrations::native_api_connection_points(sources)
                 .iter()
                 .any(|point| {
-                    self.release_catalog
-                        .as_ref()
+                    Some(&catalog)
                         .and_then(|catalog| {
                             super::model_connections::point_catalog::point_evidence(catalog, point)
                                 .ok()
@@ -94,8 +96,7 @@ impl LocalControlAdapter {
             if hiroute_integrations::native_api_connection_points(sources)
                 .iter()
                 .any(|point| {
-                    self.release_catalog
-                        .as_ref()
+                    Some(&catalog)
                         .and_then(|catalog| {
                             super::model_connections::point_catalog::point_evidence(catalog, point)
                                 .ok()
@@ -124,8 +125,7 @@ impl LocalControlAdapter {
             if hiroute_integrations::native_api_connection_points(sources)
                 .iter()
                 .any(|point| {
-                    self.release_catalog
-                        .as_ref()
+                    Some(&catalog)
                         .and_then(|catalog| {
                             super::model_connections::point_catalog::point_evidence(catalog, point)
                                 .ok()

@@ -2,6 +2,7 @@
 
 #[cfg(feature = "integration-test-hooks")]
 pub(crate) mod product_fixture;
+mod recovery;
 mod store;
 pub(crate) use store::*;
 
@@ -38,6 +39,7 @@ impl Deref for ReleaseCatalogSnapshot {
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct ModelFeedStatus {
     pub retrieval_enabled: bool,
+    pub recovery_available: bool,
     pub held: Option<HeldPublication>,
     pub highest_accepted_sequence: Option<u64>,
     pub last_attempt: Option<FeedAttempt>,
@@ -52,6 +54,7 @@ struct MutableFeed {
     state: FeedState,
     counts: FeedCounts,
     refused: Option<String>,
+    recovery_available: bool,
     refreshing: bool,
     retrieval_epoch: u64,
     last_refresh_result: Option<Result<(), String>>,
@@ -63,7 +66,7 @@ type FeedVerifier = fn(&[u8]) -> Result<VerifiedFeed, hiroute_integrations::mode
 
 pub(crate) struct ModelFeedService {
     verify: FeedVerifier,
-    pub embedded: Arc<TrustedReleaseCatalog>,
+    embedded: Arc<TrustedReleaseCatalog>,
     current: ArcSwap<ReleaseCatalogSnapshot>,
     store: FeedStore,
     mutable: Mutex<MutableFeed>,
@@ -105,19 +108,8 @@ impl ModelFeedService {
         verify: FeedVerifier,
     ) -> Result<Self, String> {
         let store = FeedStore::open(root)?;
-        let (mut state, mut refused) = match store.read_state() {
-            Ok(state) => (state, None),
-            Err(reason) => (
-                FeedState {
-                    retrieval_enabled: false,
-                    generation: minimum_generation
-                        .checked_add(1)
-                        .ok_or("feed_generation_overflow")?,
-                    ..Default::default()
-                },
-                Some(reason),
-            ),
-        };
+        let (mut state, refused, recovery_available) =
+            recovery::restore_state(&store, minimum_generation, minimum_sequence)?;
         let client_version = env!("CARGO_PKG_VERSION").to_owned();
         let mut effective = embedded.clone();
         let mut counts = FeedCounts::default();
@@ -160,21 +152,6 @@ impl ModelFeedService {
                 }
             }
         }
-        if state.generation < minimum_generation
-            || state.highest_accepted.as_ref().map_or(0, |h| h.sequence) < minimum_sequence
-        {
-            // A lost/rolled-back commit record cannot reset acceptance, nor block frozen Plans.
-            // Preserve the directory and use embedded facts with feed mutations refused.
-            effective = embedded.clone();
-            counts = FeedCounts::default();
-            state.held = None;
-            state.etag = None;
-            state.retrieval_enabled = false;
-            state.generation = minimum_generation
-                .checked_add(1)
-                .ok_or("feed_generation_overflow")?;
-            refused = Some("feed_state_rollback_or_missing".into());
-        }
         let generation = state.generation;
         let next_attempt = state
             .retrieval_enabled
@@ -185,17 +162,14 @@ impl ModelFeedService {
             current: ArcSwap::from_pointee(ReleaseCatalogSnapshot {
                 catalog: effective,
                 generation,
-                accepted_sequence: state
-                    .highest_accepted
-                    .as_ref()
-                    .map_or(0, |h| h.sequence)
-                    .max(minimum_sequence),
+                accepted_sequence: accepted_sequence(&state),
             }),
             store,
             mutable: Mutex::new(MutableFeed {
                 state,
                 counts,
                 refused,
+                recovery_available,
                 refreshing: false,
                 retrieval_epoch: 0,
                 last_refresh_result: None,
@@ -206,6 +180,9 @@ impl ModelFeedService {
             active: AtomicBool::new(true),
             client_version,
         })
+    }
+    pub(crate) fn is_embedded_model(&self, id: &str) -> bool {
+        self.embedded.model_data().model(id).is_some()
     }
     pub fn current(&self) -> Arc<ReleaseCatalogSnapshot> {
         self.current.load_full()
@@ -226,8 +203,9 @@ impl ModelFeedService {
         let state = &guard.state;
         Ok(ModelFeedStatus {
             retrieval_enabled: state.retrieval_enabled,
+            recovery_available: guard.recovery_available,
             held: state.held.clone(),
-            highest_accepted_sequence: state.highest_accepted.as_ref().map(|h| h.sequence),
+            highest_accepted_sequence: Some(accepted_sequence(state)).filter(|s| *s > 0),
             last_attempt: state.last_attempt.clone(),
             verification: guard.refused.clone().unwrap_or_else(|| {
                 if state.held.is_some() {
@@ -266,8 +244,8 @@ impl ModelFeedService {
         Ok(())
     }
     pub fn removal_digest(&self) -> Result<CanonicalDigest, String> {
-        let state = &self.mutable.lock().map_err(|_| "feed_lock")?.state;
-        CanonicalDigest::of(state).map_err(|_| "feed_digest".into())
+        let guard = self.mutable.lock().map_err(|_| "feed_lock")?;
+        removal_digest(&guard)
     }
     pub fn remove(
         &self,
@@ -276,8 +254,10 @@ impl ModelFeedService {
         install: impl FnOnce(u64, u64) -> Result<(), String>,
     ) -> Result<(), String> {
         let mut guard = self.mutable.lock().map_err(|_| "feed_lock")?;
-        check_mutable(&guard)?;
-        if &CanonicalDigest::of(&guard.state).map_err(|_| "feed_digest")? != expected {
+        if !guard.recovery_available {
+            check_mutable(&guard)?;
+        }
+        if &removal_digest(&guard)? != expected {
             return Err("feed_preview_changed".into());
         }
         let mut next = guard.state.clone();
@@ -290,6 +270,9 @@ impl ModelFeedService {
         if disable {
             next.retrieval_enabled = false;
         }
+        if guard.recovery_available {
+            self.store.quarantine_state()?;
+        }
         self.store.commit(&next)?;
         guard.state = next;
         guard.counts = FeedCounts::default();
@@ -298,27 +281,21 @@ impl ModelFeedService {
             .retrieval_enabled
             .then(|| now_ms() + startup_delay_ms());
         self.active.store(false, Ordering::Release);
-        if let Err(error) = install(
-            guard.state.generation,
-            guard
-                .state
-                .highest_accepted
-                .as_ref()
-                .map_or(0, |h| h.sequence),
-        ) {
+        if let Err(error) = install(guard.state.generation, accepted_sequence(&guard.state)) {
             guard.refused = Some("feed_activation_requires_restart".into());
+            guard.recovery_available = false;
+            // The control transaction failed atomically; its previous snapshot is still valid.
+            self.active.store(true, Ordering::Release);
             return Err(error);
         }
         self.current.store(Arc::new(ReleaseCatalogSnapshot {
             catalog: (*self.embedded).clone(),
             generation: guard.state.generation,
-            accepted_sequence: guard
-                .state
-                .highest_accepted
-                .as_ref()
-                .map_or(0, |h| h.sequence),
+            accepted_sequence: accepted_sequence(&guard.state),
         }));
         self.active.store(true, Ordering::Release);
+        guard.refused = None;
+        guard.recovery_available = false;
         self.store.retire_unreferenced(None);
         Ok(())
     }
@@ -412,6 +389,15 @@ impl ModelFeedService {
         etag: Option<String>,
         install: impl FnOnce(u64, u64) -> Result<(), String>,
     ) -> Result<&'static str, String> {
+        if verified.payload.sequence <= guard.state.sequence_floor
+            && !guard
+                .state
+                .highest_accepted
+                .as_ref()
+                .is_some_and(|h| h.sequence == verified.payload.sequence)
+        {
+            return Err("older_sequence".into());
+        }
         if let Some(high) = &guard.state.highest_accepted {
             if verified.payload.sequence < high.sequence {
                 return Err("older_sequence".into());
@@ -454,25 +440,17 @@ impl ModelFeedService {
         guard.state = next;
         guard.counts = admission.counts;
         self.active.store(false, Ordering::Release);
-        if let Err(error) = install(
-            guard.state.generation,
-            guard
-                .state
-                .highest_accepted
-                .as_ref()
-                .map_or(0, |h| h.sequence),
-        ) {
+        if let Err(error) = install(guard.state.generation, accepted_sequence(&guard.state)) {
             guard.refused = Some("feed_activation_requires_restart".into());
+            guard.recovery_available = false;
+            // The control transaction failed atomically; its previous snapshot is still valid.
+            self.active.store(true, Ordering::Release);
             return Err(error);
         }
         self.current.store(Arc::new(ReleaseCatalogSnapshot {
             catalog,
             generation: guard.state.generation,
-            accepted_sequence: guard
-                .state
-                .highest_accepted
-                .as_ref()
-                .map_or(0, |h| h.sequence),
+            accepted_sequence: accepted_sequence(&guard.state),
         }));
         self.active.store(true, Ordering::Release);
         self.store.retire_unreferenced(guard.state.held.as_ref());
@@ -480,6 +458,17 @@ impl ModelFeedService {
     }
 }
 
+fn accepted_sequence(state: &FeedState) -> u64 {
+    state
+        .highest_accepted
+        .as_ref()
+        .map_or(0, |h| h.sequence)
+        .max(state.sequence_floor)
+}
+fn removal_digest(guard: &MutableFeed) -> Result<CanonicalDigest, String> {
+    CanonicalDigest::of(&(&guard.state, &guard.refused, guard.recovery_available))
+        .map_err(|_| "feed_digest".into())
+}
 fn check_mutable(guard: &MutableFeed) -> Result<(), String> {
     guard
         .refused

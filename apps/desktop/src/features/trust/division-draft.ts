@@ -1,9 +1,8 @@
-import { emptyEditor, reopen, type Editor, type Plan, type Selection } from '../../plan-editor';
+import { type Editor, type Plan, type Selection } from '../../plan-editor';
 import type { Classifier, Judgment } from '../decision-services/types';
 
 export type DivisionSource = { regular: Selection[]; primary: Selection[]; judgment: Judgment; classifier: Classifier; threshold: number };
-export function divisionSource(plan: Plan, branchId: string): DivisionSource | null {
-  const editor = reopen(plan);
+export function divisionSource(editor: Editor, branchId: string): DivisionSource | null {
   if (editor.mode === 'smart_saving' && branchId === 'smart_saving' && editor.smart.classifier.kind !== 'local_rules' && editor.smart.economy.length && editor.smart.primary.length) {
     return { regular: editor.smart.economy, primary: editor.smart.primary, judgment: editor.smart.judgment, classifier: editor.smart.classifier, threshold: editor.smart.judgment.degree.simple_threshold_millis };
   }
@@ -14,8 +13,8 @@ export function divisionSource(plan: Plan, branchId: string): DivisionSource | n
   return { regular: branch.candidates, primary: branch.primary_candidates, judgment, classifier: routing.classifier, threshold: judgment.degree.simple_threshold_millis };
 }
 
-export function divisionDraft(plan: Plan, source: DivisionSource, kind: 'branches' | 'worker', keepPrimary: boolean, descriptions: [string, string], names: [string, string], work?: Editor['work']): Editor {
-  const draft = emptyEditor();
+export function divisionDraft(plan: Plan, source: DivisionSource, kind: 'branches' | 'worker', keepPrimary: boolean, descriptions: [string, string], names: [string, string], work: Editor['work'] | undefined, defaults: Editor): Editor {
+  const draft = structuredClone(defaults);
   draft.display_name = `${plan.desired.display_name} · ${kind === 'branches' ? names.join(' / ') : 'Worker'}`;
   draft.purpose = descriptions.join(' ');
   draft.mode = 'custom_branches';

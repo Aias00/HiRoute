@@ -1,4 +1,5 @@
 export type ModelFeedStatus = {
+  recovery_available?: boolean;
   retrieval_enabled: boolean;
   held: { sequence: number; issued_at: string; retrieved_at: number } | null;
   highest_accepted_sequence: number | null;

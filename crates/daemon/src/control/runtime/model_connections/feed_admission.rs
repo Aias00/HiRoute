@@ -37,6 +37,18 @@ impl LocalControlAdapter {
             let Some(id) = model.catalog_configuration_id.as_deref() else {
                 continue;
             };
+            let retained = mutation
+                .expected()
+                .is_some_and(|old| old.models.iter().any(|saved| saved == model));
+            let embedded = self.model_feed.as_ref().map_or_else(
+                || catalog.model_data().model(id).is_some(),
+                |feed| feed.is_embedded_model(id),
+            );
+            // Lifecycle edits retain saved embedded facts across catalog upgrades.
+            // New members and feed-only members must still pass current admission.
+            if retained && embedded {
+                continue;
+            }
             let Some(definition) = catalog.model_data().model(id) else {
                 return Err(ComputeManagementControlError::RegisteredOptionUnavailable);
             };

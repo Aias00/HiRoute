@@ -48,6 +48,8 @@ pub struct ModelFeedCountsV1 {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModelFeedStatusV1 {
+    #[serde(default)]
+    pub recovery_available: bool,
     pub retrieval_enabled: bool,
     pub held: Option<ModelFeedHeldV1>,
     pub highest_accepted_sequence: Option<u64>,

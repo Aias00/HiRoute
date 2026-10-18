@@ -1,4 +1,4 @@
-import { reopen } from '../plan-editor';
+import type { Options } from '../plan-editor';
 import { TrialQuickStart } from '../features/trial/TrialQuickStart';
 import { NewModels } from '../features/trial/NewModels';
 import { useTrustSuggestions } from '../features/trust/use-trust-suggestions';
@@ -522,7 +522,13 @@ export function DesktopApp() {
       await showRouting({ key: `division/${crypto.randomUUID()}`, plan, initialView: 'performance', initialDivisionBranch: branchId }); return;
     }
     if ('threshold_millis' in suggestion) {
-      const editor = reopen(plan);
+      let authoring;
+      try {
+        const options = await invoke<Options>('plan_editor_options', { input: { authoring: { plan_id: planId }, include_unavailable: true } });
+        if (!options.authoring || options.authoring.expected_head_revision !== plan.head.head_revision) throw Error('CHANGE_PREVIEW_STALE');
+        authoring = options.authoring;
+      } catch { await showRouting({ key: `trust/${crypto.randomUUID()}`, plan, initialView: 'performance' }); return; }
+      const editor = structuredClone(authoring.editor);
       if (editor.mode === 'smart_saving' && branchId === 'smart_saving') editor.smart.judgment.degree.simple_threshold_millis = suggestion.threshold_millis;
       else {
         const selected = editor.branch_routing?.branches.find(b => b.id === branchId);
