@@ -202,6 +202,14 @@ normal Rust installation entry with the captured login/tray defaults; it does
 not force a stop or bypass restoration. This mutates the prepared installation
 and is diagnostic evidence, never a successful full NSIS result. Inspect its
 output and resulting transaction before any further installation attempt.
+If that failed unreleased producer never registered its generated uninstaller,
+manual `installer-quarantine` can preserve that one file in the run's evidence.
+It requires the same inspection/prior-product admission and an independently
+extracted digest from the verified failed NSIS artifact in
+`--generated-uninstaller-sha256`. A changed file, missing verified old backup or
+already registered replacement is refused. This changes no journal or business
+data and is manual preparation, not a compatibility reader or an installation
+result; the Rust transaction still owns all restoration and installation.
 Before native input, the runner checks that the existing session's input desktop
 is accessible and matches its ordinary desktop. `--action desktop-state` reads
 that prerequisite without unlocking or creating a login. UI observations require

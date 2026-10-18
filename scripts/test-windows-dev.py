@@ -229,9 +229,38 @@ class Runner(unittest.TestCase):
         with patch.object(desktop.subprocess,'run') as run, self.assertRaisesRegex(ValueError,'matching installation'):
             desktop.installer_resume(request,self.root,{},profiles,{},host.manifest,self.root)
         run.assert_not_called()
+
         with patch.object(desktop.subprocess,'run') as run, self.assertRaisesRegex(ValueError,'explicit inspection'):
             desktop.installer_resume({**request,'observation_run':'../other'},self.root,{},profiles,{},host.manifest,self.root)
         run.assert_not_called()
+
+    def test_installer_resume_preserves_recorded_login_and_tray_choices(self):
+        facts = {'install-pending.json': {'record': {'previous_autostart': False}},
+                 'shell-install.json': {'record': {'tray_enabled': False}}}
+        shell = self.root / 'hiroute-shell.exe'
+        completed = desktop.subprocess.CompletedProcess([], 0, b'installed', b'')
+        with patch.object(desktop, 'prepared_installer_replacement', return_value=(facts, self.root, shell)), \
+                patch.object(desktop.subprocess, 'run', return_value=completed) as run, \
+                patch.object(profiles, 'inspect_installation', return_value={}), \
+                patch.dict(os.environ, LOCALAPPDATA=str(self.root)):
+            desktop.installer_resume({}, self.root, {}, profiles, {}, host.manifest, self.root)
+        self.assertEqual(run.call_args.args[0], [str(shell), '--installer-install', '--no-login-start', '--no-tray'])
+        self.assertEqual((self.root / 'installer-resume.stdout').read_bytes(), b'installed')
+
+    def test_manual_generated_file_quarantine_preserves_backup_and_refuses_changed_bytes(self):
+        programs, state, output = (self.root / name for name in ('program','state','evidence'))
+        programs.mkdir();(state / 'install-backups').mkdir(parents=True);output.mkdir()
+        source = programs / 'uninstall.exe';source.write_bytes(b'verified generated image')
+        backup = state / 'install-backups/uninstall.exe';backup.write_bytes(b'previous verified image')
+        old = profiles.digest(backup);expected = profiles.digest(source)
+        pending = {'old':{'uninstall.exe':old},'new':{}}
+        with self.assertRaisesRegex(ValueError,'identity changed'):
+            desktop.quarantine_generated_uninstaller(programs,state,output,'0'*64,pending,profiles)
+        self.assertTrue(source.is_file());self.assertEqual(profiles.digest(backup),old)
+        result = desktop.quarantine_generated_uninstaller(programs,state,output,expected,pending,profiles)
+        self.assertEqual(result['sha256'],expected);self.assertFalse(source.exists())
+        self.assertEqual(profiles.digest(output / 'unregistered-uninstaller.bin'),expected)
+        self.assertEqual(profiles.digest(backup),old)
 
     def test_bootstrap_publishes_once_and_preserves_changed_content(self):
         destination = self.root / 'helper.py'

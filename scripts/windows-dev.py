@@ -334,7 +334,7 @@ def main():
     desktop = commands.add_parser('desktop-session', help='Measured installed Desktop and native UI acceptance')
     desktop.add_argument('--product', required=True)
     desktop.add_argument('--action', dest='desktop_action', required=True,
-                         choices=('install', 'installer-resume', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call'))
+                         choices=('install', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call'))
     desktop.add_argument('--from-product', help='Exact installed bundle admitted before a cross-build upgrade')
     desktop.add_argument('--observation-run')
     desktop.add_argument('--element', help='Runtime ID from a recent native UI observation')
@@ -343,6 +343,7 @@ def main():
     desktop.add_argument('--y', type=int)
     desktop.add_argument('--scroll-direction', choices=('up', 'down'))
     desktop.add_argument('--codex-profile', choices=('hiroute',), help='Use the product-owned Codex profile instead of the default configuration')
+    desktop.add_argument('--generated-uninstaller-sha256', help='Digest independently extracted from the verified failed NSIS artifact, for manual quarantine only')
     desktop.add_argument('--cli-args', type=Path, help='Private JSON array of public CLI arguments')
     run = commands.add_parser('run')
     run.add_argument('--harness', required=True)
@@ -399,10 +400,13 @@ def main():
                 if (not args.observation_run or not re.fullmatch(r'[a-f0-9]{32}', args.observation_run)
                         or not args.element or not re.fullmatch(r'[0-9.]+', args.element)):
                     raise ValueError('Native interaction requires an observed Runtime ID and run')
-            if args.desktop_action == 'installer-resume' and (
+            if args.desktop_action in ('installer-resume', 'installer-quarantine') and (
                     not args.from_product or not args.observation_run
                     or not re.fullmatch(r'[a-f0-9]{32}', args.observation_run)):
                 raise ValueError('Installer resume requires the prior product and a recent installation inspection')
+            if args.desktop_action == 'installer-quarantine' and not re.fullmatch(
+                    r'[a-f0-9]{64}', args.generated_uninstaller_sha256 or ''):
+                raise ValueError('Manual quarantine requires the independently measured generated-uninstaller digest')
             if args.desktop_action == 'text' and (args.text is None or len(args.text) > 4096):
                 raise ValueError('Native text input requires bounded text')
             if args.desktop_action in ('click', 'scroll'):

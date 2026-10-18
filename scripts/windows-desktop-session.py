@@ -403,7 +403,7 @@ def codex_call(run, request, helper):
     return evidence
 
 
-def installer_resume(request, run, pm, helper, activity, manifest, root):
+def prepared_installer_replacement(request, pm, helper, activity, manifest, root):
     if (not re.fullmatch(r'[a-f0-9]{32}', request.get('observation_run') or '')
             or not re.fullmatch(r'[a-f0-9]{12}-[a-f0-9]{12}', request.get('from_product') or '')):
         raise ValueError('Installer resume requires explicit inspection and prior product identities')
@@ -440,6 +440,33 @@ def installer_resume(request, run, pm, helper, activity, manifest, root):
         path = helper.plain(programs / 'standalone' / name)
         if helper.digest(path) != pm['files'][name]['sha256']:
             raise ValueError('The replacement product changed')
+    return facts, programs, shell
+
+
+def quarantine_generated_uninstaller(programs, state, run, expected, pending, helper):
+    if (not re.fullmatch(r'[a-f0-9]{64}', expected or '')
+            or 'uninstall.exe' in pending.get('new', {}) or not pending.get('old', {}).get('uninstall.exe')):
+        raise ValueError('Only an unregistered generated uninstaller can be quarantined manually')
+    source = helper.plain(programs / 'uninstall.exe')
+    backup = helper.plain(state / 'install-backups/uninstall.exe')
+    if (helper.digest(source) != expected or helper.digest(backup) != pending['old']['uninstall.exe']
+            or expected == pending['old']['uninstall.exe']):
+        raise ValueError('Generated-file or retained-backup identity changed; no file was moved')
+    destination = run / 'unregistered-uninstaller.bin'
+    if destination.exists():
+        raise ValueError('Quarantine destination already exists')
+    source.rename(destination)
+    if helper.digest(destination) != expected:
+        if not source.exists():
+            destination.rename(source)
+        raise ValueError('Quarantined generated file changed')
+    return dict(native_entry='manual quarantine of an independently verified generated file; not installation acceptance',
+                sha256=expected, previous_backup_preserved=True, business_data_untouched=True)
+
+
+def installer_resume(request, run, pm, helper, activity, manifest, root):
+    facts, programs, shell = prepared_installer_replacement(request, pm, helper, activity, manifest, root)
+    pending = facts['install-pending.json']['record']
     command = [str(shell), '--installer-install']
     if pending.get('previous_autostart') is False:
         command.append('--no-login-start')
@@ -460,7 +487,7 @@ def execute(request, run, product, pm, helper, activity, manifest, root):
     if activity.get('administrator_groups') is not False:
         raise ValueError('Native Desktop evidence requires a standard account, not a filtered administrator')
     action = request['desktop_action']
-    if action not in ('install', 'installer-resume', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call'):
+    if action not in ('install', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call'):
         raise ValueError('Unknown native Desktop action')
     if action == 'desktop-state':
         return dict(native_entry='read-only input desktop inspection', state=desktop_state())
@@ -484,6 +511,10 @@ def execute(request, run, product, pm, helper, activity, manifest, root):
         return dict(native_entry='read-only native configuration inventory', files=files)
     if action == 'installer-resume':
         return installer_resume(request, run, pm, helper, activity, manifest, root)
+    if action == 'installer-quarantine':
+        facts, programs, _ = prepared_installer_replacement(request, pm, helper, activity, manifest, root)
+        return quarantine_generated_uninstaller(programs, Path(facts['shell_state']['path']), run,
+            request.get('generated_uninstaller_sha256'), facts['install-pending.json']['record'], helper)
     if action == 'install':
         facts = helper.inspect_installation(Path.home(), Path(os.environ['LOCALAPPDATA']))
         previous = request.get('from_product')

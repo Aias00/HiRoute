@@ -219,6 +219,11 @@ HiRoute SHALL provide a Windows x64 Desktop installer that a standard user can r
 - **WHEN** installation commits or uninstall removes its package
 - **THEN** verified obsolete payloads are removed, rollback sources survive until both owners commit, interrupted cleanup can resume, and changed or foreign entries remain untouched.
 
+#### Scenario: Replacement changes frontend resource names
+
+- **WHEN** an existing Windows Desktop installation is replaced by a verified package with different hashed frontend asset filenames
+- **THEN** the installer durably backs up the prior owned files before retiring obsolete payload paths, validates the complete new package without accepting foreign or modified content, and preserves the old versioned core until both installation owners commit.
+
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/132#issuecomment-6219731276
 
@@ -292,6 +297,11 @@ The Windows shell SHALL select a newer stable Windows x64 Desktop release from t
 
 - **WHEN** the trusted Windows catalog returns HTTP 404 or 410
 - **THEN** the page reports that the Windows update catalog is unavailable and offers retry, without claiming that installation failed or that the latest version is installed, changing product data, stopping the service or selecting a V2 artifact.
+
+#### Scenario: Shell replacement fails before the core changes
+
+- **WHEN** a prepared shell replacement fails while the standalone marker and verified Task still refer to the previous installation
+- **THEN** recovery restores the verified shell files and captured login/tray/listener settings without reinstalling or draining that unchanged core, retains active work and business data, and a subsequent installer run can proceed through the same ownership checks.
 
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/132#issuecomment-6219734656
