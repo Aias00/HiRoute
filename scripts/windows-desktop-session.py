@@ -403,11 +403,64 @@ def codex_call(run, request, helper):
     return evidence
 
 
+def installer_resume(request, run, pm, helper, activity, manifest, root):
+    if (not re.fullmatch(r'[a-f0-9]{32}', request.get('observation_run') or '')
+            or not re.fullmatch(r'[a-f0-9]{12}-[a-f0-9]{12}', request.get('from_product') or '')):
+        raise ValueError('Installer resume requires explicit inspection and prior product identities')
+    observed = root / 'runs' / request['observation_run']
+    before = json.loads((observed / 'result.json').read_text(encoding='utf-8'))
+    old_request = json.loads((observed / 'request.json').read_text(encoding='utf-8'))
+    if (before.get('passed') is not True or before.get('assessment') != 'inspection_only'
+            or old_request['product'] != request['product']
+            or old_request['config']['session_id'] != request['config']['session_id']
+            or time.time() - (observed / 'result.json').stat().st_mtime > 600):
+        raise ValueError('Installer resume requires a recent matching installation inspection')
+    facts = helper.inspect_installation(Path.home(), Path(os.environ['LOCALAPPDATA']))
+    for name in ('marker', 'install-pending.json'):
+        if facts.get(name, {}).get('sha256') != before['installation'].get(name, {}).get('sha256'):
+            raise ValueError('Installation changed after inspection')
+    pending = facts.get('install-pending.json', {}).get('record', {})
+    if pending.get('schema') != 'hiroute.windows-shell-transaction/v1' or pending.get('phase') != 'prepared':
+        raise ValueError('Only the exact prepared shell installation can be resumed')
+    prior = manifest(root / 'bundles' / request['from_product'])
+    marker = facts['marker']['record']
+    previous = helper.plain(Path(marker['install_root']))
+    if (previous != Path(pending.get('previous_package') or '') or not previous.name.endswith(prior['source_revision'][:12])
+            or previous.parent != Path.home() / '.local/lib/hiroute'):
+        raise ValueError('The retained previous package does not match the requested product')
+    for name in ('hiroute.exe', 'hirouted.exe'):
+        if helper.digest(previous / name) != prior['files'][name]['sha256']:
+            raise ValueError('The retained previous product changed')
+    programs = helper.plain(Path(facts['programs']['path']))
+    shell = helper.plain(programs / 'hiroute-shell.exe')
+    if (helper.digest(shell) != pm['shell_sha256'] or pending.get('new', {}).get('hiroute-shell.exe') != pm['shell_sha256']
+            or any(Path(p.get('ExecutablePath') or '') == shell for p in activity.get('processes', []))):
+        raise ValueError('The measured replacement shell must be present and stopped')
+    for name in ('hiroute.exe', 'hirouted.exe'):
+        path = helper.plain(programs / 'standalone' / name)
+        if helper.digest(path) != pm['files'][name]['sha256']:
+            raise ValueError('The replacement product changed')
+    command = [str(shell), '--installer-install']
+    if pending.get('previous_autostart') is False:
+        command.append('--no-login-start')
+    if facts.get('shell-install.json', {}).get('record', {}).get('tray_enabled') is False:
+        command.append('--no-tray')
+    done = subprocess.run(command, stdin=subprocess.DEVNULL,
+                          capture_output=True, timeout=180, creationflags=0x08000000)
+    (run / 'installer-resume.stdout').write_bytes(done.stdout)
+    (run / 'installer-resume.stderr').write_bytes(done.stderr)
+    (run / 'installer-resume.after.json').write_text(json.dumps(
+        helper.inspect_installation(Path.home(), Path(os.environ['LOCALAPPDATA'])),indent=2),encoding='utf-8')
+    if done.returncode:
+        raise RuntimeError('The real post-install phase failed; inspect installer-resume.stdout before any further action')
+    return dict(native_entry='measured installer post-install phase; not a full NSIS result', exit_code=done.returncode)
+
+
 def execute(request, run, product, pm, helper, activity, manifest, root):
     if activity.get('administrator_groups') is not False:
         raise ValueError('Native Desktop evidence requires a standard account, not a filtered administrator')
     action = request['desktop_action']
-    if action not in ('install', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call'):
+    if action not in ('install', 'installer-resume', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call'):
         raise ValueError('Unknown native Desktop action')
     if action == 'desktop-state':
         return dict(native_entry='read-only input desktop inspection', state=desktop_state())
@@ -429,6 +482,8 @@ def execute(request, run, product, pm, helper, activity, manifest, root):
                 files[relative] = dict(exists=True, inventory=helper.inventory(path))
         (run / 'native-files.json').write_text(json.dumps(files, indent=2), encoding='utf-8')
         return dict(native_entry='read-only native configuration inventory', files=files)
+    if action == 'installer-resume':
+        return installer_resume(request, run, pm, helper, activity, manifest, root)
     if action == 'install':
         facts = helper.inspect_installation(Path.home(), Path(os.environ['LOCALAPPDATA']))
         previous = request.get('from_product')

@@ -218,6 +218,21 @@ class Runner(unittest.TestCase):
                          [{'code':'EXPECTED_INSTALL_FAILURE'}])
         self.assertEqual(original,(journal.read_bytes(),log.read_bytes()))
 
+    def test_installer_resume_requires_recent_matching_evidence_before_process_start(self):
+        observed = self.root / 'runs' / ('a' * 32)
+        observed.mkdir(parents=True)
+        (observed / 'result.json').write_text(json.dumps(dict(passed=True,assessment='inspection_only')))
+        (observed / 'request.json').write_text(json.dumps(dict(product='b' * 12 + '-' + 'c' * 12,
+                                                            config=dict(session_id=3))))
+        request = dict(observation_run='a' * 32,from_product='d' * 12 + '-' + 'e' * 12,
+                       product='b' * 12 + '-' + 'c' * 12,config=dict(session_id=4))
+        with patch.object(desktop.subprocess,'run') as run, self.assertRaisesRegex(ValueError,'matching installation'):
+            desktop.installer_resume(request,self.root,{},profiles,{},host.manifest,self.root)
+        run.assert_not_called()
+        with patch.object(desktop.subprocess,'run') as run, self.assertRaisesRegex(ValueError,'explicit inspection'):
+            desktop.installer_resume({**request,'observation_run':'../other'},self.root,{},profiles,{},host.manifest,self.root)
+        run.assert_not_called()
+
     def test_bootstrap_publishes_once_and_preserves_changed_content(self):
         destination = self.root / 'helper.py'
         temporary = self.root / 'upload'

@@ -194,6 +194,14 @@ scenario needs Python 3.11+ and verifies the completed tool output and nonce-bea
 answer; process exit alone is insufficient. Preserve its actual client image hash,
 product revision and native output. It does not alter sandbox configuration or
 substitute a model fixture for a real upstream.
+For a failed NSIS attempt with a prepared shell transaction, `installer-resume`
+captures the actual post-install adapter's output. It requires the matching
+recent inspection in `--observation-run`, the exact retained `--from-product`,
+the measured replacement shell/CLI/daemon and no running shell. It resumes the
+normal Rust installation entry with the captured login/tray defaults; it does
+not force a stop or bypass restoration. This mutates the prepared installation
+and is diagnostic evidence, never a successful full NSIS result. Inspect its
+output and resulting transaction before any further installation attempt.
 Before native input, the runner checks that the existing session's input desktop
 is accessible and matches its ordinary desktop. `--action desktop-state` reads
 that prerequisite without unlocking or creating a login. UI observations require
