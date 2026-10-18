@@ -200,6 +200,19 @@ class Runner(unittest.TestCase):
         self.assertEqual((self.root / 'codex.stdout').read_bytes(), failure.stdout)
         self.assertEqual((self.root / 'codex.stderr').read_bytes(), failure.stderr)
 
+    def test_tls_diagnostics_retain_verification_failure_without_http_or_credentials(self):
+        import ssl
+        import socket
+        with patch.object(socket, 'create_connection', side_effect=OSError('connection refused')):
+            with self.assertRaisesRegex(RuntimeError, 'before any authenticated or HTTP'):
+                desktop.probe_tls(self.root, dict(scheme='https', authority='example.com', port=443))
+        result = json.loads((self.root / 'tls-probe.json').read_text())
+        self.assertFalse(result['tls_verified'])
+        self.assertFalse(result['http_request_sent'])
+        self.assertFalse(result['authenticated'])
+        with self.assertRaisesRegex(ValueError, 'saved HTTPS DNS target'):
+            desktop.probe_tls(self.root, dict(scheme='https', authority='user:secret@example.com', port=443))
+
     def test_codex_real_call_requires_completed_turn_tool_and_exact_nonce(self):
         expected = 'HiRoute-Windows-test:42'
         events = [{'type':'item.completed','item':{'type':'command_execution','status':'completed','exit_code':0,'aggregated_output':'42\n'}},

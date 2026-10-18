@@ -507,6 +507,45 @@ def installer_resume(request, run, pm, helper, activity, manifest, root):
     return dict(native_entry='measured installer post-install phase; not a full NSIS result', exit_code=done.returncode)
 
 
+def probe_tls(run, target):
+    import hashlib
+    import socket
+    import ssl
+    host, port = target.get('authority', ''), target.get('port')
+    if (target.get('scheme') != 'https' or not re.fullmatch(r'[A-Za-z0-9.-]{1,253}', host)
+            or not isinstance(port, int) or not 1 <= port <= 65535):
+        raise ValueError('TLS diagnostics require a saved HTTPS DNS target')
+    context = ssl.create_default_context()
+    context.set_alpn_protocols(['h2', 'http/1.1'])
+    result = dict(host=host, port=port, certificate_store=context.cert_store_stats(),
+                  authenticated=False, http_request_sent=False, tls_verified=False)
+    try:
+        with socket.create_connection((host, port), timeout=8) as stream:
+            with context.wrap_socket(stream, server_hostname=host) as secured:
+                result.update(tls_verified=True, tls_version=secured.version(),
+                    alpn=secured.selected_alpn_protocol(),
+                    peer_certificate_sha256=hashlib.sha256(secured.getpeercert(binary_form=True)).hexdigest())
+    except (OSError, ssl.SSLError) as error:
+        result.update(error_type=type(error).__name__, error=str(error)[:1024],
+                      verify_code=getattr(error, 'verify_code', None))
+    (run / 'tls-probe.json').write_text(json.dumps(result, indent=2), encoding='utf-8')
+    if not result['tls_verified']:
+        raise RuntimeError('TLS verification failed before any authenticated or HTTP request; inspect tls-probe.json')
+    return result
+
+
+def network_probe(request, run, roots):
+    done = subprocess.run([str(roots['stable_cli']), 'compute', 'list', '--output', 'json'],
+        capture_output=True, timeout=30, creationflags=0x08000000)
+    done.check_returncode()
+    envelope = json.loads(done.stdout)
+    matches = [s for s in envelope.get('data', {}).get('sources', [])
+               if s.get('source_id') == request.get('source_id') and s.get('state') == 'ready']
+    if envelope.get('status') != 'succeeded' or len(matches) != 1:
+        raise ValueError('Select one ready saved source for unauthenticated TLS diagnosis')
+    return probe_tls(run, matches[0]['target'])
+
+
 def admit_nsis_install(request, helper, activity, manifest, root):
     facts = helper.inspect_installation(Path.home(), Path(os.environ['LOCALAPPDATA']))
     previous = request.get('from_product')
@@ -529,7 +568,7 @@ def execute(request, run, product, pm, helper, activity, manifest, root):
     if activity.get('administrator_groups') is not False:
         raise ValueError('Native Desktop evidence requires a standard account, not a filtered administrator')
     action = request['desktop_action']
-    if action not in ('install', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call'):
+    if action not in ('install', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call', 'network-probe'):
         raise ValueError('Unknown native Desktop action')
     if action == 'desktop-state':
         return dict(native_entry='read-only input desktop inspection', state=desktop_state())
@@ -568,6 +607,8 @@ def execute(request, run, product, pm, helper, activity, manifest, root):
                     upgrade_from=previous, recovery_from=request.get('recover_product'),
                     installer_sha256=pm['files']['installer.exe']['sha256'])
     roots, facts, shell = installed(helper, product, pm)
+    if action == 'network-probe':
+        return network_probe(request, run, roots)
     if action == 'codex-call':
         return codex_call(run, request, helper)
     if action == 'launch':

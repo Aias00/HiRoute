@@ -200,6 +200,11 @@ The runner records the actual client version before the call and preserves parti
 stdout/stderr when its bounded wait expires. Such a timeout is a failed attempt,
 not an inference verdict. The bounded public-CLI action also accepts `sessions`
 for product receipt readback; protected content still uses the product's authority.
+For a connection failure, `network-probe --source-id SOURCE` resolves one ready
+saved HTTPS source through the installed CLI and performs a bounded, verified TLS
+handshake in the same account. It sends no HTTP request or credentials, changes no
+trust settings, and records the certificate-store count, TLS result and error.
+This is diagnostics only; it cannot establish a product model call.
 For a failed NSIS attempt with a prepared shell transaction, `installer-resume`
 captures the actual post-install adapter's output. It requires the matching
 recent inspection in `--observation-run`, the exact retained `--from-product`,

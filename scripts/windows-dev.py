@@ -334,7 +334,7 @@ def main():
     desktop = commands.add_parser('desktop-session', help='Measured installed Desktop and native UI acceptance')
     desktop.add_argument('--product', required=True)
     desktop.add_argument('--action', dest='desktop_action', required=True,
-                         choices=('install', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call'))
+                         choices=('install', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call', 'network-probe'))
     desktop.add_argument('--from-product', help='Exact installed bundle admitted before a cross-build upgrade')
     desktop.add_argument('--recover-product', help='Exact interrupted bundle, with a recent inspection, before normal NSIS recovery')
     desktop.add_argument('--observation-run')
@@ -344,6 +344,7 @@ def main():
     desktop.add_argument('--y', type=int)
     desktop.add_argument('--scroll-direction', choices=('up', 'down'))
     desktop.add_argument('--codex-profile', choices=('hiroute',), help='Use the product-owned Codex profile instead of the default configuration')
+    desktop.add_argument('--source-id', help='One ready saved source for unauthenticated TLS diagnosis')
     desktop.add_argument('--generated-uninstaller-sha256', help='Digest independently extracted from the verified failed NSIS artifact, for manual quarantine only')
     desktop.add_argument('--cli-args', type=Path, help='Private JSON array of public CLI arguments')
     run = commands.add_parser('run')
@@ -405,6 +406,9 @@ def main():
                 if (not args.observation_run or not re.fullmatch(r'[a-f0-9]{32}', args.observation_run)
                         or not args.element or not re.fullmatch(r'[0-9.]+', args.element)):
                     raise ValueError('Native interaction requires an observed Runtime ID and run')
+            if args.desktop_action == 'network-probe' and (
+                    not args.source_id or not re.fullmatch(r'source/[A-Za-z0-9._:-]{1,240}', args.source_id)):
+                raise ValueError('TLS diagnostics require an explicit saved source identity')
             if args.desktop_action in ('installer-resume', 'installer-quarantine') and (
                     not args.from_product or not args.observation_run
                     or not re.fullmatch(r'[a-f0-9]{32}', args.observation_run)):
