@@ -18,6 +18,11 @@ fn launch_uses_only_startup_listeners_and_preserves_pending_configuration() {
     ) {
         return;
     }
+    if super::tests::installed_test_layout(
+        "console::listener_tests::launch_uses_only_startup_listeners_and_preserves_pending_configuration",
+    ) {
+        return;
+    }
     for mode in ["off", "occupied", "loopback", "network"] {
         let directory = crate::test_support::private_tempdir();
         let layout = StandaloneLayout::from_values(

@@ -55,7 +55,9 @@ fn real_role_all_keeps_external_gate_and_console_auth_authority_separate() {
     ) {
         return;
     }
-    if installed_test_layout() {
+    if installed_test_layout(
+        "console::tests::real_role_all_keeps_external_gate_and_console_auth_authority_separate",
+    ) {
         return;
     }
     let directory = crate::test_support::private_tempdir();
@@ -301,10 +303,8 @@ fn real_role_all_keeps_external_gate_and_console_auth_authority_separate() {
 /// never create an alias beside Cargo's shared test binaries. This native test
 /// image is only a layout fixture, not installed CLI or provider-call evidence.
 #[cfg(unix)]
-fn installed_test_layout() -> bool {
+pub(super) fn installed_test_layout(test: &str) -> bool {
     const CHILD: &str = "HIROUTE_CONSOLE_LAYOUT_TEST";
-    let test =
-        "console::tests::real_role_all_keeps_external_gate_and_console_auth_authority_separate";
     if std::env::var(CHILD).as_deref() == Ok(test) {
         return false;
     }
