@@ -48,11 +48,14 @@ fn launch_uses_only_startup_listeners_and_preserves_pending_configuration() {
             _ => ConsoleListenerDesiredV1::loopback(),
         };
         store.configure(desired).unwrap();
-        let mut role = crate::start_role_all(
+        let gateway = TcpListener::bind("127.0.0.1:0").unwrap();
+        let gateway_address = gateway.local_addr().unwrap();
+        drop(gateway);
+        let role = crate::start_role_all(
             crate::RoleAllConfig::new(
                 layout.storage_root(),
                 layout.runtime_root.clone(),
-                "127.0.0.1:0".parse().unwrap(),
+                gateway_address,
                 layout.gateway_lkg(),
             )
             .with_released_commands_only(),
