@@ -307,7 +307,7 @@ fn trust_suggestion_population_read_cost() {
             })
             .collect();
         let sql = format!(
-            "INSERT INTO plan_quality_segments({}) SELECT {} FROM plan_quality_segments WHERE segment_id='seed'",
+            "INSERT INTO plan_quality_segments({}) SELECT {} FROM plan_quality_segments WHERE workspace_id=?3 AND segment_id='seed'",
             columns.join(","),
             select.join(",")
         );
@@ -315,7 +315,9 @@ fn trust_suggestion_population_read_cost() {
             let mut insert = tx.prepare(&sql).unwrap();
             for plan in ["plan/large-a", "plan/large-b"] {
                 for index in 1..=49_999 {
-                    insert.execute(rusqlite::params![plan, index]).unwrap();
+                    insert
+                        .execute(rusqlite::params![plan, index, f.workspace.as_str()])
+                        .unwrap();
                 }
             }
         }
