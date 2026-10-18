@@ -257,7 +257,7 @@ fn known_plan_identity_without_c_metadata_keeps_mixed_revision_rates_partial() {
     let fixture = Fixture::new("c-mixed-retained-revisions");
     let channel = fact_channel(&fixture, 1024 * 1024);
     let writer = writer(&store);
-    for is_c in [true, false] {
+    for (sequence, is_c) in [(1, true), (2, false)] {
         let mut request = fixture.clone();
         request.request = LogicalRequestId::parse(if is_c {
             "c-current"
@@ -270,10 +270,11 @@ fn known_plan_identity_without_c_metadata_keeps_mixed_revision_rates_partial() {
             unreachable!()
         };
         decision.complexity.as_mut().unwrap().routing_observation = is_c.then(|| observation(3));
-        assert!(matches!(
-            offer_fact(&writer, &channel, request.fact(1, fact, 1000)),
-            WriterCycleOutcome::Ack(_)
-        ));
+        let verdict = offer_fact(&writer, &channel, request.fact(sequence, fact, 1000));
+        assert!(
+            matches!(verdict, WriterCycleOutcome::Ack(_)),
+            "sequence {sequence}: {verdict:?}"
+        );
     }
     let mut q = query(None);
     q.include_routing_observations = true;
