@@ -15,6 +15,9 @@ impl LocalObservationStore {
         capture: Option<&AnalysisPricesV1>,
         now: i64,
     ) -> Result<ObservationAnalysisPageV1, Error> {
+        let deadline = reader
+            .query_deadline()
+            .unwrap_or_else(|| std::time::Instant::now() + std::time::Duration::from_millis(500));
         reader.check(now, q.view.content(), q.query.is_some())?;
         if reader.allowed_runs().is_some() {
             return Err(Error::Unauthorized);
@@ -58,6 +61,20 @@ impl LocalObservationStore {
             rusqlite::TransactionBehavior::Immediate
         } else {
             rusqlite::TransactionBehavior::Deferred
+        };
+        // Captured traffic and maintenance already serialize through this
+        // writer. Join that admission only when persisting a new scope/capture,
+        // rather than repeatedly losing SQLite's shorter busy slice to them.
+        // Waiting consumes the caller's original deadline. Existing scopes do
+        // not take the writer, and external writers still use SQLite's bound.
+        let writer = if matches!(behavior, rusqlite::TransactionBehavior::Immediate) {
+            Some(
+                self.connection
+                    .try_lock_until(deadline)
+                    .ok_or(Error::Timeout)?,
+            )
+        } else {
+            None
         };
         let tx = db.transaction_with_behavior(behavior)?;
         let (mut s, offset) = if q.analysis_scope.is_some() || q.cursor.is_some() {
@@ -241,6 +258,7 @@ impl LocalObservationStore {
             scope::save(&tx, &s)?;
         }
         tx.commit()?;
+        drop(writer);
         if q.view.content() {
             views::content(self, &db, reader, &mut page.requests, now)?;
         }
