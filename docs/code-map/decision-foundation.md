@@ -48,7 +48,7 @@ Editor input/readback has no native protocol or background selection. Effective
 native authoring records the current internal protocol, with a fixed eight-turn
 background. Compiled execution freezes actual fixed/effective content and digest.
 Legacy omission remains frozen execution support only and is registered for
-supported old publications. Default assessments resolve to the current default at
+supported old publications and retained [Operation validation](../../crates/domain/src/operation/routing_content.rs), which checks the original editor against already sealed settings without replaying completed effects. Default assessments resolve to the current default at
 the next edit/publication; custom text stays exact. The released-input adapter
 recognizes exact legacy default instructions and all criteria. Existing
 publications are never rewritten; assessment inheritance and thresholds keep

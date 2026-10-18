@@ -242,6 +242,8 @@ Known unavailable state paths in custom text MUST fail Preview with the affected
 
 Desktop uses the capability name and default/custom labels without protocol/assessment revision, question number or digest. Existing unrelated connection/publication versions remain visible; machine output retains internal identities and digests. No startup rewrite, SQL migration, new retention promise or binary downgrade guarantee is implied.
 
+Retained supported Plan-content Operations MUST validate their original editor against the protocol already sealed in that Operation, without applying current authoring defaults, rewriting identities or replaying completed effects. This recovery validation cannot select legacy behavior for a new publication.
+
 #### Scenario: Existing native route moves at its next publication
 
 - **WHEN** an owner opens and republishes a released native route with default assessment text
@@ -271,6 +273,11 @@ Desktop uses the capability name and default/custom labels without protocol/asse
 
 - **WHEN** Desktop or CLI submits native routing input
 - **THEN** The editor MUST contain no protocol/capability or background field; ordinary Preview/Apply freezes full current native contents without caller-supplied preset text or digest.
+
+#### Scenario: Restore a retained native content Operation
+
+- **WHEN** startup reconstructs an authenticated supported older Operation after the native authoring default changed
+- **THEN** Validation MUST use its already sealed native settings, preserving original content/identities and completed effects; new publication still uses the current default.
 
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/139#issuecomment-6235110836

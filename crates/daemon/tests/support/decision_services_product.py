@@ -109,7 +109,10 @@ def scenario(repository, routed=False):
         assert DecisionEndpoint.requests[-1][0] == token
         assert DecisionEndpoint.requests[-1][1]['model'] == 'fixture-jev'
         assert len(DecisionEndpoint.requests[-1][1]['questions']) == 3
-        assert DecisionEndpoint.requests[-1][1]['state']['assessment_from'] is None
+        state = DecisionEndpoint.requests[-1][1]['state']
+        assert state['assessment_stage'] is None
+        assert state['prior_context'] == []
+        assert 'assessment_from' not in state and 'visible_conversation' not in state
         # A shared API Key may back independent immutable service versions.
         shared = copy.deepcopy(service)
         shared.update(id='decision-shared', name='Same key, independent connection')
@@ -138,6 +141,8 @@ def scenario(repository, routed=False):
         routing = {'classifier': {'kind': 'decision_service', 'service': copy.deepcopy(service)},
                    'branches': branches, 'default_branch_id': 'docs',
                    'judgment': judgment_fixture(), 'reselect_on_user_message': False}
+        # This lifecycle case deliberately owns custom text; publication must retain it.
+        routing['judgment']['competence']['standard'] = 'custom'
         routing['judgment']['degree']['instructions'] = 'A complete degree standard.\n' * 1000
         routing['branches'][0]['condition'] = 'Programming tasks with supplied requirements.\n' * 500
         change = plan_change(product, 'update', mode='custom_branches', branch_routing=routing)

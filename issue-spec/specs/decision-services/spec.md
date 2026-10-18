@@ -163,7 +163,7 @@ historical Score and applicability fit the supported nineteen-question shape in
 one call. Unused malformed degree answers do not poison the selected path.
 
 C category and category-conditioned degree templates MUST be immutable versioned
-content. Domain compilation, C Gateway execution and Desktop C preview share
+content. Domain compilation and C Gateway execution share
 the supported v1 template. Editing current defaults MUST NOT alter a supported
 publication's questions or make it unloadable. C request construction and answer
 bindings consume the stored frozen decision, while authoring/compiled consistency,

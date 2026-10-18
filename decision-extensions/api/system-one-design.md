@@ -21,7 +21,7 @@ Token Plan 保持一个入口，不根据个人/团队版做本地资格判断�
 ## 三步适配，不增加执行框架
 
 1. **编译**：验证计划，构建当前 decision 定义和冻结的 assessment_target；分配本请求内的 opaque question ID，并保留 ID 到语义位置的局部绑定表。
-2. **调用**：使用既有 classification deadline、Replay、认证和取消逻辑提交一次请求。state 包含完整当前用户输入、已保留历史、缺口事实及评分起点；不用第二次请求才能知道的内容出题。
+2. **调用**：使用既有 classification deadline、Replay、认证和取消逻辑提交一次请求。state 按冻结协议提供当前输入、历史分区与覆盖事实；不用第二次请求才能知道的内容出题。
 3. **归约**：校验本次需要的 answers，映射回 v1 的 decision/assessment；HiRoute 再执行阈值和候选政策。绑定表不持久化，不让供应商返回模型/执行身份。
 
 | 决策协议语义 | System One question | 使用的 answer |
@@ -35,98 +35,29 @@ Token Plan 保持一个入口，不根据个人/团队版做本地资格判断�
 
 类别分类不需要消费方配置置信度阈值。程度判断不能把 `.confidence`、`.score` 或 `1-score` 当成通用简单概率；多档量表的均值会丢失分布。胜任评分则明确采用三级等距锚点，因此使用供应商原始 score/2；不能从已舍入的 probabilities 重新计算。两处采用 Score，但消费字段和含义不同。
 
-类别 Choice 的 instructions 必须包含按主要意图处理重叠条件、无匹配时选择计划默认类别的规则和准确 ID；不要求供应商额外返回置信阈值或无匹配标记。裁剪历史时同步重算 state.assessment_from，局部绑定仍指向原实际阶段；裁到评分目标则标记 partial，目标全部移除则不提交评分问题。
+类别 Choice 的 instructions 必须包含按主要意图处理重叠条件、无匹配时选择计划默认类别的规则和准确 ID；不要求供应商额外返回置信阈值或无匹配标记。当前分区协议按实际阶段边界分配历史，早期冻结执行保留自己的 assessment_from；局部绑定仍指向原实际阶段；裁到评分目标则标记 partial，目标全部移除则不提交评分问题。
 
-## 智能省钱请求
+## Current native requests and frozen publications
 
-以下请求示例使用现有原生协议。显式 C 路由使用下面的分区契约；自定义扩展 v1 仍使用自己的公开协议。
+Historical problem applicability is the sole authoring behavior for new built-in System One publications. There is no protocol switch, CLI editor field or background setting. Background retains at most eight complete turns. Existing frozen publications keep executing unchanged until the next publication. Default assessments then follow the current default silently; custom instructions and every criterion remain byte-for-byte unchanged. Unavailable state paths fail Preview with their scope and field. Local rules and custom-extension v1 retain their behavior.
 
-### 显式 C 路由
+The internal frozen identity is `hiroute.system-one-c/v1`. A publication contains actual fixed questions, complete effective assessments, thresholds, the eight-turn background bound and a content digest. [Domain frozen content](../../crates/domain/src/routing/fixtures/system_one_c_v1.json) is the single source for default questions. Do not append a suffix to the legacy assessment wrapper. Editor callers do not supply fixed prompts or digests.
 
-C 的版本是 `hiroute.system-one-c/v1`，只在路由选择，连接继续保存供应商、端点、模型和认证。发布版本冻结实际固定问题、完整生效评分、阈值、背景上限和内容摘要。完整标准问题以 [Domain 冻结内容](../../crates/domain/src/routing/fixtures/system_one_c_v1.json) 为唯一内容源；不能把 C 后缀拼到旧评分 wrapper。
+State separates `prior_context`, `assessment_stage`, `latest_user` and `history_partial`. Background is a continuous suffix before the actual assessed stage. A complete target stage is not limited to eight turns. Current input is retained separately; tool-result bodies, goal parsing and semantic extraction are excluded. The serialized request limit is 262144 bytes. Budget the applicability question before admitting the complete target, then allocate the target and background. A partially retained target omits applicability without refilling history using the freed bytes. Oversized current input fails explicitly.
 
-C 仍在一次 `model + state + questions` 调用内构造独立问题：分类 Choice、各适用分支的简单/复杂 Score、上一实际阶段的原始 Score，以及历史执行问题对当前工作是否适用的 Choice。16 个双组分支最多 19 问。最后一问必须返回恰好 `applicable` 和 `not_established` 两标签的有限 0..1 概率，和在 1e-6 容差内为 1；`choice` 字符串不代替概率。错误只使该问不可用，不丢弃有效的分类、所选程度和评分。
+Smart saving asks current degree and, for a complete attributable target, independent historical assessment and applicability questions. Branch routing adds a category Choice and a degree question for every two-group category. With sixteen such categories and a complete historical target, one request contains nineteen questions: one category, sixteen degree questions, one assessment and one applicability question. Questions cannot depend on another answer; reduction consumes only the selected category's degree.
 
-状态明确分为 `prior_context`、`assessment_stage`、`latest_user` 与覆盖标记。背景默认最多 8 轮，目标阶段按实际边界保留，不加入工具结果正文、goal 解析或语义提取。实际转义后的请求上限为 262144 字节；完整目标先计入第三问，再分配目标、背景。目标因此部分保留后省略第三问，不利用腾出的字节回填历史。当前输入超限显式失败。
+Applicability requires exactly `applicable` and `not_established`, with finite probabilities in 0..1 summing to one within 1e-6. The choice string cannot substitute for probabilities. A malformed applicability answer preserves valid category, selected degree and assessment results. Existing version, attribution, category, completeness and frozen-rubric eligibility checks still apply first. When simple probability reaches its threshold and an eligible score is below the competence floor, applicability below 0.5 suppresses the existing protection. A value at least 0.5 or an unavailable result conservatively retains it. Complex tasks independently select the primary group. Default thresholds remain 0.8 / 0.5; same-turn inheritance and availability relay keep their behavior.
 
-历史低分仍先通过计划版本、实际归因、分支、完整性和冻结标准约束。当前简单概率达到阈值且有效历史评分低于胜任下限时，适用概率低于 0.5 才抑制原有保护；达到 0.5 或不可用则保留。当前复杂任务独立选主力。默认阈值保持 0.8 / 0.5，同轮继承与可用性接力不变。
+## Connection test and maximum-shape diagnostic
 
-已有连接测试 V1 仍只验证其原能力。现有受保护测试操作可显式接收 [C 测试 V2](../../crates/application-api/src/classifier_diagnostic_c.rs)，绑定准确保存的服务版本、冻结内容与 `standard` / `max_branches` 形状，通过生产构造、传输和解析验证原始 Score 与完整概率向量。结果是本次会话证据，不持久化健康保证；保存和发布不会调用供应商。真实供应商容量与质量需要单独授权验收。
+The connection page has one test, retaining `hiroute.classifier-decision-test/v1` and its result contract. Its fixed example uses the current request frame. There is no route-editor test. Save, inspect and publish do not call a provider.
 
-下列数值及回答均为说明性样本，不是真实调用结果。首次请求只问程度，有可靠上一阶段才附评估。
+CLI and acceptance tooling can explicitly invoke the separately named [historical problem applicability diagnostic](../../crates/application-api/src/classifier_diagnostic_c.rs), `hiroute.historical-applicability-test/v1`, through the existing protected test operation. It binds an exact saved service revision, endpoint/model, frozen content and `standard` / `max_branches` shape, using production construction, transport and parsing to verify raw Score and complete probability vectors. The maximum shape submits all nineteen questions once, without splitting, dropping questions or inferring capacity from a smaller success. Results describe that shape and connection only, without semantic accuracy or continuous-health claims. Explicit calls may consume quota.
 
-```json
-{
-  "model":"decision-model-preview",
-  "state":{
-    "latest_user":[{"kind":"text","text":"把这段说明改成三条清晰的要点。"}],
-    "visible_conversation":[],
-    "history_partial":false,
-    "assessment_from":null
-  },
-  "questions":{
-    "q0":{
-      "type":"score",
-      "instructions":"只判断 state.latest_user 所要求的当前任务需要的处理程度，不评价上一阶段表现。",
-      "criteria":["需求明确、边界清楚，可沿用已有模式完成。","需要深入推理、跨模块诊断或设计新的方案。"]
-    }
-  }
-}
-```
+## Earlier frozen-publication execution support
 
-```json
-{"answers":{"q0":{"type":"score","score":0.07,"probabilities":{"0":0.93,"1":0.07}}}}
-```
-
-局部绑定 `q0 → decision.levels` 得到 `{"simple":0.93,"complex":0.07}`；HiRoute 使用已发布简单阈值 0.8 选择省钱组。精简响应省略了供应商可返回的 legend、confidence、usage 等元数据。
-
-## 写稿 + 审稿请求
-
-以下 state 对应决策请求的上一写稿阶段。评分绑定写稿，不因 q0 选择审稿而变化。两类都有双档时，首轮是三个问题；有评分目标时是四个问题。
-
-```json
-{
-  "model":"decision-model-preview",
-  "state":{
-    "latest_user":[{"kind":"text","text":"请逐项核对这篇稿件的来源与因果论断，给出审稿意见。"}],
-    "visible_conversation":[
-      {"user":[{"kind":"text","text":"根据所给材料写一篇文章。"}],"status":"completed",
-       "steps":[[{"kind":"text","text":"文章已写出，但将两个没有因果证据的现象写成了因果关系。"}]]}
-    ],
-    "history_partial":false,
-    "assessment_from":0
-  },
-  "questions":{
-    "q0":{"type":"choice",
-      "instructions":"按 state.latest_user 的主要意图选择一个工作类别，不按任务难度或上次失败选择。条件重叠时选择最符合主要意图的一项；均不匹配时选择默认类别 writing。",
-      "criteria":{"writing":"撰写、续写或改写文章，包括根据反馈修稿。","review":"审阅、核实文章并提出意见，不直接重写全文。"}},
-    "q1":{"type":"score",
-      "instructions":"假设 state.latest_user 交给写稿分支，判断写稿工作所需程度。不要读取其他问题的答案。",
-      "criteria":["事实和提纲充分，仅需常规组织或局部改写。","需要综合冲突材料、构建论证或重组全文。"]},
-    "q2":{"type":"score",
-      "instructions":"假设 state.latest_user 交给审稿分支，判断审稿工作所需程度。不要读取其他问题的答案。",
-      "criteria":["范围明确的格式、措辞与已知事实核查。","需要逐项核对来源、检查因果推断或全篇论证。"]},
-    "q3":{"type":"score",
-      "instructions":"从 state.visible_conversation 的 state.assessment_from 下标起评估已执行的写稿阶段。评价材料忠实性与论证，state.latest_user 仅可作为明确反馈证据；不要评价本轮尚未发生的审稿。重复或继续消息本身不是失败。",
-      "criteria":["关键事实失真、无进展或需要大幅纠正。","有用但不完整，仍有明显事实或论证问题。","忠实于材料、归因准确、完成写稿要求。"]}
-  }
-}
-```
-
-```json
-{
-  "answers":{
-    "q0":{"type":"choice","choice":"review","probabilities":{"writing":0.02,"review":0.98}},
-    "q1":{"type":"score","score":0.15,"probabilities":{"0":0.85,"1":0.15}},
-    "q2":{"type":"score","score":0.72,"probabilities":{"0":0.28,"1":0.72}},
-    "q3":{"type":"score","score":0.7,"probabilities":{"0":0.4,"1":0.5,"2":0.1}}
-  }
-}
-```
-
-归约取 q0 的 review、q2 的概率、q3 的 `0.7/2=0.35`，忽略 q1。q1 即使缺失或非法也不影响这条选中路径。q2 失败则记录“程度判断失败”，使用审稿主力；q3 失败只丢弃评分。q0 失败则执行计划的整体决策失败政策。没有主力模型的分支不生成对应程度问题。
-
-System One 不产生自由文本解释；内置适配器不伪造 reason。partial 来自 HiRoute 的证据覆盖和本次裁剪事实，不能让一个评分数值替代完整性判断。连接测试使用合成输入验证类别和程度必要字段，不调用业务模型、不生成用户阶段评分，也不测试未来 subset 支持。
+Supported earlier native publications retain their frozen `visible_conversation`, `assessment_from`, independent legacy category template and assessment wrapper. Reads do not rewrite content or digests. Startup validation of retained Operations uses the protocol already sealed in that Operation to validate its original editor; current authoring defaults must not reinterpret it or replay completed effects. The compatibility register records the owner and removal condition. Current editor input cannot select this legacy behavior.
 
 ## 工具精选的未来调用示例
 
