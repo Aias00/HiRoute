@@ -1,10 +1,10 @@
 # Session content search
 
-Current `hiroute.observation.query/v3` includes routing detail in facts and
-plan-quality results (`hiroute.observation.facts/v3` and
-`hiroute.plan-quality.samples/v2`). The registered released v2 adapter retains
-its strict field set, authorization digest and original cursor bindings; cursors
-cannot cross versions. There is no projection opt-in flag.
+Current `hiroute.observation.query/v2` retains the optional
+`include_routing_observations` flag for facts and plan-quality reads. Omitted/false
+preserves released strict fields, authorization encoding and cursor bindings.
+Opt-in adds bounded routing evidence; it does not add a read permission, SQL table
+or query version.
 
 Statistics cover all retained matching decisions in the authorized scope,
 independently of stage pagination and model/score filters. Each current classifier

@@ -16,8 +16,8 @@ with no current runtime or product entry.
 | Connect, edit, test or delete a decision model/custom extension | [Connection UI](../../apps/desktop/src/features/decision-services/DecisionServicesPage.tsx), [native transaction](../../apps/desktop/src-tauri/src/session/decision_services.rs), [store](../../crates/local-storage/src/control/decision_services.rs) | [Desktop shell scenarios](../../apps/desktop/tests/v3/browser/product-shell-scenarios.mjs), [real CLI lifecycle](../../crates/daemon/tests/support/decision_services_product.py) |
 | Create a connection while editing a route | [DesktopApp](../../apps/desktop/src/product/DesktopApp.tsx), [selector](../../apps/desktop/src/features/decision-services/DecisionSelector.tsx) | Preserve route edits and select the exact saved revision without implicit publication |
 | Configure categories, degree and competence | [Plan editor](../../apps/desktop/src/plan-editor.tsx), [branch editor](../../apps/desktop/src/features/decision-services/BranchRoutingEditor.tsx), [judgment controls](../../apps/desktop/src/features/decision-services/JudgmentSettings.tsx), [domain](../../crates/domain/src/routing/decision.rs) | Existing model picker, collapsed advanced settings, complete overrides and publish validation |
-| Adopt or roll back historical problem applicability by scope | [Frozen protocol domain](../../crates/domain/src/routing/system_one_c.rs), [transition validation](../../crates/domain/src/routing/assessment_transition.rs), [retained sources](../../crates/local-storage/src/control/plans/assessment_sources.rs), [transition Preview](../../apps/desktop/src/features/decision-services/AssessmentTransitionPreview.tsx) | [Real CLI adoption/restart/rollback](../../crates/daemon/tests/support/c_protocol_product.py), [Desktop interaction](../../apps/desktop/tests/v3/browser/c-protocol-scenarios.mjs) |
-| Explicitly test connectivity or applicability | [V2 contract](../../crates/application-api/src/classifier_diagnostic_c.rs), [Application](../../crates/application/src/classifier_c.rs), [production diagnostic](../../crates/gateway/src/core_runtime/classification/c_capability.rs), [native session](../../apps/desktop/src-tauri/src/classifier_c_session.rs) | [CLI request boundary](../../crates/cli/src/control_plane.rs), [focused Windows case](../../crates/daemon/tests/windows_headless.rs): standard and nineteen-question shapes through the existing protected command; no implicit provider call |
+| Enable historical problem applicability and edit default/custom assessments | [Assessment intent and released-input adapter](../../crates/domain/src/routing/assessment.rs), [frozen protocol](../../crates/domain/src/routing/system_one_c.rs), [capability editor](../../apps/desktop/src/features/decision-services/NativeProtocolEditor.tsx), [judgment fields](../../apps/desktop/src/features/decision-services/JudgmentSettings.tsx) | [Real CLI default/custom toggles and restart](../../crates/daemon/tests/support/c_protocol_product.py), [Desktop interaction](../../apps/desktop/tests/v3/browser/c-protocol-scenarios.mjs) |
+| Explicitly test connectivity or applicability | [Purpose-named applicability contract](../../crates/application-api/src/classifier_diagnostic_c.rs), [Application](../../crates/application/src/classifier_c.rs), [production diagnostic](../../crates/gateway/src/core_runtime/classification/c_capability.rs), [native session](../../apps/desktop/src-tauri/src/classifier_c_session.rs) | [CLI request boundary](../../crates/cli/src/control_plane.rs), [focused Windows case](../../crates/daemon/tests/windows_headless.rs): standard and nineteen-question shapes through the existing protected command; no implicit provider call |
 | Freeze connection, definition and rubric | [Authoring snapshot](../../crates/daemon/src/control/runtime/plan_content_snapshot.rs), [Application compiler](../../crates/application/src/compiler), [Gateway compiler](../../crates/gateway/src/publication/compiler.rs) | [Decision publication contracts](../../crates/gateway/src/publication/tests/decision_contracts.rs), [real publication/restart](../../crates/daemon/tests/publication_process.rs) |
 | Judge the current task and preceding actual stage | [Call lifetime](../../crates/gateway/src/core_runtime/classification.rs), [safe transport diagnostics](../../crates/gateway/src/core_runtime/classification/diagnostic.rs), [System One adapter](../../crates/gateway/src/core_runtime/classification/system_one.rs), [custom codec](../../crates/gateway/src/core_runtime/classification/protocol.rs) | [Provider mapping](../../crates/gateway/src/core_runtime/classification/system_one_tests.rs), [protocol/replay tests](../../crates/gateway/src/core_runtime/classification/protocol_tests.rs) |
 | Select a group and execute candidates | [Group policy](../../crates/gateway/src/core_runtime/classification/group_policy.rs), [planner](../../crates/gateway/src/planner.rs), [history](../../crates/gateway/src/agent_turn_history/store.rs) | [Threshold/score isolation](../../crates/gateway/src/core_runtime/classification/group_policy_tests.rs), [group boundaries](../../crates/gateway/src/planning/branch_tests.rs), [multi-turn listener journey](../../tools/e2e-harness/tests/p0_gateway_runtime/decision_branches.rs) |
@@ -44,13 +44,13 @@ existing Secret storage. Custom HTTP belongs to a saved connection, not inline
 the custom-extension v1 shape has no old-format negotiation. Native C is a separate,
 explicit route semantic carried by the existing System One wire envelope.
 
-Native authoring and compiled routes carry optional protocol content. Omission
-preserves legacy encoding. The compiler freezes actual fixed questions, effective
-per-scope assessments, thresholds, history cap and digest. Transition choices live in Preview/Apply and server-composed provenance is sealed
-with the immutable published version, outside editable configuration. Ordinary
-same-protocol edits carry no review state. Historical
-rollback copies only an exact retained rubric and adds no hold or execution-time
-dependency. Supported released inputs retain their existing admission adapters.
+Native authoring carries a compact protocol selection and background cap; compiled
+execution carries actual fixed/effective content and digest. Omission preserves
+legacy encoding. Default assessments resolve for the active configuration during
+ordinary Preview/Apply. Custom text remains exact. Current intent is explicit;
+the released-input adapter recognizes exact legacy default instructions and all
+criteria without rewriting existing publications. Assessment inheritance and
+thresholds retain their existing owners.
 
 ## Provider and routing policy
 
@@ -75,7 +75,7 @@ interrupted/unknown turns stay in the continuous background suffix; execution
 status and target-score eligibility are separate. The shared immutable
 [native category v1 template](../../crates/domain/src/routing/fixtures/native_category_v1.json)
 feeds compilation and Desktop preview; C transport consumes the frozen decision.
-Freeze writes custom for categorical shapes before hashing. Legacy native wording
+Freeze records default/custom assessment intent for every scope before hashing. Legacy native wording
 has [its own current definition](../../crates/domain/src/routing/legacy_category.rs), independent of the C fixture. C applicability
 only gates an otherwise eligible low-score protection opportunity. Invalid or
 unavailable applicability retains that opportunity conservatively; category,
@@ -109,8 +109,8 @@ assessments do not enter averages.
 
 [All-decision C summaries](../../crates/observation/src/query_v2/routing_observations.rs)
 read the existing route events and safe-fact projection, independently of stage
-pages and score/model filters. Current observation query v3 includes routing evidence;
-the registered v2 adapter preserves released fields, authorization and cursors.
+pages and score/model filters. The existing observation query v2 opts in with `include_routing_observations`;
+omission preserves released fields, authorization and cursor bindings.
 [Product presentation](../../apps/desktop/src/features/RoutingObservations.tsx)
 shows counts, denominators, cohorts and coverage; it does not infer accuracy.
 Every current classifier decision records its protocol. Known non-C decisions stay

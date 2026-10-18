@@ -50,10 +50,10 @@ export const focusedRequirements = {
 };
 
 export const productShellRequired = [
-  'desktop.routing.c-scope-review',
-  'desktop.decisions.diagnostic-shapes',
-  'desktop.routing.same-protocol-edit',
-  'desktop.routing.c-cross-mode-rollback',
+  'desktop.routing.capability-toggle',
+  'desktop.decisions.connectivity-test',
+  'desktop.routing.custom-assessment',
+  'desktop.routing.applicability-test',
   'desktop.quality.c-observations',
   'desktop.routing.additional-budget-consumers',
   'desktop.models.subscription-scan.recommended-login',

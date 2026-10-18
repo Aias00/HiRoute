@@ -97,3 +97,116 @@ async fn edited_draft_publish_uses_submitted_content_and_consumes_the_exact_draf
             .all(|draft| draft.draft_id != "draft/native-publication")
     );
 }
+#[tokio::test]
+async fn protocol_capability_toggle_preserves_defaults_and_custom_text_in_native_publication() {
+    use hiroute_domain::*;
+    let root = prepare();
+    let mut session = open(root.path());
+    let original = plan(&mut session).await;
+    let service: DecisionServiceV1 = serde_json::from_value(serde_json::json!({
+        "id":"native-transition", "revision":1, "name":"Native transition fixture", "connection": {
+            "kind":"system_one", "provider":"compatible", "model":"fixture", "endpoint":"https://decision.example/systemone",
+            "timeout_ms":3000, "auth_header":{"name":"Authorization","value_secret_ref":"placeholder"}
+        }
+    })).unwrap();
+    session
+        .save_decision_service(
+            DecisionServiceChangeV1 {
+                id: service.id.clone(),
+                expected_revision: 0,
+                service: Some(service),
+                input_slot: None,
+            },
+            Some(zeroize::Zeroizing::new("native-fixture".into())),
+        )
+        .await
+        .unwrap();
+    let service = session
+        .decision_services()
+        .await
+        .unwrap()
+        .services
+        .remove(0);
+    let mut editor = original
+        .desired
+        .editor(Some(original.model_alias.as_str().into()))
+        .unwrap();
+    editor.mode = PlanEditorMode::SmartSaving;
+    editor.smart.economy = editor.candidates.clone();
+    editor.smart.primary = editor.candidates.clone();
+    editor.smart.classifier = ComplexityClassifierModeV1::DecisionService {
+        service: Box::new(service),
+    };
+    editor.smart.native_protocol = Some(NativeProtocolSelectionV1::default());
+    let mut current = original.clone();
+    for enabled in [true, false, true] {
+        editor.smart.native_protocol = enabled.then(NativeProtocolSelectionV1::default);
+        let confirmation = session
+            .preview_editor(editor_input("publish", &current, &editor, None))
+            .await
+            .unwrap();
+        assert!(
+            !confirmation.requires_confirmation(),
+            "ordinary publish gained an extra review dialog"
+        );
+        session
+            .finish_native_confirmation(confirmation, true)
+            .await
+            .unwrap();
+        current = plan(&mut session).await;
+        let scope = current.desired.assessment_scopes()[SMART_SAVING_SCOPE_ID];
+        assert_eq!(
+            scope.competence.standard,
+            Some(AssessmentStandardV1::Default)
+        );
+        if enabled {
+            assert_eq!(
+                scope.competence.criteria,
+                stock_c_questions()["q1"]["criteria"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|v| v.as_str().unwrap().to_owned())
+                    .collect::<Vec<_>>()
+                    .as_slice()
+            );
+        } else {
+            assert_eq!(
+                scope.competence.instructions,
+                DEFAULT_COMPETENCE_INSTRUCTIONS
+            );
+        }
+        editor = current.desired.editor(None).unwrap();
+    }
+    editor.smart.judgment.competence.standard = Some(AssessmentStandardV1::Custom);
+    editor.smart.judgment.competence.instructions =
+        "  Preserve custom text.\nSecond line.  ".into();
+    editor.smart.judgment.competence.criteria[1].push_str("  ");
+    let custom = editor.smart.judgment.competence.clone();
+    for enabled in [true, false] {
+        editor.smart.native_protocol = enabled.then(NativeProtocolSelectionV1::default);
+        let confirmation = session
+            .preview_editor(editor_input("publish", &current, &editor, None))
+            .await
+            .unwrap();
+        session
+            .finish_native_confirmation(confirmation, true)
+            .await
+            .unwrap();
+        current = plan(&mut session).await;
+        assert_eq!(
+            current.desired.assessment_scopes()[SMART_SAVING_SCOPE_ID].competence,
+            custom
+        );
+        editor = current.desired.editor(None).unwrap();
+    }
+    let before = current.head.reference.clone();
+    drop(session);
+    let mut restarted = open(root.path());
+    let reopened = plan(&mut restarted).await;
+    assert_eq!(reopened.head.reference, before);
+    assert_eq!(
+        reopened.desired.assessment_scopes()[SMART_SAVING_SCOPE_ID].competence,
+        custom
+    );
+}

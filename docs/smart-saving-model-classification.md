@@ -35,25 +35,16 @@ Category conditions, degree criteria and assessment criteria are separate inputs
 Existing plan/session views show actual group/model/profile, frozen thresholds and selection reasons
 separately from latest competence. Draft edits cannot reinterpret published evidence.
 
-For a built-in decision connection, choose **Historical problem applicability** on
-that route. This temporary authoring selector changes the draft only; existing
-routes and global creation defaults retain their behavior. On publication, Preview
-lists every transitioning assessment scope with the complete server-composed
-question and three criteria. Choose the destination default, review and retain
-custom text, or restore a retained historical standard when rolling back. Check
-the final Preview and confirm publication. Independent overrides have stable scope
-IDs; inherited branches share the effective default. The server copies only the
-selected assessment text/criteria, preserving thresholds and unrelated settings.
-Simple probability defaults to 0.8 and competence floor to 0.5.
-
-Review provenance belongs to that immutable published revision and is available
-through Plan reads. Editor state carries no review record or removal action.
-Ordinary edits within the same protocol need no protocol re-review. New scopes and
-protocol rollback still require explicit choices; mode/draft changes cannot approve
-them. Missing/reclaimed history disables only historical restoration. Incompatible
-context references and dangling stock applicability text produce scope diagnostics.
-Published execution remains frozen when current defaults change or the temporary
-selector is eventually retired.
+For a built-in decision connection, enable **Historical problem applicability** on
+the route. It is off by default and changes the draft until ordinary publication.
+Enabling changes how history is supplied and the default assessment. Default
+assessments follow the switch silently. Editing assessment text makes it custom;
+custom instructions and every criterion remain unchanged in either direction.
+**Reset to default** restores the active default and preserves thresholds.
+Published versions and historical evidence stay frozen. The editor offers no
+assessment adoption, review or historical-restoration steps. Unsupported context
+references remain field-specific validation errors. Simple probability remains
+0.8 and the competence floor remains 0.5 unless explicitly configured otherwise.
 
 The applicability protocol supplies separate `prior_context`, `assessment_stage`
 and `latest_user`. Background defaults to eight whole turns before the actual
@@ -69,13 +60,14 @@ at least 0.5 retains protection and a lower value suppresses it. Unavailable ans
 retain protection conservatively. Attribution, version, category, score/rubric
 validity, same-turn inheritance and availability relay retain their existing rules.
 
-Each context offers one explicit diagnostic action with a selected shape. A saved
-revision can test connectivity or historical problem applicability, including the
-nineteen-question maximum. Route tests use the exact frozen route content.
-**Not tested in this session** remains visible without evidence; changing
-connection/content/shape discards it. Results state the verified shapes. Each test
-sends one synthetic request and may consume provider quota. Saving and publishing
-remain available without testing and never probe implicitly.
+The connection page keeps its original connectivity test. The route editor has a
+separate **Test route applicability** action for its actual configuration. It
+reports capability outcomes without exposing protocol identities, digests or
+question numbers. **Not tested in this session** remains visible without evidence;
+changing connection, content or shape discards it even if later reverted. An
+explicit test sends one synthetic request and may consume quota. Saving and
+publishing never probe and remain available without capability evidence. CLI and
+acceptance diagnostics can separately exercise the maximum supported shape.
 
 Plan/session quality includes counts from all retained matching decisions,
 independent of stage pages and score/model filters. Current events mark all four
@@ -83,8 +75,7 @@ classifier protocols; known non-applicability decisions are counted separately a
 do not make mixed scopes partial. Unmarked old events, missing projections and
 bounded scans remain coverage gaps: counts stay visible, while exact rates are
 unavailable. Content-only deletion keeps safe evidence; full fact deletion/expiry
-removes it. Categorical requests seal a custom standard before hashing; only the
-exact stock ordinal question/criteria shape is labelled default. Rates describe
+removes it. Every scope records its authored default/custom assessment intent before sealing. Rates describe
 routing behavior and do not claim accuracy or quality improvement.
 
 The CLI keeps `decision services list/apply/test` and the existing routing preview/apply workflow.

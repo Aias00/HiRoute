@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use thiserror::Error;
 
 use super::{BranchExecutionPolicyV1, JudgmentSettingsV1, MaterializedBranchV1};
-use crate::{CanonicalDigest, DecisionDefinitionV1, PlanExecutionRef};
+use crate::{CanonicalDigest, DecisionDefinitionV1};
 
 pub const SYSTEM_ONE_C_V1: &str = "hiroute.system-one-c/v1";
 pub const SYSTEM_ONE_LEGACY: &str = "hiroute.system-one-legacy/v1";

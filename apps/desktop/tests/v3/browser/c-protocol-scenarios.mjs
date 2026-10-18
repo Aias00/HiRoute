@@ -1,177 +1,101 @@
 import { branchRouting } from '../../../src/features/decision-services/types.ts';
-import { composedAssessment, nativeProtocol, stockAssessment } from '../../../src/features/decision-services/native-protocol.ts';
+import { defaultJudgment } from '../../../src/features/decision-services/types.ts';
+import { nativeProtocol, stockAssessment, contentDigest } from '../../../src/features/decision-services/native-protocol.ts';
 import { scenario } from './scenario-selection.mjs';
 
 export function cProtocolScenarios({ fresh, routing, click, until, all, text, calls, setInput, control }) {
   const assert = (value, message) => { if (!value) throw new Error(message); };
-  const choose = (select, value) => { select.value = value; select.dispatchEvent(new Event('change', { bubbles: true })); };
-  const service = { id: 'decision/c-ui-fixture', revision: 7, name: 'Saved applicability fixture', connection: {
-    kind: 'system_one', provider: 'compatible', model: 'synthetic-c-model', endpoint: 'https://decision.example/systemone', timeout_ms: 3000,
-    auth_header: { name: 'Authorization', value_secret_ref: 'decision/c-ui-fixture/r7' },
-  } };
-  const source = { plan: { workspace_id: 'default', plan_id: 'plan/fixture', content_revision: 1, content_digest: 'sha256:' + 'a'.repeat(64) }, scope: 'default' };
-  async function open(language, { c = false, branches = false, parkedBranches = false, same = false } = {}) {
+  const service = { id:'decision/ui-fixture',revision:7,name:'Saved decision fixture',connection:{kind:'system_one',provider:'compatible',model:'synthetic-model',endpoint:'https://decision.example/systemone',timeout_ms:3000,auth_header:{name:'Authorization',value_secret_ref:'decision/ui-fixture/r7'}} };
+  async function open(language, { enabled=false, branches=false, custom=false }={}) {
     await fresh(() => {
-      control().handlers.decision_services = () => ({ services: [service] });
-      control().handlers.desktop_snapshot = payload => {
-        const snapshot = structuredClone(control().fixtureResponse('desktop_snapshot', payload));
-        const plan = snapshot.catalog.plans[0], strategy = plan.desired.strategy;
-        strategy.classifier = { kind: 'decision_service', service };
-        if (c) { strategy.native_protocol = nativeProtocol(); strategy.judgment = stockAssessment(strategy.judgment, strategy.native_protocol); }
-        plan.desired.delegation_enabled = false;
-        const custom = branchRouting(service);
-        custom.branches.forEach((b,i) => { b.name = 'Category ' + i; b.condition = 'Work of category ' + i; b.candidates = structuredClone(strategy.economy); b.primary_candidates = structuredClone(strategy.primary); b.judgment = structuredClone(strategy.judgment); });
-        custom.judgment = structuredClone(strategy.judgment);
-        if (c) custom.native_protocol = nativeProtocol();
-        if (branches) { plan.desired.mode = 'custom_branches'; plan.desired.strategy = { mode: 'branches', routing: custom }; }
-        if (same) plan.assessment_transition = { smart_saving: { protocol: c ? 'hiroute.system-one-c/v1' : 'hiroute.system-one-legacy/v1', method: 'stock', assessment_digest: 'sha256:' + 'b'.repeat(64) } };
-        if (parkedBranches) {
-          delete custom.native_protocol;
-          custom.branches.forEach(b => { b.judgment = null; });
-          const smart = structuredClone(strategy); delete smart.mode;
-          snapshot.catalog.drafts = [{ schema:'hiroute.plan-draft/v1', workspace_id:'default', draft_id:'draft/transition-ui', revision:1, plan_id:plan.agent_plan_id, base_head_revision:plan.head.head_revision, editor: {
-            schema:'hiroute.plan-editor/v2',display_name:plan.desired.display_name,purpose:plan.desired.purpose,mode:'smart_saving',candidates:[],smart,
-            branch_routing:custom,free:{candidates:[],primary:[],primary_fallback:false},delegation_enabled:false,requirements:plan.desired.requirements,limits:plan.desired.limits,
-          } }];
+      control().handlers.decision_services=()=>({services:[service]});
+      control().handlers.desktop_snapshot=payload=>{
+        const snapshot=structuredClone(control().fixtureResponse('desktop_snapshot',payload));
+        const plan=snapshot.catalog.plans[0],strategy=plan.desired.strategy;
+        strategy.classifier={kind:'decision_service',service};
+        if(enabled){strategy.native_protocol=nativeProtocol();strategy.judgment=stockAssessment(strategy.judgment,strategy.native_protocol);}
+        if(custom){strategy.judgment.competence.standard='custom';strategy.judgment.competence.instructions='  Keep this exact text.\nSecond line.  ';strategy.judgment.competence.criteria[1]+='  ';}
+        plan.desired.delegation_enabled=false;
+        if(branches){
+          const route=branchRouting(service);route.judgment=structuredClone(strategy.judgment);
+          if(enabled)route.native_protocol=nativeProtocol();
+          route.branches.forEach((b,i)=>{b.name='Category '+i;b.condition='Work '+i;b.candidates=structuredClone(strategy.economy);b.primary_candidates=structuredClone(strategy.primary);b.judgment=i===0?structuredClone(strategy.judgment):null;});
+          plan.desired.mode='custom_branches';plan.desired.strategy={mode:'branches',routing:route};
         }
         return snapshot;
       };
-      // Synthetic IPC models a server response, not persistence or product acceptance.
-      control().handlers.plan_editor_transition_preview = ({ input }) => {
-        if (same) return {};
-        const editor = input.editor, branchMode = editor.mode === 'custom_branches';
-        const settings = branchMode ? editor.branch_routing : editor.smart;
-        const scopes = branchMode ? [...(settings.branches.some(b => !b.judgment) ? [{id:'default',judgment:settings.judgment}] : []), ...settings.branches.filter(b => b.judgment).map(b => ({id:b.id,judgment:b.judgment}))] : [{id:'smart_saving',judgment:settings.judgment}];
-        return { assessment_transition: { scopes: scopes.map(({id,judgment}) => {
-          const choice = input.assessment_choices?.[id];
-          const effective = choice?.method === 'stock' && settings.native_protocol ? stockAssessment(judgment, settings.native_protocol) : judgment;
-          const assessment = composedAssessment(settings.native_protocol, effective);
-          assessment.instructions += ' Server Preview content for this publication.';
-          return {scope:id,from_protocol:c?'hiroute.system-one-c/v1':'hiroute.system-one-legacy/v1',protocol:settings.native_protocol?'hiroute.system-one-c/v1':'hiroute.system-one-legacy/v1',assessment,assessment_digest:'sha256:'+'d'.repeat(64),available_methods:['stock','reviewed_custom',...(settings.native_protocol?[]:['historical'])],historical_sources:settings.native_protocol?[]:[{source:{...source,scope:id},instructions:'Retained assessment',criteria:['Failed','Partial','Complete']}],choice:choice??null};
-        }) } };
-      };
     });
-    localStorage.setItem('hiroute.language', language); control().remount();
-    if (language === 'zh') await routing();
-    else { await click('Smart routing'); await until(() => all('.master-list .list-row').length, 'saved routes'); all('.master-list .list-row')[0].click(); }
-    await until(() => document.querySelector('.native-protocol-editor select'), 'native behavior selector');
-    await until(() => calls('plan_editor_options').some(c => c.payload.input.editor?.smart.classifier.kind === 'decision_service'), 'loaded model options');
+    localStorage.setItem('hiroute.language',language);control().remount();
+    if(language==='zh')await routing();else {await click('Smart routing');await until(()=>all('.master-list .list-row').length,'routes');all('.master-list .list-row')[0].click();}
+    await until(()=>document.querySelector('.native-protocol-editor input[type="checkbox"]'),'capability toggle');
+    await until(()=>calls('plan_editor_options').length,'editor options');
   }
-  function geometry() {
-    for (const element of all('.native-protocol-editor .field-label, .native-prompt, .native-content-digest, .native-protocol-editor button')) {
-      assert(element.scrollWidth <= element.clientWidth + 1, 'Assessment text or action overflows');
-      if (element.classList.contains('field-label')) assert(element.getBoundingClientRect().width >= 160, 'Label collapsed under control pressure');
+  const toggle=()=>document.querySelector('.native-protocol-editor input[type="checkbox"]');
+  function assertCopy(){
+    const visible=text();
+    assert(!/hiroute\.system-one|sha256:|Stock wording|Stock C|C decisions|Question 3|第三问|恢复版本|Confirm assessments|审阅/.test(visible),'Implementation or review wording remains visible');
+    assert(!document.querySelector('[data-assessment-transition]'),'Extra transition review remains');
+  }
+  function geometry(){for(const e of all('.native-protocol-editor .field-label,.native-prompt,.native-protocol-editor button'))assert(e.scrollWidth<=e.clientWidth+1,'Capability content overflows');}
+  async function publish(t){
+    const before=calls('preview_plan_editor').length;
+    await click(t('发布更改','Publish changes'));
+    await until(()=>calls('preview_plan_editor').length>before,'ordinary publication dispatch');
+    const input=calls('preview_plan_editor').at(-1).payload.input;
+    assert(!('assessment_choices' in input)&&!JSON.stringify(input.editor).includes('assessment_review'),'Review metadata entered publication');
+    assert(!calls('plan_editor_transition_preview').length,'Extra Preview operation remains');
+    return input;
+  }
+  return [scenario('desktop.routing.capability-toggle',['routing-editor','decision-services','c-protocol'],'Defaults silently follow the capability through ordinary publication',async()=>{
+    for(const language of ['zh','en']){
+      const t=(zh,en)=>language==='zh'?zh:en;await open(language);assert(!toggle().checked,'Released route enabled itself');
+      toggle().click();await until(()=>toggle().checked,'enabled');
+      assertCopy();geometry();
+      const on=await publish(t);assert(Object.keys(on.editor.smart.native_protocol).length===2,'Editor requires fixed bundle');
+      assert(on.editor.smart.judgment.competence.standard==='default','Default intent lost');
+      assert(on.editor.smart.judgment.competence.floor_millis===500&&on.editor.smart.judgment.degree.simple_threshold_millis===800,'Threshold changed');
+      await until(()=>!all('.plan-editor fieldset')[0]?.disabled,'publication completed');
+      toggle().click();await until(()=>!toggle().checked,'disabled');
+      assert(document.querySelector('[data-decision-field="smart-competence-instructions"]').value===defaultJudgment.competence.instructions,'Default failed to follow toggle off');
+      assertCopy();geometry();assert(!calls('test_classifier_decision').length,'Toggle/publication dispatched a model request');
     }
-  }
-  return [scenario('desktop.routing.c-scope-review', ['routing-editor', 'decision-services', 'c-protocol'], 'Publication Preview confirms server-composed scope choices outside the editor', async () => {
-    for (const language of ['zh','en']) {
-      const t = (zh,en) => language === 'zh' ? zh : en;
-      await open(language);
-      const select = () => document.querySelector('.native-protocol-editor select');
-      assert(select().value === 'legacy', 'Existing route automatically changed behavior');
-      choose(select(), 'applicability');
-      await until(() => text().includes(t('本次打开尚未测试历史问题适用性','Not tested in this session')), 'session evidence');
-      assert(!all('[data-assessment-transition]').length, 'Editable selector stores a review');
-      control().handlers.test_classifier_decision = async ({input}) => {
-        const target = input.request.target;
-        assert(target.kind === 'saved' && target.service_revision === 7 && target.shape === 'standard', 'Test lost saved revision/shape');
-        const bytes = await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(service.connection.endpoint)));
-        return {schema:'hiroute.classifier-decision-test-result/v2',state:'verified',verified_shapes:['degree','historical_assessment','applicability'],service_id:service.id,service_revision:7,model:service.connection.model,endpoint_digest:'sha256:'+ [...new Uint8Array(bytes)].map(b=>b.toString(16).padStart(2,'0')).join(''),protocol_digest:target.protocol.digest,shape:'standard',question_count:3,tested_at_unix_ms:Date.now(),duration_millis:1,reason:'complete'};
+  }),scenario('desktop.routing.custom-assessment',['routing-editor','decision-services','c-protocol'],'Custom text survives both toggle directions and reset restores active defaults',async()=>{
+    for(const language of ['zh','en'])for(const branches of [false,true]){
+      const t=(zh,en)=>language==='zh'?zh:en;await open(language,{custom:true,branches});
+      const selector=`[data-decision-field="${branches?'branch-0':'smart'}-competence-instructions"]`;
+      const original=document.querySelector(selector).value;
+      toggle().click();await until(()=>toggle().checked,'enabled');assert(document.querySelector(selector).value===original,'Custom changed on enable');
+      toggle().click();await until(()=>!toggle().checked,'disabled');assert(document.querySelector(selector).value===original,'Custom changed on disable');
+      toggle().click();await until(()=>toggle().checked,'enabled again');
+      const field=document.querySelector(selector),parents=[];for(let p=field.parentElement;p;p=p.parentElement)if(p.tagName==='DETAILS')parents.unshift(p);for(const p of parents)if(!p.open)p.querySelector('summary').click();
+      const disclosure=field.closest('details');const reset=[...disclosure.querySelectorAll('button')].find(b=>b.textContent===t('恢复默认','Reset to default'));assert(reset,'Reset missing');reset.click();
+      await until(()=>document.querySelector(selector).value!==original,'reset active default');assertCopy();geometry();
+      const input=await publish(t);const j=branches?input.editor.branch_routing.branches[0].judgment:input.editor.smart.judgment;
+      assert(j.competence.standard==='default','Reset did not record intent');assert(!calls('test_classifier_decision').length,'Edit implicitly probed');
+    }
+  }),scenario('desktop.routing.applicability-test',['routing-editor','decision-services','c-protocol'],'The route test binds actual content and discards evidence after changes',async()=>{
+    for(const language of ['zh','en']){
+      const t=(zh,en)=>language==='zh'?zh:en;await open(language,{enabled:true});
+      control().handlers.test_classifier_decision=async({input})=>{
+        const request=input.request;assert(request.schema==='hiroute.historical-applicability-test/v1'&&request.service_revision===7,'Wrong purpose or revision');
+        return {schema:'hiroute.historical-applicability-test-result/v1',state:'verified',service_id:service.id,service_revision:7,model:service.connection.model,endpoint_digest:await contentDigest(service.connection.endpoint),protocol_digest:request.protocol.digest,shape:request.shape,question_count:3,tested_at_unix_ms:Date.now(),duration_millis:1,reason:'complete'};
       };
       await click(t('测试此路由的适用性（1 次请求）','Test route applicability (1 request)'));
-      await until(() => text().includes(t('适用性请求形状已验证','Applicability request shape verified')), 'verified exact test');
-      setInput(document.querySelector('.native-protocol-editor input[type="number"]'),'0');
-      await until(() => text().includes(t('背景为 0','With zero background')), 'zero background warning');
-      assert(text().includes(t('本次打开尚未测试历史问题适用性','Not tested in this session')), 'Changed content reused evidence');
+      await until(()=>text().includes(t('历史问题适用性测试通过','Historical problem applicability test passed')),'exact capability evidence');
+      setInput(document.querySelector('.native-protocol-editor input[type="number"]'),'0');await until(()=>text().includes(t('背景为 0','With zero background')),'zero background');
+      assert(text().includes(t('本次打开尚未测试历史问题适用性','Not tested in this session')),'Changed content reused evidence');
       setInput(document.querySelector('.native-protocol-editor input[type="number"]'),'8');
-      await until(() => !text().includes(t('适用性请求形状已验证','Applicability request shape verified')), 'returning to old content does not resurrect evidence');
-      setInput(document.querySelector('.native-protocol-editor input[type="number"]'),'0');
-      await click(t('保存草稿','Save draft'));
-      await until(() => calls('preview_plan_editor').length && !all('.plan-editor fieldset')[0].disabled, 'draft submitted');
-      const saved = calls('preview_plan_editor').at(-1).payload.input.editor.smart;
-      assert(saved.native_protocol.prior_context_max_turns === 0 && !('assessment_review' in saved), 'Draft persisted a review record');
-      assert(saved.judgment.degree.simple_threshold_millis === 800 && saved.judgment.competence.floor_millis === 500, 'Selection changed thresholds');
-      await click(t('发布更改','Publish changes'));
-      await until(() => all('[data-assessment-transition]').length, 'server transition Preview');
-      assert(!calls('preview_plan_editor').some(c=>c.payload.input.action==='publish'), 'Unconfirmed transition published');
-      await click(t('采用目标方式的默认评分','Use destination default'));
-      await until(() => text().includes(t('已选择，将随本次发布记录','Chosen for this publication')), 'choice refreshed Preview');
-      assert(text().includes('Server Preview content for this publication.') && text().includes('sha256:'+'d'.repeat(64)), 'UI replaced server-composed content or digest');
-      const choices = calls('plan_editor_transition_preview').at(-1).payload.input.assessment_choices;
-      assert(JSON.stringify(choices) === JSON.stringify({smart_saving:{method:'stock'}}), 'Client supplied review hashing/provenance');
-      geometry();
-      await click(t('确认评分标准并发布','Confirm assessments and publish'));
-      await until(() => calls('preview_plan_editor').some(c=>c.payload.input.action==='publish'), 'confirmed publication dispatch');
-      const input = calls('preview_plan_editor').at(-1).payload.input;
-      assert(!('assessment_review' in input.editor.smart) && input.assessment_choices.smart_saving.method === 'stock', 'Publication lost transient choice');
-      assert(calls('test_classifier_decision').length === 1, 'Save/Preview/publication probed a provider');
-      document.querySelector('[data-assessment-transition]').scrollIntoView({block:'start'});
+      await until(()=>!text().includes(t('历史问题适用性测试通过','Historical problem applicability test passed')),'Old evidence resurrected');assertCopy();geometry();
     }
-  }), scenario('desktop.routing.same-protocol-edit', ['routing-editor','decision-services','c-protocol'], 'Ordinary competence edits within either protocol carry no review state', async () => {
-    for (const language of ['zh','en']) for(const c of [false,true]) for(const branches of [false,true]) {
-      const t=(zh,en)=>language==='zh'?zh:en;
-      await open(language,{c,branches,same:true});
-      const field = document.querySelector(`[data-decision-field="${branches?'branch-0':'smart'}-competence-instructions"]`);
-      assert(field,'Competence field missing');
-      const parents=[]; for(let p=field.parentElement;p;p=p.parentElement) if(p.tagName==='DETAILS')parents.unshift(p);
-      for(const p of parents) if(!p.open)p.querySelector('summary').click();
-      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(field,field.value+' Assess the requested deliverable.'); field.dispatchEvent(new Event('input',{bubbles:true}));
-      await click(t('发布更改','Publish changes'));
-      await until(() => calls('preview_plan_editor').some(c=>c.payload.input.action==='publish'), 'same-protocol publication');
-      const input = calls('preview_plan_editor').at(-1).payload.input;
-      assert(!all('[data-assessment-transition]').length && Object.keys(input.assessment_choices).length === 0, 'Ordinary edit required protocol re-review');
-      assert(!JSON.stringify(input.editor).includes('assessment_review'), 'Published provenance entered editor state');
-      assert(!all('button').some(b=>/Remove this review record|移除此审阅记录/.test(b.textContent)), 'Obsolete review-removal action remains');
-      assert(calls('test_classifier_decision').length===0,'Ordinary publication dispatched a model test');
+  }),scenario('desktop.decisions.connectivity-test',['decision-services','c-protocol'],'The connection page retains its original single V1 connectivity test',async()=>{
+    for(const language of ['zh','en']){
+      await fresh(()=>{control().handlers.decision_services=()=>({services:[service]});control().handlers.test_classifier_decision=({input})=>{assert(input.classifier?.service.revision===7&&!input.request,'Connection switched contract');return {schema:'hiroute.classifier-decision-test-result/v1',outcome:'passed',duration_millis:1};};});
+      localStorage.setItem('hiroute.language',language);control().remount();const t=(zh,en)=>language==='zh'?zh:en;
+      await click(t('决策模型','Decision models'));await until(()=>all('.master-list .list-row').length,'connection list');await click(service.name);await click(t('测试连接','Test connection'));
+      await until(()=>text().includes(t('连接测试通过','Connection test passed')),'connection test');
+      assert(!all('select').some(e=>e.getAttribute('aria-label')?.includes('shape')),'Shape selector remains');assert(calls('test_classifier_decision').length===1,'Connection sent more than one request');assertCopy();
     }
-  }), scenario('desktop.routing.c-cross-mode-rollback', ['routing-editor','decision-services','c-protocol'], 'C smart to legacy branches requires a destination choice at publication', async () => {
-    for(const language of ['zh','en']) {
-      const t=(zh,en)=>language==='zh'?zh:en;
-      await open(language,{c:true,parkedBranches:true});
-      all('.mode-card').find(b=>b.querySelector('strong')?.textContent===t('自定义分支','Custom branches')).click();
-      await until(()=>document.querySelector('.native-protocol-editor select')?.value==='legacy','legacy destination');
-      await click(t('发布更改','Publish changes'));
-      await until(()=>document.querySelector('[data-native-scope="default"]'),'cross-mode scope');
-      assert(!calls('preview_plan_editor').length,'Cross-mode rollback skipped destination confirmation');
-      assert(all('[data-native-scope]').length===1,'Inherited scopes were duplicated');
-      await click(t('恢复版本 1 的评分','Restore revision 1 assessment'));
-      await until(()=>text().includes(t('已选择，将随本次发布记录','Chosen for this publication')),'pinned historical choice');
-      geometry();
-      await click(t('确认评分标准并发布','Confirm assessments and publish'));
-      await until(()=>calls('preview_plan_editor').length,'reviewed rollback dispatch');
-      const input=calls('preview_plan_editor').at(-1).payload.input;
-      assert(input.assessment_choices.default.method==='historical'&&input.assessment_choices.default.source.scope==='default','Historical choice is not pinned');
-      assert(!input.editor.branch_routing.native_protocol&&!('assessment_review' in input.editor.branch_routing),'Rollback persisted editable review');
-      assert(calls('test_classifier_decision').length===0,'Rollback implicitly called a provider');
-      document.querySelector('[data-assessment-transition]').scrollIntoView({block:'start'});
-    }
-  }), scenario('desktop.decisions.diagnostic-shapes', ['decision-services','c-protocol'], 'One diagnostic action selects a shape and discards evidence after changing it', async () => {
-    for(const language of ['zh','en']) {
-      const t=(zh,en)=>language==='zh'?zh:en;
-      await fresh(() => {
-        control().handlers.decision_services=()=>({services:[service]});
-        control().handlers.test_classifier_decision=async({input})=>{
-          const target=input.request.target;
-          assert(target.kind==='saved'&&target.service_revision===7,'Diagnostic lost exact saved revision');
-          const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(service.connection.endpoint)));
-          return {schema:'hiroute.classifier-decision-test-result/v2',state:'verified',verified_shapes:['degree','historical_assessment','applicability'],service_id:service.id,service_revision:7,model:service.connection.model,endpoint_digest:'sha256:'+ [...new Uint8Array(bytes)].map(b=>b.toString(16).padStart(2,'0')).join(''),protocol_digest:target.protocol.digest,shape:target.shape,question_count:3,tested_at_unix_ms:Date.now(),duration_millis:1,reason:'complete'};
-        };
-      });
-      localStorage.setItem('hiroute.language',language);control().remount();
-      await click(t('模型','Models'));await click(t('决策模型','Decision models'));
-      await until(()=>document.querySelector('.decision-test-actions select'),'diagnostic shape selector');
-      const select=()=>document.querySelector('.decision-test-actions select');
-      assert(all('button').filter(b=>[t('测试连接','Test connection'),t('测试所选形状','Test selected shape')].includes(b.textContent.trim())).length===1,'Parallel diagnostic actions remain');
-      choose(select(),'standard');await click(t('测试所选形状','Test selected shape'));
-      await until(()=>text().includes(t('适用性请求形状已验证','Applicability request shape verified')),'shape evidence');
-      choose(select(),'max_branches');
-      await until(()=>!text().includes(t('适用性请求形状已验证','Applicability request shape verified')),'shape change discards evidence');
-      choose(select(),'standard');
-      await until(()=>text().includes(t('本次打开尚未测试历史问题适用性','Not tested in this session')),'old shape cannot resurrect evidence');
-      assert(calls('test_classifier_decision').length===1,'Changing shape implicitly tested');
-      geometry();
-    }
-  }), scenario('desktop.quality.c-observations', ['routing-editor', 'sessions', 'c-protocol'], 'Retained C counts, denominators, partial coverage and empty states remain readable', async () => {
+  }),scenario('desktop.quality.c-observations', ['routing-editor', 'sessions', 'c-protocol'], 'Retained C counts, denominators, partial coverage and empty states remain readable', async () => {
     for (const language of ['zh', 'en']) {
       const t = (zh, en) => language === 'zh' ? zh : en;
       let partial = false, empty = false;
