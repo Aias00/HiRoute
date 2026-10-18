@@ -58,6 +58,11 @@ temporary complete-source sets and large metadata pages for repeated history;
 missing indexes or incomplete publication still report authorized gaps.
 Scale regressions include distinct source digests and common short keywords;
 repeating many occurrences of a single blob does not cover these query costs.
+The maintenance indexer limits metadata-only scanning separately from body input.
+After a stable complete pass it sleeps until the existing source revision or its
+writer connection changes; analysis-scope writes do not restart that scan. A
+change behind an in-progress cursor requires another pass before declaring idle.
+Unchanged analysis checkpoints perform no writes during ordinary idle maintenance.
 
 The released `search` intent retains occurrence pagination and its V2 response
 shape. It is a distinct supported interface, not the Desktop session-list query.
