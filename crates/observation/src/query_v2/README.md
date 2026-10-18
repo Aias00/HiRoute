@@ -67,6 +67,10 @@ Fresh analysis scopes and price captures share the existing capture writer's
 admission within the caller's original deadline, so sustained native capture does
 not repeatedly beat them to SQLite's shorter busy slice. Existing scope reads
 retain their concurrent read transactions; content reads release the writer first.
+Idle physical blob collection also merges covering identities on a separate read
+connection. Only selected unreferenced candidates take the writer, and current
+references and paths are rechecked before deleting a file. The batch bound stays
+in the candidate merge, including a large orphan backlog.
 
 The released `search` intent retains occurrence pagination and its V2 response
 shape. It is a distinct supported interface, not the Desktop session-list query.

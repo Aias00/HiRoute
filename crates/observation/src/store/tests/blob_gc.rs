@@ -102,7 +102,17 @@ fn blob_gc_live_lookup_stays_linear_and_existing_databases_gain_index() {
              DROP INDEX content_instances_v2_search_blob;",
         )
         .unwrap();
-    let without_index = idle_query_steps(&store);
+    // Negative control for the original correlated lookup. The current merge
+    // algorithm also avoids its quadratic work when an index is unavailable.
+    let without_index = {
+        let db = store.connection.lock();
+        let mut statement = db.prepare(
+            "SELECT b.workspace_id,b.blob_digest FROM content_blobs_v2 b WHERE NOT EXISTS(
+             SELECT 1 FROM content_instances_v2 c WHERE c.workspace_id=b.workspace_id AND c.content_blob_digest=b.blob_digest AND c.state='complete') ORDER BY b.rowid LIMIT ?1",
+        ).unwrap();
+        assert!(!statement.exists([32]).unwrap());
+        statement.get_status(StatementStatus::VmStep)
+    };
     assert!(
         without_index > indexed * 20,
         "regression fixture must expose the expensive old lookup"
