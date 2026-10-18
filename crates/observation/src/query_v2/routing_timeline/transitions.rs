@@ -15,6 +15,16 @@ pub(super) fn classify(
         append(session, previous, identity, requests, &mut rows);
     }
     append(session, turn, identity, requests, &mut rows);
+    rows.sort_by(|a, b| {
+        (
+            a.request.request.started_at_ms,
+            &a.request.request.request_id,
+        )
+            .cmp(&(
+                b.request.request.started_at_ms,
+                &b.request.request.request_id,
+            ))
+    });
     let ids: std::collections::BTreeSet<_> = turn
         .requests
         .iter()

@@ -70,6 +70,7 @@ try {
  results.push({id:'timeline.scope-error-stops-until-explicit-retry',status:'passed'});
  await open('lang=en&view=timeline&busy-read=1'); await waitFor(client,`document.querySelectorAll('.routing-turn').length===2`);
  assert.equal(await evaluate(client,`document.querySelector('.routing-timeline [role=alert]')`),null);
+ assert.ok(await evaluate(client,`(()=>{const calls=trialTrace.filter(x=>x.command==='observation_read'&&x.payload.request.intent.view==='routing_timeline');return calls[1].at-calls[0].at<1000;})()`));
  results.push({id:'timeline.busy-retries-quietly',status:'passed'});
  await open('lang=en&view=editor&cost=1'); await waitFor(client,`!!document.querySelector('[data-trust-control="smart"]')`); await click('[role=tab]','Model performance');
  await waitFor(client,`document.body.textContent.includes('Additional cost')`); await evaluate(client,`document.querySelector('[aria-label="Regular cost comparison"]').scrollIntoView({block:'center'});true`); await shot('trust-cost-positive-en-755');

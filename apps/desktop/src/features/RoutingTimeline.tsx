@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { formatMoney } from '../ui';
 import { safeDiagnosticCode } from '../error-code';
+import { observationBusyRetryMs } from './observation-failure';
 import { observationRead } from './observation-client';
 import { formatTokenCount } from './usage-presentation';
 
@@ -50,10 +51,8 @@ export function RoutingTimeline({ session, language, active, refreshVersion, req
       } catch (e) {
         if (controller.signal.aborted) return;
         const code = safeDiagnosticCode(e, 'OBSERVATION_UNAVAILABLE');
-        const failure = e as { observation_read?: { reason?: string; retry_after_ms?: number } };
-        if (failure?.observation_read?.reason === 'reader_busy' || code === 'OBSERVATION_QUERY_BUSY') {
-          schedule(Math.min(1000, Math.max(100, failure?.observation_read?.retry_after_ms ?? 100))); return;
-        }
+        const busyDelay = observationBusyRetryMs(e);
+        if (busyDelay !== null) { schedule(busyDelay); return; }
         stopped = code.toLowerCase().includes('scope_too_large');
         const stale = code.toLowerCase().includes('stale') && watermark.current !== null;
         if (stale) { watermark.current = null; stored.current.clear(); setTurns([]); setLoaded(false); }

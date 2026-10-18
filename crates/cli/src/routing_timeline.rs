@@ -223,7 +223,7 @@ mod tests {
         assert!(retry_delay(Some(&transient), &mut count).is_none());
         for code in [
             ErrorCode::ScopeTooLarge,
-            ErrorCode::InvalidArguments,
+            ErrorCode::CapabilityDenied,
             ErrorCode::InvalidArguments,
         ] {
             assert!(

@@ -363,7 +363,7 @@ Reads share authorized observation limits and a 500 ms storage deadline, returni
 an explicit retryable scope error beyond 10,000 requests, 50,000 facts or a 1 MiB
 response rather than sampled evidence. Visible Desktop timelines refresh every two
 seconds; hidden views stop polling. The CLI's `--follow` emits NDJSON changes using
-the same query and preserves terminal errors.
+the same query and preserves terminal errors. Timeline cache locks SHALL cover only cache take/return, never database reads, projection or serialization. Storage timeouts SHALL be reported as the same explicit scope error; after that result, Desktop SHALL stop automatic retries until an explicit Retry. A busy reader SHALL honor the supplied bounded retry hint without warning or clearing loaded content; CLI follow SHALL remain interruptible through busy reads and retry at most three consecutive transient unavailable failures. Live and retained readers SHALL share recorded endpoint/start-time membership and the retained transition taxonomy, leaving unrelated timestamp ties unassigned.
 
 #### Scenario: Assessment arrives during pagination
 
