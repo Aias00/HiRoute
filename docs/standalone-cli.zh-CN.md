@@ -868,7 +868,7 @@ hiroute decision services test --request-stdin --output json < decision-test-req
 不读取真实会话、不运行业务模型、不产生胜任样本；通过不保证任务质量或持续健康。
 保存连接与测试是独立动作，两者都不会发布路由。
 
-历史问题适用性是内置 System One 路由新发布时的默认行为。编辑输入与读回没有协议开关、背景设置，也不接受 `native_protocol` 或 `historical_applicability` 字段。背景固定最多 8 轮；普通 Preview/Apply 会冻结实际提示词、标准、阈值及内容摘要。已有冻结路由继续原样执行，到下次发布才切换。本地规则和自定义扩展保持原行为。
+历史问题适用性是内置 System One 路由新发布时的默认行为。背景固定最多 8 轮；普通 Preview/Apply 会冻结实际提示词、标准、阈值及内容摘要。已有冻结路由继续原样执行，到下次发布才切换。本地规则和自定义扩展保持原行为。
 
 评分区分默认和自定义。`judgment.competence.standard:"default"` 在下次编辑、发布时解析为当前默认；`"custom"` 逐字保留 instructions 和全部 criteria。旧输入缺少意图时，仅文字及三条标准精确匹配旧内置默认才归为默认，阈值变化不影响判断。“恢复默认”恢复当前默认并保留阈值。引用不可用上下文字段的自定义文字会在 Preview 指出具体范围和字段；旧发布继续有效。
 

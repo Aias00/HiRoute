@@ -1065,9 +1065,8 @@ A pass is not a task-quality or continuing-health guarantee. Saving a connection
 it are separate actions; neither publishes a route.
 
 Historical problem applicability is the built-in default for newly published native
-System One routes. Editor input and readback have no protocol/capability switch,
-background setting or `native_protocol`/`historical_applicability` field. Background
-is fixed at eight turns. Use ordinary Preview/Apply; the compiler freezes complete
+System One routes. Background is fixed at eight turns. Use ordinary Preview/Apply;
+the compiler freezes complete
 actual prompts, criteria, thresholds and content digest into the publication.
 Existing frozen routes continue unchanged until their next publication. Local
 rules and custom extensions retain their existing behavior.

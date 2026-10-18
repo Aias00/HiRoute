@@ -1,7 +1,5 @@
 #[path = "agent_check_session.rs"]
 mod checks;
-#[path = "classifier_c_session.rs"]
-mod classifier_c;
 pub use checks::*;
 #[path = "agent_session.rs"]
 mod agents;

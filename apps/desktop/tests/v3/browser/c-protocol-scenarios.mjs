@@ -142,6 +142,7 @@ export function cProtocolScenarios({ fresh, routing, click, until, all, text, ca
       }
       partial = true; all('.quality-refresh')[0].click();
       await until(() => text().includes(t('覆盖不完整，比例不可用', 'Partial coverage; rates unavailable')), 'partial coverage');
+      assert(text().includes(t('来源无法确认的决策 2', 'Decisions of unconfirmed origin 2')), 'Unconfirmed decision origins are not explained');
       assert(!all('.routing-counts')[0].textContent.includes('%') && all('.routing-counts')[0].textContent.includes('4 / 7'), 'Partial coverage hides counts or claims a rate');
       empty = true; partial = false; all('.quality-refresh')[0].click();
       await until(() => text().includes(t('此范围内暂无历史问题适用性决策记录', 'No historical problem applicability decisions are available')), 'empty retained scope');
