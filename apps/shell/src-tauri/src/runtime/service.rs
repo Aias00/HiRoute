@@ -193,14 +193,18 @@ mod tests {
 
     #[test]
     fn missing_console_listener_is_not_reported_as_service_start_failure() {
-        let reply = MachineEnvelopeV2::failed(ErrorV1::new(ErrorCode::ActionRequired), None);
+        let failure = |code| -> MachineEnvelopeV2<ConsoleLaunchV1> {
+            serde_json::from_value(
+                serde_json::to_value(MachineEnvelopeV2::failed(ErrorV1::new(code), None)).unwrap(),
+            )
+            .unwrap()
+        };
         assert_eq!(
-            launch_reply(reply).unwrap_err(),
+            launch_reply(failure(ErrorCode::ActionRequired)).unwrap_err(),
             "CONSOLE_LISTENER_UNAVAILABLE"
         );
-        let reply = MachineEnvelopeV2::failed(ErrorV1::new(ErrorCode::DaemonUnavailable), None);
         assert_eq!(
-            launch_reply(reply).unwrap_err(),
+            launch_reply(failure(ErrorCode::DaemonUnavailable)).unwrap_err(),
             "CONSOLE_LAUNCH_UNAVAILABLE"
         );
     }

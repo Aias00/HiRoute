@@ -82,12 +82,6 @@ impl Updater {
         view.recovery = None;
         Ok(())
     }
-    fn failure(&self, code: &'static str) {
-        self.change(|v| {
-            v.phase = "failed";
-            v.error = Some(code);
-        });
-    }
     fn cancelled(&self) -> Result<(), &'static str> {
         if self.cancel.load(Ordering::Acquire) {
             Err("UPGRADE_CANCELLED")
