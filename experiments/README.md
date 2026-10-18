@@ -99,10 +99,10 @@ cache-cost figures are rebuilt with the other figures by
 ## Research manuscripts
 
 [System One routing for long-running agents](system-one-routing-paper/README.md)
-contains a community-review manuscript and the exact study questions. It reports
-policy-conditioned routing and historical-protection experiments. Its complete
-research dataset and offline reproduction package are not yet public; the
-reproduction commands above do not cover that manuscript.
+contains a community-review manuscript, bilingual datasets, exact study questions,
+curated model responses and an offline evaluator for policy-conditioned routing
+and historical protection. Follow its [reproduction guide](system-one-routing-paper/REPRODUCE.md);
+the earlier case-study commands above do not cover that manuscript.
 
 ## Add an experiment
 

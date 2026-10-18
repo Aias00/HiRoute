@@ -58,23 +58,41 @@ separate from the tested product default of 0.8.
 
 ## Research material availability
 
-This directory publishes the manuscript and exact question definitions. It does
-**not** yet contain the complete datasets, provider adapters, response archive or
-portable offline reproduction package. The experiments' existing local arithmetic
-checks are reported in the manuscript; they are not an external reproduction of
-this public directory. The reproduction commands elsewhere in `experiments/`
-apply to their named case studies, not this manuscript.
+This directory includes the [bilingual datasets](datasets/), [curated response
+ledgers](responses/), [exact execution requests and plans](execution/), [anonymous
+review evidence](reviews/), and a portable [offline replay and evaluator](REPRODUCE.md).
+The [data card](DATA-CARD.md) documents construction, dependence, disclosures,
+intended use and label boundaries. [MANIFEST.json](MANIFEST.json) records public
+file hashes; original source hashes are separately recorded under `provenance/`.
 
-The complete research package is intended to include:
+| Panel | Records | Use |
+| --- | ---:| --- |
+| Engineering primary | 104 | 26 workflows; original cohort and coverage supplement remain distinguishable |
+| Engineering paraphrases | 24 | Separate expression panel, not extra independent workflows |
+| Mathematics | 64 | 16 workflows with custom current-demand criteria |
+| Development V3 | 384 | Historical development and audit evidence, not blind validation |
+| Native direct probes | 8 | Interface diagnostics, not a general accuracy test |
 
-- Original bilingual inputs and labels, including boundary and insufficient cases;
-  the engineering primary, supplement and paraphrase panels remain distinguishable.
-- Model responses and validity accounting needed to reproduce the reported results,
-  including failed outputs and a separate record of aborted runs.
-- Exact provider adapters, execution parameters, offline aggregation, uncertainty
-  estimation, component diagnostics and a separate MR010_b sensitivity overlay.
-- Anonymous construction and audit provenance, AI-assisted human-review summaries,
-  a data card, environment information and version checksums.
+The nine execution archives retain matched, independent, expression-control,
+development and abandoned campaigns separately. Invalid output, unknown outcomes
+and not-started calls remain visible. Complete semantic response fields and LLM
+completion text are retained; service metadata and remote response IDs are removed.
+Original labels remain the scoring source. The [MR010_b overlay](sensitivities/mr010.json)
+is separately identified as a post-hoc sensitivity and does not replace them.
+
+From the repository root, with Python 3.9+ and no external packages or model calls:
+
+```sh
+python3 experiments/system-one-routing-paper/reproduce.py verify
+python3 experiments/system-one-routing-paper/reproduce.py report --check --output /tmp/hiroute-paper-replay
+python3 -m unittest discover -s experiments/system-one-routing-paper/tests -v
+```
+
+Choose a fresh output directory. The replay parses the saved responses and
+recomputes actions, component scores, intervals, cohorts, error propagation, usage
+charges and sensitivity. [REPRODUCE.md](REPRODUCE.md) also explains how to inspect a
+complete case and evaluate another router in the generic or typed track. Commands
+elsewhere in `experiments/` apply to their own case studies, not this paper.
 
 The public draft identifies AI construction and review systems by role, without
 disclosing their model identities, and describes the hosted decision access service
