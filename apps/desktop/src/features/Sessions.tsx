@@ -276,7 +276,7 @@ export function Sessions({ initialSession = null, initialRequest = null, languag
   const routed = routing === 'turns' || routing === 'blocked' || routing === 'unavailable';
   const pane = routed ? sessionView ?? 'timeline' : 'conversation';
   // Loading the first conversation request does not mean the person picked a timeline turn.
-  const routingRequestId = focusedRequest ?? anchor?.request_id ?? (requestPicked || sessionView === 'conversation' ? request : null);
+  const routingRequestId = requestPicked ? request : focusedRequest ?? anchor?.request_id ?? (sessionView === 'conversation' ? request : null);
   const selectTimelineRequest = (item: TimelineRequest) => {
     setRequestPicked(true); setRequest(item.request_id); setReadingRequests([item.request_id]); setAnchor(null);
     setRequests(current => current.some(r => r.request_id === item.request_id) ? current : [...current, { request_id: item.request_id, started_at_ms: item.started_at_ms, outcome: item.outcome, native_turn_id: null, within_request_fallback: null, final_native_model: item.native_model, between_turn_model_change: null, previous_native_turn_id: null, previous_turn_model: null, turn_final_native_model: null }].sort((a, b) => a.started_at_ms - b.started_at_ms));

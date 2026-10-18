@@ -164,8 +164,9 @@ try {
   await evaluate(client,`${executor}.scrollIntoView({block:'center'});true`);await shot(`trust-scoring-states-executor-${lang}-${width}`);
   results.push({id:`trust.scoring-states.both-groupings.${lang}.${width}`,status:'passed'});
  }
- for (const [lang,theme,width,height] of [['en','light',755,600],['zh','dark',755,600],['en','dark',1200,813],['zh','light',1200,813]]) {
-  await open(`lang=${lang}&theme=${theme}&view=timeline`,width,height);
+ for (const [lang,theme,width,height,target] of [['en','light',755,600],['zh','dark',755,600],['en','dark',1200,813],['zh','light',1200,813],['en','dark',1200,813,'request-1']]) {
+  await open(`lang=${lang}&theme=${theme}&view=timeline${target ? '&initial-request='+target : ''}`,width,height);
+  if (target) { await waitFor(client,`!!document.querySelector('.session-view-tabs')`); await click('.session-view-tabs button','Routing timeline'); }
   await waitFor(client,`document.querySelectorAll('.routing-turn').length===2`);
   await waitFor(client,`document.querySelector('.routing-turn').textContent.includes('0.40')`);
   assert.equal(await evaluate(client,`document.querySelectorAll('.routing-turn').length`),2);
@@ -177,7 +178,7 @@ try {
   assert.ok(await evaluate(client,`document.querySelector('.routing-request.selected')?.textContent.includes('trial-model')`));
   for (const g of await evaluate(client,`[...document.querySelectorAll('.routing-timeline,.routing-conversation,.routing-turn-detail,.session-routing-and-conversation')].map(e=>({width:e.clientWidth,scroll:e.scrollWidth,left:e.getBoundingClientRect().left,right:e.getBoundingClientRect().right}))`)) {assert.ok(g.scroll<=g.width+1,JSON.stringify(g));assert.ok(g.left>=-1&&g.right<=width+1,JSON.stringify(g));}
   await shot(`timeline-${lang}-${theme}-${width}`);
-  results.push({id:`timeline.late-score-and-request-selection.${lang}.${theme}.${width}`,status:'passed'});
+  results.push({id:`timeline.late-score-and-request-selection.${lang}.${theme}.${width}${target ? '-from-request' : ''}`,status:'passed'});
  }
  await open('lang=en&view=timeline&stale-timeline=1');
  await waitFor(client,`document.querySelectorAll('.routing-turn').length===2`);
