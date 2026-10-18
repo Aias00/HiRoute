@@ -21,6 +21,7 @@ struct Ports {
     context: AtomicU64,
     reads: AtomicUsize,
     stages: AtomicUsize,
+    worker_state: AtomicUsize,
     fail_first: Mutex<bool>,
 }
 impl ControlStatePort for Ports {
@@ -60,9 +61,26 @@ impl ControlStatePort for Ports {
     fn trust_runs(
         &self,
         _: &WorkspaceId,
-        _: &[String],
+        ids: &[String],
     ) -> Result<BTreeMap<String, TrustRunV1>, ControlReadError> {
-        Ok(BTreeMap::new())
+        Ok(ids
+            .iter()
+            .map(|id| {
+                (
+                    id.clone(),
+                    TrustRunV1 {
+                        run_id: id.clone(),
+                        task_id: "task/trial".into(),
+                        ordinal: 1,
+                        state: if self.worker_state.load(Ordering::Relaxed) == 1 {
+                            hiroute_domain::delegation::RunStateV1::Running
+                        } else {
+                            hiroute_domain::delegation::RunStateV1::Succeeded
+                        },
+                    },
+                )
+            })
+            .collect())
     }
 }
 impl ApplicationClockPort for Ports {
@@ -100,10 +118,11 @@ impl ObservationQueryPort for Ports {
         if q.plan_id == "plan/oversized" && *self.fail_first.lock().unwrap() {
             return Err(ObservationQueryError::ScopeTooLarge);
         }
-        Ok(trial_population(
-            self.stages.load(Ordering::Relaxed).max(40),
-            0.9,
-        ))
+        let mut population = trial_population(self.stages.load(Ordering::Relaxed).max(40), 0.9);
+        if self.worker_state.load(Ordering::Relaxed) > 0 {
+            population.active_stages[0].sample.run_id = Some("run/trial".into());
+        }
+        Ok(population)
     }
     fn list_sessions(
         &self,
@@ -200,6 +219,34 @@ fn trust_suggestion_oversized_plan_keeps_healthy_plan_available() {
     assert_eq!(
         result["unavailable"],
         json!([{"plan_id":"plan/oversized","reason":"scope_too_large"}])
+    );
+}
+
+#[test]
+fn trust_suggestion_cache_rechecks_worker_completion_without_new_observation() {
+    let ports = Arc::new(Ports::default());
+    ports.worker_state.store(1, Ordering::Relaxed);
+    let control =
+        ObservationControl::new(ports.clone(), ports.clone(), ports.clone(), ports.clone());
+    let reader = ObservationReaderContext::local_user(
+        WorkspaceId::default(),
+        "user".into(),
+        1,
+        20_000,
+        false,
+        false,
+    )
+    .unwrap();
+    control.trust_suggestions(&reader, 5000).unwrap();
+    assert_eq!(ports.reads.load(Ordering::Relaxed), 2);
+    control.trust_suggestions(&reader, 5001).unwrap();
+    assert_eq!(ports.reads.load(Ordering::Relaxed), 2);
+    ports.worker_state.store(2, Ordering::Relaxed);
+    control.trust_suggestions(&reader, 5002).unwrap();
+    assert_eq!(
+        ports.reads.load(Ordering::Relaxed),
+        4,
+        "a completed Worker changes evidence eligibility before another observation write"
     );
 }
 

@@ -4,8 +4,8 @@ use std::{
     sync::Arc,
 };
 
-// Bound both the session count and retained bodies. Eviction affects cost only;
-// every cursor remains authenticated and can reconstruct its bounded snapshot.
+// Bound both the session count and retained bodies. An evicted frozen page must
+// restart with Stale; a completed cursor can rebuild from current retained facts.
 #[derive(Default)]
 pub(crate) struct TimelineCache {
     pub(super) entries: BTreeMap<String, Snapshot>,
