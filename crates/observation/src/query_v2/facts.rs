@@ -102,6 +102,7 @@ impl crate::LocalObservationStore {
             // Routing identity is an internal durable projection consumed by the request
             // timeline. Keep the public safe-facts surface unchanged.
             fact.routing_context = None;
+            fact.pre_applicability_schema_digest = None;
             if !query.include_routing_observations {
                 fact.routing_observation = None;
                 fact.decision_protocol = None;

@@ -14,7 +14,7 @@ export type RouteBranch = {
   id: string; name: string; condition: string; candidates: Selection[]; primary_candidates: Selection[]; judgment?: Judgment | null;
 };
 export type BranchRouting = {
-  native_protocol?: NativeProtocol;
+  historical_applicability?: NativeProtocol;
   classifier: Classifier; branches: RouteBranch[]; default_branch_id: string; judgment: Judgment;
   /** @deprecated Accepted only for saved plans and drafts. */
   reselect_on_user_message?: boolean;

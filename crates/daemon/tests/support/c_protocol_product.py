@@ -22,7 +22,7 @@ def native_protocol(repository):
     stock = json.loads((repository / 'crates/domain/src/routing/fixtures/system_one_c_v1.json').read_text())
     assert digest(stock) == 'sha256:4dbab2f53954eb2176b6aa8d31b97808c4fee15ebb2fae337012eba348aef3c7'
     wrapper, suffix = stock['q1']['instructions'].split(' Distinguish those meanings', 1)
-    return {'schema': C, 'prior_context_max_turns': 8}, {
+    return {'prior_context_max_turns': 8}, {
             'instructions': 'Distinguish those meanings' + suffix, 'criteria': stock['q1']['criteria']}
 
 
@@ -81,7 +81,7 @@ def exercise(product, cli, service, endpoint, selection):
     editor.update(mode='smart_saving', smart=smart)
     _, legacy = publish(editor, 'applicability-off-default')
     legacy_identity = copy.deepcopy(legacy['head']['reference'])
-    smart['native_protocol'] = protocol
+    smart['historical_applicability'] = protocol
     preview, saved = publish(editor, 'applicability-on-default')
     frozen = frozen_from(preview)
     assert 'fixed' not in protocol and 'digest' not in protocol
@@ -91,13 +91,13 @@ def exercise(product, cli, service, endpoint, selection):
     assert judgment(saved)['competence']['floor_millis'] == 317
     assert judgment(saved)['competence']['instructions'] == stock['instructions']
     smart['judgment'] = copy.deepcopy(judgment(saved))
-    smart.pop('native_protocol')
+    smart.pop('historical_applicability')
     _, saved = publish(editor, 'applicability-off-default-again')
     assert judgment(saved)['competence']['instructions'] == original['competence']['instructions']
     assert judgment(saved)['competence']['criteria'] == original['competence']['criteria']
     assert judgment(saved)['competence']['floor_millis'] == 317
     smart['judgment'] = copy.deepcopy(judgment(saved))
-    smart['native_protocol'] = protocol
+    smart['historical_applicability'] = protocol
     _, saved = publish(editor, 'applicability-on-default-again')
     smart['judgment'] = copy.deepcopy(judgment(saved))
     smart['judgment']['competence']['standard'] = 'custom'
@@ -106,9 +106,9 @@ def exercise(product, cli, service, endpoint, selection):
     custom = copy.deepcopy(smart['judgment'])
     for enabled in [True, False, True]:
         if enabled:
-            smart['native_protocol'] = protocol
+            smart['historical_applicability'] = protocol
         else:
-            smart.pop('native_protocol', None)
+            smart.pop('historical_applicability', None)
         preview, saved = publish(editor, 'applicability-custom-' + str(enabled) + '-' + str(len(endpoint.requests)) + '-' + str(time.monotonic_ns()))
         assert judgment(saved) == custom, 'toggle rewrote custom text or thresholds'
     frozen = frozen_from(preview)
@@ -151,7 +151,7 @@ def exercise(product, cli, service, endpoint, selection):
     default = copy.deepcopy(original)
     default['competence']['standard'] = 'default'
     routing = {'classifier': smart['classifier'], 'branches': branches, 'default_branch_id': branches[0]['id'],
-               'judgment': default, 'native_protocol': protocol, 'reselect_on_user_message': False}
+               'judgment': default, 'historical_applicability': protocol, 'reselect_on_user_message': False}
     maximum_change = plan_change(product, 'update', mode='custom_branches', branch_routing=routing)
     maximum = frozen_from(product.preview('routing preview', {'change': maximum_change}))
     assert all(scope['standard'] == 'default' for scope in maximum['scopes'].values())
@@ -161,7 +161,7 @@ def exercise(product, cli, service, endpoint, selection):
     assert result['state'] == 'verified' and result['question_count'] == 19, result
     assert len(endpoint.requests[-1][1]['questions']) == 19
 
-    smart.pop('native_protocol')
+    smart.pop('historical_applicability')
     _, saved = publish(editor, 'applicability-off-custom-final')
     assert judgment(saved) == custom
     if product.cpa_args:

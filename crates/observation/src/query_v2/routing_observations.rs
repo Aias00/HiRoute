@@ -110,6 +110,15 @@ pub(super) fn summarize(
                 result.known_non_c_decisions += 1;
                 continue;
             }
+            None if fact.routing_observation.is_none()
+                && fact
+                    .pre_applicability_schema_digest
+                    .as_deref()
+                    .is_some_and(is_pre_applicability_execution_digest) =>
+            {
+                result.known_non_c_decisions += 1;
+                continue;
+            }
             None => {
                 result.legacy_or_unknown_decisions += 1;
                 continue;

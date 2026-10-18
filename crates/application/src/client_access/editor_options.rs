@@ -327,7 +327,7 @@ mod tests {
             mode: PlanEditorMode::FixedModel,
             candidates,
             smart: SmartEditorV2 {
-                native_protocol: None,
+                historical_applicability: None,
 
                 economy: Vec::new(),
                 primary: Vec::new(),

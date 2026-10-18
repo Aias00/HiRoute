@@ -15,6 +15,18 @@ use super::{
     LogicalRequestId, ObservationStreamV1, SessionId, TrafficKind, TurnId, UsageFactsV1,
 };
 
+/// Authenticated storage formats whose released producers predate applicability.
+/// This recognizes format evidence, never the absence of a decision marker.
+pub fn is_pre_applicability_execution_digest(value: &str) -> bool {
+    matches!(
+        value,
+        "sha256:5aad4c450a2a296ec557b7a934bfbf70ad69a8e8fe9bc7539db46830a2940069"
+            | "sha256:de91d4f2333db66f0ec3f8b63ce192267dee0a56b65f34180b06996b232fb2c6"
+            | "sha256:80b4ff13af8abc79d7721fea42141300beade2acf1d2659983ceaafcdc6e4799"
+            | "sha256:4f0dbcc9f7862133e73e451f64d7a6d6e5de146d958ac8bf3a4d1acc885b6b1d"
+    )
+}
+
 /// Sole live Product execution-fact contract. Existing v1 rows are authenticated and read only
 /// through `validate_persisted_contract`; they are never accepted by live ingestion.
 pub const EXECUTION_FACT_SCHEMA_V2: &str = "hiroute.observation.product-execution-envelope/v2";

@@ -16,8 +16,8 @@ fn threshold() -> Value {
 
 pub(super) fn authoring() -> Value {
     object(
-        &["schema", "prior_context_max_turns"],
-        json!({"schema":{"const":hiroute_domain::SYSTEM_ONE_C_V1},"prior_context_max_turns":{"type":"integer","minimum":0,"maximum":8,"default":8}}),
+        &["prior_context_max_turns"],
+        json!({"prior_context_max_turns":{"type":"integer","minimum":0,"maximum":8,"default":8}}),
     )
 }
 fn resolved_protocol() -> Value {

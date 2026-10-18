@@ -44,7 +44,7 @@ existing Secret storage. Custom HTTP belongs to a saved connection, not inline
 the custom-extension v1 shape has no old-format negotiation. Native C is a separate,
 explicit route semantic carried by the existing System One wire envelope.
 
-Native authoring carries a compact protocol selection and background cap; compiled
+Editor input/readback carries the historical_applicability option and background cap; effective authoring records the internally selected protocol. Compiled
 execution carries actual fixed/effective content and digest. Omission preserves
 legacy encoding. Default assessments resolve for the active configuration during
 ordinary Preview/Apply. Custom text remains exact. Current intent is explicit;
@@ -114,8 +114,7 @@ omission preserves released fields, authorization and cursor bindings.
 [Product presentation](../../apps/desktop/src/features/RoutingObservations.tsx)
 shows counts, denominators, cohorts and coverage; it does not infer accuracy.
 Every current classifier decision records its protocol. Known non-C decisions stay
-separate, so mixed current scopes retain rates; unmarked historical records and
-projection gaps remain partial. Plan identity alone never proves a protocol. Content-only deletion retains safe evidence; full fact retention/deletion removes it.
+separate, so mixed current scopes retain rates; authenticated supported pre-applicability records also count as known non-C. The existing bounded projection refresh retains format/routing/time evidence from verified carriers; unproven records and projection gaps remain partial. Plan identity alone never proves a protocol. Content-only deletion retains safe evidence; full fact retention/deletion removes it.
 
 The [model row projection](../../apps/desktop/src/features/plan-quality-state.ts)
 associates configured candidates with retained execution by declared position and

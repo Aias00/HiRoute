@@ -218,8 +218,7 @@ and authorized query entrances, with no new table, SQL migration, view or permis
 Every current routed classifier decision records its selected protocol (native
 legacy, applicability C v1, custom extension v1 or local rules), independently of
 inherited/fallback source; project that marker into safe facts. Known non-C counts
-are separate and never enter C denominators. Absent historical protocol evidence
-remains unknown; do not infer it from Plan identity or rewrite authenticated facts.
+are separate and never enter C denominators. An authenticated supported pre-applicability envelope proves a known non-C decision without identifying its classifier family. Retain only its bounded format evidence in the existing safe projection, with routing/time identity, after verifying the original digest through the supported reader. Missing markers alone remain unknown; never infer protocol from Plan identity or rewrite authenticated facts. Missing, invalid, unsupported or already-deleted source evidence cannot be invented.
 
 C detail records full-content/bundle identity, authored default/custom assessment standard, provider/model,
 target/completeness/eligibility, applicability dispatch/state/reason/probability,
@@ -233,9 +232,7 @@ Summaries MUST cover all matching authorized retained route decisions independen
 of page, model/score/grade filters, scoped by Plan/session, time, configured
 thresholds, protocol/content/standard and provider/model. Exclude inherited records
 as new dispatches and deduplicate originating event identity. Report retained and
-covered scopes, missing projections, old unknown markers and scan limits. Mixed
-current C/non-C scopes can report complete coverage and C rates; old unknown or
-incomplete evidence withholds exact-population rates while preserving known counts.
+covered scopes, missing projections, old unknown markers and scan limits. Mixed current C/non-C scopes, including proven supported pre-applicability records, can report complete coverage and C rates; unproven old/current records or incomplete evidence withholds exact-population rates while preserving known counts.
 Deleted data is outside retained scope and its missing population cannot be invented.
 
 Q3 unavailable/requested uses actual dispatch as denominator. No-target/partial
@@ -263,6 +260,16 @@ idempotency and deletion boundaries remain effective.
 
 - **WHEN** a facts or plan-quality request omits the new opt-in flag
 - **THEN** The response MUST preserve its prior field set, including nested stage selection.
+
+#### Scenario: Proven pre-applicability format
+
+- **WHEN** supported pre-applicability decisions with authenticated format evidence share a scope with current applicability decisions
+- **THEN** Known non-C counts MUST include only the proven older decisions, outside applicability denominators; complete scopes retain rates before and after content-only deletion and reopen.
+
+#### Scenario: Missing evidence stays partial
+
+- **WHEN** a current marker is lost or a source/projection is missing, invalid, unsupported or already deleted without retained proof
+- **THEN** Coverage MUST remain partial and exact-population rates unavailable; Plan identity and marker omission cannot replace evidence.
 
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/139#issuecomment-6235111513

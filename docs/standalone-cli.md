@@ -908,18 +908,17 @@ A pass is not a task-quality or continuing-health guarantee. Saving a connection
 it are separate actions; neither publishes a route.
 
 Historical problem applicability is a route capability, off by default. In `smart`
-or `branch_routing`, select `native_protocol:{schema:"hiroute.system-one-c/v1",prior_context_max_turns:8}`.
-Editor input contains no fixed bundle or digest. Use the normal Preview/Apply flow;
+or `branch_routing`, select `historical_applicability:{prior_context_max_turns:8}`.
+Presence enables the capability; HiRoute selects the protocol internally. Editor input and editor readback contain no protocol identity, fixed bundle or digest. Use the normal Preview/Apply flow;
 the compiler freezes complete effective contents into the publication. Omission
 keeps the current behavior and global defaults do not change.
 
 Assessments are default or custom. `judgment.competence.standard:"default"`
 resolves the active default; `"custom"` preserves the supplied instructions and all
-criteria exactly. Released input without this field recognizes exact legacy
+criteria exactly. Released input without this field recognizes exact built-in
 default text, including all criteria, as default. Threshold changes alone do not
 customize text. UI edits record custom intent; Reset to default restores active
-defaults. Both toggle directions use one ordinary Preview/Apply, with no per-scope
-adoption, review digest or historical restore. Incompatible custom state paths name
+defaults. Both toggle directions use one ordinary Preview/Apply. Incompatible custom state paths name
 the field and fail validation. Existing PlanVersions remain frozen.
 
 Connectivity keeps `hiroute.classifier-decision-test/v1` and its original result.

@@ -41,8 +41,7 @@ Enabling changes how history is supplied and the default assessment. Default
 assessments follow the switch silently. Editing assessment text makes it custom;
 custom instructions and every criterion remain unchanged in either direction.
 **Reset to default** restores the active default and preserves thresholds.
-Published versions and historical evidence stay frozen. The editor offers no
-assessment adoption, review or historical-restoration steps. Unsupported context
+Published versions and historical evidence stay frozen. Unsupported context
 references remain field-specific validation errors. Simple probability remains
 0.8 and the competence floor remains 0.5 unless explicitly configured otherwise.
 
@@ -51,7 +50,7 @@ and `latest_user`. Background defaults to eight whole turns before the actual
 assessed stage, preserving bounded interrupted/unknown turns and their status.
 The complete stage can be longer. Zero background warns that earlier requirements
 and references are absent. Wire-budget trimming marks the target partial and
-omits the third question without refilling history; partial scores cannot trigger
+omits the applicability judgment without refilling history; partial scores cannot trigger
 historical protection. Current input is never silently truncated; tool-result bodies
 are excluded.
 

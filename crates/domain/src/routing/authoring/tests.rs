@@ -258,7 +258,7 @@ fn default_assessment_follows_both_directions_without_changing_thresholds_or_old
     let old = serde_json::to_vec(&value).unwrap();
     value.smart.judgment.degree.simple_threshold_millis = 913;
     value.smart.judgment.competence.floor_millis = 612;
-    value.smart.native_protocol = Some(NativeProtocolSelectionV1::default());
+    value.smart.historical_applicability = Some(HistoricalApplicabilityV1::default());
     let enabled = value.effective().unwrap();
     let j = enabled.assessment_scopes()[SMART_SAVING_SCOPE_ID];
     assert_eq!(j.competence.standard, Some(AssessmentStandardV1::Default));
@@ -271,7 +271,7 @@ fn default_assessment_follows_both_directions_without_changing_thresholds_or_old
         (913, 612)
     );
     let mut reopened = enabled.editor(None).unwrap();
-    reopened.smart.native_protocol = None;
+    reopened.smart.historical_applicability = None;
     let disabled = reopened.effective().unwrap();
     let j = disabled.assessment_scopes()[SMART_SAVING_SCOPE_ID];
     assert_eq!(j.competence.instructions, DEFAULT_COMPETENCE_INSTRUCTIONS);
@@ -290,6 +290,25 @@ fn default_assessment_follows_both_directions_without_changing_thresholds_or_old
     let mut unknown = selection;
     unknown["fixed"] = serde_json::json!({});
     assert!(serde_json::from_value::<NativeProtocolSelectionV1>(unknown).is_err());
+    let editor = serde_json::to_value(enabled.editor(None).unwrap()).unwrap();
+    assert_eq!(
+        editor["smart"]["historical_applicability"],
+        serde_json::json!({"prior_context_max_turns":8})
+    );
+    assert!(editor["smart"].get("native_protocol").is_none());
+    for forbidden in ["schema", "fixed", "digest"] {
+        let mut input = editor.clone();
+        input["smart"]["historical_applicability"][forbidden] =
+            serde_json::json!("caller-supplied");
+        assert!(
+            serde_json::from_value::<PlanEditorStateV2>(input).is_err(),
+            "{forbidden}"
+        );
+    }
+    let mut input = editor;
+    input["smart"]["native_protocol"] =
+        serde_json::json!({"schema":SYSTEM_ONE_C_V1,"prior_context_max_turns":8});
+    assert!(serde_json::from_value::<PlanEditorStateV2>(input).is_err());
 }
 
 #[test]
@@ -305,7 +324,7 @@ fn custom_text_and_criteria_remain_byte_exact_even_when_equal_to_a_default() {
         }
         let original = value.smart.judgment.competence.clone();
         for on in [true, false, true] {
-            value.smart.native_protocol = on.then(NativeProtocolSelectionV1::default);
+            value.smart.historical_applicability = on.then(HistoricalApplicabilityV1::default);
             let authored = value.effective().unwrap();
             assert_eq!(
                 authored.assessment_scopes()[SMART_SAVING_SCOPE_ID].competence,
@@ -316,7 +335,7 @@ fn custom_text_and_criteria_remain_byte_exact_even_when_equal_to_a_default() {
     }
     let mut value = native_editor();
     value.smart.judgment.competence.criteria[2].push(' ');
-    value.smart.native_protocol = Some(NativeProtocolSelectionV1::default());
+    value.smart.historical_applicability = Some(HistoricalApplicabilityV1::default());
     assert_eq!(
         value.effective().unwrap().assessment_scopes()[SMART_SAVING_SCOPE_ID]
             .competence
@@ -337,8 +356,8 @@ fn inherited_defaults_and_independent_custom_overrides_resolve_separately() {
     value.mode = PlanEditorMode::CustomBranches;
     let mut custom = JudgmentSettingsV1::default();
     custom.competence.criteria[0].push_str(" Custom.");
-    value.branch_routing = Some(BranchRoutingV1 {
-        native_protocol: Some(NativeProtocolSelectionV1::default()),
+    value.branch_routing = Some(BranchRoutingEditorV1 {
+        historical_applicability: Some(HistoricalApplicabilityV1::default()),
         classifier: value.smart.classifier.clone(),
         default_branch_id: "code".into(),
         judgment: JudgmentSettingsV1::default(),
@@ -356,6 +375,24 @@ fn inherited_defaults_and_independent_custom_overrides_resolve_separately() {
             .collect(),
     });
     let authored = value.effective().unwrap();
+    let internal = serde_json::to_value(&authored).unwrap();
+    assert_eq!(
+        internal["strategy"]["routing"]["native_protocol"]["schema"],
+        SYSTEM_ONE_C_V1
+    );
+    let editor = serde_json::to_value(authored.editor(None).unwrap()).unwrap();
+    assert_eq!(
+        editor["branch_routing"]["historical_applicability"],
+        serde_json::json!({"prior_context_max_turns":8})
+    );
+    assert!(editor["branch_routing"].get("native_protocol").is_none());
+    assert_eq!(
+        serde_json::from_value::<PlanEditorStateV2>(editor)
+            .unwrap()
+            .effective()
+            .unwrap(),
+        authored
+    );
     let scopes = authored.assessment_scopes();
     assert_eq!(
         scopes["default"].competence.standard,

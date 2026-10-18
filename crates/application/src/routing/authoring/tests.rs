@@ -55,8 +55,8 @@ fn publication_requires_the_exact_saved_decision_revision_for_both_modes() {
         change.editor.smart.economy = change.editor.candidates.clone();
         change.editor.smart.primary = change.editor.candidates.clone();
         change.editor.smart.classifier = classifier.clone();
-        change.editor.branch_routing = Some(BranchRoutingV1 {
-            native_protocol: None,
+        change.editor.branch_routing = Some(BranchRoutingEditorV1 {
+            historical_applicability: None,
 
             classifier,
             branches: ["writing", "review"]
@@ -417,7 +417,7 @@ fn ordinary_preview_resolves_defaults_and_seals_concrete_contents_without_review
         legacy.change_digest,
         plan_content_confirmation_digest(&change, &state.expected_revisions).unwrap()
     );
-    change.editor.smart.native_protocol = Some(NativeProtocolSelectionV1::default());
+    change.editor.smart.historical_applicability = Some(HistoricalApplicabilityV1::default());
     let enabled = preview_plan_content(&change, &state).unwrap();
     enabled.plan_version.validate().unwrap();
     let encoded = serde_json::to_value(&enabled).unwrap();
@@ -451,7 +451,7 @@ fn ordinary_preview_resolves_defaults_and_seals_concrete_contents_without_review
     );
     assert_eq!(frozen.protocol.fixed, NativeFixedContentV1::c_v1());
     let mut reopened = enabled.plan_version.configuration.editor(None).unwrap();
-    reopened.smart.native_protocol = None;
+    reopened.smart.historical_applicability = None;
     change.editor = reopened;
     let off = preview_plan_content(&change, &state).unwrap();
     off.plan_version.validate().unwrap();

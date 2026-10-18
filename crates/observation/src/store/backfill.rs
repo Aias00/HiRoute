@@ -1,4 +1,4 @@
-//! Supported activity-v4 inline carriers only. Preserve exact original bytes
+//! Supported activity-v4 carriers and rebuildable safe routing evidence. Preserve original bytes
 //! and digests; malformed/oversized rows remain unavailable, not reinterpreted.
 use super::*;
 use hiroute_domain::{CanonicalDigest, ExecutionFactEnvelopeV1, RoutingReceiptV1};
@@ -22,7 +22,13 @@ impl LocalObservationStore {
             ),
             ("routing_receipts", "body_json", "body_digest", "receipt"),
         ] {
-            let key = format!("inline-backfill-{kind}-rowid");
+            // Revisit existing managed fact carriers once for supported-format evidence.
+            // The old cursor remains intact; no SQL or authenticated payload migration.
+            let key = if kind == "fact" {
+                "inline-backfill-fact-protocol-evidence-rowid".to_owned()
+            } else {
+                format!("inline-backfill-{kind}-rowid")
+            };
             let after: i64 = tx
                 .query_row(
                     "SELECT CAST(value AS INTEGER) FROM observation_meta WHERE key=?1",
@@ -49,9 +55,24 @@ impl LocalObservationStore {
                 {
                     break;
                 }
-                let (workspace,session,request,digest,body):(String,String,String,String,String)=tx.query_row(&format!("SELECT workspace_id,session_id,request_id,{digest_column},CASE WHEN length(CAST({column} AS BLOB))<=1048576 THEN {column} ELSE '' END FROM {table} WHERE rowid=?1"),[id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?))).map_err(|_|ObservationStoreError::Corrupt)?;
+                let (workspace,session,request,digest,stored):(String,String,String,String,String)=tx.query_row(&format!("SELECT workspace_id,session_id,request_id,{digest_column},CASE WHEN length(CAST({column} AS BLOB))<=1048576 THEN {column} ELSE '' END FROM {table} WHERE rowid=?1"),[id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?))).map_err(|_|ObservationStoreError::Corrupt)?;
+                let (body, unavailable) = if kind == "fact" {
+                    match super::sensitive::hydrate_bounded(
+                        &tx,
+                        kind,
+                        &digest,
+                        &stored,
+                        1024 * 1024,
+                    ) {
+                        Ok(body) => (body, false),
+                        Err(ObservationStoreError::ContentUnavailable) => (String::new(), true),
+                        Err(error) => return Err(error),
+                    }
+                } else {
+                    (stored.clone(), false)
+                };
                 bytes += body.len();
-                if !body.contains("\"managed_sensitive_ref\"") {
+                if !unavailable && (kind == "fact" || !body.contains("\"managed_sensitive_ref\"")) {
                     let verified = if kind == "fact" {
                         serde_json::from_str::<ExecutionFactEnvelopeV1>(&body)
                             .ok()
@@ -64,6 +85,12 @@ impl LocalObservationStore {
                             })
                             .map(|fact| {
                                 super::safe_facts::project(
+                                    &tx,
+                                    &fact,
+                                    &CanonicalDigest::parse(&digest)
+                                        .map_err(|_| ObservationStoreError::Corrupt)?,
+                                )?;
+                                super::safe_facts::refresh_pre_applicability(
                                     &tx,
                                     &fact,
                                     &CanonicalDigest::parse(&digest)

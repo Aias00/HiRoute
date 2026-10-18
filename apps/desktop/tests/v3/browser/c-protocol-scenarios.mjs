@@ -1,6 +1,6 @@
 import { branchRouting } from '../../../src/features/decision-services/types.ts';
 import { defaultJudgment } from '../../../src/features/decision-services/types.ts';
-import { nativeProtocol, stockAssessment, contentDigest } from '../../../src/features/decision-services/native-protocol.ts';
+import { nativeProtocol, stockAssessment, contentDigest, C_PROTOCOL } from '../../../src/features/decision-services/native-protocol.ts';
 import { scenario } from './scenario-selection.mjs';
 
 export function cProtocolScenarios({ fresh, routing, click, until, all, text, calls, setInput, control }) {
@@ -13,12 +13,12 @@ export function cProtocolScenarios({ fresh, routing, click, until, all, text, ca
         const snapshot=structuredClone(control().fixtureResponse('desktop_snapshot',payload));
         const plan=snapshot.catalog.plans[0],strategy=plan.desired.strategy;
         strategy.classifier={kind:'decision_service',service};
-        if(enabled){strategy.native_protocol=nativeProtocol();strategy.judgment=stockAssessment(strategy.judgment,strategy.native_protocol);}
+        if(enabled){strategy.native_protocol={schema:C_PROTOCOL,...nativeProtocol()};strategy.judgment=stockAssessment(strategy.judgment,nativeProtocol());}
         if(custom){strategy.judgment.competence.standard='custom';strategy.judgment.competence.instructions='  Keep this exact text.\nSecond line.  ';strategy.judgment.competence.criteria[1]+='  ';}
         plan.desired.delegation_enabled=false;
         if(branches){
           const route=branchRouting(service);route.judgment=structuredClone(strategy.judgment);
-          if(enabled)route.native_protocol=nativeProtocol();
+          if(enabled)route.native_protocol={schema:C_PROTOCOL,...nativeProtocol()};
           route.branches.forEach((b,i)=>{b.name='Category '+i;b.condition='Work '+i;b.candidates=structuredClone(strategy.economy);b.primary_candidates=structuredClone(strategy.primary);b.judgment=i===0?structuredClone(strategy.judgment):null;});
           plan.desired.mode='custom_branches';plan.desired.strategy={mode:'branches',routing:route};
         }
@@ -54,13 +54,16 @@ export function cProtocolScenarios({ fresh, routing, click, until, all, text, ca
   return [scenario('desktop.routing.capability-toggle',['routing-editor','decision-services','c-protocol'],'Defaults silently follow the capability through ordinary publication',async()=>{
     for(const language of ['zh','en']){
       const t=(zh,en)=>language==='zh'?zh:en;await open(language);assert(!toggle().checked,'Released route enabled itself');
+      assert(!document.querySelector('.native-protocol-editor details'),'Disabled capability exposes composed assessment');
       toggle().click();await until(()=>toggle().checked,'enabled');
+      assert(document.querySelector('.native-protocol-editor details'),'Enabled capability hides composed assessment');
       assertCopy();geometry();
-      const on=await publish(t);assert(Object.keys(on.editor.smart.native_protocol).length===2,'Editor requires fixed bundle');
+      const on=await publish(t);assert(Object.keys(on.editor.smart.historical_applicability).length===1,'Editor requires fixed bundle');
       assert(on.editor.smart.judgment.competence.standard==='default','Default intent lost');
       assert(on.editor.smart.judgment.competence.floor_millis===500&&on.editor.smart.judgment.degree.simple_threshold_millis===800,'Threshold changed');
       await until(()=>!all('.plan-editor fieldset')[0]?.disabled,'publication completed');
       toggle().click();await until(()=>!toggle().checked,'disabled');
+      assert(!document.querySelector('.native-protocol-editor details'),'Disabling leaves composed assessment visible');
       assert(document.querySelector('[data-decision-field="smart-competence-instructions"]').value===defaultJudgment.competence.instructions,'Default failed to follow toggle off');
       assertCopy();geometry();assert(!calls('test_classifier_decision').length,'Toggle/publication dispatched a model request');
     }

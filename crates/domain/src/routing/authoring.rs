@@ -32,7 +32,7 @@ pub struct WorkerPlanV1 {
 #[serde(deny_unknown_fields)]
 pub struct SmartEditorV2 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub native_protocol: Option<super::NativeProtocolSelectionV1>,
+    pub historical_applicability: Option<super::HistoricalApplicabilityV1>,
 
     pub economy: Vec<CandidateSelectionV1>,
     pub primary: Vec<CandidateSelectionV1>,
@@ -65,7 +65,7 @@ pub struct PlanEditorStateV2 {
     pub smart: SmartEditorV2,
     pub free: FreeEditorV2,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub branch_routing: Option<super::BranchRoutingV1>,
+    pub branch_routing: Option<BranchRoutingEditorV1>,
     pub delegation_enabled: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub work: Option<WorkerPlanV1>,
@@ -86,7 +86,7 @@ impl PlanEditorStateV2 {
             || self
                 .branch_routing
                 .as_ref()
-                .is_some_and(|routing| !routing.validate(true))
+                .is_some_and(|routing| !routing.configuration().validate(true))
             || self
                 .smart
                 .complex_keywords
@@ -140,8 +140,9 @@ impl PlanEditorStateV2 {
             PlanEditorMode::CustomBranches => {
                 let mut routing = self
                     .branch_routing
-                    .clone()
-                    .ok_or(PlanAuthoringError::InvalidStrategy)?;
+                    .as_ref()
+                    .ok_or(PlanAuthoringError::InvalidStrategy)?
+                    .configuration();
                 if !super::native_mode(&routing.classifier) {
                     routing.native_protocol = None;
                 }
@@ -164,27 +165,30 @@ impl PlanEditorStateV2 {
             PlanEditorMode::FixedModel => AgentPlanStrategyV2::Custom {
                 candidates: self.candidates.clone(),
             },
-            PlanEditorMode::SmartSaving => AgentPlanStrategyV2::SmartSaving {
-                native_protocol: if super::native_mode(&self.smart.classifier) {
-                    self.smart.native_protocol.clone()
+            PlanEditorMode::SmartSaving => {
+                let native_protocol = if super::native_mode(&self.smart.classifier) {
+                    self.smart
+                        .historical_applicability
+                        .as_ref()
+                        .map(super::HistoricalApplicabilityV1::selection)
                 } else {
                     None
-                },
-                economy: self.smart.economy.clone(),
-                primary: self.smart.primary.clone(),
-                judgment: self
+                };
+                let judgment = self
                     .smart
                     .judgment
-                    .resolve_assessment(if super::native_mode(&self.smart.classifier) {
-                        self.smart.native_protocol.as_ref()
-                    } else {
-                        None
-                    })
-                    .map_err(PlanAuthoringError::NativeProtocol)?,
-                reselect_on_user_message: self.smart.reselect_on_user_message,
-                classifier: self.smart.classifier.clone(),
-                complex_keywords: self.smart.complex_keywords.clone(),
-            },
+                    .resolve_assessment(native_protocol.as_ref())
+                    .map_err(PlanAuthoringError::NativeProtocol)?;
+                AgentPlanStrategyV2::SmartSaving {
+                    native_protocol,
+                    economy: self.smart.economy.clone(),
+                    primary: self.smart.primary.clone(),
+                    judgment,
+                    reselect_on_user_message: self.smart.reselect_on_user_message,
+                    classifier: self.smart.classifier.clone(),
+                    complex_keywords: self.smart.complex_keywords.clone(),
+                }
+            }
             PlanEditorMode::FreeFirst => AgentPlanStrategyV2::FreeFirst {
                 candidates: self.free.candidates.clone(),
                 primary_fallback: self.free.primary_fallback,
@@ -374,4 +378,6 @@ pub enum PlanAuthoringError {
 #[cfg(test)]
 mod tests;
 
+mod branch_editor;
 mod editor;
+pub use branch_editor::BranchRoutingEditorV1;

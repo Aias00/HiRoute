@@ -4,8 +4,9 @@ import { defaultJudgment, type Judgment, type RouteBranch, type DecisionService 
 
 export const C_PROTOCOL = 'hiroute.system-one-c/v1';
 export const LEGACY_PROTOCOL = 'hiroute.system-one-legacy/v1';
-export type NativeProtocol = { schema: string; prior_context_max_turns: number };
-type ResolvedNativeProtocol = NativeProtocol & { fixed: { degree_prefix: string; assessment_wrapper: string; applicability: typeof stock.q2 } };
+export type NativeProtocol = { prior_context_max_turns: number };
+export type NativeProtocolSelection = NativeProtocol & { schema: string };
+type ResolvedNativeProtocol = NativeProtocolSelection & { fixed: { degree_prefix: string; assessment_wrapper: string; applicability: typeof stock.q2 } };
 export type FrozenNativeProtocol = { protocol: ResolvedNativeProtocol; context_layout: string; decision: Record<string, unknown>; scopes: Record<string, { assessment: ReturnType<typeof composedAssessment>; simple_threshold_millis: number; competence_floor_millis: number; standard: string }>; digest: string };
 export type CapabilityShape = 'standard' | 'max_branches';
 export type CCapability = { schema: string; state: 'verified' | 'unsupported' | 'not_tested' | 'test_failed'; service_id: string; service_revision: number; endpoint_digest: string; model: string; protocol_digest: string; shape: CapabilityShape; question_count: number; tested_at_unix_ms: number; duration_millis: number; reason: string };
@@ -14,10 +15,10 @@ export type CTestRequest = { schema: string; service_id: string; service_revisio
 const wrapper = stock.q1.instructions.split(' Distinguish those meanings')[0];
 const legacyWrapper = 'Evaluate only the completed stage from state.visible_conversation[state.assessment_from] through the end. state.latest_user may supply explicit feedback, but is not yet executed.';
 export function nativeProtocol(): NativeProtocol {
-  return { schema: C_PROTOCOL, prior_context_max_turns: 8 };
+  return { prior_context_max_turns: 8 };
 }
 function resolvedProtocol(protocol: NativeProtocol): ResolvedNativeProtocol {
-  return { ...protocol, fixed: { degree_prefix: 'Assess state.latest_user only, not historical competence.', assessment_wrapper: wrapper, applicability: structuredClone(stock.q2) } };
+  return { ...protocol, schema: C_PROTOCOL, fixed: { degree_prefix: 'Assess state.latest_user only, not historical competence.', assessment_wrapper: wrapper, applicability: structuredClone(stock.q2) } };
 }
 export function assessmentStandard(judgment: Judgment): 'default' | 'custom' {
   return judgment.competence.standard ?? (judgment.competence.instructions === defaultJudgment.competence.instructions && judgment.competence.criteria.every((c, i) => c === defaultJudgment.competence.criteria[i]) ? 'default' : 'custom');

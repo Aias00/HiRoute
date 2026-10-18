@@ -10,8 +10,33 @@ pub(crate) fn project(
     envelope: &ExecutionFactEnvelopeV1,
     digest: &CanonicalDigest,
 ) -> Result<(), Error> {
+    let json = serde_json::to_string(&projection(envelope, digest)?).map_err(|_| Error::Corrupt)?;
+    transaction.execute("INSERT OR IGNORE INTO observation_safe_facts_v2(workspace_id,request_id,original_digest,body_json) VALUES(?1,?2,?3,?4)",params![envelope.correlation.workspace_id.as_str(),envelope.correlation.request_id.as_str(),digest.as_str(),json]).map_err(|_|Error::ActivityUnavailable)?;
+    Ok(())
+}
+
+/// Rebuild only an existing projection proven to come from a supported pre-applicability
+/// envelope. Callers authenticate the carrier and original digest before reaching here.
+pub(super) fn refresh_pre_applicability(
+    transaction: &Transaction<'_>,
+    envelope: &ExecutionFactEnvelopeV1,
+    digest: &CanonicalDigest,
+) -> Result<usize, Error> {
+    let fact = projection(envelope, digest)?;
+    if fact.pre_applicability_schema_digest.is_none() {
+        return Ok(0);
+    }
+    let json = serde_json::to_string(&fact).map_err(|_| Error::Corrupt)?;
+    transaction.execute("UPDATE observation_safe_facts_v2 SET body_json=?4 WHERE workspace_id=?1 AND request_id=?2 AND original_digest=?3 AND body_json<>?4", params![envelope.correlation.workspace_id.as_str(),envelope.correlation.request_id.as_str(),digest.as_str(),json]).map_err(|_|Error::ActivityUnavailable)
+}
+
+fn projection(
+    envelope: &ExecutionFactEnvelopeV1,
+    digest: &CanonicalDigest,
+) -> Result<ObservationSafeFactV2, Error> {
     let fact_json = serde_json::to_value(&envelope.fact).map_err(|_| Error::Corrupt)?;
     let mut fact = ObservationSafeFactV2 {
+        pre_applicability_schema_digest: None,
         decision_protocol: None,
         routing_observation: None,
         event_id: envelope.event_id.to_string(),
@@ -38,6 +63,16 @@ pub(crate) fn project(
     };
     match &envelope.fact {
         ExecutionFactV1::RouteDecision(decision) => {
+            if hiroute_domain::is_pre_applicability_execution_digest(
+                envelope.schema_digest.as_str(),
+            ) && envelope.validate_persisted_contract().is_ok()
+                && decision
+                    .complexity
+                    .as_ref()
+                    .is_none_or(|c| c.decision_protocol.is_none())
+            {
+                fact.pre_applicability_schema_digest = Some(envelope.schema_digest.to_string());
+            }
             fact.decision_protocol = decision
                 .complexity
                 .as_ref()
@@ -110,7 +145,5 @@ pub(crate) fn project(
         }
         _ => {}
     }
-    let json = serde_json::to_string(&fact).map_err(|_| Error::Corrupt)?;
-    transaction.execute("INSERT OR IGNORE INTO observation_safe_facts_v2(workspace_id,request_id,original_digest,body_json) VALUES(?1,?2,?3,?4)",params![envelope.correlation.workspace_id.as_str(),envelope.correlation.request_id.as_str(),digest.as_str(),json]).map_err(|_|Error::ActivityUnavailable)?;
-    Ok(())
+    Ok(fact)
 }

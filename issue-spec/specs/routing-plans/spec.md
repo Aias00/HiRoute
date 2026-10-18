@@ -234,7 +234,7 @@ Historical problem applicability MUST remain a route-level capability, off by de
 
 Current authoring MUST record default/custom intent rather than repeatedly infer user intent from equality. Supported released input without that marker uses a bounded adapter: exact built-in legacy instructions and all three criteria mean default, including v0.3.1 Plans; any differing text means custom. Do not trim or normalize text, or use changed thresholds as evidence of custom text. Explicit custom intent remains custom even if its bytes equal a default. Existing frozen PlanVersions, canonical identities and historical evidence are never reinterpreted or rewritten on read; the new behavior takes effect at the next edit and publication.
 
-Editor protocol selection contains the supported identity and background cap, not the entire fixed bundle or a digest. The compiler MUST freeze actual fixed/effective prompts, criteria, thresholds, context layout/cap, assessment standard and content digest into the publication. Unsupported identities, mismatches and corrupt contents fail explicitly while preserving the active/last-known-good publication. A bare preset ID is insufficient for published execution.
+Editor input, saved drafts and editor readback use only the optional historical_applicability object with prior_context_max_turns (default 8, range 0–8); presence enables the capability. This editor option MUST NOT require or accept a protocol identity, fixed bundle or digest. HiRoute selects and records the protocol internally in effective authoring and stored PlanVersion configuration, preserving exact publication consistency. The compiler MUST freeze actual fixed/effective prompts, criteria, thresholds, context layout/cap, assessment standard and content digest into the publication. Unsupported identities, mismatches and corrupt contents fail explicitly while preserving the active/last-known-good publication. A bare preset ID is insufficient for published execution.
 
 There MUST be no assessment review record/digest, per-scope adoption choice, historical revision restoration, assessment_review_plan opt-in, dangling_c rule or special omission rule. Ordinary Preview/Apply remains the only confirmation for toggles and edits. Known unavailable native state paths in custom text remain ordinary validation errors naming the scope and field; user confirmation cannot waive them. No semantic extraction, state alias or C-suffix migration is introduced. Save, reopen and publication never send implicit provider probes.
 
@@ -267,8 +267,8 @@ Desktop authoring, testing and observations MUST use the capability name and def
 
 #### Scenario: Compact authoring freezes full publication
 
-- **WHEN** CLI input selects the capability using identity and background cap only
-- **THEN** Preview/Apply MUST freeze complete actual contents and digest without caller-supplied fixed content or review state.
+- **WHEN** CLI input enables historical_applicability using only the background cap
+- **THEN** Preview/Apply MUST freeze complete actual contents and digest without caller-supplied protocol identity, fixed content or review state; editor readback MUST remain capability-only and internally frozen identities stay exact.
 
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/139#issuecomment-6235110836

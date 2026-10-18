@@ -71,5 +71,5 @@ test('default intent follows toggles while custom bytes and explicit custom equa
   }
   const criteriaOnly = structuredClone(original); criteriaOnly.competence.criteria[0]+=' ';
   assert.equal(assessmentStandard(criteriaOnly), 'custom');
-  assert.deepEqual(Object.keys(nativeProtocol()).sort(), ['prior_context_max_turns', 'schema']);
+  assert.deepEqual(Object.keys(nativeProtocol()).sort(), ['prior_context_max_turns']);
 });

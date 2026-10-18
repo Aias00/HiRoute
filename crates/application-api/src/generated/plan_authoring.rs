@@ -81,7 +81,7 @@ fn definitions() -> Value {
     let routing = object(
         &["classifier", "branches", "default_branch_id", "judgment"],
         json!({
-            "native_protocol":native,"classifier":classifier,"branches":{"type":"array","maxItems":16,"items":branch},"default_branch_id":{"type":"string","maxLength":128},"judgment":reference("judgment"),"reselect_on_user_message":{"type":"boolean","deprecated":true,"description":"Compatibility-only no-op. Follow-ups always prefer a valid held candidate within the newly selected group."}
+            "historical_applicability":native,"classifier":classifier,"branches":{"type":"array","maxItems":16,"items":branch},"default_branch_id":{"type":"string","maxLength":128},"judgment":reference("judgment"),"reselect_on_user_message":{"type":"boolean","deprecated":true,"description":"Compatibility-only no-op. Follow-ups always prefer a valid held candidate within the newly selected group."}
         }),
     );
     let smart = object(
@@ -92,7 +92,7 @@ fn definitions() -> Value {
             "classifier",
             "complex_keywords",
         ],
-        json!({"native_protocol":native,"economy":reference("candidates"),"primary":reference("candidates"),"judgment":reference("judgment"),"reselect_on_user_message":{"type":"boolean","deprecated":true,"description":"Compatibility-only no-op. Follow-ups always prefer a valid held candidate within the newly selected group."},"classifier":classifier,"complex_keywords":{"type":"array","maxItems":64,"items":{"type":"string","maxLength":64}}}),
+        json!({"historical_applicability":native,"economy":reference("candidates"),"primary":reference("candidates"),"judgment":reference("judgment"),"reselect_on_user_message":{"type":"boolean","deprecated":true,"description":"Compatibility-only no-op. Follow-ups always prefer a valid held candidate within the newly selected group."},"classifier":classifier,"complex_keywords":{"type":"array","maxItems":64,"items":{"type":"string","maxLength":64}}}),
     );
     let free = object(
         &["candidates", "primary", "primary_fallback"],

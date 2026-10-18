@@ -544,6 +544,9 @@ pub struct ObservationFactsQueryV2 {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ObservationSafeFactV2 {
+    /// Internal supported-format evidence. Never exposed by the public facts reader.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pre_applicability_schema_digest: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decision_protocol: Option<super::DecisionProtocolV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

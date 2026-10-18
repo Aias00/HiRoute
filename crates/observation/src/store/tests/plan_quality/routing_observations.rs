@@ -2,7 +2,7 @@ use super::*;
 use crate::store::tests::support::route_decision;
 use hiroute_domain::*;
 
-fn observation(variant: u8) -> RoutingObservationV1 {
+pub(super) fn observation(variant: u8) -> RoutingObservationV1 {
     let protocol = NativeProtocolV1::default();
     let mut j = JudgmentSettingsV1::default();
     protocol.stock_assessment(&mut j);

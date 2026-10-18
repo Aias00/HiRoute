@@ -15,7 +15,7 @@ impl AgentPlanAuthoringV2 {
             branch_routing: None,
             candidates: vec![],
             smart: SmartEditorV2 {
-                native_protocol: None,
+                historical_applicability: None,
 
                 economy: vec![],
                 primary: vec![],
@@ -36,7 +36,7 @@ impl AgentPlanAuthoringV2 {
         };
         match &self.strategy {
             AgentPlanStrategyV2::Branches { routing } => {
-                editor.branch_routing = Some(routing.clone())
+                editor.branch_routing = Some(routing.into())
             }
             AgentPlanStrategyV2::Custom { candidates } => {
                 editor.candidates = candidates.clone();
@@ -51,7 +51,7 @@ impl AgentPlanAuthoringV2 {
                 complex_keywords,
             } => {
                 editor.smart = SmartEditorV2 {
-                    native_protocol: native_protocol.clone(),
+                    historical_applicability: native_protocol.as_ref().map(Into::into),
 
                     economy: economy.clone(),
                     primary: primary.clone(),
