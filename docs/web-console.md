@@ -64,6 +64,11 @@ They persist settings without starting the service. The advertised address must
 have the bind address's IP family. DNS names and wildcard login URLs are not used.
 Network reachability still depends on the host's routing and firewall.
 
+An owner on the service host can run `hiroute console open --loopback-only` to use
+its already-bound local recovery endpoint while network mode remains configured.
+This selects a local one-use URL and preserves the separate local sign-in budget;
+it does not create a listener or change the network configuration.
+
 For repeated logins, an owner can alternatively create a named access token:
 
 ```sh

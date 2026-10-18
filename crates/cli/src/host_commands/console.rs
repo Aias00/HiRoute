@@ -4,7 +4,7 @@ mod configuration;
 
 pub(super) fn execute(arguments: &[String], globals: &Globals) -> CliExecution {
     if globals.help {
-        return CliExecution{exit_code:0,stdout:"Usage\n  hiroute console open [--browser]\n  hiroute console init [--mode off|loopback|network] [--listen IP] [--port N] [--advertise-address IP] [--allow-plaintext-network]\n  hiroute console status\n  hiroute console enable [--listen IP] [--port N] [--advertise-address IP] [--allow-plaintext-network]\n  hiroute console disable\n  hiroute console token create --name NAME [--expires DAYS]\n  hiroute console token list\n  hiroute console token revoke ID\nAccess tokens are owner credentials. Network HTTP is unencrypted. Configuration takes effect on the next service start; open only mints a one-use URL for the actual listener and never starts listening.\n".into(),stderr:String::new()};
+        return CliExecution{exit_code:0,stdout:"Usage\n  hiroute console open [--browser] [--loopback-only]\n  hiroute console init [--mode off|loopback|network] [--listen IP] [--port N] [--advertise-address IP] [--allow-plaintext-network]\n  hiroute console status\n  hiroute console enable [--listen IP] [--port N] [--advertise-address IP] [--allow-plaintext-network]\n  hiroute console disable\n  hiroute console token create --name NAME [--expires DAYS]\n  hiroute console token list\n  hiroute console token revoke ID\nAccess tokens are owner credentials. Network HTTP is unencrypted. Configuration takes effect on the next service start; open only mints a one-use URL for the actual listener and never starts listening.\n".into(),stderr:String::new()};
     }
     if globals.agent.is_some() || globals.has_capability() {
         return failure(ErrorCode::CapabilityDenied, globals.request_id.clone());
@@ -61,9 +61,14 @@ fn call(
 }
 fn command(args: &[String], globals: &Globals) -> Result<serde_json::Value, ErrorCode> {
     match args {
-        [open, rest @ ..] if open == "open" && (rest.is_empty() || rest == ["--browser"]) => {
-            let value = call("CreateConsoleLaunch", json!({}), globals)?;
-            if !rest.is_empty() {
+        [open, rest @ ..] if open == "open" => {
+            let (open_browser, loopback_only) = configuration::open_options(rest)?;
+            let value = call(
+                "CreateConsoleLaunch",
+                json!({"loopback_only":loopback_only}),
+                globals,
+            )?;
+            if open_browser {
                 browser(
                     value
                         .get("url")

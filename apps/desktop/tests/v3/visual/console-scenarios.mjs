@@ -19,6 +19,10 @@ export async function runConsoleScenarios(client, baseUrl, output) {
       await waitFor(client, 'document.querySelector(".console-transport-bar")?.getBoundingClientRect().height > 0');
       assert(await evaluate(client, '!window.consoleComponent.errors.length'), 'Incomplete console component fixture: ' + await evaluate(client, 'JSON.stringify(window.consoleComponent.errors)'));
     }
+    if (state === 'login' || state === 'expired') {
+      const guidance = language === 'zh' ? '获取一次性登录链接' : 'single-use sign-in link';
+      assert(await evaluate(client, `document.body.innerText.includes(${JSON.stringify(guidance)})`), 'Console entry still describes a local-only launch link');
+    }
     if (state === 'rate-limited' || state === 'session-limit') {
       await evaluate(client, 'Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set.call(document.querySelector("input"), "c".repeat(64)); document.querySelector("input").dispatchEvent(new Event("input",{bubbles:true}))');
       await evaluate(client, 'document.querySelector("form").requestSubmit()');
@@ -31,6 +35,7 @@ export async function runConsoleScenarios(client, baseUrl, output) {
   const check = async (id, run) => { try { await run(); results.push({ id, state: 'green' }); } catch (error) { results.push({ id, state: 'red', error: String(error) }); } };
   await check('console.session.launch', async () => {
     await open('launch');
+    assert(await evaluate(client, 'Boolean(document.querySelector(".console-transport-bar.plaintext"))'), 'Network launch login lost its persistent plaintext warning');
     assert(await evaluate(client, 'location.pathname === "/" && !location.search && window.consoleComponent.requests.filter(r => r.path.endsWith("/launch")).length === 1 && window.consoleComponent.requests.every(r => !r.url.includes("code="))'), 'Launch code was not removed before exchange');
     assert(await evaluate(client, 'sessionStorage.getItem("hiroute.console.session")?.length === 64 && !localStorage.getItem("hiroute.console.session") && !document.cookie'), 'Session escaped sessionStorage');
     assert(await evaluate(client, 'window.consoleComponent.requests.filter(r => !r.path.endsWith("/launch")).every(r => r.headers.authorization?.startsWith("Bearer ") && r.credentials === "omit" && /^[a-f0-9]{32}$/.test(r.headers["x-hiroute-context"]))'), 'Console request authority differs from the Bearer/context contract');

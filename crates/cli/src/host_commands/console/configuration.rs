@@ -2,6 +2,18 @@ use hiroute_application_api::ErrorCode;
 use hiroute_host_runtime::{ConsoleListenerDesiredV1, ConsoleListenerMode, ConsolePortMode};
 use std::net::IpAddr;
 
+pub(super) fn open_options(options: &[String]) -> Result<(bool, bool), ErrorCode> {
+    let (mut browser, mut local) = (false, false);
+    for flag in options {
+        match flag.as_str() {
+            "--browser" if !browser => browser = true,
+            "--loopback-only" if !local => local = true,
+            _ => return Err(ErrorCode::InvalidArguments),
+        }
+    }
+    Ok((browser, local))
+}
+
 pub(super) fn parse(
     options: &[String],
     initialization: bool,
@@ -67,6 +79,33 @@ mod tests {
     use super::*;
     fn args(value: &str) -> Vec<String> {
         value.split_whitespace().map(str::to_owned).collect()
+    }
+    #[test]
+    fn launch_selection_is_explicit_and_never_treated_as_browser_open() {
+        assert_eq!(open_options(&[]).unwrap(), (false, false));
+        assert_eq!(
+            open_options(&args("--loopback-only")).unwrap(),
+            (false, true)
+        );
+        assert_eq!(
+            open_options(&args("--browser --loopback-only")).unwrap(),
+            (true, true)
+        );
+        assert_eq!(
+            open_options(&args("--loopback-only --browser")).unwrap(),
+            (true, true)
+        );
+        for invalid in [
+            "--loopback-only --loopback-only",
+            "--browser --browser",
+            "--remote",
+            "--listen 127.0.0.1",
+        ] {
+            assert_eq!(
+                open_options(&args(invalid)).unwrap_err(),
+                ErrorCode::InvalidArguments
+            );
+        }
     }
     #[test]
     fn initialization_validates_scope_port_and_plaintext_before_writing() {

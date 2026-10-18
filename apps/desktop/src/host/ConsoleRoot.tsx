@@ -75,7 +75,7 @@ function ConsoleSessionRoot({ children }: PropsWithChildren) {
               : phase === 'unavailable' ? text('暂时无法连接服务', 'The service is unavailable')
                 : text('登录控制台', 'Sign in to the console')}</h1>
         {loginPage && <>
-          <p>{text('在服务所在设备运行 hiroute console open 获取本机启动链接，或输入由 hiroute console token create 创建的 access token。', 'On the service host, run hiroute console open for a local launch link, or enter an access token created with hiroute console token create.')}</p>
+          <p>{text('在服务所在设备运行 hiroute console open 获取一次性登录链接，或输入由 hiroute console token create 创建的 access token。', 'On the service host, run hiroute console open for a single-use sign-in link, or enter an access token created with hiroute console token create.')}</p>
           {plaintext && <div className="callout warn" role="note"><UiIcon name="warning" /><span>{text('当前连接未加密，access token 将以明文通过网络发送。仅在信任的网络中继续。', 'This connection is unencrypted. Your access token will travel over the network as plaintext. Continue only on a network you trust.')}</span></div>}
           <form className="console-login" autoComplete="off" onSubmit={event => void login(event)}>
             <label className="field"><span className="field-label">Access token</span><input className="input" type="password" name="access-token" autoComplete="off" spellCheck={false} required maxLength={64} value={token} disabled={busy} onChange={event => setToken(event.currentTarget.value)} autoFocus /></label>
