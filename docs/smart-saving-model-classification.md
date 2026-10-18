@@ -71,7 +71,9 @@ historical restoration. Rollback publishes a new revision and preserves old C ev
 After rollback has completed, **Remove this review record** lets a later ordinary
 legacy edit discard obsolete review provenance without changing the rubric or
 thresholds. Keeping a review requires it to match the current composition. The
-removal action cannot approve an unfinished rollback.
+removal action cannot approve an unfinished rollback. An ordinary legacy scope
+without a retained review does not need a new review because another independent
+scope or parked default has one; removing one record preserves the others.
 Plan/session quality includes opt-in C counts and coverage, using all retained matching
 decisions rather than stage-opening samples. A retained decision with Plan identity
 but no C metadata still leaves coverage incomplete; known counts remain visible,

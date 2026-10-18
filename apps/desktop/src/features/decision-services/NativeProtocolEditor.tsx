@@ -22,7 +22,9 @@ export function NativeProtocolEditor({ protocol, reviews, scopes, service, branc
   useEffect(() => { let cancelled = false; void Promise.all(scopes.map(async s => [s.id, await contentDigest(composedAssessment(protocol, s.judgment))] as const)).then(v => { if (!cancelled) setDigests(Object.fromEntries(v)); }); return () => { cancelled = true; }; }, [key]);
   useEffect(() => { let cancelled = false; setFrozenDigest(''); if (protocol) void freezeNative(protocol, scopes[0].judgment, branches, defaultId).then(p => { if (!cancelled) setFrozenDigest(p.digest); }); return () => { cancelled = true; }; }, [key]);
   const destination = protocol ? C_PROTOCOL : LEGACY_PROTOCOL;
-  const needsReview = !!protocol || Object.keys(reviews ?? {}).length > 0 || wasC || transitionReview;
+  const requiresScopeReview = !!protocol || wasC || transitionReview;
+  const reviewedScopes = requiresScopeReview ? scopes : scopes.filter(scope => !!reviews?.[scope.id]);
+  const needsReview = requiresScopeReview || reviewedScopes.length > 0;
   const capability = result?.key === key ? result.value : undefined;
   async function review(scope: AssessmentScope) {
     const snapshot = key; setBusy(true);
@@ -49,7 +51,7 @@ export function NativeProtocolEditor({ protocol, reviews, scopes, service, branc
     <label className="field"><span className="field-label">{t('决策协议', 'Decision protocol')}</span><select className="input" value={protocol ? 'c' : 'legacy'} disabled={busy} onChange={e => { setTransitionReview(true); onProtocol(e.target.value === 'c' ? nativeProtocol() : undefined); }}><option value="legacy">{t('现有协议', 'Existing protocol')}</option><option value="c">{t('C · 历史问题适用性', 'C · historical problem applicability')}</option></select></label>
     {protocol && <><label className="field"><span className="field-label">{t('目标阶段之前的背景轮数', 'Background turns before the assessed stage')}</span><input className="input" type="number" min={0} max={8} step={1} value={protocol.prior_context_max_turns} onChange={e => onProtocol({ ...protocol, prior_context_max_turns: Number(e.target.value) })} /><span className="field-help">{t('默认 8 轮；不限制完整目标阶段的轮数。', 'Defaults to 8 turns; the complete assessed stage is not limited by this cap.')}</span></label>{protocol.prior_context_max_turns === 0 && <p role="status" className="field-help">{t('背景为 0：不会提供目标阶段之前的要求和引用。', 'With zero background, requirements and references before the assessed stage are not supplied.')}</p>}<p className="field-help">{t('C 保留当前难度和胜任度阈值。每个生效的评分范围都需要明确选择并审阅标准。', 'C preserves your degree and competence thresholds. Explicitly choose and review each effective assessment scope.')}</p></>}
     {needsReview && branches?.filter(b => nativeReferenceIssue(!!protocol, b.condition)).map(b => <p role="alert" className="field-error" key={b.id}>{b.name} · {t('任务条件包含目标协议不支持的历史字段。', 'The category condition references history fields unavailable in the destination protocol.')}</p>)}
-    {needsReview && scopes.map(scope => {
+    {needsReview && reviewedScopes.map(scope => {
       const question = composedAssessment(protocol, scope.judgment);
       const valid = reviews?.[scope.id]?.protocol === destination && reviews[scope.id].assessment_digest === digests[scope.id];
       const incompatible = nativeReferenceIssue(!!protocol, JSON.stringify(question)) || Object.values(scope.judgment.degree).some(value => typeof value === 'string' && nativeReferenceIssue(!!protocol, value));

@@ -1,3 +1,4 @@
+import { branchRouting } from '../../../src/features/decision-services/types.ts';
 import { composedAssessment, contentDigest, nativeProtocol, stockAssessment } from '../../../src/features/decision-services/native-protocol.ts';
 import { scenario } from './scenario-selection.mjs';
 
@@ -74,19 +75,32 @@ export function cProtocolScenarios({ fresh, routing, click, until, all, text, ca
       const footer = document.querySelector('.plan-editor-footer, .editor-actions, .plan-editor .modal-foot');
       if (footer) assert(footer.getBoundingClientRect().bottom <= innerHeight + 1, 'Save actions left the supported viewport');
     }
-  }), scenario('desktop.routing.legacy-review-removal', ['routing-editor', 'decision-services', 'c-protocol'], 'Completed rollback permits explicit review removal without changing the legacy rubric', async () => {
-    for (const language of ['zh', 'en']) {
+  }), scenario('desktop.routing.legacy-review-removal', ['routing-editor', 'decision-services', 'c-protocol'], 'Completed rollback permits per-scope review removal without changing legacy rubrics or requiring unrelated scopes', async () => {
+    for (const language of ['zh', 'en']) for (const branchMode of [false, true]) {
       const t = (zh, en) => language === 'zh' ? zh : en;
-      let original;
+      let original, selectedScope = 'smart_saving';
+      const independent = branchMode ? branchRouting(service) : null;
+      if (independent) {
+        independent.branches = independent.branches.map(b => ({ ...b, judgment: structuredClone(independent.judgment) }));
+        selectedScope = independent.branches[0].id;
+        const record = { protocol: 'hiroute.system-one-legacy/v1', method: 'reviewed_custom', assessment_digest: await contentDigest(composedAssessment(undefined, independent.judgment)) };
+        independent.assessment_review = { [selectedScope]: record, default: record }; // Default is parked: both branches override it.
+      }
       await fresh(() => {
         control().handlers.decision_services = () => ({ services: [service] });
         control().handlers.desktop_snapshot = async payload => {
           const snapshot = structuredClone(control().fixtureResponse('desktop_snapshot', payload));
           const plan = snapshot.catalog.plans[0];
-          const strategy = plan.desired.strategy;
-          strategy.classifier = { kind: 'decision_service', service };
-          strategy.assessment_review = { smart_saving: { protocol: 'hiroute.system-one-legacy/v1', method: 'reviewed_custom', assessment_digest: await contentDigest(composedAssessment(undefined, strategy.judgment)) } };
-          original = structuredClone(strategy.judgment);
+          if (independent) {
+            plan.desired.mode = 'custom_branches';
+            plan.desired.strategy = { mode: 'branches', routing: structuredClone(independent) };
+            original = structuredClone(independent.branches.map(b => b.judgment));
+          } else {
+            const strategy = plan.desired.strategy;
+            strategy.classifier = { kind: 'decision_service', service };
+            strategy.assessment_review = { smart_saving: { protocol: 'hiroute.system-one-legacy/v1', method: 'reviewed_custom', assessment_digest: await contentDigest(composedAssessment(undefined, strategy.judgment)) } };
+            original = structuredClone(strategy.judgment);
+          }
           return snapshot;
         };
       });
@@ -97,17 +111,25 @@ export function cProtocolScenarios({ fresh, routing, click, until, all, text, ca
         await until(() => all('.master-list .list-row').length, 'saved routes'); all('.master-list .list-row')[0].click();
         await until(() => document.querySelector('.plan-identity-fields input'), 'route editor');
       }
-      await until(() => all('[data-native-scope="smart_saving"]').length, 'retained legacy review');
+      await until(() => all('[data-native-scope]').length, 'retained legacy review');
+      assert(all('[data-native-scope]').length === 1, 'Legacy provenance required unrelated independent scopes');
       const button = all('.native-protocol-editor button').find(b => b.textContent === t('移除此审阅记录', 'Remove this review record'));
       assert(button, 'Completed legacy rollback has no review-removal action');
       assert(button.scrollWidth <= button.clientWidth + 1, 'Review-removal action overflows');
       button.click();
-      await until(() => !all('[data-native-scope="smart_saving"]').length, 'review removed');
+      await until(() => !all('[data-native-scope]').length, 'review removed without requiring unrelated scopes');
       await click(t('保存草稿', 'Save draft'));
       await until(() => calls('preview_plan_editor').length, 'legacy draft submitted');
-      const smart = calls('preview_plan_editor').at(-1).payload.input.editor.smart;
-      assert(!smart.native_protocol && !smart.assessment_review, 'Clear action retained C or an empty review map');
-      assert(JSON.stringify(smart.judgment) === JSON.stringify(original), 'Clearing provenance changed the rubric or thresholds');
+      const editor = calls('preview_plan_editor').at(-1).payload.input.editor;
+      const saved = branchMode ? editor.branch_routing : editor.smart;
+      assert(!saved.native_protocol && !saved.assessment_review?.[selectedScope], 'Clear action retained the selected review or C');
+      if (branchMode) {
+        assert(saved.assessment_review.default, 'Clearing one scope removed parked provenance');
+        assert(JSON.stringify(saved.branches.map(b => b.judgment)) === JSON.stringify(original), 'Clearing branch provenance changed a rubric or threshold');
+      } else {
+        assert(!saved.assessment_review, 'Clearing the last scope retained an empty map');
+        assert(JSON.stringify(saved.judgment) === JSON.stringify(original), 'Clearing provenance changed the rubric or thresholds');
+      }
       assert(calls('test_classifier_decision').length === 0, 'Clearing review implicitly called a provider');
     }
   }), scenario('desktop.routing.c-cross-mode-rollback', ['routing-editor', 'decision-services', 'c-protocol'], 'Changing a published C smart route to legacy branches retains required destination review', async () => {
