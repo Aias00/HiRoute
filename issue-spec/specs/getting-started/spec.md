@@ -303,6 +303,11 @@ The Windows shell SHALL select a newer stable Windows x64 Desktop release from t
 - **WHEN** a prepared shell replacement fails while the standalone marker and verified Task still refer to the previous installation
 - **THEN** recovery restores the verified shell files and captured login/tray/listener settings without reinstalling or draining that unchanged core, retains active work and business data, and a subsequent installer run can proceed through the same ownership checks.
 
+#### Scenario: Manual repair supersedes a prior failure
+
+- **WHEN** recovery reported an earlier replacement failure and a subsequent manual installer commits the verified new core and shell
+- **THEN** the persisted startup and Settings outcome reflects the committed installation instead of claiming that the prior version was restored, and interrupted committed-phase reporting completes idempotently through recovery.
+
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/132#issuecomment-6219734656
 

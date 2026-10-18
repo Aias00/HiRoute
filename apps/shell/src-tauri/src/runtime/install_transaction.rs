@@ -376,13 +376,22 @@ pub(super) fn commit() -> io::Result<()> {
     hiroute_platform::durable::write_private_atomic(&root.join(INVENTORY), &bytes)?;
     value.phase = Phase::Committed;
     write(&data()?.join(PENDING), &value)?;
-    clear(&value.old)?;
+    complete_commit(&data()?, &value.old)?;
     cleanup_committed();
     Ok(())
 }
 
-fn clear(old: &BTreeMap<String, String>) -> io::Result<()> {
-    let data = data()?;
+fn complete_commit(data: &Path, old: &BTreeMap<String, String>) -> io::Result<()> {
+    // A manual install has no update finisher to replace an earlier failure. Keep
+    // the committed journal until reporting succeeds so recovery can repeat it.
+    write(
+        &data.join("update-outcome.json"),
+        &serde_json::json!({"schema":"hiroute.windows-shell-update-outcome/v1","status":"succeeded"}),
+    )?;
+    clear(data, old)
+}
+
+fn clear(data: &Path, old: &BTreeMap<String, String>) -> io::Result<()> {
     for (name, expected) in old {
         let path = data.join("install-backups").join(name);
         if present(&path)? {
@@ -402,7 +411,7 @@ pub(super) fn rollback(allow_unavailable_agent_restore: bool) -> io::Result<()> 
     let root = root()?;
     if value.phase == Phase::Committed {
         validate_installed()?;
-        clear(&value.old)?;
+        complete_commit(&data()?, &value.old)?;
         cleanup_committed();
         return Ok(());
     }
@@ -518,7 +527,7 @@ pub(super) fn rollback(allow_unavailable_agent_restore: bool) -> io::Result<()> 
         &data()?.join("update-outcome.json"),
         &serde_json::json!({"schema":"hiroute.windows-shell-update-outcome/v1","status":"failed","code":"UPGRADE_INSTALL_FAILED","service_available":value.service_active}),
     )?;
-    clear(&value.old)?;
+    clear(&data()?, &value.old)?;
     cleanup_committed();
     Ok(())
 }
@@ -552,6 +561,70 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn committed_manual_repair_replaces_stale_failure_before_retiring_journal() {
+        let temporary = PayloadDirectory::new();
+        let previous = temporary.file("install-backups/previous.exe", b"previous shell");
+        temporary.file(PENDING, b"committed shell transaction");
+        write(
+            &temporary.0.join("update-outcome.json"),
+            &serde_json::json!({"schema":"hiroute.windows-shell-update-outcome/v1","status":"failed","code":"UPGRADE_INSTALL_FAILED","service_available":true}),
+        )
+        .unwrap();
+        complete_commit(
+            &temporary.0,
+            &BTreeMap::from([("previous.exe".into(), previous)]),
+        )
+        .unwrap();
+        let outcome: serde_json::Value =
+            read(&temporary.0.join("update-outcome.json"), true).unwrap();
+        assert_eq!(
+            outcome,
+            serde_json::json!({"schema":"hiroute.windows-shell-update-outcome/v1","status":"succeeded"})
+        );
+        assert!(!temporary.0.join(PENDING).exists());
+        assert!(!temporary.0.join("install-backups/previous.exe").exists());
+    }
+
+    #[test]
+    fn failed_committed_reporting_preserves_journal_and_backups_for_retry() {
+        let temporary = PayloadDirectory::new();
+        let previous = temporary.file("install-backups/previous.exe", b"previous shell");
+        temporary.file(PENDING, b"committed shell transaction");
+        let old = BTreeMap::from([("previous.exe".into(), previous)]);
+        let outcome = temporary.0.join("update-outcome.json");
+        security::ensure_private_directory(&outcome).unwrap();
+        assert!(complete_commit(&temporary.0, &old).is_err());
+        assert!(temporary.0.join(PENDING).exists());
+        assert_eq!(
+            fs::read(temporary.0.join("install-backups/previous.exe")).unwrap(),
+            b"previous shell"
+        );
+        fs::remove_dir(outcome).unwrap();
+        complete_commit(&temporary.0, &old).unwrap();
+        assert!(!temporary.0.join(PENDING).exists());
+    }
+
+    #[test]
+    fn interrupted_committed_cleanup_repeats_reporting_without_losing_journal() {
+        let temporary = PayloadDirectory::new();
+        let previous = temporary.file("install-backups/previous.exe", b"previous shell");
+        temporary.file(PENDING, b"committed shell transaction");
+        temporary.file("install-backups/previous.exe", b"foreign change");
+        let old = BTreeMap::from([("previous.exe".into(), previous)]);
+        assert!(complete_commit(&temporary.0, &old).is_err());
+        let first: serde_json::Value =
+            read(&temporary.0.join("update-outcome.json"), true).unwrap();
+        assert_eq!(first["status"], "succeeded");
+        assert!(temporary.0.join(PENDING).exists());
+        temporary.file("install-backups/previous.exe", b"previous shell");
+        complete_commit(&temporary.0, &old).unwrap();
+        let retried: serde_json::Value =
+            read(&temporary.0.join("update-outcome.json"), true).unwrap();
+        assert_eq!(retried, first);
+        assert!(!temporary.0.join(PENDING).exists());
     }
 
     #[test]

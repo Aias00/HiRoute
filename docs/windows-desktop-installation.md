@@ -34,6 +34,9 @@ This happens before the new payload's strict closed-file-set verification. A ret
 recovers any pending shell transaction first. If the standalone core still matches
 the previous installation, shell rollback restores its captured settings and files
 without reinstalling or draining that unchanged core.
+Once both owners commit, the shell atomically records the successful outcome before
+retiring its journal. A successful manual repair replaces an earlier failure in
+startup and Settings; committed-phase recovery safely repeats that reporting step.
 
 Recovery and uninstall run a verified shell copy outside the program directory.
 A failed first installation can therefore roll back before `shell-package.json`
