@@ -345,15 +345,25 @@ pub(super) fn validate_stream_coordinates(
     Ok(())
 }
 
+const ACKNOWLEDGED_BLOBS_SQL: &str =
+    "SELECT content_id, content_blob_digest FROM content_instances_v2
+     WHERE workspace_id=?1 AND request_id=?2 AND direction=?3 AND fork_id=?4 AND state='complete'
+     ORDER BY content_id";
+const MISSING_BLOBS_SQL: &str = "SELECT content_id, content_blob_digest FROM content_instances_v2
+     WHERE workspace_id=?1 AND request_id=?2 AND direction=?3 AND fork_id=?4 AND state!='complete'
+     ORDER BY content_id";
+
+#[cfg(test)]
+#[path = "projection_tests.rs"]
+mod tests;
+
 pub(super) fn acknowledged_blobs(
     transaction: &Transaction<'_>,
     envelope: &ConversationContentEnvelopeV1,
 ) -> Result<Vec<ObservationBlobAcknowledgementV1>, ContentProjectionError> {
-    let mut statement = transaction.prepare(
-        "SELECT content_id, content_blob_digest FROM content_instances_v2
-         WHERE workspace_id=?1 AND request_id=?2 AND direction=?3 AND fork_id=?4 AND state='complete'
-         ORDER BY content_id",
-    ).map_err(|_| ContentProjectionError::ActivityStorage)?;
+    let mut statement = transaction
+        .prepare(ACKNOWLEDGED_BLOBS_SQL)
+        .map_err(|_| ContentProjectionError::ActivityStorage)?;
     statement
         .query_map(
             params![
@@ -378,11 +388,9 @@ pub(super) fn missing_blobs(
     transaction: &Transaction<'_>,
     envelope: &ConversationContentEnvelopeV1,
 ) -> Result<Vec<ObservationBlobAcknowledgementV1>, ContentProjectionError> {
-    let mut statement = transaction.prepare(
-        "SELECT content_id, content_blob_digest FROM content_instances_v2
-         WHERE workspace_id=?1 AND request_id=?2 AND direction=?3 AND fork_id=?4 AND state!='complete'
-         ORDER BY content_id",
-    ).map_err(|_| ContentProjectionError::ActivityStorage)?;
+    let mut statement = transaction
+        .prepare(MISSING_BLOBS_SQL)
+        .map_err(|_| ContentProjectionError::ActivityStorage)?;
     statement
         .query_map(
             params![
