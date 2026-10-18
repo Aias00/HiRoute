@@ -30,6 +30,7 @@ export function cProtocolScenarios({ fresh, routing, click, until, all, text, ca
         if(payload?.input?.authoring){
           control().handlers.desktop_snapshot({});
           const editor=result.authoring.editor,strategy=structuredClone(selectedPlan.desired.strategy);
+          editor.delegation_enabled=false;
           editor.mode=selectedPlan.desired.mode;
           const native=j=>resolveAssessment(j,true);
           if(editor.mode==='custom_branches'){
@@ -46,7 +47,7 @@ export function cProtocolScenarios({ fresh, routing, click, until, all, text, ca
     localStorage.setItem('hiroute.language',language);control().remount();
     if(language==='zh')await routing();else {await click('Smart routing');await until(()=>all('.master-list .list-row').length,'routes');all('.master-list .list-row')[0].click();}
     await until(()=>document.querySelector('.decision-judgment-fields'),'native judgment settings');
-    await until(()=>calls('plan_editor_options').some(c=>c.payload.input.editor?.smart.classifier.kind==='decision_service'),'loaded route options');
+    await until(()=>calls('plan_editor_options').some(c=>(branches?c.payload.input.editor?.branch_routing?.classifier:c.payload.input.editor?.smart.classifier)?.kind==='decision_service'),'loaded route options');
   }
   function assertCopy(){
     const visible=text();
@@ -73,9 +74,11 @@ export function cProtocolScenarios({ fresh, routing, click, until, all, text, ca
       for(const field of all('.decision-judgment-fields'))for(const detail of field.querySelectorAll('details'))if(!detail.open)detail.querySelector('summary').click();
       const criteria=stock.q1.criteria;
       assert(document.querySelector('[data-decision-field="smart-criterion-0"]').value===criteria[0],'Released default did not resolve to current native default');
+      setInput(document.querySelector('[data-decision-field="smart-floor"]'),'0.51');
+      await until(()=>document.querySelector('[data-decision-field="smart-floor"]').value==='0.51','ordinary edit');
       const input=await publish(t);
       for(const key of ['historical_applicability','native_protocol','prior_context_max_turns'])assert(!(key in input.editor.smart),'Retired field entered editor input: '+key);
-      assert(input.editor.smart.judgment.competence.floor_millis===500&&input.editor.smart.judgment.degree.simple_threshold_millis===800,'Threshold changed');
+      assert(input.editor.smart.judgment.competence.floor_millis===510&&input.editor.smart.judgment.degree.simple_threshold_millis===800,'Threshold changed');
       assert(!calls('test_classifier_decision').length,'Opening/publication dispatched a model request');
     }
   }),scenario('desktop.routing.custom-assessment',['routing-editor','decision-services','c-protocol'],'Custom text survives native editing and reset restores current defaults',async()=>{
