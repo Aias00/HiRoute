@@ -1,5 +1,6 @@
 //! A bounded projection of existing facts. Cursors retain a snapshot while paging and
 //! advance only after every changed turn has been delivered.
+pub(crate) mod cache;
 mod projection;
 mod read;
 
@@ -9,7 +10,7 @@ use rusqlite::{Connection, OpenFlags};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct Position {
     facts: i64,
@@ -36,6 +37,7 @@ struct Cursor {
     delivered: Position,
     snapshot: Option<Position>,
     after: Option<(i64, String)>,
+    expires_at: i64,
 }
 struct Fact {
     position: i64,
@@ -54,7 +56,11 @@ struct Request {
     candidate: Option<(String, Option<String>)>,
     models: BTreeMap<u32, String>,
     partial: bool,
+    body_bytes: usize,
+    fact_count: usize,
+    usage_count: usize,
 }
+#[derive(Clone)]
 struct Projected {
     view: RoutingTimelineTurnV1,
     position: Position,
@@ -84,52 +90,80 @@ impl crate::LocalObservationStore {
         let mut cursor = match &query.after_watermark {
             Some(value) => {
                 let cursor: Cursor = self.decode_observation_cursor(value)?;
-                if cursor.schema != 1
+                if cursor.schema != 2
                     || cursor.binding != binding
                     || cursor.visibility != visibility
+                    || now_ms >= cursor.expires_at
                 {
                     return Err(ObservationV2Error::Stale);
                 }
                 cursor
             }
             None => Cursor {
-                schema: 1,
+                schema: 2,
                 binding,
                 visibility,
                 delivered: Position::default(),
                 snapshot: None,
                 after: None,
+                expires_at: i64::MAX,
             },
         };
         let target = match cursor.snapshot {
             Some(value) => value,
             None => read::position(&tx)?,
         };
-        let (requests, facts) = read::read(&tx, reader, &query.session_id, target, now_ms)
-            .map_err(|error| {
-                if error == ObservationV2Error::Unavailable
-                    && started.elapsed() >= std::time::Duration::from_millis(500)
-                {
-                    ObservationV2Error::ScopeTooLarge
-                } else {
-                    error
-                }
-            })?;
-        let mut turns = projection::project(requests, &facts)?;
+        let mut caches = self
+            .timeline_cache
+            .try_lock()
+            .ok_or(ObservationV2Error::Busy)?;
+        let key = cursor.binding.clone();
+        let cached = caches
+            .entries
+            .remove(&key)
+            .filter(|c| c.visibility == visibility && now_ms < c.expires_at);
+        let mut state = cached.unwrap_or_default();
+        let frozen = cursor.snapshot.is_some();
+        // A frozen page must never use the no-change shortcut: it still owes rows.
+        if state.position != Some(target) || query.after_watermark.is_none() {
+            let can_update = query.after_watermark.is_some()
+                && !frozen
+                && state.position.is_some_and(|p| p == cursor.delivered);
+            let changed = if can_update {
+                Some(read::changed_requests(
+                    &tx,
+                    reader,
+                    &query.session_id,
+                    cursor.delivered,
+                    target,
+                )?)
+            } else {
+                None
+            };
+            state.refresh(
+                &tx,
+                reader,
+                &query.session_id,
+                target,
+                now_ms,
+                changed.as_ref(),
+            )?;
+        }
+        state.visibility = visibility;
+        cursor.expires_at = state.expires_at;
         if started.elapsed() > std::time::Duration::from_millis(500) {
             return Err(ObservationV2Error::ScopeTooLarge);
         }
-        turns.sort_by(|a, b| {
-            (a.view.started_at_ms, &a.view.turn_id).cmp(&(b.view.started_at_ms, &b.view.turn_id))
-        });
-        let mut changed: Vec<_> = turns
-            .into_iter()
-            .filter(|turn| {
-                turn.position.newer_than(cursor.delivered)
-                    && cursor.after.as_ref().is_none_or(|after| {
-                        (turn.view.started_at_ms, &turn.view.turn_id) > (after.0, &after.1)
-                    })
+        let start = cursor.after.as_ref().map_or(0, |after| {
+            state.turns.partition_point(|turn| {
+                (turn.view.started_at_ms, &turn.view.turn_id) <= (after.0, &after.1)
             })
+        });
+        let mut changed: Vec<_> = state.turns[start..]
+            .iter()
+            .filter(|turn| turn.position.newer_than(cursor.delivered))
+            .take(usize::from(query.limit) + 1)
+            .cloned()
             .collect();
         let complete = changed.len() <= usize::from(query.limit);
         changed.truncate(usize::from(query.limit));
@@ -142,7 +176,7 @@ impl crate::LocalObservationStore {
             cursor.snapshot = Some(target);
             cursor.after = Some((last.view.started_at_ms, last.view.turn_id.clone()));
         }
-        let turns = changed.into_iter().map(|turn| turn.view).collect();
+        let turns = changed.into_iter().map(|turn| turn.view.clone()).collect();
         let result = RoutingTimelinePageV1 {
             turns,
             watermark: self.encode_observation_cursor(&cursor)?,
@@ -157,6 +191,7 @@ impl crate::LocalObservationStore {
         }
         tx.commit()?;
         super::check_visibility(&connection, visibility)?;
+        caches.insert(key, state);
         Ok(result)
     }
 }

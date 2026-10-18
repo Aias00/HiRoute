@@ -27,7 +27,12 @@ pub(super) fn read(
     session: &str,
     target: Position,
     now: i64,
+    selected: Option<&std::collections::BTreeSet<String>>,
 ) -> Result<(BTreeMap<String, Request>, Vec<Fact>), ObservationV2Error> {
+    let selected = selected
+        .map(serde_json::to_string)
+        .transpose()
+        .map_err(|_| ObservationV2Error::Invalid)?;
     let runs = reader
         .allowed_runs()
         .map(serde_json::to_string)
@@ -47,12 +52,13 @@ pub(super) fn read(
         FROM logical_requests r JOIN sessions s ON s.workspace_id=r.workspace_id AND s.session_id=r.session_id
         LEFT JOIN observation_run_links l ON l.workspace_id=r.workspace_id AND l.request_id=r.request_id
         WHERE r.workspace_id=:workspace AND r.session_id=:session AND r.started_at_ms>=:retained
+          AND (:selected IS NULL OR r.request_id IN(SELECT value FROM json_each(:selected)))
           AND (s.tombstone_reason IS NULL OR EXISTS(SELECT 1 FROM observation_tombstones t WHERE t.workspace_id=s.workspace_id AND t.session_id=s.session_id AND t.delete_scope='content_only'))
           AND (:runs IS NULL OR (l.conflicted=0 AND l.run_id IN(SELECT value FROM json_each(:runs))))
           AND EXISTS(SELECT 1 FROM execution_fact_events e WHERE e.workspace_id=r.workspace_id AND e.request_id=r.request_id AND e.rowid<=:facts)
         ORDER BY r.started_at_ms,r.request_id LIMIT 10001")?;
     let mut bytes = 0usize;
-    let rows = statement.query_map(named_params! { ":workspace":reader.workspace().as_str(), ":session":session, ":retained":retained, ":runs":runs, ":facts":target.facts, ":values":target.values, ":links":target.links }, |r| Ok((r.get::<_,String>(0)?,r.get::<_,i64>(1)?,r.get::<_,Option<i64>>(2)?,r.get::<_,Option<String>>(3)?,r.get::<_,Option<String>>(4)?,r.get::<_,Option<bool>>(5)?,r.get::<_,i64>(6)?,r.get::<_,Option<String>>(7)?,r.get::<_,i64>(8)?,r.get::<_,String>(9)?,r.get::<_,Option<String>>(10)?,r.get::<_,bool>(11)?)))?;
+    let rows = statement.query_map(named_params! { ":selected":selected, ":workspace":reader.workspace().as_str(), ":session":session, ":retained":retained, ":runs":runs, ":facts":target.facts, ":values":target.values, ":links":target.links }, |r| Ok((r.get::<_,String>(0)?,r.get::<_,i64>(1)?,r.get::<_,Option<i64>>(2)?,r.get::<_,Option<String>>(3)?,r.get::<_,Option<String>>(4)?,r.get::<_,Option<bool>>(5)?,r.get::<_,i64>(6)?,r.get::<_,Option<String>>(7)?,r.get::<_,i64>(8)?,r.get::<_,String>(9)?,r.get::<_,Option<String>>(10)?,r.get::<_,bool>(11)?)))?;
     for row in rows {
         let (
             id,
@@ -75,6 +81,8 @@ pub(super) fn read(
         if bytes > 16 * 1024 * 1024 || requests.len() >= 10_000 {
             return Err(ObservationV2Error::ScopeTooLarge);
         }
+        let request_bytes =
+            link.as_ref().map_or(0, String::len) + valuation.as_ref().map_or(0, String::len);
         let link = link
             .and_then(|s| serde_json::from_str::<RunObservationLink>(&s).ok())
             .filter(|l| {
@@ -122,14 +130,17 @@ pub(super) fn read(
                 candidate: None,
                 models: BTreeMap::new(),
                 partial: conflicted == Some(true),
+                body_bytes: request_bytes,
+                fact_count: 0,
+                usage_count: 0,
             },
         );
     }
     let mut statement = tx.prepare("SELECT e.rowid,e.request_id,e.event_id,CASE WHEN length(CAST(p.body_json AS BLOB))<=1048576 THEN json_extract(p.body_json,'$.fact') END,COALESCE(length(CAST(p.body_json AS BLOB)),0)>1048576
         FROM execution_fact_events e LEFT JOIN observation_sensitive_payloads_v2 p ON p.id='fact:'||e.envelope_digest
-        WHERE e.workspace_id=?1 AND e.session_id=?2 AND e.rowid<=?3 ORDER BY e.rowid LIMIT 50001")?;
+        WHERE e.workspace_id=?1 AND e.session_id=?2 AND e.rowid<=?3 AND (?4 IS NULL OR e.request_id IN(SELECT value FROM json_each(?4))) ORDER BY e.rowid LIMIT 50001")?;
     let rows = statement.query_map(
-        rusqlite::params![reader.workspace().as_str(), session, target.facts],
+        rusqlite::params![reader.workspace().as_str(), session, target.facts, selected],
         |r| {
             Ok((
                 r.get::<_, i64>(0)?,
@@ -149,6 +160,7 @@ pub(super) fn read(
         let Some(request) = requests.get_mut(&request_id) else {
             continue;
         };
+        request.fact_count += 1;
         if oversized {
             return Err(ObservationV2Error::ScopeTooLarge);
         }
@@ -159,6 +171,7 @@ pub(super) fn read(
             continue;
         };
         bytes += value.len();
+        request.body_bytes += value.len();
         if bytes > 32 * 1024 * 1024 {
             return Err(ObservationV2Error::ScopeTooLarge);
         }
@@ -171,9 +184,9 @@ pub(super) fn read(
     }
     // Reuse the valuation owner's cumulative/delta normalization. Unknown usage
     // remains unknown rather than silently turning a partial sum into a total.
-    let mut statement = tx.prepare("SELECT i.request_id,CASE WHEN length(CAST(i.usage_json AS BLOB))<=65536 THEN i.usage_json END,COALESCE(length(CAST(i.usage_json AS BLOB)),0)>65536 FROM valuation_attempt_inputs_v2 i JOIN logical_requests r ON r.workspace_id=i.workspace_id AND r.request_id=i.request_id WHERE r.workspace_id=?1 AND r.session_id=?2 ORDER BY i.request_id,i.ordinal LIMIT 50001")?;
+    let mut statement = tx.prepare("SELECT i.request_id,CASE WHEN length(CAST(i.usage_json AS BLOB))<=65536 THEN i.usage_json END,COALESCE(length(CAST(i.usage_json AS BLOB)),0)>65536 FROM valuation_attempt_inputs_v2 i JOIN logical_requests r ON r.workspace_id=i.workspace_id AND r.request_id=i.request_id WHERE r.workspace_id=?1 AND r.session_id=?2 AND (?3 IS NULL OR r.request_id IN(SELECT value FROM json_each(?3))) ORDER BY i.request_id,i.ordinal LIMIT 50001")?;
     let rows = statement.query_map(
-        rusqlite::params![reader.workspace().as_str(), session],
+        rusqlite::params![reader.workspace().as_str(), session, selected],
         |r| {
             Ok((
                 r.get::<_, String>(0)?,
@@ -195,6 +208,10 @@ pub(super) fn read(
             return Err(ObservationV2Error::ScopeTooLarge);
         }
         bytes += body.as_ref().map_or(0, String::len);
+        if let Some(request) = requests.get_mut(&id) {
+            request.body_bytes += body.as_ref().map_or(0, String::len);
+            request.usage_count += 1;
+        }
         if bytes > 32 * 1024 * 1024 {
             return Err(ObservationV2Error::ScopeTooLarge);
         }
@@ -218,6 +235,7 @@ pub(super) fn read(
             .filter(|(i, r)| *i > 0 && r <= i)
             .map(|(i, r)| r as f64 / i as f64);
     }
+    projection::hydrate(&mut requests, &facts);
     Ok((requests, facts))
 }
 
@@ -263,4 +281,39 @@ fn unknown(count: u64) -> RoutingTimelineCostV1 {
         known_micros: None,
         unknown_contributions: count,
     }
+}
+
+/// Scan only the newly appended interval. Advancing the authenticated cursor
+/// across an empty interval prevents repeated work on other sessions' traffic.
+pub(super) fn changed_requests(
+    tx: &Transaction<'_>,
+    reader: &ObservationReaderContext,
+    session: &str,
+    from: Position,
+    through: Position,
+) -> Result<std::collections::BTreeSet<String>, ObservationV2Error> {
+    let mut result = std::collections::BTreeSet::new();
+    for (table, low, high) in [
+        ("execution_fact_events", from.facts, through.facts),
+        ("valuation_records_v2", from.values, through.values),
+        ("observation_link_events", from.links, through.links),
+    ] {
+        if low == high {
+            continue;
+        }
+        let sql = format!(
+            "SELECT DISTINCT e.request_id FROM {table} e JOIN logical_requests r ON r.workspace_id=e.workspace_id AND r.request_id=e.request_id WHERE e.rowid>?1 AND e.rowid<=?2 AND r.workspace_id=?3 AND r.session_id=?4 LIMIT 10001"
+        );
+        let mut statement = tx.prepare(&sql)?;
+        for row in statement.query_map(
+            rusqlite::params![low, high, reader.workspace().as_str(), session],
+            |r| r.get::<_, String>(0),
+        )? {
+            result.insert(row?);
+            if result.len() > 10_000 {
+                return Err(ObservationV2Error::ScopeTooLarge);
+            }
+        }
+    }
+    Ok(result)
 }

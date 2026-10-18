@@ -1,4 +1,5 @@
 use super::*;
+use std::sync::Arc;
 
 fn held(request: &Request, code: LedgerReasonCodeV1) -> bool {
     request
@@ -7,10 +8,7 @@ fn held(request: &Request, code: LedgerReasonCodeV1) -> bool {
         .is_some_and(|d| d.reason_ledger.iter().any(|r| r.code == code))
 }
 
-pub(super) fn project(
-    mut requests: BTreeMap<String, Request>,
-    facts: &[Fact],
-) -> Result<Vec<Projected>, ObservationV2Error> {
+pub(super) fn hydrate(requests: &mut BTreeMap<String, Request>, facts: &[Fact]) {
     for fact in facts {
         let Some(request) = requests.get_mut(&fact.request_id) else {
             continue;
@@ -50,6 +48,17 @@ pub(super) fn project(
                 .map(|(_, model)| model.clone());
         }
     }
+}
+
+pub(super) fn project(
+    requests: &BTreeMap<String, Request>,
+    facts: &[Fact],
+    previous: Position,
+    bases: &mut BTreeMap<String, Arc<Projected>>,
+    old: &[Arc<Projected>],
+) -> Result<Vec<Arc<Projected>>, ObservationV2Error> {
+    let old: BTreeMap<_, _> = old.iter().map(|t| (t.view.turn_id.as_str(), t)).collect();
+    let mut next_bases = BTreeMap::new();
     let mut ordered: Vec<_> = requests.values().collect();
     ordered.sort_by_key(|r| (r.first_fact, &r.view.request_id));
     let positions: BTreeMap<_, _> = ordered
@@ -111,6 +120,22 @@ pub(super) fn project(
             return Err(ObservationV2Error::Unavailable);
         }
         covered.extend(members.iter().map(|r| r.view.request_id.as_str()));
+        let mut position = Position {
+            facts: fact.position,
+            ..Default::default()
+        };
+        for r in members {
+            position.include(r.position);
+        }
+        let key = &members[0].view.request_id;
+        if !position.newer_than(previous)
+            && let Some(turn) = bases.get(key)
+        {
+            ordinals.insert(key.clone(), *ordinal);
+            next_bases.insert(key.clone(), turn.clone());
+            result.push(turn.clone());
+            continue;
+        }
         let mut turn = make_turn(members)?;
         turn.position.facts = turn.position.facts.max(fact.position);
         turn.view.agent_turn_id = Some(agent_turn_id.clone());
@@ -135,6 +160,8 @@ pub(super) fn project(
             .into();
         turn.view.evidence_partial |= *history_partial;
         ordinals.insert(turn.view.turn_id.clone(), *ordinal);
+        let turn = Arc::new(turn);
+        next_bases.insert(turn.view.turn_id.clone(), turn.clone());
         result.push(turn);
     }
     // Requests arrive before AgentTurnFinished. Keep their opening-request ID stable.
@@ -142,103 +169,161 @@ pub(super) fn project(
     for request in &ordered {
         if covered.contains(request.view.request_id.as_str()) {
             if !pending.is_empty() {
-                result.push(make_turn(&pending)?);
+                result.push(base_turn(&pending, previous, bases, &mut next_bases)?);
                 pending.clear();
             }
             continue;
         }
         if !pending.is_empty() && !held(request, LedgerReasonCodeV1::ContextHoldApplied) {
-            result.push(make_turn(&pending)?);
+            result.push(base_turn(&pending, previous, bases, &mut next_bases)?);
             pending.clear();
         }
         pending.push(*request);
     }
     if !pending.is_empty() {
-        result.push(make_turn(&pending)?);
+        result.push(base_turn(&pending, previous, bases, &mut next_bases)?);
     }
     result.sort_by(|a, b| {
         (a.view.started_at_ms, &a.view.turn_id).cmp(&(b.view.started_at_ms, &b.view.turn_id))
     });
-    for index in 0..result.len() {
-        let first = requests
-            .get(&result[index].view.turn_id)
-            .ok_or(ObservationV2Error::Unavailable)?;
+    // Index assessment candidates by their segment instead of comparing every
+    // assessment with every turn. Positions include cross-turn dependencies.
+    let mut assessments: BTreeMap<&str, Vec<&Fact>> = BTreeMap::new();
+    for fact in facts {
+        if let ExecutionFactV1::BranchAssessmentRecorded { segment_id, .. } = &fact.value {
+            assessments
+                .entry(segment_id.as_str())
+                .or_default()
+                .push(fact);
+        }
+    }
+    let mut protections: BTreeMap<&str, Vec<(String, Position)>> = BTreeMap::new();
+    for turn in &result {
+        if let Some(trigger) = turn
+            .view
+            .selection
+            .as_ref()
+            .and_then(|s| s.competence_trigger.as_ref())
+        {
+            protections
+                .entry(trigger.segment_id.as_str())
+                .or_default()
+                .push((turn.view.turn_id.clone(), turn.position));
+        }
+    }
+    let mut output = Vec::with_capacity(result.len());
+    for (index, base) in result.iter().enumerate() {
+        let mut dependency = base.position;
+        if index > 0 {
+            dependency.include(result[index - 1].position);
+        }
+        if index + 1 < result.len() {
+            dependency.include(result[index + 1].position);
+        }
+        let candidates = base
+            .view
+            .segment_id
+            .as_deref()
+            .and_then(|s| assessments.get(s));
+        let score = candidates
+            .into_iter()
+            .flatten()
+            .filter(|fact| {
+                let ExecutionFactV1::BranchAssessmentRecorded {
+                    plan_id,
+                    plan_revision,
+                    model_configuration_id,
+                    target_from_ordinal,
+                    target_through_ordinal,
+                    ..
+                } = &fact.value
+                else {
+                    return false;
+                };
+                base.view.plan_id.as_deref() == Some(plan_id.as_str())
+                    && base.view.plan_revision == Some(*plan_revision)
+                    && base.view.model_configuration_id.as_ref() == Some(model_configuration_id)
+                    && ordinals
+                        .get(&base.view.turn_id)
+                        .is_some_and(|n| n >= target_from_ordinal && n <= target_through_ordinal)
+            })
+            .max_by_key(|fact| match &fact.value {
+                ExecutionFactV1::BranchAssessmentRecorded { assessed_at_ms, .. } => {
+                    (*assessed_at_ms, fact.position)
+                }
+                _ => unreachable!(),
+            });
+        if let Some(fact) = score {
+            dependency.facts = dependency.facts.max(fact.position);
+            if let ExecutionFactV1::BranchAssessmentRecorded {
+                trigger_request_id, ..
+            } = &fact.value
+                && let Some(trigger) = requests.get(trigger_request_id.as_str())
+            {
+                dependency.include(trigger.position);
+            }
+        }
+        let protected = base
+            .view
+            .segment_id
+            .as_deref()
+            .and_then(|s| protections.get(s));
+        for (_, position) in protected.into_iter().flatten() {
+            dependency.include(*position);
+        }
+        if !dependency.newer_than(previous)
+            && let Some(turn) = old.get(base.view.turn_id.as_str())
+        {
+            output.push((*turn).clone());
+            continue;
+        }
+        let mut turn = (**base).clone();
+        turn.position = dependency;
+        let first = &requests[&turn.view.turn_id];
         if held(first, LedgerReasonCodeV1::ContextHoldInvalidated) {
-            result[index].view.boundary = RoutingTurnBoundaryV1::ContextRebuild;
+            turn.view.boundary = RoutingTurnBoundaryV1::ContextRebuild;
         } else if index > 0 && !held(first, LedgerReasonCodeV1::ContextHoldApplied) {
-            let previous = requests
-                .get(&result[index - 1].view.turn_id)
-                .ok_or(ObservationV2Error::Unavailable)?;
+            let prior = &requests[&result[index - 1].view.turn_id];
             if first
                 .native_turn
                 .as_ref()
-                .zip(previous.native_turn.as_ref())
+                .zip(prior.native_turn.as_ref())
                 .is_some_and(|(a, b)| a != b)
                 && first.native_session.is_some()
-                && first.native_session == previous.native_session
-                && first.run_id == previous.run_id
+                && first.native_session == prior.native_session
+                && first.run_id == prior.run_id
                 && first
                     .decision
                     .as_ref()
                     .and_then(|d| d.complexity.as_ref())
                     .is_some_and(|s| s.decision_source != ComplexityDecisionSourceV1::Inherited)
             {
-                result[index].view.boundary = RoutingTurnBoundaryV1::NewUserMessage;
+                turn.view.boundary = RoutingTurnBoundaryV1::NewUserMessage;
             }
         }
-        if index + 1 < result.len() {
-            result[index].view.assessment_state = "unrated".into();
-            let next = result[index + 1].position;
-            result[index].position.include(next);
+        turn.view.assessment_state = if index + 1 < result.len()
+            || matches!(turn.view.status.as_str(), "failed" | "interrupted")
+        {
+            "unrated"
         } else {
-            result[index].view.assessment_state =
-                if matches!(result[index].view.status.as_str(), "failed" | "interrupted") {
-                    "unrated"
-                } else {
-                    "pending"
-                }
-                .into();
+            "pending"
         }
-    }
-    for fact in facts {
-        let ExecutionFactV1::BranchAssessmentRecorded {
-            segment_id,
-            plan_id,
-            plan_revision,
-            model_configuration_id,
-            trigger_request_id,
-            target_from_turn_id,
-            target_through_turn_id,
-            target_from_ordinal,
-            target_through_ordinal,
-            assessed_at_ms,
-            score,
-            partial,
-            ..
-        } = &fact.value
-        else {
-            continue;
-        };
-        for turn in &mut result {
-            if turn.view.segment_id.as_ref() != Some(segment_id)
-                || turn.view.plan_id.as_deref() != Some(plan_id.as_str())
-                || turn.view.plan_revision != Some(*plan_revision)
-                || turn.view.model_configuration_id.as_ref() != Some(model_configuration_id)
-                || !ordinals
-                    .get(&turn.view.turn_id)
-                    .is_some_and(|n| n >= target_from_ordinal && n <= target_through_ordinal)
-            {
-                continue;
-            }
-            if turn
-                .view
-                .assessment
-                .as_ref()
-                .is_some_and(|a| a.assessed_at_ms > *assessed_at_ms as i64)
-            {
-                continue;
-            }
-            turn.position.facts = turn.position.facts.max(fact.position);
+        .into();
+        if let Some(fact) = score {
+            let ExecutionFactV1::BranchAssessmentRecorded {
+                trigger_request_id,
+                target_from_turn_id,
+                target_through_turn_id,
+                target_from_ordinal,
+                target_through_ordinal,
+                assessed_at_ms,
+                score,
+                partial,
+                ..
+            } = &fact.value
+            else {
+                unreachable!()
+            };
             turn.view.assessment_state = if *partial { "partial" } else { "scored" }.into();
             turn.view.assessment = Some(PlanQualityAssessment {
                 event_id: fact.event_id.clone(),
@@ -254,36 +339,40 @@ pub(super) fn project(
                 evidence_available: requests.contains_key(trigger_request_id.as_str()),
             });
         }
-    }
-    let protections: Vec<_> = result
-        .iter()
-        .filter_map(|turn| {
-            turn.view
-                .selection
-                .as_ref()?
-                .competence_trigger
-                .as_ref()
-                .map(|trigger| {
-                    (
-                        trigger.segment_id.clone(),
-                        turn.view.turn_id.clone(),
-                        turn.position,
-                    )
-                })
-        })
-        .collect();
-    for turn in &mut result {
-        for (segment, id, position) in &protections {
-            if turn.view.segment_id.as_ref() == Some(segment) {
-                turn.view.protected_turn_ids.push(id.clone());
-                turn.position.include(*position);
-            }
-        }
+        turn.view.protected_turn_ids = protected
+            .into_iter()
+            .flatten()
+            .map(|(id, _)| id.clone())
+            .collect();
         turn.view.content_digest = CanonicalDigest::of(&turn.view)
             .map_err(|_| ObservationV2Error::Unavailable)?
             .to_string();
+        output.push(Arc::new(turn));
     }
-    Ok(result)
+    *bases = next_bases;
+    Ok(output)
+}
+
+fn base_turn(
+    members: &[&Request],
+    previous: Position,
+    old: &BTreeMap<String, Arc<Projected>>,
+    next: &mut BTreeMap<String, Arc<Projected>>,
+) -> Result<Arc<Projected>, ObservationV2Error> {
+    let key = &members[0].view.request_id;
+    let mut position = Position::default();
+    for r in members {
+        position.include(r.position);
+    }
+    let turn = if !position.newer_than(previous)
+        && let Some(turn) = old.get(key)
+    {
+        turn.clone()
+    } else {
+        Arc::new(make_turn(members)?)
+    };
+    next.insert(key.clone(), turn.clone());
+    Ok(turn)
 }
 
 fn make_turn(members: &[&Request]) -> Result<Projected, ObservationV2Error> {

@@ -10,7 +10,7 @@ mod plan_quality;
 pub(crate) use plan_quality::routing_reason;
 mod relation;
 mod requests;
-mod routing_timeline;
+pub(crate) mod routing_timeline;
 mod schema;
 mod search;
 #[cfg(test)]

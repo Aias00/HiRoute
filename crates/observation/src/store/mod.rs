@@ -27,6 +27,7 @@ use crate::DigestAuthority;
 use crate::writer::ObservationStoreError;
 
 pub struct LocalObservationStore {
+    pub(crate) timeline_cache: Mutex<crate::query_v2::routing_timeline::cache::TimelineCache>,
     pub(crate) maintenance_running: std::sync::Arc<std::sync::atomic::AtomicBool>,
     pub(crate) index_running: std::sync::Arc<std::sync::atomic::AtomicBool>,
     pub(crate) maintenance_errors: std::sync::atomic::AtomicU64,
@@ -59,6 +60,7 @@ impl LocalObservationStore {
         // storage unreadable when its own table-local format is unavailable.
         let _ = crate::analysis::migrate(&mut connection);
         Ok(Self {
+            timeline_cache: Default::default(),
             maintenance_running: Default::default(),
             index_running: Default::default(),
             maintenance_errors: std::sync::atomic::AtomicU64::new(0),
