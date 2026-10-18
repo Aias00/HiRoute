@@ -58,9 +58,9 @@ separate from the tested product default of 0.8.
 
 ## Research material availability
 
-This directory includes the [bilingual datasets](datasets/), [curated response
-ledgers](responses/), [exact execution requests and plans](execution/), [anonymous
-review evidence](reviews/), and a portable [offline replay and evaluator](REPRODUCE.md).
+This directory includes the [bilingual datasets](datasets/README.md), [curated response
+ledgers](responses/README.md), [exact execution requests and plans](execution/README.md), [anonymous
+review evidence](reviews/README.md), and a portable [offline replay and evaluator](REPRODUCE.md).
 The [data card](DATA-CARD.md) documents construction, dependence, disclosures,
 intended use and label boundaries. [MANIFEST.json](MANIFEST.json) records public
 file hashes; original source hashes are separately recorded under `provenance/`.
