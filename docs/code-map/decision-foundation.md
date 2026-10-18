@@ -139,3 +139,11 @@ and [CLI entry tests](../../crates/cli/src/lib.rs) must remain aligned.
 Documentation fixtures and native windows with constructed observation records
 illustrate the product. Neither capture method proves live-provider behavior or
 answer quality; acceptance records must identify the actual revision and scenario.
+
+The session timeline uses a [read-specific selection](../../crates/domain/src/observation/routing_timeline.rs)
+to expose opening historical-protection evidence while preserving the stored decision.
+The [protection evidence guard](../../apps/desktop/src/features/trust/protection-evidence.ts)
+checks complete matching Plan, revision, time and branch scope before placing a
+released-decision count beside protected stages. Product requirements belong to
+[smart-saving routing](../../issue-spec/specs/smart-saving-routing/spec.md) and
+[session history](../../issue-spec/specs/session-history/spec.md).

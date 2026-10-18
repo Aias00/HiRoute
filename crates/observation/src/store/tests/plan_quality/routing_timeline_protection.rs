@@ -51,6 +51,32 @@ fn timeline_preserves_opening_protection_and_keeps_later_scores_separate() {
         }
         let original_selection = serde_json::to_value(&selection).unwrap();
         let previous_score = observation.score.as_ref().unwrap().as_f64().unwrap();
+        let mut continuation = current.clone();
+        continuation.request = LogicalRequestId::parse(format!("continuation-{variant}")).unwrap();
+        let mut inherited = route.clone();
+        if let ExecutionFactV1::RouteDecision(decision) = &mut inherited {
+            decision.complexity.as_mut().unwrap().decision_source =
+                ComplexityDecisionSourceV1::Inherited;
+            decision.reason_ledger.push(ReasonLedgerEntryV1 {
+                ordinal: 1,
+                code: LedgerReasonCodeV1::ContextHoldApplied,
+                group_id: None,
+            });
+        }
+        let mut close = finished(
+            &current,
+            "current-stage",
+            "current-turn",
+            2,
+            SMART_SAVING_SCOPE_ID,
+            1200,
+        );
+        if let ExecutionFactV1::AgentTurnFinished {
+            last_request_id, ..
+        } = &mut close
+        {
+            *last_request_id = Some(continuation.request.clone());
+        }
         let facts = [
             previous.fact(
                 1,
@@ -76,20 +102,10 @@ fn timeline_preserves_opening_protection_and_keeps_later_scores_separate() {
                 1100,
             ),
             current.fact(3, route, 1200),
+            continuation.fact(4, inherited, 1205),
+            current.fact(5, close, 1210),
             current.fact(
-                4,
-                finished(
-                    &current,
-                    "current-stage",
-                    "current-turn",
-                    2,
-                    SMART_SAVING_SCOPE_ID,
-                    1200,
-                ),
-                1210,
-            ),
-            current.fact(
-                5,
+                6,
                 assessment(
                     &current,
                     "current-stage",
@@ -119,6 +135,13 @@ fn timeline_preserves_opening_protection_and_keeps_later_scores_separate() {
             .iter()
             .find(|turn| turn.turn_id == current.request.as_str())
             .unwrap();
+        assert_eq!(
+            page.turns.len(),
+            2,
+            "a continuation stays inside the opening turn"
+        );
+        assert_eq!(turn.requests.len(), 2);
+        assert_eq!(turn.tool_continuations, 1);
         let selection = turn.selection.as_ref().unwrap();
         let history = selection.historical_protection.as_ref().unwrap();
         assert_eq!(history.outcome, observation.protection_action);

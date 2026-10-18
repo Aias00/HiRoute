@@ -58,6 +58,15 @@ proves native authorization, persistence, process cleanup or real model calls.
 | Change model grouping or inspect page controls | `desktop.models.view-switch`, `desktop.presentation.control-layout`; [presentation scenarios](v3/browser/presentation-interactions.mjs) | Production styles preserve model/connection counts, selected model and visible selection. Chinese/English and light/dark checks reject browser-default buttons and horizontal overflow from long recent-session titles at the supported small window. |
 | Try a new model, judge its evidence and follow live routing | `timeline.initial-failure-retry-recovers.*`, `timeline.polls-only-while-displayed-and-visible`, `trust.scoring-states.both-groupings.*`, `quickstart.*.inline-connection-guard.model-change-and-back` in [trial scenarios](v3/visual/new-model-trial-active.mjs) | A failed timeline read keeps its tab, error and Retry until recovery, while only a confirmed empty read hides the tab; polling continues only while the timeline is shown and the window is visible, after one availability probe. Per-model and per-executor groupings both show scoring coverage and complete/partial/awaiting/unscored counts. Changing models, going back or leaving the quick start asks before discarding the inline connection form; Cancel keeps the model and input. `HIROUTE_BROWSER_TRANSPORT=console` runs the same scenarios over the console host. Real feed retrieval, saved trials and live sessions require native acceptance. |
 
+The [historical protection and overview scenarios](v3/visual/new-model-trial-protection-active.mjs)
+run with `node tests/v3/visual/new-model-trial.mjs <evidence-directory> --protection`.
+They verify scope-matched release counts and explicit unavailable reasons, the opening
+selection's historical-protection outcome/previous score, and forty-turn overview
+navigation, viewport tracking, keyboard access and live append. Use the same
+`HIROUTE_BROWSER_TRANSPORT=console` switch for the console host. These remain
+production-component scenarios with synthetic data; real protection/release
+records and native acceptance need their own evidence. Run browser suites serially.
+
 The [trial interaction refinements](v3/visual/new-model-trial-polish-active.mjs)
 run with `node tests/v3/visual/new-model-trial.mjs <evidence-directory> --polish`.
 They cover cached trust-level replay, precise-value debounce, shared reason labels,

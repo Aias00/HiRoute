@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { mockIPC } from './host-mock';
 import { Sessions } from '../../../src/features/Sessions';
+import type { TimelineTurn } from '../../../src/features/RoutingTimeline';
 import { Models } from '../../../src/features/models/Models';
 import { PlanEditor } from '../../../src/plan-editor';
 import { PresentationRoot, ProductPage } from '../../../src/ui';
@@ -61,7 +62,20 @@ const homeSuggestions = [
 ];
 const timelineRequests = (params.has('polish') ? Array.from({length:Number(params.get('turns')??2)},(_,i)=>i+1) : params.has('stale-timeline') ? [1,2,3] : [1,2]).map(i => ({request_id:`request-${i}`,started_at_ms:Date.now()-10000+i*1000,duration_ms:1500,native_model:i===1?'primary-model':'trial-model',input_tokens:1000,output_tokens:200,cache_read_tokens:990,cache_read_share:0.99,costs:[{model_configuration_id:i===1?'Primary':'Trial',currency:'USD',valuation_kind:'usage_estimate',known_micros:1250,unknown_contributions:i===1?0:1}],outcome:'completed'}));
 let timelinePolls=0; let busyReturned=false;
-const timelineTurn = (i:number,updated=false) => ({turn_id:`request-${i}`,agent_turn_id:`turn-${i}`,segment_id:`stage-${i}`,started_at_ms:timelineRequests[i-1].started_at_ms,finished_at_ms:timelineRequests[i-1].started_at_ms+1500,boundary:i===1?'new_user_message':'context_rebuild',plan_id:dailyPlan.agent_plan_id,plan_revision:8,branch_id:'smart_saving',model_configuration_id:i===1?'Primary model with a long readable name':'Trial model',reasoning_profile_id:'high',group:i===1?'primary':'regular',selection:{simple_probability:i===1?0.62:0.94,simple_threshold_millis:900,selection_reason:i===1?'complex_task':'simple_task',competence_trigger:null},tool_continuations:1,relays:[],assessment_state:updated?'scored':'pending',assessment:updated?{score:0.4,partial:false,target_from_ordinal:1,target_through_ordinal:1}:null,competence_floor_millis:500,protected_turn_ids:[],status:'completed',requests:[timelineRequests[i-1]],cost_by_model:timelineRequests[i-1].costs,evidence_partial:false,content_digest:`digest-${i}-${updated}`});
+const timelineTurn = (i:number,updated=false): TimelineTurn => { const turn: TimelineTurn = {turn_id:`request-${i}`,agent_turn_id:`turn-${i}`,segment_id:`stage-${i}`,started_at_ms:timelineRequests[i-1].started_at_ms,finished_at_ms:timelineRequests[i-1].started_at_ms+1500,boundary:i===1?'new_user_message':'context_rebuild',plan_id:dailyPlan.agent_plan_id,plan_revision:8,branch_id:'smart_saving',model_configuration_id:i===1?'Primary model with a long readable name':'Trial model',reasoning_profile_id:'high',group:i===1?'primary':'regular',selection:{simple_probability:i===1?0.62:0.94,simple_threshold_millis:900,selection_reason:i===1?'complex_task':'simple_task',competence_trigger:null},tool_continuations:1,relays:[],assessment_state:updated?'scored':'pending',assessment:updated?{score:0.4,partial:false,target_from_ordinal:1,target_through_ordinal:1}:null,competence_floor_millis:500,protected_turn_ids:[],status:'completed',requests:[timelineRequests[i-1]],cost_by_model:timelineRequests[i-1].costs,evidence_partial:false,content_digest:`digest-${i}-${updated}`};
+  if(params.has('protection')) {
+    const outcome = (['applied','suppressed','retained_unavailable','not_needed','not_considered',null] as const)[(i-1)%6];
+    const protectedTurn = outcome==='applied' || outcome==='retained_unavailable';
+    turn.group=protectedTurn?'primary':'regular';
+    turn.selection!.simple_probability=0.94;
+    turn.selection!.selection_reason=protectedTurn?'low_competence':'simple_task';
+    turn.selection!.historical_protection=outcome ? {outcome,previous_score:outcome==='not_needed'?0.8:outcome==='not_considered'?null:0.3,competence_floor_millis:500,applicability_probability:outcome==='applied'?0.99:outcome==='suppressed'?0.05:null,applicability_boundary_millis:500} : null;
+    turn.requests=[{...turn.requests[0],native_model:protectedTurn?'primary-model':'trial-model',outcome:i%6===0?'failed':'completed'}];
+    turn.model_configuration_id=protectedTurn?'Primary model':'Trial model';
+    turn.status=i%6===0?'failed':'completed';turn.assessment_state='scored';turn.assessment={score:i%5===0?0.2:0.91,partial:false,target_from_ordinal:i,target_through_ordinal:i};
+  }
+  return turn;
+};
 let pendingTimelineTurns: number[] = [];
 Object.assign(window, { appendTrialTurns: (count = 1) => {
   for (let n=0;n<count;n++) {
@@ -93,6 +107,7 @@ mockIPC(async (command, payload: any) => {
   if (command === 'observation_read' && payload.request.intent.view === 'plan_trust') {
     const value=structuredClone(report); if(params.has('cost')) value.cost={kind:'available',difference_micros:6000,comparison:{currency:'USD',coverage:'complete',request_count:3,compared_request_count:3,missing_request_count:0,excluded_request_count:0,routed_estimate_micros:18000,reference_estimate_micros:12000,compared_routed_subtotal_micros:18000,compared_reference_subtotal_micros:12000,retention_boundary_partial:false,arithmetic_overflow:false}}; if(params.has('division')) value.branches[0].suggestion={kind:'explore_division'}; if (params.has('empty')) {value.rows=[]; value.branches[0].full_history={executed:0,complete:0,meets_floor:0,partial:0,awaiting_assessment:0,unscored:0,sessions:0};}
     if(params.has('cost-partial') || params.has('cost-unknown')) {const known=params.has('cost-partial');value.cost={kind:'available',difference_micros:null,comparison:{currency:'USD',coverage:known?'partial':'unknown',request_count:3,compared_request_count:known?1:0,missing_request_count:known?2:3,excluded_request_count:known?2:3,routed_estimate_micros:null,reference_estimate_micros:null,compared_routed_subtotal_micros:known?6000:null,compared_reference_subtotal_micros:known?4000:null,retention_boundary_partial:false,arithmetic_overflow:false}};}
+    if(params.has('release-evidence')) {value.from_ms=payload.request.intent.query.from_ms??0;value.to_ms=payload.request.intent.query.to_ms;value.revision=payload.request.intent.query.revision;}
     if (payload.request.intent.query.group_by === 'executor') value.rows.forEach(row => row.executor='deepseek_harness');
     return value;
   }
@@ -107,7 +122,7 @@ mockIPC(async (command, payload: any) => {
       if(params.has('polish')) {
         const indices=query.after_watermark==null?timelineRequests.map((_,i)=>i+1):pendingTimelineTurns;
         const turns=indices.map(i=>timelineTurn(i));pendingTimelineTurns=[];
-        if(params.has('reason') && turns[0]) turns[0].selection.selection_reason=params.get('reason')!;
+        if(params.has('reason') && turns[0]) turns[0].selection!.selection_reason=params.get('reason')!;
         return {turns,watermark:`watermark-${timelinePolls}`,complete:true};
       }
       if(params.has('stale-timeline') && query.after_watermark==='watermark-1') throw {message_key:'application.error.change_preview_stale'};
@@ -122,6 +137,12 @@ mockIPC(async (command, payload: any) => {
     if(view==='facts') return {facts:[],projection_partial:false,next_cursor:null};
   }
   if (command === 'observation_read' && ['timeline','catalog','content'].includes(payload.request.intent.view)) return mockProductInvoke(command,payload,'ready');
+  if(command==='observation_read' && payload.request.intent.view==='plan_quality' && params.has('release-evidence')) {
+    const q=payload.request.intent.query, state=params.get('release-evidence');
+    const counts={c_decisions:10,requested:10,unavailable:0,no_target_omissions:0,partial_target_omissions:0,inherited:0,required_question_missing:0,gate_opportunities:5,suppressed:state==='zero'?0:5,unavailable_per_requested:0,suppressed_per_opportunity:state==='zero'?0:1,suppressed_per_c_decision:state==='zero'?0:0.5};
+    const routing={plan_id:state==='plan'?'other-plan':q.plan_id,session_id:null,plan_revision:state==='revision'?99:q.plan_revision,requested_from_ms:q.from_ms??null,requested_to_ms:q.to_ms,covered_from_ms:(q.from_ms??0)+(state==='time'?1:0),covered_to_ms:q.to_ms,coverage:state==='partial'?'partial':'complete',retained_decisions:10,known_non_c_decisions:0,legacy_or_unknown_decisions:0,unknown_scope_decisions:0,missing_projection_events:0,scan_limited:false,cohorts:state==='empty'?[]:[{cohort:{protocol:'fixture',content_digest:'fixture',bundle_digest:'fixture',scope_id:state==='branch'?'another-branch':'smart_saving',standard:'default',provider:'Fixture service',model:'Judgment model',simple_threshold_millis:720,competence_floor_millis:500},counts}]};
+    return {samples:qualitySamples,summary:{models:qualityModels,scored_stage_count:58,unrated_stage_count:19,session_count:9,available_revisions:[8]},routing_observations:state==='missing'?undefined:routing,next_cursor:null};
+  }
   if (command === 'observation_read' && payload.request.intent.query.execution && !params.has('empty')) {
     const {execution,competence}=payload.request.intent.query;
     const pick=competence==='below_floor'?qualitySamples.filter(s=>s.assessment.score<0.6):competence==='meets_floor'?qualitySamples.filter(s=>s.assessment.score>=0.6):qualitySamples;
