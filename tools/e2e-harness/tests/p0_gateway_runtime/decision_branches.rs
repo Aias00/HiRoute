@@ -139,23 +139,26 @@ fn assert_turn_routing(hermes: bool) {
                 let decider = NativeProvider::start(vec![reply(simple), reply(simple)]);
                 let fixture =
                     RuntimeFixture::launch_builtin_branches(&[&regular, &primary, &decider], smart);
-                if hermes {
+                if hermes || c {
                     let mut publication = fixture.publication();
-                    publication
-                        .grants
-                        .iter_mut()
-                        .filter(|grant| {
-                            grant.protocol
+                    if hermes {
+                        publication
+                            .grants
+                            .iter_mut()
+                            .filter(|grant| {
+                                grant.protocol
                                 == hiroute_gateway::server::request_plan::IngressProtocol::Responses
-                        })
-                        .for_each(|grant| {
-                            grant.consumer = Some(hiroute_domain::AgentModelConsumerV1::Hermes)
-                        });
-                    publication.publication_revision += 1;
+                            })
+                            .for_each(|grant| {
+                                grant.consumer = Some(hiroute_domain::AgentModelConsumerV1::Hermes)
+                            });
+                    }
+                    if c {
+                        enable_c_in_publication(&mut publication);
+                    } else {
+                        publication.publication_revision += 1;
+                    }
                     fixture.publish(&mut publication);
-                }
-                if c {
-                    enable_c(&fixture);
                 }
                 let send = |input: &[Value], instructions: &str| {
                     let response = request(fixture.address, "POST", "/v1/responses", &[
@@ -530,9 +533,17 @@ fn builtin_decision_reselects_groups_and_observes_actual_execution_in_both_modes
 }
 
 fn enable_c(fixture: &RuntimeFixture) -> hiroute_domain::FrozenNativeProtocolV1 {
+    let mut publication = fixture.publication();
+    let protocol = enable_c_in_publication(&mut publication);
+    fixture.publish(&mut publication);
+    protocol
+}
+
+fn enable_c_in_publication(
+    publication: &mut hiroute_gateway::server::publication::GatewayPublicationSnapshotV3,
+) -> hiroute_domain::FrozenNativeProtocolV1 {
     use hiroute_domain::*;
     use hiroute_gateway::server::publication::AliasRequestOwnedRouteV1;
-    let mut publication = fixture.publication();
     match &mut publication.aliases[0]
         .routing
         .as_mut()
@@ -591,7 +602,6 @@ fn enable_c(fixture: &RuntimeFixture) -> hiroute_domain::FrozenNativeProtocolV1 
         }
     }
     publication.publication_revision += 1;
-    fixture.publish(&mut publication);
     match &publication.aliases[0]
         .routing
         .as_ref()
