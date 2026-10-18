@@ -271,9 +271,82 @@ fn consumed_draft_binds_identity_and_revision_but_publishes_the_submitted_editor
 
 #[test]
 fn complete_content_operation_binds_the_version_head_and_publication() {
-    let change = change();
-    let state = state();
-    let preview = preview_plan_content(&change, &state).unwrap();
+    assert_complete_content_operation(false);
+}
+
+#[test]
+fn retained_native_operation_uses_frozen_semantics_and_still_rejects_tampering() {
+    assert_complete_content_operation(true);
+}
+
+fn assert_complete_content_operation(legacy_native: bool) {
+    let mut change = change();
+    let mut state = state();
+    if legacy_native {
+        let service = DecisionServiceV1 {
+            id: "decision/retained-operation".into(),
+            revision: 1,
+            name: "Retained native".into(),
+            connection: DecisionConnectionV1::SystemOne {
+                provider: "compatible".into(),
+                model: "synthetic".into(),
+                endpoint: "https://decision.example/systemone".into(),
+                timeout_ms: 3000,
+                auth_header: ClassifierAuthHeaderV1 {
+                    name: "Authorization".into(),
+                    value_secret_ref: "fixture".into(),
+                },
+            },
+        };
+        change.editor.mode = PlanEditorMode::SmartSaving;
+        change.editor.smart.economy = change.editor.candidates.clone();
+        change.editor.smart.primary = change.editor.candidates.clone();
+        change.editor.smart.classifier = ComplexityClassifierModeV1::DecisionService {
+            service: Box::new(service.clone()),
+        };
+        state.decision_service = Some(service);
+    }
+    let mut preview = preview_plan_content(&change, &state).unwrap();
+    if legacy_native {
+        // Construct the supported sealed legacy shape. The real released-producer
+        // acceptance additionally authenticates actual v0.3.1 Operations on reopen.
+        let mut configuration = preview.plan_version.configuration.clone();
+        let AgentPlanStrategyV2::SmartSaving {
+            native_protocol,
+            judgment,
+            ..
+        } = &mut configuration.strategy
+        else {
+            unreachable!()
+        };
+        *native_protocol = None;
+        *judgment = change.editor.smart.judgment.clone();
+        let compiled = crate::compiler::compile_agent_plan_v2(
+            preview.plan_version.compiled.body.identity.clone(),
+            preview.plan_version.reference.content_revision,
+            &configuration,
+            &state.facts,
+        )
+        .unwrap();
+        preview.plan_version =
+            PlanVersionV1::new(state.workspace.clone(), configuration, compiled).unwrap();
+        preview.plan_head.reference = preview.plan_version.reference.clone();
+        assert!(
+            change
+                .editor
+                .effective()
+                .unwrap()
+                .native_protocol()
+                .is_some()
+        );
+        assert!(
+            preview
+                .plan_version
+                .configuration
+                .native_protocol()
+                .is_none()
+        );
+    }
     let mut aliases = state.aliases.clone();
     aliases
         .allocate_custom(
