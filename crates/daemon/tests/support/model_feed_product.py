@@ -195,10 +195,30 @@ def run(repository):
             {'query_id': kind, 'target_locator': {'kind': 'binding', 'binding_id': binding},
              'currency': 'USD', 'valuation_kind': kind} for kind in ['usage_estimate', 'api_equivalent']]})['data']
         assert not prices['pending_activation'] and len(prices['items']) == 2, prices
-        for item in prices['items']:
-            quote = item['quote']
-            assert quote['rates']['input_uncached'] == {'state': 'known', 'micros_per_million_tokens': 1234567}, quote
-            assert quote['rates']['output'] == {'state': 'known', 'micros_per_million_tokens': 2345678}, quote
+        by_kind = {item['query_id']: item for item in prices['items']}
+        for item in by_kind.values():
+            assert item['quote']['exact_target']['model_identity'] == {'kind': 'catalog_model', 'id': MODEL}, item
+        quote = by_kind['usage_estimate']['quote']
+        assert quote['rates']['input_uncached'] == {'state': 'known', 'micros_per_million_tokens': 1234567}, quote
+        assert quote['rates']['output'] == {'state': 'known', 'micros_per_million_tokens': 2345678}, quote
+        # API-equivalent references keep their existing separate, explicit pricing contract.
+        reference = by_kind['api_equivalent']
+        assert reference['quote']['unknown_reasons'] == ['price_not_collected'], reference
+        reference_rates = {key: {'state': 'known', 'micros_per_million_tokens': 3456789}
+                           for key in ['input_uncached', 'output', 'cache_read', 'cache_write']}
+        preview = product.cli('prices', 'override', 'preview', '--request-stdin', payload={
+            **reference['edit_context'], 'currency': 'USD', 'valuation_kind': 'api_equivalent',
+            'action': {'kind': 'set', 'rates': reference_rates}})['data']
+        applied = product.cli('prices', 'override', 'apply', '--request-stdin', payload={
+            'spec': preview['spec'], 'accept_digest': preview['change_digest'],
+            'expected_revisions': preview['expected_revisions'], 'idempotency_key': 'feed-api-reference'})['data']
+        assert applied['state'] == 'succeeded', applied
+        configured = product.cli('prices', 'effective', '--request-stdin', payload={'targets': [{
+            'query_id': 'api', 'target_locator': {'kind': 'binding', 'binding_id': binding},
+            'currency': 'USD', 'valuation_kind': 'api_equivalent'}]})['data']
+        assert not configured['pending_activation'], configured
+        quote = configured['items'][0]['quote']
+        assert quote['rates'] == reference_rates and quote['applied_override_refs'], quote
         print(json.dumps({'scenario': 'signed-feed-default-and-api-reference-prices', 'state': 'green'}), flush=True)
         discovered = product.cli('worker', 'dependencies', 'discover')['data']
         revision = next(x['revision'] for x in discovered['selection_revisions'] if x['harness'] == 'codex_cli')
