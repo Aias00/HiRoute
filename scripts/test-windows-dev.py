@@ -225,11 +225,12 @@ class Runner(unittest.TestCase):
         self.assertEqual(json.loads((self.root / 'tls-target.json').read_text())['authority'], 'example.com')
 
     def test_codex_real_call_requires_completed_turn_tool_and_exact_nonce(self):
-        expected = 'HiRoute-Windows-test:42'
-        events = [{'type':'item.completed','item':{'type':'command_execution','status':'completed','exit_code':0,'aggregated_output':'42\n'}},
+        expected = 'HiRoute-Windows-test:ok'
+        events = [{'type':'item.completed','item':{'type':'command_execution','status':'completed','exit_code':0,
+                   'command':'pwsh -Command Get-Location','aggregated_output':'C:\\acceptance\\bounded-run\n'}},
                   {'type':'item.completed','item':{'type':'agent_message','text':expected}}, {'type':'turn.completed'}]
         def evidence(values):
-            return desktop.codex_call_evidence(('\n'.join(json.dumps(value) for value in values)).encode(), expected)
+            return desktop.codex_call_evidence(('\n'.join(json.dumps(value) for value in values)).encode(), expected, 'bounded-run')
         self.assertTrue(all(evidence(events).values()))
         for index in range(len(events)):
             self.assertFalse(all(evidence(events[:index]+events[index+1:]).values()))

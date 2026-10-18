@@ -186,14 +186,15 @@ both collaboration and management Skill directories for restoration readback.
 `scroll` uses a recent screenshot's window geometry and pointer coordinates, plus
 an explicit `--scroll-direction up|down`; it sends a bounded native mouse wheel
 event to that foreground window. `codex-call` runs the configured real Codex CLI
-with a fixed arithmetic-tool prompt, a read-only sandbox and no approvals. It
+with a fixed `Get-Location` tool prompt, a read-only sandbox and no approvals. It
 requires saved configuration selecting the local HiRoute Gateway and rejects
 authentication/routing environment overrides. Use `--codex-profile hiroute` for
 the product-owned standalone `hiroute.config.toml`, or omit it for the default
 `config.toml`. The native inventory records both files independently; root config
 preservation is expected when using the standalone profile. This optional
 scenario needs Python 3.11+ and verifies the completed tool output and nonce-bearing
-answer; process exit alone is insufficient. Preserve its actual client image hash,
+answer; the completed command must be `Get-Location` and report the actual run
+directory. Process exit alone is insufficient. Preserve its actual client image hash,
 product revision and native output. It does not alter sandbox configuration or
 substitute a model fixture for a real upstream.
 The runner records the actual client version before the call and preserves partial

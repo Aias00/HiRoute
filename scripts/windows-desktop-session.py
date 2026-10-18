@@ -362,14 +362,15 @@ def codex_gateway(document, profile):
     return target
 
 
-def codex_call_evidence(stdout, expected):
+def codex_call_evidence(stdout, expected, directory_token):
     events = [json.loads(line) for line in stdout.decode('utf-8-sig').splitlines() if line.strip()]
     items = [event.get('item', {}) for event in events if event.get('type') == 'item.completed']
     return dict(turn_completed=any(event.get('type') == 'turn.completed' for event in events),
                 answer=any(item.get('type') == 'agent_message' and item.get('text', '').strip() == expected for item in items),
                 shell_tool=any(item.get('type') == 'command_execution' and item.get('status') == 'completed'
                                and item.get('exit_code') == 0
-                               and re.search(r'\b42\b', item.get('aggregated_output', '')) for item in items))
+                               and re.search(r'\bGet-Location\b', item.get('command', ''), re.I)
+                               and directory_token in item.get('aggregated_output', '') for item in items))
 
 
 def codex_process(run, command, environment):
@@ -408,16 +409,17 @@ def codex_call(run, request, helper):
     identity = dict(binary_sha256=checksum, client_version=version.stdout.decode('utf-8-sig').strip(),
                     profile=profile, gateway_endpoint=endpoint)
     (run / 'codex-input.json').write_text(json.dumps(identity, indent=2), encoding='utf-8')
-    expected = 'HiRoute-Windows-' + request['run_id'] + ':42'
-    prompt = ('Do not read or modify any files. Use your shell tool to evaluate the PowerShell arithmetic '
-              'expression (19 + 23). Then reply with exactly ' + expected)
+    expected = 'HiRoute-Windows-' + request['run_id'] + ':ok'
+    prompt = ('Do not read or modify any files or change directories. Use your shell tool to run '
+              'the read-only PowerShell command Get-Location in the current working directory. '
+              'Then reply with exactly ' + expected)
     command = [str(binary), 'exec', '--json', '--skip-git-repo-check', '--sandbox', 'read-only',
                '--config', 'approval_policy="never"']
     if profile:
         command += ['--profile', profile]
     command.append(prompt)
     done = codex_process(run, command, environment)
-    evidence = codex_call_evidence(done.stdout, expected)
+    evidence = codex_call_evidence(done.stdout, expected, run.name)
     evidence.update(identity, exit_code=done.returncode,
                     native_entry='configured Codex exec; read-only sandbox')
     (run / 'codex-call.json').write_text(json.dumps(evidence, indent=2), encoding='utf-8')
