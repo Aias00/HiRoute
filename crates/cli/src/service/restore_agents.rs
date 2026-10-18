@@ -42,6 +42,8 @@ fn preview(client: &LocalControlClient, spec: &AgentSettingsSpecV2) -> io::Resul
         || value["applicable"] != true
         || value["blockers"].as_array().is_none_or(|b| !b.is_empty())
         || returned.context_id != spec.context_id
+        || returned.native_target != spec.native_target
+        || returned.management_skill != spec.management_skill
         || returned.model != spec.model
         || returned.collaboration != spec.collaboration
         || returned.restore_native_model != spec.restore_native_model
@@ -78,7 +80,10 @@ pub(super) fn restore(layout: &hiroute_host_runtime::StandaloneLayout) -> io::Re
             "GetAgentConnectionStatus",
             json!(AgentSettingsStatusRequestV2 {
                 schema_version: AGENT_SETTINGS_SCHEMA_V2,
-                context_id: context.id.clone()
+                context_id: context.id.clone(),
+                native_target: context.native_target.clone(),
+                include_skills: true,
+                effective: None,
             }),
         )
         .and_then(|v| serde_json::from_value::<AgentSettingsStatusV2>(v).map_err(io::Error::other));

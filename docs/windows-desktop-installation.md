@@ -111,10 +111,12 @@ is preserved. User PATH removal applies only when the installer added that fixed
 entry. Data removal is an explicit unchecked option and does not turn the headless
 state root into the NSIS program directory.
 
-Codex's model profile and original root are distinct restore contexts. Its profile
-status also displays the root's collaboration state; uninstall restores that
-Skill through the root and restores any model profile separately. A Skill ownership conflict
-still blocks uninstall before any restore is applied.
+Restoration includes each independently managed model, collaboration Skill and
+management Skill. Codex's model profile and original root are distinct contexts:
+profile status displays both root-owned Skill facets, so uninstall restores those
+through the root and any model profile separately. Explicit native profile targets
+from discovery remain bound to status, Preview and Apply. Incomplete or conflicting
+managed state blocks uninstall before any restore is applied.
 
 If the service cannot start or Agent state cannot be enumerated, interactive
 recovery/uninstall offers a separate confirmation with **No** selected by default.

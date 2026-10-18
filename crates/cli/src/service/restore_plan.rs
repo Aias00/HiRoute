@@ -1,7 +1,7 @@
 //! Restore the actual owning contexts, rather than a UI status projection.
 use hiroute_application_api::{
     AGENT_SETTINGS_SCHEMA_V2, AgentAccessTokenIntentV1, AgentFacetIntent,
-    AgentModelSettingsStateV2, AgentSettingsSpecV2, AgentSettingsStatusV2,
+    AgentModelSettingsStateV2, AgentNativeTargetV1, AgentSettingsSpecV2, AgentSettingsStatusV2,
 };
 use serde_json::Value;
 use std::{collections::BTreeMap, io};
@@ -12,6 +12,8 @@ pub(super) struct Context {
     pub agent: String,
     pub model: bool,
     pub collaboration: bool,
+    pub management_skill: bool,
+    pub native_target: Option<AgentNativeTargetV1>,
 }
 
 pub(super) fn decision(mut agents: Vec<String>) -> io::Error {
@@ -32,12 +34,24 @@ pub(super) fn contexts(list: &Value) -> io::Result<Vec<Context>> {
             continue;
         };
         let name = agent["agent_id"].as_str().unwrap_or(context);
+        let target: Option<AgentNativeTargetV1> =
+            serde_json::from_value(agent["native_target"].clone())
+                .map_err(|_| decision(vec![name.into()]))?;
+        if target
+            .as_ref()
+            .is_some_and(|target| target.validate().is_err())
+            || (name == "agent_hermes_default" && target.is_none())
+        {
+            return Err(decision(vec![name.into()]));
+        }
         let mut insert = |id: &str, model, collaboration| {
             let value = Context {
                 id: id.into(),
                 agent: name.into(),
                 model,
                 collaboration,
+                management_skill: collaboration,
+                native_target: target.clone(),
             };
             if contexts.insert(id.to_owned(), value).is_some() {
                 return Err(unavailable());
@@ -57,8 +71,8 @@ pub(super) fn contexts(list: &Value) -> io::Result<Vec<Context>> {
             if root == profile || ![root, profile].contains(&context) {
                 return Err(unavailable());
             }
-            // Profile status deliberately displays the root's collaboration facet.
-            // Its restore point must be applied to the root, never to the profile.
+            // Profile status deliberately displays both root-owned Skill facets.
+            // Their restore points belong to the root, never to the profile.
             insert(context, true, context == root)?;
             if context != root {
                 insert(root, false, true)?;
@@ -88,9 +102,24 @@ pub(super) fn spec(
         (true, Some(c)) => restore(&c.state, &c.restore_point_ref)?,
         _ => None,
     };
+    let management = if context.management_skill {
+        let management = match status {
+            AgentSettingsStatusV2::Model(model) => model.management_skill.as_ref(),
+            AgentSettingsStatusV2::CollaborationOnly(status) => status.management_skill.as_ref(),
+        }?;
+        if management.schema != "hiroute.agent-management-skill-status/v1" {
+            return None;
+        }
+        restore(&management.state, &management.restore_point_ref)?
+    } else {
+        None
+    };
     Some(AgentSettingsSpecV2 {
         schema_version: AGENT_SETTINGS_SCHEMA_V2,
         context_id: context.id.clone(),
+        native_target: context.native_target.clone(),
+        management_skill: management
+            .map(|restore_point_ref| AgentFacetIntent::Restore { restore_point_ref }),
         model: model
             .map(|restore_point_ref| AgentFacetIntent::Restore { restore_point_ref })
             .unwrap_or_default(),
@@ -118,9 +147,77 @@ mod tests {
             "context_id":context,"state":model,"operation_id":null,"operation_state":null,
             "restore_point_ref":if model == "configured" { Some("model-point") } else { None },
             "applied_revision":null,"surface_results":[],"model_verified":false,
+            "management_skill":{"schema":"hiroute.agent-management-skill-status/v1",
+                "state":"not_configured","operation_id":null,"operation_state":null,"restore_point_ref":null},
             "collaboration":{"schema":"hiroute.agent-collaboration-settings-status/v2",
                 "state":collaboration,"operation_id":null,"operation_state":null,
                 "restore_point_ref":if collaboration == "configured" { Some("root-skill-point") } else { None }}})).unwrap()
+    }
+
+    fn management_status(context: &str, state: &str) -> AgentSettingsStatusV2 {
+        let mut value =
+            serde_json::to_value(status(context, "not_configured", "not_configured")).unwrap();
+        value["management_skill"]["state"] = json!(state);
+        if state == "configured" {
+            value["management_skill"]["restore_point_ref"] = json!("management-point");
+        }
+        serde_json::from_value(value).unwrap()
+    }
+
+    #[test]
+    fn management_only_restore_keeps_the_explicit_native_target_and_all_other_facets() {
+        let root = tempfile::tempdir().unwrap();
+        let target = AgentNativeTargetV1::Hermes {
+            config_root: root.path().to_str().unwrap().into(),
+        };
+        let rows = contexts(&json!({"agents":[{"agent_id":"agent_hermes_default","context_id":"hermes","native_target":target}]})).unwrap();
+        let restore = spec(&rows[0], &management_status("hermes", "configured")).unwrap();
+        assert!(restore.is_restore_only());
+        assert_eq!(restore.native_target, Some(target));
+        assert_eq!(
+            restore.management_skill,
+            Some(AgentFacetIntent::Restore {
+                restore_point_ref: "management-point".into()
+            })
+        );
+        assert!(matches!(restore.model, AgentFacetIntent::Keep));
+        assert!(matches!(restore.collaboration, AgentFacetIntent::Keep));
+        for state in ["drift", "pending", "needs_attention"] {
+            assert!(spec(&rows[0], &management_status("hermes", state)).is_none());
+        }
+        let mut missing = serde_json::to_value(management_status("hermes", "configured")).unwrap();
+        missing["management_skill"]["restore_point_ref"] = Value::Null;
+        assert!(spec(&rows[0], &serde_json::from_value(missing).unwrap()).is_none());
+        let missing_target =
+            json!({"agents":[{"agent_id":"agent_hermes_default","context_id":"hermes"}]});
+        assert!(
+            super::contexts(&missing_target)
+                .unwrap_err()
+                .to_string()
+                .starts_with("AGENT_RESTORE_REQUIRED:")
+        );
+    }
+
+    #[test]
+    fn codex_management_projection_is_restored_only_through_the_original_root() {
+        let rows = contexts(&codex("profile")).unwrap();
+        let profile = rows.iter().find(|row| row.id == "profile").unwrap();
+        let root = rows.iter().find(|row| row.id == "root").unwrap();
+        assert!(
+            spec(profile, &management_status("profile", "configured"))
+                .unwrap()
+                .management_skill
+                .is_none()
+        );
+        assert!(matches!(
+            spec(root, &management_status("root", "configured"))
+                .unwrap()
+                .management_skill,
+            Some(AgentFacetIntent::Restore { .. })
+        ));
+        let mut missing = serde_json::to_value(management_status("root", "configured")).unwrap();
+        missing.as_object_mut().unwrap().remove("management_skill");
+        assert!(spec(root, &serde_json::from_value(missing).unwrap()).is_none());
     }
 
     #[test]

@@ -344,7 +344,8 @@ def execute(request, run, product, pm, helper, activity, manifest, root):
     if action == 'native-files':
         files = {}
         for relative in ('.codex/config.toml', '.claude/settings.json',
-                         '.agents/skills/hiroute-collaboration', '.claude/skills/hiroute-collaboration'):
+                         '.agents/skills/hiroute-collaboration', '.claude/skills/hiroute-collaboration',
+                         '.agents/skills/hiroute-management', '.claude/skills/hiroute-management'):
             path = helper.plain(Path.home() / relative)
             if not path.exists():
                 files[relative] = dict(exists=False)
@@ -387,7 +388,7 @@ def execute(request, run, product, pm, helper, activity, manifest, root):
         args = request['cli_args']
         if (not isinstance(args, list) or not args or len(args) > 40
                 or any(not isinstance(a, str) or len(a) > 64 * 1024 or '\x00' in a for a in args)
-                or args[0] not in ('system', 'service', 'agents', 'plans', 'compute', 'operations', 'console')):
+                or args[0] not in ('system', 'service', 'agents', 'agent', 'plans', 'routing', 'gateway', 'compute', 'operations', 'console')):
             raise ValueError('Only bounded public product CLI families are accepted')
         environment = os.environ.copy()
         environment.update(request['config']['environment'])
