@@ -64,6 +64,8 @@ pub enum ComplexityReasonCodeV1 {
 #[serde(deny_unknown_fields)]
 pub struct BranchDecisionV1 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decision_protocol: Option<hiroute_domain::DecisionProtocolV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub routing_observation: Option<hiroute_domain::RoutingObservationV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub policy: Option<hiroute_domain::BranchExecutionPolicyV1>,

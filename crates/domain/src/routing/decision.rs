@@ -245,8 +245,7 @@ pub struct RouteBranchV1 {
 pub struct BranchRoutingV1 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native_protocol: Option<super::NativeProtocolV1>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub assessment_review: Option<super::AssessmentReviewsV1>,
+
     pub classifier: ComplexityClassifierModeV1,
     pub branches: Vec<RouteBranchV1>,
     pub default_branch_id: String,
@@ -263,12 +262,10 @@ impl BranchRoutingV1 {
         for b in &self.branches {
             super::validate_assessment_scope(
                 self.native_protocol.as_ref(),
-                self.assessment_review.as_ref(),
                 &b.id,
-                b.judgment.is_none(),
                 self.judgment_for(b),
             )?;
-            if (self.native_protocol.is_some() || self.assessment_review.is_some())
+            if self.native_protocol.is_some()
                 && super::incompatible_native_reference(
                     self.native_protocol.is_some(),
                     &b.condition,
@@ -288,13 +285,11 @@ impl BranchRoutingV1 {
                 || self.branches.iter().any(|b| {
                     super::validate_assessment_scope(
                         self.native_protocol.as_ref(),
-                        self.assessment_review.as_ref(),
-                        &b.id,
-                        b.judgment.is_none(),
-                        self.judgment_for(b),
+                                &b.id,
+                                self.judgment_for(b),
                     )
                     .is_err()
-                        || (self.native_protocol.is_some() || self.assessment_review.is_some())
+                        || self.native_protocol.is_some()
                             && super::incompatible_native_reference(
                                 self.native_protocol.is_some(),
                                 &b.condition,

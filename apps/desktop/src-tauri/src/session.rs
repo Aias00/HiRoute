@@ -212,7 +212,7 @@ impl Session {
 
     pub async fn observation_read(
         &mut self,
-        request: ObservationReadRequestV2,
+        request: ObservationReadRequestV3,
     ) -> Result<Value, DesktopFailure> {
         #[cfg(unix)]
         {
@@ -513,6 +513,7 @@ impl Session {
             .map_err(|_| "PLAN_INVALID")?;
         editor.display_name = input.display_name.clone();
         let change = PlanContentChangeV2 {
+            assessment_choices: Default::default(),
             schema: PLAN_CONTENT_CHANGE_SCHEMA_V2.into(),
             target: PlanContentTargetV2::Update {
                 plan_id: plan.agent_plan_id,

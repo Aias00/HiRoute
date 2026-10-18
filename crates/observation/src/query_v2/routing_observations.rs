@@ -26,6 +26,7 @@ pub(super) fn summarize(
         covered_to_ms: to_ms,
         coverage: "complete".into(),
         retained_decisions: 0,
+        known_non_c_decisions: 0,
         legacy_or_unknown_decisions: 0,
         unknown_scope_decisions: 0,
         missing_projection_events: 0,
@@ -102,6 +103,11 @@ pub(super) fn summarize(
         if fact.occurred_at_ms.is_none() {
             result.legacy_or_unknown_decisions += 1;
             continue;
+        }
+        match fact.decision_protocol {
+            Some(DecisionProtocolV1::SystemOneC) => {}
+            Some(_) => { result.known_non_c_decisions += 1; continue; }
+            None => { result.legacy_or_unknown_decisions += 1; continue; }
         }
         let Some(record) = fact.routing_observation else {
             result.legacy_or_unknown_decisions += 1;

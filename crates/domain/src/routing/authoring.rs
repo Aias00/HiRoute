@@ -33,8 +33,7 @@ pub struct WorkerPlanV1 {
 pub struct SmartEditorV2 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native_protocol: Option<super::NativeProtocolV1>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub assessment_review: Option<super::AssessmentReviewsV1>,
+
     pub economy: Vec<CandidateSelectionV1>,
     pub primary: Vec<CandidateSelectionV1>,
     pub judgment: super::JudgmentSettingsV1,
@@ -145,7 +144,6 @@ impl PlanEditorStateV2 {
                     .ok_or(PlanAuthoringError::InvalidStrategy)?;
                 if !super::native_mode(&routing.classifier) {
                     routing.native_protocol = None;
-                    routing.assessment_review = None;
                 }
                 AgentPlanStrategyV2::Branches { routing }
             }
@@ -155,11 +153,6 @@ impl PlanEditorStateV2 {
             PlanEditorMode::SmartSaving => AgentPlanStrategyV2::SmartSaving {
                 native_protocol: if super::native_mode(&self.smart.classifier) {
                     self.smart.native_protocol.clone()
-                } else {
-                    None
-                },
-                assessment_review: if super::native_mode(&self.smart.classifier) {
-                    self.smart.assessment_review.clone()
                 } else {
                     None
                 },
@@ -222,8 +215,6 @@ pub enum AgentPlanStrategyV2 {
     SmartSaving {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         native_protocol: Option<super::NativeProtocolV1>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        assessment_review: Option<super::AssessmentReviewsV1>,
         economy: Vec<CandidateSelectionV1>,
         primary: Vec<CandidateSelectionV1>,
         judgment: super::JudgmentSettingsV1,
@@ -297,8 +288,7 @@ impl AgentPlanAuthoringV2 {
                     complex_keywords,
                     judgment,
                     native_protocol,
-                    assessment_review,
-                    ..
+                        ..
                 },
             ) => {
                 if !judgment.validate() {
@@ -309,9 +299,7 @@ impl AgentPlanAuthoringV2 {
                 }
                 super::validate_assessment_scope(
                     native_protocol.as_ref(),
-                    assessment_review.as_ref(),
                     super::SMART_SAVING_SCOPE_ID,
-                    false,
                     judgment,
                 )
                 .map_err(PlanAuthoringError::NativeProtocol)?;

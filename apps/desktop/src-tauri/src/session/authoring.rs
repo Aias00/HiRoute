@@ -166,6 +166,7 @@ impl Session {
                         revision: d.revision,
                     });
                 serde_json::to_value(PlanContentChangeV2 {
+            assessment_choices: Default::default(),
                     schema: PLAN_CONTENT_CHANGE_SCHEMA_V2.into(),
                     target,
                     editor: input.editor.clone(),

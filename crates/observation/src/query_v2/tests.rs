@@ -609,7 +609,7 @@ fn timeline_uses_each_frozen_route_and_safe_projection_survives_sensitive_deleti
         .observed_facts(
             &reader(None),
             &hiroute_domain::ObservationFactsQueryV2 {
-                include_routing_observations: false,
+
                 request_id: first.request.clone(),
                 limit: 50,
                 cursor: None,

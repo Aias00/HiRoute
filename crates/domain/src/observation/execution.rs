@@ -240,9 +240,15 @@ pub enum ComplexityReasonCodeV1 {
     ClassifierAssessmentInvalid,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DecisionProtocolV1 { SystemOneLegacy, SystemOneC, CustomExtensionV1, LocalRules }
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct BranchDecisionV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decision_protocol: Option<DecisionProtocolV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub routing_observation: Option<crate::RoutingObservationV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

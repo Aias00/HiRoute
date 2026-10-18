@@ -122,8 +122,8 @@ fn production_writer_store_drives_application_owned_defaults_and_all_plan_scope(
         2
     );
 
-    let v2 = hiroute_application_api::ObservationReadRequestV2::new(
-        hiroute_application_api::ObservationReadIntentV2::Sessions(
+    let v2 = hiroute_application_api::ObservationReadRequestV3::new(
+        hiroute_application_api::ObservationReadIntentV3::Sessions(
             hiroute_application_api::ObservationRequestQuery {
                 from_ms: now_ms - 7 * 86_400_000,
                 to_ms: now_ms + 1000,
@@ -164,8 +164,8 @@ fn production_writer_store_drives_application_owned_defaults_and_all_plan_scope(
         hiroute_application_api::ErrorCode::CapabilityDenied
     );
 
-    let search = hiroute_application_api::ObservationReadRequestV2::new(
-        hiroute_application_api::ObservationReadIntentV2::SessionSearch(
+    let search = hiroute_application_api::ObservationReadRequestV3::new(
+        hiroute_application_api::ObservationReadIntentV3::SessionSearch(
             hiroute_application_api::ObservationSearchQueryV2 {
                 from_ms: now_ms - 7 * 86_400_000,
                 to_ms: now_ms + 1000,
@@ -212,8 +212,8 @@ fn production_writer_store_drives_application_owned_defaults_and_all_plan_scope(
         hiroute_application_api::ErrorCode::CapabilityDenied
     );
 
-    let home = hiroute_application_api::ObservationReadRequestV2::new(
-        hiroute_application_api::ObservationReadIntentV2::HomeValue(
+    let home = hiroute_application_api::ObservationReadRequestV3::new(
+        hiroute_application_api::ObservationReadIntentV3::HomeValue(
             hiroute_application_api::ObservationHomeValueQueryV2 {
                 period: Some(hiroute_application_api::ValuePeriodV1::SevenDays),
                 session_id: None,
@@ -238,8 +238,8 @@ fn production_writer_store_drives_application_owned_defaults_and_all_plan_scope(
     assert_eq!(home_data["amounts"][0]["known_sum_micros"], 160);
     assert_eq!(home_data["archive_boundary_partial"], false);
 
-    let scoped_home = hiroute_application_api::ObservationReadRequestV2::new(
-        hiroute_application_api::ObservationReadIntentV2::HomeValue(
+    let scoped_home = hiroute_application_api::ObservationReadRequestV3::new(
+        hiroute_application_api::ObservationReadIntentV3::HomeValue(
             hiroute_application_api::ObservationHomeValueQueryV2 {
                 period: Some(hiroute_application_api::ValuePeriodV1::SevenDays),
                 session_id: Some("session-alpha".into()),
@@ -921,8 +921,8 @@ fn failed_live_check_with_known_usage_is_excluded_by_real_receipt_identity() {
     // The human CLI now emits this current report intent, not a ValueSnapshot
     // ledger query. These production facts deliberately contain no legacy value.
     let application = ApplicationService::new(runtime.application_ports());
-    let value_request = hiroute_application_api::ObservationReadRequestV2::new(
-        hiroute_application_api::ObservationReadIntentV2::ValueReport(
+    let value_request = hiroute_application_api::ObservationReadRequestV3::new(
+        hiroute_application_api::ObservationReadIntentV3::ValueReport(
             hiroute_application_api::ObservationValueReportOptionsV2 {
                 from_ms: Some(query.from_ms),
                 to_ms: Some(query.to_ms),

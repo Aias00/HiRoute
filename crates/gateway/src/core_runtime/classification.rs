@@ -428,6 +428,7 @@ impl ProductionGatewayRuntime {
                 Ok(ClassificationOutcome {
                     diagnostic_failure: None,
                     decision: BranchDecisionV1 {
+                        decision_protocol: None,
                         routing_observation,
                         policy: None,
                         competence_trigger: None,

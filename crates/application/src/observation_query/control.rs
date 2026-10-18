@@ -53,7 +53,7 @@ impl ObservationControl {
         grant: Option<&ProtectedClientGrantV2>,
         payload: Value,
     ) -> Result<Value, ObservationQueryError> {
-        if payload.get("schema").and_then(Value::as_str) == Some("hiroute.observation.query/v2") {
+        if payload.get("schema").and_then(Value::as_str) == Some("hiroute.observation.query/v2") || payload.get("schema").and_then(Value::as_str) == Some("hiroute.observation.query/v3") {
             return self.read_v2(grant, payload, "ListSessions");
         }
 
@@ -129,7 +129,7 @@ impl ObservationControl {
         grant: Option<&ProtectedClientGrantV2>,
         payload: Value,
     ) -> Result<Value, ObservationQueryError> {
-        if payload.get("schema").and_then(Value::as_str) == Some("hiroute.observation.query/v2") {
+        if payload.get("schema").and_then(Value::as_str) == Some("hiroute.observation.query/v2") || payload.get("schema").and_then(Value::as_str) == Some("hiroute.observation.query/v3") {
             return self.read_v2(grant, payload, "GetSession");
         }
 
@@ -152,7 +152,7 @@ impl ObservationControl {
         grant: Option<&ProtectedClientGrantV2>,
         payload: Value,
     ) -> Result<Value, ObservationQueryError> {
-        if payload.get("schema").and_then(Value::as_str) == Some("hiroute.observation.query/v2") {
+        if payload.get("schema").and_then(Value::as_str) == Some("hiroute.observation.query/v2") || payload.get("schema").and_then(Value::as_str) == Some("hiroute.observation.query/v3") {
             return self.read_v2(grant, payload, "GetRoutingReceipt");
         }
 
@@ -184,7 +184,7 @@ impl ObservationControl {
         grant: Option<&ProtectedClientGrantV2>,
         payload: Value,
     ) -> Result<Value, ObservationQueryError> {
-        if payload.get("schema").and_then(Value::as_str) == Some("hiroute.observation.query/v2") {
+        if payload.get("schema").and_then(Value::as_str) == Some("hiroute.observation.query/v2") || payload.get("schema").and_then(Value::as_str) == Some("hiroute.observation.query/v3") {
             return self.read_v2(grant, payload, "GetValue");
         }
 

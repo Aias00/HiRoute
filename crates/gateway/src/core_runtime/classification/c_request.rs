@@ -117,7 +117,7 @@ pub(super) fn request_template(
             .map_err(|_| CallFailure::RejectedInput)?,
         provider: authority.decision_provider.clone(),
         model: authority.system_one_model.clone().unwrap_or_default(),
-        standard: protocol.effective_standard(scope).into(),
+        standard: scope.map_or("custom", |s| s.standard.as_str()).into(),
         target_segment: history
             .assessment_target
             .as_ref()

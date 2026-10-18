@@ -125,7 +125,7 @@ pub fn compile_agent_plan_v2(
             primary,
             judgment,
             native_protocol,
-            assessment_review: _,
+
             reselect_on_user_message,
             classifier,
             complex_keywords,

@@ -66,6 +66,7 @@ pub struct RoutingObservationsSummaryV1 {
     pub covered_to_ms: i64,
     pub coverage: String,
     pub retained_decisions: u64,
+    pub known_non_c_decisions: u64,
     pub legacy_or_unknown_decisions: u64,
     pub unknown_scope_decisions: u64,
     pub missing_projection_events: u64,

@@ -77,7 +77,7 @@ impl PlanVersionV1 {
                 PlanEditorMode::SmartSaving,
                 AgentPlanStrategyV2::SmartSaving {
                     native_protocol: None,
-                    assessment_review: None,
+
                     economy: group(MaterializedGroupId::Economy)?,
                     primary: group(MaterializedGroupId::Primary)?,
                     judgment: judgment.clone(),

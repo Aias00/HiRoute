@@ -12,6 +12,7 @@ pub(crate) fn project(
 ) -> Result<(), Error> {
     let fact_json = serde_json::to_value(&envelope.fact).map_err(|_| Error::Corrupt)?;
     let mut fact = ObservationSafeFactV2 {
+        decision_protocol: None,
         routing_observation: None,
         event_id: envelope.event_id.to_string(),
         sequence: envelope.sequence,
@@ -37,6 +38,7 @@ pub(crate) fn project(
     };
     match &envelope.fact {
         ExecutionFactV1::RouteDecision(decision) => {
+            fact.decision_protocol = decision.complexity.as_ref().and_then(|c| c.decision_protocol);
             if let Some(complexity) = &decision.complexity
                 && let Some(observation) = &complexity.routing_observation
             {

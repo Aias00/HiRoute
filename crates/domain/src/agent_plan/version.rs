@@ -36,6 +36,8 @@ pub struct PlanVersionV1 {
     pub schema: String,
     pub reference: PlanExecutionRef,
     pub configuration: AgentPlanAuthoringV2,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assessment_transition: Option<crate::AssessmentReviewsV1>,
     #[serde(with = "crate::plan_codec")]
     pub compiled: CompiledAgentPlanV1,
 }
@@ -46,6 +48,15 @@ impl PlanVersionV1 {
         configuration: AgentPlanAuthoringV2,
         compiled: CompiledAgentPlanV1,
     ) -> Result<Self, PlanVersionError> {
+        Self::with_assessment_transition(workspace, configuration, compiled, None)
+    }
+
+    pub fn with_assessment_transition(
+        workspace: WorkspaceId,
+        configuration: AgentPlanAuthoringV2,
+        compiled: CompiledAgentPlanV1,
+        assessment_transition: Option<crate::AssessmentReviewsV1>,
+    ) -> Result<Self, PlanVersionError> {
         // Authenticated unversioned recovery retains candidate order, then removes the retired
         // rating-order evidence before sealing the current stable representation.
         let compiled = compiled
@@ -54,13 +65,17 @@ impl PlanVersionV1 {
         let compiled = crate::StoredPlanV1::freeze(&compiled)
             .and_then(|p| p.build())
             .map_err(|_| PlanVersionError::Invalid)?;
-        let content_digest = CanonicalDigest::of(&(
+        let base_digest = CanonicalDigest::of(&(
             PLAN_VERSION_SCHEMA_V1,
             &workspace,
             &configuration,
             &crate::StoredPlanV1::freeze(&compiled).map_err(|_| PlanVersionError::Invalid)?,
         ))
         .map_err(|_| PlanVersionError::Invalid)?;
+        let content_digest = match &assessment_transition {
+            Some(records) => CanonicalDigest::of(&(&base_digest, records)).map_err(|_| PlanVersionError::Invalid)?,
+            None => base_digest,
+        };
         let value = Self {
             schema: PLAN_VERSION_SCHEMA_V1.into(),
             reference: PlanExecutionRef {
@@ -70,6 +85,7 @@ impl PlanVersionV1 {
                 content_digest,
             },
             configuration,
+            assessment_transition,
             compiled,
         };
         value.validate()?;
@@ -91,6 +107,18 @@ impl PlanVersionV1 {
             &crate::StoredPlanV1::freeze(&self.compiled).map_err(|_| PlanVersionError::Invalid)?,
         ))
         .map_err(|_| PlanVersionError::Invalid)?;
+        let expected = match &self.assessment_transition {
+            Some(records) => {
+                if records.is_empty() { return Err(PlanVersionError::Invalid); }
+                let scopes = self.configuration.assessment_scopes();
+                for (scope, record) in records {
+                    let judgment = scopes.get(scope).ok_or(PlanVersionError::Invalid)?;
+                    record.validate(self.configuration.native_protocol(), judgment).map_err(|_| PlanVersionError::Invalid)?;
+                }
+                CanonicalDigest::of(&(&expected, records)).map_err(|_| PlanVersionError::Invalid)?
+            }
+            None => expected,
+        };
         if self.schema != PLAN_VERSION_SCHEMA_V1
             || expected != self.reference.content_digest
             || self.reference.plan_id != *self.compiled.agent_plan_id()

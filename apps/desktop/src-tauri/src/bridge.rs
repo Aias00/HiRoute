@@ -1137,7 +1137,7 @@ pub async fn quit_desktop(window: WebviewWindow) -> Result<(), DesktopFailure> {
 pub async fn observation_read(
     window: WebviewWindow,
     state: State<'_, DesktopState>,
-    request: hiroute_application_api::ObservationReadRequestV2,
+    request: hiroute_application_api::ObservationReadRequestV3,
 ) -> Result<serde_json::Value, DesktopFailure> {
     main_window(&window)?;
     state

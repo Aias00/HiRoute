@@ -65,7 +65,7 @@ pub(super) fn validate_execution(
             (
                 AgentPlanStrategyV2::SmartSaving {
                     native_protocol,
-                    assessment_review: _,
+
                     economy,
                     primary,
                     judgment,

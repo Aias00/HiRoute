@@ -91,13 +91,22 @@ pub(super) fn dispatch_apply(
     ) {
         return replay;
     }
-    let prepared = (|| {
-        if plan_content_confirmation_digest(&payload.change, &payload.expected_revisions)
-            .map_err(|_| ErrorCode::InvalidArguments)?
-            != payload.accept_digest
-        {
-            return Err(ErrorCode::ChangePreviewStale);
+    match preview(port.as_ref(), &payload.change) {
+        Ok(value) => {
+            if let Some(transition) = &value.assessment_transition {
+                if let Err(native) = transition.require_acknowledged() {
+                    let mut error = ErrorV1::new(ErrorCode::InvalidArguments);
+                    error.message_key = native.diagnostic_key().into();
+                    error.details_schema = "hiroute.native-protocol-diagnostic/v1".into();
+                    return MachineEnvelopeV2::failed_with_data(error, serde_json::json!({"schema":"hiroute.native-protocol-diagnostic/v1","reason":native.to_string()}), Some(request.request_id));
+                }
+            }
+            if value.change_digest != payload.accept_digest || value.expected_revisions != payload.expected_revisions { return failed(ErrorCode::ChangePreviewStale, request.request_id); }
         }
+        Err((error, Some(data))) => return MachineEnvelopeV2::failed_with_data(*error, data, Some(request.request_id)),
+        Err((error, None)) => return MachineEnvelopeV2::failed(*error, Some(request.request_id)),
+    }
+    let prepared = (|| {
         let plan_id = match &payload.change.target {
             PlanContentTargetV2::Update { plan_id, .. } => plan_id.as_str().to_owned(),
             PlanContentTargetV2::Create { creation_key } => {
@@ -148,6 +157,9 @@ fn reproduce_plan(
         .plan_authoring_snapshot(&WorkspaceId::default(), &payload.change)
         .map_err(map_control_error)?;
     let reproduced = preview_plan_content(&payload.change, &state).map_err(map_preview_error)?;
+    if let Some(transition) = &reproduced.assessment_transition {
+        transition.require_acknowledged().map_err(|_| ErrorCode::InvalidArguments)?;
+    }
     if reproduced.change_digest != payload.accept_digest
         || reproduced.expected_revisions != payload.expected_revisions
     {

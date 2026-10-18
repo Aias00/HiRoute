@@ -3,6 +3,7 @@ use crate::compiler::test_fixtures::compilation_facts;
 
 fn change() -> PlanContentChangeV2 {
     PlanContentChangeV2 {
+            assessment_choices: Default::default(),
         schema: PLAN_CONTENT_CHANGE_SCHEMA_V2.into(), target: PlanContentTargetV2::Create { creation_key: "editor-one".into() },
         editor: serde_json::from_value(serde_json::json!({
             "schema": PLAN_EDITOR_SCHEMA_V2, "display_name": "日常编码", "purpose": "辅助日常编码",
@@ -58,7 +59,7 @@ fn publication_requires_the_exact_saved_decision_revision_for_both_modes() {
         change.editor.smart.classifier = classifier.clone();
         change.editor.branch_routing = Some(BranchRoutingV1 {
             native_protocol: None,
-            assessment_review: None,
+
             classifier,
             branches: ["writing", "review"]
                 .map(|id| RouteBranchV1 {

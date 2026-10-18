@@ -25,8 +25,8 @@ impl crate::LocalObservationStore {
         if query.limit == 0 || query.limit > 200 {
             return Err(ObservationV2Error::Invalid);
         }
-        let binding = if query.include_routing_observations {
-            CanonicalDigest::of(&(reader.binding()?, &query.request_id, query.limit, true))
+        let binding = if !reader.is_legacy_query_v2() {
+            CanonicalDigest::of(&(reader.binding()?, &query.request_id, query.limit, 3u8))
         } else {
             CanonicalDigest::of(&(reader.binding()?, &query.request_id, query.limit))
         }
@@ -102,8 +102,9 @@ impl crate::LocalObservationStore {
             // Routing identity is an internal durable projection consumed by the request
             // timeline. Keep the public safe-facts surface unchanged.
             fact.routing_context = None;
-            if !query.include_routing_observations {
+            if reader.is_legacy_query_v2() {
                 fact.routing_observation = None;
+                fact.decision_protocol = None;
             }
             fact.sensitive_fields_deleted = deleted;
             facts.push(fact);
@@ -111,6 +112,7 @@ impl crate::LocalObservationStore {
         }
         transaction.commit()?;
         Ok(ObservationFactsPageV2 {
+            schema: Some("hiroute.observation.facts/v3".into()),
             facts,
             projection_partial,
             next_cursor: if more {

@@ -131,6 +131,7 @@ pub struct HistoricalAssessmentSourceV1 {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AssessmentReviewV1 {
+    pub from_protocol: Option<String>,
     pub protocol: String,
     pub assessment_digest: CanonicalDigest,
     pub method: AssessmentAdoptionV1,
@@ -157,6 +158,7 @@ impl AssessmentReviewV1 {
         source: Option<HistoricalAssessmentSourceV1>,
     ) -> Result<Self, NativeProtocolError> {
         Ok(Self {
+            from_protocol: None,
             protocol: protocol
                 .map_or(SYSTEM_ONE_LEGACY, |p| p.schema.as_str())
                 .into(),
@@ -172,8 +174,10 @@ impl AssessmentReviewV1 {
         protocol: Option<&NativeProtocolV1>,
         judgment: &JudgmentSettingsV1,
     ) -> Result<(), NativeProtocolError> {
-        if *self != Self::new(protocol, judgment, self.method, self.source.clone())? {
-            return Err(NativeProtocolError::Review);
+        let mut expected = Self::new(protocol, judgment, self.method, self.source.clone())?;
+        expected.from_protocol = self.from_protocol.clone();
+        if *self != expected {
+            return Err(NativeProtocolError::Review { scope: "assessment".into(), reason: "invalid published transition provenance".into() });
         }
         if (self.method == AssessmentAdoptionV1::Historical) != self.source.is_some()
             || self.source.as_ref().is_some_and(|s| {
@@ -182,7 +186,7 @@ impl AssessmentReviewV1 {
                     || !super::strategy::valid_reference(&s.scope)
             })
         {
-            return Err(NativeProtocolError::Review);
+            return Err(NativeProtocolError::Review { scope: "assessment".into(), reason: "invalid published transition provenance".into() });
         }
         if self.method == AssessmentAdoptionV1::Stock {
             let mut stock = JudgmentSettingsV1::default();
@@ -192,7 +196,7 @@ impl AssessmentReviewV1 {
             if judgment.competence.instructions != stock.competence.instructions
                 || judgment.competence.criteria != stock.competence.criteria
             {
-                return Err(NativeProtocolError::Review);
+                return Err(NativeProtocolError::Review { scope: "assessment".into(), reason: "invalid published transition provenance".into() });
             }
         }
         Ok(())
@@ -201,22 +205,11 @@ impl AssessmentReviewV1 {
 
 pub fn validate_assessment_scope(
     protocol: Option<&NativeProtocolV1>,
-    reviews: Option<&AssessmentReviewsV1>,
     scope: &str,
-    inherited: bool,
     judgment: &JudgmentSettingsV1,
 ) -> Result<(), NativeProtocolError> {
     if let Some(p) = protocol {
         p.validate()?;
-    }
-    let review = reviews.and_then(|r| {
-        r.get(scope)
-            .or_else(|| inherited.then(|| r.get("default")).flatten())
-    });
-    if let Some(review) = review {
-        review.validate(protocol, judgment)?;
-    } else if protocol.is_some() {
-        return Err(NativeProtocolError::Review);
     }
     let texts = [
         ("degree.instructions", &judgment.degree.instructions),
@@ -227,7 +220,7 @@ pub fn validate_assessment_scope(
         ("competence.criteria.1", &judgment.competence.criteria[1]),
         ("competence.criteria.2", &judgment.competence.criteria[2]),
     ];
-    if (protocol.is_some() || review.is_some())
+    if protocol.is_some()
         && let Some((field, _)) = texts
             .iter()
             .find(|(_, t)| incompatible_native_reference(protocol.is_some(), t))
@@ -294,7 +287,8 @@ impl FrozenNativeProtocolV1 {
                     )),
                     simple_threshold_millis: judgment.degree.simple_threshold_millis,
                     competence_floor_millis: judgment.competence.floor_millis,
-                    standard: if judgment.competence.instructions == stock.competence.instructions
+                    standard: if !matches!(&decision, DecisionDefinitionV1::Categorical { .. })
+                        && judgment.competence.instructions == stock.competence.instructions
                         && judgment.competence.criteria == stock.competence.criteria
                         && format!(
                             "{} {}",
@@ -441,21 +435,14 @@ impl FrozenNativeProtocolV1 {
         policy
     }
 
-    /// Frozen `standard` is preset-wording provenance, retained in publication
-    /// identity. A category-conditioned degree changes the actual question shape.
-    pub fn effective_standard<'a>(&self, scope: Option<&'a FrozenAssessmentScopeV1>) -> &'a str {
-        match &self.decision {
-            DecisionDefinitionV1::Categorical { .. } => "custom",
-            _ => scope.map_or("custom", |s| s.standard.as_str()),
-        }
-    }
+
 }
 
 pub fn branch_decision_definition(
     branches: &[MaterializedBranchV1],
     default_id: &str,
 ) -> DecisionDefinitionV1 {
-    c_v1_branch_decision_definition(branches, default_id)
+    super::legacy_category::branch_decision_definition(branches, default_id)
 }
 
 /// Composition fixed by SYSTEM_ONE_C_V1, independently of future legacy defaults.
@@ -463,37 +450,9 @@ pub fn c_v1_branch_decision_definition(
     branches: &[MaterializedBranchV1],
     default_id: &str,
 ) -> DecisionDefinitionV1 {
-    // This v1 composition is supported immutable publication content, shared with
-    // Desktop. Future current defaults must not edit this fixture in place.
-    let template: Value = serde_json::from_str(include_str!("fixtures/native_category_v1.json"))
+    let template = serde_json::from_str(include_str!("fixtures/native_category_v1.json"))
         .expect("immutable native category v1 template");
-    DecisionDefinitionV1::Categorical {
-        instructions: format!(
-            "{}{default_id}{}",
-            template["category_prefix"].as_str().unwrap(),
-            template["category_suffix"].as_str().unwrap()
-        ),
-        options: branches
-            .iter()
-            .map(|b| super::CategoryOptionV1 {
-                id: b.id.clone(),
-                criterion: b.condition.clone(),
-                refinement: b.primary_group.map(|_| {
-                    let mut degree = b.judgment.degree.definition();
-                    degree.instructions = format!(
-                        "{}{}{}{}{}{}",
-                        template["degree_prefix"].as_str().unwrap(),
-                        b.name,
-                        template["degree_condition_separator"].as_str().unwrap(),
-                        b.condition,
-                        template["degree_suffix"].as_str().unwrap(),
-                        degree.instructions
-                    );
-                    degree
-                }),
-            })
-            .collect(),
-    }
+    super::legacy_category::compose(branches, default_id, &template)
 }
 
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
@@ -508,8 +467,8 @@ pub enum NativeProtocolError {
     FixedContent,
     #[error("native prior context cap must be between 0 and 8")]
     HistoryCap,
-    #[error("assessment requires an explicit destination-protocol scope review")]
-    Review,
+    #[error("assessment scope {scope}: {reason}")]
+    Review { scope: String, reason: String },
     #[error("native state reference is incompatible in scope {0}")]
     StateReference(String),
     #[error("native protocol digest does not match frozen content")]
@@ -530,7 +489,7 @@ impl NativeProtocolError {
             Self::Unsupported => "native.protocol.unsupported",
             Self::FixedContent => "native.protocol.fixed_content_invalid",
             Self::HistoryCap => "native.protocol.history_cap_invalid",
-            Self::Review => "native.assessment.review_required",
+            Self::Review { .. } => "native.assessment.review_required",
             Self::HistoricalUnavailable => "native.assessment.source_unavailable",
             Self::StateReference(_) => "native.protocol.state_reference_invalid",
             Self::DigestMismatch => "native.protocol.digest_mismatch",

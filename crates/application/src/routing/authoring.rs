@@ -57,17 +57,14 @@ pub fn preview_plan_content(
             return Err(PlanPreviewError::Invalid);
         }
     }
-    let configuration = change.editor.effective().map_err(|e| match e {
+    let (resolved_editor, transition) = preview_assessment_transition(
+        &change.editor, state.previous_configuration.as_ref(),
+        state.draft.as_ref().map(|d| &d.editor), &state.assessment_sources, &change.assessment_choices,
+    ).map_err(PlanPreviewError::NativeProtocol)?;
+    let configuration = resolved_editor.effective().map_err(|e| match e {
         PlanAuthoringError::NativeProtocol(e) => PlanPreviewError::NativeProtocol(e),
         _ => PlanPreviewError::Invalid,
     })?;
-    validate_assessment_transition(
-        &configuration,
-        state.previous_configuration.as_ref(),
-        state.draft.as_ref().map(|d| &d.editor),
-        &state.assessment_sources,
-    )
-    .map_err(PlanPreviewError::NativeProtocol)?;
     if let Some(service) = configuration.decision_service()
         && state.decision_service.as_ref() != Some(service)
     {
@@ -163,7 +160,7 @@ pub fn preview_plan_content(
         &configuration,
         &state.facts,
     )?;
-    let plan_version = PlanVersionV1::new(state.workspace.clone(), configuration, compiled)
+    let plan_version = PlanVersionV1::with_assessment_transition(state.workspace.clone(), configuration, compiled, transition.records())
         .map_err(|_| PlanPreviewError::Invalid)?;
     let plan_head = PlanHeadV1 {
         reference: plan_version.reference.clone(),
@@ -173,8 +170,13 @@ pub fn preview_plan_content(
     };
     let alias_registry_digest =
         CanonicalDigest::of(&state.aliases).map_err(|_| PlanPreviewError::Invalid)?;
-    let change_digest = plan_content_confirmation_digest(change, &state.expected_revisions)
+    let base_digest = plan_content_confirmation_digest(change, &state.expected_revisions)
         .map_err(|_| PlanPreviewError::Invalid)?;
+    let assessment_transition = (!transition.scopes.is_empty()).then_some(transition);
+    let change_digest = match &assessment_transition {
+        Some(value) => CanonicalDigest::of(&(&base_digest, value)).map_err(|_| PlanPreviewError::Invalid)?,
+        None => base_digest,
+    };
     Ok(PlanContentPreviewV2 {
         schema: PLAN_CONTENT_PREVIEW_SCHEMA_V2.into(),
         change_digest,
@@ -185,6 +187,7 @@ pub fn preview_plan_content(
         plan_head,
         plan_version,
         consumed_draft: change.consumed_draft.clone(),
+        assessment_transition,
     })
 }
 

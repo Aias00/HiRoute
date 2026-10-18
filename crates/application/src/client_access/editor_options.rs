@@ -336,7 +336,7 @@ mod tests {
             candidates,
             smart: SmartEditorV2 {
                 native_protocol: None,
-                assessment_review: None,
+
                 economy: Vec::new(),
                 primary: Vec::new(),
                 judgment: Default::default(),

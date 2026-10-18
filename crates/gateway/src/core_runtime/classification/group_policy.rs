@@ -201,7 +201,7 @@ fn finalize_observation(input: &PlannerInputV1, outcome: &mut ClassificationOutc
     let Some(scope) = p.scopes.get(&outcome.decision.branch_id) else {
         return;
     };
-    o.standard = p.effective_standard(Some(scope)).into();
+    o.standard = scope.standard.clone();
     o.simple_probability = outcome.decision.simple_probability.clone();
     o.simple_threshold_millis = scope.simple_threshold_millis;
     o.competence_floor_millis = scope.competence_floor_millis;

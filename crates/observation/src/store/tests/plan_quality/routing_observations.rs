@@ -144,7 +144,7 @@ fn routing_stats_use_all_decisions_and_preserve_safe_evidence_after_content_dele
         request_id: fixture.request.clone(),
         limit: 1,
         cursor: None,
-        include_routing_observations: true,
+
     };
     let facts = store.observed_facts(&reader(), &fq, 5000).unwrap();
     assert!(facts.facts[0].routing_observation.is_some());

@@ -830,7 +830,14 @@ impl ProductionGatewayRuntime {
                 };
                 drop(classification);
                 match classification_result {
-                    Ok(result) => {
+                    Ok(mut result) => {
+                        use hiroute_domain::DecisionProtocolV1 as P;
+                        result.decision.decision_protocol = Some(match authorized.classifier() {
+                            Some(c) if c.native_protocol.is_some() => P::SystemOneC,
+                            Some(c) if c.system_one_model.is_some() => P::SystemOneLegacy,
+                            Some(_) => P::CustomExtensionV1,
+                            None => P::LocalRules,
+                        });
                         classification_context = Some((turn_ticket, turn_history));
                         Some(result)
                     }

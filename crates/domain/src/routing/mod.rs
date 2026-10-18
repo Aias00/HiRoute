@@ -9,6 +9,7 @@ mod capability_compiler;
 mod classifier;
 mod decision;
 pub use decision::*;
+mod legacy_category;
 mod system_one_c;
 pub use system_one_c::*;
 mod c_observation;
