@@ -7,7 +7,12 @@ const [port, base, output] = process.argv.slice(2);
 const client = await connectPage(Number(port));
 const keepAlive = setInterval(() => {}, 1000);
 const results = [];
+const settled = async () => {
+  await evaluate(client, `Promise.all(document.getAnimations().filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity).map(animation => animation.finished.catch(() => undefined))).then(() => true)`);
+  await evaluate(client, 'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))');
+};
 const screenshot = async name => {
+  await settled();
   const shot = await client.send('Page.captureScreenshot', { format: 'png' });
   await writeFile(path.join(output, `${name}.png`), Buffer.from(shot.data, 'base64'));
 };
@@ -19,6 +24,7 @@ const open = async (query = '', viewport = { width: 1200, height: 813 }, page = 
   await waitFor(client, `location.href === ${JSON.stringify(url)} && document.readyState === 'complete'`);
   await evaluate(client, 'document.fonts.ready.then(() => true)');
   await waitFor(client, `document.querySelector('.connection-flow') && !document.querySelector('.oc-spinner')`);
+  await settled();
 };
 const click = async (selector, text = '') => {
   const expression = `Array.from(document.querySelectorAll(${JSON.stringify(selector)})).find(item => item.getClientRects().length && !item.disabled && (!${JSON.stringify(text)} || item.textContent.trim() === ${JSON.stringify(text)} || item.querySelector('strong')?.textContent === ${JSON.stringify(text)}))`;
@@ -51,7 +57,7 @@ try {
     await open();
     await waitFor(client, `Array.from(document.querySelectorAll('.connection-provider-card img')).every(image=>image.complete&&image.naturalWidth>0)`);
     const facts = await evaluate(client, `({count:document.querySelectorAll('.connection-provider-card').length,intro:document.querySelector('.connection-directory-intro').textContent,logos:Array.from(document.querySelectorAll('.connection-provider-card img')).every(image=>image.complete&&image.naturalWidth>0)})`);
-    assert.equal(facts.count, 13); assert.match(facts.intro, /13.*18/); assert.ok(facts.logos);
+    assert.equal(facts.count, 13); assert.match(facts.intro, /13.*19/); assert.ok(facts.logos);
     await screenshot('catalog');
     await field('搜索供应商或产品', 'Coding Plan');
     await waitFor(client, `document.querySelectorAll('.connection-provider-card').length === 4`);
@@ -116,7 +122,7 @@ try {
   });
   await run('custom no-auth and manual model declarations remain usable', async () => {
     await open('kind=custom');
-    await field('连接名称', '本地模型'); await field('Base URL', 'http://127.0.0.1:51234/v1');
+    await field('连接名称', '团队 HTTP 模型'); await field('Base URL', 'http://192.0.2.10:51234/v1');
     await click('summary', '高级设置展开'); await field('认证方式', 'none');
     await waitFor(client, `!document.querySelector('#mc-connection-form input[type=password]')`);
     await click('#mc-connection-form button', '手工维护模型');
@@ -127,7 +133,60 @@ try {
     assert.equal(trace.registered.length, 0); assert.equal(trace.saves.length, 1);
     assert.equal(trace.checks[0].draft.authentication.kind, 'none');
     assert.equal(trace.checks[0].draft.models[0].upstream_model_id, 'local-test-model');
-    assert.equal(trace.checks[0].draft.display_name, '本地模型');
+    assert.equal(trace.checks[0].draft.display_name, '团队 HTTP 模型');
+    assert.equal(trace.checks[0].draft.base_url, 'http://192.0.2.10:51234/v1');
+    assert.equal(trace.checks[0].draft.inventory_path_override, null);
+  });
+  await run('explicit HTTP explains plaintext without blocking the configured endpoint', async () => {
+    for (const lang of ['zh', 'en']) for (const theme of ['light', 'dark']) for (const viewport of [{ width: 1200, height: 813 }, { width: 755, height: 600 }]) {
+      await open(`kind=custom&lang=${lang}&theme=${theme}`, viewport);
+      await field('Base URL', 'http://gateway.invalid:8123/v1');
+      await waitFor(client, 'Boolean(document.querySelector("[data-plaintext-http-warning]"))');
+      const warning = await evaluate(client, `(() => {
+        const note = document.querySelector('[data-plaintext-http-warning]');
+        note.scrollIntoView({ block: 'center', behavior: 'instant' });
+        const rect = note.getBoundingClientRect(); const footer = document.querySelector('.modal-foot').getBoundingClientRect();
+        const header = document.querySelector('.modal-head').getBoundingClientRect();
+        return { text: note.textContent, left: rect.left, right: rect.right, height: rect.height,
+          fontSize: parseFloat(getComputedStyle(note).fontSize),
+          top: rect.top, bottom: rect.bottom, headerBottom: header.bottom, footerTop: footer.top,
+          footerBottom: footer.bottom, overflow: document.documentElement.scrollWidth > innerWidth + 1 };
+      })()`);
+      assert.match(warning.text, /API Key|API keys/);
+      assert.match(warning.text, /明文|plaintext/);
+      assert.match(warning.text, /HTTPS/);
+      assert.ok(warning.left >= 0 && warning.right <= viewport.width && warning.height >= warning.fontSize && !warning.overflow, JSON.stringify(warning));
+      assert.ok(warning.top >= warning.headerBottom && warning.bottom <= warning.footerTop, JSON.stringify(warning));
+      assert.ok(warning.footerBottom <= viewport.height + 1, JSON.stringify(warning));
+      await screenshot(`http-warning-${lang}-${theme}-${viewport.width}`);
+      assert.equal(await evaluate(client, 'window.connectionFlowTrace.checks.length'), 0);
+      await field('Base URL', 'https://gateway.invalid/v1');
+      await waitFor(client, '!document.querySelector("[data-plaintext-http-warning]")');
+    }
+  });
+  await run('safe backend target reasons become actionable localized errors and retain input', async () => {
+    for (const lang of ['zh', 'en']) for (const [reason, correction] of [
+      ['invalid_url', /http:\/\/.*https:\/\//],
+      ['unsafe_path', /路径|paths/],
+      ['unsafe_authentication_header', /Bearer.*x-api-key/],
+      ['unsafe_protocol_header', /协议.*Header|protocol headers/],
+    ]) {
+      const key = `model_connections.${reason}`;
+      await open(`kind=custom&lang=${lang}&check_error=${key}`, { width: 755, height: 600 });
+      await field(lang === 'zh' ? '连接名称' : 'Connection name', 'HTTP fixture');
+      await field('Base URL', 'http://gateway.invalid:8123/v1');
+      await click('summary', lang === 'zh' ? '高级设置展开' : 'Advanced settingsExpand');
+      await field(lang === 'zh' ? '认证方式' : 'Authentication', 'none');
+      await click('.modal-foot button', lang === 'zh' ? '检查并继续' : 'Check and continue');
+      await waitFor(client, `Boolean(document.querySelector('[data-error-code="${key}"]'))`);
+      const error = await evaluate(client, `document.querySelector('[data-error-code="${key}"]').textContent`);
+      assert.match(error, correction);
+      assert.ok(!/暂时无法完成操作|The operation could not complete/.test(error), error);
+      assert.equal(await evaluate(client, 'window.connectionFlowTrace.saves.length'), 0);
+      const retained = await evaluate(client, `Array.from(document.querySelectorAll('.field')).find(item => item.querySelector('.field-label')?.textContent === 'Base URL')?.querySelector('input').value`);
+      assert.equal(retained, 'http://gateway.invalid:8123/v1');
+      await screenshot(`target-error-${lang}-${reason}`);
+    }
   });
   await run('cancel preserves the credential and ignores late check results', async () => {
     await open('hold_check=1'); await provider('Anthropic按量付费');

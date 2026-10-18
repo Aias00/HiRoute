@@ -463,7 +463,11 @@ fn management_port(
 fn map_management_error(error: super::control::ComputeManagementControlError) -> ErrorCode {
     use super::control::ComputeManagementControlError as E;
     match error {
-        E::Invalid => ErrorCode::InvalidArguments,
+        E::Invalid
+        | E::InvalidModelConnectionUrl
+        | E::UnsafeModelConnectionPath
+        | E::UnsafeModelConnectionAuthenticationHeader
+        | E::UnsafeModelConnectionProtocolHeader => ErrorCode::InvalidArguments,
         E::NotFound | E::RegisteredOptionUnavailable | E::DiscoveryUnavailable => {
             ErrorCode::ResourceNotFound
         }

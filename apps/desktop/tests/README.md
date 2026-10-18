@@ -82,6 +82,13 @@ Session quality names come from the exact retained execution request (same sessi
 
 ## Run levels
 
+Custom API transport and error presentation use the production form in
+`node tests/v3/visual/connection-flow.mjs /path/to/evidence`. It exercises manual
+HTTP save without a directory, closed backend error reasons with retained input,
+and plaintext notices in zh/en, light/dark, at 1200×813 and 755×600. Browser IPC is
+synthetic; `real_process_custom_http_save_recheck_and_validation_errors` in the
+daemon publication tests separately proves actual control/save/restart behavior.
+
 From `apps/desktop`, with the repository's Node 24 and installed dependencies:
 
 ```sh

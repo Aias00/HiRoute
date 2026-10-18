@@ -72,6 +72,11 @@ fn real_process_native_model_save_publishes_and_reaches_gateway() {
     run_script("model_connections_product.py");
 }
 
+#[test]
+fn real_process_custom_http_save_recheck_and_validation_errors() {
+    run_script("custom_http_product.py");
+}
+
 /// Branch execution identity must not replace current managed source membership.
 #[test]
 fn real_process_native_branch_credentials_preserve_source_and_key_permissions() {

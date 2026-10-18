@@ -1,9 +1,3 @@
-use std::{
-    net::{IpAddr, SocketAddr, ToSocketAddrs},
-    sync::mpsc,
-    time::Duration,
-};
-
 use hiroute_application_api::ComputeCandidateTargetV2;
 use hiroute_domain::{
     GatewayAuthenticationSemanticsV1, GatewayHeaderSemanticsV1, UpstreamProtocol,
@@ -41,7 +35,6 @@ pub struct NormalizedModelConnectionTargetV1 {
     pub candidate_target: ComputeCandidateTargetV2,
     pub inventory_path: Option<String>,
     host_header: String,
-    network_authority: String,
     directory_headers: Vec<(HeaderName, HeaderValue)>,
 }
 
@@ -73,7 +66,7 @@ impl NormalizedModelConnectionTargetV1 {
     fn url_for(&self, path: &str) -> String {
         format!(
             "{}://{}{}",
-            self.candidate_target.scheme, self.network_authority, path
+            self.candidate_target.scheme, self.host_header, path
         )
     }
 }
@@ -82,41 +75,31 @@ impl NormalizedModelConnectionTargetV1 {
 pub enum ModelConnectionTargetError {
     #[error("model connection URL is invalid")]
     InvalidUrl,
-    #[error("HTTP is allowed only when every resolved target address is loopback")]
-    NonLoopbackHttp,
     #[error("model connection URL contains an unsafe path")]
     UnsafePath,
     #[error("model connection authentication header is unsafe")]
     UnsafeAuthenticationHeader,
     #[error("model connection protocol profile headers are unsupported or unsafe")]
     UnsafeProtocolHeader,
-    #[error("loopback hostname resolution timed out")]
-    ResolutionTimeout,
 }
 
+/// Validate the configured target without DNS or I/O. The bounded transport resolves
+/// its hostname when explicitly checking or executing a request, for HTTP and HTTPS alike.
 pub fn normalize_model_connection_target(
     input: ModelConnectionTargetInputV1<'_>,
 ) -> Result<NormalizedModelConnectionTargetV1, ModelConnectionTargetError> {
-    normalize_model_connection_target_with_timeout(input, Duration::from_secs(2))
-}
-
-pub(crate) fn normalize_model_connection_target_with_timeout(
-    input: ModelConnectionTargetInputV1<'_>,
-    resolution_timeout: Duration,
-) -> Result<NormalizedModelConnectionTargetV1, ModelConnectionTargetError> {
-    normalize_target(input, Some(resolution_timeout))
+    normalize_target(input)
 }
 
 /// Pure scan projection. It never resolves hostnames or opens a socket.
 pub fn project_model_connection_target(
     input: ModelConnectionTargetInputV1<'_>,
 ) -> Result<NormalizedModelConnectionTargetV1, ModelConnectionTargetError> {
-    normalize_target(input, None)
+    normalize_target(input)
 }
 
 fn normalize_target(
     input: ModelConnectionTargetInputV1<'_>,
-    resolution_timeout: Option<Duration>,
 ) -> Result<NormalizedModelConnectionTargetV1, ModelConnectionTargetError> {
     let ModelConnectionTargetInputV1 {
         base_url,
@@ -159,7 +142,12 @@ fn normalize_target(
     if authority.as_str().contains('@') {
         return Err(ModelConnectionTargetError::InvalidUrl);
     }
-    let host = authority.host().trim_end_matches('.').to_ascii_lowercase();
+    let host = authority
+        .host()
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .trim_end_matches('.')
+        .to_ascii_lowercase();
     if host.is_empty() {
         return Err(ModelConnectionTargetError::InvalidUrl);
     }
@@ -180,33 +168,10 @@ fn normalize_target(
         .transpose()?;
 
     let host_header = authority_for(&host, port, &scheme);
-    let network_authority = if scheme == "http" {
-        let addresses = match resolution_timeout {
-            Some(timeout) => resolve_loopback(&host, port, timeout)?,
-            None => match host.parse::<IpAddr>() {
-                Ok(ip) if ip.is_loopback() => vec![SocketAddr::new(ip, port)],
-                _ if host == "localhost" => {
-                    vec![SocketAddr::new(IpAddr::from([127, 0, 0, 1]), port)]
-                }
-                _ => return Err(ModelConnectionTargetError::NonLoopbackHttp),
-            },
-        };
-        let address = addresses
-            .first()
-            .ok_or(ModelConnectionTargetError::NonLoopbackHttp)?;
-        socket_authority(*address)
-    } else {
-        host_header.clone()
-    };
-    let published_authority = if scheme == "http" {
-        addresses_host(&network_authority)?
-    } else {
-        host.clone()
-    };
     Ok(NormalizedModelConnectionTargetV1 {
         candidate_target: ComputeCandidateTargetV2 {
             scheme,
-            authority: published_authority,
+            authority: host,
             port,
             request_path,
             upstream_protocol: protocol,
@@ -215,16 +180,8 @@ fn normalize_target(
         },
         inventory_path,
         host_header,
-        network_authority,
         directory_headers,
     })
-}
-
-fn addresses_host(authority: &str) -> Result<String, ModelConnectionTargetError> {
-    let address = authority
-        .parse::<SocketAddr>()
-        .map_err(|_| ModelConnectionTargetError::InvalidUrl)?;
-    Ok(address.ip().to_string())
 }
 
 fn validated_directory_headers(
@@ -362,39 +319,6 @@ fn append(base: &str, suffix: &str) -> String {
     }
 }
 
-fn resolve_loopback(
-    host: &str,
-    port: u16,
-    timeout: Duration,
-) -> Result<Vec<SocketAddr>, ModelConnectionTargetError> {
-    if let Ok(ip) = host.parse::<IpAddr>() {
-        return if ip.is_loopback() {
-            Ok(vec![SocketAddr::new(ip, port)])
-        } else {
-            Err(ModelConnectionTargetError::NonLoopbackHttp)
-        };
-    }
-    let (tx, rx) = mpsc::sync_channel(1);
-    let host = host.to_owned();
-    std::thread::spawn(move || {
-        let result = (host.as_str(), port)
-            .to_socket_addrs()
-            .map(|values| values.collect::<Vec<_>>());
-        let _ = tx.send(result);
-    });
-    let mut addresses = rx
-        .recv_timeout(timeout)
-        .map_err(|_| ModelConnectionTargetError::ResolutionTimeout)?
-        .map_err(|_| ModelConnectionTargetError::NonLoopbackHttp)?;
-    addresses.sort();
-    addresses.dedup();
-    if addresses.is_empty() || addresses.iter().any(|address| !address.ip().is_loopback()) {
-        Err(ModelConnectionTargetError::NonLoopbackHttp)
-    } else {
-        Ok(addresses)
-    }
-}
-
 fn authority_for(host: &str, port: u16, scheme: &str) -> String {
     let host = if host.contains(':') {
         format!("[{host}]")
@@ -405,13 +329,6 @@ fn authority_for(host: &str, port: u16, scheme: &str) -> String {
         host
     } else {
         format!("{host}:{port}")
-    }
-}
-
-fn socket_authority(address: SocketAddr) -> String {
-    match address {
-        SocketAddr::V4(value) => value.to_string(),
-        SocketAddr::V6(value) => format!("[{}]:{}", value.ip(), value.port()),
     }
 }
 
@@ -485,29 +402,96 @@ mod tests {
     }
 
     #[test]
-    fn plaintext_and_unsafe_headers_fail_before_network() {
-        let loopback = normalize_model_connection_target(input(
-            "http://127.0.0.1:8123/v1",
+    fn explicit_http_and_https_targets_preserve_the_host_without_dns() {
+        for (base, authority, host, port) in [
+            ("http://192.0.2.10/v1", "192.0.2.10", "192.0.2.10", 80),
+            (
+                "http://192.168.1.10:8123/v1",
+                "192.168.1.10",
+                "192.168.1.10:8123",
+                8123,
+            ),
+            (
+                "http://gateway.invalid:8123/v1",
+                "gateway.invalid",
+                "gateway.invalid:8123",
+                8123,
+            ),
+            (
+                "http://localhost:8123/v1",
+                "localhost",
+                "localhost:8123",
+                8123,
+            ),
+            (
+                "http://127.0.0.1:8123/v1",
+                "127.0.0.1",
+                "127.0.0.1:8123",
+                8123,
+            ),
+            ("http://[::1]:8123/v1", "::1", "[::1]:8123", 8123),
+            (
+                "http://[2001:db8::10]:8123/v1",
+                "2001:db8::10",
+                "[2001:db8::10]:8123",
+                8123,
+            ),
+            (
+                "https://gateway.invalid/v1",
+                "gateway.invalid",
+                "gateway.invalid",
+                443,
+            ),
+        ] {
+            for authentication in [
+                GatewayAuthenticationSemanticsV1::None,
+                GatewayAuthenticationSemanticsV1::Bearer,
+                GatewayAuthenticationSemanticsV1::ApiKeyHeader {
+                    header: "x-api-key".into(),
+                },
+            ] {
+                let draft = input(
+                    base,
+                    ModelConnectionBaseKindV1::ApiRoot,
+                    UpstreamProtocol::Responses,
+                    "profile/responses",
+                    &authentication,
+                );
+                let target = normalize_model_connection_target(draft).unwrap();
+                assert_eq!(target.candidate_target.authority, authority);
+                assert_eq!(target.candidate_target.port, port);
+                assert_eq!(target.host_header(), host);
+                assert_eq!(target.request_url(), format!("{base}/responses"));
+                assert_eq!(target.inventory_path, None);
+                assert_eq!(project_model_connection_target(draft).unwrap(), target);
+            }
+        }
+    }
+
+    #[test]
+    fn explicit_http_directory_uses_the_same_configured_authority() {
+        let mut draft = input(
+            "http://gateway.invalid:8123/proxy",
             ModelConnectionBaseKindV1::ApiRoot,
             UpstreamProtocol::Responses,
             "profile/responses",
-            &GatewayAuthenticationSemanticsV1::None,
-        ))
-        .unwrap();
-        assert_eq!(loopback.candidate_target.authority, "127.0.0.1");
-        assert_eq!(loopback.candidate_target.port, 8123);
-        assert_eq!(loopback.request_url(), "http://127.0.0.1:8123/v1/responses");
-
-        assert_eq!(
-            normalize_model_connection_target(input(
-                "http://192.0.2.10/v1",
-                ModelConnectionBaseKindV1::ApiRoot,
-                UpstreamProtocol::Responses,
-                "profile/responses",
-                &GatewayAuthenticationSemanticsV1::Bearer,
-            )),
-            Err(ModelConnectionTargetError::NonLoopbackHttp)
+            &GatewayAuthenticationSemanticsV1::Bearer,
         );
+        draft.inventory_path_override = Some("/proxy/models");
+        let target = normalize_model_connection_target(draft).unwrap();
+        assert_eq!(
+            target.inventory_url(None),
+            "http://gateway.invalid:8123/proxy/models"
+        );
+        assert_eq!(
+            target.request_url(),
+            "http://gateway.invalid:8123/proxy/responses"
+        );
+        assert_eq!(target.host_header(), "gateway.invalid:8123");
+    }
+
+    #[test]
+    fn unsafe_authentication_headers_fail_before_network() {
         assert_eq!(
             validate_authentication_header(&GatewayAuthenticationSemanticsV1::ApiKeyHeader {
                 header: "Proxy-Authorization".into()
@@ -517,8 +501,33 @@ mod tests {
     }
 
     #[test]
+    fn http_does_not_allow_protocol_headers_to_inject_credentials() {
+        let headers = GatewayHeaderSemanticsV1 {
+            content_type: "application/json".into(),
+            required_headers: vec![("authorization".into(), "Bearer must-not-leak".into())],
+            forbidden_forward_headers: Vec::new(),
+        };
+        let mut draft = input(
+            "http://gateway.invalid/v1",
+            ModelConnectionBaseKindV1::ApiRoot,
+            UpstreamProtocol::Responses,
+            "profile/responses",
+            &GatewayAuthenticationSemanticsV1::None,
+        );
+        draft.protocol_header_semantics = &headers;
+        assert_eq!(
+            normalize_model_connection_target(draft),
+            Err(ModelConnectionTargetError::UnsafeProtocolHeader)
+        );
+    }
+
+    #[test]
     fn embedded_secrets_and_ambiguous_paths_are_rejected() {
         for url in [
+            "http://user:secret@gateway.invalid/v1",
+            "http://gateway.invalid/v1?api_key=secret",
+            "http://gateway.invalid/v1/%2e%2e/private",
+            "ftp://gateway.invalid/v1",
             "https://user:secret@example.test/v1",
             "https://example.test/v1?api_key=secret",
             "https://example.test/v1/%2e%2e/private",
