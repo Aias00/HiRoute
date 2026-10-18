@@ -42,7 +42,11 @@ fn read(headers: &HeaderMap, current: &str) -> Option<HermesCompressionLineageV1
         }
     }
     if let Some(state) = &proof.current_state
-        && (!stamp(&state.observation) || state.observation.age_ms > 1000)
+        && (!stamp(&state.observation)
+            || state.observation.age_ms > 1000
+            || state
+                .started_at_ms
+                .is_some_and(|t| t < 0 || t > state.observation.observed_at_ms))
     {
         return None;
     }
@@ -185,6 +189,31 @@ mod tests {
         );
         assert!(read(&h, "s").is_some());
         assert!(read(&h, "other").is_none());
+        let mut with_origin = p.clone();
+        with_origin["current_state"] = serde_json::json!({"value":"open",
+            "observation":{"observer_id":"o","sequence":2,"observed_at_ms":10000,"age_ms":0},
+            "started_at_ms":5000});
+        h.insert(
+            "x-hermes-compression-lineage",
+            http::HeaderValue::from_str(&with_origin.to_string()).unwrap(),
+        );
+        assert_eq!(
+            read(&h, "s").unwrap().current_state.unwrap().started_at_ms,
+            Some(5000)
+        );
+        with_origin["current_state"]["started_at_ms"] = serde_json::json!(20000);
+        h.insert(
+            "x-hermes-compression-lineage",
+            http::HeaderValue::from_str(&with_origin.to_string()).unwrap(),
+        );
+        assert!(
+            read(&h, "s").is_none(),
+            "future creation is not native origin proof"
+        );
+        h.insert(
+            "x-hermes-compression-lineage",
+            http::HeaderValue::from_str(&p.to_string()).unwrap(),
+        );
         h.append(
             "x-hermes-compression-lineage",
             http::HeaderValue::from_static("{}"),

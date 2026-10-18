@@ -77,6 +77,15 @@ class LineageTests(unittest.TestCase):
         self.assertIsNone(manager.header("root"))
         self.assertEqual(reader.chain_calls, 0)
 
+    def test_creation_time_comes_from_the_fresh_native_row_not_the_proof_stamp(self):
+        for started, expected in ((1234.5, 1234500), (None, None), (-1, None),
+                                  (True, None), ("1234", None), (float("nan"), None)):
+            manager = self.manager(NativeReader({"root": {"started_at": started}}, ["root"]))
+            self.warm(manager, "root")
+            header = json.loads(manager.header("root"))
+            self.assertEqual(header["current_state"].get("started_at_ms"), expected)
+            self.assertEqual(header["ids"], ["root"])
+
     def test_warm_ancestor_proof_survives_normal_generation_interval(self):
         rows = {"parent": {"parent_session_id": None, "ended_at": 1, "end_reason": "compression"},
                 "child": {"parent_session_id": "parent", "ended_at": None, "id": "child"}}

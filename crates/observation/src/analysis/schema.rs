@@ -2,6 +2,10 @@
 //! strict execution/receipt payloads are intentionally unchanged.
 use rusqlite::{Connection, OptionalExtension, params};
 
+#[cfg(test)]
+#[path = "schema_tests.rs"]
+mod tests;
+
 pub(super) const FORMAT: &str = "1";
 
 pub(crate) fn available(db: &Connection) -> bool {
@@ -113,7 +117,9 @@ pub(crate) fn migrate(db: &mut Connection) -> rusqlite::Result<()> {
 fn install_dirty_triggers(db: &Connection) -> rusqlite::Result<()> {
     // These SQL-only notifications also remain executable by a compatible
     // released writer. They never require a new Rust/SQLite function, alter a
-    // source row, or pretend its derived projection has been reconciled.
+    // source row, or pretend its derived projection has been reconciled. They
+    // are a retained-writer dependency: any table replacement must replace
+    // these triggers in the same transaction, before core writes can resume.
     for table in [
         "logical_requests",
         "valuation_requests_v2",
@@ -188,6 +194,9 @@ CREATE INDEX IF NOT EXISTS analysis_dirty_sequence_v1 ON observation_analysis_di
 CREATE TABLE IF NOT EXISTS observation_analysis_cuts_v1(
  workspace_id TEXT NOT NULL,session_id TEXT NOT NULL,through_ms INTEGER NOT NULL,kind TEXT NOT NULL,
  PRIMARY KEY(workspace_id,session_id,kind));
+CREATE TABLE IF NOT EXISTS observation_native_origins_v1(
+ workspace_id TEXT NOT NULL,session_id TEXT NOT NULL,not_before_ms INTEGER NOT NULL,
+ PRIMARY KEY(workspace_id,session_id));
 CREATE TABLE IF NOT EXISTS observation_analysis_requests_v1(
  workspace_id TEXT NOT NULL,request_id TEXT NOT NULL,revision INTEGER NOT NULL,
  session_id TEXT NOT NULL,turn_id TEXT NOT NULL,at_ms INTEGER NOT NULL,finished_ms INTEGER,

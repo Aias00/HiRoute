@@ -96,6 +96,8 @@ class _LineageReader:
                    "proof_observation": self.wire_stamp(proof)}
         if state and time.monotonic() - state[1]["_monotonic"] <= 1:
             payload["current_state"] = {"value": state[0], "observation": self.wire_stamp(state[1])}
+            if state[2] is not None:
+                payload["current_state"]["started_at_ms"] = state[2]
         if negative:
             payload["invalid_edges"] = {"edges": negative, "observation": self.wire_stamp(proof)}
         # Fit only complete suffixes; never trim JSON bytes or invent a root.
@@ -150,7 +152,13 @@ class _LineageReader:
                 return
             observed = self.stamp()
             if ticket:
-                ticket["sample"] = (_state(row), observed)
+                started = row.get("started_at")
+                # SessionDB creates this timestamp once; reopening does not
+                # replace it. Older/malformed rows simply lack origin proof.
+                started_ms = (int(started * 1000) if isinstance(started, (int, float))
+                              and not isinstance(started, bool)
+                              and 0 <= started <= observed["observed_at_ms"] / 1000 else None)
+                ticket["sample"] = (_state(row), observed, started_ms)
                 ticket["ready"].set()
             candidates, rows = [current], {current: row}
             complete = False

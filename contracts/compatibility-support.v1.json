@@ -1613,6 +1613,21 @@
         "crates/domain/src/routing/authoring/fixtures/released-plan-editor.v2.json",
         "crates/domain/src/routing/authoring/tests.rs"
       ]
+    },
+    {
+      "contract": "hiroute.observation.analysis/v1",
+      "field": "retained released-writer SQL triggers and optional native creation projection",
+      "mode": "recovery_read_only",
+      "owner": "observation-storage",
+      "reason": "Supported v0.3.1 13856abd873da5b4373d39322493b4cc105c4867 core mutations execute the persisted SQL-only analysis dirty/deletion triggers. Their meta, dirty and cut table dependencies must be replaced with the triggers atomically. Current native creation evidence is kept in a separate additive origin table; strict retained native-continuation v1 event JSON remains readable without that transport-only extension. Missing origin proof preserves a gap, and old readers do not acquire new authority.",
+      "removal_condition": "Retire these trigger/table dependencies only after supported retained-writer re-upgrade and matching-binary recovery support is explicitly retired or migrated with verified core-write and deletion regressions.",
+      "allowed_paths": [
+        "crates/observation/src/analysis/schema.rs",
+        "crates/observation/src/analysis/schema_tests.rs",
+        "crates/observation/src/analysis/native.rs",
+        "crates/observation/src/analysis/native_origin.rs",
+        "crates/observation/src/store/tests/analysis_delete_tests.rs"
+      ]
     }
   ]
 }

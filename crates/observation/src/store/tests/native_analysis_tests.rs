@@ -1,5 +1,8 @@
 use super::*;
 
+#[path = "analysis_delete_tests.rs"]
+mod deletion;
+
 fn native(store: &LocalObservationStore, id: &str) -> Fixture {
     let f = Fixture::new(id);
     for e in facts(&f, UsageFrameKindV1::Cumulative) {
@@ -74,6 +77,7 @@ fn cached_ancestor_proof_cannot_override_parent_reopen_but_fresh_verification_ca
     reopened.current_state = Some(NativeCurrentStateV1 {
         value: NativeSessionStateV1::Open,
         observation: reopened.proof_observation.clone().unwrap(),
+        started_at_ms: None,
     });
     store.ingest_native_continuation(&reopened).unwrap();
     assert_eq!(page(&store).conversations.len(), 2);

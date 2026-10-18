@@ -207,14 +207,28 @@ fn retained(
     {
         return Ok(None);
     }
-    if let Some(index) = e.ids.iter().rposition(|id| cuts.contains_key(id)) {
-        let start = (index + 1).min(e.ids.len() - 1);
+    let mut start = 0;
+    for (index, pair) in e.ids.windows(2).enumerate() {
+        if (cuts.contains_key(&pair[0]) || cuts.contains_key(&pair[1]))
+            && !super::native_origin::edge_retained(db, &e.workspace_id, &pair[0], &pair[1])?
+        {
+            start = index + 1;
+        }
+    }
+    if start > 0 || cuts.contains_key(&e.ids[0]) {
         e.ids = e.ids[start..].to_vec();
         e.complete = false;
     }
     if let Some(n) = &mut e.invalid_edges {
-        n.edges
-            .retain(|[p, c]| !cuts.contains_key(p) && !cuts.contains_key(c));
+        let mut kept = Vec::new();
+        for [p, c] in &n.edges {
+            if (!cuts.contains_key(p) && !cuts.contains_key(c))
+                || super::native_origin::edge_retained(db, &e.workspace_id, p, c)?
+            {
+                kept.push([p.clone(), c.clone()]);
+            }
+        }
+        n.edges = kept;
         if n.edges.is_empty() {
             e.invalid_edges = None;
         }
@@ -293,9 +307,22 @@ impl LocalObservationStore {
             return Err(Error::Unavailable);
         }
         let tx = db.transaction()?;
+        // A replay from covered history must not install origin evidence after
+        // a full deletion removed that member's reverse references.
+        let deleted:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM observation_analysis_cuts_v1 WHERE workspace_id=?1 AND session_id=?2 AND through_ms>=?3)",params![e.workspace_id,e.current_session_id,e.ingress_at_ms],|r|r.get(0))?;
+        if deleted {
+            return Ok(());
+        }
+        super::native_origin::record(&tx, e)?;
         let Some(e) = retained(&tx, e)? else {
             return Ok(());
         };
+        let mut e = e;
+        // Older retained readers deserialize this strict v1 body. The optional
+        // transport extension is persisted only in its additive origin table.
+        if let Some(state) = &mut e.current_state {
+            state.started_at_ms = None;
+        }
         let e = &e;
         let body = serde_json::to_string(e).map_err(|_| Error::Invalid)?;
         let previous:Option<String>=tx.query_row("SELECT body FROM observation_native_events_v1 WHERE workspace_id=?1 AND event_id=?2",params![e.workspace_id,e.event_id],|r|r.get(0)).optional()?;
@@ -391,6 +418,10 @@ pub(crate) fn full_delete(
         "DELETE FROM observation_native_presence_v1 WHERE workspace_id=?1 AND session_id=?2",
         params![w, session],
     )?;
+    db.execute(
+        "DELETE FROM observation_native_origins_v1 WHERE workspace_id=?1 AND session_id=?2",
+        params![w, session],
+    )?;
     db.execute("INSERT INTO observation_analysis_cuts_v1 VALUES(?1,?2,?3,'full') ON CONFLICT(workspace_id,session_id,kind) DO UPDATE SET through_ms=MAX(through_ms,excluded.through_ms)",params![w,session,through])?;
     let removed=db.execute("DELETE FROM observation_native_relations_v1 WHERE workspace_id=?1 AND (parent_id=?2 OR child_id=?2)",params![w,session])?;
     if removed > 0 {
@@ -420,7 +451,17 @@ pub(super) fn redact_events(
       JOIN observation_native_event_members_v1 m ON m.workspace_id=e.workspace_id AND m.event_id=e.event_id
       JOIN observation_analysis_cuts_v1 c ON c.workspace_id=m.workspace_id AND c.session_id=m.session_id
       WHERE e.workspace_id=?1 AND (?2 IS NULL OR m.session_id=?2)
-        AND (m.session_id!=json_extract(e.body,'$.current_session_id') OR json_extract(e.body,'$.ingress_at_ms')<=c.through_ms OR json_array_length(json_extract(e.body,'$.ids'))>1 OR json_array_length(json_extract(e.body,'$.invalid_edges.edges'))>0)
+        AND ((m.session_id=json_extract(e.body,'$.current_session_id') AND json_extract(e.body,'$.ingress_at_ms')<=c.through_ms)
+          OR (json_extract(e.body,'$.complete')=1 AND m.session_id=json_extract(e.body,'$.ids[0]'))
+          OR EXISTS(SELECT 1 FROM json_each(e.body,'$.ids') n
+            WHERE CAST(n.key AS INTEGER)>0
+              AND c.session_id IN(n.value,json_extract(e.body,'$.ids['||(CAST(n.key AS INTEGER)-1)||']'))
+              AND NOT EXISTS(SELECT 1 FROM observation_native_origins_v1 o
+                WHERE o.workspace_id=e.workspace_id AND o.session_id=n.value AND o.not_before_ms>c.through_ms))
+          OR EXISTS(SELECT 1 FROM json_each(e.body,'$.invalid_edges.edges') n
+            WHERE c.session_id IN(json_extract(n.value,'$[0]'),json_extract(n.value,'$[1]'))
+              AND NOT EXISTS(SELECT 1 FROM observation_native_origins_v1 o
+                WHERE o.workspace_id=e.workspace_id AND o.session_id=json_extract(n.value,'$[1]') AND o.not_before_ms>c.through_ms)))
       ORDER BY e.event_id LIMIT ?3")?;
     let events = stmt
         .query_map(params![w, session, limit], |r| {

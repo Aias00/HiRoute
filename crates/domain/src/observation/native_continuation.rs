@@ -15,6 +15,10 @@ pub struct NativeProofObservationV1 {
 pub struct NativeCurrentStateV1 {
     pub value: NativeSessionStateV1,
     pub observation: NativeProofObservationV1,
+    /// Optional native creation time, sampled with this current row. It is
+    /// origin evidence, never a refreshed ancestor-observation timestamp.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started_at_ms: Option<i64>,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
