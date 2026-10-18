@@ -121,7 +121,7 @@ export function DesktopApp() {
   const [operation, setOperation] = useState<DesktopOperation | null>(null);
   const [operationPresentation, setOperationPresentation] = useState<OperationPresentation>({ kind: 'background' });
   const [observing, setObserving] = useState(true);
-  const trustSuggestions = useTrustSuggestions(observing && Boolean(home.desktopSnapshot), `${refreshVersion}:${home.desktopSnapshot?.catalog.plans.map(p => `${p.agent_plan_id}:${p.head.head_revision}`).join(',') ?? ''}`);
+  const trustSuggestions = useTrustSuggestions(observing && Boolean(home.desktopSnapshot), `${refreshVersion}:${home.desktopSnapshot?.catalog.plans.map(p => `${p.agent_plan_id}:${p.head.head_revision}`).join(',') ?? ''}`, page === 'home');
   const [operationRecoveryPending, setOperationRecoveryPending] = useState(false);
   const [pollingRevision, setPollingRevision] = useState(0);
   const [operationError, setOperationError] = useState('');
@@ -685,7 +685,7 @@ export function DesktopApp() {
           </div>
         </div>}
 
-        {trialIntent && <TrialQuickStart onOpenPerformance={plan => { setTrialIntent(null); void showRouting({ key: `trial/${crypto.randomUUID()}`, plan, initialView: 'performance' }); }} onOpenSessions={() => { setTrialIntent(null); void openPageSafely('sessions'); }} initialModelId={trialIntent.modelId} initialBindingId={trialIntent.bindingId} language={language} mutable={Boolean(home.desktopSnapshot?.trusted_authority && home.desktopSnapshot.service.mutation_available)} snapshot={home.desktopSnapshot} operation={operation} onOperation={value => acceptOperation(value, { kind: 'routing' })} onRefresh={async () => { setObserving(true); await home.refreshAll(); setRefreshVersion(value => value + 1); }} onClose={() => setTrialIntent(null)} onOpenAgent={id => { setTrialIntent(null); setAgentIntent({ key: `agents/${crypto.randomUUID()}`, agentId: id }); openPage('agents'); }} />}
+        {trialIntent && <TrialQuickStart onOpenPerformance={plan => { setTrialIntent(null); void showRouting({ key: `trial/${crypto.randomUUID()}`, plan, initialView: 'performance' }); }} onOpenSessions={sessionId => { void (async () => { if (!await allowPageChange('sessions')) return; setTrialIntent(null); setSessionIntent({ key: `sessions/${crypto.randomUUID()}`, sessionId }); openPage('sessions'); })(); }} initialModelId={trialIntent.modelId} initialBindingId={trialIntent.bindingId} language={language} mutable={Boolean(home.desktopSnapshot?.trusted_authority && home.desktopSnapshot.service.mutation_available)} snapshot={home.desktopSnapshot} operation={operation} onOperation={value => acceptOperation(value, { kind: 'routing' })} onRefresh={async () => { setObserving(true); await home.refreshAll(); setRefreshVersion(value => value + 1); }} onClose={() => setTrialIntent(null)} onOpenAgent={id => { setTrialIntent(null); setAgentIntent({ key: `agents/${crypto.randomUUID()}`, agentId: id }); openPage('agents'); }} />}
         <div hidden={page !== 'home'}><Home
             language={language}
             reads={home.reads}

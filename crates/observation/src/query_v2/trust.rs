@@ -7,11 +7,40 @@ use hiroute_domain::{TrustObservedStageV1, TrustPopulationQueryV1, TrustPopulati
 use rusqlite::{Connection, OpenFlags, named_params};
 
 impl LocalObservationStore {
+    pub fn observed_trust_generation(
+        &self,
+        reader: &ObservationReaderContext,
+        now_ms: i64,
+    ) -> Result<(u64, u64), ObservationV2Error> {
+        reader.check(now_ms, false, false)?;
+        let _permit = self.query_permit()?;
+        let connection =
+            Connection::open_with_flags(&self.activity_path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+        let _deadline = QueryDeadline::start_for(&connection, reader)?;
+        Ok(connection.query_row("SELECT (SELECT CAST(value AS INTEGER) FROM observation_meta WHERE key='plan_quality_generation'), (SELECT CAST(value AS INTEGER) FROM observation_meta WHERE key='query_visibility_generation')", [], |row| Ok((row.get(0)?,row.get(1)?)))?)
+    }
     pub fn observed_trust_population(
         &self,
         reader: &ObservationReaderContext,
         query: &TrustPopulationQueryV1,
         now_ms: i64,
+    ) -> Result<TrustPopulationV1, ObservationV2Error> {
+        self.trust_population(reader, query, now_ms, false)
+    }
+    pub fn observed_trust_suggestion_population(
+        &self,
+        reader: &ObservationReaderContext,
+        query: &TrustPopulationQueryV1,
+        now_ms: i64,
+    ) -> Result<TrustPopulationV1, ObservationV2Error> {
+        self.trust_population(reader, query, now_ms, true)
+    }
+    fn trust_population(
+        &self,
+        reader: &ObservationReaderContext,
+        query: &TrustPopulationQueryV1,
+        now_ms: i64,
+        lean: bool,
     ) -> Result<TrustPopulationV1, ObservationV2Error> {
         reader.check(now_ms, false, false)?;
         if query.active_revision == 0
@@ -57,7 +86,17 @@ impl LocalObservationStore {
                AND r.started_at_ms <= (SELECT last.started_at_ms FROM logical_requests last WHERE last.workspace_id=q.workspace_id AND last.request_id=q.last_request_id)
                AND r.finished_at_ms>=r.started_at_ms) AS performance
             FROM quality q");
-        let population_scope = SCOPE.replace("q.last_at_ms>=:from AND q.last_at_ms<:to", "q.last_at_ms>=:retained AND q.last_at_ms<:now AND (q.plan_revision=:active OR (q.last_at_ms>=:from AND q.last_at_ms<:to AND (:revision IS NULL OR q.plan_revision=:revision)))").replace("AND (:revision IS NULL OR q.plan_revision=:revision)\n", "\n");
+        let projection = if lean {
+            DETAIL_SELECT.replace("FROM quality q", ", NULL AS executor, EXISTS(SELECT 1 FROM plan_quality_segments later WHERE later.workspace_id=q.workspace_id AND later.session_id=q.session_id AND later.last_observed_turn_ordinal>q.last_observed_turn_ordinal) AS has_later_turn, '[]' AS performance FROM quality q")
+        } else {
+            projection
+        };
+        let scope = if lean {
+            format!("SELECT q.*, NULL AS native_model, NULL AS reasoning_profile_id {}", &SCOPE[SCOPE.find("FROM plan_quality_segments q").expect("scope owner"):])
+        } else {
+            SCOPE.to_owned()
+        };
+        let population_scope = scope.replace("q.last_at_ms>=:from AND q.last_at_ms<:to", "q.last_at_ms>=:retained AND q.last_at_ms<:now AND (q.plan_revision=:active OR (q.last_at_ms>=:from AND q.last_at_ms<:to AND (:revision IS NULL OR q.plan_revision=:revision)))").replace("AND (:revision IS NULL OR q.plan_revision=:revision)\n", "\n");
         let sql = format!(
             "WITH quality AS ({population_scope}) {projection} WHERE (:branch IS NULL OR COALESCE(q.executed_branch_id,q.selected_branch_id)=:branch) ORDER BY q.last_at_ms,q.segment_id LIMIT 50001"
         );

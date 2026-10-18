@@ -23,7 +23,7 @@ import './trial.css';
 
 export function TrialQuickStart({ initialModelId, initialBindingId, language, mutable, snapshot, operation, onOperation, onRefresh, onClose, onOpenAgent, onOpenPerformance, onOpenSessions }: {
   initialModelId?: string; initialBindingId?: string; language: 'zh' | 'en'; mutable: boolean; snapshot: DesktopSnapshot | null; operation: DesktopOperation | null;
-  onOpenPerformance?(plan: Plan): void; onOpenSessions?(): void;
+  onOpenPerformance?(plan: Plan): void; onOpenSessions?(sessionId?: string): void;
   onOperation(operation: DesktopOperation | null): void; onRefresh(): Promise<void>; onClose(): void; onOpenAgent(id: string): void;
 }) {
   const t = (zh: string, en: string) => language === 'zh' ? zh : en;

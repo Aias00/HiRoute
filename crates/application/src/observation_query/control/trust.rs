@@ -10,40 +10,157 @@ impl ObservationControl {
         reader: &ObservationReaderContext,
         now: i64,
     ) -> Result<Value, ObservationQueryError> {
+        reader.check(now, false, false)?;
         let started = std::time::Instant::now();
         let generation = self
             .state
             .snapshot(&self.workspace_id)
             .map_err(map_control)?
             .revisions;
-        let ids = self
+        let observation = self.service.observed_trust_generation(reader, now)?;
+        let binding = reader.binding()?;
+        let mut ids = self
             .state
             .trust_plan_ids(&self.workspace_id)
             .map_err(map_control)?;
+        let mut cache = self
+            .trust_suggestion_cache
+            .try_lock()
+            .map_err(|_| ObservationQueryError::Unavailable)?;
+        cache.entries.retain(|id, _| ids.contains(id));
+        if !ids.is_empty() {
+            let offset = cache.next % ids.len();
+            ids.rotate_left(offset);
+        }
         let mut suggestions = Vec::new();
-        for plan_id in ids {
-            if started.elapsed() > std::time::Duration::from_secs(1) {
-                return Err(ObservationQueryError::ScopeTooLarge);
+        let mut unavailable = Vec::new();
+        let mut deferred = None;
+        for (index, plan_id) in ids.iter().enumerate() {
+            let result = (|| {
+                let context = self
+                    .state
+                    .trust_context(&self.workspace_id, plan_id)
+                    .map_err(map_control)?;
+                let key =
+                    CanonicalDigest::of(&(&binding, &generation, observation, &context.generation))
+                        .map_err(|_| ObservationQueryError::Corrupt)?;
+                if let Some(entry) = cache.entries.get(plan_id)
+                    && entry.key == key
+                    && now >= entry.created_at
+                    && now < entry.expires_at
+                {
+                    // Worker state is independent of observation/control revisions.
+                    // Pending Worker populations are deliberately not cached.
+                    return Ok(entry.value.clone());
+                }
+                if started.elapsed() >= std::time::Duration::from_millis(800) {
+                    deferred.get_or_insert(index);
+                    return Err(ObservationQueryError::Unavailable);
+                }
+                let query = PlanTrustQueryV1 {
+                    plan_id: plan_id.clone(),
+                    branch_id: None,
+                    revision: Default::default(),
+                    from_ms: None,
+                    to_ms: None,
+                    group_by: Default::default(),
+                };
+                let population = self.service.observed_trust_suggestion_population(
+                    reader,
+                    &TrustPopulationQueryV1 {
+                        active_revision: context.active.content_revision,
+                        plan_id: plan_id.clone(),
+                        branch_id: None,
+                        revision: Some(context.active.content_revision),
+                        from_ms: None,
+                        to_ms: None,
+                    },
+                    now,
+                )?;
+                let run_ids: Vec<_> = population
+                    .active_stages
+                    .iter()
+                    .filter_map(|s| s.sample.run_id.clone())
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .into_iter()
+                    .collect();
+                let runs = self
+                    .state
+                    .trust_runs(&self.workspace_id, &run_ids)
+                    .map_err(map_control)?;
+                let mut value =
+                    crate::trust::report::suggestion_evidence(&query, &context, &population, &runs);
+                if value["branches"].as_array().is_some_and(|branches| {
+                    branches
+                        .iter()
+                        .any(|b| b["suggestion"]["kind"] == "change_regular_model")
+                }) {
+                    let targets = self
+                        .state
+                        .trust_recovery_targets(plan_id)
+                        .map_err(map_control)?;
+                    if !targets.is_empty() {
+                        for branch in value["branches"]
+                            .as_array_mut()
+                            .ok_or(ObservationQueryError::Corrupt)?
+                        {
+                            if branch["suggestion"]["kind"] == "change_regular_model" {
+                                branch["suggestion"] = json!({"kind":"return_to_previous_routing"});
+                            }
+                        }
+                    }
+                    value["previous_routing"] = serde_json::to_value(targets)
+                        .map_err(|_| ObservationQueryError::Corrupt)?;
+                }
+                if self
+                    .state
+                    .trust_context(&self.workspace_id, plan_id)
+                    .map_err(map_control)?
+                    .generation
+                    != context.generation
+                    || self.service.observed_trust_generation(reader, now)? != observation
+                {
+                    return Err(ObservationQueryError::StalePreview);
+                }
+                // A terminal/missing run can be replaced by control recovery too;
+                // keep Worker-linked populations uncached until a runtime revision is available.
+                if run_ids.is_empty() {
+                    let expires_at = population
+                        .active_stages
+                        .iter()
+                        .map(|s| {
+                            s.sample
+                                .last_at_ms
+                                .saturating_add(hiroute_domain::SEVEN_DAYS_MILLIS)
+                        })
+                        .min()
+                        .unwrap_or(i64::MAX)
+                        .min(now.saturating_add(300_000));
+                    cache.entries.insert(
+                        plan_id.clone(),
+                        SuggestionEntry {
+                            key,
+                            created_at: now,
+                            expires_at,
+                            value: value.clone(),
+                        },
+                    );
+                }
+                Ok(value)
+            })();
+            match result {
+                Ok(value) if value["branches"].as_array().is_some_and(|b| !b.is_empty()) => {
+                    suggestions.push(value)
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    cache.entries.remove(plan_id);
+                    unavailable.push(json!({"plan_id":plan_id,"reason":match error { ObservationQueryError::ScopeTooLarge => "scope_too_large", ObservationQueryError::StalePreview => "stale", _ => "unavailable" }}));
+                }
             }
-            let query = PlanTrustQueryV1 {
-                plan_id: plan_id.clone(),
-                branch_id: None,
-                revision: Default::default(),
-                from_ms: None,
-                to_ms: None,
-                group_by: Default::default(),
-            };
-            let report = self.trust_result(reader, &query, None, now)?;
-            let branches: Vec<_> = report["branches"]
-                .as_array()
-                .ok_or(ObservationQueryError::Corrupt)?
-                .iter()
-                .filter(|b| b["suggestion"]["kind"] != "keep")
-                .cloned()
-                .collect();
-            if !branches.is_empty() {
-                suggestions.push(json!({"plan_id":plan_id,"active_revision":report["active_revision"],"branches":branches,"announcements":report["announcements"],"rows":report["rows"],"previous_routing":report["previous_routing"]}));
-            }
+        }
+        if let Some(index) = deferred {
+            cache.next = (cache.next + index) % ids.len().max(1);
         }
         if self
             .state
@@ -54,7 +171,7 @@ impl ObservationControl {
         {
             return Err(ObservationQueryError::StalePreview);
         }
-        Ok(json!({"suggestions":suggestions}))
+        Ok(json!({"suggestions":suggestions,"unavailable":unavailable}))
     }
 
     pub(super) fn trust_result(
@@ -169,4 +286,16 @@ impl ObservationControl {
             serde_json::to_value(targets).map_err(|_| ObservationQueryError::Corrupt)?;
         Ok(value)
     }
+}
+
+#[derive(Default)]
+pub(super) struct SuggestionCache {
+    entries: std::collections::BTreeMap<String, SuggestionEntry>,
+    next: usize,
+}
+struct SuggestionEntry {
+    key: CanonicalDigest,
+    created_at: i64,
+    expires_at: i64,
+    value: Value,
 }

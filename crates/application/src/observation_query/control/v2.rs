@@ -80,6 +80,10 @@ impl ObservationControl {
             content,
             search,
         )?;
+        let suggestions_read = matches!(
+            &request.intent,
+            ObservationReadIntentV2::PlanTrustSuggestions(_)
+        );
         let trust_read = matches!(
             &request.intent,
             ObservationReadIntentV2::RoutingTimeline(_)
@@ -243,7 +247,8 @@ impl ObservationControl {
                 ObservationQueryError::Unavailable
             });
         }
-        if trust_read && started.elapsed() > std::time::Duration::from_secs(1) {
+        if trust_read && !suggestions_read && started.elapsed() > std::time::Duration::from_secs(1)
+        {
             return Err(ObservationQueryError::ScopeTooLarge);
         }
         Ok(result)

@@ -25,6 +25,7 @@ const MAX_SESSION_LIMIT: usize = 200;
 const DAY_MILLIS: i64 = 86_400_000;
 
 pub(crate) struct ObservationControl {
+    trust_suggestion_cache: std::sync::Mutex<trust::SuggestionCache>,
     service: ObservationQueryService,
     state: Arc<dyn ControlStatePort>,
     clock: Arc<dyn ApplicationClockPort>,
@@ -43,6 +44,7 @@ impl ObservationControl {
     ) -> Self {
         Self {
             service: ObservationQueryService::new(port),
+            trust_suggestion_cache: Default::default(),
             state,
             clock,
             value_scope,

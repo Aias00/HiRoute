@@ -392,6 +392,22 @@ pub trait ObservationQueryPort: Send + Sync {
         Err(ObservationQueryError::Unavailable)
     }
 
+    fn observed_trust_generation(
+        &self,
+        _reader: &super::ObservationReaderContext,
+        _now_ms: i64,
+    ) -> Result<(u64, u64), ObservationQueryError> {
+        Err(ObservationQueryError::Unavailable)
+    }
+    fn observed_trust_suggestion_population(
+        &self,
+        _reader: &super::ObservationReaderContext,
+        _query: &super::TrustPopulationQueryV1,
+        _now_ms: i64,
+    ) -> Result<super::TrustPopulationV1, ObservationQueryError> {
+        Err(ObservationQueryError::Unavailable)
+    }
+
     fn observed_trust_population(
         &self,
         _reader: &super::ObservationReaderContext,

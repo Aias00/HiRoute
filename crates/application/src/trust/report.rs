@@ -257,13 +257,43 @@ pub fn report(
             }
         })
         .collect();
+    let (branches, announcements) = branch_evidence(query, context, population, runs, false);
+    PlanTrustReportV1 {
+        plan_id: query.plan_id.clone(),
+        active_revision: context.active.content_revision,
+        revision: query.revision.clone(),
+        from_ms: population.from_ms,
+        to_ms: population.to_ms,
+        generation: population.generation,
+        levels: TrustLevelV1::all().to_vec(),
+        rows,
+        branches,
+        session_total: sessions.len(),
+        sessions: sessions
+            .into_iter()
+            .take(200)
+            .map(|(session_id, stages)| TrustSessionV1 { session_id, stages })
+            .collect(),
+        announcements,
+        executors: executor_outcomes(tasks),
+        cost: serde_json::json!({"kind":"unavailable", "reason":"comparison basis not available"}),
+        suggestion_rules: serde_json::json!({"min_scored":30,"upper_rate":0.85,"lower_rate":0.70,"min_coverage":0.60,"min_sessions":3}),
+    }
+}
+fn branch_evidence(
+    query: &PlanTrustQueryV1,
+    context: &TrustContextV1,
+    population: &TrustPopulationV1,
+    runs: &BTreeMap<String, TrustRunV1>,
+    lean: bool,
+) -> (Vec<TrustBranchV1>, Vec<TrustAnnouncementCountV1>) {
     let policies = policies(context);
     let active_scope = matches!(
         &query.revision,
         TrustRevisionV1::Name(TrustRevisionNameV1::Active)
     ) || query.revision
         == TrustRevisionV1::Number(context.active.content_revision);
-    let branches = policies
+    let branches: Vec<TrustBranchV1> = policies
         .into_iter()
         .filter(|(id, _, _)| query.branch_id.as_ref().is_none_or(|wanted| wanted == id))
         .map(|(id, threshold, models)| {
@@ -306,6 +336,18 @@ pub fn report(
                 })
                 .cloned()
                 .collect();
+            let thresholds = if lean {
+                match &suggestion {
+                    TrustSuggestionV1::StepUp { threshold_millis }
+                    | TrustSuggestionV1::StepDown { threshold_millis } => vec![*threshold_millis],
+                    _ => vec![],
+                }
+            } else {
+                TrustLevelV1::all()
+                    .iter()
+                    .map(|l| l.threshold_millis)
+                    .collect()
+            };
             TrustBranchV1 {
                 branch_id: id,
                 threshold_millis: threshold,
@@ -314,13 +356,7 @@ pub fn report(
                 upward_cohort,
                 upward_from_ms,
                 suggestion,
-                replay: replay(
-                    &branch_stages,
-                    &TrustLevelV1::all()
-                        .iter()
-                        .map(|l| l.threshold_millis)
-                        .collect::<Vec<_>>(),
-                ),
+                replay: replay(&branch_stages, &thresholds),
             }
         })
         .collect();
@@ -350,28 +386,56 @@ pub fn report(
             result
         })
         .collect();
-    PlanTrustReportV1 {
-        plan_id: query.plan_id.clone(),
-        active_revision: context.active.content_revision,
-        revision: query.revision.clone(),
-        from_ms: population.from_ms,
-        to_ms: population.to_ms,
-        generation: population.generation,
-        levels: TrustLevelV1::all().to_vec(),
-        rows,
-        branches,
-        session_total: sessions.len(),
-        sessions: sessions
-            .into_iter()
-            .take(200)
-            .map(|(session_id, stages)| TrustSessionV1 { session_id, stages })
-            .collect(),
-        announcements,
-        executors: executor_outcomes(tasks),
-        cost: serde_json::json!({"kind":"unavailable", "reason":"comparison basis not available"}),
-        suggestion_rules: serde_json::json!({"min_scored":30,"upper_rate":0.85,"lower_rate":0.70,"min_coverage":0.60,"min_sessions":3}),
-    }
+    (branches, announcements)
 }
+
+pub fn suggestion_evidence(
+    query: &PlanTrustQueryV1,
+    context: &TrustContextV1,
+    population: &TrustPopulationV1,
+    runs: &BTreeMap<String, TrustRunV1>,
+) -> serde_json::Value {
+    let (branches, announcements) = branch_evidence(query, context, population, runs, true);
+    let branches: Vec<_> = branches
+        .into_iter()
+        .filter(|b| !matches!(b.suggestion, TrustSuggestionV1::Keep { .. }))
+        .map(|b| {
+            let regular: Vec<_> = population
+                .active_stages
+                .iter()
+                .filter(|s| branch(s) == b.branch_id && regular(s))
+                .collect();
+            let protections = regular
+                .iter()
+                .filter(|s| {
+                    s.sample
+                        .selection
+                        .as_ref()
+                        .is_some_and(|s| s.competence_trigger.is_some())
+                })
+                .map(|s| &s.sample.segment_id)
+                .collect::<BTreeSet<_>>()
+                .len();
+            let identities = regular
+                .iter()
+                .map(|s| {
+                    s.sample
+                        .model_configuration_id
+                        .as_ref()
+                        .and_then(|id| context.identity_stability.get(id))
+                        .map(String::as_str)
+                        .unwrap_or("unknown")
+                })
+                .collect::<BTreeSet<_>>();
+            let mut value = serde_json::to_value(&b).expect("typed suggestion");
+            value["protection_count"] = serde_json::json!(protections);
+            value["identity_stabilities"] = serde_json::json!(identities);
+            value
+        })
+        .collect();
+    serde_json::json!({"plan_id":query.plan_id,"active_revision":context.active.content_revision,"branches":branches,"announcements":announcements,"previous_routing":[]})
+}
+
 fn policies(context: &TrustContextV1) -> Vec<(String, u16, BTreeSet<String>)> {
     let models = |candidates: &[CandidateSelectionV1]| {
         candidates

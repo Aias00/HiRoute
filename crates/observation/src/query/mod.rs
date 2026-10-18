@@ -147,6 +147,26 @@ impl ObservationQueryPort for LocalObservationStore {
             .map_err(|error| error.into_domain())
     }
 
+    fn observed_trust_generation(
+        &self,
+        reader: &hiroute_domain::ObservationReaderContext,
+        now_ms: i64,
+    ) -> Result<(u64, u64), ObservationQueryError> {
+        reader.check(now_ms, false, false)?;
+        self.observed_trust_generation(reader, now_ms)
+            .map_err(crate::query_v2::ObservationV2Error::into_domain)
+    }
+    fn observed_trust_suggestion_population(
+        &self,
+        reader: &hiroute_domain::ObservationReaderContext,
+        query: &hiroute_domain::TrustPopulationQueryV1,
+        now_ms: i64,
+    ) -> Result<hiroute_domain::TrustPopulationV1, ObservationQueryError> {
+        reader.check(now_ms, false, false)?;
+        self.observed_trust_suggestion_population(reader, query, now_ms)
+            .map_err(crate::query_v2::ObservationV2Error::into_domain)
+    }
+
     fn observed_trust_population(
         &self,
         reader: &hiroute_domain::ObservationReaderContext,
