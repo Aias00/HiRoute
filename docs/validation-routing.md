@@ -210,6 +210,11 @@ extracted digest from the verified failed NSIS artifact in
 already registered replacement is refused. This changes no journal or business
 data and is manual preparation, not a compatibility reader or an installation
 result; the Rust transaction still owns all restoration and installation.
+To test a normal NSIS retry over that prepared replacement, `install` accepts
+`--recover-product INTERRUPTED_BUNDLE` with `--from-product RETAINED_BUNDLE` and
+the recent matching `--observation-run`. It verifies both retained and interrupted
+product images before launching the new installer. Recovery itself remains the
+normal NSIS/Rust path; this admission does not repair files or journals.
 Before native input, the runner checks that the existing session's input desktop
 is accessible and matches its ordinary desktop. `--action desktop-state` reads
 that prerequisite without unlocking or creating a login. UI observations require

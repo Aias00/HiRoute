@@ -336,6 +336,7 @@ def main():
     desktop.add_argument('--action', dest='desktop_action', required=True,
                          choices=('install', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call'))
     desktop.add_argument('--from-product', help='Exact installed bundle admitted before a cross-build upgrade')
+    desktop.add_argument('--recover-product', help='Exact interrupted bundle, with a recent inspection, before normal NSIS recovery')
     desktop.add_argument('--observation-run')
     desktop.add_argument('--element', help='Runtime ID from a recent native UI observation')
     desktop.add_argument('--text')
@@ -396,6 +397,10 @@ def main():
                 identifier = r'[a-f0-9]{12}-[a-f0-9]{12}'
                 if not re.fullmatch(identifier, args.from_product):
                     raise ValueError('Expected an explicit prior product bundle')
+            if args.recover_product and (args.desktop_action != 'install' or not args.from_product
+                    or not re.fullmatch(r'[a-f0-9]{12}-[a-f0-9]{12}', args.recover_product)
+                    or not re.fullmatch(r'[a-f0-9]{32}', args.observation_run or '')):
+                raise ValueError('Prepared NSIS recovery requires exact products and a recent inspection')
             if args.desktop_action in ('invoke', 'text'):
                 if (not args.observation_run or not re.fullmatch(r'[a-f0-9]{32}', args.observation_run)
                         or not args.element or not re.fullmatch(r'[0-9.]+', args.element)):

@@ -247,6 +247,22 @@ class Runner(unittest.TestCase):
         self.assertEqual(run.call_args.args[0], [str(shell), '--installer-install', '--no-login-start', '--no-tray'])
         self.assertEqual((self.root / 'installer-resume.stdout').read_bytes(), b'installed')
 
+    def test_nsis_retry_admits_the_exact_interrupted_product_before_normal_install(self):
+        interrupted = 'b' * 12 + '-' + 'c' * 12
+        request = dict(product='a' * 12 + '-' + 'd' * 12, from_product='e' * 12 + '-' + 'f' * 12,
+                       recover_product=interrupted, observation_run='1' * 32)
+        with patch.object(profiles, 'inspect_installation', return_value={}), \
+                patch.dict(os.environ, LOCALAPPDATA=str(self.root)), \
+                patch.object(desktop, 'prepared_installer_replacement') as admission, \
+                patch.object(desktop, 'installed') as installed:
+            desktop.admit_nsis_install(request, profiles, {}, lambda _: {'image': 'measured'}, self.root)
+            self.assertEqual(admission.call_args.args[0], {**request, 'product': interrupted})
+            self.assertEqual(admission.call_args.args[1], {'image': 'measured'})
+            installed.assert_not_called()
+            admission.side_effect = ValueError('changed interrupted image')
+            with self.assertRaisesRegex(ValueError, 'changed interrupted image'):
+                desktop.admit_nsis_install(request, profiles, {}, lambda _: {}, self.root)
+
     def test_manual_generated_file_quarantine_preserves_backup_and_refuses_changed_bytes(self):
         programs, state, output = (self.root / name for name in ('program','state','evidence'))
         programs.mkdir();(state / 'install-backups').mkdir(parents=True);output.mkdir()

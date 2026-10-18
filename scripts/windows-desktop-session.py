@@ -483,6 +483,24 @@ def installer_resume(request, run, pm, helper, activity, manifest, root):
     return dict(native_entry='measured installer post-install phase; not a full NSIS result', exit_code=done.returncode)
 
 
+def admit_nsis_install(request, helper, activity, manifest, root):
+    facts = helper.inspect_installation(Path.home(), Path(os.environ['LOCALAPPDATA']))
+    previous = request.get('from_product')
+    interrupted = request.get('recover_product')
+    if interrupted:
+        if not previous or not re.fullmatch(r'[a-f0-9]{12}-[a-f0-9]{12}', interrupted):
+            raise ValueError('Prepared recovery requires explicit previous and interrupted products')
+        prepared_installer_replacement({**request, 'product': interrupted},
+            manifest(root / 'bundles' / interrupted), helper, activity, manifest, root)
+    elif previous:
+        old = root / 'bundles' / previous
+        _, _, shell = installed(helper, old, manifest(old))
+        if any(Path(p.get('ExecutablePath') or '') == shell for p in activity.get('processes', [])):
+            raise ValueError('Quit the old Desktop through its native UI before upgrade')
+    elif 'marker' in facts or facts['programs']['exists'] or facts['stable_cli']['exists']:
+        raise ValueError('Fresh Desktop installation must not adopt an existing product')
+
+
 def execute(request, run, product, pm, helper, activity, manifest, root):
     if activity.get('administrator_groups') is not False:
         raise ValueError('Native Desktop evidence requires a standard account, not a filtered administrator')
@@ -516,21 +534,15 @@ def execute(request, run, product, pm, helper, activity, manifest, root):
         return quarantine_generated_uninstaller(programs, Path(facts['shell_state']['path']), run,
             request.get('generated_uninstaller_sha256'), facts['install-pending.json']['record'], helper)
     if action == 'install':
-        facts = helper.inspect_installation(Path.home(), Path(os.environ['LOCALAPPDATA']))
+        admit_nsis_install(request, helper, activity, manifest, root)
         previous = request.get('from_product')
-        if previous:
-            old = root / 'bundles' / previous
-            _, _, shell = installed(helper, old, manifest(old))
-            if any(Path(p.get('ExecutablePath') or '') == shell for p in activity.get('processes', [])):
-                raise ValueError('Quit the old Desktop through its native UI before upgrade')
-        elif 'marker' in facts or facts['programs']['exists'] or facts['stable_cli']['exists']:
-            raise ValueError('Fresh Desktop installation must not adopt an existing product')
         with (run / 'installer.stdout').open('xb') as out, (run / 'installer.stderr').open('xb') as err:
             done = subprocess.run([str(product / 'installer.exe'), '/S'], stdin=subprocess.DEVNULL,
                                   stdout=out, stderr=err, timeout=150, check=True)
         _, after, _ = installed(helper, product, pm)
         return dict(native_entry='NSIS /S', exit_code=done.returncode, installation=after,
-                    upgrade_from=previous, installer_sha256=pm['files']['installer.exe']['sha256'])
+                    upgrade_from=previous, recovery_from=request.get('recover_product'),
+                    installer_sha256=pm['files']['installer.exe']['sha256'])
     roots, facts, shell = installed(helper, product, pm)
     if action == 'codex-call':
         return codex_call(run, request, helper)
