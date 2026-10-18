@@ -63,6 +63,10 @@ After a stable complete pass it sleeps until the existing source revision or its
 writer connection changes; analysis-scope writes do not restart that scan. A
 change behind an in-progress cursor requires another pass before declaring idle.
 Unchanged analysis checkpoints perform no writes during ordinary idle maintenance.
+Fresh analysis scopes and price captures share the existing capture writer's
+admission within the caller's original deadline, so sustained native capture does
+not repeatedly beat them to SQLite's shorter busy slice. Existing scope reads
+retain their concurrent read transactions; content reads release the writer first.
 
 The released `search` intent retains occurrence pagination and its V2 response
 shape. It is a distinct supported interface, not the Desktop session-list query.
