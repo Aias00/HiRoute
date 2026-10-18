@@ -152,6 +152,56 @@ class Runner(unittest.TestCase):
         run.assert_not_called()
         self.assertFalse(json.loads((self.root / 'desktop-state.json').read_text())['interactive'])
 
+    def test_scroll_requires_direction_and_keeps_observed_geometry(self):
+        request = dict(desktop_action='scroll', x=250, y=200)
+        observed = dict(handle=42, width=755, height=600)
+        with patch.object(desktop, 'desktop_state', return_value={'interactive':True}), \
+             patch.object(desktop.subprocess, 'run') as run:
+            with self.assertRaisesRegex(ValueError, 'explicit direction'):
+                desktop.ui_action(self.root, request, Path('shell.exe'), 12, observed=observed)
+            run.assert_not_called()
+            request['scroll_direction'] = 'down'
+            run.return_value = desktop.subprocess.CompletedProcess([], 0, b'{}', b'')
+            desktop.ui_action(self.root, request, Path('shell.exe'), 12, observed=observed)
+        query = json.loads((self.root / 'ui-request.json').read_text())
+        self.assertEqual((query['window'],query['width'],query['height'],query['x'],query['y'],query['direction']),
+                         (42,755,600,250,200,'down'))
+
+    def test_codex_real_call_refuses_foreign_provider_profile_or_endpoint(self):
+        document = dict(model_provider='hiroute', model_providers={'hiroute':{'base_url':'http://127.0.0.1:8317/v1'}},
+                        profiles={'hiroute':{'model_provider':'hiroute'}})
+        self.assertEqual(desktop.codex_gateway(document, None), 'http://127.0.0.1:8317/v1')
+        self.assertEqual(desktop.codex_gateway(document, 'hiroute'), 'http://127.0.0.1:8317/v1')
+        for changes,profile in (({'model_provider':'openai'},None), ({},'foreign'),
+                ({'model_providers':{'hiroute':{'base_url':'https://example.com/v1'}}},None),
+                ({'model_providers':{'hiroute':{'base_url':'http://127.0.0.1/v1'}}},None),
+                ({'model_providers':{'hiroute':{'base_url':'http://user:secret@127.0.0.1:8317/v1'}}},None)):
+            with self.subTest(changes=changes,profile=profile), self.assertRaises(ValueError):
+                desktop.codex_gateway({**document,**changes},profile)
+
+    def test_codex_real_call_requires_completed_turn_tool_and_exact_nonce(self):
+        expected = 'HiRoute-Windows-test:42'
+        events = [{'type':'item.completed','item':{'type':'command_execution','status':'completed','exit_code':0,'aggregated_output':'42\n'}},
+                  {'type':'item.completed','item':{'type':'agent_message','text':expected}}, {'type':'turn.completed'}]
+        def evidence(values):
+            return desktop.codex_call_evidence(('\n'.join(json.dumps(value) for value in values)).encode(), expected)
+        self.assertTrue(all(evidence(events).values()))
+        for index in range(len(events)):
+            self.assertFalse(all(evidence(events[:index]+events[index+1:]).values()))
+        events[1]['item']['text'] = '42'
+        self.assertFalse(evidence(events)['answer'])
+        events[0]['item']['status'] = 'failed'
+        self.assertFalse(evidence(events)['shell_tool'])
+        events[0]['item'].update(status='completed',exit_code=1)
+        self.assertFalse(evidence(events)['shell_tool'])
+
+    def test_codex_real_call_refuses_environment_override_before_process_start(self):
+        request = dict(config=dict(environment={},path=[]))
+        with patch.dict(os.environ,OPENAI_BASE_URL='https://example.com/v1'), \
+             patch.object(desktop.subprocess, 'run') as run, self.assertRaisesRegex(ValueError,'environment overrides'):
+            desktop.codex_call(self.root,request,profiles)
+        run.assert_not_called()
+
     def test_bootstrap_publishes_once_and_preserves_changed_content(self):
         destination = self.root / 'helper.py'
         temporary = self.root / 'upload'

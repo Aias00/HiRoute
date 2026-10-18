@@ -183,6 +183,17 @@ Administrators SID, including deny-only membership. All native observations and
 screenshots remain in ignored, private evidence.
 `native-files` captures the fixed Codex/Claude configuration files and inventories
 both collaboration and management Skill directories for restoration readback.
+`scroll` uses a recent screenshot's window geometry and pointer coordinates, plus
+an explicit `--scroll-direction up|down`; it sends a bounded native mouse wheel
+event to that foreground window. `codex-call` runs the configured real Codex CLI
+with a fixed arithmetic-tool prompt, a read-only sandbox and no approvals. It
+requires saved configuration selecting the local HiRoute Gateway and rejects
+authentication/routing environment overrides. Use `--codex-profile hiroute` for
+the product-owned profile, or omit it for the default configuration. This optional
+scenario needs Python 3.11+ and verifies the completed tool output and nonce-bearing
+answer; process exit alone is insufficient. Preserve its actual client image hash,
+product revision and native output. It does not alter sandbox configuration or
+substitute a model fixture for a real upstream.
 Before native input, the runner checks that the existing session's input desktop
 is accessible and matches its ordinary desktop. `--action desktop-state` reads
 that prerequisite without unlocking or creating a login. UI observations require

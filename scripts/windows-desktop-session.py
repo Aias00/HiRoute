@@ -8,8 +8,10 @@ import json
 import ctypes
 import os
 from pathlib import Path
+import re
 import subprocess
 import time
+from urllib.parse import urlsplit
 
 
 def desktop_state():
@@ -238,16 +240,23 @@ function Observe($root) {
 }
 $all=@(Observe $root)
 if($all.Count -gt 1600){throw 'UI Automation tree exceeds observation bound'}
-if($q.action -in @('invoke','text','close','click')) {
+if($q.action -in @('invoke','text','close','click','scroll')) {
  if($q.action -eq 'close') {
   $root.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern).Close()
- } elseif($q.action -eq 'click') {
+ } elseif($q.action -in @('click','scroll')) {
   $r=$root.Current.BoundingRectangle
   if($q.window -ne $p.MainWindowHandle.ToInt64() -or $q.width -ne $r.Width -or $q.height -ne $r.Height){throw 'Observed window geometry changed'}
   if($q.x -lt 0 -or $q.y -lt 0 -or $q.x -ge $r.Width -or $q.y -ge $r.Height){throw 'Click is outside the observed window'}
   [void][DesktopWindow]::SetCursorPos([int]($r.X+$q.x),[int]($r.Y+$q.y))
-  [DesktopWindow]::mouse_event(2,0,0,0,[UIntPtr]::Zero)
-  [DesktopWindow]::mouse_event(4,0,0,0,[UIntPtr]::Zero)
+  if($q.action -eq 'scroll') {
+   if($q.direction -notin @('up','down')){throw 'Invalid scroll direction'}
+   $delta=if($q.direction -eq 'down'){-480}else{480}
+   $data=[BitConverter]::ToUInt32([BitConverter]::GetBytes([int]$delta),0)
+   [DesktopWindow]::mouse_event(0x0800,0,0,$data,[UIntPtr]::Zero)
+  } else {
+   [DesktopWindow]::mouse_event(2,0,0,0,[UIntPtr]::Zero)
+   [DesktopWindow]::mouse_event(4,0,0,0,[UIntPtr]::Zero)
+  }
  } else {
   $matches=@($all | Where-Object {($_.GetRuntimeId() -join '.') -eq $q.element.runtime_id} | Select-Object -First 1)
   if($matches.Count -ne 1){throw 'Observed element is no longer unique'}
@@ -317,9 +326,11 @@ def ui_action(run, request, shell, pid, element=None, observed=None):
         raise RuntimeError('The existing session input desktop is unavailable; unlock it before native UI acceptance')
     query = dict(pid=pid, image=str(shell), action=request['desktop_action'], element=element,
                  text=request.get('text'))
-    if request['desktop_action'] == 'click':
+    if request['desktop_action'] in ('click', 'scroll'):
+        if request['desktop_action'] == 'scroll' and request.get('scroll_direction') not in ('up', 'down'):
+            raise ValueError('Scrolling requires an explicit direction')
         query.update(window=observed['handle'], width=observed['width'], height=observed['height'],
-                     x=request['x'], y=request['y'])
+                     x=request['x'], y=request['y'], direction=request.get('scroll_direction'))
     (run / 'ui-request.json').write_text(json.dumps(query), encoding='utf-8')
     script = run / 'ui.ps1'
     script.write_text(UI, encoding='utf-8-sig')
@@ -333,11 +344,70 @@ def ui_action(run, request, shell, pid, element=None, observed=None):
     return observed
 
 
+def codex_gateway(document, profile):
+    if profile not in (None, 'hiroute'):
+        raise ValueError('Only the product-owned Codex profile is accepted')
+    selected = document.get('profiles', {}).get(profile, {}) if profile else document
+    target = document.get('model_providers', {}).get('hiroute', {}).get('base_url', '')
+    address = urlsplit(target)
+    if (selected.get('model_provider') != 'hiroute' or address.scheme != 'http'
+            or address.hostname not in ('127.0.0.1', 'localhost', '::1')
+            or not address.port or address.username or address.password):
+        raise ValueError('Saved Codex configuration must select the local HiRoute Gateway')
+    return target
+
+
+def codex_call_evidence(stdout, expected):
+    events = [json.loads(line) for line in stdout.decode('utf-8-sig').splitlines() if line.strip()]
+    items = [event.get('item', {}) for event in events if event.get('type') == 'item.completed']
+    return dict(turn_completed=any(event.get('type') == 'turn.completed' for event in events),
+                answer=any(item.get('type') == 'agent_message' and item.get('text', '').strip() == expected for item in items),
+                shell_tool=any(item.get('type') == 'command_execution' and item.get('status') == 'completed'
+                               and item.get('exit_code') == 0
+                               and re.search(r'\b42\b', item.get('aggregated_output', '')) for item in items))
+
+
+def codex_call(run, request, helper):
+    environment = os.environ.copy()
+    environment.update(request['config']['environment'])
+    environment['PATH'] = ';'.join(request['config']['path']) + ';' + environment['PATH']
+    if any(environment.get(name) for name in ('CODEX_HOME', 'OPENAI_API_KEY', 'OPENAI_BASE_URL', 'CODEX_API_KEY')):
+        raise ValueError('Native acceptance requires saved configuration without auth or routing environment overrides')
+    import tomllib  # This optional native scenario requires the configured Python 3.11+ runtime.
+    config = helper.plain(Path.home() / '.codex/config.toml')
+    if config.stat().st_size > 4 * 1024 * 1024:
+        raise ValueError('Native configuration exceeds evidence bound')
+    profile = request.get('codex_profile')
+    endpoint = codex_gateway(tomllib.loads(config.read_text(encoding='utf-8-sig')), profile)
+    binary = helper.plain(Path(environment['HIROUTE_WORKER_CODEX_BINARY']))
+    checksum = helper.digest(binary)
+    expected = 'HiRoute-Windows-' + request['run_id'] + ':42'
+    prompt = ('Do not read or modify any files. Use your shell tool to evaluate the PowerShell arithmetic '
+              'expression (19 + 23). Then reply with exactly ' + expected)
+    command = [str(binary), 'exec', '--json', '--skip-git-repo-check', '--sandbox', 'read-only',
+               '--config', 'approval_policy="never"']
+    if profile:
+        command += ['--profile', profile]
+    command.append(prompt)
+    done = subprocess.run(command, cwd=run, stdin=subprocess.DEVNULL, capture_output=True,
+                          timeout=150, env=environment, creationflags=0x08000000)
+    (run / 'codex.stdout').write_bytes(done.stdout)
+    (run / 'codex.stderr').write_bytes(done.stderr)
+    evidence = codex_call_evidence(done.stdout, expected)
+    evidence.update(exit_code=done.returncode, binary_sha256=checksum, profile=profile,
+                    gateway_endpoint=endpoint, native_entry='configured Codex exec; read-only sandbox')
+    (run / 'codex-call.json').write_text(json.dumps(evidence, indent=2), encoding='utf-8')
+    if (helper.digest(binary) != checksum or done.returncode != 0
+            or not all(evidence[key] for key in ('turn_completed', 'answer', 'shell_tool'))):
+        raise RuntimeError('Native Codex call did not complete the real tool and answer checks; inspect private evidence')
+    return evidence
+
+
 def execute(request, run, product, pm, helper, activity, manifest, root):
     if activity.get('administrator_groups') is not False:
         raise ValueError('Native Desktop evidence requires a standard account, not a filtered administrator')
     action = request['desktop_action']
-    if action not in ('install', 'launch', 'snapshot', 'invoke', 'text', 'click', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files'):
+    if action not in ('install', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call'):
         raise ValueError('Unknown native Desktop action')
     if action == 'desktop-state':
         return dict(native_entry='read-only input desktop inspection', state=desktop_state())
@@ -376,6 +446,8 @@ def execute(request, run, product, pm, helper, activity, manifest, root):
         return dict(native_entry='NSIS /S', exit_code=done.returncode, installation=after,
                     upgrade_from=previous, installer_sha256=pm['files']['installer.exe']['sha256'])
     roots, facts, shell = installed(helper, product, pm)
+    if action == 'codex-call':
+        return codex_call(run, request, helper)
     if action == 'launch':
         child = subprocess.Popen([str(shell)], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                  stderr=subprocess.DEVNULL)
@@ -404,7 +476,7 @@ def execute(request, run, product, pm, helper, activity, manifest, root):
     pid = candidates[0]['ProcessId']
     element = None
     observed = None
-    if action in ('invoke', 'text', 'click'):
+    if action in ('invoke', 'text', 'click', 'scroll'):
         parent = root / 'runs' / request['observation_run']
         old_request = json.loads((parent / 'request.json').read_text(encoding='utf-8'))
         old_result = json.loads((parent / 'result.json').read_text(encoding='utf-8'))
@@ -413,7 +485,7 @@ def execute(request, run, product, pm, helper, activity, manifest, root):
                 or old_request['config']['session_id'] != request['config']['session_id']
                 or observed['pid'] != pid or time.time() - (parent / 'ui.json').stat().st_mtime > 600):
             raise ValueError('A recent observation of this exact Desktop process is required')
-        if action != 'click':
+        if action not in ('click', 'scroll'):
             matches = [e for e in observed['nodes'] if e['runtime_id'] == request['element']]
             if not matches:
                 raise ValueError('Choose one observed native UI element')

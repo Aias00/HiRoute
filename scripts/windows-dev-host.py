@@ -324,7 +324,8 @@ def worker(request):
             result['profile_activity'] = activity
             outcome = desktop_helper(request).execute(request, run, product, pm, profile_helper(request),
                                                      activity, manifest, root)
-            result.update(passed=True, assessment='native_desktop_observation', desktop=outcome)
+            result.update(passed=True, assessment='native_codex_gateway_call' if request.get('desktop_action') == 'codex-call'
+                          else 'native_desktop_observation', desktop=outcome)
             return 0
         if request.get('operation') == 'inspect':
             result.update(passed=True, assessment='inspection_only',
