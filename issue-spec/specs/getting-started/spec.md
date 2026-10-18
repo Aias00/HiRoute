@@ -224,7 +224,7 @@ Source SPEC comments:
 
 ### Requirement: The Windows shell is a thin host for the console
 
-The Windows Desktop shell SHALL run as a single instance, show the console in an embedded WebView after the service is ready, and offer tray actions to open the window, open the console in the default browser and quit the shell. It SHALL obtain console sessions through the private named-pipe Local Control path and SHALL NOT persist session or launch credentials. Quitting the shell SHALL NOT stop the service. When the service is stopped or unhealthy, the shell SHALL start it through the installed manager and show progress, failure and the location of logs. The shell SHALL NOT execute business operations of its own; product actions go through the console and its HTTP control interface. Host-only features available in the shell, such as update and login-start preference, SHALL be exposed to the console as explicit host capabilities.
+The Windows Desktop shell SHALL run as a single instance, show the console in an embedded WebView after the service is ready, and offer tray actions to open the window, open the console in the default browser and quit the shell. It SHALL obtain console sessions through the private named-pipe Local Control path and SHALL NOT persist session or launch credentials. Quitting the shell SHALL NOT stop the service. When the service is stopped or unhealthy, the shell SHALL start it through the installed manager and show progress, failure and the location of logs. The shell SHALL NOT execute business operations of its own; product actions go through the console and its HTTP control interface. Host-only features available in the shell, such as update and login-start preference, SHALL be exposed to the console as explicit host capabilities. If Control and Gateway are ready but no local console listener is bound, the shell SHALL identify the console-listener failure separately from service startup and show explicit owner CLI configuration and restart instructions. Retrying SHALL NOT change saved listener settings or start a temporary listener, and the owner SHALL retain the ability to disable the console.
 
 #### Scenario: Second launch
 
@@ -246,12 +246,17 @@ The Windows Desktop shell SHALL run as a single instance, show the console in an
 - **WHEN** the user selects open in browser
 - **THEN** the default browser opens a fresh single-use launch link and reaches an authenticated console session.
 
+#### Scenario: Local console disabled or unable to bind
+
+- **WHEN** the service is healthy but the saved console is off or its explicit port could not bind
+- **THEN** the shell identifies the missing local console, shows how to save loopback with automatic port selection and restart the service, and warns that restart may interrupt active work. Retry only rechecks; it does not overwrite the owner configuration.
+
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/132#issuecomment-6219733037
 
 ### Requirement: Windows Desktop updates verify unsigned packages by catalog digest
 
-The Windows shell SHALL select a newer stable Windows x64 Desktop release from the trusted website release catalog and download it over HTTPS while the service keeps running. Before any stop it SHALL verify byte count and SHA-256 against the catalog. Windows packages are not code-signed; package origin SHALL be established by the HTTPS catalog and digest, and HiRoute SHALL NOT claim a publisher identity. Release pages SHALL publish each package SHA-256, and documentation SHALL guide users through the unknown-publisher prompt. Replacement SHALL follow the existing orderly-stop handoff: preflight, drain active requests and accepted Worker work with user cancellation, stop the shell and service, replace through the journaled installation transaction, run storage validation and migration, restart and report health. A failure before replacement SHALL restore the old running service; an interrupted replacement SHALL be repaired on the next start or installer run. A manually downloaded newer installer SHALL use the same transaction. The in-app passive update SHALL preserve the existing login-start and tray choices and SHALL NOT wait on an interactive options page. In this release, Windows publication SHALL consist only of the x64 Desktop installer named `HiRoute-<version>-<rev12>-windows-x86_64-setup.exe`. Windows standalone archives of any architecture and Windows ARM64 packages SHALL NOT be published, and release catalog validation SHALL reject a Windows standalone artifact.
+The Windows shell SHALL select a newer stable Windows x64 Desktop release from the trusted website release catalog and download it over HTTPS while the service keeps running. Before any stop it SHALL verify byte count and SHA-256 against the catalog. Windows packages are not code-signed; package origin SHALL be established by the HTTPS catalog and digest, and HiRoute SHALL NOT claim a publisher identity. Release pages SHALL publish each package SHA-256, and documentation SHALL guide users through the unknown-publisher prompt. Replacement SHALL follow the existing orderly-stop handoff: preflight, drain active requests and accepted Worker work with user cancellation, stop the shell and service, replace through the journaled installation transaction, run storage validation and migration, restart and report health. A failure before replacement SHALL restore the old running service; an interrupted replacement SHALL be repaired on the next start or installer run. A manually downloaded newer installer SHALL use the same transaction. The in-app passive update SHALL preserve the existing login-start and tray choices and SHALL NOT wait on an interactive options page. In this release, Windows publication SHALL consist only of the x64 Desktop installer named `HiRoute-<version>-<rev12>-windows-x86_64-setup.exe`. Windows standalone archives of any architecture and Windows ARM64 packages SHALL NOT be published, and release catalog validation SHALL reject a Windows standalone artifact. An unavailable or invalid catalog SHALL be reported as an update-check failure while the current application and service remain usable. A missing or retired Windows catalog SHALL NOT be presented as a failed installation or as proof that no update exists, and the shell SHALL NOT fall back to the released V2 catalog.
 
 #### Scenario: Digest mismatch
 
@@ -282,6 +287,11 @@ The Windows shell SHALL select a newer stable Windows x64 Desktop release from t
 
 - **WHEN** the shell hands off a verified update to the passive installer
 - **THEN** installation proceeds without an interactive options page, retains the existing login-start and tray preferences, and returns to a healthy service.
+
+#### Scenario: Windows catalog not available
+
+- **WHEN** the trusted Windows catalog returns HTTP 404 or 410
+- **THEN** the page reports that the Windows update catalog is unavailable and offers retry, without claiming that installation failed or that the latest version is installed, changing product data, stopping the service or selecting a V2 artifact.
 
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/132#issuecomment-6219734656

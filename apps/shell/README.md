@@ -7,7 +7,9 @@ authentication, confirmations and operations stay in `hirouted` and
 `src-tauri/src/runtime` owns these boundaries:
 
 - `service`: fixed installed CLI lookup, bounded native execution, real
-  Control/Gateway readiness and one-time console launch minting.
+  Control/Gateway readiness and one-time console launch minting. A missing local
+  listener remains distinct from a service-start failure; the bundled page gives
+  explicit owner configuration/restart steps without changing saved scope.
 - `mod` / `commands`: private WebView, single instance, navigation lock and
   explicit host commands, each checked against the exact active console origin.
 - `tray` / platform `shell_login`: window visibility and current-user login start;
@@ -15,7 +17,8 @@ authentication, confirmations and operations stay in `hirouted` and
 - `installer`: NSIS's fixed adapter to the native Rust installation transaction.
 - `install_transaction`: shell-only digest inventory, prepared/committed backup
   record and failure recovery; standalone journals keep their separate owner.
-- `updater`: fixed HTTPS V3 selection/download, verification, cancellable drain
+- `updater`: fixed HTTPS V3 selection/download, distinct check-unavailable states,
+  verification, cancellable drain
   and a private native finisher that waits for shell exit before passive NSIS.
 
 `src/main.ts` and `index.html` are the bundled startup/failure page. They use the

@@ -53,6 +53,25 @@ compensating a failed Run update. Disabling the tray makes window close exit the
 shell; a background login launch then opens a visible window. Quit never stops the
 service. A second launch focuses the existing window.
 
+## Local console unavailable
+
+The service binds its console at startup. Disabling the console with
+`hiroute console disable` or `hiroute console init --mode off` therefore prevents
+the shell from opening it after the next service restart. An occupied explicit
+console port has the same effect, while Control and Gateway remain independent.
+The bundled page identifies this local-console failure and shows the log path.
+Recheck does not change the saved configuration or create a temporary listener.
+
+To restore the local interface with automatic port selection, run in PowerShell:
+
+```powershell
+hiroute console init --mode loopback
+hiroute service restart
+```
+
+Restart can interrupt active calls and tasks. After it completes, select Recheck
+in the shell. Keeping the console disabled remains an explicit owner choice.
+
 ## Update ordering and recovery
 
 The host selects a newer stable x64 NSIS entry from `releases-v3.json`. The page
@@ -60,6 +79,11 @@ cannot supply a download URL, install directory or executable. Downloading and
 size/SHA-256 verification finish in private staging while the service runs. Native
 lifecycle preparation pauses new admissions and reports active calls/tasks. The
 user can cancel; cancellation resumes admission and leaves work untouched.
+
+A missing or retired Windows catalog (HTTP 404/410) is shown as an unavailable
+update check. The current installation and service remain usable; retry later.
+The shell does not call that a failed installation, claim the current version is
+latest, or use the macOS V2 feed as a Windows fallback.
 
 After drain, a private native finisher acknowledges readiness and requires a
 generation-bound explicit commit. It waits for the shell to exit, rechecks the

@@ -1,6 +1,8 @@
 use super::ShellState;
 use crate::ConsoleOrigin;
-use hiroute_application_api::{ConsoleLaunchRequestV1, ConsoleLaunchV1, SystemStatusV1};
+use hiroute_application_api::{
+    ConsoleLaunchRequestV1, ConsoleLaunchV1, ErrorCode, MachineEnvelopeV2, SystemStatusV1,
+};
 use hiroute_client_core::{Client, LocalEndpoint};
 use hiroute_host_runtime::{
     StandaloneLayout, read_standalone_install_record, standalone_cli_binary,
@@ -119,10 +121,19 @@ pub(super) async fn launch() -> Result<(ConsoleOrigin, url::Url), &'static str> 
         )
         .await
         .map_err(|_| "CONSOLE_LAUNCH_UNAVAILABLE")?;
-    let value = response
-        .data
-        .filter(|_| response.error.is_none())
-        .ok_or("CONSOLE_LAUNCH_UNAVAILABLE")?;
+    launch_reply(response)
+}
+fn launch_reply(
+    response: MachineEnvelopeV2<ConsoleLaunchV1>,
+) -> Result<(ConsoleOrigin, url::Url), &'static str> {
+    if let Some(error) = response.error {
+        return Err(if error.code == ErrorCode::ActionRequired {
+            "CONSOLE_LISTENER_UNAVAILABLE"
+        } else {
+            "CONSOLE_LAUNCH_UNAVAILABLE"
+        });
+    }
+    let value = response.data.ok_or("CONSOLE_LAUNCH_UNAVAILABLE")?;
     ConsoleOrigin::launch(&value.url)
 }
 pub(super) async fn ready_launch(
@@ -173,4 +184,42 @@ pub(super) fn available_blocking() -> bool {
         .enable_all()
         .build()
         .is_ok_and(|runtime| runtime.block_on(is_ready()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use hiroute_application_api::ErrorV1;
+
+    #[test]
+    fn missing_console_listener_is_not_reported_as_service_start_failure() {
+        let reply = MachineEnvelopeV2::failed(ErrorV1::new(ErrorCode::ActionRequired), None);
+        assert_eq!(
+            launch_reply(reply).unwrap_err(),
+            "CONSOLE_LISTENER_UNAVAILABLE"
+        );
+        let reply = MachineEnvelopeV2::failed(ErrorV1::new(ErrorCode::DaemonUnavailable), None);
+        assert_eq!(
+            launch_reply(reply).unwrap_err(),
+            "CONSOLE_LAUNCH_UNAVAILABLE"
+        );
+    }
+
+    #[test]
+    fn launch_rechecks_and_accepts_only_the_current_bound_loopback_origin() {
+        let reply = |host: &str| {
+            MachineEnvelopeV2::succeeded(
+                ConsoleLaunchV1 {
+                    url: format!("http://{host}:5839/launch?code={}", "a".repeat(64)),
+                    expires_in: 120,
+                },
+                None,
+            )
+        };
+        assert!(launch_reply(reply("127.0.0.1")).is_ok());
+        assert_eq!(
+            launch_reply(reply("example.test")).unwrap_err(),
+            "CONSOLE_LAUNCH_INVALID"
+        );
+    }
 }

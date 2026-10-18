@@ -105,9 +105,8 @@ impl Updater {
                     .get(WINDOWS_RELEASE_FEED)
                     .send()
                     .await
-                    .map_err(|_| "UPGRADE_CHECK_FAILED")?
-                    .error_for_status()
                     .map_err(|_| "UPGRADE_CHECK_FAILED")?;
+                catalog_status(response.status())?;
                 if response
                     .content_length()
                     .is_some_and(|n| n > MAX_RELEASE_FEED_BYTES as u64)
@@ -139,7 +138,10 @@ impl Updater {
             }
             .await;
             if let Err(code) = result {
-                state.updater.failure(code);
+                state.updater.change(|v| {
+                    v.phase = "check_failed";
+                    v.error = Some(code);
+                });
             }
         });
         Ok(initial)
@@ -316,6 +318,37 @@ impl Updater {
         }
         self.cancel.store(true, Ordering::Release);
         Ok(view.clone())
+    }
+}
+fn catalog_status(status: reqwest::StatusCode) -> Result<(), &'static str> {
+    match status {
+        reqwest::StatusCode::NOT_FOUND | reqwest::StatusCode::GONE => {
+            Err("UPGRADE_CATALOG_UNAVAILABLE")
+        }
+        status if status.is_success() => Ok(()),
+        _ => Err("UPGRADE_CHECK_FAILED"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unavailable_catalog_cannot_be_mistaken_for_a_completed_update_check() {
+        for status in [404, 410] {
+            assert_eq!(
+                catalog_status(reqwest::StatusCode::from_u16(status).unwrap()),
+                Err("UPGRADE_CATALOG_UNAVAILABLE"),
+            );
+        }
+        for status in [302, 403, 500] {
+            assert_eq!(
+                catalog_status(reqwest::StatusCode::from_u16(status).unwrap()),
+                Err("UPGRADE_CHECK_FAILED"),
+            );
+        }
+        assert_eq!(catalog_status(reqwest::StatusCode::OK), Ok(()));
     }
 }
 fn http() -> Result<reqwest::Client, &'static str> {

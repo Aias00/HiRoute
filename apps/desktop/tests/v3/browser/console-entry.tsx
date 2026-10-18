@@ -25,7 +25,8 @@ const control = {
   capabilities: hostCapabilities,
 };
 if (query.get('host') === 'shell-console') {
-  const view = { current_version:'0.3.1',phase:query.get('update')??'ready',available:{version:'0.4.0',notes:{zh:'更新说明',en:'Release notes'},size:1000},downloaded_bytes:1000,active_calls:1,active_tasks:2,error:query.get('update')==='failed'?'UPGRADE_INSTALL_FAILED':null,can_install:true,package_ready:true,recovery:query.get('update')==='failed'?'service_available':null };
+  const unavailable = query.get('update') === 'catalog-unavailable';
+  const view = { current_version:'0.3.1',phase:unavailable?'check_failed':query.get('update')??'ready',available:unavailable?null:{version:'0.4.0',notes:{zh:'更新说明',en:'Release notes'},size:1000},downloaded_bytes:unavailable?0:1000,active_calls:1,active_tasks:2,error:unavailable?'UPGRADE_CATALOG_UNAVAILABLE':query.get('update')==='failed'?'UPGRADE_INSTALL_FAILED':null,can_install:true,package_ready:!unavailable,recovery:query.get('update')==='failed'?'service_available':null };
   setHostTransport({ capabilities:()=>({...browserCapabilities,host:'shell-console',platform:'windows',updates:true,login_start:true}),
     call:async <T,>(command:string,args:Record<string,unknown>={})=>{
       if (command.startsWith('update_') || command.startsWith('login_start_') || ['open_in_browser','restart_service','reconnect'].includes(command)) {

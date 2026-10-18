@@ -5,7 +5,7 @@ import type { Language } from '../ui/preferences';
 
 type UpdateView = {
   current_version: string;
-  phase: 'idle' | 'checking' | 'current' | 'available' | 'downloading' | 'verifying' | 'ready' | 'waiting' | 'installing' | 'failed';
+  phase: 'idle' | 'checking' | 'check_failed' | 'current' | 'available' | 'downloading' | 'verifying' | 'ready' | 'waiting' | 'installing' | 'failed';
   available: { version: string; notes: { zh: string; en: string }; size: number } | null;
   downloaded_bytes: number;
   active_calls: number;
@@ -44,6 +44,7 @@ export function UpdatesSettings({ active, language, onServiceChanged }: { active
   };
   const status = !view ? text('正在读取版本信息…', 'Reading version information…')
     : view.phase === 'checking' ? text('正在检查官网发布版本…', 'Checking official releases…')
+    : view.phase === 'check_failed' ? view.error === 'UPGRADE_CATALOG_UNAVAILABLE' ? text('Windows 更新目录暂不可用，可稍后重试检查。', 'The Windows update catalog is unavailable. Try checking again later.') : text('检查更新失败，可稍后重试。', 'Could not check for updates. Try again later.')
     : view.phase === 'current' ? text('已是最新稳定版本', 'The latest stable version is installed')
     : view.phase === 'available' ? text(`可升级到 ${view.available?.version}`, `Version ${view.available?.version} is available`)
     : view.phase === 'downloading' ? text(`正在下载 ${view.available?.version} · ${Math.min(100, Math.floor(view.downloaded_bytes / (view.available?.size || 1) * 100))}%`, `Downloading ${view.available?.version} · ${Math.min(100, Math.floor(view.downloaded_bytes / (view.available?.size || 1) * 100))}%`)
@@ -70,7 +71,7 @@ export function UpdatesSettings({ active, language, onServiceChanged }: { active
     {recovery === 'service_available' && <div className="gateway-risk">{text('升级未完成，旧版本服务已恢复，可继续使用或重试安装。', 'The upgrade did not complete. The previous service is available; continue using HiRoute or retry installation.')}</div>}
     {recovery === 'stop_pending' && <div className="settings-inline-error" role="status">{text('服务仍在停止，尚未替换应用。请等待服务退出后，完全退出并重新打开 HiRoute。', 'The service is still stopping and the App has not been replaced. Wait for the service to exit, then fully quit and reopen HiRoute.')}</div>}
     {recovery === 'restart_required' && <div className="settings-inline-error" role="status">{text('尚未替换应用，旧版本服务未能恢复。请完全退出并重新打开 HiRoute，并查看启动页的恢复说明。', 'The App has not been replaced, but the previous service could not be restored. Fully quit and reopen HiRoute and follow the startup recovery instructions.')}</div>}
-    {code && <div className="settings-inline-error" role="status">{text(`升级不可用（${code}）。可重试检查，或从官网下载安装包并完全退出 HiRoute 后覆盖安装。`, `Update unavailable (${code}). Check again, or download from the official website and fully quit HiRoute before replacing the App.`)}</div>}
+    {code && <div className="settings-inline-error" role="status">{view?.phase === 'check_failed' ? text(`检查未完成（${code}）。当前版本和后台服务仍可继续使用。`, `The check did not complete (${code}). The current version and background service remain available.`) : text(`升级不可用（${code}）。可重试检查，或从官网下载安装包并完全退出 HiRoute 后覆盖安装。`, `Update unavailable (${code}). Check again, or download from the official website and fully quit HiRoute before replacing the App.`)}</div>}
     {view && !view.can_install && <div className="gateway-risk">{text('应用内安装需要使用完整的 HiRoute App。', 'In-app installation requires a complete HiRoute App.')}</div>}
   </div></section>;
 }
