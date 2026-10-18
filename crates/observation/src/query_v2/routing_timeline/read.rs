@@ -318,3 +318,19 @@ pub(super) fn changed_requests(
     }
     Ok(result)
 }
+
+/// Match the cold reader's row bounds even when some rows are outside a
+/// run-scoped reader. These indexed counts never deserialize session payloads.
+pub(super) fn check_row_bounds(
+    tx: &Transaction<'_>,
+    reader: &ObservationReaderContext,
+    session: &str,
+    target: Position,
+) -> Result<(), ObservationV2Error> {
+    let facts: usize = tx.query_row("SELECT COUNT(*) FROM (SELECT 1 FROM execution_fact_events WHERE workspace_id=?1 AND session_id=?2 AND rowid<=?3 LIMIT 50001)", rusqlite::params![reader.workspace().as_str(),session,target.facts], |r| r.get(0))?;
+    let usage: usize = tx.query_row("SELECT COUNT(*) FROM (SELECT 1 FROM valuation_attempt_inputs_v2 i JOIN logical_requests r ON r.workspace_id=i.workspace_id AND r.request_id=i.request_id WHERE r.workspace_id=?1 AND r.session_id=?2 LIMIT 50001)",rusqlite::params![reader.workspace().as_str(),session],|r|r.get(0))?;
+    if facts > 50_000 || usage > 50_000 {
+        return Err(ObservationV2Error::ScopeTooLarge);
+    }
+    Ok(())
+}

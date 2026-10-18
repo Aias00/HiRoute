@@ -51,6 +51,9 @@ impl Snapshot {
             self.position = Some(target);
             return Ok(());
         }
+        if changed.is_some() {
+            read::check_row_bounds(tx, reader, session, target)?;
+        }
         let (requests, facts) = read::read(tx, reader, session, target, now, changed)?;
         self.read_requests += requests.len();
         if changed.is_some()
