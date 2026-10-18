@@ -10,7 +10,7 @@ use std::{
 
 struct TracedStore {
     store: Arc<LocalObservationStore>,
-    busy: mpsc::Sender<()>,
+    busy: mpsc::Sender<bool>,
 }
 
 impl ObservationQueryPort for TracedStore {
@@ -22,7 +22,9 @@ impl ObservationQueryPort for TracedStore {
     ) -> Result<RoutingTimelinePageV1, ObservationQueryError> {
         let result = ObservationQueryPort::observed_routing_timeline(&*self.store, r, q, now);
         if matches!(&result, Err(ObservationQueryError::ReaderBusy)) {
-            self.busy.send(()).unwrap();
+            self.busy.send(true).unwrap();
+        } else if result.is_ok() {
+            self.busy.send(false).unwrap();
         }
         result
     }
@@ -144,23 +146,42 @@ fn review_cli_follow_retries_real_busy_reads() {
         // Two real failures prove the CLI survived the first busy response and
         // retried through the server, rather than exiting or using a fake hint.
         for _ in 0..2 {
-            reads
-                .recv_timeout(Duration::from_secs(5))
-                .expect("follow did not retry the real busy read");
+            assert!(
+                reads
+                    .recv_timeout(Duration::from_secs(5))
+                    .expect("follow did not retry the real busy read")
+            );
         }
         child
     });
+    // An empty timeline is a successful page. Observe two successful reads to
+    // prove the CLI accepted recovery and continued its normal polling cadence.
+    for _ in 0..2 {
+        assert!(
+            !reads
+                .recv_timeout(Duration::from_secs(5))
+                .expect("follow did not recover to successful reads")
+        );
+    }
+    nix::sys::signal::kill(
+        nix::unistd::Pid::from_raw(child.0.as_ref().unwrap().id() as i32),
+        nix::sys::signal::Signal::SIGINT,
+    )
+    .unwrap();
     let deadline = Instant::now() + Duration::from_secs(5);
     while child.0.as_mut().unwrap().try_wait().unwrap().is_none() {
         assert!(
             Instant::now() < deadline,
-            "follow did not stop for the terminal not-found result after reader recovery"
+            "follow did not stop on Ctrl-C after reader recovery"
         );
         std::thread::sleep(Duration::from_millis(20));
     }
     let output = child.0.take().unwrap().wait_with_output().unwrap();
-    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(value["error"]["code"], "RESOURCE_NOT_FOUND", "{value}");
+    assert!(output.status.success(), "{output:?}");
+    assert!(
+        output.stdout.is_empty(),
+        "an unchanged empty timeline emits no changes"
+    );
     assert!(!String::from_utf8_lossy(&output.stderr).contains("temporarily unavailable"));
     server.shutdown();
     server.join(Duration::from_secs(3)).unwrap();
