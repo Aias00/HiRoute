@@ -270,7 +270,15 @@ fn feed_payload_check_survives_a_bundle_changing_squash_merge() {
     run(&["add", "."]);
     run(&["commit", "-m", "Supported catalog"]);
     let revision = run(&["rev-parse", "HEAD"]);
-    let snapshot = std::fs::read(root.join("contracts/releases/v0.3.1.json")).unwrap();
+    run(&["tag", "v0.3.1"]);
+    let mut record: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(root.join("contracts/releases/v0.3.1.json")).unwrap(),
+    )
+    .unwrap();
+    record["release"]["revision"] = serde_json::json!(revision);
+    record["release"]["tag"] = serde_json::json!("v0.3.1");
+    let snapshot = serde_json::to_vec(&record).unwrap();
+    std::fs::write(root.join("contracts/releases/v0.3.1.json"), &snapshot).unwrap();
     std::fs::write(root.join("contracts/releases/index.v1.json"), serde_json::to_vec(&serde_json::json!({
         "schema":"hiroute.release-contract-index/v1", "releases":[{"channel":"stable","file":"v0.3.1.json","tag":"v0.3.1","revision":revision,"sha256":&CanonicalDigest::of_bytes(&snapshot).as_str()[7..]}]
     })).unwrap()).unwrap();

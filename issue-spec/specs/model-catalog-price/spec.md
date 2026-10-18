@@ -209,6 +209,8 @@ Source SPEC comments:
 
 HiRoute SHALL retrieve the model feed only from a fixed hiroute.ai location derived by the client build. It SHALL refuse redirects, any location supplied through IPC, CLI arguments, environment or configuration in production builds, and responses larger than 2 MiB, and it SHALL apply a 10-second connection timeout and a 30-second total deadline. Each feed publication SHALL carry a schema version, a monotonically increasing sequence, an issue time and a signature over its exact bytes. The daemon SHALL apply a publication only when all of these hold: the signature verifies against a public key compiled into that client build, the schema version is one the client implements, the whole publication is well formed, and its sequence is greater than the highest sequence this service has accepted. A client build MAY trust more than one public key so that keys can be rotated through releases. A rejected publication SHALL leave the held verified copy in effect and SHALL record a classified reason: network, size, signature, schema, validation or older sequence. The daemon SHALL persist the last verified copy with its digest, re-verify it at startup and discard a copy that fails verification, with a reason, instead of partially using it. The daemon SHALL retain the highest accepted sequence and the digest of that publication independently of the held copy, so that removing or discarding the copy never lowers it. A publication whose sequence equals the retained highest sequence SHALL be accepted only to restore a missing held copy and only when its digest equals the retained digest; a lower sequence SHALL never be accepted. Retrieval and verification SHALL run in the daemon, so that every product UI host (macOS Desktop, the Windows shell and the web console), the public CLI and standalone services share one verified state, and SHALL NOT delay startup, Gateway admission or routing. The request SHALL carry no account, installation, model, credential, session or usage identifier beyond a product user agent with the client version. Automatic retrieval SHALL be enabled by default for every service, whether it runs under macOS Desktop, the Windows shell or the web console, or as a standalone service. It SHALL run after a randomized 2–10 minute startup delay and then every six hours with 30 minutes of jitter in either direction, using bounded retry backoff after failure. An explicit refresh SHALL be available in every product UI host and in the public CLI. One service-owned setting SHALL turn automatic retrieval off and back on. Every product UI host and the public CLI SHALL read and change that same setting, and it SHALL survive restart and upgrade. The first time feed content is shown in a product UI host, the host SHALL state that the content comes from hiroute.ai and how to turn retrieval off.
 
+The highest accepted sequence and payload digest SHALL be durably checkpointed outside the removable cache directory before a new cache state is committed. A missing cache state SHALL be reconstructed from that checkpoint with no held copy and automatic retrieval off. If only the activated sequence survives without its digest, only a strictly higher sequence may be accepted. A corrupt owned cache state MAY be explicitly quarantined and reset through the confirmed removal flow only when a valid independent checkpoint preserves acceptance; status SHALL disclose the reason and whether this recovery is available. Newer-schema, unsafe or unreadable state, invalid checkpoints and corruption without a trusted checkpoint remain preserved and refuse mutation. After atomic activation failure, the previous consistent catalog remains available and further feed mutations are refused until restart reconciles durable state.
+
 #### Scenario: Tampered publication
 
 - **WHEN** the served feed bytes do not match a signature from a trusted public key
@@ -257,12 +259,22 @@ HiRoute SHALL retrieve the model feed only from a fixed hiroute.ai location deri
 #### Scenario: Interrupted cache replacement
 
 - **WHEN** the service stops while replacing its held publication
-- **THEN** restart uses the last atomically committed accepted sequence and its matching verified content; an uncommitted blob cannot advance acceptance or destroy the previously committed offline copy.
+- **THEN** restart retains the highest independently committed acceptance checkpoint. If cache state trails that checkpoint, it discards held/ETag references, uses embedded facts and leaves automatic retrieval off. A blob alone never advances acceptance or becomes a held copy.
 
 #### Scenario: Restore after conditional retrieval
 
 - **WHEN** a cached publication previously had an HTTP ETag and its held copy is removed or discarded
 - **THEN** the next refresh obtains full verified content before reporting restoration; an HTTP not-modified response alone cannot restore a missing copy.
+
+#### Scenario: Removing the entire cache cannot reset acceptance
+
+- **WHEN** an accepted publication is checkpointed and the cache directory is removed before restart
+- **THEN** embedded facts are used with automatic retrieval off, the highest accepted sequence/digest survive, older publications are rejected and only an identical same-sequence restoration or a higher sequence is accepted
+
+#### Scenario: Confirmed corrupt-cache reset
+
+- **WHEN** a user confirms the removal preview for corrupt owned state with a valid independent checkpoint
+- **THEN** the damaged file is preserved, cache state is recreated without lowering acceptance, and published Plans and runs remain usable
 
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/142#issuecomment-6236433837
@@ -334,21 +346,3 @@ Source SPEC comments:
   [source price contract](../../../crates/domain/src/compute/source_price/mod.rs).
 - [Price persistence scenarios](../../../crates/local-storage/src/control/prices/tests.rs).
 - [Current subscription/model query](../../../crates/application/src/compute_management/query_v3.rs).
-
-### Requirement: Model feed cache recovery preserves acceptance
-
-The service SHALL keep its highest accepted feed sequence and payload digest in a private, bounded, atomically written checkpoint outside the removable model-feed cache directory. The acceptance checkpoint SHALL be durable before the cache state names a newly accepted publication. Missing or rolled-back cache state SHALL recover using this checkpoint, discard held/ETag references, use embedded facts and leave automatic retrieval off until explicitly changed. If only the activated control-store sequence survives and its digest is unknown, the service SHALL accept only a strictly greater sequence. It SHALL never adopt an unreferenced envelope as a held publication.
-
-A corrupt owned cache state with a valid independent checkpoint MAY be reset only through the existing confirmed removal flow, preserving the damaged file and acceptance checkpoint. Status SHALL disclose the reason and whether this recovery is available. A newer schema, unreadable or unsafe file, invalid checkpoint, or corruption without a trusted checkpoint SHALL remain preserved and refuse mutation. If feed activation fails atomically, the previous catalog snapshot SHALL remain available for catalog-dependent controls, further feed mutations SHALL be refused, and restart SHALL reconcile durable state with control dependencies.
-
-#### Scenario: Removing the entire cache cannot reset acceptance
-
-- **GIVEN** a verified publication has been accepted and its independent checkpoint is durable
-- **WHEN** the cache directory is removed and the service restarts
-- **THEN** it uses embedded facts with automatic retrieval off, retains the highest accepted sequence and digest, rejects older publications, and permits only an identical same-sequence restoration or a higher sequence
-
-#### Scenario: Corrupt cache reset preserves evidence and anti-rollback
-
-- **GIVEN** corrupt owned cache state and a valid independent acceptance checkpoint
-- **WHEN** the user reviews the removal impact and confirms a reset
-- **THEN** the damaged state file is preserved, new cache state retains the acceptance checkpoint, and published Plans and their execution remain usable

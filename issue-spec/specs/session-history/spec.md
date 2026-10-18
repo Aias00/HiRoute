@@ -333,6 +333,8 @@ completion without a complete score remains unscored. Different executors are no
 ranked because their task populations differ. Unavailable cost comparisons are
 explicitly unavailable, never zero or a claimed saving.
 
+The cost comparison SHALL select requests by the disclosed Plan revision, category and Regular group through retained stage identity, and SHALL reuse the existing per-attempt API-equivalent calculation. A missing or nonunique published Primary or saved currency, dirty/missing stage projections, and missing evidence make the comparison explicitly unavailable until ready; requests lacking required stage identity SHALL NOT silently disappear from its denominator. Paired subtotals SHALL not imply full coverage or cash savings.
+
 #### Scenario: Completed Worker without an assessment
 
 - **WHEN** a Worker succeeds but its model stage has no complete assessment
@@ -363,7 +365,9 @@ Reads share authorized observation limits and a 500 ms storage deadline, returni
 an explicit retryable scope error beyond 10,000 requests, 50,000 facts or a 1 MiB
 response rather than sampled evidence. Visible Desktop timelines refresh every two
 seconds; hidden views stop polling. The CLI's `--follow` emits NDJSON changes using
-the same query and preserves terminal errors. Timeline cache locks SHALL cover only cache take/return, never database reads, projection or serialization. Storage timeouts SHALL be reported as the same explicit scope error; after that result, Desktop SHALL stop automatic retries until an explicit Retry. A busy reader SHALL honor the supplied bounded retry hint without warning or clearing loaded content; CLI follow SHALL remain interruptible through busy reads and retry at most three consecutive transient unavailable failures. Live and retained readers SHALL share recorded endpoint/start-time membership and the retained transition taxonomy, leaving unrelated timestamp ties unassigned.
+the same query and preserves terminal errors.
+
+Timeline cache locks cover only cache take/return, never database reads, projection or serialization. Storage timeouts are the same explicit scope error; Desktop stops automatic retries after it until explicit Retry. Busy readers honor the bounded retry hint quietly while retaining loaded content. CLI follow remains interruptible through busy reads and retries at most three consecutive transient unavailable failures. Live and retained readers use recorded endpoint/start-time membership and the same retained transition classifier, leaving unrelated timestamp ties unassigned.
 
 #### Scenario: Assessment arrives during pagination
 

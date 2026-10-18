@@ -109,7 +109,9 @@ Connectors, endpoint profiles, protocol endpoints, authentication semantics, sec
 
 A registered check submits option ID, expected provenance, edit correlation, selected models and protected input. The daemon resolves exact destination, protocol, authentication, static headers, identity and billing; client-supplied overrides of registered facts MUST be rejected. Native API uses direct HiRoute adapters, not CPA. A product missing exact authentication or a supported adapter is metadata-only, not an executable option.
 
-Saved provenance is historical evidence. For feed-supplied model facts it records the feed sequence that supplied them; each publication records the committed source-bundle tree identity that reproduces its records across squash merges. New presentation, recheck and publication resolve the stable `connection_option_id` against the current embedded catalog and the current verified feed records, and compare the actual saved endpoint, authentication, header, model, capability and credential-destination facts. A catalog or feed digest change alone cannot invalidate compatible sources, enlarge saved endpoints or Key authority, or rewrite frozen publications or runs. An absent option, a withdrawn feed record, a removed feed copy or an incompatible fact blocks only that source's new use, with a real reason. New use means a registered check, a save or edit of the source, offering the model for selection, and compiling or publishing a draft that selects the source. Execution of an already published revision, including a new session that uses it, a newly delegated Worker task and Continue of an existing task, uses the facts frozen in that revision and MUST NOT depend on the held feed copy or the current feed records, including after restart. Usage valued after a withdrawal or removal uses the current price facts, so a feed default price that is no longer present is unknown unless the user has set an override. When a later client embeds a model previously supplied by the feed, the embedded facts take over, and a compatible saved source continues without a new check. An unchanged saved embedded member retains its saved capabilities during lifecycle edits such as rename, removing another member and changing keys. Current-fact validation applies to newly added or rechecked members and to feed-only members, including withdrawal; a compatible embedded catalog revision alone does not force rechecking unchanged members.
+Saved provenance is historical evidence. For feed-supplied model facts it records the feed sequence that supplied them; each publication records the committed source-bundle tree identity that reproduces its records across squash merges. New presentation, recheck and publication resolve the stable `connection_option_id` against the current embedded catalog and the current verified feed records, and compare the actual saved endpoint, authentication, header, model, capability and credential-destination facts. A catalog or feed digest change alone cannot invalidate compatible sources, enlarge saved endpoints or Key authority, or rewrite frozen publications or runs. An absent option, a withdrawn feed record, a removed feed copy or an incompatible fact blocks only that source's new use, with a real reason. New use means a registered check, a save or edit of the source, offering the model for selection, and compiling or publishing a draft that selects the source. Execution of an already published revision, including a new session that uses it, a newly delegated Worker task and Continue of an existing task, uses the facts frozen in that revision and MUST NOT depend on the held feed copy or the current feed records, including after restart. Usage valued after a withdrawal or removal uses the current price facts, so a feed default price that is no longer present is unknown unless the user has set an override. When a later client embeds a model previously supplied by the feed, the embedded facts take over, and a compatible saved source continues without a new check.
+
+An unchanged saved embedded member retains its saved capabilities during lifecycle edits such as rename, removing another member and changing keys. Current-fact validation applies to newly added or rechecked members and to feed-only members, including withdrawal; a compatible embedded catalog revision alone does not force rechecking unchanged members.
 
 #### Scenario: New model on an embedded service
 
@@ -135,6 +137,12 @@ Saved provenance is historical evidence. For feed-supplied model facts it record
 
 - **WHEN** a published Plan uses a feed-supplied model, the user removes the held copy and the service restarts
 - **THEN** new sessions and newly delegated Worker tasks through that published revision, and Continue of existing tasks, keep running with its frozen facts, while a recheck of the source, publishing a draft that selects it and selecting the model in an editor are blocked with the reason that its feed facts are no longer present.
+
+
+#### Scenario: Saved embedded member survives changed catalog capabilities
+
+- **WHEN** the user renames a saved registered source or removes another member after an embedded model context or reasoning fact changed
+- **THEN** the unchanged embedded member retains its saved capability facts and the edit succeeds; new/rechecked and withdrawn feed-only members still require current admission
 
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/142#issuecomment-6236436037
@@ -374,9 +382,3 @@ Source SPEC comments:
 - [Subscription assembly](../../../crates/daemon/src/control/runtime/subscriptions.rs),
   [versioned query contract](../../../crates/application-api/src/compute_management_v3.rs), and
   [slow-I/O/revocation scenarios](../../../crates/cpa-bridge/src/runtime/tests/request_io.rs).
-
-#### Scenario: Saved embedded member survives changed catalog capabilities
-
-- **GIVEN** a saved registered source has an embedded member whose saved context or reasoning facts differ from a newer embedded catalog
-- **WHEN** the user renames the source or removes another member without rechecking that member
-- **THEN** the edit retains its saved capability facts and succeeds; newly admitted members and withdrawn feed-only members still require current admission
