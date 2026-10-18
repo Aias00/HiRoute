@@ -69,7 +69,13 @@ partial; loss of an earlier prefix does not by itself invalidate the scored stag
 [C allocation](../../crates/gateway/src/core_runtime/classification/c_request.rs)
 partitions prior context, actual assessed stage and latest user. It reserves the
 third question before target admission, removes optional background first and
-never refills history after a partial target frees question bytes. C applicability
+never refills history after a partial target frees question bytes. Already-bounded
+interrupted/unknown turns stay in the continuous background suffix; execution
+status and target-score eligibility are separate. The shared immutable
+[native category v1 template](../../crates/domain/src/routing/fixtures/native_category_v1.json)
+feeds compilation and Desktop preview; C transport consumes the frozen decision.
+Frozen standard provenance stays byte-stable, while categorical execution reports
+a custom question shape. C applicability
 only gates an otherwise eligible low-score protection opportunity. Invalid or
 unavailable applicability retains that opportunity conservatively; category,
 degree, rubric validity, inheritance and relay retain their separate owners.
@@ -106,7 +112,9 @@ pages and score/model filters. The default-false `include_routing_observations`
 flag preserves released strict facts/quality responses, including nested selection.
 [Product presentation](../../apps/desktop/src/features/RoutingObservations.tsx)
 shows counts, denominators, cohorts and coverage; it does not infer accuracy.
-Content-only deletion retains safe evidence; full fact retention/deletion removes it.
+Plan identity alone cannot resolve missing C metadata; mixed retained revisions
+keep partial coverage and unavailable rates until the scope is narrowed or complete
+evidence exists. Content-only deletion retains safe evidence; full fact retention/deletion removes it.
 
 The [model row projection](../../apps/desktop/src/features/plan-quality-state.ts)
 associates configured candidates with retained execution by declared position and

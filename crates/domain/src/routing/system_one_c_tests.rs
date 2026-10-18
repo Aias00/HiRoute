@@ -123,10 +123,17 @@ fn categorical_stock_wording_is_not_the_stock_experimental_question_shape() {
         primary_group: Some(super::super::MaterializedGroupId::BranchPrimary(0)),
         judgment: j.clone(),
     };
+    let mut other = branch.clone();
+    other.id = "general".into();
+    other.name = "General".into();
+    other.condition = "Other work".into();
+    other.group = super::super::MaterializedGroupId::Branch(1);
+    other.primary_group = None;
+    let branches = [branch, other];
     let frozen = FrozenNativeProtocolV1::freeze(
         &p,
-        branch_decision_definition(std::slice::from_ref(&branch), "writing"),
-        [("writing".into(), j)],
+        branch_decision_definition(&branches, "writing"),
+        branches.iter().map(|b| (b.id.clone(), b.judgment.clone())),
     )
     .unwrap();
     let before = serde_json::to_vec(&frozen).unwrap();
@@ -136,7 +143,7 @@ fn categorical_stock_wording_is_not_the_stock_experimental_question_shape() {
         crate::RoutingObservationV1::not_dispatched(&frozen, "writing").standard,
         "custom"
     );
-    frozen.validate_branches(&[branch], "writing").unwrap();
+    frozen.validate_branches(&branches, "writing").unwrap();
     assert_eq!(serde_json::to_vec(&frozen).unwrap(), before);
 }
 

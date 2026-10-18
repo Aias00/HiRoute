@@ -1575,6 +1575,23 @@
         "crates/domain/src/routing/decision_definition.rs",
         "crates/cli/src/control_plane.rs"
       ]
+    },
+    {
+      "contract": "hiroute.system-one-c/v1",
+      "field": "immutable native category v1 templates and frozen preset-wording provenance",
+      "mode": "frozen_fixture",
+      "owner": "decision-foundation",
+      "reason": "Keep supported published category/degree composition independent of later current defaults, and retain sealed scope standard bytes while reporting category-conditioned requests as custom. The shared template exactly preserves the existing v1 wording; it is not an editable current preset.",
+      "removal_condition": "Retire only after an explicit supported-bundle retirement or versioned adapter preserves retained C v1 publications and their immutable question identity.",
+      "allowed_paths": [
+        "crates/domain/src/routing/fixtures/native_category_v1.json",
+        "crates/domain/src/routing/system_one_c.rs",
+        "crates/domain/src/routing/system_one_c_tests.rs",
+        "crates/domain/src/routing/c_observation.rs",
+        "crates/gateway/src/publication/compiler.rs",
+        "crates/gateway/src/core_runtime/classification/system_one.rs",
+        "apps/desktop/src/features/decision-services/native-protocol.ts"
+      ]
     }
   ]
 }

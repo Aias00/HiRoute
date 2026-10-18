@@ -264,6 +264,19 @@ assessment instructions/criteria into a new current revision. No permanent hold,
 backup promise, whole-Plan restoration or runtime dependency on the source row is
 introduced. An already-published copied review remains usable after reclamation.
 
+After rollback has completed, later ordinary legacy edits MAY explicitly remove
+retained assessment-review provenance without changing judgment text or thresholds.
+A present review still MUST match the current protocol and complete composition;
+removal MUST NOT bypass any scope's adoption/rollback transition review obligation.
+Desktop exposes removal for a retained published legacy review and omits an empty
+review map after its last scope is removed.
+
+#### Scenario: Edit after completed rollback
+
+- **WHEN** a legacy route with a retained review later edits its assessment
+- **THEN** A stale review MUST fail validation; explicit removal permits an ordinary legacy edit after completed rollback, but cannot approve a C-to-legacy transition.
+
+
 #### Scenario: Bare rollback
 
 - **WHEN** a published C route switches to legacy without a new scope choice and review

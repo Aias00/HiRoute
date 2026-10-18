@@ -915,6 +915,20 @@ protocol and complete composed assessment digest. Use the generated
 [adoption/rollback guide](smart-saving-model-classification.md). Omitting both
 members preserves legacy behavior. A protocol name alone is insufficient.
 
+C background keeps the newest contiguous bounded safe turns, including interrupted
+or unknown execution statuses. Their status is preserved and does not certify a
+complete scored stage. Published category/degree templates are versioned content;
+execution uses the frozen questions even if current defaults change. Categorical
+requests report a custom effective question shape, including when the underlying
+wording came from stock C; this is not the original experimental condition.
+
+A rollback requires a fresh destination-specific review in every effective scope.
+After it has completed, an ordinary legacy edit can explicitly remove retained
+`assessment_review` provenance. Omit the member after removing its last scope;
+keeping an obsolete review causes validation to fail. Removal never approves an
+unreviewed rollback.
+
+
 The existing test command also accepts
 [C capability V2](../contracts/cli/classifier-decision-test.v2.schema.json):
 `schema`, exact saved `service_id`/`service_revision`, the frozen `protocol` from

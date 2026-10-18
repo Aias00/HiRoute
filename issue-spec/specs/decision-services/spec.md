@@ -170,6 +170,24 @@ one call. Unused malformed degree answers do not poison the selected path.
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/139#issuecomment-6235109346
 
+C category and category-conditioned degree templates MUST be immutable versioned
+content. Domain compilation, Gateway legacy composition and Desktop preview share
+the supported v1 template. Editing current defaults MUST NOT alter a supported
+publication's questions or make it unloadable. C request construction and answer
+bindings consume the stored frozen decision, while authoring/compiled consistency,
+fixed-content validation and digest checks remain mandatory.
+
+The frozen scope standard records preset-wording provenance covered by the sealed
+identity. Preserve those bytes on reopen. A categorical request adds category-specific
+degree context and MUST report its effective standard as custom, even when its base
+wording is stock. Only the unchanged stock ordinal question shape may report stock;
+content digests and thresholds continue to separate statistical conditions.
+
+#### Scenario: Defaults change after publication
+
+- **WHEN** current category or degree defaults change after a C publication is saved
+- **THEN** Reopen and execution MUST retain the frozen questions, role bindings and content identity, while corrupted or authoring-mismatched content remains rejected.
+
 ### Requirement: Custom extensions have one constrained v1 request/response
 
 The current `/v1/decisions` contract MUST use `decision`, `latest_user`,
@@ -223,8 +241,11 @@ using the same [quality queries](../session-history/spec.md).
 ### Requirement: C context allocation protects the complete assessed stage
 
 C MUST partition safe supplied content into prior_context, assessment_stage and
-latest_user. Background defaults to at most eight completed/failed turns before
-the actual assessment target, configurable from zero through eight. Zero warns
+latest_user. Background is the newest contiguous whole-turn suffix before the actual assessment
+target, capped at eight by default and configurable from zero through eight.
+Preserve bounded interrupted/unknown turns and their recorded status; execution
+status alone MUST NOT erase earlier user requirements or cut off older background.
+This admission does not certify assessment-target completeness or score eligibility. Zero warns
 that prior requirements/references are unavailable. The complete actual target
 stage is not limited by that turn cap. Latest user input remains separately
 represented; tool-result bodies, goal parsing, semantic extraction and invented
@@ -244,6 +265,11 @@ equal inputs and frozen content MUST yield identical prepared requests.
 
 - **WHEN** a complete target fits only if applicability bytes are reclaimed
 - **THEN** Preparation MUST mark the target partial, omit applicability and retain the original allocation without a refill pass.
+
+#### Scenario: Interrupted or unknown background
+
+- **WHEN** an already-bounded safe background turn has interrupted or unknown status
+- **THEN** Its user content and recorded status MUST remain in the contiguous admitted suffix when within the cap and byte budget; earlier background MUST NOT be removed solely because of that execution status.
 
 #### Scenario: Background cap
 

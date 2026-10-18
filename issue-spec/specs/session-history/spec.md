@@ -244,7 +244,11 @@ Expose unavailable/requested, suppressed/opportunity and suppressed/fresh-C-deci
 ratios with raw counts. Zero denominators are unavailable, not zero. Declare query
 scope, covered time, retained population, legacy/unknown and unknown-scope records,
 missing safe projections and bounded-scan truncation. Gaps/limits invalidate rates
-rather than certifying complete coverage. These statistics describe routing
+rather than certifying complete coverage. A known Plan identity without C metadata MUST NOT certify that the decision was
+non-C. Mixed retained revisions with such gaps retain their known counts but report
+partial coverage and unavailable exact rates; callers may narrow the revision/time
+scope. A separate confirmed-non-C count requires protocol evidence beyond identity.
+These statistics describe routing
 behavior, not correctness, accuracy, quality gain or universal provider support.
 Content-only deletion MUST retain safe routing evidence under existing fact
 retention. Full fact deletion/expiry removes it and aggregates cannot reconstruct
