@@ -52,7 +52,7 @@ test('a Qoder budget conflict requires model reconnection and preserves independ
 
 
 test('protocol errors identify only the validated safe scope or field', () => {
-  const error = { envelope: { error: { message_key:'native.assessment.review_required' }, data: {schema:'hiroute.native-protocol-diagnostic/v1',scope:'branch/code',message:'untrusted-private-detail'} } };
+  const error = { envelope: { error: { message_key:'native.protocol.state_reference_invalid' }, data: {schema:'hiroute.native-protocol-diagnostic/v1',scope:'branch/code',message:'untrusted-private-detail'} } };
   assert.match(planErrorMessage(error, 'en'), /branch\/code/);
   assert.ok(!planErrorMessage(error, 'en').includes('untrusted-private-detail'));
   error.envelope.data.scope = '<private-wire-text>';

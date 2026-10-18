@@ -2,20 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
-    "branch_id": {
-      "minLength": 1,
-      "type": "string"
-    },
     "duration_millis": {
       "minimum": 0,
       "type": "integer"
     },
     "endpoint_digest": {
       "pattern": "^sha256:[0-9a-f]{64}$",
-      "type": "string"
-    },
-    "failure_code": {
-      "minLength": 1,
       "type": "string"
     },
     "model": {
@@ -36,7 +28,7 @@
       "type": "string"
     },
     "schema": {
-      "const": "hiroute.classifier-decision-test-result/v2"
+      "const": "hiroute.historical-applicability-test-result/v1"
     },
     "service_id": {
       "minLength": 1,
@@ -63,24 +55,17 @@
     "tested_at_unix_ms": {
       "minimum": 0,
       "type": "integer"
-    },
-    "verified_shapes": {
-      "items": {
-        "enum": [
-          "connectivity",
-          "category",
-          "degree",
-          "historical_assessment",
-          "applicability"
-        ]
-      },
-      "type": "array"
     }
   },
   "required": [
     "schema",
     "state",
-    "verified_shapes",
+    "service_id",
+    "service_revision",
+    "endpoint_digest",
+    "model",
+    "protocol_digest",
+    "shape",
     "question_count",
     "tested_at_unix_ms",
     "duration_millis",

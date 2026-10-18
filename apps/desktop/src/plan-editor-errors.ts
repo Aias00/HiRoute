@@ -60,14 +60,12 @@ export function planErrorMessage(error: unknown, language: 'zh' | 'en'): string 
       : `Installed model routing capacity is protected. ${blockers}. On the Agent page, remove the affected plan from these connections or disable their model routing, then publish and reconnect. Task collaboration can stay enabled. Your input is retained.`;
   }
   const messages: Record<string, [string, string]> = {
-    NATIVE_PROTOCOL_UNSUPPORTED: ['此原生协议版本不受支持，请选择受支持的历史问题适用性版本。', 'This native protocol version is unsupported. Select a supported historical problem applicability version.'],
-    NATIVE_PROTOCOL_FIXED_CONTENT_INVALID: ['固定适用性内容无效，请重新选择受支持的协议。', 'The fixed applicability bundle is invalid. Select a supported protocol bundle.'],
+    NATIVE_PROTOCOL_UNSUPPORTED: ['此功能配置不受支持，请更新 HiRoute 并重新读取配置。', 'This capability configuration is unsupported. Update HiRoute and reload the configuration.'],
+    NATIVE_PROTOCOL_FIXED_CONTENT_INVALID: ['适用性配置无效，请重新读取配置。', 'The applicability configuration is invalid. Reload the configuration.'],
     NATIVE_PROTOCOL_HISTORY_CAP_INVALID: ['背景轮数需在 0 到 8 之间。', 'Background turns must be between 0 and 8.'],
-    NATIVE_ASSESSMENT_REVIEW_REQUIRED: ['请在发布预览中逐项选择切换范围的评分方式，并审阅最终正文。', 'Choose each transitioning scope’s assessment in publication Preview and review the final text.'],
-    NATIVE_ASSESSMENT_SOURCE_UNAVAILABLE: ['所选历史评分已不可用或已变化，请重新选择可用版本或明确采用其他标准。', 'The selected historical assessment is unavailable or changed. Select an available source or explicitly choose another standard.'],
-    NATIVE_PROTOCOL_STATE_REFERENCE_INVALID: ['提示词引用了目标协议不提供的历史字段，请编辑受影响的判断设置。', 'A prompt references history fields absent from the destination protocol. Edit the affected judgment settings.'],
-    NATIVE_PROTOCOL_DIGEST_MISMATCH: ['冻结内容与摘要不一致，请重新读取配置。当前发布版本保持有效。', 'Frozen content does not match its digest. Reload the configuration. The accepted publication remains active.'],
-    NATIVE_PROTOCOL_CONTENT_MISMATCH: ['评分设置与冻结内容不一致，请重新预览发布。', 'Assessment settings differ from frozen content. Preview the publication again.'],
+    NATIVE_PROTOCOL_STATE_REFERENCE_INVALID: ['提示词引用了当前配置不提供的历史字段，请编辑受影响的判断设置。', 'A prompt references history fields absent from the current configuration. Edit the affected judgment settings.'],
+    NATIVE_PROTOCOL_DIGEST_MISMATCH: ['发布内容校验未通过，请重新读取配置。当前已发布路由仍然有效。', 'Publication validation failed. Reload the configuration. The published route remains active.'],
+    NATIVE_PROTOCOL_CONTENT_MISMATCH: ['评分设置与发布内容不一致，请重新预览发布。', 'Assessment settings differ from publication content. Preview the publication again.'],
 
     PLAN_UNCHANGED: ['没有待发布更改。', 'No changes to publish.'],
     EDITOR_INVALID: ['请检查名称、使用场景及模型设置，当前输入已保留。', 'Check the name, purpose and model settings. Your input is retained.'],
