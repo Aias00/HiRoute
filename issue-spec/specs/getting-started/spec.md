@@ -170,78 +170,6 @@ and exits. Deleting the App alone preserves data; optional cleanup cannot delete
 projects or native Agent credentials. Package construction alone is not signing,
 notarization, native installation, or live-Agent evidence.
 
-### Requirement: New-model trials compose the existing protected workflow
-
-Home MUST show at most six featured model entries with origin, availability and
-version disclosure; without featured entries it offers unused executable or
-connectable embedded models. Models needing a newer client cannot start a trial.
-Home and routing creation open one full-page, four-step flow for trial model, in-place connection,
-Primary model, decision connection, selected Agent/presets and review.
-
-A registered connection must observe the selected model before continuing. Protected
-input/check/save and native subscription import retain their existing authority.
-Primary is prefilled only from a recorded unambiguous fixed-model resolution; a
-native alias does not identify a model version. Decision connections can be reused
-or created in place; this flow offers no heuristic classification. The editable
-review begins at Trial 0.90 with explicit low-progress/corrected-result competence
-criteria, both model groups, saved connections and the proposed mapping scope.
-
-Confirmation saves the ordinary draft, publishes it after its exact save and model
-facts are confirmed, then uses normal Agent Preview/Apply. Mapping only changes the
-selected presets/default; unrelated mappings, permissions and collaboration stay
-intact. Flow IDs are retained in memory across retries without new daemon trial
-state. Uncertain replies reconcile the same operation and exact resulting revision,
-never the preceding successful operation. Completed connections, drafts and Plans
-remain visible after later failures. A published Plan can be mapped from Routing
-after reload without recreating it.
-
-After this flow confirms that the Agent mapping applied successfully, it SHALL wait for matching Plan activity while the trial page and window remain visible. It SHALL query the existing sessions view from that confirmation time at a five-second cadence, skipping an in-flight read. The first matching candidate observed by the flow SHALL remain selectable through "Watch this session", which opens its live routing timeline only on user action. A Plan match SHALL NOT be described as proof of the Agent identity or a newly created, chronologically first session. Closing or hiding the flow stops reads; showing it resumes them. A read failure SHALL offer retry while retaining the model-performance and session-list actions.
-
-#### Scenario: Publication succeeds but its reply is lost
-
-- **WHEN** saving a trial draft succeeds and the subsequent publication reply is lost
-- **THEN** refresh MUST verify the publication operation and exact Plan revision,
-  without repeating either mutation or treating the draft save as publication;
-  Agent mapping remains a separate reviewed action.
-
-#### Scenario: Post-mapping session handoff
-
-- **WHEN** the mapping is confirmed and a subsequent session read finds activity using the published Plan
-- **THEN** the flow offers Watch this session without automatic navigation; old activity before confirmation is excluded, and leaving the trial page stops waiting.
-
-Source SPEC comments:
-- https://github.com/higress-group/HiRoute/issues/140#issuecomment-6235502571
-
-### Requirement: Home lists routing suggestions that need attention
-
-The Desktop Home "Needs your attention" section SHALL list each current level suggestion for difficulty-routing Plans and two-group branches: step up, step down, create a division draft, or return to previous routing. Suggestions SHALL come from the same backend computation as the model performance view. Each item SHALL name the Plan and its published trust level, state the facts behind the suggestion (scored stages, scoring coverage, contributing sessions, competence rate, protection count and, for a level change, the replay share at the suggested level), carry the version disclosure and the actual suggestion evidence window/cohort of the model performance view when they apply, and offer two actions. "View evidence" opens the Plan's model performance view. The primary action opens the existing draft, division-draft or Agent settings Preview/Apply. Neither action SHALL change routing until the user publishes or applies. An item SHALL disappear when its condition no longer holds for the active published revision. While Home is not shown, navigation SHALL mark that suggestions exist. Suggestions SHALL be presented as optional; keeping the current level SHALL remain a valid outcome, and trust levels SHALL NOT be presented as onboarding progress or completion. When no suggestion applies, the section SHALL say so without inventing progress. A failed suggestion read SHALL be shown as a retryable read failure and SHALL NOT be shown as an absence of suggestions.
-
-
-Suggestion failures SHALL be isolated per Plan: an oversized or unavailable Plan appears as a retryable unavailable item alongside other valid suggestions. The response SHALL provide suggestions and unavailable arrays, with unavailable entries naming the Plan and a stable scope_too_large, unavailable or stale reason. Suggested branches SHALL expose their counts, cohort, protection count, identity-stability disclosure and replay at the suggested threshold without returning full report rows or session lists. A failed whole query remains a retryable failure. Desktop SHALL refresh on Home display, window visibility and the user's own publish/apply actions, and otherwise every five minutes while visible; navigation and Plan markers reuse this read. Cached evidence SHALL still validate reader authority and all relevant control, observation, Worker and retention changes, including expiry with time.
-
-#### Scenario: Two Plans, two directions
-
-- **WHEN** one Plan qualifies to step up and another to step down
-- **THEN** Home lists both items with their facts, and opening the step-up draft changes nothing until it is published.
-
-#### Scenario: Condition resolved
-
-- **WHEN** the user publishes the suggested level for a Plan
-- **THEN** that Plan's item disappears, and no new suggestion appears for it until the new revision reaches the minimum scored stages.
-
-#### Scenario: Read failure
-
-- **WHEN** the suggestion query fails while other Home reads succeed
-- **THEN** the section reports the failed read with a retry, and the other Home content stays visible.
-
-#### Scenario: One Plan exceeds the read limit
-
-- **WHEN** one enabled Plan exceeds its read bound while another has an available suggestion
-- **THEN** Home shows the healthy Plan's suggestion and a retryable failure for the oversized Plan, without calling the result empty or disabling the healthy Plan's actions.
-
-Source SPEC comments:
-- https://github.com/higress-group/HiRoute/issues/140#issuecomment-6236472105
-
 ### Requirement: Windows x64 Desktop installs per user and opens ready to use
 
 HiRoute SHALL provide a Windows x64 Desktop installer that a standard user can run without administrator rights, Python or a terminal. In this release it is the only supported Windows installation path. It SHALL verify the package, publish the user-owned Windows standalone installation (CLI, daemon, CPA and Skills), register the default Task Scheduler manager, add the Desktop shell, start the service and open the shell when the service is ready. Login start and tray residency SHALL be enabled by default and SHALL be optional during installation. An unattended mode SHALL install with the defaults without prompts. An existing Task Scheduler installation for the same user SHALL be upgraded in place with its data and Agent recovery references preserved. SCM service installation is not offered in this release: an existing SCM-managed installation SHALL be refused before writing, with an explanation, and SHALL remain unchanged. The installer SHALL refuse non-x64 systems before writing. A missing WebView2 runtime SHALL be installed or explained. An interrupted installation SHALL be repairable by running the installer again. Uninstall SHALL restore managed Agent access before removing the manager registration, shell and entries, and SHALL preserve business data unless the user explicitly selects its removal. When neither Agent storage nor its upgrade backup exists, first-install recovery SHALL NOT require a working daemon. If the service is unavailable and Agent state cannot be enumerated, recovery or uninstall SHALL offer a separate default-No interactive confirmation to stop the owned unresponsive Task and proceed with restoration unverified. It SHALL warn that affected Agents cannot be enumerated, configured Agents may need manual restoration and active work may be interrupted; this continuation SHALL retain all business data. Silent and passive modes SHALL refuse this continuation, and enumerated restore conflicts SHALL still block removal. Verified obsolete versioned packages SHALL be pruned only after both installation owners commit; rollback sources SHALL be retained until then. Uninstall SHALL remove its verified current package and preserve changed or foreign files.
@@ -382,6 +310,78 @@ The Windows shell SHALL select a newer stable Windows x64 Desktop release from t
 
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/132#issuecomment-6219734656
+
+### Requirement: New-model trials compose the existing protected workflow
+
+Home MUST show at most six featured model entries with origin, availability and
+version disclosure; without featured entries it offers unused executable or
+connectable embedded models. Models needing a newer client cannot start a trial.
+Home and routing creation open one full-page, four-step flow for trial model, in-place connection,
+Primary model, decision connection, selected Agent/presets and review.
+
+A registered connection must observe the selected model before continuing. Protected
+input/check/save and native subscription import retain their existing authority.
+Primary is prefilled only from a recorded unambiguous fixed-model resolution; a
+native alias does not identify a model version. Decision connections can be reused
+or created in place; this flow offers no heuristic classification. The editable
+review begins at Trial 0.90 with explicit low-progress/corrected-result competence
+criteria, both model groups, saved connections and the proposed mapping scope.
+
+Confirmation saves the ordinary draft, publishes it after its exact save and model
+facts are confirmed, then uses normal Agent Preview/Apply. Mapping only changes the
+selected presets/default; unrelated mappings, permissions and collaboration stay
+intact. Flow IDs are retained in memory across retries without new daemon trial
+state. Uncertain replies reconcile the same operation and exact resulting revision,
+never the preceding successful operation. Completed connections, drafts and Plans
+remain visible after later failures. A published Plan can be mapped from Routing
+after reload without recreating it.
+
+After this flow confirms that the Agent mapping applied successfully, it SHALL wait for matching Plan activity while the trial page and window remain visible. It SHALL query the existing sessions view from that confirmation time at a five-second cadence, skipping an in-flight read. The first matching candidate observed by the flow SHALL remain selectable through "Watch this session", which opens its live routing timeline only on user action. A Plan match SHALL NOT be described as proof of the Agent identity or a newly created, chronologically first session. Closing or hiding the flow stops reads; showing it resumes them. A read failure SHALL offer retry while retaining the model-performance and session-list actions.
+
+#### Scenario: Publication succeeds but its reply is lost
+
+- **WHEN** saving a trial draft succeeds and the subsequent publication reply is lost
+- **THEN** refresh MUST verify the publication operation and exact Plan revision,
+  without repeating either mutation or treating the draft save as publication;
+  Agent mapping remains a separate reviewed action.
+
+#### Scenario: Post-mapping session handoff
+
+- **WHEN** the mapping is confirmed and a subsequent session read finds activity using the published Plan
+- **THEN** the flow offers Watch this session without automatic navigation; old activity before confirmation is excluded, and leaving the trial page stops waiting.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/140#issuecomment-6235502571
+
+### Requirement: Home lists routing suggestions that need attention
+
+The Desktop Home "Needs your attention" section SHALL list each current level suggestion for difficulty-routing Plans and two-group branches: step up, step down, create a division draft, or return to previous routing. Suggestions SHALL come from the same backend computation as the model performance view. Each item SHALL name the Plan and its published trust level, state the facts behind the suggestion (scored stages, scoring coverage, contributing sessions, competence rate, protection count and, for a level change, the replay share at the suggested level), carry the version disclosure and the actual suggestion evidence window/cohort of the model performance view when they apply, and offer two actions. "View evidence" opens the Plan's model performance view. The primary action opens the existing draft, division-draft or Agent settings Preview/Apply. Neither action SHALL change routing until the user publishes or applies. An item SHALL disappear when its condition no longer holds for the active published revision. While Home is not shown, navigation SHALL mark that suggestions exist. Suggestions SHALL be presented as optional; keeping the current level SHALL remain a valid outcome, and trust levels SHALL NOT be presented as onboarding progress or completion. When no suggestion applies, the section SHALL say so without inventing progress. A failed suggestion read SHALL be shown as a retryable read failure and SHALL NOT be shown as an absence of suggestions.
+
+
+Suggestion failures SHALL be isolated per Plan: an oversized or unavailable Plan appears as a retryable unavailable item alongside other valid suggestions. The response SHALL provide suggestions and unavailable arrays, with unavailable entries naming the Plan and a stable scope_too_large, unavailable or stale reason. Suggested branches SHALL expose their counts, cohort, protection count, identity-stability disclosure and replay at the suggested threshold without returning full report rows or session lists. A failed whole query remains a retryable failure. Desktop SHALL refresh on Home display, window visibility and the user's own publish/apply actions, and otherwise every five minutes while visible; navigation and Plan markers reuse this read. Cached evidence SHALL still validate reader authority and all relevant control, observation, Worker and retention changes, including expiry with time.
+
+#### Scenario: Two Plans, two directions
+
+- **WHEN** one Plan qualifies to step up and another to step down
+- **THEN** Home lists both items with their facts, and opening the step-up draft changes nothing until it is published.
+
+#### Scenario: Condition resolved
+
+- **WHEN** the user publishes the suggested level for a Plan
+- **THEN** that Plan's item disappears, and no new suggestion appears for it until the new revision reaches the minimum scored stages.
+
+#### Scenario: Read failure
+
+- **WHEN** the suggestion query fails while other Home reads succeed
+- **THEN** the section reports the failed read with a retry, and the other Home content stays visible.
+
+#### Scenario: One Plan exceeds the read limit
+
+- **WHEN** one enabled Plan exceeds its read bound while another has an available suggestion
+- **THEN** Home shows the healthy Plan's suggestion and a retryable failure for the oversized Plan, without calling the result empty or disabling the healthy Plan's actions.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/140#issuecomment-6236472105
 
 ## Implementation references
 
