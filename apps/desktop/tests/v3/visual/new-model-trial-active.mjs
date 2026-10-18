@@ -128,7 +128,7 @@ try {
   assert.ok(text.includes(`${kind==='partial'?1:0}/3`));
   for(const g of await geometry())assert.ok(g.scroll<=g.width+2,JSON.stringify(g));
   await shot(`trust-cost-gaps-${kind}-${lang}-${width}`);
-  results.push({id:`trust.cost-gaps.${kind}.${lang}.${width}.${theme}`,status:'passed'});
+  results.push({id:`trust.cost-gaps.${kind}.${lang}.${width}`,status:'passed'});
  }
 
  for(const [lang,theme,width,height] of [['en','light',755,600],['zh','dark',755,600],['en','dark',1200,813],['zh','light',1200,813]]){
