@@ -141,6 +141,6 @@ fn launch_uses_only_startup_listeners_and_preserves_pending_configuration() {
             assert!(still_live.starts_with(&format!("{expected}/launch?code=")));
         }
         console.shutdown();
-        role.shutdown().unwrap();
+        role.shutdown();
     }
 }
