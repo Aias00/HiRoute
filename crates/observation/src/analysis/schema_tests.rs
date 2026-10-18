@@ -103,3 +103,35 @@ fn interrupted_auxiliary_replacement_rolls_back_core_writer_dependencies() {
     let store = open_store(dir.path());
     ingest(&store, "schema-after-rollback-reopen");
 }
+
+#[test]
+fn missing_new_auxiliary_table_does_not_block_core_ingest_or_deletion() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    ingest(&store, "schema-before-incomplete-admission");
+    store
+        .connection
+        .lock()
+        .execute_batch("DROP TABLE observation_native_origins_v1")
+        .unwrap();
+    assert!(!available(&store.connection.lock()));
+    let f = ingest(&store, "schema-with-incomplete-admission");
+    let principal = ObservationPrincipalV1::local_user(f.workspace.clone());
+    let spec = SessionDeletionSpecV1 {
+        workspace_id: f.workspace.clone(),
+        session_id: f.session.clone(),
+        data_class: DeletionDataClass::FactsAndContent,
+        delete_rollups: false,
+    };
+    let p = store.preview_session_deletion(&principal, &spec).unwrap();
+    store
+        .apply_session_deletion(&principal, &spec, p.store_revision, &p.change_digest, 1000)
+        .unwrap();
+    drop(store);
+    let store = open_store(dir.path());
+    assert!(
+        available(&store.connection.lock()),
+        "normal admission installs the additive table on retry"
+    );
+    ingest(&store, "schema-after-admission-retry");
+}

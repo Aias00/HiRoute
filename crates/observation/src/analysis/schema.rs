@@ -9,6 +9,14 @@ mod tests;
 pub(super) const FORMAT: &str = "1";
 
 pub(crate) fn available(db: &Connection) -> bool {
+    format_supported(db)
+        && db.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='observation_native_origins_v1')",
+            [], |r|r.get::<_,bool>(0),
+        ).unwrap_or(false)
+}
+
+fn format_supported(db: &Connection) -> bool {
     db.query_row(
         "SELECT value FROM observation_analysis_meta_v1 WHERE key='format'",
         [],
@@ -19,7 +27,7 @@ pub(crate) fn available(db: &Connection) -> bool {
 
 pub(crate) fn migrate(db: &mut Connection) -> rusqlite::Result<()> {
     let exists: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='observation_analysis_meta_v1')", [], |r| r.get(0))?;
-    if exists && !available(db) {
+    if exists && !format_supported(db) {
         return Ok(());
     }
     let tx = db.transaction()?;
