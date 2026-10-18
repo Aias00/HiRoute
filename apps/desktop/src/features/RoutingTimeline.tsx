@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { formatMoney } from '../ui';
 import { safeDiagnosticCode } from '../error-code';
 import { observationBusyRetryMs } from './observation-failure';
@@ -128,8 +128,8 @@ export function RoutingTimeline({ session, language, active, displayed, refreshV
     }
     setUnseen(previous => { const next = previous.filter(id => !visible.has(id)); return next.length === previous.length ? previous : next; });
   }, []);
-  // Follow until a turn is selected; otherwise retain the reading position and acknowledge visible arrivals.
-  useEffect(() => {
+  // Set the initial position before interaction; later arrivals retain an explicitly selected turn.
+  useLayoutEffect(() => {
     if (!displayed || !scroller.current) return;
     if (!selected) { scroller.current.scrollLeft = scroller.current.scrollWidth; setUnseen([]); }
     markVisible();
