@@ -192,7 +192,11 @@ fn validate_inputs(
             .ok_or_else(invalid)?,
     )
     .map_err(|_| invalid())?;
-    if editor.effective().map_err(|_| invalid())? != version.configuration {
+    if editor
+        .effective_for_frozen_validation(&version.configuration)
+        .map_err(|_| invalid())?
+        != version.configuration
+    {
         return Err(invalid());
     }
     if let Some(before) = &control.before_head {

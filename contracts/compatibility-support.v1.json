@@ -1746,7 +1746,7 @@
       "field": "omitted native_protocol in supported frozen native publications",
       "mode": "recovery_read_only",
       "owner": "decision-foundation",
-      "reason": "Supported released v0.3.x native publications retain their original flat state, independent legacy category/assessment composition, policy and identities until replaced by a new publication. Current plan-editor authoring has no selector and always freezes the applicability protocol for built-in decision models. Reads and runtime execution never upgrade old publications.",
+      "reason": "Supported released v0.3.x native publications retain their original flat state, independent legacy category/assessment composition, policy and identities until replaced by a new publication. Current plan-editor authoring has no selector and always freezes the applicability protocol for built-in decision models. Reads and runtime execution never upgrade old publications. Retained v0.3.1 Plan-content Operations authenticate their editor against the protocol already sealed in that Operation; startup validation never applies the new authoring default or replays completed effects.",
       "removal_condition": "Remove only after the release support policy explicitly retires every supported frozen legacy publication and retained backup, or an authenticated versioned migration preserves their original execution meaning. New publication defaults alone do not retire execution support.",
       "allowed_paths": [
         "crates/domain/src/routing/legacy_category.rs",
@@ -1757,7 +1757,9 @@
         "crates/application/src/compiler/explicit.rs",
         "crates/gateway/src/core_runtime/classification/system_one.rs",
         "crates/gateway/src/core_runtime/classification/protocol.rs",
-        "crates/gateway/src/publication/compiler.rs"
+        "crates/gateway/src/publication/compiler.rs",
+        "crates/domain/src/routing/authoring.rs",
+        "crates/domain/src/operation/routing_content.rs"
       ]
     }
   ]

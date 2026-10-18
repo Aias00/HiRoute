@@ -303,6 +303,12 @@ fn released_defaults_move_only_at_next_publication_without_editor_controls() {
     let old = serde_json::to_vec(&legacy).unwrap();
     let reopened: AgentPlanAuthoringV2 = serde_json::from_slice(&old).unwrap();
     assert_eq!(serde_json::to_vec(&reopened).unwrap(), old);
+    assert_eq!(
+        native_editor()
+            .effective_for_frozen_validation(&reopened)
+            .unwrap(),
+        reopened
+    );
     let next = reopened.editor(None).unwrap().effective().unwrap();
     assert!(next.native_protocol().is_some());
     assert_eq!(serde_json::to_vec(&legacy).unwrap(), old);

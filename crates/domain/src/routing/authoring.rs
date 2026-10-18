@@ -132,6 +132,22 @@ impl PlanEditorStateV2 {
     }
 
     pub fn effective(&self) -> Result<AgentPlanAuthoringV2, PlanAuthoringError> {
+        self.effective_with_native(Some(&super::NativeProtocolSelectionV1::default()))
+    }
+
+    /// Validate a retained operation against its already sealed configuration, not
+    /// against today's authoring default. This is never a new-publication entry.
+    pub(crate) fn effective_for_frozen_validation(
+        &self,
+        frozen: &AgentPlanAuthoringV2,
+    ) -> Result<AgentPlanAuthoringV2, PlanAuthoringError> {
+        self.effective_with_native(frozen.native_protocol())
+    }
+
+    fn effective_with_native(
+        &self,
+        protocol: Option<&super::NativeProtocolSelectionV1>,
+    ) -> Result<AgentPlanAuthoringV2, PlanAuthoringError> {
         self.validate_draft()?;
         let strategy = match self.mode {
             PlanEditorMode::CustomBranches => {
@@ -140,9 +156,11 @@ impl PlanEditorStateV2 {
                     .as_ref()
                     .ok_or(PlanAuthoringError::InvalidStrategy)?
                     .configuration();
-                if !super::native_mode(&routing.classifier) {
-                    routing.native_protocol = None;
-                }
+                routing.native_protocol = if super::native_mode(&routing.classifier) {
+                    protocol.cloned()
+                } else {
+                    None
+                };
                 {
                     routing.judgment = routing
                         .judgment
@@ -164,7 +182,7 @@ impl PlanEditorStateV2 {
             },
             PlanEditorMode::SmartSaving => {
                 let native_protocol = if super::native_mode(&self.smart.classifier) {
-                    Some(super::NativeProtocolSelectionV1::default())
+                    protocol.cloned()
                 } else {
                     None
                 };
