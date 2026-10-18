@@ -157,19 +157,6 @@ degree and historical Score. Category plus sixteen independent degree questions,
 historical Score and applicability fit the supported nineteen-question shape in
 one call. Unused malformed degree answers do not poison the selected path.
 
-#### Scenario: Frozen C questions
-
-- **WHEN** a published native C route evaluates a complete prior stage
-- **THEN** The Gateway MUST use its frozen question content and separate current demand, historical performance and applicability without depending on another answer.
-
-#### Scenario: Invalid applicability only
-
-- **WHEN** the two-label applicability answer is invalid but selected degree and assessment are valid
-- **THEN** HiRoute MUST preserve those valid results and mark applicability unavailable.
-
-Source SPEC comments:
-- https://github.com/higress-group/HiRoute/issues/139#issuecomment-6235109346
-
 C category and category-conditioned degree templates MUST be immutable versioned
 content. Domain compilation, Gateway legacy composition and Desktop preview share
 the supported v1 template. Editing current defaults MUST NOT alter a supported
@@ -183,10 +170,23 @@ degree context and MUST report its effective standard as custom, even when its b
 wording is stock. Only the unchanged stock ordinal question shape may report stock;
 content digests and thresholds continue to separate statistical conditions.
 
+#### Scenario: Frozen C questions
+
+- **WHEN** a published native C route evaluates a complete prior stage
+- **THEN** The Gateway MUST use its frozen question content and separate current demand, historical performance and applicability without depending on another answer.
+
+#### Scenario: Invalid applicability only
+
+- **WHEN** the two-label applicability answer is invalid but selected degree and assessment are valid
+- **THEN** HiRoute MUST preserve those valid results and mark applicability unavailable.
+
 #### Scenario: Defaults change after publication
 
 - **WHEN** current category or degree defaults change after a C publication is saved
 - **THEN** Reopen and execution MUST retain the frozen questions, role bindings and content identity, while corrupted or authoring-mismatched content remains rejected.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/139#issuecomment-6235109346
 
 ### Requirement: Custom extensions have one constrained v1 request/response
 

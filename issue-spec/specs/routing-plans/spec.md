@@ -276,7 +276,6 @@ review map after its last scope is removed.
 - **WHEN** a legacy route with a retained review later edits its assessment
 - **THEN** A stale review MUST fail validation; explicit removal permits an ordinary legacy edit after completed rollback, but cannot approve a C-to-legacy transition.
 
-
 #### Scenario: Bare rollback
 
 - **WHEN** a published C route switches to legacy without a new scope choice and review
