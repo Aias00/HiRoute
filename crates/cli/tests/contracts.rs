@@ -373,6 +373,9 @@ fn gateway_show_waits_for_native_discovery_and_honors_control_timeout() {
                         Err(error) => panic!("{error}"),
                     }
                 };
+                // macOS accepts inherit O_NONBLOCK. Keep accept cancellable, but
+                // let this connection's reads wait for the explicit deadline.
+                stream.set_nonblocking(false).unwrap();
                 stream
                     .set_read_timeout(Some(Duration::from_secs(5)))
                     .unwrap();
