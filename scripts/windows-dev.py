@@ -345,6 +345,7 @@ def main():
     desktop.add_argument('--scroll-direction', choices=('up', 'down'))
     desktop.add_argument('--codex-profile', choices=('hiroute',), help='Use the product-owned Codex profile instead of the default configuration')
     desktop.add_argument('--source-id', help='One ready saved source for unauthenticated TLS diagnosis')
+    desktop.add_argument('--native-tls', action='store_true', help='Compare the Windows system TLS verifier without changing trust policy')
     desktop.add_argument('--generated-uninstaller-sha256', help='Digest independently extracted from the verified failed NSIS artifact, for manual quarantine only')
     desktop.add_argument('--cli-args', type=Path, help='Private JSON array of public CLI arguments')
     run = commands.add_parser('run')

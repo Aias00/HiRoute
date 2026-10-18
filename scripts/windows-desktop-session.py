@@ -534,6 +534,43 @@ def probe_tls(run, target):
     return result
 
 
+def probe_windows_tls(run, target):
+    if (target.get('scheme') != 'https'
+            or not re.fullmatch(r'[A-Za-z0-9.-]{1,253}', target.get('authority', ''))
+            or not isinstance(target.get('port'), int) or not 1 <= target['port'] <= 65535):
+        raise ValueError('TLS diagnostics require a saved HTTPS DNS target')
+    (run / 'tls-target.json').write_text(json.dumps(target), encoding='utf-8')
+    script = run / 'tls-native.ps1'
+    script.write_text(r'''
+$ErrorActionPreference='Stop'
+[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
+$q=Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'tls-target.json') | ConvertFrom-Json
+$tcp=[Net.Sockets.TcpClient]::new();$ssl=$null
+$result=@{tls_verified=$false;authenticated=$false;http_request_sent=$false;stack='Windows SslStream'}
+try {
+ $connect=$tcp.ConnectAsync([string]$q.authority,[int]$q.port)
+ if(-not $connect.Wait(8000)){throw 'TCP connect timeout'}
+ $connect.GetAwaiter().GetResult() | Out-Null
+ $ssl=[Net.Security.SslStream]::new($tcp.GetStream(),$false)
+ $handshake=$ssl.AuthenticateAsClientAsync([string]$q.authority)
+ if(-not $handshake.Wait(8000)){throw 'TLS handshake timeout'}
+ $handshake.GetAwaiter().GetResult() | Out-Null
+ $result.tls_verified=$true;$result.tls_version=$ssl.SslProtocol.ToString()
+} catch {$result.error=$_.Exception.GetBaseException().Message}
+finally {if($null -ne $ssl){$ssl.Dispose()};$tcp.Dispose()}
+$result | ConvertTo-Json -Compress
+''', encoding='utf-8-sig')
+    done = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-File', str(script)],
+        capture_output=True, timeout=30, creationflags=0x08000000)
+    (run / 'tls-native.stderr').write_bytes(done.stderr)
+    done.check_returncode()
+    result = json.loads(done.stdout.decode('utf-8-sig'))
+    (run / 'tls-probe.native.json').write_text(json.dumps(result, indent=2), encoding='utf-8')
+    if not result.get('tls_verified'):
+        raise RuntimeError('Windows system TLS verification failed; inspect tls-probe.native.json')
+    return result
+
+
 def network_probe(request, run, roots):
     done = subprocess.run([str(roots['stable_cli']), 'compute', 'list', '--output', 'json'],
         capture_output=True, timeout=30, creationflags=0x08000000)
@@ -543,7 +580,8 @@ def network_probe(request, run, roots):
                if s.get('source_id') == request.get('source_id') and s.get('state') == 'ready']
     if envelope.get('status') != 'succeeded' or len(matches) != 1:
         raise ValueError('Select one ready saved source for unauthenticated TLS diagnosis')
-    return probe_tls(run, matches[0]['target'])
+    probe = probe_windows_tls if request.get('native_tls') else probe_tls
+    return probe(run, matches[0]['target'])
 
 
 def admit_nsis_install(request, helper, activity, manifest, root):

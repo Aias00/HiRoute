@@ -213,6 +213,17 @@ class Runner(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'saved HTTPS DNS target'):
             desktop.probe_tls(self.root, dict(scheme='https', authority='user:secret@example.com', port=443))
 
+    def test_native_tls_diagnostic_uses_saved_target_and_preserves_failure(self):
+        completed = desktop.subprocess.CompletedProcess([], 0,
+            b'{"tls_verified":false,"authenticated":false,"http_request_sent":false,"error":"untrusted chain"}', b'')
+        with patch.object(desktop.subprocess, 'run', return_value=completed), \
+                self.assertRaisesRegex(RuntimeError, 'Windows system TLS verification failed'):
+            desktop.probe_windows_tls(self.root, dict(scheme='https', authority='example.com', port=443))
+        result = json.loads((self.root / 'tls-probe.native.json').read_text())
+        self.assertFalse(result['tls_verified'])
+        self.assertFalse(result['authenticated'])
+        self.assertEqual(json.loads((self.root / 'tls-target.json').read_text())['authority'], 'example.com')
+
     def test_codex_real_call_requires_completed_turn_tool_and_exact_nonce(self):
         expected = 'HiRoute-Windows-test:42'
         events = [{'type':'item.completed','item':{'type':'command_execution','status':'completed','exit_code':0,'aggregated_output':'42\n'}},

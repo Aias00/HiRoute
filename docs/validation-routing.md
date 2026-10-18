@@ -205,6 +205,9 @@ saved HTTPS source through the installed CLI and performs a bounded, verified TL
 handshake in the same account. It sends no HTTP request or credentials, changes no
 trust settings, and records the certificate-store count, TLS result and error.
 This is diagnostics only; it cannot establish a product model call.
+`--native-tls` compares Windows `SslStream` verification under the existing system
+trust policy. Normal Windows certificate-chain caching may occur; the probe does
+not import a trust anchor or override verification.
 For a failed NSIS attempt with a prepared shell transaction, `installer-resume`
 captures the actual post-install adapter's output. It requires the matching
 recent inspection in `--observation-run`, the exact retained `--from-product`,
