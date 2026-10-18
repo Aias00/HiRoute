@@ -16,8 +16,8 @@ with no current runtime or product entry.
 | Connect, edit, test or delete a decision model/custom extension | [Connection UI](../../apps/desktop/src/features/decision-services/DecisionServicesPage.tsx), [native transaction](../../apps/desktop/src-tauri/src/session/decision_services.rs), [store](../../crates/local-storage/src/control/decision_services.rs) | [Desktop shell scenarios](../../apps/desktop/tests/v3/browser/product-shell-scenarios.mjs), [real CLI lifecycle](../../crates/daemon/tests/support/decision_services_product.py) |
 | Create a connection while editing a route | [DesktopApp](../../apps/desktop/src/product/DesktopApp.tsx), [selector](../../apps/desktop/src/features/decision-services/DecisionSelector.tsx) | Preserve route edits and select the exact saved revision without implicit publication |
 | Configure categories, degree and competence | [Plan editor](../../apps/desktop/src/plan-editor.tsx), [branch editor](../../apps/desktop/src/features/decision-services/BranchRoutingEditor.tsx), [judgment controls](../../apps/desktop/src/features/decision-services/JudgmentSettings.tsx), [domain](../../crates/domain/src/routing/decision.rs) | Existing model picker, collapsed advanced settings, complete overrides and publish validation |
-| Adopt or roll back native C by assessment scope | [Frozen protocol/review domain](../../crates/domain/src/routing/system_one_c.rs), [transition validation](../../crates/domain/src/routing/assessment_transition.rs), [retained sources](../../crates/local-storage/src/control/plans/assessment_sources.rs), [scope editor](../../apps/desktop/src/features/decision-services/NativeProtocolEditor.tsx) | [Real CLI adoption/restart/rollback](../../crates/daemon/tests/support/c_protocol_product.py), [Desktop interaction](../../apps/desktop/tests/v3/browser/c-protocol-scenarios.mjs) |
-| Explicitly test saved C capability | [V2 contract](../../crates/application-api/src/classifier_diagnostic_c.rs), [Application](../../crates/application/src/classifier_c.rs), [production diagnostic](../../crates/gateway/src/core_runtime/classification/c_capability.rs), [native session](../../apps/desktop/src-tauri/src/classifier_c_session.rs) | [CLI request boundary](../../crates/cli/src/control_plane.rs), [focused Windows case](../../crates/daemon/tests/windows_headless.rs): standard and nineteen-question shapes through the existing protected command; no implicit provider call |
+| Adopt or roll back historical problem applicability by scope | [Frozen protocol domain](../../crates/domain/src/routing/system_one_c.rs), [transition validation](../../crates/domain/src/routing/assessment_transition.rs), [retained sources](../../crates/local-storage/src/control/plans/assessment_sources.rs), [transition Preview](../../apps/desktop/src/features/decision-services/AssessmentTransitionPreview.tsx) | [Real CLI adoption/restart/rollback](../../crates/daemon/tests/support/c_protocol_product.py), [Desktop interaction](../../apps/desktop/tests/v3/browser/c-protocol-scenarios.mjs) |
+| Explicitly test connectivity or applicability | [V2 contract](../../crates/application-api/src/classifier_diagnostic_c.rs), [Application](../../crates/application/src/classifier_c.rs), [production diagnostic](../../crates/gateway/src/core_runtime/classification/c_capability.rs), [native session](../../apps/desktop/src-tauri/src/classifier_c_session.rs) | [CLI request boundary](../../crates/cli/src/control_plane.rs), [focused Windows case](../../crates/daemon/tests/windows_headless.rs): standard and nineteen-question shapes through the existing protected command; no implicit provider call |
 | Freeze connection, definition and rubric | [Authoring snapshot](../../crates/daemon/src/control/runtime/plan_content_snapshot.rs), [Application compiler](../../crates/application/src/compiler), [Gateway compiler](../../crates/gateway/src/publication/compiler.rs) | [Decision publication contracts](../../crates/gateway/src/publication/tests/decision_contracts.rs), [real publication/restart](../../crates/daemon/tests/publication_process.rs) |
 | Judge the current task and preceding actual stage | [Call lifetime](../../crates/gateway/src/core_runtime/classification.rs), [safe transport diagnostics](../../crates/gateway/src/core_runtime/classification/diagnostic.rs), [System One adapter](../../crates/gateway/src/core_runtime/classification/system_one.rs), [custom codec](../../crates/gateway/src/core_runtime/classification/protocol.rs) | [Provider mapping](../../crates/gateway/src/core_runtime/classification/system_one_tests.rs), [protocol/replay tests](../../crates/gateway/src/core_runtime/classification/protocol_tests.rs) |
 | Select a group and execute candidates | [Group policy](../../crates/gateway/src/core_runtime/classification/group_policy.rs), [planner](../../crates/gateway/src/planner.rs), [history](../../crates/gateway/src/agent_turn_history/store.rs) | [Threshold/score isolation](../../crates/gateway/src/core_runtime/classification/group_policy_tests.rs), [group boundaries](../../crates/gateway/src/planning/branch_tests.rs), [multi-turn listener journey](../../tools/e2e-harness/tests/p0_gateway_runtime/decision_branches.rs) |
@@ -46,8 +46,9 @@ explicit route semantic carried by the existing System One wire envelope.
 
 Native authoring and compiled routes carry optional protocol content. Omission
 preserves legacy encoding. The compiler freezes actual fixed questions, effective
-per-scope assessments, thresholds, history cap and digest. Protocol-bound reviews
-sit beside that object so rollback cannot discard its review obligation. Historical
+per-scope assessments, thresholds, history cap and digest. Transition choices live in Preview/Apply and server-composed provenance is sealed
+with the immutable published version, outside editable configuration. Ordinary
+same-protocol edits carry no review state. Historical
 rollback copies only an exact retained rubric and adds no hold or execution-time
 dependency. Supported released inputs retain their existing admission adapters.
 
@@ -74,8 +75,8 @@ interrupted/unknown turns stay in the continuous background suffix; execution
 status and target-score eligibility are separate. The shared immutable
 [native category v1 template](../../crates/domain/src/routing/fixtures/native_category_v1.json)
 feeds compilation and Desktop preview; C transport consumes the frozen decision.
-Frozen standard provenance stays byte-stable, while categorical execution reports
-a custom question shape. C applicability
+Freeze writes custom for categorical shapes before hashing. Legacy native wording
+has [its own current definition](../../crates/domain/src/routing/legacy_category.rs), independent of the C fixture. C applicability
 only gates an otherwise eligible low-score protection opportunity. Invalid or
 unavailable applicability retains that opportunity conservatively; category,
 degree, rubric validity, inheritance and relay retain their separate owners.
@@ -108,13 +109,13 @@ assessments do not enter averages.
 
 [All-decision C summaries](../../crates/observation/src/query_v2/routing_observations.rs)
 read the existing route events and safe-fact projection, independently of stage
-pages and score/model filters. The default-false `include_routing_observations`
-flag preserves released strict facts/quality responses, including nested selection.
+pages and score/model filters. Current observation query v3 includes routing evidence;
+the registered v2 adapter preserves released fields, authorization and cursors.
 [Product presentation](../../apps/desktop/src/features/RoutingObservations.tsx)
 shows counts, denominators, cohorts and coverage; it does not infer accuracy.
-Plan identity alone cannot resolve missing C metadata; mixed retained revisions
-keep partial coverage and unavailable rates until the scope is narrowed or complete
-evidence exists. Content-only deletion retains safe evidence; full fact retention/deletion removes it.
+Every current classifier decision records its protocol. Known non-C decisions stay
+separate, so mixed current scopes retain rates; unmarked historical records and
+projection gaps remain partial. Plan identity alone never proves a protocol. Content-only deletion retains safe evidence; full fact retention/deletion removes it.
 
 The [model row projection](../../apps/desktop/src/features/plan-quality-state.ts)
 associates configured candidates with retained execution by declared position and

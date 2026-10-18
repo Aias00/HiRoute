@@ -373,6 +373,11 @@ impl FrozenNativeProtocolV1 {
         }) {
             return Err(NativeProtocolError::ContentMismatch);
         }
+        if matches!(self.decision, DecisionDefinitionV1::Categorical { .. })
+            && self.scopes.values().any(|scope| scope.standard != "custom")
+        {
+            return Err(NativeProtocolError::ContentMismatch);
+        }
         let degree = |instructions: &str, levels: &[super::OrdinalLevelV1]| {
             !instructions.trim().is_empty()
                 && levels.len() == 2

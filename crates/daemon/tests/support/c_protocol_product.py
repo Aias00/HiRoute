@@ -12,7 +12,6 @@ from publication_product import encoded
 
 C = 'hiroute.system-one-c/v1'
 LEGACY = 'hiroute.system-one-legacy/v1'
-LEGACY_WRAPPER = 'Evaluate only the completed stage from state.visible_conversation[state.assessment_from] through the end. state.latest_user may supply explicit feedback, but is not yet executed.'
 
 
 def digest(value):
@@ -26,15 +25,6 @@ def native_protocol(repository):
     return {'schema': C, 'fixed': {'degree_prefix': 'Assess state.latest_user only, not historical competence.',
             'assessment_wrapper': wrapper, 'applicability': stock['q2']}, 'prior_context_max_turns': 8}, {
             'instructions': 'Distinguish those meanings' + suffix, 'criteria': stock['q1']['criteria']}
-
-
-def review(protocol, judgment, method='reviewed_custom', source=None):
-    question = {'type': 'score', 'instructions': (protocol['fixed']['assessment_wrapper'] if protocol else LEGACY_WRAPPER)
-                + ' ' + judgment['competence']['instructions'], 'criteria': judgment['competence']['criteria']}
-    result = {'protocol': C if protocol else LEGACY, 'assessment_digest': digest(question), 'method': method}
-    if source is not None:
-        result['source'] = source
-    return result
 
 
 def frozen_from(preview):
@@ -67,8 +57,14 @@ def exercise(product, cli, service, endpoint, selection):
     original = copy.deepcopy(smart['judgment'])
     calls = len(endpoint.requests)
 
-    def publish(editor, key):
+    def change_for(editor, choices=None):
         change = plan_change(product, 'update', **editor)
+        if choices:
+            change['assessment_choices'] = choices
+        return change
+
+    def publish(editor, key, choices=None):
+        change = change_for(editor, choices)
         preview = product.preview('routing preview', {'change': change})
         product.apply('routing apply', 'ApplyAgentPlanChange', preview, {'change': change}, key)
         product.stop()
@@ -77,40 +73,63 @@ def exercise(product, cli, service, endpoint, selection):
         saved = cli('routing show ' + product.plan_id)['data']
         return preview, saved
 
+    def unacknowledged(editor, key):
+        change = change_for(editor)
+        pending = product.preview('routing preview', {'change': change})
+        scopes = pending['assessment_transition']['scopes']
+        assert scopes and all(scope['choice'] is None for scope in scopes), pending
+        rejected = cli('routing apply', {'change': change, 'accept_digest': pending['change_digest'],
+            'expected_revisions': pending['expected_revisions'], 'idempotency_key': key}, ok=False)
+        assert rejected['status'] != 'succeeded' and rejected['data']['scope'] == scopes[0]['scope'], rejected
+        return pending
+
     editor = copy.deepcopy(product.editor)
     editor.update(mode='smart_saving', smart=smart)
     _, legacy = publish(editor, 'c-legacy-source')
     legacy_ref = legacy['head']['reference']
     smart['native_protocol'] = protocol
-    smart['judgment']['competence'].update(stock)
-    invalid = plan_change(product, 'update', mode='smart_saving', smart=smart)
-    rejected = cli('routing preview', {'change': invalid}, ok=False)
-    assert rejected['status'] != 'succeeded', 'bare C toggle accepted without scope review'
-    smart['assessment_review'] = {'smart_saving': review(protocol, smart['judgment'], 'stock')}
     editor['smart'] = smart
-    preview, saved = publish(editor, 'c-adopt-reviewed-stock')
+    pending = unacknowledged(editor, 'c-adoption-without-choice')
+    assert pending['assessment_transition']['scopes'][0]['assessment_digest'].startswith('sha256:')
+    # The client supplies only the method. The server composes, hashes and copies the rubric.
+    preview, saved = publish(editor, 'c-adopt-server-stock', {'smart_saving': {'method': 'stock'}})
     frozen = frozen_from(preview)
     assert frozen['protocol'] == protocol
     assert saved['desired']['strategy']['judgment']['degree'] == original['degree']
     assert saved['desired']['strategy']['judgment']['competence']['floor_millis'] == 317
-    # The existing options response remains strict unless this projection is requested.
-    assert 'assessment_sources' not in cli('routing options', {})['data']
-    sources = cli('routing options', {'assessment_review_plan': {'plan_id': product.plan_id,
-                  'revision': saved['head']['head_revision']}})['data']['assessment_sources']
-    source = next(s for s in sources if s['source']['scope'] == 'smart_saving')
-    assert source['source']['plan'] == legacy_ref
-    assert source['instructions'] == original['competence']['instructions']
+    assert saved['desired']['strategy']['judgment']['competence']['instructions'] == stock['instructions']
+    assert 'assessment_review' not in saved['desired']['strategy']
+    assert saved['assessment_transition']['smart_saving']['method'] == 'stock'
+    assert preview['plan_version']['assessment_transition'] == saved['assessment_transition']
+    smart['judgment'] = copy.deepcopy(saved['desired']['strategy']['judgment'])
+    smart['judgment']['competence']['instructions'] += ' Assess the requested deliverable.'
+    ordinary, saved = publish(editor, 'c-ordinary-edit-without-protocol-review')
+    assert 'assessment_transition' not in ordinary and 'assessment_transition' not in saved
+    frozen = frozen_from(ordinary)
 
-    request = {'schema': 'hiroute.classifier-decision-test/v2', 'service_id': service['id'],
-               'service_revision': service['revision'], 'protocol': frozen, 'shape': 'standard'}
+    # Both released and current connectivity calls normalize to one business path.
+    legacy_test = cli('decision services test', {'schema': 'hiroute.classifier-decision-test/v1',
+        'classifier': smart['classifier']})['data']
+    calls += 1
+    assert legacy_test['outcome'] == 'passed' and 'state' not in legacy_test and 'verified_shapes' not in legacy_test
+    connectivity = cli('decision services test', {'schema': 'hiroute.classifier-decision-test/v2',
+        'target': {'kind': 'saved', 'service_id': service['id'], 'service_revision': service['revision']}})['data']
+    calls += 1
+    assert connectivity['state'] == 'verified' and connectivity['verified_shapes'] == ['connectivity']
+    assert connectivity['service_revision'] == service['revision'] and connectivity['model'] == service['connection']['model']
+
+    target = {'kind': 'saved', 'service_id': service['id'], 'service_revision': service['revision'],
+        'protocol': frozen, 'shape': 'standard'}
+    request = {'schema': 'hiroute.classifier-decision-test/v2', 'target': target}
     endpoint.c_vectors = False
     negative = cli('decision services test', request)['data']
     calls += 1
-    assert negative['state'] == 'unsupported', negative
+    assert negative['state'] == 'unsupported' and negative['verified_shapes'] == [], negative
     endpoint.c_vectors = True
     positive = cli('decision services test', request)['data']
     calls += 1
     assert positive['state'] == 'verified' and positive['question_count'] == 3, positive
+    assert set(positive['verified_shapes']) == {'degree', 'historical_assessment', 'applicability'}
     assert positive['service_revision'] == service['revision']
     assert positive['protocol_digest'] == frozen['digest']
     assert positive['endpoint_digest'] == digest(service['connection']['endpoint'])
@@ -118,7 +137,7 @@ def exercise(product, cli, service, endpoint, selection):
     assert set(body['state']) == {'latest_user', 'prior_context', 'assessment_stage', 'history_partial'}
     assert body['state']['assessment_stage'] and len(body['questions']) == 3
     stale = copy.deepcopy(request)
-    stale['service_revision'] = 999
+    stale['target']['service_revision'] = 999
     assert cli('decision services test', stale, ok=False)['status'] != 'succeeded'
     assert len(endpoint.requests) == calls, 'missing saved revision dispatched a request'
 
@@ -127,53 +146,49 @@ def exercise(product, cli, service, endpoint, selection):
         routing_calls = execute_and_inspect(product, endpoint, saved)
         calls += routing_calls
 
-    # Full 16-branch shape is compiled by the product, then tested in one actual call.
     branches = [{'id': f'category-{i}', 'name': f'Category {i}', 'condition': f'Synthetic work {i}',
                  'candidates': [selection], 'primary_candidates': [selection], 'judgment': None} for i in range(16)]
     routing = {'classifier': smart['classifier'], 'branches': branches, 'default_branch_id': branches[0]['id'],
-               'judgment': smart['judgment'], 'native_protocol': protocol,
-               'assessment_review': {'default': review(protocol, smart['judgment'], 'stock')},
-               'reselect_on_user_message': False}
+               'judgment': smart['judgment'], 'native_protocol': protocol, 'reselect_on_user_message': False}
     maximum_change = plan_change(product, 'update', mode='custom_branches', branch_routing=routing)
     maximum = frozen_from(product.preview('routing preview', {'change': maximum_change}))
-    request.update(protocol=maximum, shape='max_branches')
+    assert all(scope['standard'] == 'custom' for scope in maximum['scopes'].values())
+    target.update(protocol=maximum, shape='max_branches')
     result = cli('decision services test', request)['data']
     calls += 1
     assert result['state'] == 'verified' and result['question_count'] == 19, result
-    assert len(endpoint.requests[-1][1]['questions']) == 19
+    assert 'category' in result['verified_shapes'] and len(endpoint.requests[-1][1]['questions']) == 19
 
-    # A C review cannot approve the legacy wrapper. Missing source is explicit/stale.
+    # C suffixes contain no C state-path literal: the transition still requires a choice.
     rollback = copy.deepcopy(smart)
     rollback.pop('native_protocol')
-    invalid = plan_change(product, 'update', mode='smart_saving', smart=rollback)
-    assert cli('routing preview', {'change': invalid}, ok=False)['status'] != 'succeeded'
-    rollback['judgment']['competence'].update(instructions=source['instructions'], criteria=source['criteria'])
-    rollback['assessment_review'] = {'smart_saving': review(None, rollback['judgment'], 'historical', source['source'])}
-    missing = copy.deepcopy(rollback)
-    missing['assessment_review']['smart_saving']['source']['plan']['content_digest'] = 'sha256:' + 'f' * 64
-    invalid = plan_change(product, 'update', mode='smart_saving', smart=missing)
-    rejected = cli('routing preview', {'change': invalid}, ok=False)
-    assert rejected['status'] != 'succeeded' and rejected['error']['code'] == 'CHANGE_PREVIEW_STALE', rejected
     editor['smart'] = rollback
-    _, saved = publish(editor, 'c-restore-exact-retained-rubric')
+    pending = unacknowledged(editor, 'c-rollback-without-choice')
+    scope = pending['assessment_transition']['scopes'][0]
+    source = next(s for s in scope['historical_sources'] if s['source']['scope'] == 'smart_saving')
+    assert source['source']['plan'] == legacy_ref and source['instructions'] == original['competence']['instructions']
+    missing = {'smart_saving': {'method': 'historical', 'source': copy.deepcopy(source['source'])}}
+    missing['smart_saving']['source']['plan']['content_digest'] = 'sha256:' + 'f' * 64
+    rejected = cli('routing preview', {'change': change_for(editor, missing)}, ok=False)
+    assert rejected['status'] != 'succeeded' and rejected['error']['code'] == 'CHANGE_PREVIEW_STALE', rejected
+    assert rejected['data']['scope'] == 'smart_saving'
+    chosen = change_for(editor, {'smart_saving': {'method': 'historical', 'source': source['source']}})
+    rejected = cli('routing apply', {'change': chosen, 'accept_digest': pending['change_digest'],
+        'expected_revisions': pending['expected_revisions'], 'idempotency_key': 'c-changed-choice-stale'}, ok=False)
+    assert rejected['error']['code'] == 'CHANGE_PREVIEW_STALE', rejected
+    _, saved = publish(editor, 'c-restore-exact-retained-rubric', chosen['assessment_choices'])
     restored = saved['desired']['strategy']
-    assert 'native_protocol' not in restored
+    assert 'native_protocol' not in restored and 'assessment_review' not in restored
     assert restored['judgment'] == original, 'rollback altered thresholds or degree text'
-    assert restored['assessment_review']['smart_saving']['source'] == source['source']
-    # After completed rollback, stale provenance can be removed on an ordinary edit.
-    later = copy.deepcopy(rollback)
-    later['judgment']['competence']['instructions'] += ' Assess only the explicitly requested deliverable.'
-    invalid = plan_change(product, 'update', mode='smart_saving', smart=later)
-    assert cli('routing preview', {'change': invalid}, ok=False)['status'] != 'succeeded', 'stale review approved edited text'
-    later.pop('assessment_review')
-    editor['smart'] = later
-    _, saved = publish(editor, 'legacy-edit-with-explicit-review-removal')
-    assert saved['desired']['strategy']['judgment'] == later['judgment']
-    assert 'assessment_review' not in saved['desired']['strategy']
-    assert 'native_protocol' not in saved['desired']['strategy']
+    assert saved['assessment_transition']['smart_saving']['source'] == source['source']
+    rollback['judgment'] = copy.deepcopy(restored['judgment'])
+    rollback['judgment']['competence']['instructions'] += ' Assess only the explicitly requested deliverable.'
+    _, saved = publish(editor, 'legacy-ordinary-edit-without-protocol-review')
+    assert saved['desired']['strategy']['judgment'] == rollback['judgment']
+    assert 'assessment_transition' not in saved
     endpoint.c_vectors = False
-    print(json.dumps({'scenario': 'c-reviewed-adoption-restart-explicit-3-and-19-question-diagnostics-exact-scope-rollback',
-                      'state': 'green', 'explicit_calls': 3, 'routing_calls': routing_calls, 'implicit_calls': 0}), flush=True)
+    print(json.dumps({'scenario': 'server-preview-adoption-same-protocol-edit-restart-legacy-adapter-3-and-19-question-diagnostics-exact-rollback',
+                      'state': 'green', 'explicit_calls': 5, 'routing_calls': routing_calls, 'implicit_calls': 0}), flush=True)
 
 
 def execute_and_inspect(product, endpoint, saved):
@@ -207,16 +222,15 @@ def execute_and_inspect(product, endpoint, saved):
     assert len(endpoint.requests[-1][1]['questions']) == 3, 'required applicability question was omitted'
 
     query = {'plan_id': product.plan_id, 'plan_revision': saved['head']['reference']['content_revision'],
-             'from_ms': started - 1, 'to_ms': int(time.time() * 1000) + 60000, 'limit': 20,
-             'include_routing_observations': True}
+             'from_ms': started - 1, 'to_ms': int(time.time() * 1000) + 60000, 'limit': 20}
     deadline = time.monotonic() + 30
-    def read(options):
+    def read(options, schema='hiroute.observation.query/v3'):
         # Ingestion can advance generation after a read transaction commits. A
         # fresh first page may then report stale; never retry other errors or an
         # old cursor, and keep the original acceptance deadline.
         assert not options.get('cursor')
         while True:
-            result = product.control('GetPlanQualitySamples', {'schema': 'hiroute.observation.query/v2',
+            result = product.control('GetPlanQualitySamples', {'schema': schema,
                 'intent': {'view': 'plan_quality', 'query': options}}, success=False)
             error = result.get('error')
             if error is None:
@@ -239,8 +253,8 @@ def execute_and_inspect(product, endpoint, saved):
     assert counts['suppressed_per_opportunity'] == 1.0 and counts['suppressed_per_c_decision'] == 0.5, counts
     filtered = read({**query, 'model_configuration_id': 'model/no-matching-execution'})
     assert filtered['samples'] == [] and filtered['routing_observations'] == summary
-    strict = read({**query, 'include_routing_observations': False})
-    assert 'routing_observations' not in strict
+    strict = read(query, schema='hiroute.observation.query/v2')
+    assert 'schema' not in strict and 'routing_observations' not in strict
     assert all('routing_observation' not in (sample.get('selection') or {}) for sample in strict['samples'])
     endpoint.c_score, endpoint.c_applicability = 1.0, 0.75
     print(json.dumps({'scenario': 'c-real-gateway-to-retained-product-observations', 'state': 'green',

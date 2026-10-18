@@ -95,10 +95,9 @@ impl AgentPlanAuthoringV2 {
                     scopes.insert("default".into(), &routing.judgment);
                 }
                 scopes.extend(
-                    routing
-                        .branches
-                        .iter()
-                        .filter_map(|b| b.judgment.as_ref().map(|j| (b.id.clone(), j))),
+                    routing.branches.iter().filter_map(|b| {
+                        b.judgment.as_ref().map(|j| (format!("branch/{}", b.id), j))
+                    }),
                 );
                 scopes
             }
@@ -162,7 +161,7 @@ fn set_assessment(
                 routing
                     .branches
                     .iter_mut()
-                    .find(|b| b.id == scope)
+                    .find(|b| scope.strip_prefix("branch/") == Some(b.id.as_str()))
                     .and_then(|b| b.judgment.as_mut())
                     .ok_or_else(|| review_error(scope, "missing independent scope"))?
             }

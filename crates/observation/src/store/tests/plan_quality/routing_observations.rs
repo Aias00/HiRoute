@@ -282,7 +282,7 @@ fn known_current_non_c_protocol_keeps_mixed_revision_rates_complete() {
             "sequence {sequence}: {verdict:?}"
         );
     }
-    let mut q = query(None);
+    let q = query(None);
     let report = store
         .observed_plan_quality_samples(&reader(), &q, 5000)
         .unwrap()
@@ -310,4 +310,57 @@ fn known_current_non_c_protocol_keeps_mixed_revision_rates_complete() {
     assert_eq!(c.suppressed_per_opportunity, Some(1.0));
     assert_eq!(c.unavailable_per_requested, Some(0.0));
     assert_eq!(c.suppressed_per_c_decision, Some(1.0));
+}
+
+#[test]
+fn unmarked_historical_projection_with_known_plan_still_withholds_rates() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = open_store(directory.path());
+    let fixture = Fixture::new("unmarked-protocol");
+    let channel = fact_channel(&fixture, 1024 * 1024);
+    let writer = writer(&store);
+    for (sequence, is_c) in [(1, true), (2, false)] {
+        let mut request = fixture.clone();
+        request.request = LogicalRequestId::parse(format!("unmarked-request-{sequence}")).unwrap();
+        let mut fact = route_decision(PLAN);
+        let ExecutionFactV1::RouteDecision(route) = &mut fact else {
+            unreachable!()
+        };
+        let decision = route.complexity.as_mut().unwrap();
+        if is_c {
+            decision.decision_protocol = Some(DecisionProtocolV1::SystemOneC);
+            decision.routing_observation = Some(observation(3));
+        }
+        assert!(matches!(
+            offer_fact(&writer, &channel, request.fact(sequence, fact, 1000)),
+            WriterCycleOutcome::Ack(_)
+        ));
+    }
+    // Emulate only an older derived safe projection; immutable producer events stay intact.
+    store.connection.lock().execute("UPDATE observation_safe_facts_v2 SET body_json=json_remove(body_json,'$.decision_protocol') WHERE json_extract(body_json,'$.decision_protocol')='local_rules'", []).unwrap();
+    let summary = store
+        .observed_plan_quality_samples(&reader(), &query(None), 5000)
+        .unwrap()
+        .routing_observations
+        .unwrap();
+    assert_eq!(
+        (
+            summary.retained_decisions,
+            summary.known_non_c_decisions,
+            summary.legacy_or_unknown_decisions,
+            summary.unknown_scope_decisions
+        ),
+        (2, 0, 1, 0)
+    );
+    assert_eq!(summary.coverage, "partial");
+    let counts = &summary.cohorts[0].counts;
+    assert_eq!(
+        (
+            counts.requested,
+            counts.gate_opportunities,
+            counts.suppressed
+        ),
+        (1, 1, 1)
+    );
+    assert_eq!(counts.suppressed_per_opportunity, None);
 }

@@ -326,3 +326,66 @@ fn protocol_transitions_use_choices_without_client_hashes_and_same_protocol_edit
         matches!(preview_assessment_transition(&later, Some(&before), None, &[], &invalid), Err(NativeProtocolError::HistoricalUnavailable {scope}) if scope == SMART_SAVING_SCOPE_ID)
     );
 }
+
+#[test]
+fn independent_category_named_default_cannot_replace_the_inherited_default_scope() {
+    use crate::*;
+    let mut value = editor();
+    value.mode = PlanEditorMode::CustomBranches;
+    let mut routing = BranchRoutingV1 {
+        native_protocol: Some(NativeProtocolV1::default()),
+        classifier: ComplexityClassifierModeV1::DecisionService {
+            service: Box::new(DecisionServiceV1 {
+                id: "scope-fixture".into(),
+                revision: 1,
+                name: "Fixture".into(),
+                connection: DecisionConnectionV1::SystemOne {
+                    provider: "compatible".into(),
+                    model: "fixture".into(),
+                    endpoint: "https://decision.example/systemone".into(),
+                    timeout_ms: 3000,
+                    auth_header: ClassifierAuthHeaderV1 {
+                        name: "Authorization".into(),
+                        value_secret_ref: "scope-fixture".into(),
+                    },
+                },
+            }),
+        },
+        branches: vec![],
+        default_branch_id: "code".into(),
+        judgment: JudgmentSettingsV1::default(),
+        reselect_on_user_message: false,
+    };
+    for id in ["default", "code"] {
+        routing.branches.push(RouteBranchV1 {
+            id: id.into(),
+            name: id.into(),
+            condition: format!("Handle {id}"),
+            candidates: value.candidates.clone(),
+            primary_candidates: vec![],
+            judgment: (id == "default").then(JudgmentSettingsV1::default),
+        });
+    }
+    value.branch_routing = Some(routing);
+    let (_, pending) =
+        preview_assessment_transition(&value, None, None, &[], &Default::default()).unwrap();
+    assert_eq!(
+        pending
+            .scopes
+            .iter()
+            .map(|s| s.scope.as_str())
+            .collect::<Vec<_>>(),
+        vec!["branch/default", "default"]
+    );
+    let choices = std::collections::BTreeMap::from([(
+        "default".into(),
+        AssessmentChoiceV1 {
+            method: AssessmentAdoptionV1::Stock,
+            source: None,
+        },
+    )]);
+    let (_, pending) = preview_assessment_transition(&value, None, None, &[], &choices).unwrap();
+    assert!(
+        matches!(pending.require_acknowledged(),Err(NativeProtocolError::Review{scope,..}) if scope=="branch/default")
+    );
+}

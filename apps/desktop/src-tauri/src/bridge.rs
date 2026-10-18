@@ -318,36 +318,12 @@ pub async fn plan_editor_transition_preview(
     input: EditorInput,
 ) -> Result<hiroute_application_api::PlanContentPreviewV2, DesktopFailure> {
     main_window(&window)?;
-    use hiroute_application_api::*;
-    let target = match input.plan_id {
-        Some(id) => PlanContentTargetV2::Update {
-            plan_id: hiroute_domain::AgentPlanId::parse(id).map_err(|_| "EDITOR_INVALID")?,
-            expected_head_revision: input.expected_head_revision.ok_or("EDITOR_INVALID")?,
-        },
-        None => PlanContentTargetV2::Create {
-            creation_key: input.draft_id.clone(),
-        },
-    };
-    let change = PlanContentChangeV2 {
-        schema: PLAN_CONTENT_CHANGE_SCHEMA_V2.into(),
-        target,
-        editor: input.editor,
-        consumed_draft: input
-            .expected_draft_revision
-            .map(|revision| PlanDraftRefV1 {
-                draft_id: input.draft_id,
-                revision,
-            }),
-        assessment_choices: input.assessment_choices,
-    };
     let guard = state.0.lock().await;
-    let session = guard.as_ref().ok_or("RESIDENT_UNAVAILABLE")?;
-    crate::session::query(
-        &session.client,
-        "PreviewAgentPlanChange",
-        &PlanContentPreviewRequestV2 { change },
-    )
-    .await
+    guard
+        .as_ref()
+        .ok_or("RESIDENT_UNAVAILABLE")?
+        .preview_editor_transition(&input)
+        .await
 }
 #[tauri::command]
 pub async fn plan_editor_options(

@@ -1,24 +1,24 @@
 # Session content search
 
-`facts` and `plan_quality` also accept the default-false
-`include_routing_observations` flag. Omitted/false preserves the released field set,
-including nested stage selection. True projects bounded C decision detail from
-existing safe facts; plan quality adds `routing_observations` from all matching
-retained decision events in the authorized Plan/revision/session/time scope.
-Model/score filters and stage pagination do not change that population. Cohorts
-separate protocol/content/bundle, scope/standard, thresholds and provider/model.
-Counts distinguish actual third-question requests/unavailability, omissions,
-inheritance, internal missing-question anomalies, protection opportunities and
-suppression. Rates are absent for zero denominators or incomplete coverage.
-Coverage reports unknown/legacy scope, missing projections and bounded reads.
-Content-only deletion retains this safe evidence; full fact deletion/expiry removes
-it through existing retention. No new storage/query/permission surface is added.
-See [the contract](../../../../issue-spec/specs/session-history/spec.md) and
-[all-decision query](routing_observations.rs). The remaining sections describe the
-independent session-search contract.
+Current `hiroute.observation.query/v3` includes routing detail in facts and
+plan-quality results (`hiroute.observation.facts/v3` and
+`hiroute.plan-quality.samples/v2`). The registered released v2 adapter retains
+its strict field set, authorization digest and original cursor bindings; cursors
+cannot cross versions. There is no projection opt-in flag.
 
-`session_search` is the Desktop conversation-search intent on the protected V2
-observation transport. It uses the existing search filters and returns one
+Statistics cover all retained matching decisions in the authorized scope,
+independently of stage pagination and model/score filters. Each current classifier
+decision records C, native legacy, custom-extension v1 or local rules. Known non-C
+counts stay separate from C denominators. Unmarked historical events, unknown
+scope, missing projections and bounded scans withhold rates while preserving counts.
+Content-only deletion retains safe evidence; full fact deletion/expiry removes it
+through existing retention, without a new table, migration, view or permission.
+See [the contract](../../../../issue-spec/specs/session-history/spec.md) and
+[all-decision query](routing_observations.rs). The remaining sections describe
+independent session search.
+
+`session_search` is the Desktop conversation-search intent on the existing protected
+observation operation. It uses the existing search filters and returns one
 `ObservationTextAnchorV2` per matching session, newest matching request first,
 then session ID ascending. Within that request it chooses the first matching
 content occurrence/block. `limit` counts sessions, and `next_cursor` means there

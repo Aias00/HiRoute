@@ -610,7 +610,7 @@ session timeline (a session ID or v1 receipt ID is a different locator):
 
 ```json
 {
-  "schema": "hiroute.observation.query/v2",
+  "schema": "hiroute.observation.query/v3",
   "intent": {
     "view": "facts",
     "query": {"request_id": "REQUEST_ID_FROM_TIMELINE", "limit": 100, "cursor": null}
@@ -642,7 +642,7 @@ Current normal-argument calls also opt into `routing_observations`: all retained
 matching C decisions, separate requested/unavailable/omitted/inherited/anomaly
 counts, historical protection opportunities and suppression, with exact cohorts
 and coverage. Zero denominators or coverage gaps have unavailable rates. Existing
-structured requests that omit `include_routing_observations` retain the prior
+released v2 structured requests retain the prior
 response field set. Content-only deletion retains safe evidence; full fact deletion
 and retention remove it. These rates do not establish accuracy or model quality.
 
@@ -893,56 +893,54 @@ Test the exact saved r1, rather than an unsaved draft or whichever version happe
 jq -e --arg id decision-main --argjson revision 1 \
   '[.data.services[] | select(.id==$id and .revision==$revision)] |
    if length == 1 then
-     {schema:"hiroute.classifier-decision-test/v1",
-      classifier:{kind:"decision_service",service:.[0]}}
+     {schema:"hiroute.classifier-decision-test/v2",
+      target:{kind:"saved",service_id:.[0].id,service_revision:.[0].revision}}
    else error("Expected saved connection revision is not in this list") end' \
   decision-saved.json > decision-test-request.json
 
 hiroute decision services test --request-stdin --output json < decision-test-request.json
 ```
 
-The fixed synthetic test may consume quota. Check `data.outcome` and `data.failure_code`,
+The fixed synthetic test may consume quota. Check `data.state`, `data.verified_shapes` and `data.failure_code`,
 not only the CLI exit code. It tests that saved connection's transport and required response
 fields, reads no real conversation, runs no execution model and produces no competence sample.
 A pass is not a task-quality or continuing-health guarantee. Saving a connection and testing
 it are separate actions; neither publishes a route.
 
-Native C is an explicit route option. In `smart` or `branch_routing`,
-`native_protocol` contains the actual versioned fixed bundle and background cap;
-`assessment_review` separately binds each effective scope to its destination
-protocol and complete composed assessment digest. Use the generated
-[editor schema](../contracts/cli/plan-editor.v2.schema.json) and the
-[adoption/rollback guide](smart-saving-model-classification.md). Omitting both
-members preserves legacy behavior. A protocol name alone is insufficient.
+Historical problem applicability is an explicit route option. In `smart` or
+`branch_routing`, `native_protocol` contains the actual versioned fixed bundle and
+background cap. Omission retains legacy behavior; global creation defaults remain
+unchanged. See the [editor schema](../contracts/cli/plan-editor.v2.schema.json) and
+[adoption/rollback guide](smart-saving-model-classification.md).
 
-C background keeps the newest contiguous bounded safe turns, including interrupted
-or unknown execution statuses. Their status is preserved and does not certify a
-complete scored stage. Published category/degree templates are versioned content;
-execution uses the frozen questions even if current defaults change. Categorical
-requests report a custom effective question shape, including when the underlying
-wording came from stock C; this is not the original experimental condition.
+Use the existing Preview/Apply flow. Preview the destination editor, then inspect
+`data.assessment_transition.scopes`: each affected scope has a server-composed
+question, three criteria, digest and available historical sources. In the change,
+set `assessment_choices` by scope (`smart_saving`, effective `default`, or
+`branch/<stable-category-id>` for independent overrides) to `{method:"stock"}`, `{method:"reviewed_custom"}`
+or `{method:"historical",source:<exact source returned by Preview>}`. Preview again,
+review the final text, and Apply with that response's `change_digest` and
+`expected_revisions`. No client-side review hashing is required. Stock/history
+choices copy only assessment instructions/criteria and preserve thresholds,
+degree/category definitions and other edits. Missing choices or unavailable
+sources identify the scope; changing choices/content invalidates the old Preview.
 
-A rollback requires a fresh destination-specific review in every effective scope.
-After it has completed, an ordinary legacy edit can explicitly remove retained
-`assessment_review` provenance. Omit the member after removing its last scope;
-keeping an obsolete review causes validation to fail. Removal never approves an
-unreviewed rollback.
+The immutable published version keeps `assessment_transition`, inspectable through
+`routing show`. Editor state contains no review record. Ordinary edits within the
+same protocol need no protocol re-review. Rollback requires an explicit choice per
+effective scope, including when the old suffix contains no state-path literal.
+Historical choices are returned by Preview, without a separate options flag.
 
-
-The existing test command also accepts
-[C capability V2](../contracts/cli/classifier-decision-test.v2.schema.json):
-`schema`, exact saved `service_id`/`service_revision`, the frozen `protocol` from
-`routing preview`'s `data.plan_version.compiled.request.native_protocol`, and
-`shape` (`standard` or `max_branches`). Maximum shape requires sixteen dual-group
-categories and tests nineteen questions. It sends one synthetic request through
-production construction/transport/parsing. Inspect `data.state`, content identity,
-shape and question count; V1 connectivity success does not establish C support.
-Results are evidence for that exact test, without persistence or implicit probes.
-
-`routing options` can explicitly request `assessment_review_plan: {plan_id,
-revision}` to return available exact historical rubric sources. The existing
-response omits `assessment_sources` unless requested. Selection pins the exact
-source in the reviewed change; Apply fails if it is no longer available.
+The [one current diagnostic request](../contracts/cli/classifier-decision-test.v2.schema.json)
+uses `target:{kind:"value",classifier:...}` for unsaved connectivity, or
+`target:{kind:"saved",service_id,service_revision}` for an exact saved revision.
+Adding both frozen `protocol` and `shape` (`standard` or `max_branches`) to the saved
+target tests historical problem applicability. Maximum shape requires sixteen
+dual-group categories and nineteen questions in one request. Inspect
+`data.verified_shapes`, state and exact content identity; connectivity success alone
+does not establish applicability support. Released v1 calls use an explicit adapter
+and retain their original `outcome`/`failure_code` result. Each explicit test sends
+one synthetic request and may consume quota; saving/publication never probes.
 
 Plans use the existing `routing preview/apply` transaction with `hiroute.plan-editor/v2`:
 

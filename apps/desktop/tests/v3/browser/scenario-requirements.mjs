@@ -51,6 +51,8 @@ export const focusedRequirements = {
 
 export const productShellRequired = [
   'desktop.routing.c-scope-review',
+  'desktop.routing.same-protocol-edit',
+  'desktop.routing.c-cross-mode-rollback',
   'desktop.quality.c-observations',
   'desktop.routing.additional-budget-consumers',
   'desktop.models.subscription-scan.recommended-login',

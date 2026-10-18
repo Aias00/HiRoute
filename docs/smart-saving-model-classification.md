@@ -35,52 +35,57 @@ Category conditions, degree criteria and assessment criteria are separate inputs
 Existing plan/session views show actual group/model/profile, frozen thresholds and selection reasons
 separately from latest competence. Draft edits cannot reinterpret published evidence.
 
-For a built-in decision connection, **Decision protocol → C** explicitly enables
-historical-problem applicability on that route. Existing routes and global creation
-defaults retain their protocol. For each effective assessment scope, adopt the stock
-C assessment or retain/edit a custom standard, expand its complete composed question
-and three criteria, then confirm the review. Independent branch overrides are reviewed
-separately. Adoption preserves degree/category text, candidates and numeric thresholds.
-C still defaults to simple probability 0.8 and competence floor 0.5.
+For a built-in decision connection, choose **Historical problem applicability** on
+that route. This temporary authoring selector changes the draft only; existing
+routes and global creation defaults retain their behavior. On publication, Preview
+lists every transitioning assessment scope with the complete server-composed
+question and three criteria. Choose the destination default, review and retain
+custom text, or restore a retained historical standard when rolling back. Check
+the final Preview and confirm publication. Independent overrides have stable scope
+IDs; inherited branches share the effective default. The server copies only the
+selected assessment text/criteria, preserving thresholds and unrelated settings.
+Simple probability defaults to 0.8 and competence floor to 0.5.
 
-C supplies separate `prior_context`, `assessment_stage` and `latest_user` sections.
-Background defaults to at most eight turns before the actual assessed stage; the
-complete stage can be longer. Bounded interrupted/unknown background turns retain
-their user requirements and recorded status; they do not certify a complete scored
-stage. Published questions remain frozen when current defaults change. Zero background warns that earlier requirements and
-references are absent. If the wire budget trims the target, the third question is
-omitted and the partial score cannot trigger historical protection. Current input
-is never silently truncated. Tool-result bodies are not added.
+Review provenance belongs to that immutable published revision and is available
+through Plan reads. Editor state carries no review record or removal action.
+Ordinary edits within the same protocol need no protocol re-review. New scopes and
+protocol rollback still require explicit choices; mode/draft changes cannot approve
+them. Missing/reclaimed history disables only historical restoration. Incompatible
+context references and dangling stock applicability text produce scope diagnostics.
+Published execution remains frozen when current defaults change or the temporary
+selector is eventually retired.
 
-For an otherwise valid historical low-score protection opportunity, C retains that
-protection when applicability is at least 0.5, and suppresses it below 0.5. An
-unavailable answer retains protection conservatively. This does not override a
-complex current task, transfer old scores or change same-turn availability relay.
+The applicability protocol supplies separate `prior_context`, `assessment_stage`
+and `latest_user`. Background defaults to eight whole turns before the actual
+assessed stage, preserving bounded interrupted/unknown turns and their status.
+The complete stage can be longer. Zero background warns that earlier requirements
+and references are absent. Wire-budget trimming marks the target partial and
+omits the third question without refilling history; partial scores cannot trigger
+historical protection. Current input is never silently truncated; tool-result bodies
+are excluded.
 
-**Test this route's C capability** sends one synthetic request using the exact saved
-connection and frozen route content. Connection details also offer the full
-nineteen-question shape. Missing evidence reads **Not tested in this session**;
-changing the connection/content/shape invalidates it. The existing connection test
-does not establish C support. Saving and publishing remain available without a
-test, and neither action probes a provider.
+For an otherwise eligible historical low-score protection opportunity, applicability
+at least 0.5 retains protection and a lower value suppresses it. Unavailable answers
+retain protection conservatively. Attribution, version, category, score/rubric
+validity, same-turn inheritance and availability relay retain their existing rules.
 
-Switching back requires a new assessment choice and review under the legacy wrapper:
-restore an available retained pre-C rubric from the same stable scope, adopt the
-legacy default, or review custom text. Unavailable/reclaimed history disables only
-historical restoration. Rollback publishes a new revision and preserves old C evidence.
-After rollback has completed, **Remove this review record** lets a later ordinary
-legacy edit discard obsolete review provenance without changing the rubric or
-thresholds. Keeping a review requires it to match the current composition. The
-removal action cannot approve an unfinished rollback. An ordinary legacy scope
-without a retained review does not need a new review because another independent
-scope or parked default has one; removing one record preserves the others.
-Plan/session quality includes opt-in C counts and coverage, using all retained matching
-decisions rather than stage-opening samples. A retained decision with Plan identity
-but no C metadata still leaves coverage incomplete; known counts remain visible,
-while exact rates are unavailable. Narrow the revision/time scope when needed.
-Categorical C requests use a custom question shape, even with stock base wording;
-**Stock wording** does not claim the original experimental condition. These rates
-describe behavior, not quality.
+Each context offers one explicit diagnostic action with a selected shape. A saved
+revision can test connectivity or historical problem applicability, including the
+nineteen-question maximum. Route tests use the exact frozen route content.
+**Not tested in this session** remains visible without evidence; changing
+connection/content/shape discards it. Results state the verified shapes. Each test
+sends one synthetic request and may consume provider quota. Saving and publishing
+remain available without testing and never probe implicitly.
+
+Plan/session quality includes counts from all retained matching decisions,
+independent of stage pages and score/model filters. Current events mark all four
+classifier protocols; known non-applicability decisions are counted separately and
+do not make mixed scopes partial. Unmarked old events, missing projections and
+bounded scans remain coverage gaps: counts stay visible, while exact rates are
+unavailable. Content-only deletion keeps safe evidence; full fact deletion/expiry
+removes it. Categorical requests seal a custom standard before hashing; only the
+exact stock ordinal question/criteria shape is labelled default. Rates describe
+routing behavior and do not claim accuracy or quality improvement.
 
 The CLI keeps `decision services list/apply/test` and the existing routing preview/apply workflow.
 Editor data uses `smart.judgment`, or `branch_routing.judgment` with branch `primary_candidates` and optional

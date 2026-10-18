@@ -376,3 +376,36 @@ fn c_omission_reasons_survive_final_group_policy_without_creating_protection() {
         assert_eq!(result.decision.execution_group, ExecutionGroupV1::Regular);
     }
 }
+
+#[test]
+fn not_dispatched_is_unrated_while_observed_no_target_remains_no_target() {
+    use hiroute_domain::{
+        ApplicabilityReasonV1 as R, HistoricalProtectionActionV1 as A, ProtectionEligibilityV1 as E,
+    };
+    let input = c_input();
+    for (eligibility, reason) in [
+        (E::Unrated, R::DispatchNotStarted),
+        (E::NoTarget, R::NoTarget),
+    ] {
+        let mut result = outcome(&input, Some(0.9), None);
+        let mut observation = hiroute_domain::RoutingObservationV1::not_dispatched(
+            native_protocol(&input).unwrap(),
+            "code",
+        );
+        observation.eligibility = eligibility;
+        observation.applicability_reason = reason;
+        result.decision.routing_observation = Some(observation);
+        apply(&input, &history(), &mut result);
+        assert_eq!(result.decision.execution_group, ExecutionGroupV1::Regular);
+        let observed = result.decision.routing_observation.unwrap();
+        assert_eq!(
+            (
+                observed.eligibility,
+                observed.applicability_reason,
+                observed.protection_action
+            ),
+            (eligibility, reason, A::NotConsidered)
+        );
+        assert!(observed.score.is_none() && !observed.applicability_requested);
+    }
+}

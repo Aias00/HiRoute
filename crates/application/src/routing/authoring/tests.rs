@@ -386,3 +386,147 @@ fn ordinary_publication_confirmation_binds_edit_target_versions_and_draft_intent
         plan_content_confirmation_digest(&with_draft, &revisions).unwrap()
     );
 }
+
+#[test]
+fn transition_preview_seals_server_rubric_outside_editor_and_preserves_old_digest() {
+    let mut change = change();
+    let mut state = state();
+    let service = DecisionServiceV1 {
+        id: "decision/preview".into(),
+        revision: 1,
+        name: "Preview fixture".into(),
+        connection: DecisionConnectionV1::SystemOne {
+            provider: "compatible".into(),
+            model: "fixture".into(),
+            endpoint: "https://decision.example/systemone".into(),
+            timeout_ms: 3000,
+            auth_header: ClassifierAuthHeaderV1 {
+                name: "Authorization".into(),
+                value_secret_ref: "decision/preview".into(),
+            },
+        },
+    };
+    change.editor.mode = PlanEditorMode::SmartSaving;
+    change.editor.smart.classifier = ComplexityClassifierModeV1::DecisionService {
+        service: Box::new(service.clone()),
+    };
+    change.editor.smart.economy = change.editor.candidates.clone();
+    change.editor.smart.primary = change.editor.candidates.clone();
+    state.decision_service = Some(service);
+    let legacy = preview_plan_content(&change, &state).unwrap();
+    assert!(legacy.assessment_transition.is_none());
+    assert_eq!(
+        legacy.change_digest,
+        plan_content_confirmation_digest(&change, &state.expected_revisions).unwrap()
+    );
+    let base_digest = CanonicalDigest::of(&(
+        PLAN_VERSION_SCHEMA_V1,
+        &state.workspace,
+        &legacy.plan_version.configuration,
+        &StoredPlanV1::freeze(&legacy.plan_version.compiled).unwrap(),
+    ))
+    .unwrap();
+    assert_eq!(
+        base_digest, legacy.plan_version.reference.content_digest,
+        "released absent-metadata identity stays exact"
+    );
+    state.previous_configuration = Some(legacy.plan_version.configuration);
+    state.current_head = Some(legacy.plan_head.clone());
+    state
+        .aliases
+        .allocate_named(
+            legacy.plan_head.reference.plan_id.clone(),
+            change.editor.display_name.as_str(),
+        )
+        .unwrap();
+    change.target = PlanContentTargetV2::Update {
+        plan_id: legacy.plan_head.reference.plan_id,
+        expected_head_revision: legacy.plan_head.head_revision,
+    };
+    change.editor.smart.native_protocol = Some(NativeProtocolV1::default());
+    let pending = preview_plan_content(&change, &state).unwrap();
+    assert!(
+        pending
+            .assessment_transition
+            .unwrap()
+            .require_acknowledged()
+            .is_err()
+    );
+    change.assessment_choices.insert(
+        SMART_SAVING_SCOPE_ID.into(),
+        AssessmentChoiceV1 {
+            method: AssessmentAdoptionV1::Stock,
+            source: None,
+        },
+    );
+    let ready = preview_plan_content(&change, &state).unwrap();
+    let records = ready.plan_version.assessment_transition.as_ref().unwrap();
+    assert_eq!(
+        records[SMART_SAVING_SCOPE_ID].assessment_digest,
+        ready.assessment_transition.as_ref().unwrap().scopes[0].assessment_digest
+    );
+    assert_eq!(
+        records[SMART_SAVING_SCOPE_ID].from_protocol.as_deref(),
+        Some(SYSTEM_ONE_LEGACY)
+    );
+    assert!(
+        serde_json::to_value(&ready.plan_version.configuration).unwrap()["strategy"]
+            .get("assessment_review")
+            .is_none()
+    );
+    let reopened: PlanVersionV1 =
+        serde_json::from_slice(&serde_json::to_vec(&ready.plan_version).unwrap()).unwrap();
+    reopened.validate().unwrap();
+    let mut tampered = reopened.clone();
+    tampered
+        .assessment_transition
+        .as_mut()
+        .unwrap()
+        .get_mut(SMART_SAVING_SCOPE_ID)
+        .unwrap()
+        .method = AssessmentAdoptionV1::ReviewedCustom;
+    assert!(tampered.validate().is_err());
+    state.previous_configuration = Some(reopened.configuration.clone());
+    state.current_head = Some(ready.plan_head.clone());
+    change.editor = reopened.configuration.editor(None).unwrap();
+    change.target = PlanContentTargetV2::Update {
+        plan_id: ready.plan_head.reference.plan_id,
+        expected_head_revision: ready.plan_head.head_revision,
+    };
+    change.assessment_choices.clear();
+    change
+        .editor
+        .smart
+        .judgment
+        .competence
+        .instructions
+        .push_str(" Review the requested deliverable.");
+    let ordinary = preview_plan_content(&change, &state).unwrap();
+    assert!(
+        ordinary.assessment_transition.is_none()
+            && ordinary.plan_version.assessment_transition.is_none()
+    );
+    change.editor.smart.native_protocol = None;
+    let rollback = preview_plan_content(&change, &state).unwrap();
+    assert!(
+        rollback
+            .assessment_transition
+            .unwrap()
+            .require_acknowledged()
+            .is_err()
+    );
+    change.assessment_choices.insert(
+        SMART_SAVING_SCOPE_ID.into(),
+        AssessmentChoiceV1 {
+            method: AssessmentAdoptionV1::Stock,
+            source: None,
+        },
+    );
+    let restored = preview_plan_content(&change, &state).unwrap();
+    assert_eq!(
+        restored.plan_version.configuration.assessment_scopes()[SMART_SAVING_SCOPE_ID]
+            .competence
+            .instructions,
+        JudgmentSettingsV1::default().competence.instructions
+    );
+}

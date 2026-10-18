@@ -170,3 +170,39 @@ pub fn observation_wire_value(
     }
     Ok(value)
 }
+
+#[cfg(test)]
+mod wire_tests {
+    use super::*;
+    #[test]
+    fn legacy_adapter_preserves_typed_authorization_payload_and_current_uses_v3() {
+        let old = serde_json::json!({"schema":"hiroute.observation.query/v2","intent":{"view":"facts","query":{"request_id":"request/retained","limit":1,"cursor":null}}});
+        let (current, version) = decode_observation_read(old.clone()).unwrap();
+        assert_eq!(version, ObservationWireVersion::LegacyV2);
+        assert_eq!(observation_wire_value(&current, version).unwrap(), old);
+        assert_eq!(current.operation(), "GetRoutingReceipt");
+        assert_eq!(current.protected_operation(), "ReadSessionFactsV2");
+        let new = observation_wire_value(&current, ObservationWireVersion::Current).unwrap();
+        assert_eq!(new["schema"], "hiroute.observation.query/v3");
+        assert_ne!(
+            hiroute_domain::CanonicalDigest::of(&new).unwrap(),
+            hiroute_domain::CanonicalDigest::of(&old).unwrap()
+        );
+        assert_eq!(
+            decode_observation_read(new).unwrap().1,
+            ObservationWireVersion::Current
+        );
+        for schema in [
+            "hiroute.observation.query/v2",
+            "hiroute.observation.query/v3",
+        ] {
+            let mut flagged = old.clone();
+            flagged["schema"] = schema.into();
+            flagged["intent"]["query"]["include_routing_observations"] = true.into();
+            assert!(
+                decode_observation_read(flagged).is_err(),
+                "unreleased projection flags have no support adapter"
+            );
+        }
+    }
+}

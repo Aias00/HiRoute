@@ -152,7 +152,7 @@ impl ApplicationService {
             model: None,
             protocol_digest: None,
             shape: None,
-            question_count: 2,
+            question_count: 3,
             tested_at_unix_ms: tested_at,
             duration_millis: result.duration_millis.unwrap_or(0),
         };

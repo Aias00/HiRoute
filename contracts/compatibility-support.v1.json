@@ -1136,6 +1136,7 @@
             "contracts/cli/planned-manifest.v1.json",
             "crates/application-api/src/classifier_diagnostic.rs",
             "crates/cli/src/control_plane.rs",
+            "crates/daemon/tests/support/c_protocol_product.py",
             "crates/daemon/tests/support/decision_services_product.py",
             "crates/daemon/tests/support/windows_decision_business.rs",
             "docs/standalone-cli.md",

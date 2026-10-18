@@ -76,10 +76,11 @@ fn frozen() -> Value {
 
 pub(super) fn files() -> [(&'static str, String); 2] {
     let shape = json!({"enum":["standard","max_branches"]});
-    let saved = object(
+    let mut saved = object(
         &["kind", "service_id", "service_revision"],
         json!({"kind":{"const":"saved"}, "service_id":text(), "service_revision":{"type":"integer","minimum":1}, "protocol":frozen(),"shape":shape}),
     );
+    saved["dependentRequired"] = json!({"protocol":["shape"],"shape":["protocol"]});
     let value = object(
         &["kind", "classifier"],
         json!({"kind":{"const":"value"},"classifier":super::plan_authoring::classifier_definition()["oneOf"][1].clone()}),

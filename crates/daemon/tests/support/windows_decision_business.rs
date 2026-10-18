@@ -181,13 +181,13 @@ fn test_c(product: &InstalledProduct, service: &Value, maximum: bool, expected: 
         j.degree.definition().into()
     };
     let frozen = FrozenNativeProtocolV1::freeze(&p, decision, scopes).unwrap();
-    let request = json!({"schema":"hiroute.classifier-decision-test/v2","service_id":service["id"],"service_revision":service["revision"],"protocol":frozen,"shape":if maximum {"max_branches"} else {"standard"}});
+    let request = json!({"schema":"hiroute.classifier-decision-test/v2","target":{"kind":"saved","service_id":service["id"],"service_revision":service["revision"],"protocol":frozen,"shape":if maximum {"max_branches"} else {"standard"}}});
     let tested = cli(product, &["decision", "services", "test"], Some(&request));
     assert_eq!(tested["data"]["state"], expected);
     assert_eq!(tested["data"]["service_revision"], service["revision"]);
     assert_eq!(
         tested["data"]["protocol_digest"],
-        request["protocol"]["digest"]
+        request["target"]["protocol"]["digest"]
     );
     assert_eq!(
         tested["data"]["question_count"],
