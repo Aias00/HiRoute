@@ -1,5 +1,5 @@
 {
-  "descriptor_digest": "sha256:b8cc3234b330839d063d5e7be0b5bd0153558839c538eb770d01355bc1fc6b71",
+  "descriptor_digest": "sha256:e84faca0f6f1f3e34921f0e305fdf722a3928f1d195ba4bc43a2b712084a1db6",
   "expected_red_reasons": [],
   "planned_commands": [
     "console.open",
@@ -32,6 +32,7 @@
     "compute.list",
     "compute.show",
     "compute.refresh",
+    "compute.connection.prepare",
     "compute.connection.options",
     "compute.connection.preview",
     "compute.connection.apply",
@@ -125,6 +126,7 @@
     "compute.scan",
     "compute.list",
     "compute.show",
+    "compute.connection.prepare",
     "compute.connection.options",
     "compute.connection.preview",
     "compute.connection.apply",
@@ -153,6 +155,9 @@
     "decision.services.apply",
     "decision.services.test",
     "models.show",
+    "prices.effective",
+    "prices.override.preview",
+    "prices.override.apply",
     "operations.get",
     "sessions.list",
     "sessions.show",
