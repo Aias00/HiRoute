@@ -9,7 +9,7 @@ use std::{
     net::{SocketAddr, TcpListener, TcpStream},
     time::Duration,
 };
-fn request(operation: &str, payload: Value) -> LocalControlWireRequestV2 {
+pub(super) fn request(operation: &str, payload: Value) -> LocalControlWireRequestV2 {
     LocalControlWireRequestV2 {
         schema_version: LOCAL_CONTROL_SCHEMA_V2,
         request_id: format!("console-{operation}"),
@@ -18,7 +18,7 @@ fn request(operation: &str, payload: Value) -> LocalControlWireRequestV2 {
         protected_grant: None,
     }
 }
-fn http(
+pub(super) fn http(
     address: SocketAddr,
     path: &str,
     body: Option<Value>,
@@ -87,6 +87,9 @@ fn real_role_all_keeps_external_gate_and_console_auth_authority_separate() {
         b"<!doctype html><title>HiRoute</title>",
     )
     .unwrap();
+    hiroute_host_runtime::ConsoleListenerStore::new(layout.gateway_config_root())
+        .configure(hiroute_host_runtime::ConsoleListenerDesiredV1::loopback())
+        .unwrap();
     let mut console = ConsoleService::start(&role, layout.clone(), assets, None).unwrap();
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let external = Client::new(

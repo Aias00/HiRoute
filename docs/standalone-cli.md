@@ -17,9 +17,11 @@ page and the Quickstart are validated for Linux.
 ## Installation
 
 The installed daemon also provides the [Web console](web-console.md). It defaults
-to off on Linux; after starting the service, `hiroute console open` creates a
-one-time loopback entry. Remote HTTP access uses owner-created CLI access tokens
-and displays plaintext warnings. It does not change the Gateway listener.
+to off on Linux. Configure its scope and port with installer options or
+`hiroute console init`, then start/restart the service. `hiroute console open`
+returns a one-use URL for the actual local or remote listener without starting
+listening. Remote HTTP also accepts owner-created CLI access tokens and displays
+plaintext warnings. It does not change the Gateway listener.
 
 Install the latest stable Linux package for `x86_64` or ARM64 (`aarch64`) from
 [hiroute.ai](https://hiroute.ai/en/download/):

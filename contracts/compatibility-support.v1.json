@@ -126,6 +126,7 @@
     "hiroute.connector-profile/v1",
     "hiroute.connector-registry/v1",
     "hiroute.connector-runtime-fallback/v1",
+    "hiroute.console-launch-request/v1",
     "hiroute.console-launch/v1",
     "hiroute.console-listener/v1",
     "hiroute.console-token-create/v1",

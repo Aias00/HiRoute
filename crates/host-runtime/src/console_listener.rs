@@ -1,4 +1,4 @@
-//! A separate management listener, off until the owner enables or opens it.
+//! Persisted management exposure. Only service startup binds the configured listener.
 use serde::{Deserialize, Serialize};
 use std::{
     io::Read,
@@ -28,6 +28,8 @@ pub struct ConsoleListenerDesiredV1 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub address: Option<IpAddr>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub advertise_address: Option<IpAddr>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub port: Option<u16>,
     #[serde(default)]
     pub allow_plaintext_network: bool,
@@ -49,16 +51,42 @@ impl ConsoleListenerDesiredV1 {
             ConsoleListenerMode::Off | ConsoleListenerMode::Loopback
                 if self
                     .address
-                    .is_none_or(|a| a == IpAddr::V4(Ipv4Addr::LOCALHOST)) =>
+                    .is_none_or(|a| a == IpAddr::V4(Ipv4Addr::LOCALHOST))
+                    && self.advertise_address.is_none() =>
             {
                 Ok(IpAddr::V4(Ipv4Addr::LOCALHOST))
             }
-            ConsoleListenerMode::Network if self.allow_plaintext_network => self
-                .address
-                .filter(|a| !a.is_loopback() && !a.is_multicast())
-                .ok_or(ConsoleListenerError),
+            ConsoleListenerMode::Network if self.allow_plaintext_network => {
+                let address = self.address.ok_or(ConsoleListenerError)?;
+                let advertised = self.advertise_address.unwrap_or(address);
+                if address.is_loopback()
+                    || address.is_multicast()
+                    || advertised.is_loopback()
+                    || (self.advertise_address.is_some() && advertised.is_unspecified())
+                    || advertised.is_multicast()
+                    || advertised == IpAddr::V4(Ipv4Addr::BROADCAST)
+                    || advertised.is_ipv4() != address.is_ipv4()
+                {
+                    return Err(ConsoleListenerError);
+                }
+                Ok(address)
+            }
             _ => Err(ConsoleListenerError),
         }
+    }
+    pub fn validate_configuration(&self) -> Result<(), ConsoleListenerError> {
+        let address = self.validate()?;
+        if self.mode == ConsoleListenerMode::Network
+            && address.is_unspecified()
+            && self.advertise_address.is_none()
+        {
+            return Err(ConsoleListenerError);
+        }
+        Ok(())
+    }
+    /// The actual port comes from the socket, never from pending desired settings.
+    pub fn advertised_socket(&self, bound: SocketAddr) -> SocketAddr {
+        SocketAddr::new(self.advertise_address.unwrap_or(bound.ip()), bound.port())
     }
     pub fn reserve(&self) -> Result<Option<TcpListener>, ConsoleListenerError> {
         let address = self.validate()?;
@@ -153,7 +181,7 @@ impl ConsoleListenerStore {
         &self,
         desired: ConsoleListenerDesiredV1,
     ) -> Result<ConsoleListenerConfigV1, ConsoleListenerError> {
-        desired.validate()?;
+        desired.validate_configuration()?;
         let mut config = self.read()?;
         config.desired = desired;
         self.write(&config)?;
@@ -184,6 +212,7 @@ mod tests {
         let mut desired = ConsoleListenerDesiredV1 {
             mode: ConsoleListenerMode::Network,
             address: Some("0.0.0.0".parse().unwrap()),
+            advertise_address: Some("192.0.2.1".parse().unwrap()),
             ..Default::default()
         };
         assert!(store.configure(desired.clone()).is_err());
@@ -193,6 +222,33 @@ mod tests {
         assert_eq!(
             store.read().unwrap().desired.mode,
             ConsoleListenerMode::Network
+        );
+    }
+    #[test]
+    fn network_advertisement_is_concrete_and_does_not_change_the_actual_port() {
+        let mut desired = ConsoleListenerDesiredV1 {
+            mode: ConsoleListenerMode::Network,
+            address: Some("0.0.0.0".parse().unwrap()),
+            allow_plaintext_network: true,
+            ..Default::default()
+        };
+        assert!(desired.validate_configuration().is_err());
+        for invalid in [
+            "0.0.0.0",
+            "127.0.0.1",
+            "224.0.0.1",
+            "255.255.255.255",
+            "::1",
+            "2001:db8::1",
+        ] {
+            desired.advertise_address = Some(invalid.parse().unwrap());
+            assert!(desired.validate().is_err(), "{invalid}");
+        }
+        desired.advertise_address = Some("192.0.2.1".parse().unwrap());
+        assert!(desired.validate().is_ok());
+        assert_eq!(
+            desired.advertised_socket("0.0.0.0:43210".parse().unwrap()),
+            "192.0.2.1:43210".parse().unwrap()
         );
     }
     #[test]

@@ -42,12 +42,13 @@ command -v python3 >/dev/null 2>&1 || { echo "Python 3 is required." >&2; exit 1
 temporary=$(mktemp -d "\${TMPDIR:-/tmp}/hiroute-install.XXXXXX")
 trap 'rm -rf "$temporary"' EXIT HUP INT TERM
 curl -fsSL https://hiroute.ai/install/standalone.py -o "$temporary/standalone.py"
-python3 "$temporary/standalone.py" install --manifest-url "$manifest_url"
+python3 "$temporary/standalone.py" install --manifest-url "$manifest_url" "$@"
 
 printf '%s\n' \
   "HiRoute is installed for the current user. No service was started automatically." \
   "Ensure $HOME/.local/bin is on PATH, then run:" \
   "  hiroute service start --output json" \
-  "  hiroute system status --output json"
+  "  hiroute system status --output json" \
+  "Configure the console during installation with --console-mode/--console-listen/--console-port, or run hiroute console init before starting the service."
 `;
 }

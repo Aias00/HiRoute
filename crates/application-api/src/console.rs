@@ -1,8 +1,14 @@
 //! Owner credential operations. Credential exchanges never traverse Local Control.
 use serde::{Deserialize, Serialize};
+#[derive(Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConsoleLaunchRequestV1 {
+    #[serde(default)]
+    pub loopback_only: bool,
+}
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct ConsoleLaunchRequestV1 {}
+pub struct ConsoleListTokensRequestV1 {}
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ConsoleCreateTokenRequestV1 {

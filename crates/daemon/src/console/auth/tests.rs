@@ -4,6 +4,9 @@ fn auth() -> (tempfile::TempDir, ConsoleAuth) {
     let auth = ConsoleAuth::open(root.path()).unwrap();
     (root, auth)
 }
+fn local_target() -> LaunchTarget {
+    LaunchTarget::new("127.0.0.1:5838".parse().unwrap(), true)
+}
 fn peer() -> IpAddr {
     "127.0.0.1".parse().unwrap()
 }
@@ -18,17 +21,25 @@ fn headers(bearer: &str) -> HeaderMap {
 #[test]
 fn launch_is_loopback_only_short_lived_and_single_use() {
     let (_root, mut a) = auth();
-    let code = a.create_launch().unwrap();
+    let code = a.create_launch(local_target()).unwrap();
     assert!(matches!(
-        a.exchange_launch(&code, "192.0.2.1".parse().unwrap()),
+        a.exchange_launch(&code, "192.0.2.1".parse().unwrap(), &local_target().origin),
         Err(AuthError::Invalid)
     ));
-    let session = a.exchange_launch(&code, peer()).unwrap();
+    let session = a
+        .exchange_launch(&code, peer(), &local_target().origin)
+        .unwrap();
     assert!(a.authenticate(&headers(&session.bearer), peer()).is_ok());
-    assert!(a.exchange_launch(&code, peer()).is_err());
-    let code = a.create_launch().unwrap();
-    a.launches.insert(hash(&code), now().unwrap() - 1);
-    assert!(a.exchange_launch(&code, peer()).is_err());
+    assert!(
+        a.exchange_launch(&code, peer(), &local_target().origin)
+            .is_err()
+    );
+    let code = a.create_launch(local_target()).unwrap();
+    a.launches.get_mut(&hash(&code)).unwrap().expires = now().unwrap() - 1;
+    assert!(
+        a.exchange_launch(&code, peer(), &local_target().origin)
+            .is_err()
+    );
 }
 #[test]
 fn token_revocation_ends_sessions_and_disk_never_contains_credentials() {
@@ -56,8 +67,10 @@ fn token_revocation_ends_sessions_and_disk_never_contains_credentials() {
 fn idle_absolute_and_credential_expiry_end_authority() {
     let (_root, mut a) = auth();
     for absolute in [false, true] {
-        let code = a.create_launch().unwrap();
-        let session = a.exchange_launch(&code, peer()).unwrap();
+        let code = a.create_launch(local_target()).unwrap();
+        let session = a
+            .exchange_launch(&code, peer(), &local_target().origin)
+            .unwrap();
         let entry = a.sessions.get_mut(&hash(&session.bearer)).unwrap();
         if absolute {
             entry.created = now().unwrap() - ABSOLUTE_TTL;
@@ -96,13 +109,16 @@ fn failed_exchanges_have_per_peer_and_global_bounded_limits() {
         Some(AuthError::RateLimited)
     );
     assert_eq!(a.failures.len(), 72);
-    let code = a.create_launch().unwrap();
+    let code = a.create_launch(local_target()).unwrap();
     let local = "127.0.0.2".parse().unwrap();
-    let session = a.exchange_launch(&code, local).unwrap();
+    let session = a
+        .exchange_launch(&code, local, &local_target().origin)
+        .unwrap();
     assert!(a.authenticate(&headers(&session.bearer), local).is_ok());
     // A separate local peer limit still applies; isolation is not an exemption.
     assert_eq!(
-        a.exchange_launch(&code, peer()).err(),
+        a.exchange_launch(&code, peer(), &local_target().origin)
+            .err(),
         Some(AuthError::RateLimited)
     );
 }
@@ -112,16 +128,21 @@ fn bearer_is_explicit_and_capacity_evicts_the_least_recently_used_session() {
     assert!(a.authenticate(&HeaderMap::new(), peer()).is_err());
     let mut sessions = vec![];
     for _ in 0..16 {
-        let code = a.create_launch().unwrap();
-        sessions.push(a.exchange_launch(&code, peer()).unwrap());
+        let code = a.create_launch(local_target()).unwrap();
+        sessions.push(
+            a.exchange_launch(&code, peer(), &local_target().origin)
+                .unwrap(),
+        );
     }
     // Refresh the oldest session: the second session must now be evicted.
     assert!(
         a.authenticate(&headers(&sessions[0].bearer), peer())
             .is_ok()
     );
-    let code = a.create_launch().unwrap();
-    let newest = a.exchange_launch(&code, peer()).unwrap();
+    let code = a.create_launch(local_target()).unwrap();
+    let newest = a
+        .exchange_launch(&code, peer(), &local_target().origin)
+        .unwrap();
     assert_eq!(a.sessions.len(), 16);
     assert!(
         a.authenticate(&headers(&sessions[0].bearer), peer())
@@ -194,4 +215,33 @@ fn foreign_modes_links_and_corrupt_store_are_preserved_and_refused() {
     symlink(&foreign, &path).unwrap();
     assert!(ConsoleAuth::open(root.path()).is_err());
     assert_eq!(std::fs::read(&foreign).unwrap(), bytes);
+}
+
+#[test]
+fn network_launch_is_origin_port_bound_and_mismatches_do_not_consume_it() {
+    let (root, mut auth) = auth();
+    let remote: IpAddr = "198.51.100.20".parse().unwrap();
+    for address in ["192.0.2.1:5838", "[2001:db8::1]:80"] {
+        let target = LaunchTarget::new(address.parse().unwrap(), false);
+        let code = auth.create_launch(target.clone()).unwrap();
+        for wrong in [
+            "http://192.0.2.1:5839",
+            "http://127.0.0.1:5838",
+            "http://evil.example:5838",
+        ] {
+            assert_eq!(
+                auth.exchange_launch(&code, remote, wrong).err(),
+                Some(AuthError::Invalid)
+            );
+        }
+        let session = auth.exchange_launch(&code, remote, &target.origin).unwrap();
+        assert!(auth.authenticate(&headers(&session.bearer), remote).is_ok());
+        assert_eq!(
+            auth.exchange_launch(&code, remote, &target.origin).err(),
+            Some(AuthError::Invalid)
+        );
+        let audit = std::fs::read_to_string(root.path().join("console/audit.jsonl")).unwrap();
+        assert!(!audit.contains(code.as_str()));
+        assert!(!audit.contains(&session.bearer));
+    }
 }

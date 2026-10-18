@@ -72,6 +72,12 @@ cannot cancel a newer prompt or another context. The
 real role-all dispatcher while preserving the external Local Control Released
 gate. [Authentication cases](../../crates/daemon/src/console/auth/tests.rs) cover
 launch replay, revocation, hash-only storage and rate limits.
+The [listener lifecycle cases](../../crates/daemon/src/console/listener_tests.rs)
+verify off/failed minting without binds, actual network origins, the pre-established
+shell loopback path and desired configuration pending restart. Unix installer
+regressions cover explicit exposure validation, omitted-option preservation and
+configuration rollback. Network launch authentication tests cover exact origin/port,
+remote local-code refusal, expiry, replay and credential redaction.
 The [console transport cases](../../crates/daemon/src/console/transport/tests.rs)
 exercise independent peer admission, stalled-write permit release, progressing
 responses, bounded idle headers and confirmations on aged keep-alive connections

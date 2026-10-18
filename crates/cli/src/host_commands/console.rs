@@ -1,11 +1,10 @@
 use super::*;
-use hiroute_host_runtime::{
-    ConsoleListenerDesiredV1, ConsoleListenerMode, ConsoleListenerStore, ConsolePortMode,
-};
+use hiroute_host_runtime::{ConsoleListenerDesiredV1, ConsoleListenerStore};
+mod configuration;
 
 pub(super) fn execute(arguments: &[String], globals: &Globals) -> CliExecution {
     if globals.help {
-        return CliExecution{exit_code:0,stdout:"Usage\n  hiroute console open [--browser]\n  hiroute console status\n  hiroute console enable [--listen ADDR] [--port N] [--allow-plaintext-network]\n  hiroute console disable\n  hiroute console token create --name NAME [--expires DAYS]\n  hiroute console token list\n  hiroute console token revoke ID\nAccess tokens are owner credentials. Network HTTP is unencrypted. Configuration takes effect on the next service start; open can start a temporary loopback listener in a running service.\n".into(),stderr:String::new()};
+        return CliExecution{exit_code:0,stdout:"Usage\n  hiroute console open [--browser]\n  hiroute console init [--mode off|loopback|network] [--listen IP] [--port N] [--advertise-address IP] [--allow-plaintext-network]\n  hiroute console status\n  hiroute console enable [--listen IP] [--port N] [--advertise-address IP] [--allow-plaintext-network]\n  hiroute console disable\n  hiroute console token create --name NAME [--expires DAYS]\n  hiroute console token list\n  hiroute console token revoke ID\nAccess tokens are owner credentials. Network HTTP is unencrypted. Configuration takes effect on the next service start; open only mints a one-use URL for the actual listener and never starts listening.\n".into(),stderr:String::new()};
     }
     if globals.agent.is_some() || globals.has_capability() {
         return failure(ErrorCode::CapabilityDenied, globals.request_id.clone());
@@ -27,7 +26,13 @@ pub(super) fn execute(arguments: &[String], globals: &Globals) -> CliExecution {
             stderr: String::new(),
         },
         Ok(value) => success(value, globals.request_id.clone()),
-        Err(code) => failure(code, globals.request_id.clone()),
+        Err(code) => {
+            let mut result = failure(code, globals.request_id.clone());
+            if code == ErrorCode::ActionRequired {
+                result.stderr = "The console must be configured and listening. Run `hiroute console status`, configure it with `hiroute console init`, then start/restart the service. Network configuration requires `--allow-plaintext-network`; wildcard binds also require `--advertise-address IP`. `console open` never starts a listener.\n".into();
+            }
+            result
+        }
     }
 }
 fn call(
@@ -108,51 +113,8 @@ fn command(args: &[String], globals: &Globals) -> Result<serde_json::Value, Erro
                 .map_err(|_| ErrorCode::DaemonUnavailable)?,
         )
         .map_err(|_| ErrorCode::Internal),
-        [enable, options @ ..] if enable == "enable" => {
-            let mut desired = ConsoleListenerDesiredV1::loopback();
-            let mut listen_seen = false;
-            let mut port_seen = false;
-            let mut it = options.iter();
-            while let Some(flag) = it.next() {
-                match flag.as_str() {
-                    "--listen" if !listen_seen => {
-                        listen_seen = true;
-                        let ip: std::net::IpAddr = it
-                            .next()
-                            .ok_or(ErrorCode::InvalidArguments)?
-                            .parse()
-                            .map_err(|_| ErrorCode::InvalidArguments)?;
-                        if ip.is_loopback() {
-                            if ip != "127.0.0.1".parse::<std::net::IpAddr>().unwrap() {
-                                return Err(ErrorCode::InvalidArguments);
-                            }
-                        } else {
-                            desired.mode = ConsoleListenerMode::Network;
-                            desired.address = Some(ip);
-                        }
-                    }
-                    "--port" if !port_seen => {
-                        port_seen = true;
-                        desired.port_mode = ConsolePortMode::Explicit;
-                        desired.port = Some(
-                            it.next()
-                                .ok_or(ErrorCode::InvalidArguments)?
-                                .parse()
-                                .map_err(|_| ErrorCode::InvalidArguments)?,
-                        );
-                    }
-                    "--allow-plaintext-network" if !desired.allow_plaintext_network => {
-                        desired.allow_plaintext_network = true
-                    }
-                    _ => return Err(ErrorCode::InvalidArguments),
-                }
-            }
-            if desired.mode == ConsoleListenerMode::Network && !desired.allow_plaintext_network {
-                return Err(ErrorCode::ActionRequired);
-            }
-            desired
-                .validate()
-                .map_err(|_| ErrorCode::InvalidArguments)?;
+        [setup, options @ ..] if setup == "enable" || setup == "init" => {
+            let desired = configuration::parse(options, setup == "init")?;
             serde_json::to_value(
                 store()?
                     .configure(desired)

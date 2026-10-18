@@ -219,12 +219,12 @@ Source SPEC comments:
 
 ### Requirement: The daemon serves the shared product console
 
-A role-all `hirouted` on Linux and Windows SHALL be able to serve the HiRoute product frontend and its control operations over HTTP on a console listener that is separate from the Gateway listener. Console pages SHALL use the same Application owners, typed operations, results and failure codes as CLI and Desktop, and SHALL present the same saved state. Gateway credentials SHALL NOT authenticate console requests and console sessions SHALL NOT authorize model requests. On Linux standalone the console SHALL be disabled until the owner opens or enables it; enabling it SHALL NOT start the daemon implicitly. Host-only features unavailable in the current host, such as in-app update, window behavior and login items, SHALL be absent or explicitly unavailable rather than failing or reporting fixture success.
+A role-all `hirouted` on Linux and Windows SHALL be able to serve the HiRoute product frontend and its control operations over HTTP on a console listener that is separate from the Gateway listener. Console pages SHALL use the same Application owners, typed operations, results and failure codes as CLI and Desktop, and SHALL present the same saved state. Gateway credentials SHALL NOT authenticate console requests and console sessions SHALL NOT authorize model requests. On Linux standalone the console SHALL be disabled until the owner explicitly configures it during installation or initialization; enabling it SHALL NOT start the daemon implicitly. Host-only features unavailable in the current host, such as in-app update, window behavior and login items, SHALL be absent or explicitly unavailable rather than failing or reporting fixture success.
 
 #### Scenario: Open the console from the Linux CLI
 
-- **WHEN** the standalone service is running and the owner runs the documented console open command
-- **THEN** the command returns a single-use local link; opening it in a browser shows the product pages with the current service status, sources, plans, Agents, Workers and sessions.
+- **WHEN** the console is configured, the standalone service has established its listener and the owner runs the documented console open command
+- **THEN** the command returns a single-use link for the actual local or explicitly configured network listener; opening it in a browser shows the product pages with the current service status, sources, plans, Agents, Workers and sessions.
 
 #### Scenario: Cross-client consistency
 
@@ -246,7 +246,7 @@ Source SPEC comments:
 
 ### Requirement: Console sessions require explicit owner authentication
 
-Every console request other than static frontend assets and the credential exchange SHALL require an authenticated session. A local launch credential SHALL be issued only through the OS-trusted Local Control path, SHALL be single-use and short-lived, and SHALL be exchanged for a session credential bound to the console origin, including its port. The session credential SHALL be held only in browser sessionStorage and sent in an explicit Bearer request header. It SHALL NOT be placed in cookies, URLs, localStorage or other persistent browser storage, so cross-site requests and other services on the same host never receive console authority. The owner SHALL be able to create, list, expire and revoke named access tokens through the CLI; token secrets SHALL be shown only at creation and SHALL NOT be stored in recoverable form. Revoking a token SHALL end the sessions derived from it. State-changing requests SHALL be rejected when Host or Origin does not match the configured console or when cross-site request protection fails. Console operations SHALL carry a distinct principal identity that operation history and diagnostics can attribute; this increment supports a single owner principal.
+Every console request other than static frontend assets and the credential exchange SHALL require an authenticated session. A launch credential SHALL be issued only through the OS-trusted Local Control path for an actually listening console. It SHALL be single-use, expire after two minutes, and be bound to the selected console origin including its actual port. The owner CLI SHALL return a local or remote login URL according to that live listener. A network-origin credential MAY be exchanged remotely only when network listening was explicitly configured; a loopback-origin credential SHALL NOT be redeemed remotely. A mismatched origin or port SHALL NOT consume an otherwise valid code. The page SHALL remove the code from its URL before exchange. The resulting session credential SHALL be bound to the console origin including its port. The session credential SHALL be held only in browser sessionStorage and sent in an explicit Bearer request header. It SHALL NOT be placed in cookies, URLs, localStorage or other persistent browser storage, so cross-site requests and other services on the same host never receive console authority. The owner SHALL be able to create, list, expire and revoke named access tokens through the CLI; token secrets SHALL be shown only at creation and SHALL NOT be stored in recoverable form. Revoking a token SHALL end the sessions derived from it. State-changing requests SHALL be rejected when Host or Origin does not match the configured console or when cross-site request protection fails. Console operations SHALL carry a distinct principal identity that operation history and diagnostics can attribute; this increment supports a single owner principal.
 
 An authenticated console session SHALL have the same protected-operation authority as macOS Desktop, without a password or unlock step. Every protected operation SHALL retain its in-page confirmation and exact-digest authority registration. Callers operating under collaboration or Skill authorization SHALL NOT mint console launch credentials or access tokens. Protected-operation uses SHALL be audited without credentials, secret input or conversation bodies.
 
@@ -256,6 +256,11 @@ Sessions SHALL remain in memory only, expire after 12 hours idle or seven days t
 
 - **WHEN** a launch link that was already exchanged, or has expired, is opened again
 - **THEN** no session is created and the page explains how to obtain a new link.
+
+#### Scenario: Launch credential target binding
+
+- **WHEN** a launch credential is presented at a different host or port, or a local-only credential is submitted remotely
+- **THEN** no session is created, the credential is not consumed, and it remains usable once at its original authorized origin until expiry.
 
 #### Scenario: Foreign origin
 
@@ -292,7 +297,7 @@ Source SPEC comments:
 
 ### Requirement: Console exposure beyond loopback is explicit
 
-The console listener SHALL bind only to loopback by default. Binding to a non-loopback address SHALL require an explicit owner configuration that persists across restarts, and remote sessions SHALL require an access token. TLS SHALL NOT be required. When a session is served over a non-loopback connection without TLS, the console SHALL persistently indicate that traffic is unencrypted and SHALL show an additional warning before secret entry, while still allowing it. A configured address or port that cannot be bound SHALL produce an explicit listener failure without changing Gateway or Local Control availability.
+On Linux, the console SHALL remain disabled on a fresh unattended installation unless the owner explicitly chooses a scope and port during installation or initialization. Enabling without a network address SHALL select loopback. Installation upgrades without console options SHALL preserve existing settings. Listening SHALL begin only at service startup using the persisted scope and port. `hiroute console open` SHALL NOT create a listener or start a service: it SHALL issue a single-use login URL from actual live listener state or return an actionable unavailable result. Binding to a non-loopback address SHALL require explicit persisted owner configuration and plaintext-network consent. Remote sessions SHALL require an owner CLI-issued single-use credential bound to that network origin or a named access token. A wildcard bind SHALL require a concrete advertised address for a usable login URL. Changing desired settings while a service is running SHALL NOT change the URL until that service applies the configuration. An occupied explicit port SHALL NOT silently fall back to another port. TLS SHALL NOT be required. When a session is served over a non-loopback connection without TLS, the console SHALL persistently indicate that traffic is unencrypted and SHALL show an additional warning before secret entry, while still allowing it. A configured address or port that cannot be bound SHALL produce an explicit listener failure without changing Gateway or Local Control availability.
 
 #### Scenario: Default exposure
 
@@ -301,8 +306,23 @@ The console listener SHALL bind only to loopback by default. Binding to a non-lo
 
 #### Scenario: Remote access
 
-- **WHEN** the owner configures a network address and opens it from another computer with a valid access token
-- **THEN** the console works and shows the unencrypted-connection indicator; without a token the remote request is rejected.
+- **WHEN** the owner configures a network address and port during installation or initialization, starts the service and runs `console open`
+- **THEN** it returns a one-use URL for that live network origin, works from another computer and shows the unencrypted-connection indicator; a request without a valid launch credential, token or session is rejected.
+
+#### Scenario: Open does not enable listening
+
+- **WHEN** the console is off or its configured port failed to bind
+- **THEN** repeated `console open` calls fail with setup or restart guidance and do not open any listener or change configuration.
+
+#### Scenario: Live configuration and upgrade
+
+- **WHEN** desired scope or port changes during a running service, or the installer upgrades without console options
+- **THEN** `console open` still uses the actual bound origin until restart, and an upgrade preserves the chosen configuration.
+
+#### Scenario: Wildcard advertisement
+
+- **WHEN** a network listener binds a wildcard address
+- **THEN** initialization requires a concrete advertised address, the returned URL uses that address and the actual bound port, and Host/Origin checks admit only the configured console origin or its bound local origin.
 
 #### Scenario: Secret entry over plaintext
 

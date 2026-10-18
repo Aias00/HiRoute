@@ -6,7 +6,12 @@
 ## Web console and Windows host
 
 `crates/daemon/src/console` owns the separate HTTP listener, origin/asset admission,
-credential stores and per-client product contexts.
+credential stores and per-client product contexts. Service startup exclusively
+binds configured sockets, including the local companion in network mode; launch
+minting selects live state and never enables listening. Linux installer options
+and `console init` persist scope/port in the host-runtime listener store. A wildcard
+bind requires a concrete advertised IP for its one-use URL. Launch codes bind that
+origin and actual port; the Windows shell explicitly requests the local endpoint.
 Request deadlines cover each request independently of connection age; incomplete
 headers and bodies have their own bounds. Shared confirmation permits and broker
 prompts release on caller cancellation, without approving or affecting another context.

@@ -33,7 +33,11 @@ pub(super) async fn handle(
     Ok(headers(reply))
 }
 /// Every request, including data-free assets, is checked before body collection or dispatch.
-pub(super) fn valid_origin(headers: &http::HeaderMap, local: SocketAddr) -> bool {
+pub(super) fn valid_origin(
+    headers: &http::HeaderMap,
+    local: SocketAddr,
+    advertised: Option<SocketAddr>,
+) -> bool {
     let mut hosts = headers.get_all(header::HOST).iter();
     let Some(host) = hosts.next().and_then(|h| h.to_str().ok()) else {
         return false;
@@ -41,13 +45,19 @@ pub(super) fn valid_origin(headers: &http::HeaderMap, local: SocketAddr) -> bool
     if hosts.next().is_some() {
         return false;
     }
-    let mut allowed = vec![local.to_string()];
+    let mut allowed = vec![super::auth::authority(local), local.to_string()];
+    if let Some(address) = advertised {
+        allowed.extend([super::auth::authority(address), address.to_string()]);
+    }
     if local.ip().is_loopback() {
         allowed.extend([
             format!("127.0.0.1:{}", local.port()),
             format!("localhost:{}", local.port()),
             format!("[::1]:{}", local.port()),
         ]);
+        if local.port() == 80 {
+            allowed.extend(["127.0.0.1".into(), "localhost".into(), "[::1]".into()]);
+        }
     }
     if !allowed.iter().any(|a| a == host) {
         return false;
@@ -73,9 +83,21 @@ async fn checked(
     peer: SocketAddr,
     local: SocketAddr,
 ) -> Result<Reply, (StatusCode, &'static str)> {
-    if !valid_origin(request.headers(), local) {
+    if !valid_origin(request.headers(), local, server.advertised_on(local)) {
         return Err((StatusCode::FORBIDDEN, "CONSOLE_ORIGIN_DENIED"));
     }
+    // Host was checked above, including duplicates, port and configured advertisement.
+    let host = request
+        .headers()
+        .get(header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default();
+    let host = if local.port() == 80 {
+        host.strip_suffix(":80").unwrap_or(host)
+    } else {
+        host
+    };
+    let origin = format!("http://{host}");
     let path = request.uri().path().to_owned();
     let method = request.method().clone();
     if !path.starts_with(PREFIX) {
@@ -203,7 +225,7 @@ async fn checked(
                 .auth
                 .lock()
                 .map_err(|_| auth_failure(AuthError::Unavailable))?
-                .exchange_launch(&code, peer.ip())
+                .exchange_launch(&code, peer.ip(), &origin)
         } else {
             #[derive(Deserialize)]
             #[serde(deny_unknown_fields)]
@@ -342,7 +364,9 @@ fn auth_failure(error: AuthError) -> (StatusCode, &'static str) {
             AuthError::Required | AuthError::Invalid => StatusCode::UNAUTHORIZED,
             AuthError::RateLimited => StatusCode::TOO_MANY_REQUESTS,
             AuthError::Capacity => StatusCode::CONFLICT,
-            AuthError::Unavailable => StatusCode::SERVICE_UNAVAILABLE,
+            AuthError::Unavailable | AuthError::ListenerUnavailable => {
+                StatusCode::SERVICE_UNAVAILABLE
+            }
         },
         error.code(),
     )
@@ -387,15 +411,40 @@ mod tests {
         let local = "127.0.0.1:5838".parse().unwrap();
         let mut h = http::HeaderMap::new();
         h.insert(header::HOST, "127.0.0.1:5838".parse().unwrap());
-        assert!(valid_origin(&h, local));
+        assert!(valid_origin(&h, local, None));
         h.insert(header::ORIGIN, "http://127.0.0.1:5839".parse().unwrap());
-        assert!(!valid_origin(&h, local));
+        assert!(!valid_origin(&h, local, None));
         h.insert(header::ORIGIN, "http://127.0.0.1:5838".parse().unwrap());
-        assert!(valid_origin(&h, local));
+        assert!(valid_origin(&h, local, None));
         h.insert("sec-fetch-site", "same-site".parse().unwrap());
-        assert!(!valid_origin(&h, local));
+        assert!(!valid_origin(&h, local, None));
         h.remove("sec-fetch-site");
         h.insert(header::HOST, "evil.example:5838".parse().unwrap());
-        assert!(!valid_origin(&h, local));
+        assert!(!valid_origin(&h, local, None));
+    }
+}
+
+#[cfg(test)]
+mod advertised_tests {
+    use super::*;
+    #[test]
+    fn advertisement_is_explicit_port_exact_and_default_http_port_works() {
+        let mut headers = http::HeaderMap::new();
+        let local = "198.51.100.1:5838".parse().unwrap();
+        let advertised = "192.0.2.1:5838".parse().unwrap();
+        headers.insert(header::HOST, "192.0.2.1:5838".parse().unwrap());
+        assert!(!valid_origin(&headers, local, None));
+        assert!(valid_origin(&headers, local, Some(advertised)));
+        headers.insert(header::HOST, "192.0.2.1:5839".parse().unwrap());
+        assert!(!valid_origin(&headers, local, Some(advertised)));
+        for host in ["192.0.2.1", "192.0.2.1:80"] {
+            headers.insert(header::HOST, host.parse().unwrap());
+            headers.insert(header::ORIGIN, format!("http://{host}").parse().unwrap());
+            assert!(valid_origin(
+                &headers,
+                "198.51.100.1:80".parse().unwrap(),
+                Some("192.0.2.1:80".parse().unwrap())
+            ));
+        }
     }
 }

@@ -11,4 +11,6 @@ mod transport;
 pub use server::ConsoleService;
 
 #[cfg(all(test, unix))]
+mod listener_tests;
+#[cfg(all(test, unix))]
 mod tests;

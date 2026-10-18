@@ -6,6 +6,7 @@ from contextlib import contextmanager
 import fcntl
 import hashlib
 import http.client
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -624,10 +625,79 @@ def replace_components(components):
                 shutil.rmtree(backup_root, ignore_errors=True)
 
 
+def console_desired(args):
+    """Validate explicit Linux exposure before acquiring the install write lock."""
+    mode = getattr(args, "console_mode", None)
+    listen = getattr(args, "console_listen", None)
+    port = getattr(args, "console_port", None)
+    advertise = getattr(args, "console_advertise_address", None)
+    plaintext = getattr(args, "allow_plaintext_network", False)
+    if all(value is None for value in (mode, listen, port, advertise)) and not plaintext:
+        return None
+    if platform.system() != "Linux":
+        raise ValueError("console installation options are supported only on Linux")
+    def address(value):
+        if value is None:
+            return None
+        if "%" in value:
+            raise ValueError("console addresses must be IP literals without a scope identifier")
+        return ipaddress.ip_address(value)
+    ip, advertised = address(listen), address(advertise)
+    mode = mode or ("network" if ip and not ip.is_loopback else "loopback")
+    if port is not None and not 1 <= port <= 65535:
+        raise ValueError("console port must be between 1 and 65535")
+    if mode == "network":
+        if not plaintext:
+            raise ValueError("network console requires --allow-plaintext-network")
+        if ip is None or ip.is_loopback or ip.is_multicast:
+            raise ValueError("network console requires a non-loopback --console-listen IP")
+        advertised = advertised or ip
+        if (advertised.is_unspecified or advertised.is_loopback or advertised.is_multicast
+                or str(advertised) == "255.255.255.255" or advertised.version != ip.version):
+            raise ValueError("network console requires a concrete --console-advertise-address of the same address family")
+    elif mode not in ("off", "loopback") or (ip is not None and str(ip) != "127.0.0.1") or advertised:
+        raise ValueError("off/loopback console accepts only 127.0.0.1 and no advertised address")
+    desired = {"mode": mode, "port_mode": "explicit" if port is not None else "automatic", "allow_plaintext_network": plaintext}
+    if ip is not None:
+        desired["address"] = str(ip)
+    if advertise is not None:
+        desired["advertise_address"] = str(advertised)
+    if port is not None:
+        desired["port"] = port
+    return desired
+
+
+def console_component(paths, desired):
+    if desired is None:
+        return None
+    destination = paths["state"] / "console-listener.json"
+    config = {"schema": "hiroute.console-listener/v1", "applied_address": None, "failure_code": None}
+    try:
+        descriptor = os.open(destination, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except FileNotFoundError:
+        pass
+    else:
+        with os.fdopen(descriptor, "rb") as source:
+            metadata = os.fstat(source.fileno())
+            if (not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid()
+                    or metadata.st_mode & 0o077 or metadata.st_nlink != 1):
+                raise ValueError("existing console configuration is not a private single-link file")
+            content = source.read(16 * 1024 + 1)
+        if len(content) > 16 * 1024:
+            raise ValueError("existing console configuration exceeds its size bound")
+        config = load_json_bytes(content)
+        if (not isinstance(config, dict) or config.get("schema") != "hiroute.console-listener/v1"
+                or set(config) - {"schema", "desired", "applied_address", "failure_code"}):
+            raise ValueError("existing console configuration has an unsupported schema")
+    config["desired"] = desired
+    return staged_file(destination, (json.dumps(config, sort_keys=True) + "\n").encode(), 0o600), destination
+
+
 def install(args):
     home = Path(os.environ.get("HOME", ""))
     if not home.is_absolute() or not home.is_dir():
         raise ValueError("HOME must identify the current user's absolute home directory")
+    desired_console = console_desired(args)
     paths = layout(home)
     with installation_lock(paths), tempfile.TemporaryDirectory(
         prefix="hiroute-install-verify-"
@@ -667,6 +737,9 @@ def install(args):
         staged_data = Path(tempfile.mkdtemp(prefix=f".{version}.", dir=resource_parent))
         staged_components = []
         try:
+            configured_console = console_component(paths, desired_console)
+            if configured_console is not None:
+                staged_components.append(configured_console)
             shutil.copy2(staging / "bin/hiroute", staged_bin / "hiroute")
             shutil.copy2(staging / "bin/hirouted", staged_bin / "hirouted")
             if (staging / "console").is_dir():
@@ -830,6 +903,11 @@ def parser():
     add.add_argument("--manifest", type=Path)
     add.add_argument("--archive", type=Path)
     add.add_argument("--manifest-url")
+    add.add_argument("--console-mode", choices=("off", "loopback", "network"))
+    add.add_argument("--console-listen", help="console bind IP; defaults to loopback when enabled")
+    add.add_argument("--console-port", type=int, help="explicit console port (otherwise prefer 5838, then a free port)")
+    add.add_argument("--console-advertise-address", help="reachable IP for a wildcard network bind")
+    add.add_argument("--allow-plaintext-network", action="store_true")
     sub.add_parser("uninstall")
     return result
 

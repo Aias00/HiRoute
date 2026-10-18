@@ -1,6 +1,6 @@
 use super::{
     assets::Assets,
-    auth::AuthError,
+    auth::{AuthError, LaunchTarget},
     contexts::Contexts,
     control::{ConsoleControl, ConsoleEndpoint},
     transport::Connections,
@@ -34,9 +34,14 @@ pub(super) struct Server {
     pub connections: Connections,
     runtime: tokio::runtime::Handle,
     running: AtomicBool,
-    loopback: Mutex<Option<SocketAddr>>,
+    endpoints: Mutex<Endpoints>,
     desired: ConsoleListenerDesiredV1,
     store: ConsoleListenerStore,
+}
+#[derive(Default)]
+struct Endpoints {
+    primary: Option<SocketAddr>,
+    loopback: Option<SocketAddr>,
 }
 pub struct ConsoleService {
     pub(super) server: Arc<Server>,
@@ -76,11 +81,11 @@ impl ConsoleService {
             connections: Connections::default(),
             runtime: runtime.handle().clone(),
             running: AtomicBool::new(true),
-            loopback: Mutex::new(None),
+            endpoints: Mutex::new(Endpoints::default()),
             desired,
             store,
         });
-        control.set_endpoint(Arc::new(LoopbackEndpoint(Arc::downgrade(&server))))?;
+        control.set_endpoint(Arc::new(LiveEndpoint(Arc::downgrade(&server))))?;
         let state = server.clone();
         let worker=std::thread::Builder::new().name("hiroute-console".into()).spawn(move||{
             runtime.block_on(async {
@@ -99,10 +104,29 @@ impl ConsoleService {
         match server.desired.reserve() {
             Ok(Some(listener)) => {
                 let address = listener.local_addr().map_err(|_| AuthError::Unavailable)?;
-                if server.desired.mode == ConsoleListenerMode::Loopback {
-                    *server.loopback.lock().map_err(|_| AuthError::Unavailable)? = Some(address);
-                }
                 server.listen(listener)?;
+                let loopback = if server.desired.mode == ConsoleListenerMode::Loopback {
+                    Some(address)
+                } else {
+                    // Establish the local recovery/shell path at startup as well.
+                    // Failure here leaves the primary network console usable.
+                    ConsoleListenerDesiredV1::loopback()
+                        .reserve()
+                        .ok()
+                        .flatten()
+                        .and_then(|listener| {
+                            let local = listener.local_addr().ok()?;
+                            server.listen(listener).ok()?;
+                            Some(local)
+                        })
+                };
+                *server
+                    .endpoints
+                    .lock()
+                    .map_err(|_| AuthError::Unavailable)? = Endpoints {
+                    primary: Some(address),
+                    loopback,
+                };
                 let _ = server.store.mark_applied(Some(address));
             }
             Ok(None) => {
@@ -127,37 +151,42 @@ impl Drop for ConsoleService {
         self.shutdown();
     }
 }
-struct LoopbackEndpoint(std::sync::Weak<Server>);
-impl ConsoleEndpoint for LoopbackEndpoint {
-    fn launch_url(&self) -> Result<String, AuthError> {
-        self.0.upgrade().ok_or(AuthError::Unavailable)?.launch_url()
+struct LiveEndpoint(std::sync::Weak<Server>);
+impl ConsoleEndpoint for LiveEndpoint {
+    fn launch_target(&self, loopback_only: bool) -> Result<LaunchTarget, AuthError> {
+        self.0
+            .upgrade()
+            .ok_or(AuthError::Unavailable)?
+            .launch_target(loopback_only)
     }
 }
 impl Server {
-    fn launch_url(self: &Arc<Self>) -> Result<String, AuthError> {
+    fn launch_target(&self, loopback_only: bool) -> Result<LaunchTarget, AuthError> {
         if !self.running.load(Ordering::Acquire) {
             return Err(AuthError::Unavailable);
         }
-        let mut bound = self.loopback.lock().map_err(|_| AuthError::Unavailable)?;
-        if let Some(address) = *bound {
-            return Ok(format!("http://{address}"));
-        }
-        let desired = if self.desired.mode == ConsoleListenerMode::Loopback {
-            self.desired.clone()
+        let bound = self.endpoints.lock().map_err(|_| AuthError::Unavailable)?;
+        let address = if loopback_only {
+            bound.loopback
         } else {
-            ConsoleListenerDesiredV1::loopback()
-        };
-        let listener = desired
-            .reserve()
-            .map_err(|_| AuthError::Unavailable)?
-            .ok_or(AuthError::Unavailable)?;
-        let address = listener.local_addr().map_err(|_| AuthError::Unavailable)?;
-        self.listen(listener)?;
-        *bound = Some(address);
-        if self.desired.mode != ConsoleListenerMode::Network {
-            let _ = self.store.mark_applied(Some(address));
+            bound
+                .primary
+                .map(|address| self.desired.advertised_socket(address))
         }
-        Ok(format!("http://{address}"))
+        .ok_or(AuthError::ListenerUnavailable)?;
+        if address.ip().is_unspecified() {
+            return Err(AuthError::ListenerUnavailable);
+        }
+        Ok(LaunchTarget::new(address, address.ip().is_loopback()))
+    }
+    /// Advertisement is scoped to the established primary port, not a companion.
+    pub(super) fn advertised_on(&self, local: SocketAddr) -> Option<SocketAddr> {
+        let bound = self.endpoints.lock().ok()?;
+        let primary = bound.primary?;
+        (self.desired.mode == ConsoleListenerMode::Network
+            && primary.port() == local.port()
+            && (primary.ip().is_unspecified() || primary.ip() == local.ip()))
+        .then(|| self.desired.advertised_socket(primary))
     }
 }
 impl Server {

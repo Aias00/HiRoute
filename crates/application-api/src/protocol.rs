@@ -818,6 +818,7 @@ pub struct MachineNextActionV1 {
 
 pub(crate) fn command_request_schema(command_id: &str) -> &'static str {
     match command_id {
+        "console.open" => "hiroute.console-launch-request/v1",
         "console.token.create" => "hiroute.console-token-create/v1",
         "console.token.revoke" => "hiroute.console-token-revoke/v1",
         "worker.plans" => "hiroute.worker-plans-request/v1",

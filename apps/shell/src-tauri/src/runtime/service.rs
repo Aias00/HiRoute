@@ -113,7 +113,9 @@ pub(super) async fn launch() -> Result<(ConsoleOrigin, url::Url), &'static str> 
         .query::<_, ConsoleLaunchV1>(
             "CreateConsoleLaunch",
             "shell-launch",
-            &ConsoleLaunchRequestV1 {},
+            &ConsoleLaunchRequestV1 {
+                loopback_only: true,
+            },
         )
         .await
         .map_err(|_| "CONSOLE_LAUNCH_UNAVAILABLE")?;

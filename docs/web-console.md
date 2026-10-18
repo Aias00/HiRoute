@@ -6,74 +6,93 @@ Local Control and ordinary CLI remain available independently of console assets,
 listener or authentication failures. Browser pages do not connect directly to Local
 Control. The external Local Control Released-command gate remains unchanged.
 
-## Open locally
+## Configure during installation or initialization
 
-Install a complete standalone package containing `console/`, then start the service:
+A fresh unattended Linux installation keeps the console off. Choose its scope and
+port explicitly when installing a complete package containing `console/`:
 
 ```sh
+curl -fsSL https://hiroute.ai/install.sh | sh -s -- --console-mode loopback --console-port 5838
+```
+
+After installation, the equivalent initialization is:
+
+```sh
+hiroute console init --mode loopback --port 5838
 hiroute service start --output json
 hiroute console open
 ```
 
-Open the printed URL on the service host. `hiroute console open --browser` also
-asks that host's browser to open it. The launch code expires after two minutes,
-works once, and can only be exchanged through loopback. Do not share or log it.
-These commands never implicitly start a stopped daemon.
+Open the printed single-use URL on the service host. `console open --browser` also
+asks that host's default browser to open it. Initialization only saves settings;
+service startup establishes the listener. `open` never starts a daemon or listener.
+If it is off or failed to bind, inspect `console status`, configure it and restart
+the service. Changes saved while running take effect at the next service start;
+`open` continues returning the actual live address until then.
 
-Linux's console listener defaults to off. `open` creates a temporary loopback
-listener in the running daemon; it disappears with that daemon. To keep a
-loopback listener across service starts:
-
-```sh
-hiroute console enable
-hiroute service restart --output json
-hiroute console status
-```
-
-Automatic port selection prefers 5838 and chooses another free loopback port if
-necessary. Read the actual address from `console status` or the printed launch
-URL. An explicitly selected occupied port fails instead of silently changing it.
-`hiroute console disable` saves the off setting for the next service start.
+Omit `--port` for automatic selection: prefer 5838, then another free port. An
+occupied explicit port fails without falling back. `console enable` also saves a
+configuration, and `console disable` saves off for the next start. Upgrading with
+no console installation options preserves existing settings byte for byte.
 
 ## Access from another device
 
-An owner can enable a network listener and create an access token using the CLI:
+Configure the service host's network IP and port before starting it:
 
 ```sh
-hiroute console enable --listen 192.0.2.10 --port 5838 --allow-plaintext-network
+hiroute console init --mode network --listen 192.0.2.10 --port 5838 --allow-plaintext-network
 hiroute service restart --output json
-hiroute console token create --name workstation --expires 7 --output json
+hiroute console open
 ```
 
-Replace the documentation address `192.0.2.10` with the service host's address.
-Open its HTTP console URL and enter the returned token. There is no username or
-password login. The token is shown only when created; the service stores its hash.
-Use a separate named token for each client you want to revoke independently:
+Replace the documentation address with the service host's actual reachable IP.
+The printed URL now targets that **live network listener**. Open it on your own
+computer; no desktop or browser is needed on the server. Its launch code expires
+after two minutes and can be exchanged once, only at that origin and actual port.
+The page removes the code from the URL before exchange. A local-only launch code
+cannot be redeemed remotely. Do not share or log either kind of link.
+
+For a wildcard bind, also configure the concrete IP to advertise in the URL:
 
 ```sh
+hiroute console init --mode network --listen 0.0.0.0 --advertise-address 192.0.2.10 --port 5838 --allow-plaintext-network
+```
+
+The install-time equivalents are `--console-mode`, `--console-listen`,
+`--console-advertise-address`, `--console-port` and `--allow-plaintext-network`.
+They persist settings without starting the service. The advertised address must
+have the bind address's IP family. DNS names and wildcard login URLs are not used.
+Network reachability still depends on the host's routing and firewall.
+
+For repeated logins, an owner can alternatively create a named access token:
+
+```sh
+hiroute console token create --name workstation --expires 7 --output json
 hiroute console token list --output json
 hiroute console token revoke TOKEN_ID --output json
 ```
 
-Revocation also ends sessions created with that token. A daemon restart ends every
-browser session. Tokens are owner credentials: collaboration/Skill-authorized
-callers cannot mint launch codes or tokens.
+Open the console's network URL without a code and enter the token. There is no
+username/password login. Token secrets are shown only at creation; the service
+stores hashes. Revoking a token ends its derived sessions immediately. A daemon
+restart ends every browser session and outstanding launch code. Collaboration or
+Skill-authorized callers cannot mint launch codes or tokens.
 
-Remote HTTP is unencrypted. The page warns before access-token entry, keeps a
-visible plaintext banner after login, and warns on secret-entry forms. It permits
-entering model keys and other authorized secrets on that connection. Continue only
-on a trusted network; no TLS or password unlock is required by the product.
+Remote HTTP is unencrypted. The page warns before token entry, keeps a visible
+plaintext banner after login (including login by link), and warns on secret-entry
+forms while allowing authorized entry. Continue only on a trusted network; the
+product does not require TLS or a password unlock.
 
-An SSH tunnel is an alternative. Keep the listener on loopback and forward the
-same port printed by `console open` (5838 below):
+An SSH tunnel is an alternative. Initialize loopback mode and forward the same
+port printed by `console open` (5838 below):
 
 ```sh
 ssh -N -L 5838:127.0.0.1:5838 user@service-host
 ```
 
-Use the fresh launch URL through that tunnel. The port in the browser's Host header
-must match the server port; if the local port is occupied, select a different
-explicit console port on the server before creating the matching tunnel.
+Use the fresh local launch URL through that tunnel. Its browser Host and port
+must match; if the local port is busy, configure a different server port and use
+the same port for forwarding before obtaining a fresh link.
 
 ## Sessions and confirmations
 

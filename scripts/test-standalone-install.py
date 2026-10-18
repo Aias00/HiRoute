@@ -123,6 +123,76 @@ class StandaloneFixture(unittest.TestCase):
         )
 
 
+class ConsoleInstallationTests(StandaloneFixture):
+    @patch.object(installer.platform, "system", return_value="Linux")
+    def test_console_configuration_is_private_preserved_and_transactionally_rolled_back(self, _system):
+        manifest, archive = self.build()
+        args = self.install_args(manifest, archive)
+        args.console_mode = "network"
+        args.console_listen = "0.0.0.0"
+        args.console_advertise_address = "192.0.2.10"
+        args.console_port = 8123
+        args.allow_plaintext_network = True
+        with self.environment(), patch.object(installer, "desktop_conflict", return_value=False), patch.object(installer.subprocess, "run"), patch("builtins.print"):
+            installer.install(args)
+            config = self.home / ".state/hiroute/console-listener.json"
+            original = config.read_bytes()
+            value = json.loads(original)
+            self.assertEqual(value["desired"]["mode"], "network")
+            self.assertEqual(value["desired"]["port"], 8123)
+            self.assertEqual(value["desired"]["advertise_address"], "192.0.2.10")
+            self.assertEqual(config.stat().st_mode & 0o777, 0o600)
+            installer.install(self.install_args(manifest, archive))
+            self.assertEqual(config.read_bytes(), original, "an upgrade without options must preserve the exact configuration")
+            args.console_port = 8124
+            replace = installer.os.replace
+            failed = False
+            def fail_marker(source, destination):
+                nonlocal failed
+                if Path(destination).name == "standalone.json" and not failed:
+                    failed = True
+                    raise OSError("injected commit failure")
+                return replace(source, destination)
+            with patch.object(installer.os, "replace", side_effect=fail_marker):
+                with self.assertRaisesRegex(OSError, "injected"):
+                    installer.install(args)
+            self.assertTrue(failed)
+            self.assertEqual(config.read_bytes(), original, "configuration participates in the install rollback")
+
+    @patch.object(installer.platform, "system", return_value="Linux")
+    def test_invalid_console_options_fail_before_install_writes(self, _system):
+        cases = [
+            ["--console-mode", "network", "--console-listen", "192.0.2.1"],
+            ["--console-mode", "network", "--console-listen", "0.0.0.0", "--allow-plaintext-network"],
+            ["--console-listen", "::", "--console-advertise-address", "192.0.2.1", "--allow-plaintext-network"],
+            ["--console-mode", "loopback", "--console-listen", "192.0.2.1"],
+            ["--console-port", "0"], ["--console-port", "65536"],
+        ]
+        for options in cases:
+            args = installer.parser().parse_args(["install", *options])
+            with self.environment(), self.assertRaises(ValueError), patch.object(installer, "acquire") as acquire:
+                installer.install(args)
+            acquire.assert_not_called()
+            self.assertFalse((self.home / ".local").exists())
+
+    @patch.object(installer.platform, "system", return_value="Linux")
+    def test_explicit_configuration_refuses_foreign_link_without_modifying_it(self, _system):
+        manifest, archive = self.build()
+        args = self.install_args(manifest, archive)
+        args.console_mode = "loopback"
+        state = self.home / ".state/hiroute"
+        state.mkdir(parents=True, mode=0o700)
+        foreign = self.root / "foreign.json"
+        foreign.write_text("foreign")
+        config = state / "console-listener.json"
+        config.symlink_to(foreign)
+        with self.environment(), patch.object(installer, "desktop_conflict", return_value=False), self.assertRaises(OSError):
+            installer.install(args)
+        self.assertEqual(foreign.read_text(), "foreign")
+        self.assertTrue(config.is_symlink())
+        self.assertFalse((self.home / ".local/share/hiroute/standalone.json").exists())
+
+
 class PackageTests(StandaloneFixture):
     def test_console_assets_are_verified_and_installed_with_the_existing_package(self):
         assets = self.root / "console"

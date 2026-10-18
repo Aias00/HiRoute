@@ -1,5 +1,5 @@
 //! OS-trusted credential minting. A collaboration grant can never enter this path.
-use super::auth::{AuthError, ConsoleAuth};
+use super::auth::{AuthError, ConsoleAuth, LaunchTarget};
 use hiroute_application_api::*;
 use serde_json::{Value, json};
 use std::{
@@ -8,7 +8,7 @@ use std::{
 };
 
 pub trait ConsoleEndpoint: Send + Sync {
-    fn launch_url(&self) -> Result<String, AuthError>;
+    fn launch_target(&self, loopback_only: bool) -> Result<LaunchTarget, AuthError>;
 }
 pub struct ConsoleControl {
     pub(super) auth: Arc<Mutex<ConsoleAuth>>,
@@ -44,6 +44,7 @@ impl ConsoleControl {
         } else {
             self.execute(request).map_err(|e| match e {
                 AuthError::Invalid => ErrorCode::InvalidArguments,
+                AuthError::ListenerUnavailable => ErrorCode::ActionRequired,
                 _ => ErrorCode::DaemonUnavailable,
             })
         };
@@ -57,18 +58,19 @@ impl ConsoleControl {
     fn execute(&self, request: &LocalControlWireRequestV2) -> Result<Value, AuthError> {
         match request.operation_id.as_str() {
             "CreateConsoleLaunch" => {
-                let _: ConsoleLaunchRequestV1 = serde_json::from_value(request.payload.clone())
+                let input: ConsoleLaunchRequestV1 = serde_json::from_value(request.payload.clone())
                     .map_err(|_| AuthError::Invalid)?;
-                let url = self
+                let target = self
                     .endpoint
                     .get()
                     .ok_or(AuthError::Unavailable)?
-                    .launch_url()?;
+                    .launch_target(input.loopback_only)?;
+                let url = target.origin.clone();
                 let code = self
                     .auth
                     .lock()
                     .map_err(|_| AuthError::Unavailable)?
-                    .create_launch()?;
+                    .create_launch(target)?;
                 Ok(json!({"url":format!("{url}/launch?code={}", code.as_str()),"expires_in":120}))
             }
             "CreateConsoleToken" => {
@@ -83,7 +85,7 @@ impl ConsoleControl {
                 serde_json::to_value(created).map_err(|_| AuthError::Unavailable)
             }
             "ListConsoleTokens" => {
-                let _: ConsoleLaunchRequestV1 = serde_json::from_value(request.payload.clone())
+                let _: ConsoleListTokensRequestV1 = serde_json::from_value(request.payload.clone())
                     .map_err(|_| AuthError::Invalid)?;
                 Ok(
                     json!({"tokens":self.auth.lock().map_err(|_|AuthError::Unavailable)?.list_tokens()}),

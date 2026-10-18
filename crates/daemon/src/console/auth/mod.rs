@@ -9,7 +9,10 @@ use std::{
     time::Instant,
 };
 use zeroize::Zeroizing;
+mod launch;
 mod store;
+pub use launch::LaunchTarget;
+pub(crate) use launch::authority;
 #[cfg(test)]
 mod tests;
 
@@ -23,6 +26,7 @@ pub enum AuthError {
     Invalid,
     Capacity,
     Unavailable,
+    ListenerUnavailable,
 }
 impl AuthError {
     pub fn code(self) -> &'static str {
@@ -32,6 +36,7 @@ impl AuthError {
             Self::Invalid => "CONSOLE_CREDENTIAL_INVALID",
             Self::Capacity => "CONSOLE_SESSION_LIMIT",
             Self::Unavailable => "CONSOLE_AUTH_UNAVAILABLE",
+            Self::ListenerUnavailable => "CONSOLE_LISTENER_UNAVAILABLE",
         }
     }
 }
@@ -87,7 +92,7 @@ pub(super) struct AuditEvent<'a> {
 pub struct ConsoleAuth {
     root: PathBuf,
     tokens: Vec<store::StoredToken>,
-    launches: BTreeMap<String, u64>,
+    launches: BTreeMap<String, launch::Launch>,
     sessions: BTreeMap<String, Session>,
     failures: VecDeque<(u64, IpAddr)>,
 }
@@ -104,15 +109,21 @@ impl ConsoleAuth {
             failures: VecDeque::new(),
         })
     }
-    pub fn create_launch(&mut self) -> Result<Zeroizing<String>, AuthError> {
+    pub fn create_launch(&mut self, target: LaunchTarget) -> Result<Zeroizing<String>, AuthError> {
         let now = now()?;
-        self.launches.retain(|_, expiry| *expiry > now);
+        self.launches.retain(|_, entry| entry.expires > now);
         if self.launches.len() >= 32 {
             return Err(AuthError::Capacity);
         }
         let secret = random()?;
         self.credential_event("launch_created", "launch", None)?;
-        self.launches.insert(hash(&secret), now + LAUNCH_TTL);
+        self.launches.insert(
+            hash(&secret),
+            launch::Launch {
+                expires: now + LAUNCH_TTL,
+                target,
+            },
+        );
         Ok(secret)
     }
     pub fn create_token(
@@ -177,14 +188,19 @@ impl ConsoleAuth {
         &mut self,
         code: &str,
         peer: IpAddr,
+        origin: &str,
     ) -> Result<SessionExchange, AuthError> {
         self.rate(peer)?;
         let now = now()?;
-        if !peer.is_loopback() || !valid_secret(code) {
+        if !valid_secret(code) {
             return self.failed(peer);
         }
         let digest = hash(code);
-        if !self.launches.get(&digest).is_some_and(|e| *e > now) {
+        if !self.launches.get(&digest).is_some_and(|entry| {
+            entry.expires > now
+                && entry.target.origin == origin
+                && (!entry.target.loopback_only || peer.is_loopback())
+        }) {
             return self.failed(peer);
         }
         // Consume before session creation: a failed/cancelled exchange cannot replay.
