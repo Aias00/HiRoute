@@ -8,6 +8,16 @@ use rusqlite::params;
 
 #[test]
 fn live_search_large_distinct_source_cache_keeps_indexed_anchors_and_complete_pagination() {
+    search_scale(30_000, 30_000);
+}
+
+#[test]
+#[ignore = "targeted 250k-occurrence/60k-source gate; execute explicitly outside ordinary parallel unit tests"]
+fn live_search_250k_occurrences_and_60k_sources_under_real_deadline() {
+    search_scale(60_000, 250_000);
+}
+
+fn search_scale(distinct: usize, occurrences: usize) {
     let root = tempfile::tempdir().unwrap();
     let store = LocalObservationStore::open(root.path(), DigestAuthority::new([2; 32])).unwrap();
     {
@@ -20,11 +30,11 @@ fn live_search_large_distinct_source_cache_keeps_indexed_anchors_and_complete_pa
         // Component cache fixture: unlike the repeated single-blob corpus, each
         // row has its own real digest, folded block and production lookup grams.
         // Native acceptance separately proves capture, publication and body reads.
-        for n in 0..30_000 {
+        for n in 0..distinct {
             let body = if n < 51 {
                 format!("checksum {n}")
             } else {
-                format!("ordinary background e ch {n}")
+                format!("ordinary background e ch 中文 {n}")
             };
             let digest = store
                 .authority
@@ -48,6 +58,17 @@ fn live_search_large_distinct_source_cache_keeps_indexed_anchors_and_complete_pa
                 params![WorkspaceId::DEFAULT, digest],
             )
             .unwrap();
+        }
+        // The separately selected scale gate uses 60k verified sources and
+        // 250k occurrences, including repeated input history. Native acceptance
+        // separately reads the preserved installed corpus.
+        let mut remaining = occurrences - distinct;
+        let mut replica = 0;
+        while remaining > 0 {
+            let limit = remaining.min(distinct);
+            tx.execute("INSERT INTO content_instances_v2(workspace_id,content_id,message_instance_id,request_id,direction,fork_id,part_ordinal,content_kind,canonical_media_type,content_blob_digest,has_content_ref,accumulated_byte_count,state,created_at_unix_nanos) SELECT workspace_id,?1||content_id,message_instance_id,request_id,direction,fork_id,part_ordinal+?2,content_kind,canonical_media_type,content_blob_digest,has_content_ref,accumulated_byte_count,state,created_at_unix_nanos FROM content_instances_v2 WHERE workspace_id=?3 AND content_id LIKE 'content-%' ORDER BY content_id LIMIT ?4",params![format!("repeat-{replica}-"),((replica+1)*distinct) as i64,WorkspaceId::DEFAULT,limit as i64]).unwrap();
+            remaining -= limit;
+            replica += 1;
         }
         tx.commit().unwrap();
         // Matching reads source identities and covering content metadata, not
@@ -135,17 +156,12 @@ fn live_search_large_distinct_source_cache_keeps_indexed_anchors_and_complete_pa
                     1,
                     "the shared keyword candidate set must be built once: {plan:?}"
                 );
-                let index = if exact_gram {
-                    "SEARCH b USING COVERING INDEX observation_text_blocks_source "
-                } else {
-                    "SEARCH b USING INDEX observation_text_blocks_source "
-                };
                 assert!(
-                    plan.iter()
-                        .any(|(_, _, step)| step.starts_with(index)
-                            && step.contains("(workspace=?)")),
-                    "source identity scan must precede readiness; short grams must avoid folded bodies: {plan:?}"
+                    plan.iter().any(|(_, _, step)| step
+                        .starts_with("SEARCH b USING INTEGER PRIMARY KEY (rowid=?)")),
+                    "keyword candidates must drive direct block identities, not every workspace source: {plan:?}"
                 );
+                let _ = exact_gram;
             } else if !returned_identities {
                 assert!(
                     plan.iter().any(|(_, _, step)| step
@@ -185,7 +201,7 @@ fn live_search_large_distinct_source_cache_keeps_indexed_anchors_and_complete_pa
     assert!(last.next_cursor.is_none() && !last.index_partial);
     // A common one-character keyword exercises nearly every distinct block,
     // including the final current-visibility read under the same 500 ms budget.
-    for word in ["e", "ch", "o"] {
+    for word in ["e", "ch", "o", "中文"] {
         let common = store
             .search_observed_sessions(&reader(true), &query(word, 200), 500)
             .unwrap_or_else(|error| panic!("common keyword {word} failed: {error:?}"));
@@ -194,6 +210,23 @@ fn live_search_large_distinct_source_cache_keeps_indexed_anchors_and_complete_pa
             common.next_cursor.is_none() && !common.index_partial,
             "{word}"
         );
+        let mut analysis = ObservationAnalysisQueryV1::new(AnalysisViewV1::Conversations);
+        analysis.query = Some(word.into());
+        analysis.limit = 200;
+        let range = AnalysisTimeRangeV1 {
+            requested_from_ms: 0,
+            requested_to_ms: 1000,
+            effective_from_ms: 0,
+            effective_to_ms: 1000,
+            from_utc_offset_seconds: 0,
+            to_utc_offset_seconds: 0,
+            clipped_for_retention: false,
+        };
+        let analyzed = store
+            .observed_analysis(&reader(true), &analysis, Some(&range), None, 500)
+            .unwrap_or_else(|error| panic!("analysis keyword {word} failed: {error:?}"));
+        assert_eq!(analyzed.conversations.len(), 111, "{word}");
+        assert!(analyzed.next_cursor.is_none(), "{word}");
     }
     let mut short = query("o", 200);
     short.limit = 50;

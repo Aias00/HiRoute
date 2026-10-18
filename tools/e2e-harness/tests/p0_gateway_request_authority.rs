@@ -90,6 +90,7 @@ fn snapshot(publication_revision: u64, fast_plan_revision: u64) -> GatewayPublic
             },
         ],
         vec![GrantV1 {
+            consumer: None,
             route_protocols: Default::default(),
             grant_id: "agent-a".into(),
             generation: 3,
@@ -211,7 +212,8 @@ fn production_hirouted_wire_authority_catalog_deadline_and_actual_restart() {
     assert!(ready_body["executable_sha256"].is_null());
 
     for headers in [
-        "Authorization: Bearer wire-token\r\n",
+        "Authorization: Bearer wrong-token\r\n",
+        "Authorization: Bearer wire-token\r\nAuthorization: Bearer wire-token\r\n",
         "X-HiRoute-Token: wrong-token\r\nAuthorization: Bearer wire-token\r\n",
         "X-HiRoute-Token: wire-token\r\nX-HiRoute-Token: wire-token\r\n",
     ] {
@@ -266,6 +268,17 @@ fn production_hirouted_wire_authority_catalog_deadline_and_actual_restart() {
     assert_eq!(unchanged.status, 304);
     assert_eq!(unchanged.headers["etag"], etag);
     assert!(unchanged.body.is_empty());
+
+    let bearer_models = request(
+        address,
+        "GET",
+        "/v1/models",
+        &[("Authorization", "Bearer wire-token")],
+        b"",
+    );
+    assert_json_response(&bearer_models, 200);
+    assert_eq!(bearer_models.body, models.body);
+    assert_eq!(bearer_models.headers["etag"], etag);
 
     let qoder_models = request(
         address,
@@ -335,25 +348,24 @@ fn production_hirouted_wire_authority_catalog_deadline_and_actual_restart() {
         );
     }
 
-    let provider_thread = serve_one_tls_json_response(
-        provider.try_clone().unwrap(),
-        "Bearer wire-provider-secret-1",
-        provider_response("wire-provider", "ok"),
-    );
     // Padding keeps the semantic request small while proving the production
     // entry and core impose no former 1 MiB cumulative request ceiling.
     let mut accepted_body = br#"{"model":"wire-fast","input":"opaque"}"#.to_vec();
     accepted_body.resize(1024 * 1024 + 1024, b' ');
-    let accepted = request(
-        address,
-        "POST",
-        "/v1/responses",
-        &[("X-HiRoute-Token", "wire-token")],
-        &accepted_body,
-    );
-    provider_thread.join().unwrap();
-    assert_json_response(&accepted, 200);
-    assert_response_text(&accepted, "wire-fast", "wire-provider", "ok");
+    for header in [
+        ("X-HiRoute-Token", "wire-token"),
+        ("Authorization", "Bearer wire-token"),
+    ] {
+        let provider_thread = serve_one_tls_json_response(
+            provider.try_clone().unwrap(),
+            "Bearer wire-provider-secret-1",
+            provider_response("wire-provider", "ok"),
+        );
+        let accepted = request(address, "POST", "/v1/responses", &[header], &accepted_body);
+        provider_thread.join().unwrap();
+        assert_json_response(&accepted, 200);
+        assert_response_text(&accepted, "wire-fast", "wire-provider", "ok");
+    }
 
     let qoder_provider = serve_one_tls_json_response(
         provider.try_clone().unwrap(),

@@ -1,26 +1,44 @@
 //! Finite observation intents over the existing Local Control operations.
 pub use hiroute_domain::{
-    ObservationAncestryQueryV2, ObservationAncestryV2, ObservationCatalogPageV2,
-    ObservationCatalogQueryV2, ObservationContentPageV2, ObservationContentQueryV2,
-    ObservationFactsPageV2, ObservationFactsQueryV2, ObservationRequestPage,
-    ObservationRequestQuery, ObservationSearchPageV2, ObservationSearchQueryV2,
-    ObservationSessionCorrelationKindV1, ObservationSessionPageV2, ObservationSessionSearchPageV1,
-    ObservationSessionSummaryV2, ObservationValueQueryV2, ObservationValueSummaryV2,
-    PlanCompetenceFilter, PlanQualitySamplesPage, PlanQualitySamplesQuery,
+    AnalysisCostBasisV1, AnalysisCostGroupV1, AnalysisPeriodV1, AnalysisViewV1,
+    ObservationAnalysisPageV1, ObservationAnalysisQueryV1, ObservationAncestryQueryV2,
+    ObservationAncestryV2, ObservationCatalogPageV2, ObservationCatalogQueryV2,
+    ObservationContentPageV2, ObservationContentQueryV2, ObservationFactsPageV2,
+    ObservationFactsQueryV2, ObservationRequestPage, ObservationRequestQuery,
+    ObservationSearchPageV2, ObservationSearchQueryV2, ObservationSessionCorrelationKindV1,
+    ObservationSessionPageV2, ObservationSessionSearchPageV1, ObservationSessionSummaryV2,
+    ObservationValueQueryV2, ObservationValueSummaryV2, PlanCompetenceFilter,
+    PlanQualitySamplesPage, PlanQualitySamplesQuery, PriceValuationKindV1,
 };
 use serde::{Deserialize, Serialize};
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ObservationReadFailureReasonV1 {
+    Timeout,
+    ReaderBusy,
+    IndexUnavailable,
+    StorageUnavailable,
+}
+
+#[derive(schemars::JsonSchema, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ObservationReadFailureV1 {
+    pub reason: ObservationReadFailureReasonV1,
+    pub retry_after_ms: u32,
+    pub action: String,
+}
+#[derive(schemars::JsonSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ObservationReadRequestV2 {
     pub schema: ObservationReadSchemaV2,
     pub intent: ObservationReadIntentV2,
 }
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum ObservationReadSchemaV2 {
     #[serde(rename = "hiroute.observation.query/v2")]
     V2,
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(
     tag = "view",
     content = "query",
@@ -28,6 +46,7 @@ pub enum ObservationReadSchemaV2 {
     deny_unknown_fields
 )]
 pub enum ObservationReadIntentV2 {
+    Analysis(ObservationAnalysisQueryV1),
     Status(ObservationStatusQueryV2),
     Sessions(ObservationRequestQuery),
     Timeline(ObservationRequestQuery),
@@ -40,6 +59,7 @@ pub enum ObservationReadIntentV2 {
     Value(ObservationValueQueryV2),
     HomeValue(ObservationHomeValueQueryV2),
     ValueReport(ObservationValueReportOptionsV2),
+    ApiEquivalentValue(ApiEquivalentValueOptionsV1),
     PlanQuality(PlanQualitySamplesQuery),
 }
 impl ObservationReadRequestV2 {
@@ -51,6 +71,11 @@ impl ObservationReadRequestV2 {
     }
     pub fn operation(&self) -> &'static str {
         match self.intent {
+            ObservationReadIntentV2::Analysis(ref q) => match q.view {
+                AnalysisViewV1::Conversations | AnalysisViewV1::Switches => "ListSessions",
+                AnalysisViewV1::CostRanking | AnalysisViewV1::SavingsSummary => "GetValue",
+                _ => "GetSession",
+            },
             ObservationReadIntentV2::Status(_)
             | ObservationReadIntentV2::Sessions(_)
             | ObservationReadIntentV2::Search(_)
@@ -59,12 +84,18 @@ impl ObservationReadRequestV2 {
             ObservationReadIntentV2::Facts(_) => "GetRoutingReceipt",
             ObservationReadIntentV2::Value(_)
             | ObservationReadIntentV2::HomeValue(_)
-            | ObservationReadIntentV2::ValueReport(_) => "GetValue",
+            | ObservationReadIntentV2::ValueReport(_)
+            | ObservationReadIntentV2::ApiEquivalentValue(_) => "GetValue",
             _ => "GetSession",
         }
     }
     pub fn protected_operation(&self) -> &'static str {
         match self.intent {
+            ObservationReadIntentV2::Analysis(ref q) => match q.view {
+                AnalysisViewV1::Conversations | AnalysisViewV1::Switches => "ListSessionsV2",
+                AnalysisViewV1::CostRanking | AnalysisViewV1::SavingsSummary => "GetValueV2",
+                _ => "GetSessionTimelineV2",
+            },
             ObservationReadIntentV2::Status(_) | ObservationReadIntentV2::Sessions(_) => {
                 "ListSessionsV2"
             }
@@ -78,7 +109,8 @@ impl ObservationReadRequestV2 {
             }
             ObservationReadIntentV2::Value(_)
             | ObservationReadIntentV2::HomeValue(_)
-            | ObservationReadIntentV2::ValueReport(_) => "GetValueV2",
+            | ObservationReadIntentV2::ValueReport(_)
+            | ObservationReadIntentV2::ApiEquivalentValue(_) => "GetValueV2",
             ObservationReadIntentV2::PlanQuality(_) => "ReadPlanQualitySamplesV1",
         }
     }
@@ -99,7 +131,7 @@ pub struct ObservationDeleteApplyRequestV2 {
     pub accepted_digest: hiroute_domain::CanonicalDigest,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ObservationHomeValueQueryV2 {
     #[serde(default)]
@@ -110,11 +142,11 @@ pub struct ObservationHomeValueQueryV2 {
     pub currency: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ObservationStatusQueryV2 {}
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ObservationValueReportOptionsV2 {
     pub agent_plan_id: Option<crate::AgentPlanId>,
@@ -125,4 +157,12 @@ pub struct ObservationValueReportOptionsV2 {
     pub group_by: crate::ValueGroupByV1,
     pub currency: Option<String>,
     pub session_id: Option<crate::SessionId>,
+}
+
+/// Opt-in current-price estimate; old value-report calls keep their output.
+#[derive(schemars::JsonSchema, Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ApiEquivalentValueOptionsV1 {
+    pub report: ObservationValueReportOptionsV2,
+    pub reference_binding_id: String,
 }

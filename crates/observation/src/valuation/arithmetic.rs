@@ -5,6 +5,34 @@ pub fn value_attempt(
     quote: &FrozenPriceQuoteV1,
     usage: &UsageBucketsV2,
 ) -> Result<AttemptValuationV2, ValuationError> {
+    validate_quote(quote)?;
+    let amount = amount_only(quote, usage);
+    let components = [
+        ("input_uncached", usage.input_uncached),
+        ("output", usage.output),
+        ("cache_read", usage.cache_read),
+        ("cache_write", usage.cache_write),
+    ]
+    .into_iter()
+    .zip(amount.missing)
+    .map(|((bucket, tokens), missing)| ValuationComponentV2 {
+        bucket: bucket.into(),
+        tokens,
+        missing,
+    })
+    .collect();
+    Ok(AttemptValuationV2 {
+        algorithm: VALUATION_ALGORITHM.into(),
+        currency: quote.currency.clone(),
+        valuation_kind: quote.valuation_kind,
+        quote: quote.clone(),
+        known_sum_micros: amount.known_sum_micros,
+        coverage: amount.coverage,
+        components,
+    })
+}
+
+pub(crate) fn validate_quote(quote: &FrozenPriceQuoteV1) -> Result<(), ValuationError> {
     quote
         .verify_digest()
         .map_err(|_| ValuationError::InvalidEvidence)?;
@@ -18,10 +46,24 @@ pub fn value_attempt(
     {
         return Err(ValuationError::InvalidEvidence);
     }
+    Ok(())
+}
+
+/// Shared integer evaluator for already validated quotes. Query captures verify
+/// each immutable quote once; this hot path neither rehashes nor clones it.
+pub(crate) struct NumericAmount {
+    pub known_sum_micros: Option<u64>,
+    pub coverage: MetricCoverage,
+    pub missing: [Option<ValuationMissingReason>; 4],
+}
+
+pub(crate) fn amount_only(quote: &FrozenPriceQuoteV1, usage: &UsageBucketsV2) -> NumericAmount {
     let mut numerator = Some(0u128);
     let mut known = 0;
-    let mut components = Vec::with_capacity(4);
-    for (name, tokens, rate) in [
+    let known_base = matches!(quote.rates.input_uncached, TokenRateV1::Known { .. })
+        && matches!(quote.rates.output, TokenRateV1::Known { .. });
+    let mut missing_components = [None; 4];
+    for (index, (_, tokens, rate)) in [
         (
             "input_uncached",
             usage.input_uncached,
@@ -30,9 +72,16 @@ pub fn value_attempt(
         ("output", usage.output, &quote.rates.output),
         ("cache_read", usage.cache_read, &quote.rates.cache_read),
         ("cache_write", usage.cache_write, &quote.rates.cache_write),
-    ] {
+    ]
+    .into_iter()
+    .enumerate()
+    {
         let missing = match (tokens, rate) {
             (None, _) => Some(ValuationMissingReason::UsageUnknown),
+            (Some(0), _) if known_base => {
+                known += 1;
+                None
+            }
             (
                 Some(tokens),
                 TokenRateV1::Known {
@@ -49,20 +98,16 @@ pub fn value_attempt(
             }
             (Some(_), TokenRateV1::Unknown { .. }) => Some(ValuationMissingReason::PriceUnknown),
         };
-        components.push(ValuationComponentV2 {
-            bucket: name.into(),
-            tokens,
-            missing,
-        });
+        missing_components[index] = missing;
     }
     let amount = numerator
         .and_then(|value| value.checked_add(500_000))
         .map(|value| value / 1_000_000)
         .and_then(|value| u64::try_from(value).ok());
     let coverage = if amount.is_none() {
-        for component in &mut components {
-            if component.missing.is_none() {
-                component.missing = Some(ValuationMissingReason::ArithmeticOverflow);
+        for missing in &mut missing_components {
+            if missing.is_none() {
+                *missing = Some(ValuationMissingReason::ArithmeticOverflow);
             }
         }
         MetricCoverage::Unknown
@@ -73,13 +118,9 @@ pub fn value_attempt(
     } else {
         MetricCoverage::Partial
     };
-    Ok(AttemptValuationV2 {
-        algorithm: VALUATION_ALGORITHM.into(),
-        currency: quote.currency.clone(),
-        valuation_kind: quote.valuation_kind,
-        quote: quote.clone(),
+    NumericAmount {
         known_sum_micros: if known == 0 { None } else { amount },
         coverage,
-        components,
-    })
+        missing: missing_components,
+    }
 }

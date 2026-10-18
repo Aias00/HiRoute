@@ -50,22 +50,57 @@ fn unique_offer<'a>(
 
 impl SourcePriceControlPort for LocalControlAdapter {
     fn price_control_facts(&self) -> Result<PriceControlFactsV1, ControlReadError> {
-        let catalog = self
-            .release_catalog
-            .as_ref()
-            .ok_or(ControlReadError::Unavailable)?;
         let stores = self
             .stores
             .lock()
             .map_err(|_| ControlReadError::Unavailable)?;
+        self.price_facts_locked(&stores, None)
+    }
+    fn try_price_control_facts(
+        &self,
+        deadline: std::time::Instant,
+    ) -> Result<
+        hiroute_application::control::ControlReadAttempt<PriceControlFactsV1>,
+        ControlReadError,
+    > {
+        use hiroute_application::control::ControlReadAttempt;
+        match self.stores.try_lock() {
+            Ok(stores) => self
+                .price_facts_locked(&stores, Some(deadline))
+                .map(ControlReadAttempt::Ready),
+            Err(std::sync::TryLockError::WouldBlock) => Ok(ControlReadAttempt::Busy),
+            Err(std::sync::TryLockError::Poisoned(_)) => Err(ControlReadError::Unavailable),
+        }
+    }
+}
+impl LocalControlAdapter {
+    fn price_facts_locked(
+        &self,
+        stores: &hiroute_local_storage::LocalStorageSet,
+        deadline: Option<std::time::Instant>,
+    ) -> Result<PriceControlFactsV1, ControlReadError> {
+        let catalog = self
+            .release_catalog
+            .as_ref()
+            .ok_or(ControlReadError::Unavailable)?;
+        let check = || {
+            if deadline.is_some_and(|d| std::time::Instant::now() >= d) {
+                Err(ControlReadError::Unavailable)
+            } else {
+                Ok(())
+            }
+        };
+        check()?;
         let control = stores.control();
         let legacy_source_bindings = control.price_source_bindings().map_err(map_port)?;
         let management = control
             .compute_management_snapshot(&WorkspaceId::default())
             .map_err(map_port)?;
+        check()?;
         let overrides = control
             .source_price_overrides(&WorkspaceId::default())
             .map_err(map_port)?;
+        check()?;
         let legacy = control.price_overrides().map_err(map_port)?;
         let configuration_revision = overrides
             .iter()
@@ -80,9 +115,11 @@ impl SourcePriceControlPort for LocalControlAdapter {
             revision: sequence,
             digest: digest.clone(),
         }];
+        check()?;
         let mut source_bindings = Vec::new();
         let mut identities = BTreeSet::new();
         for source in &management.sources {
+            check()?;
             // The current management aggregate owns an exact source/binding identity even when
             // its retained catalog proof is stale. In that case the binding must disappear from
             // price facts instead of falling back to a pre-migration projection with the same
@@ -126,6 +163,15 @@ impl SourcePriceControlPort for LocalControlAdapter {
                     (SourceOrigin::Cpa, BillingClass::Subscription, None)
                 }
             };
+            let execution_models =
+                hiroute_application::compute_management::compile_compute_management_source(source)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter_map(|fact| {
+                        super::candidate_execution::management_execution_model_id(&fact)
+                            .map(|id| (fact.binding_id, id))
+                    })
+                    .collect::<std::collections::BTreeMap<_, _>>();
             for model in &source.models {
                 let model_configuration_id = model
                     .catalog_configuration_id
@@ -144,6 +190,9 @@ impl SourcePriceControlPort for LocalControlAdapter {
                     binding_id: model.binding_id.clone(),
                     binding_revision: model.revision,
                     model_configuration_id,
+                    execution_model_configuration_id: execution_models
+                        .get(&model.binding_id)
+                        .cloned(),
                     billing_class,
                     offer_ref,
                 });
@@ -180,12 +229,14 @@ impl SourcePriceControlPort for LocalControlAdapter {
                 binding_id: binding.binding_id,
                 binding_revision: binding.revision,
                 model_configuration_id: binding.model_configuration_id,
+                execution_model_configuration_id: None,
                 billing_class: binding.billing_class,
                 offer_ref,
             });
         }
         let mut entries = Vec::new();
         for binding in &source_bindings {
+            check()?;
             let model = if catalog
                 .model_data()
                 .model(&binding.model_configuration_id)

@@ -1,6 +1,7 @@
 //! Exact pre-release cancellation producer fixture; no live database is edited.
 use super::*;
 use hiroute_domain::delegation::{DelegationRuntimePort, RunCleanupV1, RunStateV1};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
 fn startup_settles_only_cancelled_before_preparation_and_does_not_replay() {

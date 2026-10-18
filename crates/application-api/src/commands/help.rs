@@ -2,6 +2,9 @@
 use super::CommandKind;
 
 pub(super) fn command_effect(command_id: &str, kind: CommandKind) -> &'static str {
+    if command_id == "compute.connection.prepare" {
+        return "local_candidate_preparation";
+    }
     if command_id == "agent.launch" {
         return "managed_local_process";
     }
@@ -31,8 +34,39 @@ pub(super) fn command_network(command_id: &str, kind: CommandKind) -> &'static s
     }
 }
 pub(super) fn automation(command_id: &str) -> &'static str {
+    if matches!(command_id, "sessions.list" | "sessions.show") {
+        return SESSION_ANALYSIS_HELP;
+    }
+    if command_id == "value.show" {
+        return VALUE_ANALYSIS_HELP;
+    }
+    if command_id == "decision.services.apply" {
+        return "Read decision services options first; reuse an exact saved connection when suitable. Convenience flags prepare a Preview only. A new connection requires --id, --name, --provider and its required endpoint/model plus --candidate, or explicit --no-auth for custom only. --candidate refers to an existing protected registration; never pass a credential in flags/JSON/chat. The user can run protected-input register --candidate REF --prompt --format bearer|raw in their own terminal. System One uses Authorization and bearer; custom supports --header NAME or --no-auth. Updates by --id preserve omitted fields; changing endpoint/provider/header requires explicit new credentials or custom --no-auth. --timeout-ms defaults to 10000 for a new connection. --apply-file creates a new private exact Apply request, never overwrites or applies; submit it with the same decision services apply verb. Keep its Operation lookup and identical request for uncertain delivery. Typed Preview/Apply remain alternatives; --apply-file accepts Preview input only. No save proves connectivity, native loading or decision quality.";
+    }
+    if command_id == "decision.services.test" {
+        return "An explicit potentially billed probe. --service ID@REVISION resolves an exact current listed connection; historical pinned versions remain available through the typed request. Inspect data.outcome and failure_code even when the command itself succeeded. Passing establishes this synthetic connection test, not semantic decision quality, execution model availability or native loading. Never silently switch a selected service to local_rules after failure.";
+    }
+    if matches!(
+        command_id,
+        "routing.preview"
+            | "compute.connection.preview"
+            | "agents.connect.preview"
+            | "agents.restore.preview"
+    ) {
+        return "Convenience flags and JSON input are alternatives. --apply-file creates a new private exact Apply request, never overwrites, and performs no Apply. Review effects, then submit that file with the matching Apply command. After uncertain submission, use submission.operation_lookup with operations find or resend the identical file. Core supported variants are compute save, Plan content v2 and Agent settings v2. Routing recovery: retain a successful private routing show response before changes; use routing preview --plan ID --restore-from BEFORE_JSON --apply-file NEW_FILE, review and routing apply --request-file NEW_FILE. This restores complete effective configuration with the current head revision, exclusively from the same Plan/workspace; do not mix with edit flags or typed request inputs. Compare all desired fields after recovery; revisions advance and native facet restoration is separate. Routing: repeat economy/primary flags to preserve order; select --decision local_rules or --decision-service ID@REVISION explicitly for a new smart Plan. Native choices: Hermes requires --protocol; Codex requires --native-models preserve_available|hiroute_only and --native-default preserve_native|plan; Claude requires explicit --preset opus|sonnet|haiku; Qoder/Pi/DSH require --protocol and add entries without claiming a native default. Missing choices remain unresolved. --facet may repeat to restore selected facets; other facets stay untouched. Desktop resident-service evidence must come from Desktop, never a fabricated CLI declaration.";
+    }
+
+    if command_id == "agents.connect.status" {
+        return "Use --effective --context ID --plan ID for separate saved, native-loading, selection and exact request evidence. Unknown loading stays unknown. This read-only query never restarts an Agent or calls a model; recorded outcomes apply only to the identified request/session.";
+    }
     if command_id == "compute.connection.login" {
         return "Keep the returned login_ref for status, cancel and forget. After uncertain delivery, list/status the existing session before starting again or resubmitting a one-use callback. Never persist the authorization URL or put callback material in argv, environment, logs or ordinary request JSON.";
+    }
+    if command_id == "compute.connection.prepare" {
+        return "Reuse the opaque discovery reference and revision exactly. Prepare privately rereads native facts and returns selectable model refs. Save all currently selectable refs by default or the explicit requested subset through Preview/Apply; never omit selection or treat all as a wildcard.";
+    }
+    if command_id == "compute.scan" {
+        return "No input retains released V1 rows. Request hiroute.compute-scan-request/v2 explicitly for connection points, with the selected native_target for Hermes. No scan result is a saved source or account entitlement.";
     }
     if command_id == "worker.executors" {
         return "Ready permits a managed launch attempt, not a promise of execution or authorization. Optional capabilities remain unknown until the actual ACP handshake; start, load and cancel report real outcomes.";
@@ -113,6 +147,9 @@ pub(super) fn effects(command_id: &str, kind: CommandKind) -> &'static str {
     ) {
         return "Same-UID Application-owned journaled operation after exact spec, digest, revision, and idempotency checks.";
     }
+    if command_id == "compute.connection.prepare" {
+        return "Registers a private ephemeral candidate and protected credential reference after exact source reread. Does not save a source, mutate native files or call a model.";
+    }
     if command_id == "agent.launch" {
         return "Creates one owner-only temporary launch overlay, directly spawns the exact managed Agent executable without a shell, and removes the overlay after child exit; no persistent user configuration is changed.";
     }
@@ -164,6 +201,16 @@ pub(super) fn network_and_model_use(command_id: &str, kind: CommandKind) -> &'st
         }
     }
 }
+pub(super) fn examples(command_id: &str, joined_path: &str) -> Vec<String> {
+    if command_id == "decision.services.apply" {
+        return vec![
+            "hiroute decision services apply --request-file preview-request.json --output json  # Preview: schema_version and spec".into(),
+            "hiroute decision services apply --request-file apply-request.json --output json  # Apply: add exact accept_digest, expected_revisions and a stable idempotency_key".into(),
+            "hiroute schema show --command-id decision.services.apply --include-schema  # Complete wrappers; substitute current IDs and exact Preview values".into(),
+        ];
+    }
+    vec![example(command_id, joined_path)]
+}
 pub(super) fn example(command_id: &str, joined_path: &str) -> String {
     match command_id {
         "compute.connection.login" => "printf '%s' '{\"action\":\"start\",\"provider\":\"claude\"}' | hiroute compute connection login --request-stdin --output json".to_owned(),
@@ -207,6 +254,9 @@ pub(super) fn example(command_id: &str, joined_path: &str) -> String {
         }
         "decision.services.list" => "hiroute decision services list --output json".to_owned(),
         "decision.services.apply" | "decision.services.test" => format!("hiroute {joined_path} --request-stdin --output json < request.json"),
+        "routing.options" => "printf '%s' '{}' | hiroute routing options --request-stdin --output json".into(),
+        "routing.preview" | "agents.connect.preview" | "agents.restore.preview" => format!("hiroute {joined_path} --request-file preview-request.json --output json"),
+        "routing.apply" | "compute.connection.apply" | "agents.connect.apply" | "agents.restore.apply" => format!("hiroute {joined_path} --request-file apply-request.json --output json"),
         "routing.list" => "hiroute routing list --non-interactive --output json".to_owned(),
         "routing.show" => {
             "hiroute routing show plan/example --non-interactive --output json".to_owned()
@@ -225,3 +275,32 @@ pub(super) fn example(command_id: &str, joined_path: &str) -> String {
         _ => format!("hiroute {joined_path} --non-interactive --output json"),
     }
 }
+
+const SESSION_ANALYSIS_HELP: &str = r#"Same-OS-user Local Control reads retained message/tool content and searches without a separate GUI ticket. Supplied capability FDs remain validated; Gateway keys grant no management authority.
+
+Analysis journey (opt in; legacy views/cursors keep their meanings):
+  hiroute sessions list --view conversations --period 7d --limit 50
+  hiroute sessions list --view switches --day 2026-10-16
+  hiroute sessions show SESSION --view routing --analysis-scope TOKEN
+  hiroute sessions show SESSION --view conversation --request REQUEST --analysis-scope TOKEN
+
+Use --period today|yesterday|7d|30d, --day YYYY-MM-DD, or --from-ms N --to-ms N; choose one mode. Civil days follow this service host's local day (actual offsets are returned); absolute bounds are UTC milliseconds, half-open. Default is 7d. Analysis scopes return requested/effective bounds, expiry and relation/numeric/price watermarks. Retention may clip their start so used evidence stays retained for the token lifetime. No stable interval and missing native evidence are explicit gaps, not empty-success claims.
+
+Retain analysis_scope for ranking/switch/content drill-down; follow next_cursor with the same view/filters/limit and no new time selection. Follow-ups can narrow --session/--request, never widen the original Plan/Agent/query scope. New requests or unrelated lineage do not change a pinned range. Expired scope/cursor, withdrawal/full deletion or changed authority require a fresh initial query; do not silently compare totals across refreshed scopes. A page can be shorter than limit; its length is not the total.
+
+--query searches retained content in the conversations list. Pending/unavailable index is marked partial. --model-switch is invalid for new views; its legacy any|only|exclude behavior is unchanged. Recorded selection/competence stages explain routing; stage boundaries and credential relay are not user-turn model changes. Compare actual accepted endpoints and explicit reasoning settings. continuation_boundary marks a verified native compression boundary, including mid-turn compression; turn_context_reset/unknown/pending never establish adjacent user turns. Missing proof leaves physical sessions separate. Member previews include exact counts and partial markers. Request content is bounded; reference_only/partial entries supply content_id/request_id for typed V2 content pagination, never expose provider private state. Use sessions receipt RECEIPT for immutable routing facts and observation plan-quality samples for stage details. Missing/deleted/expired capture does not prove wrong routing.
+
+Legacy sessions list --include-unlinked --query TEXT and sessions show SESSION --content messages-and-tools remain available. Typed V2 accepts sessions/search/session_search, timeline/catalog/ancestry/content, and family-specific analysis requests. Read schema show --command-id sessions.show --include-schema for complete contracts. Observation errors opt in to timeout, reader_busy, index_unavailable or storage_unavailable diagnostics; retry the same scope where still valid. No read performs a classifier call or changes routing."#;
+
+const VALUE_ANALYSIS_HELP: &str = r#"Ordinary value show keeps frozen historical valuation. New analysis paths:
+  hiroute value show --view summary --period 7d
+  hiroute value show --group-by session --order-by cost-desc --period 7d
+  hiroute value show --group-by request --order-by cost-desc --analysis-scope TOKEN --session SESSION
+
+Summary defaults to current-price API-equivalent estimates and an unambiguous selected Plan's primary binding. Ambiguous reference/currency or missing prices returns choices; resolve actual binding IDs from routing options, never invent rates or exchange rates. Ranking needs no reference. Choose --basis recorded|api-equivalent; --currency USD|CNY and --valuation-kind usage-estimate|api-equivalent select one recorded currency/kind. Do not add different kinds or mix recorded estimates with current-price recalculation. Same time selectors, retention-safe bounds, analysis_scope, next_cursor and expiry rules as sessions --view apply; drill-downs inherit the pinned relation/numeric/price generations. Live traffic/new settlement/current price edits do not silently change them.
+
+The complete selected scope is aggregated before cost-desc pagination. Failed/retried attempts are counted once and rounded once per attempt, using exact source/model identity matching. Missing amounts are unknown, never zero/free. An incomplete ranking is highest-known-only. Savings shows signed paired subtotals, compared/missing/excluded coverage and decision overhead as unmeasured; a zero reference denominator has no percentage. Subscription/Coding Plan API-equivalent savings proves neither cash savings nor equal output/quality. Recorded receipts remain unchanged.
+
+For missing rates read prices effective, use its exact Binding locator/edit_context with prices override preview/apply, and valuation_kind=api_equivalent. Keep complete recovery material and exact retry requests. Scope/P capture capacity or reader contention is retryable within the same 500 ms budget; pending reconciliation reports target/progress and stalled state, never an empty total. Expired/deleted/withdrawn evidence requires an explicitly refreshed initial scope. Use sessions --help for related content/routing drill-downs.
+
+Legacy one-shot --basis api-equivalent --reference-binding BINDING --currency CNY with --routing PLAN or --session SESSION and an interval/period retains its original shape/time meaning and paired-coverage rules; it has no day grouping. New --view summary does not accept --group-by/--order-by. Read schema show --command-id value.show --include-schema for typed alternatives."#;

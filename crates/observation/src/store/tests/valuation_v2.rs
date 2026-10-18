@@ -6,6 +6,11 @@ use crate::{
 };
 use hiroute_domain::*;
 
+#[path = "analysis_tests.rs"]
+mod analysis_tests;
+#[path = "native_analysis_tests.rs"]
+mod native_analysis_tests;
+
 fn price(at_ms: i64, frame_kind: UsageFrameKindV1) -> ExecutionPricingEvidenceV1 {
     let target = PriceTargetV1 {
         workspace_id: WorkspaceId::default(),
@@ -620,3 +625,6 @@ fn corrupt_attempt_is_unknown_and_does_not_block_retention_batch() {
 
 #[path = "valuation_query_tests.rs"]
 mod query_tests;
+
+#[path = "api_equivalent_tests.rs"]
+mod api_equivalent_tests;

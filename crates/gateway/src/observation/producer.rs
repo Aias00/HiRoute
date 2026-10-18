@@ -230,6 +230,7 @@ pub struct GatewayObservationSinks {
     pub execution_fact: Arc<dyn ObservationRecordSink>,
     pub conversation_content: Arc<dyn ObservationRecordSink>,
     pub run_relation: Arc<dyn ObservationRecordSink>,
+    pub native_continuation: Arc<dyn ObservationRecordSink>,
     pub otel: Arc<dyn ObservationRecordSink>,
 }
 
@@ -241,6 +242,7 @@ impl GatewayObservationSinks {
             execution_fact: Arc::clone(&sink),
             conversation_content: Arc::clone(&sink),
             run_relation: Arc::clone(&sink),
+            native_continuation: Arc::clone(&sink),
             otel: sink,
         }
     }
@@ -263,6 +265,10 @@ impl GatewayObservationSinks {
             run_relation: faulting_file(
                 directory.join("run-relation.jsonl"),
                 "HIROUTE_OBSERVATION_RUN_RELATION_SINK",
+            )?,
+            native_continuation: faulting_file(
+                directory.join("native-continuation.jsonl"),
+                "HIROUTE_OBSERVATION_NATIVE_CONTINUATION_SINK",
             )?,
             otel: faulting_file(
                 directory.join("otel.jsonl"),

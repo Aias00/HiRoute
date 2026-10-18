@@ -55,6 +55,9 @@ impl LocalObservationStore {
             .map_err(|_| ObservationStoreError::ActivityUnavailable)?;
         schema::migrate(&mut connection)?;
         extensions::migrate(&mut connection)?;
+        // Optional, rebuildable analysis must not make otherwise supported core
+        // storage unreadable when its own table-local format is unavailable.
+        let _ = crate::analysis::migrate(&mut connection);
         Ok(Self {
             maintenance_running: Default::default(),
             index_running: Default::default(),
@@ -123,6 +126,13 @@ pub(crate) fn increment_store_revision(
             "UPDATE observation_meta SET value=?1 WHERE key='store_revision'",
             [next.to_string()],
         )
+        .map_err(|_| ObservationStoreError::ActivityUnavailable)?;
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .and_then(|n| i64::try_from(n.as_millis()).ok())
+        .unwrap_or(0);
+    crate::analysis::sync(connection, 200, now_ms)
         .map_err(|_| ObservationStoreError::ActivityUnavailable)?;
     Ok(next)
 }
