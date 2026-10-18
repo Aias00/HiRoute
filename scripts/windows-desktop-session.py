@@ -410,9 +410,11 @@ def codex_call(run, request, helper):
                     profile=profile, gateway_endpoint=endpoint)
     (run / 'codex-input.json').write_text(json.dumps(identity, indent=2), encoding='utf-8')
     expected = 'HiRoute-Windows-' + request['run_id'] + ':ok'
-    prompt = ('Do not read or modify any files or change directories. Use your shell tool to run '
-              'the read-only PowerShell command Get-Location in the current working directory. '
-              'Then reply with exactly ' + expected)
+    inference_only = request.get('desktop_action') == 'codex-inference'
+    prompt = (('Do not use any tools or read or modify files. Reply with exactly ' if inference_only else
+               'Do not read or modify any files or change directories. Use your shell tool to run '
+               'the read-only PowerShell command Get-Location in the current working directory. '
+               'Then reply with exactly ') + expected)
     command = [str(binary), 'exec', '--json', '--skip-git-repo-check', '--sandbox', 'read-only',
                '--config', 'approval_policy="never"']
     if profile:
@@ -421,10 +423,15 @@ def codex_call(run, request, helper):
     done = codex_process(run, command, environment)
     evidence = codex_call_evidence(done.stdout, expected, run.name)
     evidence.update(identity, exit_code=done.returncode,
+                    scope='inference_only' if inference_only else 'tool_and_inference',
                     native_entry='configured Codex exec; read-only sandbox')
-    (run / 'codex-call.json').write_text(json.dumps(evidence, indent=2), encoding='utf-8')
+    filename = 'codex-inference.json' if inference_only else 'codex-call.json'
+    (run / filename).write_text(json.dumps(evidence, indent=2), encoding='utf-8')
+    required = ('turn_completed', 'answer') if inference_only else ('turn_completed', 'answer', 'shell_tool')
     if (helper.digest(binary) != checksum or done.returncode != 0
-            or not all(evidence[key] for key in ('turn_completed', 'answer', 'shell_tool'))):
+            or not all(evidence[key] for key in required)):
+        if inference_only:
+            raise RuntimeError('Native Codex inference did not complete the turn and exact answer checks; inspect private evidence')
         raise RuntimeError('Native Codex call did not complete the real tool and answer checks; inspect private evidence')
     return evidence
 
@@ -608,7 +615,7 @@ def execute(request, run, product, pm, helper, activity, manifest, root):
     if activity.get('administrator_groups') is not False:
         raise ValueError('Native Desktop evidence requires a standard account, not a filtered administrator')
     action = request['desktop_action']
-    if action not in ('install', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call', 'network-probe'):
+    if action not in ('install', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call', 'codex-inference', 'network-probe'):
         raise ValueError('Unknown native Desktop action')
     if action == 'desktop-state':
         return dict(native_entry='read-only input desktop inspection', state=desktop_state())
@@ -649,7 +656,7 @@ def execute(request, run, product, pm, helper, activity, manifest, root):
     roots, facts, shell = installed(helper, product, pm)
     if action == 'network-probe':
         return network_probe(request, run, roots)
-    if action == 'codex-call':
+    if action in ('codex-call', 'codex-inference'):
         return codex_call(run, request, helper)
     if action == 'launch':
         child = subprocess.Popen([str(shell)], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,

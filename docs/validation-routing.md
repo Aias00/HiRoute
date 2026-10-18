@@ -197,6 +197,10 @@ answer; the completed command must be `Get-Location` and report the actual run
 directory. Process exit alone is insufficient. Preserve its actual client image hash,
 product revision and native output. It does not alter sandbox configuration or
 substitute a model fixture for a real upstream.
+`codex-inference` is a separate pure model-call scenario using the same saved
+configuration, client identity and sandbox. It requests no tools and requires a
+completed turn with the exact per-run answer. It establishes no native tool
+execution and cannot replace or waive a failed `codex-call` result.
 The runner records the actual client version before the call and preserves partial
 stdout/stderr when its bounded wait expires. Such a timeout is a failed attempt,
 not an inference verdict. The bounded public-CLI action also accepts `sessions`

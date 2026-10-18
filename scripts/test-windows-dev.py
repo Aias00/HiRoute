@@ -9,8 +9,10 @@ import json
 import os
 from pathlib import Path
 import struct
+import sys
 import tempfile
 import time
+import types
 import unittest
 from unittest.mock import patch
 import zipfile
@@ -247,6 +249,54 @@ class Runner(unittest.TestCase):
              patch.object(desktop.subprocess, 'run') as run, self.assertRaisesRegex(ValueError,'environment overrides'):
             desktop.codex_call(self.root,request,profiles)
         run.assert_not_called()
+
+    def native_codex_inference(self, action, completed=True, answer=True):
+        home = self.root / 'native-home'
+        config = home / '.codex/hiroute.config.toml'
+        config.parent.mkdir(parents=True, exist_ok=True)
+        config.write_text('model_provider = "hiroute"\n[model_providers.hiroute]\n'
+                          'base_url = "http://127.0.0.1:65140/v1"\n')
+        binary = self.root / 'codex.exe'
+        binary.write_bytes(b'measured native client')
+        run_id = 'a' * 32
+        events = [{'type':'item.completed','item':{'type':'agent_message',
+                   'text':'HiRoute-Windows-' + run_id + ':ok' if answer else 'unrelated answer'}}]
+        if completed:
+            events.append({'type':'turn.completed'})
+        output = ('\n'.join(json.dumps(value) for value in events)).encode()
+        request = dict(run_id=run_id, desktop_action=action, codex_profile='hiroute',
+                       config=dict(environment={'HIROUTE_WORKER_CODEX_BINARY':str(binary)}, path=[]))
+        parser = types.SimpleNamespace(loads=lambda text: dict(model_provider='hiroute',
+            model_providers={'hiroute':{'base_url':'http://127.0.0.1:65140/v1'}}))
+        version = types.SimpleNamespace(returncode=0, stdout=b'codex-cli test\n', stderr=b'')
+        process = types.SimpleNamespace(returncode=0, stdout=output, stderr=b'')
+        with patch.dict(os.environ, {'PATH':os.defpath}, clear=True), \
+             patch.dict(sys.modules, {'tomllib':parser}), \
+             patch.object(desktop.Path, 'home', return_value=home), \
+             patch.object(desktop.subprocess, 'run', return_value=version), \
+             patch.object(desktop, 'codex_process', return_value=process) as execute:
+            try:
+                return desktop.codex_call(self.root, request, profiles)
+            finally:
+                command = execute.call_args.args[1]
+                self.assertEqual(command[command.index('--sandbox') + 1], 'read-only')
+                self.assertIn('approval_policy="never"', command)
+                self.assertEqual(command[command.index('--profile') + 1], 'hiroute')
+                self.assertEqual('Do not use any tools' in command[-1], action == 'codex-inference')
+
+    def test_pure_inference_is_distinct_from_the_unmodified_native_tool_gate(self):
+        evidence = self.native_codex_inference('codex-inference')
+        self.assertEqual(evidence['scope'], 'inference_only')
+        self.assertTrue(evidence['turn_completed'] and evidence['answer'])
+        self.assertFalse(evidence['shell_tool'])
+        with self.assertRaisesRegex(RuntimeError, 'real tool and answer'):
+            self.native_codex_inference('codex-call')
+
+    def test_pure_inference_requires_both_completed_turn_and_exact_per_run_answer(self):
+        for completed, answer in [(False, True), (True, False)]:
+            with self.subTest(completed=completed, answer=answer), \
+                 self.assertRaisesRegex(RuntimeError, 'turn and exact answer'):
+                self.native_codex_inference('codex-inference', completed, answer)
 
     def test_inspection_keeps_bounded_transaction_and_diagnostic_evidence_without_mutation(self):
         home = self.root / 'home'

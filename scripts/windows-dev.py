@@ -334,7 +334,7 @@ def main():
     desktop = commands.add_parser('desktop-session', help='Measured installed Desktop and native UI acceptance')
     desktop.add_argument('--product', required=True)
     desktop.add_argument('--action', dest='desktop_action', required=True,
-                         choices=('install', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call', 'network-probe'))
+                         choices=('install', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call', 'codex-inference', 'network-probe'))
     desktop.add_argument('--from-product', help='Exact installed bundle admitted before a cross-build upgrade')
     desktop.add_argument('--recover-product', help='Exact interrupted bundle, with a recent inspection, before normal NSIS recovery')
     desktop.add_argument('--observation-run')
