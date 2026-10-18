@@ -132,11 +132,9 @@ button:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outli
 .decision-judgment-fields:disabled{opacity:.8;}
 .native-protocol-editor{min-width:0;display:grid;gap:16px;}
 .native-protocol-editor .field-label{white-space:normal;overflow-wrap:anywhere;}
-.native-assessment-scope{min-width:0;border-top:1px solid var(--border);padding-top:16px;display:grid;gap:12px;}
 .native-protocol-editor .field-actions{display:flex;flex-wrap:wrap;gap:8px;}
 .native-protocol-editor .btn{white-space:normal;max-width:100%;}
 .native-prompt{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6;}
-.native-content-digest{display:block;overflow-wrap:anywhere;white-space:normal;font-size:calc(12px * var(--hr-text-scale));}
 @media(max-width:720px){.decision-thresholds{grid-template-columns:minmax(0,1fr);}}
 .routing-observations, .routing-decision-detail { margin-block: 12px; }
 .routing-cohort { padding-block: 12px; border-top: 1px solid var(--border); min-width: 0; overflow-wrap: anywhere; }

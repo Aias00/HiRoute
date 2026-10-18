@@ -36,7 +36,12 @@ export function cProtocolScenarios({ fresh, routing, click, until, all, text, ca
     assert(!/hiroute\.system-one|sha256:|Stock wording|Stock C|C decisions|Question 3|第三问|恢复版本|Confirm assessments|审阅/.test(visible),'Implementation or review wording remains visible');
     assert(!document.querySelector('[data-assessment-transition]'),'Extra transition review remains');
   }
-  function geometry(){for(const e of all('.native-protocol-editor .field-label,.native-prompt,.native-protocol-editor button'))assert(e.scrollWidth<=e.clientWidth+1,'Capability content overflows');}
+  function geometry(){
+    for(const e of all('.native-protocol-editor .field-label,.native-prompt,.native-protocol-editor button'))assert(e.scrollWidth<=e.clientWidth+1,'Capability content overflows');
+    const input=toggle(),label=input.closest('label').querySelector('span'),a=input.getBoundingClientRect(),b=label.getBoundingClientRect();
+    assert(b.left>=a.right-1 && b.left-a.right<=16,'Capability toggle separated from its label');
+    assert(Math.abs((a.top+a.bottom-b.top-b.bottom)/2)<=12,'Capability toggle and label are vertically misaligned');
+  }
   async function publish(t){
     const before=calls('preview_plan_editor').length;
     await click(t('发布更改','Publish changes'));
