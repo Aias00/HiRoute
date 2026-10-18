@@ -51,7 +51,7 @@ impl crate::LocalObservationStore {
         tx.commit()?;
         check_visibility(&db, visibility)?;
         reader.check(now, false, false)?;
-        Ok(super::api_equivalent::comparison_report(
+        let mut report = super::api_equivalent::comparison_report(
             &ObservationValueQueryV2 {
                 from_ms: scope.from_ms,
                 to_ms: scope.to_ms,
@@ -64,6 +64,8 @@ impl crate::LocalObservationStore {
             now,
             retained,
             comparison,
-        ))
+        );
+        report.disclosure.push_str(" Trial scope conservatively includes unresolved normal requests in the Plan/time window without assigning a revision or execution group. Excluded stage-identity gaps are included in the missing count and prevent full coverage and a full-scope difference.");
+        Ok(report)
     }
 }

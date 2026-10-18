@@ -77,6 +77,23 @@ try {
  await waitFor(client,`document.body.textContent.includes('Additional cost')`); await evaluate(client,`document.querySelector('[aria-label="Regular cost comparison"]').scrollIntoView({block:'center'});true`); await shot('trust-cost-positive-en-755');
  assert.ok(await evaluate(client,`document.querySelector('[aria-label="Regular cost comparison"]').textContent.includes('+')`));
  results.push({id:'trust.cost-positive-difference-disclosure',status:'passed'});
+ for (const lang of ['en','zh']) for (const width of [755,1200]) for (const kind of ['partial','unknown']) {
+  await open(`lang=${lang}&view=editor&cost-${kind}=1`,width,width===755?600:813);
+  await waitFor(client,`!!document.querySelector('[data-trust-control="smart"]')`);
+  await click('[role=tab]',lang==='zh'?'模型表现':'Model performance');
+  const label=lang==='zh'?'常规组成本对比':'Regular cost comparison';
+  await waitFor(client,`!!document.querySelector('[aria-label="${label}"]')`);
+  await evaluate(client,`(()=>{document.querySelector('.occami-root')?.setAttribute('data-theme',${JSON.stringify(width===755?'light':'dark')});document.querySelector('[aria-label="${label}"]').scrollIntoView({block:'center'});return true;})()`);
+  const text=await evaluate(client,`document.querySelector('[aria-label="${label}"]').textContent`);
+  assert.ok(text.includes(lang==='zh'?'排除数量包含在缺失数量中':'Excluded gaps are included in the missing count'));
+  assert.ok(text.includes(lang==='zh'?'完整范围的差额未知':'The full-scope difference is unknown'));
+  assert.equal(text.includes(lang==='zh'?'仅完整配对请求的小计':'Paired complete-request subtotals'),kind==='partial');
+  assert.equal(text.includes(lang==='zh'?'额外成本':'Additional cost'),false);
+  assert.ok(text.includes(`${kind==='partial'?1:0}/3`));
+  for(const g of await geometry())assert.ok(g.scroll<=g.width+2,JSON.stringify(g));
+  await shot(`trust-cost-gaps-${kind}-${lang}-${width}`);
+  results.push({id:`trust.cost-gaps.${kind}.${lang}.${width}`,status:'passed'});
+ }
 
  for(const [lang,theme,width,height] of [['en','light',755,600],['zh','dark',755,600],['en','dark',1200,813],['zh','light',1200,813]]){
   await open(`lang=${lang}&theme=${theme}`,width,height);

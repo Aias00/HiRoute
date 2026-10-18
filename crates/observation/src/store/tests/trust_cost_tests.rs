@@ -288,6 +288,7 @@ fn review_trial_cost_conflicting_membership_is_not_partial_history() {
     let ExecutionFactV1::AgentTurnFinished {
         agent_turn_id,
         segment_id,
+        finished_at_ms,
         ..
     } = &mut second
     else {
@@ -295,10 +296,9 @@ fn review_trial_cost_conflicting_membership_is_not_partial_history() {
     };
     *agent_turn_id = "conflicting-turn".into();
     *segment_id = "conflicting-stage".into();
-    assert!(matches!(
-        store.ingest_fact(&f.fact(12, second, 112), &[]).unwrap(),
-        IngestOutcome::Ack(_)
-    ));
+    *finished_at_ms = 112;
+    let outcome = store.ingest_fact(&f.fact(12, second, 112), &[]).unwrap();
+    assert!(matches!(outcome, IngestOutcome::Ack(_)), "{outcome:?}");
     store.settle_pending_valuations(16).unwrap();
     let report = trial_report(&store, 1000).unwrap();
     assert_eq!(
@@ -462,15 +462,14 @@ fn review_trial_cost_unclosed_turn_ages_into_gap_and_late_evidence_recovers() {
             .excluded_request_count,
         1
     );
-    let event = f.fact(
-        11,
-        trial_turn(&f, 17, ExecutionGroupV1::Regular),
-        boundary + 1,
-    );
-    assert!(matches!(
-        store.ingest_fact(&event, &[]).unwrap(),
-        IngestOutcome::Ack(_)
-    ));
+    let mut late_turn = trial_turn(&f, 17, ExecutionGroupV1::Regular);
+    let ExecutionFactV1::AgentTurnFinished { finished_at_ms, .. } = &mut late_turn else {
+        unreachable!()
+    };
+    *finished_at_ms = (boundary + 1) as u64;
+    let event = f.fact(11, late_turn, boundary + 1);
+    let outcome = store.ingest_fact(&event, &[]).unwrap();
+    assert!(matches!(outcome, IngestOutcome::Ack(_)), "{outcome:?}");
     store.settle_pending_valuations(16).unwrap();
     let recovered = trial_report(&store, boundary + 2).unwrap();
     assert_eq!(

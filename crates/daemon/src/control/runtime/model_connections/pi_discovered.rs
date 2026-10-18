@@ -3,6 +3,10 @@ use super::*;
 use hiroute_application_api::{ComputeDiscoveryRefV1, ComputeScanItemV1};
 use hiroute_integrations::{DiscoveredAuthSource, PiApiSource};
 
+#[cfg(all(test, unix))]
+#[path = "pi_discovered_tests.rs"]
+mod tests;
+
 pub(super) fn pi_discovery(source: &PiApiSource) -> ComputeDiscoveryRefV1 {
     ComputeDiscoveryRefV1 {
         discovery_ref: format!("discovery/{}", &source.evidence_digest.as_str()[7..]),
