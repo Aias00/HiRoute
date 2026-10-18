@@ -1,10 +1,11 @@
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { formatMoney } from '../ui';
 import { safeDiagnosticCode } from '../error-code';
 import { observationBusyRetryMs } from './observation-failure';
 import { observationRead } from './observation-client';
 import { formatTokenCount } from './usage-presentation';
 import { ContentExcerpt } from './Sessions';
+import { selectionReasonLabel } from './selection-reasons';
 import './routing-timeline.css';
 
 type Cost = { model_configuration_id: string | null; currency: string | null; valuation_kind: string | null; known_micros: number | null; unknown_contributions: number };
@@ -44,6 +45,8 @@ export function RoutingTimeline({ session, language, active, displayed, refreshV
   const [loaded, setLoaded] = useState(false);
   const [retry, setRetry] = useState(0);
   const [allRequests, setAllRequests] = useState(false);
+  const [arrivals, setArrivals] = useState(new Set<string>());
+  const [unseen, setUnseen] = useState<string[]>([]);
   const watermark = useRef<string | null>(null);
   const blockedScope = useRef(false);
   const probed = useRef(false);
@@ -51,7 +54,12 @@ export function RoutingTimeline({ session, language, active, displayed, refreshV
   const stored = useRef(new Map<string, TimelineTurn>());
   const scroller = useRef<HTMLDivElement>(null);
   useEffect(() => { blockedScope.current = false; setError(''); }, [session]);
-  useEffect(() => { watermark.current = null; probed.current = false; lastRead.current = -Infinity; stored.current.clear(); setTurns([]); setSelected(null); setLoaded(false); }, [session, refreshVersion]);
+  useEffect(() => { watermark.current = null; probed.current = false; lastRead.current = -Infinity; stored.current.clear(); setTurns([]); setSelected(null); setLoaded(false); setArrivals(new Set()); setUnseen([]); }, [session, refreshVersion]);
+  useEffect(() => {
+    if (!arrivals.size) return;
+    const timer = window.setTimeout(() => setArrivals(new Set()), 600);
+    return () => window.clearTimeout(timer);
+  }, [arrivals]);
   useEffect(() => {
     if (!active) return;
     const controller = new AbortController(); let inFlight = false; let timer = 0;
@@ -63,7 +71,9 @@ export function RoutingTimeline({ session, language, active, displayed, refreshV
         const page = await observationRead<TimelinePage>('routing_timeline', { session_id: session, after_watermark: watermark.current, limit: 50 }, controller.signal);
         if (controller.signal.aborted) return;
         let changed = false;
+        const fresh = watermark.current !== null && probed.current ? page.turns.filter(turn => !stored.current.has(turn.turn_id)).map(turn => turn.turn_id) : [];
         for (const turn of page.turns) { if (stored.current.get(turn.turn_id)?.content_digest !== turn.content_digest) { stored.current.set(turn.turn_id, turn); changed = true; } }
+        if (fresh.length) { setArrivals(previous => new Set([...previous, ...fresh])); setUnseen(previous => [...new Set([...previous, ...fresh])]); }
         if (changed) setTurns([...stored.current.values()].sort((a, b) => a.started_at_ms - b.started_at_ms || a.turn_id.localeCompare(b.turn_id)));
         watermark.current = page.watermark; setError(''); setLoaded(true);
         if (!page.complete) schedule(0);
@@ -75,14 +85,14 @@ export function RoutingTimeline({ session, language, active, displayed, refreshV
         if (busyDelay !== null) { schedule(busyDelay); return; }
         blockedScope.current = code.toLowerCase().includes('scope_too_large');
         const stale = code.toLowerCase().includes('stale') && watermark.current !== null;
-        if (stale) { watermark.current = null; stored.current.clear(); setTurns([]); setLoaded(false); }
+        if (stale) { watermark.current = null; stored.current.clear(); setTurns([]); setLoaded(false); setArrivals(new Set()); setUnseen([]); }
         setError(code);
         if (stale) schedule(0);
         else { probed.current = true; if (displayed && !blockedScope.current) schedule(2000); }
       } finally { inFlight = false; lastRead.current = performance.now(); }
     }
     const visible = () => { if (document.visibilityState === 'visible') void load(); else window.clearTimeout(timer); };
-    const invalidate = () => { controller.abort(); stored.current.clear(); watermark.current = null; probed.current = false; lastRead.current = -Infinity; setTurns([]); setLoaded(false); setRetry(n => n + 1); };
+    const invalidate = () => { controller.abort(); stored.current.clear(); watermark.current = null; probed.current = false; lastRead.current = -Infinity; setTurns([]); setLoaded(false); setArrivals(new Set()); setUnseen([]); setRetry(n => n + 1); };
     // Showing the pane continues the two-second cadence instead of repeating the probe that just ran.
     const since = performance.now() - lastRead.current;
     document.addEventListener('visibilitychange', visible); window.addEventListener('hiroute-content-invalidated', invalidate);
@@ -93,8 +103,28 @@ export function RoutingTimeline({ session, language, active, displayed, refreshV
   const blocked = error.toLowerCase().includes('scope_too_large');
   const availability: TimelineAvailability = turns.length ? 'turns' : blocked ? 'blocked' : error ? 'unavailable' : loaded ? 'empty' : 'loading';
   useEffect(() => { onAvailability?.(availability); }, [availability]);
-  // Follow the newest agent turn until the person picks one.
-  useEffect(() => { if (!selected && scroller.current) scroller.current.scrollLeft = scroller.current.scrollWidth; }, [turns.length, selected]);
+  const markVisible = useCallback(() => {
+    const pane = scroller.current;
+    if (!pane || !pane.clientWidth) return;
+    const viewport = pane.getBoundingClientRect();
+    const labelWidth = pane.querySelector('.routing-lane-label')?.getBoundingClientRect().width ?? 0;
+    const visible = new Set([...pane.querySelectorAll<HTMLElement>('[data-turn-id]')].filter(element => {
+      const bounds = element.getBoundingClientRect();
+      return bounds.right > viewport.left + labelWidth && bounds.left < viewport.right;
+    }).map(element => element.dataset.turnId));
+    setUnseen(previous => { const next = previous.filter(id => !visible.has(id)); return next.length === previous.length ? previous : next; });
+  }, []);
+  // Follow until a turn is selected; otherwise retain the reading position and acknowledge visible arrivals.
+  useEffect(() => {
+    if (!displayed || !scroller.current) return;
+    if (!selected) { scroller.current.scrollLeft = scroller.current.scrollWidth; setUnseen([]); }
+    else markVisible();
+  }, [turns.length, selected, displayed, markVisible]);
+  useEffect(() => {
+    if (!displayed || !scroller.current) return;
+    const observer = new ResizeObserver(markVisible); observer.observe(scroller.current);
+    return () => observer.disconnect();
+  }, [displayed, markVisible]);
   useEffect(() => setAllRequests(false), [selected]);
 
   const selectedTurn = turns.find(t => t.turn_id === selected) ?? turns[turns.length - 1];
@@ -102,7 +132,7 @@ export function RoutingTimeline({ session, language, active, displayed, refreshV
   const boundary = (turn: TimelineTurn) => turn.boundary === 'new_user_message' ? text('新消息', 'New message') : turn.boundary === 'context_rebuild' ? text('压缩后', 'After compaction') : text('边界未确认', 'Boundary unknown');
   const laneName = (lane: Lane) => lane === 'primary' ? text('主力', 'Primary') : lane === 'regular' ? text('常规', 'Regular') : text('分组未记录', 'Group unknown');
   const tone = (lane: Lane) => lane === 'regular' ? 'cyan' : lane === 'primary' ? 'purple' : '';
-  const reason = (turn: TimelineTurn) => ({ simple_task: text('简单任务', 'Simple task'), complex_task: text('复杂任务', 'Complex task'), low_competence: text('低分保护', 'Low-score protection'), degree_unavailable: text('难度判断不可用', 'Difficulty unavailable'), single_group: text('只有一组', 'Single group'), decision_fallback: text('决策失败兜底', 'Decision fallback'), availability_relay: text('故障接力', 'Availability relay'), heuristic: text('启发式判断', 'Heuristic') } as Record<string, string>)[turn.selection?.selection_reason ?? ''] ?? text('选择原因未知', 'Selection reason unknown');
+  const reason = (turn: TimelineTurn) => selectionReasonLabel(turn.selection?.selection_reason ?? '', language);
   const fixed = (millis: number | null | undefined) => millis == null ? '—' : (millis / 1000).toFixed(2);
   const probability = (turn: TimelineTurn) => turn.selection?.simple_probability == null ? text('简单概率未知', 'P(simple) unknown') : `${text('简单概率', 'P(simple)')} ${turn.selection.simple_probability.toFixed(2)}`;
   const below = (turn: TimelineTurn) => Boolean(turn.assessment && turn.competence_floor_millis != null && turn.assessment.score * 1000 < turn.competence_floor_millis);
@@ -202,14 +232,18 @@ export function RoutingTimeline({ session, language, active, displayed, refreshV
       <div className="routing-tile"><span>{text('Agent 轮次', 'Agent turns')}</span><strong>{turns.length}</strong><small>{text(`${turns.reduce((n, turn) => n + turn.requests.length, 0)} 个请求`, `${turns.reduce((n, turn) => n + turn.requests.length, 0)} requests`)}</small></div>
     </div>}
     {turns.length > 0 && <div className="routing-lanes-card">
-      <div className="routing-lanes-scroll" ref={scroller}>
+      {selected && unseen.length > 0 && <div className="routing-lanes-notice" role="status"><button type="button" className="btn routing-new-turns" onClick={() => {
+        scroller.current?.scrollTo({ left: scroller.current.scrollWidth, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+        setUnseen([]);
+      }}>{text(`${unseen.length} 个新轮次 →`, `${unseen.length} new turn${unseen.length === 1 ? '' : 's'} →`)}</button></div>}
+      <div className="routing-lanes-scroll" ref={scroller} onScroll={markVisible}>
         <div className="routing-lanes" role="group" aria-label={text('Agent 轮次', 'Agent turns')} data-lanes={lanes.length}>
           <div className="routing-lane-corner" />
           {lanes.map(lane => <div key={lane} className={`routing-lane-label ${tone(lane)}`}><strong>{laneName(lane)}</strong>{laneModel(lane) && <span>{laneModel(lane)}</span>}</div>)}
           {/* One column per agent turn; the grid flows by column, so focus and reading order follow time. */}
           {turns.map(turn => <Fragment key={turn.turn_id}>
             <div className="routing-turn-head" title={new Date(turn.started_at_ms).toLocaleString(language === 'zh' ? 'zh-CN' : 'en')}><strong>T{index(turn)}</strong><span className="badge no-dot">{boundary(turn)}</span></div>
-            {lanes.map(lane => laneOf(turn) !== lane ? <div className="routing-cell-empty" key={lane} aria-hidden="true" /> : <button type="button" key={lane} className={`routing-turn ${tone(lane)}${selectedTurn?.turn_id === turn.turn_id ? ' selected' : ''}`} aria-pressed={selectedTurn?.turn_id === turn.turn_id} onClick={() => { setSelected(turn.turn_id); if (turn.requests[0]) onSelectRequest(turn.requests[0]); }}>
+            {lanes.map(lane => <div className={`routing-lane-cell${laneOf(turn) !== lane ? ' routing-cell-empty' : ''}`} key={lane} aria-hidden={laneOf(turn) !== lane || undefined}>{laneOf(turn) === lane && <button type="button" className={`routing-turn ${tone(lane)}${selectedTurn?.turn_id === turn.turn_id ? ' selected' : ''}`} data-turn-id={turn.turn_id} data-new={arrivals.has(turn.turn_id) || undefined} aria-pressed={selectedTurn?.turn_id === turn.turn_id} onClick={() => { setSelected(turn.turn_id); if (turn.requests[0]) onSelectRequest(turn.requests[0]); }}>
               <span className="sr-only">{text(`轮次 ${index(turn)}`, `Turn ${index(turn)}`)}</span>
               <strong className="routing-turn-reason">{reason(turn)}</strong>
               <span className="routing-turn-meta">{probability(turn)}</span>
@@ -221,7 +255,7 @@ export function RoutingTimeline({ session, language, active, displayed, refreshV
                 {turn.relays.length > 0 && <span className="badge no-dot">{text(`接力 ${turn.relays.length}`, `${turn.relays.length} relay${turn.relays.length === 1 ? '' : 's'}`)}</span>}
                 {turn.evidence_partial && <span className="badge warn no-dot">{text('证据不完整', 'Incomplete evidence')}</span>}
               </span>}
-            </button>)}
+            </button>}</div>)}
           </Fragment>)}
         </div>
       </div>

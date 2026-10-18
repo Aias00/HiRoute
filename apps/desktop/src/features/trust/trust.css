@@ -37,6 +37,8 @@
 .trust-replay-bar > svg { display: block; width: 100%; height: 100%; }
 .trust-replay-bar rect.regular { fill: var(--cyan); }
 .trust-replay-bar rect.primary { fill: var(--purple); }
+.trust-replay-bar rect { transition: width 250ms ease, x 250ms ease; }
+@media (prefers-reduced-motion: reduce) { .trust-replay-bar rect { transition: none; } }
 .trust-replay-legend i.regular { background: var(--cyan); }
 .trust-replay-legend i.primary { background: var(--purple); }
 .trust-replay-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; font-size: calc(13px * var(--hr-text-scale)); }

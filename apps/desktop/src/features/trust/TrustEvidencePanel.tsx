@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ContentExcerpt } from '../Sessions';
 import { agentDisplayName } from '../agents/ecosystems';
 import { formatMoney } from '../../ui';
@@ -11,6 +11,7 @@ const ratio = (part: number, whole: number) => whole ? `${Math.round(part / whol
 const rolling = ['rolling-alias', 'dynamic-route', 'unknown'];
 const regularRows = (report: TrustReport) => report.rows.filter(row => row.group === 'regular');
 const sum = (rows: TrustRow[], pick: (row: TrustRow) => number) => rows.reduce((total, row) => total + pick(row), 0);
+type SuggestionBanner = { tone: string; badge: string; title: string; body: string; extra: string; action: ReactNode; threshold?: string; replay?: string; newlyRegular?: string };
 
 /** One banner per routed branch: the suggestion, the facts behind it and an optional draft action. */
 export function TrustSuggestions({ report, language, onThreshold, onDivision, onOpenAgent }: {
@@ -19,12 +20,13 @@ export function TrustSuggestions({ report, language, onThreshold, onDivision, on
   const t = (zh: string, en: string) => language === 'zh' ? zh : en;
   const named = report.branches.length > 1;
   function facts(counts: TrustCounts, upward: boolean) {
-    return t(`已有 ${counts.complete} 个评分完整的阶段（要求 ≥ 30），胜任率 ${ratio(counts.meets_floor, counts.complete)}（${upward ? '要求 ≥ 85%' : '低于 70% 时建议下调'}），评分覆盖 ${ratio(counts.complete, counts.executed)}，来自 ${counts.sessions} 个会话。`,
-      `${counts.complete} fully scored stages (30 required), ${ratio(counts.meets_floor, counts.complete)} competence (${upward ? '85% required' : 'below 70% suggests stepping down'}), ${ratio(counts.complete, counts.executed)} scored, from ${counts.sessions} sessions.`);
+    return t(`完整评分阶段 ${counts.complete}（要求 ≥30）· 胜任率 ${ratio(counts.meets_floor, counts.complete)}（${upward ? '要求 ≥85%' : '低于 70% 时建议下调'}）· 评分覆盖 ${ratio(counts.complete, counts.executed)}${upward ? '（要求 ≥60%）' : ''} · 来自 ${counts.sessions} 个会话${upward ? '（要求 ≥3）' : ''}`,
+      `${counts.complete} fully scored stages (≥30 required) · ${ratio(counts.meets_floor, counts.complete)} competence (${upward ? '≥85% required' : 'below 70% suggests stepping down'}) · ${ratio(counts.complete, counts.executed)} scored${upward ? ' (≥60% required)' : ''} · ${counts.sessions} sessions${upward ? ' (≥3 required)' : ''}`);
   }
-  function banner(branch: TrustBranch) {
+  function banner(branch: TrustBranch): SuggestionBanner {
     const s = branch.suggestion;
-    const level = 'threshold_millis' in s ? t(`${trustLevelLabel(s.threshold_millis, language)}（简单概率 ≥ ${(s.threshold_millis / 1000).toFixed(2)}）`, `${trustLevelLabel(s.threshold_millis, language)} (P(simple) ≥ ${(s.threshold_millis / 1000).toFixed(2)})`) : '';
+    const level = 'threshold_millis' in s ? trustLevelLabel(s.threshold_millis, language) : '';
+    const threshold = 'threshold_millis' in s ? t(`简单概率 ≥ ${(s.threshold_millis / 1000).toFixed(2)}`, `P(simple) ≥ ${(s.threshold_millis / 1000).toFixed(2)}`) : '';
     const join = (...parts: string[]) => parts.filter(Boolean).join(t('', ' '));
     const replay = 'threshold_millis' in s ? branch.replay.thresholds.find(row => row.threshold_millis === s.threshold_millis) : undefined;
     const replayText = replay?.regular_share != null ? t(`按你的记录回放，这一档约 ${Math.round(replay.regular_share * 100)}% 的阶段会交给常规模型，${replay.protected_as_primary} 个仍由主力保护。`, `Replaying your records, about ${Math.round(replay.regular_share * 100)}% of stages would go to Regular; ${replay.protected_as_primary} stay protected by Primary.`) : '';
@@ -41,9 +43,9 @@ export function TrustSuggestions({ report, language, onThreshold, onDivision, on
       return { tone: '', badge: t('保持当前档位', 'Keep this level'), title: s.missing.includes('active_revision_only') ? t('建议只针对当前生效的版本', 'Suggestions cover only the active version') : missing.length ? t('证据还不够，暂不建议调整', 'Not enough evidence to suggest a change') : t('当前档位合适，保持即可', 'The current level fits; keeping it is fine'),
         body: missing.length ? t(`升档需要${missing.join('、')}。`, `Stepping up needs ${missing.join(', ')}.`) : facts(branch.full_history, true), extra: '', action: null };
     }
-    if (s.kind === 'step_up') return { tone: 'info', badge: t('可以上调', 'Step up'), title: t(`可以考虑调到「${level}」`, `Consider raising trust to ${level}`), body: join(facts(branch.upward_cohort, true), replayText, fresh), extra: scope,
+    if (s.kind === 'step_up') return { tone: 'info', badge: t('可以上调', 'Step up'), title: t(`可以调到「${level}」`, `You can move to ${level}`), body: facts(branch.upward_cohort, true), threshold, replay: replayText, newlyRegular: fresh, extra: scope,
       action: onThreshold && <button type="button" className="btn btn-primary" onClick={() => onThreshold(branch.branch_id, s.threshold_millis)}>{t('按建议打开草稿', 'Open draft with this level')}</button> };
-    if (s.kind === 'step_down') return { tone: 'warn', badge: t('建议下调', 'Step down'), title: t(`建议调回「${level}」`, `Consider lowering trust to ${level}`), body: join(facts(branch.full_history, false), replayText), extra: '',
+    if (s.kind === 'step_down') return { tone: 'warn', badge: t('建议下调', 'Step down'), title: t(`建议调回「${level}」`, `Consider lowering trust to ${level}`), body: facts(branch.full_history, false), threshold, replay: replayText, extra: '',
       action: onThreshold && <button type="button" className="btn btn-primary" onClick={() => onThreshold(branch.branch_id, s.threshold_millis)}>{t('按建议打开草稿', 'Open draft with this level')}</button> };
     if (s.kind === 'explore_division') return { tone: 'cyan', badge: t('可以分工', 'Divide work'), title: t('已经放手，可以试试按任务分工', 'Hands-off already; you can try dividing work by task'), body: facts(branch.upward_cohort, true), extra: scope,
       action: onDivision && <button type="button" className="btn btn-primary" onClick={() => onDivision(branch.branch_id)}>{t('查看分工草稿', 'Review division draft')}</button> };
@@ -56,7 +58,10 @@ export function TrustSuggestions({ report, language, onThreshold, onDivision, on
     return <section key={branch.branch_id} className={`trust-suggestion ${b.tone}`} aria-label={t('档位建议', 'Level suggestion')}>
       <div className="trust-suggestion-main">
         <div className="trust-suggestion-line"><span className={`badge no-dot ${b.tone}`}>{b.badge}</span><strong>{named ? `${branch.branch_id} · ` : ''}{b.title}</strong></div>
+        {b.threshold && <p className="trust-suggestion-note trust-suggestion-threshold">{b.threshold}</p>}
         <p>{b.body}</p>
+        {b.replay && <p className="trust-suggestion-replay">{b.replay}</p>}
+        {b.newlyRegular && <p className="trust-suggestion-newly-regular">{b.newlyRegular}</p>}
         {b.extra && <p className="trust-suggestion-note">{b.extra}</p>}
         <p className="trust-suggestion-note">{t(`当前「${trustLevelLabel(branch.threshold_millis, language)}」· 只是建议，发布前不会改变路由；保持当前档位也是正常选择。`, `Now ${trustLevelLabel(branch.threshold_millis, language)} · A suggestion only; routing changes only when you publish, and keeping this level is fine.`)}</p>
       </div>

@@ -58,6 +58,16 @@ proves native authorization, persistence, process cleanup or real model calls.
 | Change model grouping or inspect page controls | `desktop.models.view-switch`, `desktop.presentation.control-layout`; [presentation scenarios](v3/browser/presentation-interactions.mjs) | Production styles preserve model/connection counts, selected model and visible selection. Chinese/English and light/dark checks reject browser-default buttons and horizontal overflow from long recent-session titles at the supported small window. |
 | Try a new model, judge its evidence and follow live routing | `timeline.initial-failure-retry-recovers.*`, `timeline.polls-only-while-displayed-and-visible`, `trust.scoring-states.both-groupings.*`, `quickstart.*.inline-connection-guard.model-change-and-back` in [trial scenarios](v3/visual/new-model-trial-active.mjs) | A failed timeline read keeps its tab, error and Retry until recovery, while only a confirmed empty read hides the tab; polling continues only while the timeline is shown and the window is visible, after one availability probe. Per-model and per-executor groupings both show scoring coverage and complete/partial/awaiting/unscored counts. Changing models, going back or leaving the quick start asks before discarding the inline connection form; Cancel keeps the model and input. `HIROUTE_BROWSER_TRANSPORT=console` runs the same scenarios over the console host. Real feed retrieval, saved trials and live sessions require native acceptance. |
 
+The [trial interaction refinements](v3/visual/new-model-trial-polish-active.mjs)
+run with `node tests/v3/visual/new-model-trial.mjs <evidence-directory> --polish`.
+They cover cached trust-level replay, precise-value debounce, shared reason labels,
+bounded two/forty-turn lanes and sticky labels, visible arrivals and unread counts,
+automatic following until an explicit selection, reduced motion, suggestion hierarchy,
+model-card facts and footer clearance across both supported sizes, languages and themes.
+Small-window timeline captures use the product's Compact view. Browser suites in
+one checkout share the Vite dependency cache and should run serially. These
+fixtures do not establish native or provider effects.
+
 Task-route save scenarios also cover Pi and Qoder executor reselection: an explicit
 Messages choice survives clicking the selected executor and reaches the saved draft.
 They reuse the real Plan editor and existing IPC trace, without launching a native Agent.
