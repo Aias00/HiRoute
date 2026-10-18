@@ -68,6 +68,7 @@ export function Sessions({ initialSession = null, initialRequest = null, languag
   const [factsRequest, setFactsRequest] = useState<string | null>(null);
   const [factsOpen, setFactsOpen] = useState(false);
   const [sessionView, setSessionView] = useState<'timeline' | 'conversation' | null>(null);
+  const [requestPicked, setRequestPicked] = useState(false);
   const [routing, setRouting] = useState<TimelineAvailability>('loading');
   const [qualityPlan, setQualityPlan] = useState<string | null>(null);
   const [qualityOpen, setQualityOpen] = useState(false);
@@ -92,6 +93,7 @@ export function Sessions({ initialSession = null, initialRequest = null, languag
     setBusy(false); setTimelineError('');
     setSession(null); setRequests([]); setReadingRequests([]); setRequest(null);
     setRequestCursor(null); setFocusedRequest(null); setAnchor(null); setFactsOpen(false);
+    setRequestPicked(false);
   }
   function changeOnlySwitch(value: boolean) {
     if (keywordTimer.current !== null) { window.clearTimeout(keywordTimer.current); keywordTimer.current = null; }
@@ -145,6 +147,7 @@ export function Sessions({ initialSession = null, initialRequest = null, languag
       timelineQuery.current = { from_ms: 0, to_ms: Date.now() + 1 };
       const initialRequest = hit?.request_id ?? exactRequest ?? null;
       setFocusedRequest(exactRequest ?? null); setSessionView(hit || exactRequest ? 'conversation' : null);
+      setRequestPicked(false);
       setSession(id); setRequests([]); setReadingRequests(initialRequest ? [initialRequest] : []); setRequest(initialRequest); setAnchor(hit ?? null);
       setFactsOpen(false); setFacts([]); setFactsError(''); setFactCursor(null); setFactPartial(false);
       setFocusedSummary(sessions.find(item => item.session_id === id) ?? null);
@@ -273,9 +276,9 @@ export function Sessions({ initialSession = null, initialRequest = null, languag
   const routed = routing === 'turns' || routing === 'blocked' || routing === 'unavailable';
   const pane = routed ? sessionView ?? 'timeline' : 'conversation';
   // Loading the first conversation request does not mean the person picked a timeline turn.
-  const routingRequestId = focusedRequest ?? anchor?.request_id ?? (sessionView === 'conversation' ? request : null);
+  const routingRequestId = focusedRequest ?? anchor?.request_id ?? (requestPicked || sessionView === 'conversation' ? request : null);
   const selectTimelineRequest = (item: TimelineRequest) => {
-    setRequest(item.request_id); setReadingRequests([item.request_id]); setAnchor(null);
+    setRequestPicked(true); setRequest(item.request_id); setReadingRequests([item.request_id]); setAnchor(null);
     setRequests(current => current.some(r => r.request_id === item.request_id) ? current : [...current, { request_id: item.request_id, started_at_ms: item.started_at_ms, outcome: item.outcome, native_turn_id: null, within_request_fallback: null, final_native_model: item.native_model, between_turn_model_change: null, previous_native_turn_id: null, previous_turn_model: null, turn_final_native_model: null }].sort((a, b) => a.started_at_ms - b.started_at_ms));
   };
   return <ProductPage
@@ -323,8 +326,8 @@ export function Sessions({ initialSession = null, initialRequest = null, languag
           <Disclosure className="native-details session-model-performance" label={text('本会话的模型表现', 'Model performance in this session')} language={language} onOpenChange={setQualityOpen}><PlanQuality key={session} sessionId={session} language={language} compact active={active && qualityOpen} refreshVersion={refreshVersion + reload} onOpenEvidence={(targetSession, targetRequest) => void timeline(targetSession, null, undefined, targetRequest)} /></Disclosure>
           <div className="session-pane" hidden={pane !== 'timeline'}><RoutingTimeline key={session} session={session} language={language} active={active} displayed={pane === 'timeline'} refreshVersion={refreshVersion + reload} requestId={routingRequestId} onOpenPerformance={setQualityPlan} onAvailability={setRouting} onSelectRequest={selectTimelineRequest} onViewConversation={item => { selectTimelineRequest(item); setSessionView('conversation'); }} /></div>
           <section className="routing-conversation" hidden={pane !== 'conversation'} aria-label={text('对话', 'Conversation')}>
-          {requests.length > 1 && <Disclosure className="native-details request-timeline" label={text(`请求记录（${requests.length}）`, `Requests (${requests.length})`)} language={language}><nav className="native-list" aria-label={text('请求时间线', 'Request timeline')}>{requests.map((item, index) => <button className={`list-row${request === item.request_id ? ' active' : ''}`} key={item.request_id} aria-current={request === item.request_id ? 'true' : undefined} onClick={() => { setRequest(item.request_id); setReadingRequests([item.request_id]); setAnchor(null); }}><span className="row-main"><span className="row-title">{text('请求', 'Request')} {index + 1}</span><span className="row-meta">{item.routing_context?.state === 'recorded' && item.routing_context.display_name ? item.routing_context.display_name : item.final_native_model ?? text('路由未记录', 'Route not recorded')}{item.within_request_fallback === true ? text(' · 请求内回退', ' · Request fallback') : item.between_turn_model_change === true ? text(' · 跨轮切换', ' · Turn change') : ''}</span></span></button>)}{requestCursor && <button className="btn" disabled={busy} onClick={() => void timeline(session, requestCursor)}>{text('加载更多请求', 'Load more requests')}</button>}</nav></Disclosure>}
-          {displayedRequestIds.length ? displayedRequestIds.map((id, index) => <div key={id} className="request-chapter">{index > 0 && <h3>{text('后续请求', 'Following request')} {requests.findIndex(item => item.request_id === id) + 1}</h3>}<RequestBody request={id} summary={requests.find(item => item.request_id === id)} attemptModels={id === request ? attemptModels : []} anchor={id === request ? anchor : null} language={language} onOpenFacts={openFacts} onContentState={reportRequestContentState} onNextRequest={index === displayedRequestIds.length - 1 && nextRequestId ? () => { setReadingRequests(current => [...current, nextRequestId]); setRequest(nextRequestId); setAnchor(null); } : undefined} onMoreRequests={index === displayedRequestIds.length - 1 && !nextRequestId && requestCursor ? () => void timeline(session, requestCursor) : undefined} /></div>) : !busy && <div className="empty-state transcript-empty"><div><p>{text('此会话尚未取得可显示的请求。', 'No displayable request was retrieved for this session.')}</p></div></div>}
+          {requests.length > 1 && <Disclosure className="native-details request-timeline" label={text(`请求记录（${requests.length}）`, `Requests (${requests.length})`)} language={language}><nav className="native-list" aria-label={text('请求时间线', 'Request timeline')}>{requests.map((item, index) => <button className={`list-row${request === item.request_id ? ' active' : ''}`} key={item.request_id} aria-current={request === item.request_id ? 'true' : undefined} onClick={() => { setRequestPicked(true); setRequest(item.request_id); setReadingRequests([item.request_id]); setAnchor(null); }}><span className="row-main"><span className="row-title">{text('请求', 'Request')} {index + 1}</span><span className="row-meta">{item.routing_context?.state === 'recorded' && item.routing_context.display_name ? item.routing_context.display_name : item.final_native_model ?? text('路由未记录', 'Route not recorded')}{item.within_request_fallback === true ? text(' · 请求内回退', ' · Request fallback') : item.between_turn_model_change === true ? text(' · 跨轮切换', ' · Turn change') : ''}</span></span></button>)}{requestCursor && <button className="btn" disabled={busy} onClick={() => void timeline(session, requestCursor)}>{text('加载更多请求', 'Load more requests')}</button>}</nav></Disclosure>}
+          {displayedRequestIds.length ? displayedRequestIds.map((id, index) => <div key={id} className="request-chapter">{index > 0 && <h3>{text('后续请求', 'Following request')} {requests.findIndex(item => item.request_id === id) + 1}</h3>}<RequestBody request={id} summary={requests.find(item => item.request_id === id)} attemptModels={id === request ? attemptModels : []} anchor={id === request ? anchor : null} language={language} onOpenFacts={openFacts} onContentState={reportRequestContentState} onNextRequest={index === displayedRequestIds.length - 1 && nextRequestId ? () => { setRequestPicked(true); setReadingRequests(current => [...current, nextRequestId]); setRequest(nextRequestId); setAnchor(null); } : undefined} onMoreRequests={index === displayedRequestIds.length - 1 && !nextRequestId && requestCursor ? () => void timeline(session, requestCursor) : undefined} /></div>) : !busy && <div className="empty-state transcript-empty"><div><p>{text('此会话尚未取得可显示的请求。', 'No displayable request was retrieved for this session.')}</p></div></div>}
           </section></div>
         </article> : <div className="empty-state session-no-selection"><div><span className="empty-icon"><UiIcon name="sessions" /></span><h3>{text('选择一个会话', 'Select a session')}</h3></div></div>}
       </section>

@@ -173,6 +173,7 @@ try {
   await click('button',lang==='zh'?'紧凑视图':'Compact view');
   assert.equal(await evaluate(client,`getComputedStyle(document.querySelector('.session-master')).display`),'none');
   await evaluate(client,`document.querySelectorAll('.routing-turn')[1].click();true`);
+  await waitFor(client,`document.querySelector('.routing-request.selected')?.textContent.includes('trial-model')`);
   assert.ok(await evaluate(client,`document.querySelector('.routing-request.selected')?.textContent.includes('trial-model')`));
   for (const g of await evaluate(client,`[...document.querySelectorAll('.routing-timeline,.routing-conversation,.routing-turn-detail,.session-routing-and-conversation')].map(e=>({width:e.clientWidth,scroll:e.scrollWidth,left:e.getBoundingClientRect().left,right:e.getBoundingClientRect().right}))`)) {assert.ok(g.scroll<=g.width+1,JSON.stringify(g));assert.ok(g.left>=-1&&g.right<=width+1,JSON.stringify(g));}
   await shot(`timeline-${lang}-${theme}-${width}`);
