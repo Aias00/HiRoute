@@ -468,10 +468,7 @@
                   "maxLength": 128,
                   "type": "string"
                 },
-                "judgment": {
-                  "$ref": "#/$defs/judgment"
-                },
-                "native_protocol": {
+                "historical_applicability": {
                   "additionalProperties": false,
                   "properties": {
                     "prior_context_max_turns": {
@@ -479,16 +476,15 @@
                       "maximum": 8,
                       "minimum": 0,
                       "type": "integer"
-                    },
-                    "schema": {
-                      "const": "hiroute.system-one-c/v1"
                     }
                   },
                   "required": [
-                    "schema",
                     "prior_context_max_turns"
                   ],
                   "type": "object"
+                },
+                "judgment": {
+                  "$ref": "#/$defs/judgment"
                 },
                 "reselect_on_user_message": {
                   "deprecated": true,
@@ -787,10 +783,7 @@
             "economy": {
               "$ref": "#/$defs/candidates"
             },
-            "judgment": {
-              "$ref": "#/$defs/judgment"
-            },
-            "native_protocol": {
+            "historical_applicability": {
               "additionalProperties": false,
               "properties": {
                 "prior_context_max_turns": {
@@ -798,16 +791,15 @@
                   "maximum": 8,
                   "minimum": 0,
                   "type": "integer"
-                },
-                "schema": {
-                  "const": "hiroute.system-one-c/v1"
                 }
               },
               "required": [
-                "schema",
                 "prior_context_max_turns"
               ],
               "type": "object"
+            },
+            "judgment": {
+              "$ref": "#/$defs/judgment"
             },
             "primary": {
               "$ref": "#/$defs/candidates"

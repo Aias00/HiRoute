@@ -5,7 +5,7 @@
   },
   "product_contract_revision": "487a807c8dc25cfb24e8b097882cd3bb9716a009",
   "proposal_map_revision": "ab4da93cc49c6ec56a01e046230411ff1ca82300",
-  "descriptor_digest": "sha256:1e47db0050f01e087b2384a5fd800e5d993806f04d32b999484a715d5e85d42d",
+  "descriptor_digest": "sha256:c925b26d08aebd6694ad01285573b1acbcf7998160ca5e68dcaf8906994a63f5",
   "visibility": "release",
   "commands": [
     {
@@ -2453,7 +2453,7 @@
       "help": {
         "purpose": "List the latest competence assessment for each persisted execution segment.",
         "usage": "hiroute observation plan-quality samples ([OPTIONS] | (--request-stdin | --request-file <PATH>)) [--capability-fd <FD>] --non-interactive --output json",
-        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. Provide at least --plan-id or --session-id. Use --competence below-floor|meets-floor to compare the latest reliable score with the floor saved for that stage, or --unrated for missing/partial scores. Score bounds remain strict open bounds. Detail filters do not alter full-scope summaries. The existing v2 query may opt in with include_routing_observations:true for retained applicability statistics. Omitted/false preserves released strict fields, authorization and cursor bindings. Counts and rates state retained coverage and actual requested-Q3 denominators. Facts are same-UID reads; protected evidence content is never returned.",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. Provide at least --plan-id or --session-id. Use --competence below-floor|meets-floor to compare the latest reliable score with the floor saved for that stage, or --unrated for missing/partial scores. Score bounds remain strict open bounds. Detail filters do not alter full-scope summaries. The existing v2 query may opt in with include_routing_observations:true for retained applicability statistics. Omitted/false preserves released strict fields, authorization and cursor bindings. Counts and rates state retained coverage and actual applicability-request denominators. Facts are same-UID reads; protected evidence content is never returned.",
         "effects": "Read-only; no product side effect.",
         "network_and_model_use": "No model use; any external dependency is declared by the typed Application operation.",
         "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
