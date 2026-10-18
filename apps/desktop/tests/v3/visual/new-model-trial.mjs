@@ -33,6 +33,9 @@ const terminate = async child => {
     new Promise(resolve => child.once('exit', resolve)),
     new Promise(resolve => setTimeout(resolve, 1500)),
   ]);
+  // Browser helpers may outlive the browser while retaining its inherited pipes.
+  child.stdout?.destroy();
+  child.stderr?.destroy();
 };
 const removeProfile = async directory => {
   for (let attempt = 0; attempt < 5; attempt += 1) {
