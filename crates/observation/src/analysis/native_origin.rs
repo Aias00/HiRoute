@@ -40,6 +40,7 @@ pub(super) fn edge_retained(
     w: &str,
     parent: &str,
     child: &str,
+    proof_at_ms: i64,
 ) -> Result<bool, Error> {
     Ok(db.query_row(
         "SELECT NOT EXISTS(
@@ -47,9 +48,10 @@ pub(super) fn edge_retained(
         WHERE c.workspace_id=?1 AND c.session_id IN(?2,?3)
           AND NOT EXISTS(SELECT 1 FROM observation_native_origins_v1 o
             WHERE o.workspace_id=c.workspace_id AND o.session_id=?3 AND o.not_before_ms>c.through_ms
+              AND o.not_before_ms<=?4-1000
               AND NOT EXISTS(SELECT 1 FROM logical_requests r WHERE r.workspace_id=o.workspace_id
                 AND r.session_id=o.session_id AND r.started_at_ms<o.not_before_ms)))",
-        params![w, parent, child],
+        params![w, parent, child, proof_at_ms],
         |r| r.get(0),
     )?)
 }

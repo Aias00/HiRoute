@@ -462,8 +462,8 @@ fn check_relations(db: &Connection, s: &Scope) -> Result<(), Error> {
         }
     }
     for rev in &s.used_edges {
-        let edge:Option<(String,String,String)>=db.query_row("SELECT parent_id,child_id,request_id FROM observation_native_relations_v1 WHERE workspace_id=?1 AND revision=?2",params![s.workspace,rev],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional()?;
-        let Some((parent, child, request)) = edge else {
+        let edge:Option<(String,String,String,i64)>=db.query_row("SELECT parent_id,child_id,request_id,observed_ms FROM observation_native_relations_v1 WHERE workspace_id=?1 AND revision=?2",params![s.workspace,rev],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).optional()?;
+        let Some((parent, child, request, proof_at)) = edge else {
             return Err(Error::Stale);
         };
         if !members::edge_usable(
@@ -475,6 +475,7 @@ fn check_relations(db: &Connection, s: &Scope) -> Result<(), Error> {
             s.expires_ms
                 .saturating_sub(crate::managed_text::RETENTION_MS)
                 .saturating_add(1),
+            proof_at,
         )? {
             return Err(Error::Stale);
         }

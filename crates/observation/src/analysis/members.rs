@@ -19,7 +19,7 @@ pub(super) fn resolve(
     physical: &BTreeSet<String>,
     stable_from: i64,
 ) -> Result<(Vec<Member>, Vec<u64>), Error> {
-    let mut stmt=db.prepare("SELECT e.revision,e.parent_id,e.child_id,e.request_id,e.ingress_ms FROM observation_native_relations_v1 e
+    let mut stmt=db.prepare("SELECT e.revision,e.parent_id,e.child_id,e.request_id,e.ingress_ms,e.observed_ms FROM observation_native_relations_v1 e
       WHERE e.workspace_id=?1 AND e.revision<=?2 AND e.active=1
        AND NOT EXISTS(SELECT 1 FROM observation_native_relations_v1 newer WHERE newer.workspace_id=e.workspace_id AND newer.parent_id=e.parent_id AND newer.child_id=e.child_id AND newer.revision>e.revision AND newer.revision<=?2)")?;
     let edges = stmt
@@ -30,6 +30,7 @@ pub(super) fn resolve(
                 r.get::<_, String>(2)?,
                 r.get::<_, String>(3)?,
                 r.get::<_, i64>(4)?,
+                r.get::<_, i64>(5)?,
             ))
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -51,12 +52,12 @@ pub(super) fn resolve(
     let mut parents = BTreeMap::<String, (String, u64)>::new();
     let mut gaps = BTreeMap::<String, String>::new();
     let mut successors = BTreeMap::<String, Vec<String>>::new();
-    for (rev, parent, child, request, ingress) in edges {
+    for (rev, parent, child, request, ingress, proof_at) in edges {
         if parent == child {
             gaps.insert(child, "lineage_cycle".into());
             continue;
         }
-        if !edge_usable(db, w, &parent, &child, &request, stable_from)? {
+        if !edge_usable(db, w, &parent, &child, &request, stable_from, proof_at)? {
             gaps.insert(child, "predecessor_unavailable".into());
             continue;
         }
@@ -163,6 +164,7 @@ pub(super) fn edge_usable(
     child: &str,
     request: &str,
     stable_from: i64,
+    proof_at_ms: i64,
 ) -> Result<bool, Error> {
     // Generic barriers do not prove user deletion: expiry produces them too.
     // When old origin is unavailable they only make ancestry unavailable. A
@@ -174,6 +176,7 @@ pub(super) fn edge_usable(
         AND NOT EXISTS(SELECT 1 FROM logical_requests r WHERE r.workspace_id=b.workspace_id AND r.session_id=b.session_id AND r.started_at_ms<=b.through_ms)
         AND NOT EXISTS(SELECT 1 FROM observation_analysis_cuts_v1 c WHERE c.workspace_id=b.workspace_id AND c.session_id=b.session_id)
         AND NOT EXISTS(SELECT 1 FROM observation_native_origins_v1 o WHERE o.workspace_id=b.workspace_id AND o.session_id=?3 AND o.not_before_ms>b.through_ms
-          AND NOT EXISTS(SELECT 1 FROM logical_requests r WHERE r.workspace_id=o.workspace_id AND r.session_id=o.session_id AND r.started_at_ms<o.not_before_ms)))",params![w,parent,child,request,stable_from],|r|r.get(0))?;
-    Ok(usable && super::native_origin::edge_retained(db, w, parent, child)?)
+          AND o.not_before_ms<=?6-1000
+          AND NOT EXISTS(SELECT 1 FROM logical_requests r WHERE r.workspace_id=o.workspace_id AND r.session_id=o.session_id AND r.started_at_ms<o.not_before_ms)))",params![w,parent,child,request,stable_from,proof_at_ms],|r|r.get(0))?;
+    Ok(usable && super::native_origin::edge_retained(db, w, parent, child, proof_at_ms)?)
 }

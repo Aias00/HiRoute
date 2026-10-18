@@ -210,7 +210,15 @@ fn retained(
     let mut start = 0;
     for (index, pair) in e.ids.windows(2).enumerate() {
         if (cuts.contains_key(&pair[0]) || cuts.contains_key(&pair[1]))
-            && !super::native_origin::edge_retained(db, &e.workspace_id, &pair[0], &pair[1])?
+            && !super::native_origin::edge_retained(
+                db,
+                &e.workspace_id,
+                &pair[0],
+                &pair[1],
+                e.proof_observation
+                    .as_ref()
+                    .map_or(-1, |s| s.observed_at_ms),
+            )?
         {
             start = index + 1;
         }
@@ -223,7 +231,13 @@ fn retained(
         let mut kept = Vec::new();
         for [p, c] in &n.edges {
             if (!cuts.contains_key(p) && !cuts.contains_key(c))
-                || super::native_origin::edge_retained(db, &e.workspace_id, p, c)?
+                || super::native_origin::edge_retained(
+                    db,
+                    &e.workspace_id,
+                    p,
+                    c,
+                    n.observation.observed_at_ms,
+                )?
             {
                 kept.push([p.clone(), c.clone()]);
             }
@@ -458,11 +472,13 @@ pub(super) fn redact_events(
               AND c.session_id IN(n.value,json_extract(e.body,'$.ids['||(CAST(n.key AS INTEGER)-1)||']'))
               AND NOT EXISTS(SELECT 1 FROM observation_native_origins_v1 o
                 WHERE o.workspace_id=e.workspace_id AND o.session_id=n.value AND o.not_before_ms>c.through_ms
+                  AND o.not_before_ms<=json_extract(e.body,'$.proof_observation.observed_at_ms')-1000
                   AND NOT EXISTS(SELECT 1 FROM logical_requests r WHERE r.workspace_id=o.workspace_id AND r.session_id=o.session_id AND r.started_at_ms<o.not_before_ms)))
           OR EXISTS(SELECT 1 FROM json_each(e.body,'$.invalid_edges.edges') n
             WHERE c.session_id IN(json_extract(n.value,'$[0]'),json_extract(n.value,'$[1]'))
               AND NOT EXISTS(SELECT 1 FROM observation_native_origins_v1 o
                 WHERE o.workspace_id=e.workspace_id AND o.session_id=json_extract(n.value,'$[1]') AND o.not_before_ms>c.through_ms
+                  AND o.not_before_ms<=json_extract(e.body,'$.invalid_edges.observation.observed_at_ms')-1000
                   AND NOT EXISTS(SELECT 1 FROM logical_requests r WHERE r.workspace_id=o.workspace_id AND r.session_id=o.session_id AND r.started_at_ms<o.not_before_ms))))
       ORDER BY e.event_id LIMIT ?3")?;
     let events = stmt

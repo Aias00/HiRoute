@@ -460,6 +460,7 @@ fn a_proven_new_child_can_follow_new_requests_without_reconnecting_deleted_histo
         30,
     );
     proof.ingress_at_ms = 10_000;
+    proof.proof_observation.as_mut().unwrap().observed_at_ms = 10_000;
     proof.current_state = Some(NativeCurrentStateV1 {
         value: NativeSessionStateV1::Open,
         observation: NativeProofObservationV1 {
@@ -536,6 +537,7 @@ fn unknown_old_near_cut_or_skewed_origin_is_not_new_compression_proof() {
         );
         let mut proof = event(&d, vec![b.session.to_string(), d.session.to_string()], 50);
         proof.ingress_at_ms = 10_000;
+        proof.proof_observation.as_mut().unwrap().observed_at_ms = 10_000;
         proof.current_state = Some(NativeCurrentStateV1 {
             value: NativeSessionStateV1::Open,
             observation: NativeProofObservationV1 {
@@ -567,6 +569,7 @@ fn a_reused_native_id_with_older_retained_requests_is_not_a_new_child() {
         60,
     );
     proof.ingress_at_ms = 10_000;
+    proof.proof_observation.as_mut().unwrap().observed_at_ms = 10_000;
     proof.current_state = Some(NativeCurrentStateV1 {
         value: NativeSessionStateV1::Open,
         observation: NativeProofObservationV1 {
@@ -612,6 +615,7 @@ fn later_source_evidence_rechecks_a_previously_admitted_native_origin() {
     );
     let mut proof = event(&d, vec![b.session.to_string(), d.session.to_string()], 70);
     proof.ingress_at_ms = 10_000;
+    proof.proof_observation.as_mut().unwrap().observed_at_ms = 10_000;
     proof.current_state = Some(NativeCurrentStateV1 {
         value: NativeSessionStateV1::Open,
         observation: NativeProofObservationV1 {
@@ -649,4 +653,45 @@ fn later_source_evidence_rechecks_a_previously_admitted_native_origin() {
     check(&store, 4, 5, true);
     store.reconcile_analysis_batch(20_000).unwrap();
     check(&store, 4, 5, true);
+}
+
+#[test]
+fn a_fresh_creation_sample_cannot_upgrade_an_older_cached_relation_proof() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    let [_, b, _] = chain(&store);
+    delete(&store, &b, DeletionDataClass::FactsAndContent, false, 2000);
+    new_request(&store, &b.session, "cached-origin-parent");
+    let d = new_request(
+        &store,
+        &Fixture::new("cached-origin-child").session,
+        "cached-origin-child",
+    );
+    let mut own = event(&d, vec![d.session.to_string()], 80);
+    own.complete = false;
+    own.ingress_at_ms = 10_000;
+    own.proof_observation.as_mut().unwrap().observed_at_ms = 10_000;
+    own.current_state = Some(NativeCurrentStateV1 {
+        value: NativeSessionStateV1::Open,
+        observation: NativeProofObservationV1 {
+            observer_id: "cached-origin".into(),
+            sequence: 80,
+            observed_at_ms: 10_000,
+            age_ms: 0,
+        },
+        started_at_ms: Some(5000),
+    });
+    store.ingest_native_continuation(&own).unwrap();
+    let mut cached = event(&d, vec![b.session.to_string(), d.session.to_string()], 81);
+    cached.ingress_at_ms = 10_000;
+    cached.current_state = own.current_state;
+    store.ingest_native_continuation(&cached).unwrap();
+    check(&store, 4, 4, true);
+    store.reconcile_analysis_batch(20_000).unwrap();
+    check(&store, 4, 4, true);
+    let mut verified = event(&d, vec![b.session.to_string(), d.session.to_string()], 82);
+    verified.ingress_at_ms = 11_000;
+    verified.proof_observation.as_mut().unwrap().observed_at_ms = 10_000;
+    store.ingest_native_continuation(&verified).unwrap();
+    check(&store, 3, 4, true);
 }
