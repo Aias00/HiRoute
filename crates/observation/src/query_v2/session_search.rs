@@ -81,11 +81,11 @@ pub(super) fn candidate_sql(only_switch: bool, exact_gram: bool) -> String {
     format!(
         "{with}
  SELECT c.workspace_id,c.request_id,MIN(c.rowid) AS content_rowid
- FROM observation_text_blocks_v2 b
+ FROM observation_text_lookup_v1
+ CROSS JOIN observation_text_blocks_v2 b ON b.rowid=observation_text_lookup_v1.rowid
  CROSS JOIN content_instances_v2 c INDEXED BY content_instances_v2_search_blob
    ON c.workspace_id=b.workspace AND c.content_blob_digest=b.digest
- WHERE b.workspace=?1
-   AND b.rowid IN(SELECT rowid FROM observation_text_lookup_v1 WHERE observation_text_lookup_v1 MATCH ?11)
+ WHERE observation_text_lookup_v1 MATCH ?11 AND b.workspace=?1
    AND EXISTS(SELECT 1 FROM ({READY_SOURCES}) ready WHERE ready.digest=b.digest)
    {exact} AND {CONTENT_FILTERS}
  GROUP BY c.workspace_id,c.request_id
@@ -159,17 +159,29 @@ fn candidates_for(
 }
 
 pub(super) fn index_partial_sql(only_switch: bool) -> String {
-    // The uncorrelated, workspace-local ready set is built once. Check the
-    // digest index before loading content metadata or authorizing a gap; ready
-    // sources cannot contribute a gap regardless of their visibility. Pin this
-    // order so the request-search index cannot scatter the complete gap scan.
+    // Repeated native history can put hundreds of thousands of occurrences in
+    // large metadata pages. First deduplicate through the covering digest index,
+    // then subtract ready sources before opening any occurrence metadata. A WHERE
+    // predicate alone lets SQLite load those pages before checking readiness.
+    // Only the remaining candidates undergo the full current visibility checks.
     let filters = all_filters();
+    let with = if only_switch {
+        format!("{}, ", prefix(true))
+    } else {
+        "WITH ".into()
+    };
     format!(
-        "{} SELECT EXISTS(
-        SELECT 1 FROM content_instances_v2 c INDEXED BY content_instances_v2_live_blob {REQUEST_JOINS}
-        WHERE (c.content_blob_digest IS NULL OR c.content_blob_digest NOT IN({READY_SOURCES}))
-        AND {filters}{})",
-        prefix(only_switch),
+        "{with} sources AS MATERIALIZED (
+          SELECT DISTINCT content_blob_digest FROM content_instances_v2
+          INDEXED BY content_instances_v2_live_blob WHERE workspace_id=?1 AND state='complete'
+        ), unready_sources AS MATERIALIZED (
+          SELECT content_blob_digest FROM sources WHERE content_blob_digest IS NULL
+            OR content_blob_digest NOT IN({READY_SOURCES})
+        ) SELECT EXISTS(
+        SELECT 1 FROM unready_sources u
+        CROSS JOIN content_instances_v2 c INDEXED BY content_instances_v2_search_blob
+          ON c.workspace_id=?1 AND c.content_blob_digest IS u.content_blob_digest
+        {REQUEST_JOINS} WHERE {filters}{})",
         switch_filter(only_switch)
     )
 }

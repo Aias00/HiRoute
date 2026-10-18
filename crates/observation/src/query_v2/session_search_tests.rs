@@ -165,9 +165,20 @@ fn search_scale(distinct: usize, occurrences: usize) {
             } else if !returned_identities {
                 assert!(
                     plan.iter().any(|(_, _, step)| step
-                        .starts_with("SEARCH c USING INDEX content_instances_v2_live_blob ")
+                        .starts_with("SEARCH content_instances_v2 USING COVERING INDEX content_instances_v2_live_blob ")
                         && step.contains("(workspace_id=?)")),
-                    "gap checks must traverse digest order before loading request metadata: {plan:?}"
+                    "deduplication must read the covering source index, not large metadata pages: {plan:?}"
+                );
+                assert!(
+                    plan.iter().any(|(_, _, step)| step == "MATERIALIZE sources")
+                        && plan.iter().any(|(_, _, step)| step == "MATERIALIZE unready_sources"),
+                    "ready repeated history must be removed before occurrence metadata is read: {plan:?}"
+                );
+                assert!(
+                    plan.iter().any(|(_, _, step)| step.starts_with(
+                        "SEARCH c USING COVERING INDEX content_instances_v2_search_blob "
+                    ) && step.contains("(workspace_id=? AND content_blob_digest=?)")),
+                    "only unready source identities may open candidate occurrences: {plan:?}"
                 );
             }
             assert!(
