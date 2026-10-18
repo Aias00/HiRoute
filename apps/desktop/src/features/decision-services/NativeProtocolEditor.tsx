@@ -14,16 +14,18 @@ export function NativeProtocolEditor({ protocol, scopes, service, branches, defa
   const [busy, setBusy] = useState(false), [failure, setFailure] = useState('');
   const key = JSON.stringify([protocol, scopes, service, branches, defaultId]);
   useEffect(() => { setResult(undefined); setFailure(''); }, [key]);
-  const current = useRef(key); current.current = key;
+  const current = useRef({ key, generation: 0 });
+  if (current.current.key !== key) current.current = { key, generation: current.current.generation + 1 };
   const capability = result?.key === key ? result.value : undefined;
   async function test() {
     if (!protocol || !scopes.length) return;
-    setBusy(true); setFailure(''); const requested = key;
+    setBusy(true); setFailure(''); const requested = current.current.generation;
     try {
       const frozen = await freezeNative(protocol, scopes.find(s => s.id === 'default')?.judgment ?? scopes[0].judgment, branches, defaultId);
       const value = await invoke<CCapability>('test_classifier_decision', { input: { request: { schema: 'hiroute.historical-applicability-test/v1', service_id: service.id, service_revision: service.revision, protocol: frozen, shape: branches?.length === 16 && branches.every(b => b.primary_candidates.length > 0) ? 'max_branches' : 'standard' } } });
-      if (current.current === requested && value.protocol_digest === frozen.digest && value.service_id === service.id && value.service_revision === service.revision && service.connection.kind === 'system_one' && value.endpoint_digest === await contentDigest(service.connection.endpoint) && value.model === service.connection.model) setResult({ key: requested, value });
-    } catch { setFailure(t('适用性测试未完成。', 'Applicability test did not complete.')); } finally { setBusy(false); }
+      const endpointDigest = service.connection.kind === 'system_one' ? await contentDigest(service.connection.endpoint) : undefined;
+      if (current.current.generation === requested && service.connection.kind === 'system_one' && value.protocol_digest === frozen.digest && value.service_id === service.id && value.service_revision === service.revision && value.endpoint_digest === endpointDigest && value.model === service.connection.model) setResult({ key, value });
+    } catch { if (current.current.generation === requested) setFailure(t('适用性测试未完成。', 'Applicability test did not complete.')); } finally { setBusy(false); }
   }
   return <section className="editor-section native-protocol-editor">
     <h3>{t('历史问题适用性', 'Historical problem applicability')}</h3>
