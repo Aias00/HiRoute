@@ -1,3 +1,4 @@
+import { ReadCostFixture, installReadCostClock, readCostResponse } from './trial-read-cost-fixture';
 import { TrialFixture, quickStartInvoke } from './trial-quickstart-fixture';
 import { TrustAttention } from '../../../src/features/trust/TrustAttention';
 import { createRoot } from 'react-dom/client';
@@ -11,6 +12,8 @@ import type { ModelFeedStatus } from '../../../src/features/model-feed/types';
 import type { TrustReport } from '../../../src/features/trust/types';
 import '../../../src/occami/styles.css';
 const params = new URLSearchParams(location.search);
+const readCost = ['handoff', 'suggestion-cadence'].includes(params.get('view') ?? '');
+if (readCost) installReadCostClock();
 const language = params.get('lang') === 'zh' ? 'zh' : 'en';
 const trace: { command: string; payload: any }[] = [];
 Object.assign(window, { trialTrace: trace });
@@ -23,6 +26,7 @@ const timelineTurn = (i:number,updated=false) => ({turn_id:`request-${i}`,agent_
 let failed = false;
 mockIPC(async (command, payload: any) => {
   trace.push({command,payload});
+  if(readCost && command==='observation_read') return readCostResponse(payload,{...report,branches:report.branches.map(b=>({...b,protection_count:0,identity_stabilities:['rolling-alias']}))});
   if(params.get('view')==='quickstart') return quickStartInvoke(command,payload,params);
   if (command === 'worker_executor_availability') return {executors:['deepseek_harness','codex_cli','claude_code','pi','qoder_cli'].map(harness=>({harness,state:harness==='deepseek_harness'?'ready':'unavailable'}))};
   if (command === 'model_feed_status') { if (params.has('error') && !failed) {failed=true;throw new Error('DAEMON_UNAVAILABLE');} return structuredClone(feed); }
@@ -66,5 +70,5 @@ plan.desired.delegation_enabled=false;
 plan.desired.strategy.judgment!.degree.simple_threshold_millis=720;
 plan.desired.strategy.classifier={kind:'decision_service',service:{id:'decision/test',revision:1,name:'Decision model',connection:{kind:'custom',endpoint:'https://decision.example.test',timeout_ms:1000,auth_header:null}}};
 createRoot(document.getElementById('root')!).render(<PresentationRoot language={language} theme={params.get('theme') === 'dark' ? 'dark' : 'light'} textScale={1}>
-  {params.get('view') === 'quickstart' ? <TrialFixture language={language} /> : params.get('view') === 'attention' ? <ProductPage title="Home"><TrustAttention language={language} names={{[dailyPlan.agent_plan_id]:'My daily route'}} read={{status:params.has('error')?'error':'ready',plans:params.has('empty')?[]:[{...report,branches:report.branches.map(b=>({...b,protection_count:0,identity_stabilities:['rolling-alias']}))}],unavailable:params.has('partial-error')?[{plan_id:'plan/too-large',reason:'scope_too_large'}]:[],error:'OBSERVATION_UNAVAILABLE',refresh:()=>trace.push({command:'retry-suggestions',payload:{}})}} onAct={(planId,branchId)=>trace.push({command:'review-trust-action',payload:{planId,branchId}})} onOpen={planId=>trace.push({command:'review-trust',payload:{planId}})} /></ProductPage> : params.get('view') === 'timeline' ? <Sessions language={language} initialSession="timeline-session" /> : params.get('view') === 'editor' ? <ProductPage title="Routing"><PlanEditor plan={plan} language={language} onCreateDraft={async editor=>{ Object.assign(window,{divisionDraft:editor}); return false; }} onDone={async()=>{}} onClose={()=>{}} /></ProductPage> : <ProductPage title="Models" flush className="hr-models-page"><Models language={language} snapshot={readyManagement} mutable onRefresh={async()=>{}} onPrepareKeyInput={async()=>{throw Error('outside scenario')}} onPreview={async()=>{throw Error('outside scenario')}} onApply={async()=>'saved'} onDiscardProtectedInputs={()=>{}} /></ProductPage>}
+  {readCost ? <ReadCostFixture language={language} view={params.get('view')!} /> : params.get('view') === 'quickstart' ? <TrialFixture language={language} /> : params.get('view') === 'attention' ? <ProductPage title="Home"><TrustAttention language={language} names={{[dailyPlan.agent_plan_id]:'My daily route'}} read={{status:params.has('error')?'error':'ready',plans:params.has('empty')?[]:[{...report,branches:report.branches.map(b=>({...b,protection_count:0,identity_stabilities:['rolling-alias']}))}],unavailable:params.has('partial-error')?[{plan_id:'plan/too-large',reason:'scope_too_large'}]:[],error:'OBSERVATION_UNAVAILABLE',refresh:()=>trace.push({command:'retry-suggestions',payload:{}})}} onAct={(planId,branchId)=>trace.push({command:'review-trust-action',payload:{planId,branchId}})} onOpen={planId=>trace.push({command:'review-trust',payload:{planId}})} /></ProductPage> : params.get('view') === 'timeline' ? <Sessions language={language} initialSession="timeline-session" /> : params.get('view') === 'editor' ? <ProductPage title="Routing"><PlanEditor plan={plan} language={language} onCreateDraft={async editor=>{ Object.assign(window,{divisionDraft:editor}); return false; }} onDone={async()=>{}} onClose={()=>{}} /></ProductPage> : <ProductPage title="Models" flush className="hr-models-page"><Models language={language} snapshot={readyManagement} mutable onRefresh={async()=>{}} onPrepareKeyInput={async()=>{throw Error('outside scenario')}} onPreview={async()=>{throw Error('outside scenario')}} onApply={async()=>'saved'} onDiscardProtectedInputs={()=>{}} /></ProductPage>}
 </PresentationRoot>);

@@ -274,7 +274,7 @@ fn timeline_long_session_read_cost() {
         let first = Fixture::new("perf-root");
         let channel = fact_channel(&first, 256 * 1024);
         let writer = writer(&store);
-        for i in 0..count {
+        for i in 0..count - 40 {
             let mut f = Fixture::new(&format!("perf-{i:05}"));
             f.session = first.session.clone();
             f.fact_stream = first.fact_stream.clone();
@@ -312,6 +312,56 @@ fn timeline_long_session_read_cost() {
             after_watermark: None,
             limit: 200,
         };
+        let mut initial = store
+            .observed_routing_timeline(&reader, &q, 50_000)
+            .unwrap();
+        while !initial.complete {
+            q.after_watermark = Some(initial.watermark);
+            initial = store
+                .observed_routing_timeline(&reader, &q, 50_000)
+                .unwrap();
+        }
+        q.after_watermark = Some(initial.watermark);
+        let mut appended = Vec::new();
+        for i in count - 40..count {
+            let mut f = Fixture::new(&format!("perf-{i:05}"));
+            f.session = first.session.clone();
+            f.fact_stream = first.fact_stream.clone();
+            assert!(matches!(
+                offer_fact(
+                    &writer,
+                    &channel,
+                    f.fact(
+                        i + 1,
+                        finished(
+                            &f,
+                            &format!("seg-{i}"),
+                            &format!("turn-{i}"),
+                            i + 1,
+                            "smart_saving",
+                            1000 + i
+                        ),
+                        1000 + i as i64
+                    )
+                ),
+                WriterCycleOutcome::Ack(_)
+            ));
+            let start = Instant::now();
+            let page = store
+                .observed_routing_timeline(&reader, &q, 50_000)
+                .unwrap();
+            appended.push(start.elapsed().as_secs_f64() * 1000.);
+            assert_eq!(page.turns.len(), 2);
+            assert!(page.complete);
+            q.after_watermark = Some(page.watermark);
+        }
+        let (ap50, ap95) = timing(&mut appended);
+        eprintln!(
+            "TIMELINE_APPEND requests_from={} requests_through={count} samples=40 p50_ms={ap50:.3} p95_ms={ap95:.3}",
+            count - 39
+        );
+        assert!(ap95 < 50., "new-request p95 target");
+        q.after_watermark = None;
         let start = Instant::now();
         let mut page = store
             .observed_routing_timeline(&reader, &q, 50_000)

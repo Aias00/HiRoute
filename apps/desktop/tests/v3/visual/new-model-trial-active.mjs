@@ -11,6 +11,41 @@ const shot=async name=>{await evaluate(client,`Promise.all(document.getAnimation
 async function open(query,width=755,height=600){const url=`${base}new-model-trial.html?${query}`;await client.send('Page.enable');await client.send('Runtime.enable');await client.send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});await client.send('Page.navigate',{url});await waitFor(client,`location.href===${JSON.stringify(url)} && !!document.querySelector('.models-feature,.plan-editor,.sessions-page,.trust-attention,.new-models')`);await evaluate(client,'document.fonts.ready.then(()=>true)');}
 async function geometry(){return evaluate(client,`(()=>{const nodes=[...document.querySelectorAll('.model-feed-panel,.trust-control,.trust-evidence,.dialog')].filter(e=>e.getClientRects().length);return nodes.map(e=>({class:e.className,width:e.clientWidth,scroll:e.scrollWidth,left:e.getBoundingClientRect().left,right:e.getBoundingClientRect().right}));})()`);}
 try {
+ for(const lang of ['en','zh']) {
+  await open(`lang=${lang}&view=handoff`,755,600);
+  await waitFor(client,`trialTrace.some(x=>x.command==='observation_read' && x.payload.request.intent.view==='sessions')`);
+  assert.equal(await evaluate(client,`trialTrace.find(x=>x.command==='observation_read').payload.request.intent.query.from_ms===readCostState.confirmed`),true);
+  assert.equal(await evaluate(client,`trialTrace.find(x=>x.command==='observation_read').payload.request.intent.query.plan_id`),'plan/trial');
+  await shot(`handoff-waiting-${lang}-755`);
+  await evaluate(client,`hideReadCost(true);tickReadCost(5000);true`);
+  assert.equal(await evaluate(client,`trialTrace.filter(x=>x.command==='observation_read').length`),1);
+  await evaluate(client,`readCostState.fail=true;hideReadCost(false);true`);
+  await waitFor(client,`!!document.querySelector('.trial-session-handoff [role=alert]')`);
+  await shot(`handoff-error-${lang}-755`);
+  await evaluate(client,`readCostState.fail=false;readCostState.found=true;true`);
+  await click('.trial-session-handoff button',lang==='zh'?'重试':'Retry');
+  await waitFor(client,`!!document.querySelector('.trial-session-handoff .btn-primary')`);
+  await shot(`handoff-found-${lang}-755`);
+  const foundReads=await evaluate(client,`trialTrace.filter(x=>x.command==='observation_read').length`);
+  await evaluate(client,`tickReadCost(5000);true`);
+  assert.equal(await evaluate(client,`trialTrace.filter(x=>x.command==='observation_read').length`),foundReads);
+  await click('.trial-session-handoff button',lang==='zh'?'观察此会话':'Watch this session');
+  await waitFor(client,`trialTrace.some(x=>x.command==='observation_read' && x.payload.request.intent.view==='routing_timeline' && x.payload.request.intent.query.session_id==='trial-found')`);
+  results.push({id:`handoff.wait-hide-error-found-navigate.${lang}`,status:'passed'});
+ }
+ await open('lang=en&view=handoff');await waitFor(client,`trialTrace.some(x=>x.command==='observation_read')`);await click('button','Close waiting');
+ const closedReads=await evaluate(client,`trialTrace.length`);await evaluate(client,`tickReadCost(5000);true`);assert.equal(await evaluate(client,`trialTrace.length`),closedReads);
+ results.push({id:'handoff.close-stops-reads',status:'passed'});
+ await open('lang=en&view=suggestion-cadence');await waitFor(client,`!!document.querySelector('.trust-attention-item')`);
+ const suggestionReads=()=>evaluate(client,`trialTrace.filter(x=>x.command==='observation_read' && x.payload.request.intent.view==='plan_trust_suggestions').length`);
+ assert.equal(await suggestionReads(),1);await evaluate(client,`tickReadCost(30000);true`);assert.equal(await suggestionReads(),1);
+ await evaluate(client,`tickReadCost(300000);true`);await waitFor(client,`trialTrace.length===2`);assert.equal(await suggestionReads(),2);
+ await click('button','Publish fixture');await waitFor(client,`trialTrace.length===3`);assert.equal(await suggestionReads(),3);
+ await click('button','Toggle Home');assert.equal(await suggestionReads(),3);await click('button','Toggle Home');await waitFor(client,`trialTrace.length===4`);
+ await evaluate(client,`hideReadCost(true);tickReadCost(300000);true`);assert.equal(await suggestionReads(),4);await evaluate(client,`hideReadCost(false);true`);await waitFor(client,`trialTrace.length===5`);
+ assert.ok(await evaluate(client,`document.querySelector('.trust-attention [role=alert]').textContent.includes('Other suggestions remain available')`));
+ assert.equal(await evaluate(client,`document.querySelector('.trust-attention-item button').disabled`),false);await shot('suggestion-partial-failure-en-755');
+ results.push({id:'suggestions.five-minute-cadence-publish-home-visible-partial-failure',status:'passed'});
  if(!process.env.TRIAL_QUICK_ONLY) {
  for(const [lang,theme,width,height] of [['en','light',755,600],['zh','dark',755,600],['en','dark',1200,813],['zh','light',1200,813]]){
   await open(`lang=${lang}&theme=${theme}`,width,height);

@@ -195,6 +195,8 @@ never the preceding successful operation. Completed connections, drafts and Plan
 remain visible after later failures. A published Plan can be mapped from Routing
 after reload without recreating it.
 
+After this flow confirms that the Agent mapping applied successfully, it SHALL wait for matching Plan activity while the dialog and window remain visible. It SHALL query the existing sessions view from that confirmation time at a five-second cadence, skipping an in-flight read. The first matching candidate observed by the flow SHALL remain selectable through "Watch this session", which opens its live routing timeline only on user action. A Plan match SHALL NOT be described as proof of the Agent identity or a newly created, chronologically first session. Closing or hiding the flow stops reads; showing it resumes them. A read failure SHALL offer retry while retaining the model-performance and session-list actions.
+
 #### Scenario: Publication succeeds but its reply is lost
 
 - **WHEN** saving a trial draft succeeds and the subsequent publication reply is lost
@@ -202,12 +204,20 @@ after reload without recreating it.
   without repeating either mutation or treating the draft save as publication;
   Agent mapping remains a separate reviewed action.
 
+#### Scenario: Post-mapping session handoff
+
+- **WHEN** the mapping is confirmed and a subsequent session read finds activity using the published Plan
+- **THEN** the flow offers Watch this session without automatic navigation; old activity before confirmation is excluded, and closing the dialog stops waiting.
+
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/140#issuecomment-6235502571
 
 ### Requirement: Home lists routing suggestions that need attention
 
 The Desktop Home "Needs your attention" section SHALL list each current level suggestion for difficulty-routing Plans and two-group branches: step up, step down, create a division draft, or return to previous routing. Suggestions SHALL come from the same backend computation as the model performance view. Each item SHALL name the Plan and its published trust level, state the facts behind the suggestion (scored stages, scoring coverage, contributing sessions, competence rate, protection count and, for a level change, the replay share at the suggested level), carry the version disclosure and the actual suggestion evidence window/cohort of the model performance view when they apply, and offer two actions. "View evidence" opens the Plan's model performance view. The primary action opens the existing draft, division-draft or Agent settings Preview/Apply. Neither action SHALL change routing until the user publishes or applies. An item SHALL disappear when its condition no longer holds for the active published revision. While Home is not shown, navigation SHALL mark that suggestions exist. Suggestions SHALL be presented as optional; keeping the current level SHALL remain a valid outcome, and trust levels SHALL NOT be presented as onboarding progress or completion. When no suggestion applies, the section SHALL say so without inventing progress. A failed suggestion read SHALL be shown as a retryable read failure and SHALL NOT be shown as an absence of suggestions.
+
+
+Suggestion failures SHALL be isolated per Plan: an oversized or unavailable Plan appears as a retryable unavailable item alongside other valid suggestions. The response SHALL provide suggestions and unavailable arrays, with unavailable entries naming the Plan and a stable scope_too_large, unavailable or stale reason. Suggested branches SHALL expose their counts, cohort, protection count, identity-stability disclosure and replay at the suggested threshold without returning full report rows or session lists. A failed whole query remains a retryable failure. Desktop SHALL refresh on Home display, window visibility and the user's own publish/apply actions, and otherwise every five minutes while visible; navigation and Plan markers reuse this read. Cached evidence SHALL still validate reader authority and all relevant control, observation, Worker and retention changes, including expiry with time.
 
 #### Scenario: Two Plans, two directions
 
@@ -223,6 +233,11 @@ The Desktop Home "Needs your attention" section SHALL list each current level su
 
 - **WHEN** the suggestion query fails while other Home reads succeed
 - **THEN** the section reports the failed read with a retry, and the other Home content stays visible.
+
+#### Scenario: One Plan exceeds the read limit
+
+- **WHEN** one enabled Plan exceeds its read bound while another has an available suggestion
+- **THEN** Home shows the healthy Plan's suggestion and a retryable failure for the oversized Plan, without calling the result empty or disabling the healthy Plan's actions.
 
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/140#issuecomment-6236472105

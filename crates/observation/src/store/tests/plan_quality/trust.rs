@@ -203,3 +203,147 @@ fn trust_population_cannot_expand_a_run_scoped_reader() {
     assert!(population.stages.is_empty());
     assert!(population.active_stages.is_empty());
 }
+
+#[test]
+fn trust_suggestion_population_preserves_count_inputs_without_performance_details() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    let f = Fixture::new("lean-trust");
+    let channel = fact_channel(&f, 256 * 1024);
+    let w = writer(&store);
+    assert!(matches!(
+        offer_fact(
+            &w,
+            &channel,
+            f.fact(
+                1,
+                finished(&f, "stage", "turn", 1, "smart_saving", 1000),
+                1000
+            )
+        ),
+        WriterCycleOutcome::Ack(_)
+    ));
+    let before = store.observed_trust_generation(&reader(), 5000).unwrap();
+    assert!(matches!(
+        offer_fact(
+            &w,
+            &channel,
+            f.fact(
+                2,
+                assessment(&f, "stage", ("turn", "turn", 1, 1), 1100, 0.9),
+                1100
+            )
+        ),
+        WriterCycleOutcome::Ack(_)
+    ));
+    assert_ne!(
+        before,
+        store.observed_trust_generation(&reader(), 5000).unwrap()
+    );
+    let q = TrustPopulationQueryV1 {
+        active_revision: 17,
+        plan_id: PLAN.into(),
+        branch_id: None,
+        revision: Some(17),
+        from_ms: None,
+        to_ms: None,
+    };
+    let full = store
+        .observed_trust_population(&reader(), &q, 5000)
+        .unwrap();
+    let lean = store
+        .observed_trust_suggestion_population(&reader(), &q, 5000)
+        .unwrap();
+    assert_eq!(lean.active_stages.len(), full.active_stages.len());
+    for (a, b) in lean.active_stages.iter().zip(&full.active_stages) {
+        assert_eq!(a.sample.assessment, b.sample.assessment);
+        assert_eq!(a.sample.selection, b.sample.selection);
+        assert_eq!(a.sample.branch_execution, b.sample.branch_execution);
+        assert_eq!(a.has_later_turn, b.has_later_turn);
+        assert_eq!(a.sample.run_id, b.sample.run_id);
+        assert!(a.request_durations_ms.is_empty());
+    }
+}
+
+#[test]
+#[ignore = "large retained-population timing evidence; run explicitly in release mode"]
+fn trust_suggestion_population_read_cost() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    let f = Fixture::new("large-trust");
+    let channel = fact_channel(&f, 256 * 1024);
+    let w = writer(&store);
+    assert!(matches!(
+        offer_fact(
+            &w,
+            &channel,
+            f.fact(
+                1,
+                finished(&f, "seed", "turn", 1, "smart_saving", 1000),
+                1000
+            )
+        ),
+        WriterCycleOutcome::Ack(_)
+    ));
+    // Expand a writer-produced stage using the exact current persisted columns.
+    // This measures the real bounded SQL projection, not Gateway ingestion speed.
+    {
+        let mut connection = store.connection.lock();
+        let tx = connection.transaction().unwrap();
+        let columns: Vec<String> = tx
+            .prepare("PRAGMA table_info(plan_quality_segments)")
+            .unwrap()
+            .query_map([], |r| r.get(1))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        let select: Vec<String> = columns
+            .iter()
+            .map(|c| match c.as_str() {
+                "segment_id" => "'bench-'||?1||'-'||?2".into(),
+                "plan_id" => "?1".into(),
+                "last_observed_turn_ordinal" => "?2".into(),
+                _ => c.clone(),
+            })
+            .collect();
+        let sql = format!(
+            "INSERT INTO plan_quality_segments({}) SELECT {} FROM plan_quality_segments WHERE segment_id='seed'",
+            columns.join(","),
+            select.join(",")
+        );
+        {
+            let mut insert = tx.prepare(&sql).unwrap();
+            for plan in ["plan/large-a", "plan/large-b"] {
+                for index in 1..=49_999 {
+                    insert.execute(rusqlite::params![plan, index]).unwrap();
+                }
+            }
+        }
+        tx.commit().unwrap();
+    }
+    for plan in ["plan/large-a", "plan/large-b"] {
+        let q = TrustPopulationQueryV1 {
+            active_revision: 17,
+            plan_id: plan.into(),
+            branch_id: None,
+            revision: Some(17),
+            from_ms: None,
+            to_ms: None,
+        };
+        let start = std::time::Instant::now();
+        let result = store.observed_trust_suggestion_population(&reader(), &q, 5000);
+        let elapsed = start.elapsed().as_secs_f64() * 1000.;
+        match result {
+            Ok(p) => {
+                assert_eq!(p.active_stages.len(), 49_999);
+                eprintln!(
+                    "SUGGESTION_POPULATION plan={plan} stages=49999 cold_ms={elapsed:.3} status=available"
+                );
+            }
+            Err(crate::query_v2::ObservationV2Error::ScopeTooLarge) => eprintln!(
+                "SUGGESTION_POPULATION plan={plan} stages=49999 cold_ms={elapsed:.3} status=scope_too_large"
+            ),
+            Err(e) => panic!("unexpected {e:?}"),
+        }
+    }
+}

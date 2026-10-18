@@ -37,6 +37,7 @@ struct Cursor {
     delivered: Position,
     snapshot: Option<Position>,
     after: Option<(i64, String)>,
+    #[serde(default)]
     expires_at: i64,
 }
 struct Fact {
@@ -149,14 +150,24 @@ impl crate::LocalObservationStore {
             } else {
                 None
             };
-            state.refresh(
-                &tx,
-                reader,
-                &query.session_id,
-                target,
-                now_ms,
-                changed.as_ref(),
-            )?;
+            state
+                .refresh(
+                    &tx,
+                    reader,
+                    &query.session_id,
+                    target,
+                    now_ms,
+                    changed.as_ref(),
+                )
+                .map_err(|error| {
+                    if error == ObservationV2Error::Unavailable
+                        && started.elapsed() >= std::time::Duration::from_millis(500)
+                    {
+                        ObservationV2Error::ScopeTooLarge
+                    } else {
+                        error
+                    }
+                })?;
         }
         state.visibility = visibility;
         cursor.expires_at = state.expires_at;
@@ -202,5 +213,43 @@ impl crate::LocalObservationStore {
         super::check_visibility(&connection, visibility)?;
         caches.insert(key, state);
         Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn old_signed_cursor_requires_a_fresh_snapshot() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = crate::query_v2::tests::open(dir.path());
+        let reader = ObservationReaderContext::local_user(
+            WorkspaceId::default(),
+            "user".into(),
+            1,
+            10_000,
+            false,
+            false,
+        )
+        .unwrap();
+        let mut query = RoutingTimelineQueryV1 {
+            session_id: "session/test".into(),
+            after_watermark: None,
+            limit: 50,
+        };
+        let page = store
+            .observed_routing_timeline(&reader, &query, 5000)
+            .unwrap();
+        let mut cursor: serde_json::Value =
+            store.decode_observation_cursor(&page.watermark).unwrap();
+        cursor["schema"] = serde_json::json!(1);
+        cursor.as_object_mut().unwrap().remove("expires_at");
+        query.after_watermark = Some(store.encode_observation_cursor(&cursor).unwrap());
+        assert_eq!(
+            store
+                .observed_routing_timeline(&reader, &query, 5000)
+                .unwrap_err(),
+            ObservationV2Error::Stale
+        );
     }
 }

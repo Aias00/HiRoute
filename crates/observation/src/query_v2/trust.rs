@@ -87,7 +87,7 @@ impl LocalObservationStore {
                AND r.finished_at_ms>=r.started_at_ms) AS performance
             FROM quality q");
         let projection = if lean {
-            DETAIL_SELECT.replace("FROM quality q", ", NULL AS executor, EXISTS(SELECT 1 FROM plan_quality_segments later WHERE later.workspace_id=q.workspace_id AND later.session_id=q.session_id AND later.last_observed_turn_ordinal>q.last_observed_turn_ordinal) AS has_later_turn, '[]' AS performance FROM quality q")
+            SAMPLE_SELECT.replace("FROM quality q", ", NULL AS executor, EXISTS(SELECT 1 FROM plan_quality_segments later WHERE later.workspace_id=q.workspace_id AND later.session_id=q.session_id AND later.last_observed_turn_ordinal>q.last_observed_turn_ordinal) AS has_later_turn, '[]' AS performance FROM quality q")
         } else {
             projection
         };
