@@ -120,6 +120,7 @@ const plan = structuredClone(dailyPlan);
 plan.desired.delegation_enabled=false;
 plan.desired.strategy.judgment!.degree.simple_threshold_millis=720;
 plan.desired.strategy.classifier={kind:'decision_service',service:{id:'decision/test',revision:1,name:'Decision model',connection:{kind:'custom',endpoint:'https://decision.example.test',timeout_ms:1000,auth_header:null}}};
+if(params.has('native')) plan.desired.strategy.classifier.service.connection={kind:'system_one',provider:'compatible',model:'fixture',endpoint:'https://decision.example.test',timeout_ms:1000,auth_header:{name:'Authorization',value_secret_ref:'fixture'}};
 function TimelineFixture() {
   const [version, setVersion] = useState(0), [active, setActive] = useState(true);
   Object.assign(window, { refreshTrialTimeline: () => setVersion(v => v + 1), hideTrialTimeline: (hidden: boolean) => setActive(!hidden) });

@@ -1,10 +1,12 @@
 import { Disclosure } from '../../ui';
 import { TrustReplayPreview, type ReplayScope } from './TrustReplayPreview';
 import { trustLevels, trustLevelLabel } from './levels';
-import type { Judgment } from '../decision-services/types';
+import type { Classifier, Judgment } from '../decision-services/types';
+import { protectionExplanation } from './protection-copy';
 import './trust.css';
 
-export function TrustLevelControl({ value, onChange, language, id, complete, evidenceError, replayScope }: {
+export function TrustLevelControl({ value, classifier, onChange, language, id, complete, evidenceError, replayScope }: {
+  classifier: Classifier;
   value: Judgment; onChange(value: Judgment): void; language: 'zh' | 'en'; id: string;
   complete?: number; evidenceError?: boolean; replayScope?: ReplayScope;
 }) {
@@ -31,7 +33,7 @@ export function TrustLevelControl({ value, onChange, language, id, complete, evi
     </div></Disclosure>
     <div className="trust-safety-net">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z" /></svg>
-      <div><strong>{t(`安全网 · 胜任度下限 ${floor}`, `Safety net · competence floor ${floor}`)}</strong><span>{t(`不随信任度变化。常规模型上一阶段的完整评分低于 ${floor} 时，下一轮交给主力模型。`, `Unchanged by trust. When Regular's previous stage scores below ${floor}, the next agent turn goes to Primary.`)}</span></div>
+      <div><strong>{t(`安全网 · 胜任度下限 ${floor}`, `Safety net · competence floor ${floor}`)}</strong><span>{t('不随信任度变化。', 'Unchanged by trust. ')}{protectionExplanation(classifier, language)}</span></div>
     </div>
     {replayScope && <TrustReplayPreview scope={replayScope} threshold={threshold} language={language} />}
     <p className="trust-control-evidence" role="status">{evidence}</p>

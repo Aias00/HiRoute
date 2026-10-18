@@ -175,7 +175,7 @@ notarization, native installation, or live-Agent evidence.
 Home MUST show at most six featured model entries with origin, availability and
 version disclosure; without featured entries it offers unused executable or
 connectable embedded models. Models needing a newer client cannot start a trial.
-Home and routing creation open one flow for trial model, in-place connection,
+Home and routing creation open one full-page, four-step flow for trial model, in-place connection,
 Primary model, decision connection, selected Agent/presets and review.
 
 A registered connection must observe the selected model before continuing. Protected

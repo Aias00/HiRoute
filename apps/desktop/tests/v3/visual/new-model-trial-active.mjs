@@ -6,7 +6,7 @@ const [port,base,output]=process.argv.slice(2);
 const client=await connectPage(Number(port));
 const keepAlive=setInterval(()=>{},1000);
 const results=[];
-const click=async(selector,text)=>{ const deadline=Date.now()+5000; for(;;){ const result=await evaluate(client,`(()=>{const el=[...document.querySelectorAll(${JSON.stringify(selector)})].find(e=>e.getClientRects().length && !e.disabled && e.textContent.includes(${JSON.stringify(text)}));if(!el)return JSON.stringify([...document.querySelectorAll(${JSON.stringify(selector)})].map(e=>[e.textContent.trim().slice(0,40),e.getClientRects().length,!!e.disabled]));el.click();return true;})()`); if(result===true)return; if(Date.now()>deadline)throw Error(`Missing control ${selector} "${text}": ${result}`); await new Promise(resolve=>setTimeout(resolve,50)); } };
+const click=async(selector,text)=>{ const deadline=Date.now()+5000; for(;;){ const result=await evaluate(client,`(()=>{const el=[...document.querySelectorAll(${JSON.stringify(selector)})].find(e=>e.getClientRects().length && !e.matches(':disabled') && e.textContent.includes(${JSON.stringify(text)}));if(!el)return JSON.stringify([...document.querySelectorAll(${JSON.stringify(selector)})].map(e=>[e.textContent.trim().slice(0,40),e.getClientRects().length,e.matches(':disabled')]));el.click();return true;})()`); if(result===true)return; if(Date.now()>deadline)throw Error(`Missing control ${selector} "${text}": ${result}`); await new Promise(resolve=>setTimeout(resolve,50)); } };
 const shot=async name=>{await evaluate(client,`Promise.all(document.getAnimations().filter(a=>a.effect?.getComputedTiming().iterations!==Infinity).map(a=>a.finished.catch(()=>{}))).then(()=>true)`);const value=await client.send('Page.captureScreenshot',{format:'png'});await writeFile(path.join(output,`${name}.png`),Buffer.from(value.data,'base64'));};
 const hostTransport=process.env.HIROUTE_BROWSER_TRANSPORT??'tauri';
 if(!['tauri','console'].includes(hostTransport))throw new Error('Unknown browser host transport');
@@ -18,6 +18,35 @@ const setVisibility=state=>evaluate(client,`(()=>{Object.defineProperty(document
 const typeInto=(selector,value)=>evaluate(client,`(()=>{const input=document.querySelector(${JSON.stringify(selector)});if(!input)throw Error('Missing input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(value)});input.dispatchEvent(new Event('input',{bubbles:true}));return true;})()`);
 async function geometry(){return evaluate(client,`(()=>{const nodes=[...document.querySelectorAll('.model-feed-panel,.trust-control,.plan-quality,.trust-suggestion,.modal,.trial-wizard')].filter(e=>e.getClientRects().length);return nodes.map(e=>({class:e.className,width:e.clientWidth,scroll:e.scrollWidth,left:e.getBoundingClientRect().left,right:e.getBoundingClientRect().right}));})()`);}
 try {
+ for (const lang of ['en','zh']) for (const native of [true,false]) for (const width of [755,1200]) for(const theme of ['light','dark']) {
+  const query=`lang=${lang}&theme=${theme}${native?'&native=1':''}`, height=width===755?600:813;
+  const expectations=native ? (lang==='zh'?['问题仍相关','无法判断','问题已修正或无关']:['earlier problem still matters','cannot be checked','fixed or unrelated']) : (lang==='zh'?['下一轮交给主力模型']:['next agent turn goes to Primary']);
+  const check=async selector=>{
+   const text=await evaluate(client,`document.querySelector(${JSON.stringify(selector)})?.textContent`);
+   for(const expected of expectations) assert.ok(text?.includes(expected),`${selector}: ${expected}: ${text}`);
+   if(!native) assert.ok(!text.includes(lang==='zh'?'问题仍相关':'earlier problem still matters'));
+  };
+  await open(`${query}&view=editor&division=1`,width,height);
+  await waitFor(client,`!!document.querySelector('.trust-safety-net')`); await check('.trust-safety-net');
+  await evaluate(client,`document.querySelector('.trust-safety-net').scrollIntoView({block:'center'});true`);
+  await shot(`protection-${native?'native':'custom'}-${lang}-${width}-${theme}`);
+  await click('[role=tab]',lang==='zh'?'模型表现':'Model performance');
+  await waitFor(client,`!!document.querySelector('.trust-suggestion.cyan')`);
+  await click('.trust-suggestion button',lang==='zh'?'查看分工草稿':'Review division draft');
+  await waitFor(client,`!!document.querySelector('.division-draft-form input[type=checkbox]')`);
+  await evaluate(client,`document.querySelector('.division-draft-form input[type=checkbox]').click();true`);
+  const division=await evaluate(client,`document.querySelector('.division-protection').textContent`);
+  for(const expected of native?expectations:[lang==='zh'?'下一轮交给':'next agent turn goes to']) assert.ok(division.includes(expected));
+  await evaluate(client,`document.querySelector('.division-protection').scrollIntoView({block:'center'});true`);
+  await shot(`division-protection-${native?'native':'custom'}-${lang}-${width}-${theme}`);
+  await open(`${query}&view=quickstart`,width,height);
+  await click('.new-models button',lang==='zh'?'试用':'Try');
+  await waitFor(client,`!!document.querySelector('.trial-page .trial-agent-choice')`);
+  await check('.trial-rule');
+  await evaluate(client,`document.querySelector('.trial-rule').scrollIntoView({block:'center'});true`);
+  await shot(`trial-protection-${native?'native':'custom'}-${lang}-${width}-${theme}`);
+  results.push({id:`protection.${native?'native-three-outcomes':'custom-unconditional'}.${lang}.${width}.${theme}`,status:'passed'});
+ }
  for(const lang of ['en','zh']) {
   await open(`lang=${lang}&view=handoff`,755,600);
   await waitFor(client,`trialTrace.some(x=>x.command==='observation_read' && x.payload.request.intent.view==='sessions')`);
@@ -99,7 +128,7 @@ try {
   assert.ok(text.includes(`${kind==='partial'?1:0}/3`));
   for(const g of await geometry())assert.ok(g.scroll<=g.width+2,JSON.stringify(g));
   await shot(`trust-cost-gaps-${kind}-${lang}-${width}`);
-  results.push({id:`trust.cost-gaps.${kind}.${lang}.${width}`,status:'passed'});
+  results.push({id:`trust.cost-gaps.${kind}.${lang}.${width}.${theme}`,status:'passed'});
  }
 
  for(const [lang,theme,width,height] of [['en','light',755,600],['zh','dark',755,600],['en','dark',1200,813],['zh','light',1200,813]]){
@@ -133,7 +162,7 @@ try {
   for(const part of lang==='zh'?['71%','58 次执行','41 完整评分','4 部分评分','1 等待评分','12 未评分']:['71%','58 executed','41 complete','4 partial','1 awaiting assessment','12 unscored']) assert.ok(await evaluate(client,`${executor}.textContent.includes(${JSON.stringify(part)})`),`executor view: ${part}`);
   for(const g of await evaluate(client,`[...document.querySelectorAll('.quality-model-row,.quality-table')].map(e=>({width:e.clientWidth,scroll:e.scrollWidth}))`)) assert.ok(g.scroll<=g.width+1,JSON.stringify(g));
   await evaluate(client,`${executor}.scrollIntoView({block:'center'});true`);await shot(`trust-scoring-states-executor-${lang}-${width}`);
-  results.push({id:`trust.scoring-states.both-groupings.${lang}.${width}`,status:'passed'});
+  results.push({id:`trust.scoring-states.both-groupings.${lang}.${width}.${theme}`,status:'passed'});
  }
  for (const [lang,theme,width,height] of [['en','light',755,600],['zh','dark',755,600],['en','dark',1200,813],['zh','light',1200,813]]) {
   await open(`lang=${lang}&theme=${theme}&view=timeline`,width,height);
@@ -192,6 +221,7 @@ try {
  await waitFor(client,`!!document.querySelector('.division-draft-form') && document.querySelector('.division-draft-form').textContent.includes('DeepSeek trial')`);
  assert.equal(await evaluate(client,`document.querySelector('.division-draft-form input[type=checkbox]').checked`),false);
  await click('[role="dialog"] button','Review draft in editor');
+ await waitFor(client,`window.divisionDraft?.branch_routing?.branches?.[1]?.primary_candidates?.length===0 && window.divisionDraft?.branch_routing?.branches?.[0]?.candidates?.[0]?.binding_id==='binding/codex/gpt-5.6-sol'`);
  assert.equal(await evaluate(client,`divisionDraft.branch_routing.branches[1].primary_candidates.length`),0);
  assert.equal(await evaluate(client,`divisionDraft.branch_routing.branches[0].candidates[0].binding_id`),'binding/codex/gpt-5.6-sol');
  await evaluate(client,`document.querySelector('.division-draft-form input[type=checkbox]').click();true`);await click('[role="dialog"] button','Review draft in editor');
@@ -201,6 +231,7 @@ try {
  assert.ok(await evaluate(client,`document.querySelector('.division-executors label').textContent.includes('DeepSeek Harness')`));
  assert.equal(await evaluate(client,`[...document.querySelectorAll('[role="dialog"] button')].find(e=>e.textContent.includes('Review draft in editor')).disabled`),true);
  await evaluate(client,`document.querySelector('.division-executors input').click();true`);await click('[role="dialog"] button','Review draft in editor');
+ await waitFor(client,`window.divisionDraft?.delegation_enabled&&divisionDraft.work?.harness==='deepseek_harness'&&divisionDraft.branch_routing.branches.every(b=>b.primary_candidates.length===0&&b.candidates[0].binding_id==='binding/bailian/qwen-coder')`);
  assert.equal(await evaluate(client,`divisionDraft.delegation_enabled&&divisionDraft.work.harness==='deepseek_harness'&&divisionDraft.branch_routing.branches.every(b=>b.primary_candidates.length===0&&b.candidates[0].binding_id==='binding/bailian/qwen-coder')`),true);
  assert.equal(await evaluate(client,`trialTrace.filter(x=>x.command==='preview_plan_editor').length`),0);
  await shot('division-worker-en-755');results.push({id:'division.optional-primary-and-explicit-executor.no-publication',status:'passed'});

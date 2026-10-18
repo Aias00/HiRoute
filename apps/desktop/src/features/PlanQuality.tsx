@@ -260,7 +260,7 @@ function ProtectionCard({ report, caught, language, onShowLow, onOpenEvidence }:
   const time = (ms: number) => new Date(ms).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
   return <section className="trust-card trust-protection">
     <h3>{text(`被拦下的 ${protections} 次`, `${protections} stages caught`)}</h3>
-    <p>{protections ? text('常规模型某个阶段的完整评分低于下限后，下一轮交给主力模型。', 'After a Regular stage scored below the floor, the next agent turn went to Primary.') : text('还没有因为低分转交主力的阶段。', 'No stage has been handed to Primary after a low score yet.')}</p>
+    <p>{protections ? text('这些轮次因低分保护而交给主力模型，计数来自实际发生的记录。', 'These turns went to Primary through low-score protection; the count comes from recorded routing.') : text('还没有因为低分转交主力的阶段。', 'No stage has been handed to Primary after a low score yet.')}</p>
     {caught && caught.length > 0 && <ul className="trust-caught">{caught.map(sample => <li key={sample.segment_id}>
       <div><strong><ContentExcerpt session={sample.session_id} language={language} fallback={text('会话记录', 'Session')} limit={40} /></strong>
         <span>{time(sample.first_at_ms)} · {text(`评分 ${sample.assessment?.score.toFixed(2) ?? '—'}`, `score ${sample.assessment?.score.toFixed(2) ?? '—'}`)}{sample.assessment?.reason ? text(`（${sample.assessment.reason}）`, ` (${sample.assessment.reason})`) : ''} → {text('下一轮主力', 'next turn Primary')}</span></div>

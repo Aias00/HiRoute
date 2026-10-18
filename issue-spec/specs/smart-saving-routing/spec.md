@@ -121,11 +121,23 @@ competence floors, permissions, tool approvals or sandbox settings. The editor
 states the active revision's evidence separately and explicitly identifies zero
 samples. Keeping a level is a normal choice, not incomplete onboarding.
 
+The safety-net explanation follows the selected judgment settings. With System One native judgment, a complete Regular score below the competence floor protects the next turn when the earlier problem still matters; unavailable applicability conservatively retains protection, while a fixed or unrelated problem allows simple tasks to remain with Regular. Other decision services retain unconditional low-score protection. Published routing follows its frozen settings; editor explanations describe the next publication.
+
 #### Scenario: Custom threshold and adjacent suggestions
 
 - **WHEN** a route has threshold 0.72
 - **THEN** it displays Custom 0.72 until an explicit edit; an upward suggestion is
   0.65 and a downward suggestion is 0.80, without silently replacing the value.
+
+#### Scenario: Native safety-net explanation
+
+- **WHEN** the selected decision connection is System One
+- **THEN** the editor explains that relevant low-score history protects the next turn, unavailable applicability retains protection, and fixed or unrelated history allows simple tasks to remain with Regular.
+
+#### Scenario: Other decision-service safety net
+
+- **WHEN** the selected decision connection is a custom extension
+- **THEN** the editor describes unconditional protection after a complete Regular score below the floor, without promising historical-problem applicability checks.
 
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/140#issuecomment-6235185303
@@ -195,7 +207,7 @@ Source SPEC comments:
 
 ### Requirement: User-facing names describe difficulty routing
 
-User-facing Desktop text, website guides, README files and user documentation SHALL call the smart-saving mode "Difficulty routing" (按难度分流), described as giving simple tasks to the regular model and giving complex tasks, or the next turn after a stage that fell below the floor, to the primary model. They SHALL call its groups "Regular" (常规) and "Primary" (主力), the same names that two-group custom branches use. Text SHALL NOT describe the mode as saving money, because a regular model can cost more than the primary model. The new-routing dialog SHALL keep the four modes and SHALL offer "Try a new model" as a template of difficulty routing. Further templates MAY be added only as prefilled difficulty-routing drafts without new semantics. Stored identifiers, CLI arguments, JSON values, schemas, machine-readable output and routing semantics SHALL remain unchanged, including `smart_saving`, `smart` and the stored economy group. Human-readable CLI help MAY show the display name beside the identifier.
+User-facing Desktop text, website guides, README files and user documentation SHALL call the smart-saving mode "Difficulty routing" (按难度分流), described as giving simple tasks to the regular model and giving complex tasks, or turns requiring low-score protection, to the primary model. With System One native judgment, a complete Regular score below the competence floor protects the next turn when the earlier problem still matters; unavailable applicability conservatively retains protection, while a fixed or unrelated problem allows simple tasks to remain with Regular. Other decision services retain unconditional low-score protection. Published routing follows its frozen settings; editor explanations describe the next publication. They SHALL call its groups "Regular" (常规) and "Primary" (主力), the same names that two-group custom branches use. Text SHALL NOT describe the mode as saving money, because a regular model can cost more than the primary model. The new-routing dialog SHALL keep the four modes and SHALL offer "Try a new model" as a template of difficulty routing. Further templates MAY be added only as prefilled difficulty-routing drafts without new semantics. Stored identifiers, CLI arguments, JSON values, schemas, machine-readable output and routing semantics SHALL remain unchanged, including `smart_saving`, `smart` and the stored economy group. Human-readable CLI help MAY show the display name beside the identifier.
 
 #### Scenario: Existing Plan after upgrade
 

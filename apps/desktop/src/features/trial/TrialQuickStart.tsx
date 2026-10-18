@@ -24,6 +24,7 @@ import { currentPrimary, initialTrialMapping, trialSelection, type TrialMapping 
 import { FeedDisclosure } from '../model-feed/FeedDisclosure';
 import { factTags, originLabel, publisherName, rollingIdentity, shortDate } from '../model-feed/presentation';
 import './trial.css';
+import { protectionExplanation } from '../trust/protection-copy';
 
 export function TrialQuickStart({ initialModelId, initialBindingId, language, mutable, snapshot, operation, onOperation, onRefresh, onClose, onOpenAgent, onOpenPerformance, onOpenSessions }: {
   initialModelId?: string; initialBindingId?: string; language: 'zh' | 'en'; mutable: boolean; snapshot: DesktopSnapshot | null; operation: DesktopOperation | null;
@@ -144,7 +145,7 @@ export function TrialQuickStart({ initialModelId, initialBindingId, language, mu
       {trial?.catalog && !trialCandidates.length && trial.availability.kind !== 'needs_newer_client' && data && (connect?.model_configuration_id === trial.model_configuration_id
         ? <div className="trial-connect-card"><TrialConnectModel key={connect.model_configuration_id} model={connect} language={language} management={data.management} mutable={mutable} onOperation={operationRef} onBack={() => { setConnect(null); void refresh(); }} onSaved={(_result, model) => { setSavedConnections(values => [...new Set([...values, model.display_name])]); setConnect(null); void refresh(); void onRefresh(); }} /></div>
         : <div className="trial-connect-card"><div><strong>{t(`先接入 ${trial.display_name}`, `Connect ${trial.display_name} first`)}</strong><p className="field-help">{t('只读取这个服务的模型目录，不会发起付费推理。API Key 保存在本机。', 'Only the service model list is read; no paid inference runs. The API key stays on this device.')}</p></div><button type="button" className="btn btn-primary" onClick={() => setConnect(trial.catalog!)}>{t('在此接入', 'Connect here')}</button></div>)}
-      <div className="callout trial-rule"><UiIcon name="info" /><span>{t('不论新模型更便宜还是更强，都先放进常规组：常规模型拿到低分，下一轮会回到主力；主力拿到低分不会再回退。熟悉之后，可以用分工把难的任务交给它。', 'Whether the new model is cheaper or stronger, it starts in the Regular group: after a low Regular score the next turn returns to Primary, and Primary does not fall back. Once you know it, divide work to give it harder tasks.')}</span></div>
+      <div className="callout trial-rule"><UiIcon name="info" /><span>{t('新模型先放进常规组。', 'The new model starts in Regular. ')}{protectionExplanation(classifier, language)}{t('主力拿到低分不会再回退。熟悉之后，可以用分工把难的任务交给新模型。', ' Primary does not fall back after a low score. Once you know the new model, divide work to give it harder tasks.')}</span></div>
     </section>
     <section className="trial-card trial-card-pair">
       <div className="trial-column">
@@ -152,7 +153,7 @@ export function TrialQuickStart({ initialModelId, initialBindingId, language, mu
         {selectedPrimary && primary && !choosingPrimary ? <button type="button" className="trial-choice selected" aria-expanded={false} onClick={() => setChoosingPrimary(true)}><strong>{primary.display_name}</strong><span>{[source(selectedPrimary.binding_id), primarySelection && mappedAgent ? t(`来自 ${agentDisplayName(mappedAgent.agent_id, language)} 现在使用的模型`, `What ${agentDisplayName(mappedAgent.agent_id, language)} uses now`) : ''].filter(Boolean).join(' · ')}</span><em>{t('更换', 'Change')}</em></button>
           : <div className="trial-choice-list" role="group" aria-label={t('主力模型', 'Primary model')}>{(allPrimary ? primaryOptions : primaryOptions.slice(0, 4)).map(model => <button type="button" key={model.model_configuration_id} className={`trial-choice${primaryId === model.model_configuration_id ? ' selected' : ''}`} aria-pressed={primaryId === model.model_configuration_id} onClick={() => { setPrimaryId(model.model_configuration_id); setPrimaryBinding(''); setPrimarySelection(undefined); setChoosingPrimary(false); }}><strong>{model.display_name}</strong><span>{[...new Set(candidates(model.model_configuration_id).map(c => source(c.binding_id)).filter(Boolean))].join(' · ')}</span></button>)}{!allPrimary && primaryOptions.length > 4 && <button type="button" className="btn btn-quiet trial-inline-action" onClick={() => setAllPrimary(true)}>{t(`显示全部 ${primaryOptions.length} 个已连接模型`, `Show all ${primaryOptions.length} connected models`)}</button>}{!primaryOptions.length && <p className="field-help">{t('还没有其他已连接的模型。', 'No other connected model yet.')}</p>}</div>}
         {connectionPicker('primary')}
-        <p className="field-help">{t('复杂任务，以及常规模型没做好之后的下一轮，交给它。仅在已保存配置明确指向单个模型时，才自动填入当前主力。', 'It takes complex tasks and the turn after Regular falls short. It is prefilled only when saved settings identify a single model.')}</p>
+        <p className="field-help">{t('负责复杂任务和需要保护的轮次。仅在已保存配置明确指向单个模型时，才自动填入当前主力。', 'It takes complex tasks and turns that need protection. It is prefilled only when saved settings identify a single model.')}</p>
         <button type="button" className="btn btn-quiet trial-inline-action" onClick={() => setSubscriptions(true)}>{t('复用本机订阅', 'Reuse a local subscription')}</button>
       </div>
       <div className="trial-column trial-decision">

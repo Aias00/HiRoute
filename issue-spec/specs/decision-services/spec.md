@@ -263,6 +263,8 @@ an upgrade group. Parent models and other executors do not rescue that Worker.
 Completed tasks are not competence results. Evidence from previously routed trial
 stages does not validate work that only Primary handled.
 
+Two-group protection explanations follow the copied judgment settings. With System One native judgment, a complete Regular score below the competence floor protects the next turn when the earlier problem still matters; unavailable applicability conservatively retains protection, while a fixed or unrelated problem allows simple tasks to remain with Regular. Other decision services retain unconditional low-score protection. Published routing follows its frozen settings; editor explanations describe the next publication.
+
 #### Scenario: Keep Primary for implementation
 
 - **WHEN** the user enables Primary protection for the implementation category
