@@ -47,10 +47,20 @@ export const EMPTY_EDITOR_VALUES: AgentEditorValues = {
 const preserve = (): AgentClaudePresetChoice => ({ kind: 'preserve_native' });
 
 export function editorFingerprint(value: AgentEditorValues): string {
+  // Compare settings rather than JSON map insertion order or seed-only metadata.
+  // Preserve array order except for the set of allowed Plan identities.
   return JSON.stringify({
-    ...value,
+    fixedModels: value.fixedModels,
+    nativeModelMode: value.nativeModelMode,
     allowedPlanIds: [...value.allowedPlanIds].sort(),
-  });
+    planProtocols: value.planProtocols,
+    defaultChoice: value.defaultChoice,
+    claudePresets: value.claudePresets,
+    triggerMode: value.triggerMode,
+    hermesPlanId: value.hermesPlanId,
+    hermesProtocol: value.hermesProtocol,
+  }, (_key, item: unknown) => item && typeof item === 'object' && !Array.isArray(item)
+    ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item);
 }
 
 export function codexDefaultChoiceValid(

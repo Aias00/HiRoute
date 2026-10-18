@@ -32,7 +32,11 @@ export async function quickStartInvoke(command:string,payload:any,params:URLSear
  }
  if(command==='preview_agent_settings') {
   const agent=agents.agents[0];
-  agent.settings={state:'configured',restore_point_ref:'restore/test',model_verified:false,operation_id:'operation/map',operation_state:'succeeded',current_selection:payload.input.spec.model.settings};
+  const selection=structuredClone(payload.input.spec.model.settings);
+  // Match the native snapshot's map order rather than echoing the form object.
+  const p=selection.preset_mappings;
+  selection.preset_mappings={haiku:p.haiku,opus:p.opus,sonnet:p.sonnet};
+  agent.settings={state:'configured',restore_point_ref:'restore/test',model_verified:false,operation_id:'operation/map',operation_state:'succeeded',current_selection:selection};
   return {preview:{applicable:true,blockers:[]},mutation:{state:'applied',operation:{operation_id:'operation/map',state:'succeeded',sequence:1,cancellable:false}}};
  }
  if(command==='observation_read') return {rows:[],branches:[],sessions:[],announcements:[]};
