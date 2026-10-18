@@ -527,7 +527,7 @@ Session ID、v1 Receipt ID 与此定位符不同：
 
 ```json
 {
-  "schema": "hiroute.observation.query/v3",
+  "schema": "hiroute.observation.query/v2",
   "intent": {
     "view": "facts",
     "query": {"request_id": "REQUEST_ID_FROM_TIMELINE", "limit": 100, "cursor": null}
@@ -765,26 +765,26 @@ hiroute protected-input release --candidate candidate/decision-main --output jso
 jq -e --arg id decision-main --argjson revision 1 \
   '[.data.services[] | select(.id==$id and .revision==$revision)] |
    if length == 1 then
-     {schema:"hiroute.classifier-decision-test/v2",
-      target:{kind:"saved",service_id:.[0].id,service_revision:.[0].revision}}
+     {schema:"hiroute.classifier-decision-test/v1",
+      classifier:{kind:"decision_service",service:.[0]}}
    else error("Expected saved connection revision is not in this list") end' \
   decision-saved.json > decision-test-request.json
 
 hiroute decision services test --request-stdin --output json < decision-test-request.json
 ```
 
-测试发送固定合成输入，可能消耗供应商额度。检查 `data.state`、`data.verified_shapes` 和 `data.failure_code`，
+测试发送固定合成输入，可能消耗供应商额度。检查 `data.outcome` 和 `data.failure_code`，
 不能仅凭 CLI 退出码判断通过。测试验证已保存连接的传输与必要响应字段，
 不读取真实会话、不运行业务模型、不产生胜任样本；通过不保证任务质量或持续健康。
 保存连接与测试是独立动作，两者都不会发布路由。
 
-历史问题适用性需在路由中明确选择。`smart` 或 `branch_routing` 下的 `native_protocol` 保存实际固定内容与背景上限；省略时沿用现有协议，全局创建默认不变。实际结构见[编辑器 schema](../contracts/cli/plan-editor.v2.schema.json)和[使用说明](smart-saving-model-classification.zh-CN.md)。
+历史问题适用性是默认关闭的路由功能。在 `smart` 或 `branch_routing` 中设置 `native_protocol:{schema:"hiroute.system-one-c/v1",prior_context_max_turns:8}`，通过普通 Preview/Apply 发布。编辑输入不含固定提示词或摘要；编译器将完整实际内容冻结进发布版本。省略时保持原行为，全局创建默认不变。
 
-协议切换使用现有 Preview/Apply。先提交目标编辑内容，读取 `data.assessment_transition.scopes`：服务端返回每个受影响范围的完整问题、三条标准、摘要和可选历史来源。然后在 change 的 `assessment_choices` 按范围（`smart_saving`、生效 `default`、独立覆盖的 `branch/<稳定类别ID>`）填写 `{method:"stock"}`、`{method:"reviewed_custom"}` 或 `{method:"historical",source:<预览返回的准确来源>}`，重新 Preview，审阅最终正文，再使用该响应的 `change_digest` 和 `expected_revisions` Apply。客户端无需计算审阅摘要。默认/历史选项仅复制评分文字与标准，保留阈值、程度、分类和其他编辑。缺少确认、来源不可用或内容变化会指出具体范围并失败；变更选择后不能复用旧 Preview。
+评分区分默认和自定义。`judgment.competence.standard:"default"` 采用当前功能状态的默认文字；`"custom"` 逐字保留输入的 instructions 和全部 criteria。旧输入没有此字段时，只有文字及三条标准精确匹配旧内置默认才归为默认，阈值变化不影响这一判断。界面编辑会记录自定义意图，“恢复默认”恢复当前默认；双向切换均只有普通 Preview/Apply，不再提供逐范围采用、审阅摘要或历史评分恢复。自定义文字引用不可用状态路径会指出字段并报错。已有发布版本不重新解释。
 
-确认记录保存在不可变发布版本的 `assessment_transition`，可通过 `routing show` 查询。编辑器不保存审阅记录；同一协议内普通编辑无需重新审阅协议。回退也需逐范围明确选择，不能只移除协议字段后沿用原评分文字。历史来源直接由 Preview 提供。
+连接测试保留 `hiroute.classifier-decision-test/v1` 和原结果结构。独立的[适用性测试](../contracts/cli/historical-applicability-test.v1.schema.json)使用 `schema:"hiroute.historical-applicability-test/v1"`，并提供 `service_id`、`service_revision`、`protocol:<实际冻结路由>` 和 `shape:"standard"|"max_branches"`。冻结对象来自发布预览，其 context_layout 为 `hiroute.partitioned-history/v1`。检查结果状态与准确内容标识；16 个双组分支一次发送 19 个问题，较小形状通过不代表最大容量通过。路由编辑器测试实际配置，连接页只有原来的连接测试。显式测试发送 1 次合成请求，可能消耗配额；保存和发布不会探测，也不要求具备测试证据。
 
-[当前统一诊断请求](../contracts/cli/classifier-decision-test.v2.schema.json)可用 `target:{kind:"value",classifier:...}` 测试未保存值的连接，或 `target:{kind:"saved",service_id,service_revision}` 测试准确保存的版本。在 saved target 中同时加入 `protocol:<冻结内容>` 和 `shape:"standard"|"max_branches"`，可验证历史问题适用性；最大形状需 16 个双组分支，一次测试 19 问。`verified_shapes` 明确哪些形状已验证；连接成功不表示适用性可用。已发布的 v1 调用经显式适配器继续返回原有 `outcome` / `failure_code` 结构。每次显式测试发送 1 次合成请求，可能消耗配额，保存和发布不会测试。
+观测查询保留 `hiroute.observation.query/v2`。facts 和 plan_quality 请求可设置 `include_routing_observations:true`；省略或 false 保持旧严格字段、授权编码和游标绑定。协议标识、摘要及形状计数仍保留在机器输出中。
 
 计划继续使用 `routing preview/apply`，编辑器 schema 为 `hiroute.plan-editor/v2`：
 

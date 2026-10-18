@@ -28,7 +28,7 @@ export function cProtocolScenarios({ fresh, routing, click, until, all, text, ca
     localStorage.setItem('hiroute.language',language);control().remount();
     if(language==='zh')await routing();else {await click('Smart routing');await until(()=>all('.master-list .list-row').length,'routes');all('.master-list .list-row')[0].click();}
     await until(()=>document.querySelector('.native-protocol-editor input[type="checkbox"]'),'capability toggle');
-    await until(()=>calls('plan_editor_options').length,'editor options');
+    await until(()=>calls('plan_editor_options').some(c=>c.payload.input.editor?.smart.classifier.kind==='decision_service'),'loaded route options');
   }
   const toggle=()=>document.querySelector('.native-protocol-editor input[type="checkbox"]');
   function assertCopy(){
@@ -91,7 +91,7 @@ export function cProtocolScenarios({ fresh, routing, click, until, all, text, ca
     for(const language of ['zh','en']){
       await fresh(()=>{control().handlers.decision_services=()=>({services:[service]});control().handlers.test_classifier_decision=({input})=>{assert(input.classifier?.service.revision===7&&!input.request,'Connection switched contract');return {schema:'hiroute.classifier-decision-test-result/v1',outcome:'passed',duration_millis:1};};});
       localStorage.setItem('hiroute.language',language);control().remount();const t=(zh,en)=>language==='zh'?zh:en;
-      await click(t('决策模型','Decision models'));await until(()=>all('.master-list .list-row').length,'connection list');await click(service.name);await click(t('测试连接','Test connection'));
+      await click(t('模型','Models'));await click(t('决策模型','Decision models'));await until(()=>all('.master-list .list-row').length,'connection list');await click(service.name);await click(t('测试连接','Test connection'));
       await until(()=>text().includes(t('连接测试通过','Connection test passed')),'connection test');
       assert(!all('select').some(e=>e.getAttribute('aria-label')?.includes('shape')),'Shape selector remains');assert(calls('test_classifier_decision').length===1,'Connection sent more than one request');assertCopy();
     }
@@ -104,7 +104,7 @@ export function cProtocolScenarios({ fresh, routing, click, until, all, text, ca
       await fresh(() => {
         control().handlers.observation_read = payload => {
           if (payload.request.intent.view !== 'plan_quality') return control().fixtureResponse('observation_read', payload);
-          assert(payload.request.schema === 'hiroute.observation.query/v3' && !('include_routing_observations' in payload.request.intent.query), 'Desktop did not use the current versioned query');
+          assert(payload.request.schema === 'hiroute.observation.query/v2' && payload.request.intent.query.include_routing_observations === true, 'Desktop did not use the current versioned query');
           return { samples: [], summary: { models: [], scored_stage_count: 0, unrated_stage_count: 0, session_count: 0, available_revisions: [8] }, next_cursor: null,
             routing_observations: { coverage: partial ? 'partial' : 'complete', covered_from_ms: 0, covered_to_ms: Date.now(), retained_decisions: empty ? 0 : 11,
               known_non_c_decisions: 1, legacy_or_unknown_decisions: partial ? 2 : 0, unknown_scope_decisions: 0, missing_projection_events: partial ? 1 : 0, scan_limited: partial,
@@ -121,7 +121,6 @@ export function cProtocolScenarios({ fresh, routing, click, until, all, text, ca
       all('.routing-observations summary')[0].click();
       await until(() => text().includes('57.1%') && text().includes('25.0%') && text().includes('10.0%'), 'retained denominator rates');
       assert(all('.routing-counts')[0].textContent.includes('4 / 7'), 'Unavailable numerator or request denominator lost');
-      all('.routing-cohort details summary')[0].click();
       for (const element of all('.routing-counts dt, .routing-counts dd, .routing-cohort strong, .quality-diagnostic-identity')) {
         assert(element.scrollWidth <= element.clientWidth + 1, 'C observation identity or count overflows');
       }

@@ -41,7 +41,7 @@ test('explicit saved-service probes bind the standard and maximum branch shapes'
   assert.equal(maximum.protocol.decision.options.length, 16);
   assert.equal(maximum.protocol.decision.options.filter(o => o.refinement).length + 3, 19);
   assert.equal(Object.keys(maximum.protocol.scopes).length, 16);
-  assert.ok(Object.values(maximum.protocol.scopes).every(s => s.standard === 'default')); 
+  assert.ok(Object.values(maximum.protocol.scopes).every(s => s.standard === 'default'));
   assert.notEqual(standard.protocol.digest, maximum.protocol.digest);
   assert.equal(nativeReferenceIssue(true, 'Use state.visible_conversation'), true);
   assert.equal(nativeReferenceIssue(false, 'Use state.assessment_stage'), true);

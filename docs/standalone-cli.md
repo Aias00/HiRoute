@@ -610,7 +610,7 @@ session timeline (a session ID or v1 receipt ID is a different locator):
 
 ```json
 {
-  "schema": "hiroute.observation.query/v3",
+  "schema": "hiroute.observation.query/v2",
   "intent": {
     "view": "facts",
     "query": {"request_id": "REQUEST_ID_FROM_TIMELINE", "limit": 100, "cursor": null}
@@ -893,54 +893,51 @@ Test the exact saved r1, rather than an unsaved draft or whichever version happe
 jq -e --arg id decision-main --argjson revision 1 \
   '[.data.services[] | select(.id==$id and .revision==$revision)] |
    if length == 1 then
-     {schema:"hiroute.classifier-decision-test/v2",
-      target:{kind:"saved",service_id:.[0].id,service_revision:.[0].revision}}
+     {schema:"hiroute.classifier-decision-test/v1",
+      classifier:{kind:"decision_service",service:.[0]}}
    else error("Expected saved connection revision is not in this list") end' \
   decision-saved.json > decision-test-request.json
 
 hiroute decision services test --request-stdin --output json < decision-test-request.json
 ```
 
-The fixed synthetic test may consume quota. Check `data.state`, `data.verified_shapes` and `data.failure_code`,
+The fixed synthetic test may consume quota. Check `data.outcome` and `data.failure_code`,
 not only the CLI exit code. It tests that saved connection's transport and required response
 fields, reads no real conversation, runs no execution model and produces no competence sample.
 A pass is not a task-quality or continuing-health guarantee. Saving a connection and testing
 it are separate actions; neither publishes a route.
 
-Historical problem applicability is an explicit route option. In `smart` or
-`branch_routing`, `native_protocol` contains the actual versioned fixed bundle and
-background cap. Omission retains legacy behavior; global creation defaults remain
-unchanged. See the [editor schema](../contracts/cli/plan-editor.v2.schema.json) and
-[adoption/rollback guide](smart-saving-model-classification.md).
+Historical problem applicability is a route capability, off by default. In `smart`
+or `branch_routing`, select `native_protocol:{schema:"hiroute.system-one-c/v1",prior_context_max_turns:8}`.
+Editor input contains no fixed bundle or digest. Use the normal Preview/Apply flow;
+the compiler freezes complete effective contents into the publication. Omission
+keeps the current behavior and global defaults do not change.
 
-Use the existing Preview/Apply flow. Preview the destination editor, then inspect
-`data.assessment_transition.scopes`: each affected scope has a server-composed
-question, three criteria, digest and available historical sources. In the change,
-set `assessment_choices` by scope (`smart_saving`, effective `default`, or
-`branch/<stable-category-id>` for independent overrides) to `{method:"stock"}`, `{method:"reviewed_custom"}`
-or `{method:"historical",source:<exact source returned by Preview>}`. Preview again,
-review the final text, and Apply with that response's `change_digest` and
-`expected_revisions`. No client-side review hashing is required. Stock/history
-choices copy only assessment instructions/criteria and preserve thresholds,
-degree/category definitions and other edits. Missing choices or unavailable
-sources identify the scope; changing choices/content invalidates the old Preview.
+Assessments are default or custom. `judgment.competence.standard:"default"`
+resolves the active default; `"custom"` preserves the supplied instructions and all
+criteria exactly. Released input without this field recognizes exact legacy
+default text, including all criteria, as default. Threshold changes alone do not
+customize text. UI edits record custom intent; Reset to default restores active
+defaults. Both toggle directions use one ordinary Preview/Apply, with no per-scope
+adoption, review digest or historical restore. Incompatible custom state paths name
+the field and fail validation. Existing PlanVersions remain frozen.
 
-The immutable published version keeps `assessment_transition`, inspectable through
-`routing show`. Editor state contains no review record. Ordinary edits within the
-same protocol need no protocol re-review. Rollback requires an explicit choice per
-effective scope, including when the old suffix contains no state-path literal.
-Historical choices are returned by Preview, without a separate options flag.
+Connectivity keeps `hiroute.classifier-decision-test/v1` and its original result.
+The separate [applicability probe](../contracts/cli/historical-applicability-test.v1.schema.json)
+uses `schema:"hiroute.historical-applicability-test/v1"`, `service_id`,
+`service_revision`, `protocol:<actual frozen route>` and `shape:"standard"` or
+`"max_branches"`. Read the frozen object from the publication Preview; its context
+layout is `hiroute.partitioned-history/v1`. Inspect result state and exact evidence
+identity. A sixteen-category dual-group maximum uses nineteen questions in one
+call; a smaller success proves no maximum capacity. The route editor tests its
+actual shape; the connection page keeps its one connectivity test. All explicit
+tests send one synthetic request and may consume quota. Saving/publication never
+probe and do not require capability evidence.
 
-The [one current diagnostic request](../contracts/cli/classifier-decision-test.v2.schema.json)
-uses `target:{kind:"value",classifier:...}` for unsaved connectivity, or
-`target:{kind:"saved",service_id,service_revision}` for an exact saved revision.
-Adding both frozen `protocol` and `shape` (`standard` or `max_branches`) to the saved
-target tests historical problem applicability. Maximum shape requires sixteen
-dual-group categories and nineteen questions in one request. Inspect
-`data.verified_shapes`, state and exact content identity; connectivity success alone
-does not establish applicability support. Released v1 calls use an explicit adapter
-and retain their original `outcome`/`failure_code` result. Each explicit test sends
-one synthetic request and may consume quota; saving/publication never probes.
+Observation queries retain `hiroute.observation.query/v2`. Facts and plan-quality
+requests may set `include_routing_observations:true`; omission/false preserves the
+released strict result fields, authorization encoding and cursor binding. Protocol
+identities/digests and shape counts remain available in machine output.
 
 Plans use the existing `routing preview/apply` transaction with `hiroute.plan-editor/v2`:
 
