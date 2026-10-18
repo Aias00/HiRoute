@@ -49,6 +49,7 @@ name = "hirouted"
 path = "src/control/bin.rs"
 
 [dev-dependencies]
+hiroute-observation = { path = "../observation", features = ["test-support"] }
 base64.workspace = true
 ring = "0.17.14"
 hiroute-integrations = { path = "../integrations", features = ["test-support"] }

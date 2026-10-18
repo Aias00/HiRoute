@@ -695,12 +695,14 @@ impl ApplicationService {
         )
         .with_prices(ports.prices.clone())
         .with_routing(ports.routing.clone());
-        let analysis_details = request
-            .payload
-            .get("intent")
-            .and_then(|intent| intent.get("view"))
-            .and_then(Value::as_str)
-            == Some("analysis");
+        let read_details = matches!(
+            request
+                .payload
+                .get("intent")
+                .and_then(|intent| intent.get("view"))
+                .and_then(Value::as_str),
+            Some("analysis" | "routing_timeline")
+        );
         let result = match operation {
             ObservationOperation::List => control.list(
                 request.principal.kind,
@@ -735,7 +737,7 @@ impl ApplicationService {
         match result {
             Ok(value) => succeeded(value, request.request_id),
             Err(error) => {
-                let details = if analysis_details {
+                let details = if read_details {
                     observation_read_failure(&error)
                 } else {
                     None

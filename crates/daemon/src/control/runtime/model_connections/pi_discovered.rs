@@ -306,11 +306,9 @@ impl LocalControlAdapter {
                 free_access: None,
                 evidence_ref: None,
             },
-            runtime_fallback_denied_model_ids: super::runtime_fallback_denied_model_ids(
-                self.current_catalog()
-                    .as_deref()
-                    .map(|snapshot| &snapshot.catalog),
-            ),
+            runtime_fallback_denied_model_ids: super::runtime_fallback_denied_model_ids(Some(
+                catalog,
+            )),
             models,
         };
         let credential = NativeModelConnectionCredentialV1::Protected {

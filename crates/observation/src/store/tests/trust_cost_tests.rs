@@ -240,6 +240,188 @@ fn review_trial_cost_mixed_attribution_is_a_counted_gap() {
 }
 
 #[test]
+fn review_trial_cost_unknown_only_is_unknown_and_never_zero() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    trial_request_with(&store, "unknown", 17, ExecutionGroupV1::Regular, |turn| {
+        let ExecutionFactV1::AgentTurnFinished {
+            attribution,
+            branch_execution,
+            executed_branch_id,
+            model_configuration_id,
+            profile_digest,
+            history_partial,
+            ..
+        } = turn
+        else {
+            unreachable!()
+        };
+        *attribution = AgentTurnAttributionV1::Unknown;
+        *branch_execution = None;
+        *executed_branch_id = None;
+        *model_configuration_id = None;
+        *profile_digest = None;
+        *history_partial = true;
+    });
+    let report = trial_report(&store, 1000).unwrap();
+    assert_eq!(
+        (report.request_count, report.compared_request_count),
+        (1, 0)
+    );
+    assert_eq!(
+        (report.missing_request_count, report.excluded_request_count),
+        (1, 1)
+    );
+    assert_eq!(report.coverage, ObservationMetricCoverageV2::Unknown);
+    assert_eq!(report.estimated_savings_micros, None);
+    assert_eq!(report.compared_routed_subtotal_micros, None);
+    assert_eq!(report.compared_reference_subtotal_micros, None);
+}
+
+#[test]
+fn review_trial_cost_conflicting_membership_is_not_partial_history() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    trial_request(&store, "normal", 17, ExecutionGroupV1::Regular);
+    let f = trial_request(&store, "conflict", 16, ExecutionGroupV1::Regular);
+    let mut second = trial_turn(&f, 17, ExecutionGroupV1::Regular);
+    let ExecutionFactV1::AgentTurnFinished {
+        agent_turn_id,
+        segment_id,
+        ..
+    } = &mut second
+    else {
+        unreachable!()
+    };
+    *agent_turn_id = "conflicting-turn".into();
+    *segment_id = "conflicting-stage".into();
+    assert!(matches!(
+        store.ingest_fact(&f.fact(12, second, 112), &[]).unwrap(),
+        IngestOutcome::Ack(_)
+    ));
+    store.settle_pending_valuations(16).unwrap();
+    let report = trial_report(&store, 1000).unwrap();
+    assert_eq!(
+        (report.request_count, report.compared_request_count),
+        (2, 1)
+    );
+    assert_eq!(
+        report.excluded_request_count, 1,
+        "an apparent old revision cannot hide a membership conflict"
+    );
+    assert_eq!(report.coverage, ObservationMetricCoverageV2::Partial);
+    assert_eq!(report.estimated_savings_micros, None);
+}
+
+#[test]
+fn review_trial_cost_scopes_readiness_and_waits_for_real_projection_catchup() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    let normal = trial_request(&store, "normal", 17, ExecutionGroupV1::Regular);
+    let old = trial_request_with(
+        &store,
+        "old-partial",
+        16,
+        ExecutionGroupV1::Regular,
+        |turn| {
+            let ExecutionFactV1::AgentTurnFinished {
+                history_partial, ..
+            } = turn
+            else {
+                unreachable!()
+            };
+            *history_partial = true;
+        },
+    );
+    let primary = trial_request(&store, "primary", 17, ExecutionGroupV1::Primary);
+    // Exercise the notifications an unaware, supported core writer leaves.
+    for f in [&old, &primary] {
+        store
+            .connection
+            .lock()
+            .execute(
+                "UPDATE logical_requests SET outcome=outcome WHERE request_id=?1",
+                [f.request.as_str()],
+            )
+            .unwrap();
+    }
+    assert_eq!(
+        trial_report(&store, 1000).unwrap().compared_request_count,
+        1
+    );
+    store
+        .connection
+        .lock()
+        .execute(
+            "UPDATE logical_requests SET outcome=outcome WHERE request_id=?1",
+            [normal.request.as_str()],
+        )
+        .unwrap();
+    assert!(matches!(
+        trial_report(&store, 1000),
+        Err(crate::query_v2::ObservationV2Error::Unavailable)
+    ));
+    drop(store);
+    let store = open_store(dir.path());
+    store.settle_pending_valuations(16).unwrap();
+    assert_eq!(
+        trial_report(&store, 1000).unwrap().compared_request_count,
+        1
+    );
+    store
+        .connection
+        .lock()
+        .execute(
+            "DELETE FROM observation_analysis_requests_v1 WHERE request_id=?1",
+            [normal.request.as_str()],
+        )
+        .unwrap();
+    assert!(matches!(
+        trial_report(&store, 1000),
+        Err(crate::query_v2::ObservationV2Error::Unavailable)
+    ));
+}
+
+#[test]
+fn review_trial_cost_rebuilds_ambiguous_old_turn_projection() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    trial_request_with(
+        &store,
+        "history-partial",
+        17,
+        ExecutionGroupV1::Regular,
+        |turn| {
+            let ExecutionFactV1::AgentTurnFinished {
+                history_partial, ..
+            } = turn
+            else {
+                unreachable!()
+            };
+            *history_partial = true;
+        },
+    );
+    store
+        .connection
+        .lock()
+        .execute_batch("ALTER TABLE observation_analysis_turns_v1 DROP COLUMN membership_conflict")
+        .unwrap();
+    drop(store);
+    let store = open_store(dir.path());
+    store.settle_pending_valuations(16).unwrap();
+    assert_eq!(
+        trial_report(&store, 1000).unwrap().compared_request_count,
+        1
+    );
+    drop(store);
+    let store = open_store(dir.path());
+    assert_eq!(
+        trial_report(&store, 1000).unwrap().compared_request_count,
+        1
+    );
+}
+
+#[test]
 fn review_trial_cost_unclosed_turn_ages_into_gap_and_late_evidence_recovers() {
     let dir = tempfile::tempdir().unwrap();
     let store = open_store(dir.path());

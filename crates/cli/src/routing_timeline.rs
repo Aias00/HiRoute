@@ -160,6 +160,9 @@ fn retry_delay(
     failures: &mut u32,
 ) -> Option<std::time::Duration> {
     let error = error?;
+    if !error.retryable {
+        return None;
+    }
     if error.observation_read.as_ref().is_some_and(|r| {
         r.reason == hiroute_application_api::ObservationReadFailureReasonV1::ReaderBusy
     }) {
@@ -171,7 +174,11 @@ fn retry_delay(
                 .clamp(100, 1000),
         )));
     }
-    if error.code == ErrorCode::DaemonUnavailable && *failures < 3 {
+    if matches!(
+        error.code,
+        ErrorCode::DaemonUnavailable | ErrorCode::ObservationUnavailable
+    ) && *failures < 3
+    {
         *failures += 1;
         return Some(std::time::Duration::from_secs(2));
     }
@@ -206,7 +213,8 @@ mod tests {
     #[test]
     fn follow_retries_busy_and_bounded_transients_but_stops_for_scope_and_authorization() {
         let mut count = 0;
-        let mut busy = hiroute_application_api::ErrorV1::new(ErrorCode::DaemonUnavailable);
+        let mut busy = hiroute_application_api::ErrorV1::new(ErrorCode::ObservationUnavailable);
+        busy.retryable = true;
         busy.observation_read = Some(hiroute_application_api::ObservationReadFailureV1 {
             reason: hiroute_application_api::ObservationReadFailureReasonV1::ReaderBusy,
             retry_after_ms: 100,
@@ -216,11 +224,19 @@ mod tests {
             retry_delay(Some(&busy), &mut count),
             Some(std::time::Duration::from_millis(100))
         );
-        let transient = hiroute_application_api::ErrorV1::new(ErrorCode::DaemonUnavailable);
+        let mut transient =
+            hiroute_application_api::ErrorV1::new(ErrorCode::ObservationUnavailable);
+        transient.retryable = true;
         for _ in 0..3 {
             assert!(retry_delay(Some(&transient), &mut count).is_some());
         }
         assert!(retry_delay(Some(&transient), &mut count).is_none());
+        // A successful page resets the budget in follow; a nonretryable storage
+        // failure must never use that budget, even with the same public code.
+        count = 0;
+        assert!(retry_delay(Some(&transient), &mut count).is_some());
+        transient.retryable = false;
+        assert!(retry_delay(Some(&transient), &mut 0).is_none());
         for code in [
             ErrorCode::ScopeTooLarge,
             ErrorCode::CapabilityDenied,
