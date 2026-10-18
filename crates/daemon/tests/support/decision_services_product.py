@@ -110,7 +110,7 @@ def scenario(repository, routed=False):
         assert DecisionEndpoint.requests[-1][1]['model'] == 'fixture-jev'
         assert len(DecisionEndpoint.requests[-1][1]['questions']) == 3
         state = DecisionEndpoint.requests[-1][1]['state']
-        assert state['assessment_stage'] is None
+        assert state['assessment_stage'] == []
         assert state['prior_context'] == []
         assert 'assessment_from' not in state and 'visible_conversation' not in state
         # A shared API Key may back independent immutable service versions.
