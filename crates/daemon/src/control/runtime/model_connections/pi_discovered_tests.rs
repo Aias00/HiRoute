@@ -1,4 +1,5 @@
 use super::*;
+use hiroute_domain::CanonicalDigest;
 
 #[test]
 fn review_native_preview_uses_captured_catalog_for_fallback_denial() {
