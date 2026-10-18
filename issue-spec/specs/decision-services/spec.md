@@ -101,6 +101,11 @@ and applicability cannot rescue invalid/missing assessment or select a category.
 Same-turn inheritance, ContextHold, candidate ordering and availability relay
 retain their existing rules. C is inapplicable to custom-extension v1 and heuristics.
 
+#### Scenario: A new user turn keeps the selected group
+
+- **WHEN** a custom-branch follow-up selects the same group and its held candidate remains valid
+- **THEN** the Gateway MUST prefer that candidate while retaining the fresh category/degree decision.
+
 #### Scenario: Unresolved problem remains relevant
 
 - **WHEN** P(simple) meets T, a complete eligible score is below F and applicability equals 0.5
