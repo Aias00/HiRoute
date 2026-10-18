@@ -406,3 +406,35 @@ fn inherited_defaults_and_independent_custom_overrides_resolve_separately() {
         Some(AssessmentStandardV1::Custom)
     );
 }
+
+#[test]
+fn local_rules_and_custom_extensions_keep_their_assessment_and_omission() {
+    use crate::*;
+    let mut editor = native_editor();
+    let mut service = match &editor.smart.classifier {
+        ComplexityClassifierModeV1::DecisionService { service } => service.clone(),
+        _ => unreachable!(),
+    };
+    service.connection = DecisionConnectionV1::Custom {
+        endpoint: "https://decision.example/v1/decisions".into(),
+        timeout_ms: 3000,
+        auth_header: None,
+    };
+    for classifier in [
+        ComplexityClassifierModeV1::LocalRules,
+        ComplexityClassifierModeV1::DecisionService { service },
+    ] {
+        editor.smart.classifier = classifier;
+        let current = editor.effective().unwrap();
+        assert!(current.native_protocol().is_none());
+        assert_eq!(
+            current.assessment_scopes()[SMART_SAVING_SCOPE_ID],
+            &editor.smart.judgment
+        );
+        assert!(
+            serde_json::to_value(&current).unwrap()["strategy"]
+                .get("native_protocol")
+                .is_none()
+        );
+    }
+}

@@ -37,6 +37,9 @@ fn frozen_content_and_effective_authoring_must_both_agree() {
     );
     let mut corrupt = frozen.clone();
     corrupt.protocol.prior_context_max_turns = 2;
+    assert_eq!(corrupt.validate(), Err(NativeProtocolError::HistoryCap));
+    let mut corrupt = frozen.clone();
+    corrupt.digest = CanonicalDigest::of(&"altered content identity").unwrap();
     assert_eq!(corrupt.validate(), Err(NativeProtocolError::DigestMismatch));
     let mut changed = j.clone();
     changed.degree.simple_threshold_millis = 900;
