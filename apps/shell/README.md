@@ -16,7 +16,9 @@ authentication, confirmations and operations stay in `hirouted` and
   quitting the shell leaves the Task running.
 - `installer`: NSIS's fixed adapter to the native Rust installation transaction.
 - `install_transaction`: shell-only digest inventory, prepared/committed backup
-  record and failure recovery; standalone journals keep their separate owner.
+  record, removal of obsolete owned payload assets before strict package validation,
+  and failure recovery; unchanged cores are retained and standalone journals keep
+  their separate owner.
 - `updater`: fixed HTTPS V3 selection/download, distinct check-unavailable states,
   verification, cancellable drain
   and a private native finisher that waits for shell exit before passive NSIS.

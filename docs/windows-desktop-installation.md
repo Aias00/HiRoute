@@ -28,6 +28,12 @@ private preparation journal retains matching previous bytes until installation,
 login settings and actual Control/Gateway readiness succeed. Changed/foreign
 entries are preserved and require repair. Committed cleanup does not replay
 installation or roll back a successfully committed package.
+After NSIS overlays a replacement, obsolete owned frontend asset paths are removed
+only when both their current bytes and retained backups match the old inventory.
+This happens before the new payload's strict closed-file-set verification. A retry
+recovers any pending shell transaction first. If the standalone core still matches
+the previous installation, shell rollback restores its captured settings and files
+without reinstalling or draining that unchanged core.
 
 Recovery and uninstall run a verified shell copy outside the program directory.
 A failed first installation can therefore roll back before `shell-package.json`

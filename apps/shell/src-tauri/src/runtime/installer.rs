@@ -116,8 +116,9 @@ fn install(args: &[String]) -> Result<Value, String> {
     windows::preflight().map_err(|error| error.to_string())?;
     let root = program_root()?;
     let package = root.join("standalone");
-    Package::read(&package).map_err(|_| "INSTALL_PACKAGE_INVALID")?;
     super::install_transaction::record_generated().map_err(|error| error.to_string())?;
+    super::install_transaction::prune_payload().map_err(|error| error.to_string())?;
+    Package::read(&package).map_err(|_| "INSTALL_PACKAGE_INVALID")?;
     let enabled = !args.iter().any(|arg| arg == "--no-login-start");
     request(
         &package.join("hiroute.exe"),

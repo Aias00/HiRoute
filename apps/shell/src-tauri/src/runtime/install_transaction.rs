@@ -174,13 +174,13 @@ pub(super) fn validate_installed() -> io::Result<()> {
 }
 pub(super) fn prepare(manifest: &Path) -> io::Result<()> {
     windows::preflight()?;
-    if has_pending()? {
-        return Err(invalid());
-    }
     let package: Package = read(manifest, false)?;
     package.validate()?;
     if package.target != "x86_64-pc-windows-msvc" {
         return Err(invalid());
+    }
+    if has_pending()? {
+        rollback(false)?;
     }
     let root = root()?;
     let mut old = BTreeMap::new();
@@ -273,6 +273,48 @@ pub(super) fn prepare(manifest: &Path) -> io::Result<()> {
             shell_login,
         },
     )
+}
+/// NSIS overlays files, so old content-hashed assets must leave the package's
+/// closed file set before the Rust package reader admits the new payload.
+pub(super) fn prune_payload() -> io::Result<()> {
+    let value = pending()?;
+    if value.phase != Phase::Prepared {
+        return Err(invalid());
+    }
+    prune_old_payload(
+        &root()?,
+        &data()?.join("install-backups"),
+        &value.old,
+        &value.new,
+    )
+}
+fn prune_old_payload(
+    root: &Path,
+    backups: &Path,
+    old: &BTreeMap<String, String>,
+    new: &BTreeMap<String, String>,
+) -> io::Result<()> {
+    validate(old)?;
+    validate(new)?;
+    let obsolete: Vec<_> = old
+        .iter()
+        .filter(|(name, _)| name.starts_with("standalone/") && !new.contains_key(*name))
+        .collect();
+    // Check the whole deletion set and every retained rollback copy first.
+    for (name, expected) in &obsolete {
+        if hash(&backups.join(name))? != **expected
+            || (present(&root.join(name))? && hash(&root.join(name))? != **expected)
+        {
+            return Err(invalid());
+        }
+    }
+    for (name, _) in obsolete {
+        let path = root.join(name);
+        if present(&path)? {
+            fs::remove_file(path)?;
+        }
+    }
+    Ok(())
 }
 /// Record NSIS-generated files before any service mutation. Unknown replacements stay for repair.
 pub(super) fn record_generated() -> io::Result<()> {
@@ -379,9 +421,38 @@ pub(super) fn rollback(allow_unavailable_agent_restore: bool) -> io::Result<()> 
         && !super::installer::path_added(&data()?.join("install-backups"))
             .map_err(|_| invalid())?;
     // A failed post-install hook can follow a committed standalone transaction. Reinstall
-    // the exact retained package through the same Rust core instead of editing its marker.
+    // the retained package only if that core changed. An early payload rejection must
+    // not drain unrelated work in the still-running previous installation.
     if let Some(package) = &value.previous_package {
-        windows::install(serde_json::from_value(serde_json::json!({"schema":"hiroute.windows-install-request/v1","package_directory":package,"autostart":value.previous_autostart,"console_loopback":false,"defer_package_cleanup":true})).map_err(|_|invalid())?)?;
+        let layout =
+            hiroute_host_runtime::StandaloneLayout::from_environment().map_err(|_| invalid())?;
+        let current = if present(&layout.marker_path)? {
+            Some(
+                hiroute_host_runtime::read_standalone_install_record(&layout.marker_path)
+                    .map_err(|_| invalid())?,
+            )
+        } else {
+            None
+        };
+        if let Some(current) = current.filter(|record| record.install_root == *package) {
+            if current.service_definition
+                != layout.data_root.join("service/windows-background.json")
+            {
+                return Err(invalid());
+            }
+            let definition = hiroute_platform::windows::background::read_definition(
+                &current.service_definition,
+            )?;
+            if definition.daemon != package.join("hirouted.exe") {
+                return Err(invalid());
+            }
+            definition.verify_image()?;
+            // Task verification preserves foreign registrations; changing the login
+            // trigger does not stop the existing process or run it again.
+            hiroute_platform::windows::task::set_autostart(&definition, value.previous_autostart)?;
+        } else {
+            windows::install(serde_json::from_value(serde_json::json!({"schema":"hiroute.windows-install-request/v1","package_directory":package,"autostart":value.previous_autostart,"console_loopback":false,"defer_package_cleanup":true})).map_err(|_|invalid())?)?;
+        }
     } else {
         let layout =
             hiroute_host_runtime::StandaloneLayout::from_environment().map_err(|_| invalid())?;
@@ -455,6 +526,101 @@ pub(super) fn rollback(allow_unavailable_agent_restore: bool) -> io::Result<()> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct PayloadDirectory(PathBuf);
+    impl PayloadDirectory {
+        fn new() -> Self {
+            let value = Self(std::env::temp_dir().join(format!(
+                    "hiroute-shell-payload-{}-{}",
+                    std::process::id(),
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos()
+                )));
+            security::ensure_private_directory(&value.0).unwrap();
+            value
+        }
+        fn file(&self, name: &str, bytes: &[u8]) -> String {
+            let path = self.0.join(name);
+            security::ensure_private_directory(path.parent().unwrap()).unwrap();
+            fs::write(&path, bytes).unwrap();
+            hash(&path).unwrap()
+        }
+    }
+    impl Drop for PayloadDirectory {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn changed_frontend_names_retire_only_verified_old_payload_and_keep_rollback_bytes() {
+        let temporary = PayloadDirectory::new();
+        let name = "standalone/console/assets/index-old.js";
+        let previous = temporary.file(&format!("program/{name}"), b"old frontend");
+        temporary.file(&format!("backups/{name}"), b"old frontend");
+        let next = temporary.file(
+            "program/standalone/console/assets/index-new.js",
+            b"new frontend",
+        );
+        temporary.file("program/standalone/foreign.txt", b"foreign content");
+        temporary.file("program/shell-install.json", b"previous preferences");
+        let old = BTreeMap::from([(name.into(), previous)]);
+        let new = BTreeMap::from([("standalone/console/assets/index-new.js".into(), next)]);
+        let root = temporary.0.join("program");
+        let backups = temporary.0.join("backups");
+        prune_old_payload(&root, &backups, &old, &new).unwrap();
+        assert!(!root.join(name).exists());
+        assert_eq!(fs::read(backups.join(name)).unwrap(), b"old frontend");
+        assert_eq!(
+            fs::read(root.join("standalone/console/assets/index-new.js")).unwrap(),
+            b"new frontend"
+        );
+        assert_eq!(
+            fs::read(root.join("standalone/foreign.txt")).unwrap(),
+            b"foreign content"
+        );
+        assert_eq!(
+            fs::read(root.join("shell-install.json")).unwrap(),
+            b"previous preferences"
+        );
+        prune_old_payload(&root, &backups, &old, &new).unwrap();
+        fs::copy(backups.join(name), root.join(name)).unwrap();
+        assert_eq!(fs::read(root.join(name)).unwrap(), b"old frontend");
+    }
+
+    #[test]
+    fn changed_payload_or_backup_blocks_the_whole_prune_before_first_removal() {
+        for change_backup in [false, true] {
+            let temporary = PayloadDirectory::new();
+            let mut old = BTreeMap::new();
+            for name in ["standalone/console/a-old.js", "standalone/console/z-old.js"] {
+                old.insert(
+                    name.into(),
+                    temporary.file(&format!("program/{name}"), b"previous"),
+                );
+                temporary.file(&format!("backups/{name}"), b"previous");
+            }
+            temporary.file(
+                &format!(
+                    "{}/standalone/console/z-old.js",
+                    if change_backup { "backups" } else { "program" }
+                ),
+                b"changed content",
+            );
+            let root = temporary.0.join("program");
+            assert!(
+                prune_old_payload(&root, &temporary.0.join("backups"), &old, &BTreeMap::new())
+                    .is_err()
+            );
+            assert_eq!(
+                fs::read(root.join("standalone/console/a-old.js")).unwrap(),
+                b"previous"
+            );
+            assert!(root.join("standalone/console/z-old.js").exists());
+        }
+    }
 
     #[test]
     fn backup_copy_closes_exclusive_writer_before_verification() {
