@@ -190,6 +190,25 @@ fn timeline_incremental_pending_and_late_range_match_cold_projection() {
         }
         query.after_watermark = Some(page.watermark);
     }
+    assert_eq!(
+        store.timeline_work().0,
+        8,
+        "only newly affected requests are read"
+    );
+    assert!(
+        store.timeline_work().1 <= 16,
+        "only the new and previous pending turns are reprojected"
+    );
+    let before = store.timeline_work();
+    let unchanged = store
+        .observed_routing_timeline(&reader(), &query, 5000)
+        .unwrap();
+    assert!(unchanged.turns.is_empty());
+    assert_eq!(
+        store.timeline_work(),
+        before,
+        "unchanged poll does no session read or projection"
+    );
     let mut trigger = Fixture::new("incremental-7");
     trigger.session = first.session.clone();
     trigger.fact_stream = first.fact_stream.clone();

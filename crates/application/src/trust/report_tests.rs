@@ -114,3 +114,121 @@ fn replay_keeps_equality_protection_and_actual_relay_separate() {
     assert_eq!(result.thresholds[1].newly_regular, 1);
     assert_eq!(result.thresholds[1].protected_as_primary, 1);
 }
+
+pub(crate) fn trial_context(threshold: u16) -> TrustContextV1 {
+    let legacy = crate::compiler::test_fixtures::custom_desired();
+    let candidate = CandidateSelectionV1 {
+        binding_id: "binding/trial".into(),
+        reasoning: None,
+    };
+    let mut judgment = JudgmentSettingsV1::default();
+    judgment.degree.simple_threshold_millis = threshold;
+    TrustContextV1 {
+        active: PlanExecutionRef {
+            workspace_id: WorkspaceId::default(),
+            plan_id: AgentPlanId::parse("plan/a").unwrap(),
+            content_revision: 1,
+            content_digest: CanonicalDigest::of_bytes(b"plan"),
+        },
+        enabled: true,
+        configuration: AgentPlanAuthoringV2 {
+            schema: PLAN_AUTHORING_SCHEMA_V2.into(),
+            display_name: legacy.display_name,
+            purpose: legacy.purpose,
+            mode: PlanEditorMode::SmartSaving,
+            requirements: legacy.requirements,
+            limits: legacy.limits,
+            strategy: AgentPlanStrategyV2::SmartSaving {
+                economy: vec![candidate.clone()],
+                primary: vec![candidate],
+                judgment,
+                reselect_on_user_message: false,
+                complex_keywords: vec![],
+                classifier: ComplexityClassifierModeV1::DecisionService {
+                    service: Box::new(DecisionServiceV1 {
+                        id: "decision/test".into(),
+                        revision: 1,
+                        name: "Test".into(),
+                        connection: DecisionConnectionV1::Custom {
+                            endpoint: "https://decision.example/choose".into(),
+                            timeout_ms: 3000,
+                            auth_header: None,
+                        },
+                    }),
+                },
+            },
+            delegation_enabled: false,
+            work: None,
+        },
+        binding_models: BTreeMap::from([("binding/trial".into(), "model/trial".into())]),
+        identity_stability: BTreeMap::from([("model/trial".into(), "rolling-alias".into())]),
+        announcements: vec![],
+        generation: CanonicalDigest::of_bytes(b"context"),
+    }
+}
+pub(crate) fn trial_population(count: usize, score: f64) -> TrustPopulationV1 {
+    let stages: Vec<_> = (0..count)
+        .map(|i| {
+            let mut s = stage(&format!("stage/{i}"), Some((score, false)), true);
+            s.sample.session_id = format!("session/{}", i % 3);
+            s.sample.run_id = None;
+            s.sample.selection = Some(selection(0.94, "simple_task", "regular"));
+            s
+        })
+        .collect();
+    TrustPopulationV1 {
+        active_stages: stages.clone(),
+        stages,
+        retained_from_ms: 0,
+        from_ms: 0,
+        to_ms: 5000,
+        generation: 1,
+    }
+}
+#[test]
+fn suggestion_projection_matches_report_for_every_direction_without_report_rows() {
+    for (threshold, count, score) in [
+        (800, 40, 0.9),
+        (650, 40, 0.4),
+        (500, 40, 0.9),
+        (900, 40, 0.4),
+        (800, 10, 0.9),
+    ] {
+        let context = trial_context(threshold);
+        let population = trial_population(count, score);
+        let query = PlanTrustQueryV1 {
+            plan_id: "plan/a".into(),
+            branch_id: None,
+            revision: Default::default(),
+            from_ms: None,
+            to_ms: None,
+            group_by: Default::default(),
+        };
+        let full = report(&query, &context, &population, &BTreeMap::new(), &[]);
+        let lean = suggestion_evidence(&query, &context, &population, &BTreeMap::new());
+        assert!(lean.get("rows").is_none());
+        assert!(lean.get("sessions").is_none());
+        let expected: Vec<_> = full
+            .branches
+            .iter()
+            .filter(|b| !matches!(b.suggestion, TrustSuggestionV1::Keep { .. }))
+            .collect();
+        assert_eq!(lean["branches"].as_array().unwrap().len(), expected.len());
+        for (actual, expected) in lean["branches"].as_array().unwrap().iter().zip(expected) {
+            assert_eq!(
+                actual["suggestion"],
+                serde_json::to_value(&expected.suggestion).unwrap()
+            );
+            assert_eq!(
+                actual["full_history"],
+                serde_json::to_value(&expected.full_history).unwrap()
+            );
+            assert_eq!(
+                actual["upward_cohort"],
+                serde_json::to_value(&expected.upward_cohort).unwrap()
+            );
+            assert_eq!(actual["identity_stabilities"], json!(["rolling-alias"]));
+            assert!(actual["replay"]["thresholds"].as_array().unwrap().len() <= 1);
+        }
+    }
+}

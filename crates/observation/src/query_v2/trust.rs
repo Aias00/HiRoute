@@ -92,7 +92,12 @@ impl LocalObservationStore {
             projection
         };
         let scope = if lean {
-            format!("SELECT q.*, NULL AS native_model, NULL AS reasoning_profile_id {}", &SCOPE[SCOPE.find("FROM plan_quality_segments q").expect("scope owner"):])
+            format!(
+                "SELECT q.*, NULL AS native_model, NULL AS reasoning_profile_id {}",
+                &SCOPE[SCOPE
+                    .find("FROM plan_quality_segments q")
+                    .expect("scope owner")..]
+            )
         } else {
             SCOPE.to_owned()
         };

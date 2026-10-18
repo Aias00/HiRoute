@@ -1,0 +1,200 @@
+use super::*;
+use crate::control::ControlStateSnapshotV1;
+use crate::trust::{
+    context::{TrustContextV1, TrustRunV1},
+    report::tests::{trial_context, trial_population},
+};
+use hiroute_domain::*;
+use std::{
+    collections::BTreeMap,
+    sync::{
+        Mutex,
+        atomic::{AtomicU64, AtomicUsize, Ordering},
+    },
+};
+
+#[derive(Default)]
+struct Ports {
+    control: AtomicU64,
+    evidence: AtomicU64,
+    visibility: AtomicU64,
+    context: AtomicU64,
+    reads: AtomicUsize,
+    fail_first: Mutex<bool>,
+}
+impl ControlStatePort for Ports {
+    fn snapshot(&self, _: &WorkspaceId) -> Result<ControlStateSnapshotV1, ControlReadError> {
+        Ok(ControlStateSnapshotV1 {
+            revisions: RevisionSetV1 {
+                target: self.control.load(Ordering::Relaxed),
+                dependencies: Default::default(),
+            },
+            desired_state: None,
+            recoverable_operations: vec![],
+        })
+    }
+    fn operation(&self, _: &OperationId) -> Result<Option<OperationV1>, ControlReadError> {
+        Ok(None)
+    }
+    fn validate_protected_capability(
+        &self,
+        _: &str,
+        _: &WorkspaceId,
+        _: PrincipalKind,
+        _: &str,
+        _: &CanonicalDigest,
+        _: &RevisionSetV1,
+    ) -> Result<(), ControlReadError> {
+        Err(ControlReadError::Denied)
+    }
+    fn trust_plan_ids(&self, _: &WorkspaceId) -> Result<Vec<String>, ControlReadError> {
+        Ok(vec!["plan/oversized".into(), "plan/a".into()])
+    }
+    fn trust_context(&self, _: &WorkspaceId, id: &str) -> Result<TrustContextV1, ControlReadError> {
+        let mut c = trial_context(800);
+        c.active.plan_id = AgentPlanId::parse(id).unwrap();
+        c.generation = CanonicalDigest::of(&self.context.load(Ordering::Relaxed)).unwrap();
+        Ok(c)
+    }
+    fn trust_runs(
+        &self,
+        _: &WorkspaceId,
+        _: &[String],
+    ) -> Result<BTreeMap<String, TrustRunV1>, ControlReadError> {
+        Ok(BTreeMap::new())
+    }
+}
+impl ApplicationClockPort for Ports {
+    fn now_ms(&self) -> Result<i64, ControlReadError> {
+        Ok(5000)
+    }
+}
+impl ValueScopePort for Ports {
+    fn value_plan_ids(
+        &self,
+        _: &WorkspaceId,
+        _: &ValuePlanScopeV1,
+    ) -> Result<Vec<AgentPlanId>, ControlReadError> {
+        Ok(vec![])
+    }
+}
+impl ObservationQueryPort for Ports {
+    fn observed_trust_generation(
+        &self,
+        _: &ObservationReaderContext,
+        _: i64,
+    ) -> Result<(u64, u64), ObservationQueryError> {
+        Ok((
+            self.evidence.load(Ordering::Relaxed),
+            self.visibility.load(Ordering::Relaxed),
+        ))
+    }
+    fn observed_trust_suggestion_population(
+        &self,
+        _: &ObservationReaderContext,
+        q: &TrustPopulationQueryV1,
+        _: i64,
+    ) -> Result<TrustPopulationV1, ObservationQueryError> {
+        self.reads.fetch_add(1, Ordering::Relaxed);
+        if q.plan_id == "plan/oversized" && *self.fail_first.lock().unwrap() {
+            return Err(ObservationQueryError::ScopeTooLarge);
+        }
+        Ok(trial_population(40, 0.9))
+    }
+    fn list_sessions(
+        &self,
+        _: &WorkspaceId,
+        _: &SessionListQueryV1,
+    ) -> Result<SessionListV1, ObservationQueryError> {
+        unreachable!()
+    }
+    fn get_session(
+        &self,
+        _: &WorkspaceId,
+        _: &SessionId,
+        _: ContentMode,
+    ) -> Result<SessionDetailV1, ObservationQueryError> {
+        unreachable!()
+    }
+    fn get_receipt(
+        &self,
+        _: &WorkspaceId,
+        _: &ReceiptId,
+    ) -> Result<RoutingReceiptV1, ObservationQueryError> {
+        unreachable!()
+    }
+    fn get_value(
+        &self,
+        _: &WorkspaceId,
+        _: &ValueQueryV1,
+    ) -> Result<ValueViewV1, ObservationQueryError> {
+        unreachable!()
+    }
+    fn get_status(&self, _: &WorkspaceId) -> Result<ObservationStatusV1, ObservationQueryError> {
+        unreachable!()
+    }
+}
+#[test]
+fn trust_suggestion_cache_rechecks_all_mutation_inputs_and_time() {
+    let ports = Arc::new(Ports::default());
+    let control =
+        ObservationControl::new(ports.clone(), ports.clone(), ports.clone(), ports.clone());
+    let reader = ObservationReaderContext::local_user(
+        WorkspaceId::default(),
+        "user".into(),
+        1,
+        SEVEN_DAYS_MILLIS * 2,
+        false,
+        false,
+    )
+    .unwrap();
+    let first = control.trust_suggestions(&reader, 5000).unwrap();
+    assert_eq!(first["suggestions"].as_array().unwrap().len(), 2);
+    assert_eq!(ports.reads.load(Ordering::Relaxed), 2);
+    assert_eq!(first, control.trust_suggestions(&reader, 5001).unwrap());
+    assert_eq!(ports.reads.load(Ordering::Relaxed), 2);
+    for (index, generation) in [
+        &ports.evidence,
+        &ports.control,
+        &ports.context,
+        &ports.visibility,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        generation.fetch_add(1, Ordering::Relaxed);
+        control
+            .trust_suggestions(&reader, 5002 + index as i64)
+            .unwrap();
+        assert_eq!(ports.reads.load(Ordering::Relaxed), 4 + index * 2);
+    }
+    control
+        .trust_suggestions(&reader, SEVEN_DAYS_MILLIS + 1010)
+        .unwrap();
+    assert_eq!(ports.reads.load(Ordering::Relaxed), 12);
+    reader.cancel();
+    assert!(control.trust_suggestions(&reader, 5000).is_err());
+}
+#[test]
+fn trust_suggestion_oversized_plan_keeps_healthy_plan_available() {
+    let ports = Arc::new(Ports::default());
+    *ports.fail_first.lock().unwrap() = true;
+    let control =
+        ObservationControl::new(ports.clone(), ports.clone(), ports.clone(), ports.clone());
+    let reader = ObservationReaderContext::local_user(
+        WorkspaceId::default(),
+        "user".into(),
+        1,
+        20_000,
+        false,
+        false,
+    )
+    .unwrap();
+    let result = control.trust_suggestions(&reader, 5000).unwrap();
+    assert_eq!(result["suggestions"].as_array().unwrap().len(), 1);
+    assert_eq!(result["suggestions"][0]["plan_id"], "plan/a");
+    assert_eq!(
+        result["unavailable"],
+        json!([{"plan_id":"plan/oversized","reason":"scope_too_large"}])
+    );
+}

@@ -67,6 +67,15 @@ struct Projected {
 }
 
 impl crate::LocalObservationStore {
+    #[cfg(test)]
+    pub(crate) fn timeline_work(&self) -> (usize, usize) {
+        let cache = self.timeline_cache.lock();
+        (
+            cache.entries.values().map(|s| s.read_requests).sum(),
+            cache.entries.values().map(|s| s.projected_turns).sum(),
+        )
+    }
+
     pub fn observed_routing_timeline(
         &self,
         reader: &ObservationReaderContext,

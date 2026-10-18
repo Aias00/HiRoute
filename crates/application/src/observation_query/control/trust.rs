@@ -49,9 +49,15 @@ impl ObservationControl {
                     && now >= entry.created_at
                     && now < entry.expires_at
                 {
-                    // Worker state is independent of observation/control revisions.
-                    // Pending Worker populations are deliberately not cached.
-                    return Ok(entry.value.clone());
+                    let runs = self
+                        .state
+                        .trust_runs(&self.workspace_id, &entry.run_ids)
+                        .map_err(map_control)?;
+                    if CanonicalDigest::of(&runs).map_err(|_| ObservationQueryError::Corrupt)?
+                        == entry.runs
+                    {
+                        return Ok(entry.value.clone());
+                    }
                 }
                 if started.elapsed() >= std::time::Duration::from_millis(800) {
                     deferred.get_or_insert(index);
@@ -122,9 +128,7 @@ impl ObservationControl {
                 {
                     return Err(ObservationQueryError::StalePreview);
                 }
-                // A terminal/missing run can be replaced by control recovery too;
-                // keep Worker-linked populations uncached until a runtime revision is available.
-                if run_ids.is_empty() {
+                {
                     let expires_at = population
                         .active_stages
                         .iter()
@@ -140,6 +144,9 @@ impl ObservationControl {
                         plan_id.clone(),
                         SuggestionEntry {
                             key,
+                            runs: CanonicalDigest::of(&runs)
+                                .map_err(|_| ObservationQueryError::Corrupt)?,
+                            run_ids,
                             created_at: now,
                             expires_at,
                             value: value.clone(),
@@ -294,6 +301,8 @@ pub(super) struct SuggestionCache {
     next: usize,
 }
 struct SuggestionEntry {
+    run_ids: Vec<String>,
+    runs: CanonicalDigest,
     key: CanonicalDigest,
     created_at: i64,
     expires_at: i64,

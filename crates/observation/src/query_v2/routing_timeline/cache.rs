@@ -28,6 +28,8 @@ impl TimelineCache {
 #[derive(Default)]
 pub(super) struct Snapshot {
     pub position: Option<Position>,
+    pub read_requests: usize,
+    pub projected_turns: usize,
     pub visibility: u64,
     pub expires_at: i64,
     pub requests: BTreeMap<String, Request>,
@@ -50,6 +52,15 @@ impl Snapshot {
             return Ok(());
         }
         let (requests, facts) = read::read(tx, reader, session, target, now, changed)?;
+        self.read_requests += requests.len();
+        if changed.is_some()
+            && self
+                .requests
+                .keys()
+                .any(|id| changed.is_some_and(|c| c.contains(id)) && !requests.contains_key(id))
+        {
+            return Err(ObservationV2Error::Stale);
+        }
         let previous = if let Some(changed) = changed {
             self.requests.retain(|id, _| !changed.contains(id));
             self.requests.extend(requests);
@@ -81,13 +92,22 @@ impl Snapshot {
             })
             .min()
             .unwrap_or(i64::MAX);
-        self.turns = projection::project(
+        let turns = projection::project(
             &self.requests,
             &self.facts,
             previous,
             &mut self.bases,
             &self.turns,
         )?;
+        let old: BTreeMap<_, _> = self.turns.iter().map(|t| (&t.view.turn_id, t)).collect();
+        self.projected_turns += turns
+            .iter()
+            .filter(|t| {
+                old.get(&t.view.turn_id)
+                    .is_none_or(|old| !Arc::ptr_eq(old, t))
+            })
+            .count();
+        self.turns = turns;
         self.position = Some(target);
         Ok(())
     }

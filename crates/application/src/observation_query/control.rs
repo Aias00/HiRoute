@@ -1,4 +1,6 @@
 mod trust;
+#[cfg(test)]
+mod trust_tests;
 mod v2;
 
 use std::sync::Arc;

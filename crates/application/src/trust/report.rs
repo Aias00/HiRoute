@@ -476,4 +476,4 @@ fn policies(context: &TrustContextV1) -> Vec<(String, u16, BTreeSet<String>)> {
 
 #[cfg(test)]
 #[path = "report_tests.rs"]
-mod tests;
+pub(crate) mod tests;

@@ -19,7 +19,7 @@ pub struct TrustAnnouncementV1 {
     pub included_on: String,
     pub cohort_from_ms: i64,
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct TrustRunV1 {
     pub run_id: String,
     pub task_id: String,
