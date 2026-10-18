@@ -113,6 +113,7 @@ fn routing_stats_use_all_decisions_and_preserve_safe_evidence_after_content_dele
         WriterCycleOutcome::Ack(_)
     ));
     let mut q = query(Some(17));
+    q.include_routing_observations = true;
     q.model_configuration_id = Some("does-not-match".into());
     q.limit = 1;
     let page = store
@@ -140,6 +141,18 @@ fn routing_stats_use_all_decisions_and_preserve_safe_evidence_after_content_dele
     assert_eq!(c.unavailable_per_requested, Some(0.25));
     assert_eq!(c.suppressed_per_opportunity, Some(0.25));
     assert_eq!(c.suppressed_per_c_decision, Some(1.0 / 7.0));
+    let mut legacy_query = q.clone();
+    legacy_query.include_routing_observations = false;
+    let legacy = store
+        .observed_plan_quality_samples(&reader(), &legacy_query, 5000)
+        .unwrap();
+    assert!(legacy.routing_observations.is_none());
+    assert!(
+        serde_json::to_value(&legacy)
+            .unwrap()
+            .get("routing_observations")
+            .is_none()
+    );
     let mut fq = ObservationFactsQueryV2 {
         include_routing_observations: true,
         request_id: fixture.request.clone(),
@@ -299,7 +312,8 @@ fn known_current_non_c_protocol_keeps_mixed_revision_rates_complete() {
             "sequence {sequence}: {verdict:?}"
         );
     }
-    let q = query(None);
+    let mut q = query(None);
+    q.include_routing_observations = true;
     let report = store
         .observed_plan_quality_samples(&reader(), &q, 5000)
         .unwrap()
@@ -355,8 +369,10 @@ fn unmarked_historical_projection_with_known_plan_still_withholds_rates() {
     }
     // Emulate only an older derived safe projection; immutable producer events stay intact.
     store.connection.lock().execute("UPDATE observation_safe_facts_v2 SET body_json=json_remove(body_json,'$.decision_protocol') WHERE json_extract(body_json,'$.decision_protocol')='local_rules'", []).unwrap();
+    let mut q = query(None);
+    q.include_routing_observations = true;
     let summary = store
-        .observed_plan_quality_samples(&reader(), &query(None), 5000)
+        .observed_plan_quality_samples(&reader(), &q, 5000)
         .unwrap()
         .routing_observations
         .unwrap();
