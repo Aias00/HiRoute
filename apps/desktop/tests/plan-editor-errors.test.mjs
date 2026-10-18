@@ -49,3 +49,12 @@ test('a Qoder budget conflict requires model reconnection and preserves independ
  assert.match(planErrorMessage(failure, 'en'), /Disable Qoder model routing.*publish this plan.*configure model routing again/);
  assert.ok(!planErrorMessage(failure, 'zh').includes('private-native-config'));
 });
+
+
+test('protocol errors identify only the validated safe scope or field', () => {
+  const error = { envelope: { error: { message_key:'native.assessment.review_required' }, data: {schema:'hiroute.native-protocol-diagnostic/v1',scope:'branch/code',message:'untrusted-private-detail'} } };
+  assert.match(planErrorMessage(error, 'en'), /branch\/code/);
+  assert.ok(!planErrorMessage(error, 'en').includes('untrusted-private-detail'));
+  error.envelope.data.scope = '<private-wire-text>';
+  assert.ok(!planErrorMessage(error, 'en').includes('<private-wire-text>'));
+});
