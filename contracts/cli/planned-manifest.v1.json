@@ -5,7 +5,7 @@
   },
   "product_contract_revision": "487a807c8dc25cfb24e8b097882cd3bb9716a009",
   "proposal_map_revision": "ab4da93cc49c6ec56a01e046230411ff1ca82300",
-  "descriptor_digest": "sha256:36ebce38db8984e669ea9f4ae240bc0623cc12461eb5a9274896e74a106f2731",
+  "descriptor_digest": "sha256:b8cc3234b330839d063d5e7be0b5bd0153558839c538eb770d01355bc1fc6b71",
   "visibility": "planned",
   "commands": [
     {
@@ -19,7 +19,7 @@
       "scope": "p0",
       "lifecycle": "released",
       "kind": "action",
-      "request_schema": "hiroute.empty-request/v1",
+      "request_schema": "hiroute.console-launch-request/v1",
       "response_schema": "hiroute.console-launch/v1",
       "effect": "typed_action",
       "network": "local_control_only",

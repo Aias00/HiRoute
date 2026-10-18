@@ -13,6 +13,13 @@ use zeroize::Zeroizing;
 const PREFIX: &str = "/api/console/v1";
 const CSP: &str = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'";
 type Reply = Response<Full<Bytes>>;
+fn normalize_authority(host: &str, port: u16) -> &str {
+    if port == 80 {
+        host.strip_suffix(":80").unwrap_or(host)
+    } else {
+        host
+    }
+}
 pub(super) async fn handle(
     server: Arc<Server>,
     request: Request<Incoming>,
@@ -64,7 +71,12 @@ pub(super) fn valid_origin(
     }
     let mut origins = headers.get_all(header::ORIGIN).iter();
     if let Some(origin) = origins.next()
-        && (origin.to_str().ok() != Some(format!("http://{host}").as_str())
+        && (origin
+            .to_str()
+            .ok()
+            .and_then(|value| value.strip_prefix("http://"))
+            .map(|host| normalize_authority(host, local.port()))
+            != Some(normalize_authority(host, local.port()))
             || origins.next().is_some())
     {
         return false;
@@ -92,11 +104,7 @@ async fn checked(
         .get(header::HOST)
         .and_then(|v| v.to_str().ok())
         .unwrap_or_default();
-    let host = if local.port() == 80 {
-        host.strip_suffix(":80").unwrap_or(host)
-    } else {
-        host
-    };
+    let host = normalize_authority(host, local.port());
     let origin = format!("http://{host}");
     let path = request.uri().path().to_owned();
     let method = request.method().clone();
@@ -437,9 +445,13 @@ mod advertised_tests {
         assert!(valid_origin(&headers, local, Some(advertised)));
         headers.insert(header::HOST, "192.0.2.1:5839".parse().unwrap());
         assert!(!valid_origin(&headers, local, Some(advertised)));
-        for host in ["192.0.2.1", "192.0.2.1:80"] {
+        for (host, origin) in [
+            ("192.0.2.1", "http://192.0.2.1"),
+            ("192.0.2.1:80", "http://192.0.2.1"),
+            ("192.0.2.1", "http://192.0.2.1:80"),
+        ] {
             headers.insert(header::HOST, host.parse().unwrap());
-            headers.insert(header::ORIGIN, format!("http://{host}").parse().unwrap());
+            headers.insert(header::ORIGIN, origin.parse().unwrap());
             assert!(valid_origin(
                 &headers,
                 "198.51.100.1:80".parse().unwrap(),

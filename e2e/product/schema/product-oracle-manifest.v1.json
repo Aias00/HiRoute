@@ -1,5 +1,5 @@
 {
-  "descriptor_digest": "sha256:36ebce38db8984e669ea9f4ae240bc0623cc12461eb5a9274896e74a106f2731",
+  "descriptor_digest": "sha256:b8cc3234b330839d063d5e7be0b5bd0153558839c538eb770d01355bc1fc6b71",
   "expected_red_reasons": [],
   "planned_commands": [
     "console.open",

@@ -193,9 +193,10 @@ mod tests {
     async fn idle_eviction_expires_confirmations_and_releases_only_owned_inputs() {
         let root = tempfile::tempdir().unwrap();
         let mut auth = ConsoleAuth::open(root.path()).unwrap();
-        let code = auth.create_launch().unwrap();
+        let target = super::super::auth::LaunchTarget::new("127.0.0.1:5838".parse().unwrap(), true);
+        let code = auth.create_launch(target.clone()).unwrap();
         let identity = auth
-            .exchange_launch(&code, "127.0.0.1".parse().unwrap())
+            .exchange_launch(&code, "127.0.0.1".parse().unwrap(), &target.origin)
             .unwrap()
             .session;
         let auth = Mutex::new(auth);
