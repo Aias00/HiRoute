@@ -179,15 +179,6 @@ def run(repository):
         save_candidate(product, checked['candidate'], None, 'feed-product-save')
         source = next(x for x in product.cli('compute', 'list')['data']['sources'] if x['display_name'] == 'Feed product connection')
         binding = source['models'][0]['binding_id']
-        prices = product.cli('prices', 'effective', '--request-stdin', payload={'targets': [
-            {'query_id': kind, 'target_locator': {'kind': 'binding', 'binding_id': binding},
-             'currency': 'USD', 'valuation_kind': kind} for kind in ['usage_estimate', 'api_equivalent']]})['data']
-        assert not prices['pending_activation'] and len(prices['items']) == 2, prices
-        for item in prices['items']:
-            quote = item['quote']
-            assert quote['rates']['input_uncached'] == {'state': 'known', 'micros_per_million_tokens': 1234567}, quote
-            assert quote['rates']['output'] == {'state': 'known', 'micros_per_million_tokens': 2345678}, quote
-        print(json.dumps({'scenario': 'signed-feed-default-and-api-reference-prices', 'state': 'green'}), flush=True)
         editor = {'schema': 'hiroute.plan-editor/v2', 'display_name': 'Feed product route', 'purpose': 'Frozen feed execution',
             'mode': 'fixed_model', 'candidates': [{'binding_id': binding, 'reasoning': {'kind': 'toggle', 'enabled': True}}],
             'smart': {'economy': [], 'primary': [], 'judgment': judgment_fixture(), 'reselect_on_user_message': False,
@@ -198,6 +189,16 @@ def run(repository):
         created, _, _ = apply_plan(product, plan_change('create', editor, creation_key='feed-product'), 'feed-publish')
         plan = created['plan_head']['reference']['plan_id']
         frozen = product.cli('routing', 'show', plan)['data']
+        # Prices become effective with the published catalog generation, not a saved source alone.
+        prices = product.cli('prices', 'effective', '--request-stdin', payload={'targets': [
+            {'query_id': kind, 'target_locator': {'kind': 'binding', 'binding_id': binding},
+             'currency': 'USD', 'valuation_kind': kind} for kind in ['usage_estimate', 'api_equivalent']]})['data']
+        assert not prices['pending_activation'] and len(prices['items']) == 2, prices
+        for item in prices['items']:
+            quote = item['quote']
+            assert quote['rates']['input_uncached'] == {'state': 'known', 'micros_per_million_tokens': 1234567}, quote
+            assert quote['rates']['output'] == {'state': 'known', 'micros_per_million_tokens': 2345678}, quote
+        print(json.dumps({'scenario': 'signed-feed-default-and-api-reference-prices', 'state': 'green'}), flush=True)
         discovered = product.cli('worker', 'dependencies', 'discover')['data']
         revision = next(x['revision'] for x in discovered['selection_revisions'] if x['harness'] == 'codex_cli')
         product.cli('worker', 'dependencies', 'select', '--request-stdin', payload={'harness': 'codex_cli',
