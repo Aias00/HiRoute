@@ -45,7 +45,9 @@ C still defaults to simple probability 0.8 and competence floor 0.5.
 
 C supplies separate `prior_context`, `assessment_stage` and `latest_user` sections.
 Background defaults to at most eight turns before the actual assessed stage; the
-complete stage can be longer. Zero background warns that earlier requirements and
+complete stage can be longer. Bounded interrupted/unknown background turns retain
+their user requirements and recorded status; they do not certify a complete scored
+stage. Published questions remain frozen when current defaults change. Zero background warns that earlier requirements and
 references are absent. If the wire budget trims the target, the third question is
 omitted and the partial score cannot trigger historical protection. Current input
 is never silently truncated. Tool-result bodies are not added.
@@ -66,8 +68,17 @@ Switching back requires a new assessment choice and review under the legacy wrap
 restore an available retained pre-C rubric from the same stable scope, adopt the
 legacy default, or review custom text. Unavailable/reclaimed history disables only
 historical restoration. Rollback publishes a new revision and preserves old C evidence.
+After rollback has completed, **Remove this review record** lets a later ordinary
+legacy edit discard obsolete review provenance without changing the rubric or
+thresholds. Keeping a review requires it to match the current composition. The
+removal action cannot approve an unfinished rollback.
 Plan/session quality includes opt-in C counts and coverage, using all retained matching
-decisions rather than stage-opening samples. These rates describe behavior, not quality.
+decisions rather than stage-opening samples. A retained decision with Plan identity
+but no C metadata still leaves coverage incomplete; known counts remain visible,
+while exact rates are unavailable. Narrow the revision/time scope when needed.
+Categorical C requests use a custom question shape, even with stock base wording;
+**Stock wording** does not claim the original experimental condition. These rates
+describe behavior, not quality.
 
 The CLI keeps `decision services list/apply/test` and the existing routing preview/apply workflow.
 Editor data uses `smart.judgment`, or `branch_routing.judgment` with branch `primary_candidates` and optional
