@@ -143,6 +143,28 @@ fn trial_comparison_scopes_revision_and_group_and_keeps_missing_prices_unknown()
     );
 }
 
+fn emit_late_turn(
+    store: &LocalObservationStore,
+    target: &Fixture,
+    suffix: &str,
+    turn: ExecutionFactV1,
+    at: i64,
+) {
+    // A subsequent request carries delayed turn evidence. Finalized request
+    // streams admit late usage only; their receipts must stay immutable.
+    let mut carrier = Fixture::new(suffix);
+    carrier.session = target.session.clone();
+    let mut route = facts(&carrier, UsageFrameKindV1::Cumulative).remove(0);
+    route.occurred_at_unix_nanos = at as u64 * 1_000_000;
+    let outcome = store.ingest_fact(&route, &[]).unwrap();
+    assert!(matches!(outcome, IngestOutcome::Ack(_)), "{outcome:?}");
+    let outcome = store
+        .ingest_fact(&carrier.fact(2, turn, at + 1), &[])
+        .unwrap();
+    assert!(matches!(outcome, IngestOutcome::Ack(_)), "{outcome:?}");
+    store.settle_pending_valuations(16).unwrap();
+}
+
 fn trial_report(
     store: &LocalObservationStore,
     now: i64,
@@ -296,11 +318,9 @@ fn review_trial_cost_conflicting_membership_is_not_partial_history() {
     };
     *agent_turn_id = "conflicting-turn".into();
     *segment_id = "conflicting-stage".into();
-    *finished_at_ms = 112;
-    let outcome = store.ingest_fact(&f.fact(12, second, 112), &[]).unwrap();
-    assert!(matches!(outcome, IngestOutcome::Ack(_)), "{outcome:?}");
-    store.settle_pending_valuations(16).unwrap();
-    let report = trial_report(&store, 1000).unwrap();
+    *finished_at_ms = 2001;
+    emit_late_turn(&store, &f, "conflict-carrier", second, 2000);
+    let report = trial_report(&store, 3000).unwrap();
     assert_eq!(
         (report.request_count, report.compared_request_count),
         (2, 1)
@@ -414,12 +434,8 @@ fn review_trial_cost_rebuilds_ambiguous_old_turn_projection() {
     };
     *agent_turn_id = "migration-conflicting-turn".into();
     *segment_id = "migration-conflicting-stage".into();
-    *finished_at_ms = 112;
-    let outcome = store
-        .ingest_fact(&f.fact(12, conflicting, 112), &[])
-        .unwrap();
-    assert!(matches!(outcome, IngestOutcome::Ack(_)), "{outcome:?}");
-    store.settle_pending_valuations(16).unwrap();
+    *finished_at_ms = 2001;
+    emit_late_turn(&store, &f, "migration-carrier", conflicting, 2000);
     store
         .connection
         .lock()
@@ -428,7 +444,7 @@ fn review_trial_cost_rebuilds_ambiguous_old_turn_projection() {
     drop(store);
     let store = open_store(dir.path());
     store.settle_pending_valuations(16).unwrap();
-    let report = trial_report(&store, 1000).unwrap();
+    let report = trial_report(&store, 3000).unwrap();
     assert_eq!(
         (
             report.request_count,
@@ -441,7 +457,7 @@ fn review_trial_cost_rebuilds_ambiguous_old_turn_projection() {
     drop(store);
     let store = open_store(dir.path());
     assert_eq!(
-        trial_report(&store, 1000).unwrap().compared_request_count,
+        trial_report(&store, 3000).unwrap().compared_request_count,
         1
     );
 }
@@ -464,12 +480,15 @@ fn review_trial_cost_interrupted_request_remains_missing_with_known_stage() {
     }
     let mut turn = trial_turn(&f, 17, ExecutionGroupV1::Regular);
     let ExecutionFactV1::AgentTurnFinished {
-        history_partial, ..
+        history_partial,
+        status,
+        ..
     } = &mut turn
     else {
         unreachable!()
     };
     *history_partial = true;
+    *status = AgentTurnStatusV1::Interrupted;
     let outcome = store.ingest_fact(&f.fact(10, turn, 110), &[]).unwrap();
     assert!(matches!(outcome, IngestOutcome::Ack(_)), "{outcome:?}");
     store.settle_pending_valuations(16).unwrap();
@@ -532,16 +551,19 @@ fn review_trial_cost_unclosed_turn_ages_into_gap_and_late_evidence_recovers() {
             .excluded_request_count,
         1
     );
+    let frozen = serde_json::to_value(latest(&store, &f)).unwrap();
     let mut late_turn = trial_turn(&f, 17, ExecutionGroupV1::Regular);
     let ExecutionFactV1::AgentTurnFinished { finished_at_ms, .. } = &mut late_turn else {
         unreachable!()
     };
-    *finished_at_ms = (boundary + 1) as u64;
-    let event = f.fact(11, late_turn, boundary + 1);
-    let outcome = store.ingest_fact(&event, &[]).unwrap();
-    assert!(matches!(outcome, IngestOutcome::Ack(_)), "{outcome:?}");
-    store.settle_pending_valuations(16).unwrap();
+    *finished_at_ms = (boundary + 2) as u64;
+    emit_late_turn(&store, &f, "late-close-carrier", late_turn, boundary + 1);
     let recovered = trial_report(&store, boundary + 2).unwrap();
+    assert_eq!(
+        serde_json::to_value(latest(&store, &f)).unwrap(),
+        frozen,
+        "late turn evidence must not reprice the finalized request"
+    );
     assert_eq!(
         (recovered.request_count, recovered.compared_request_count),
         (2, 2)
