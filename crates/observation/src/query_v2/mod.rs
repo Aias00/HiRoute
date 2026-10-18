@@ -14,7 +14,7 @@ mod routing_observations;
 mod schema;
 mod search;
 #[cfg(test)]
-mod search_tests;
+pub(crate) mod search_tests;
 #[cfg(test)]
 mod search_window_tests;
 mod session_search;

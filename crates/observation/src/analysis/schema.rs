@@ -163,7 +163,7 @@ pub(super) fn get(db: &Connection, key: &str) -> rusqlite::Result<u64> {
         .unwrap_or(0))
 }
 pub(super) fn set(db: &Connection, key: &str, value: &str) -> rusqlite::Result<()> {
-    db.execute("INSERT INTO observation_analysis_meta_v1(key,value) VALUES(?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",params![key,value])?;
+    db.execute("INSERT INTO observation_analysis_meta_v1(key,value) VALUES(?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE observation_analysis_meta_v1.value!=excluded.value",params![key,value])?;
     Ok(())
 }
 pub(super) fn advance(db: &Connection, key: &str) -> rusqlite::Result<u64> {

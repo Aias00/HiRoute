@@ -10,8 +10,8 @@ metadata:
 
 # HiRoute management
 
-Use installed hiroute. This Skill is shared by all supported Agents; caller/target and
-model/management/collaboration facets are independent.
+Use installed hiroute. All Agents share this Skill; caller/target and model/management/collaboration
+facets are independent.
 
 ## Goal and target
 
@@ -19,16 +19,15 @@ Journey: target → source → Plan → connect → native activation → matchi
 names may repeat. Saved, loaded, selected and served differ.
 
 Start with hiroute quickstart/help; select returned --context CONTEXT_ID and optional --plan PLAN_ID.
-Hermes needs actual --hermes-root /ABS/ROOT, never an IM profile inferred from daemon env.
-Resolve ambiguity; retain missing/unreadable targets for repair.
+Hermes needs actual --hermes-root /ABS/ROOT, not daemon env. Resolve ambiguous/unreadable targets.
 
 Missing CLI: use Desktop Settings → CLI or standalone installer. Agent → HiRoute management enables
 this Skill. Recover the existing service using status/doctor/bounded logs; never start a second daemon.
 
 ## Contracts and result capture
 
-Use family/leaf --help and schema show --command-id COMMAND --include-schema for contracts/examples.
-Help works offline. Planned handlers are unavailable. Get IDs/revisions from options/Preview.
+Use family/leaf --help and schema show --command-id COMMAND --include-schema. Planned handlers are
+unavailable; get IDs/revisions from options/Preview.
 
 Save full stdout JSON, separate stderr and actual exit privately. Exit 2 means invalid input;
 --error-details gives hints. Read the full response: accepted is pending; query success can contain a failed Operation.
@@ -141,7 +140,9 @@ Use `agents connect preview --context CONTEXT_ID --apply-file PATH` with request
 for tasks. Omissions remain. Skill-only needs no model Plan/plugin. Delegation still requires
 collaboration policy/user intent. Native help supplies choices:
 
-Select native options from installed help. Hermes uses exact root/protocol; preserve Responses
+Binary/Skill upgrades do not refresh model plugins. Preview/Apply the saved model facet with
+access_token=keep, then reload/start a native process; preserve other facets.
+Select native options from help. Hermes uses exact root/protocol; preserve Responses
 reasoning. Recommend >=0.21.7 for replay; compatible older versions remain allowed, while required
 plugin/SDK interfaces may block. No unsolicited upgrade/patch/thinking disable. Codex needs exact
 root/profile and native/default model choice; Claude uses the intended preset, preserving others.
@@ -169,9 +170,8 @@ conflicts. Restore may require native selection/reload and caller continuity.
 
 ## Analyze history and savings
 
-Use same-OS-user CLI access; explicit content/search needs no GUI read ticket. Do not use global
-`--agent` for management: that selects the separate sealed collaboration channel. A supplied grant
-is still checked; model Gateway keys cannot authorize management.
+Same-OS-user content/search needs no GUI ticket. Global `--agent` selects sealed collaboration,
+not management. Supplied grants are checked; model keys grant no management authority.
 
 Choose the user's goal: switch explanation, conversation, expense ranking or savings. Start one scope:
 
@@ -182,12 +182,13 @@ hiroute sessions list --view switches --period 7d
 hiroute sessions list --view conversations --period 7d --query TEXT
 ```
 
-Use sessions/value help for schemas/choices. Report requested/effective bounds, offsets and retention
-clipping. Civil days are service-local; never mix period/day/absolute modes. New views reject --model-switch.
+Use sessions/value help. Report requested/effective bounds, offsets and clipping. Civil days are
+service-local; do not mix time modes. New views reject --model-switch.
 
-Retain returned analysis_scope. Use it for the other paths and narrower session/request drill-downs,
-without a new time selector. Follow next_cursor with the same view/filters/limit; collect every page
-before calling a ranking complete. A page length/member preview is not a total. Exact commands:
+Retain analysis_scope for related views and narrower session/request reads; add no time selector.
+Search must start with --query TEXT: a fixed scope rejects adding/changing its keyword. Start a new
+search scope, keeping the original for comparisons. Page with unchanged view/filters/limit to END;
+page length/member preview is not a total. Exact commands:
 
 ```sh
 hiroute sessions show SESSION_ID --view routing --analysis-scope TOKEN
@@ -196,10 +197,9 @@ hiroute value show --group-by request --order-by cost-desc --session SESSION_ID 
 hiroute sessions show SESSION_ID --view conversation --request REQUEST_ID --analysis-scope TOKEN
 ```
 
-Carry scope through your own new requests/compaction, pagination and follow-up questions. Fresh
-requests, settlement or prices do not change its pinned relations/numbers/prices. Only narrow it;
-never silently replace the scope or compare totals across refreshed scopes. Expiry, withdrawn proof,
-affected deletion or authority change requires an explicit fresh initial query; give its filled command.
+Keep scope across requests/compaction and follow-ups. New traffic/settlement/prices do not change
+pinned results. Never silently refresh or compare totals across scopes. Expiry, withdrawn proof,
+affected deletion or authority change needs a fresh initial query; give its filled command.
 
 Explain recorded decisions, served model/reasoning/publication. Stages are not switches. between_turn
 requires proven adjacent completed user turns. continuation_boundary is compression, possibly mid-turn;
@@ -220,8 +220,10 @@ highest-known-only rankings, signed paired savings and missing/excluded coverage
 has no percentage. Decision overhead is unmeasured. Coding Plan estimates are API-equivalent, not a
 cash bill or proof of equal quality. Ordinary value show preserves historical valuation.
 
-For pending/index_unavailable report missing coverage, progress/last-progress/stall and retry guidance.
-timeout/reader_busy are retryable, not empty. Missing/deleted/expired capture proves no routing error.
+For pending/index_unavailable report coverage/progress/stall. For timeout/reader_busy follow
+error.observation_read and retry the valid scope after retry_after_ms; bound retries, then report the
+exact failure. Do not call these an absent subsystem. Narrow content to a request/smaller page.
+Missing/deleted/expired capture proves no routing error.
 Compare task/answer/tools with decision source/group/probability/threshold/competence/reasoning before
 proposing changes. No auto-tuning, quality inference from cost or manual-swap classification proof.
 Explain uncertainty; authorized edits need a fresh complete baseline and filled recovery commands.
@@ -240,7 +242,7 @@ effects; submit submission.arguments and retain file/operation_lookup. Use the O
 capabilities. After uncertainty use operations find/get or replay the **identical file**; never replace
 a possibly accepted key. Confirmed unaccepted stale input needs fresh Preview. Reuse completed IDs.
 
-Keep notes outside this managed Skill. Honor ownership/user scope for effects, models, unrelated
+Keep notes outside this Skill. Honor ownership/user scope for effects, models, unrelated
 content and cancellation. Authorization persists. Explain quota. Quickstart/status never call models.
 
 ## Worker
