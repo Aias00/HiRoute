@@ -99,6 +99,10 @@ def publication(product, sequence, present=True):
     offer = copy.deepcopy(next(x for x in bundle['data']['offers'] if x['offer_id'] == 'offer.bailian.payg.cn'))
     offer['model_configuration_ids'].append(MODEL)
     records.append({'kind': 'offer', 'record': offer})
+    records.append({'kind': 'price_rate', 'record': {
+        'price_rate_id': 'price.feed.regression.usd', 'revision': 1, 'offer_ref': offer['offer_id'],
+        'model_configuration_id': MODEL, 'currency': 'USD',
+        'input_micros_per_million': 1234567, 'output_micros_per_million': 2345678}})
     for record in records:
         record.update(min_client_version='0.1.0', included_on='2026-10-18')
     return {'schema': 'hiroute.model-feed/v1', 'sequence': sequence, 'issued_at': '2026-10-18T00:00:00Z',
@@ -175,6 +179,15 @@ def run(repository):
         save_candidate(product, checked['candidate'], None, 'feed-product-save')
         source = next(x for x in product.cli('compute', 'list')['data']['sources'] if x['display_name'] == 'Feed product connection')
         binding = source['models'][0]['binding_id']
+        prices = product.cli('prices', 'effective', '--request-stdin', payload={'targets': [
+            {'query_id': kind, 'target_locator': {'kind': 'binding', 'binding_id': binding},
+             'currency': 'USD', 'valuation_kind': kind} for kind in ['usage_estimate', 'api_equivalent']]})['data']
+        assert not prices['pending_activation'] and len(prices['items']) == 2, prices
+        for item in prices['items']:
+            quote = item['quote']
+            assert quote['rates']['input_uncached'] == {'state': 'known', 'micros_per_million_tokens': 1234567}, quote
+            assert quote['rates']['output'] == {'state': 'known', 'micros_per_million_tokens': 2345678}, quote
+        print(json.dumps({'scenario': 'signed-feed-default-and-api-reference-prices', 'state': 'green'}), flush=True)
         editor = {'schema': 'hiroute.plan-editor/v2', 'display_name': 'Feed product route', 'purpose': 'Frozen feed execution',
             'mode': 'fixed_model', 'candidates': [{'binding_id': binding, 'reasoning': {'kind': 'toggle', 'enabled': True}}],
             'smart': {'economy': [], 'primary': [], 'judgment': judgment_fixture(), 'reselect_on_user_message': False,
