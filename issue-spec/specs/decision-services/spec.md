@@ -164,10 +164,10 @@ publication's questions or make it unloadable. C request construction and answer
 bindings consume the stored frozen decision, while authoring/compiled consistency,
 fixed-content validation and digest checks remain mandatory.
 
-The frozen scope standard MUST describe the actual effective question shape.
-Categorical questions are custom; only the unchanged exact stock ordinal
-question/criteria shape may be stock. Set this value before sealing and use it
-directly in observations and presentation. Keep C category wording in its fixed
+The frozen scope standard MUST record authored assessment intent as default or
+custom, including categorical scopes. Resolve defaults at compilation and seal
+actual effective contents; observations use that stored standard directly without
+relabeling or claiming experimental equivalence. Keep C category wording in its fixed
 v1 fixture; legacy native wording has its own current source, independent of that
 fixture. Pure composition logic may be shared. Disposable unreleased C encodings
 need no support adapter; supported released data and retained authenticated
@@ -284,27 +284,9 @@ Source SPEC comments:
 
 ### Requirement: C capability evidence is explicit and session scoped
 
-The classifier diagnostic boundary MUST have one current request/result. A
-request targets an unsaved classifier value for connectivity only, or an exact
-saved connection revision with optional frozen protocol content and explicitly
-selected shape. Results report verified shapes and their exact identity;
-connectivity success is not applicability capability. A saved applicability test
-uses production construction, transport and parsing with synthetic input; standard
-and maximum categorical requests preserve their actual 3/19-question shapes.
-Released v1 requests/results remain supported by an explicit registered adapter
-with owner and removal conditions, normalized to the current business path.
+The released hiroute.classifier-decision-test/v1 connectivity request/result and connection-page test MUST remain unchanged. The capability probe MUST have its own purpose-named current request/result contract, hiroute.historical-applicability-test/v1 and hiroute.historical-applicability-test-result/v1, registered as a separate subject. It reuses the existing protected diagnostic operation and production transport/parser, targets an exact saved service revision and frozen route, and checks the actual question shape, including the nineteen-question maximum categorical shape.
 
-Capability evidence MUST bind saved service revision, endpoint/model, frozen
-content and selected shape. A response must verify exact two-label applicability
-probabilities and required category/Score outputs; no question may be silently
-removed or split into a dependent call. Results distinguish verified, unsupported,
-not tested and test failed. Desktop shows missing evidence as Not tested in this
-session and discards evidence after connection/content/shape changes. Caller status
-cannot authorize publication. Missing evidence does not block saving/publishing.
-Each context presents one explicit test action with a selected shape; it discloses
-one synthetic request and possible quota use. Navigation/save/adoption/publication
-MUST NOT probe, read a real conversation, invoke a business model, create a stage
-sample or claim task quality/universal provider capacity.
+Capability evidence MUST bind saved service revision, endpoint/model, frozen content and shape, verify required Choice probability vectors and Score outputs, and distinguish verified, unsupported, not tested and test failed. Connectivity is not applicability support. Desktop has one route capability test, no shape selector or question numbers, and discards session evidence after connection/content/shape changes even if reverted. Missing evidence shows Not tested in this session and does not block saving/publication. CLI and acceptance diagnostics retain machine identities, counts and shape names. Navigation/save/publication MUST NOT probe, read real conversations, create stage samples or claim task quality or universal provider capacity.
 
 #### Scenario: Only category Choice is returned
 

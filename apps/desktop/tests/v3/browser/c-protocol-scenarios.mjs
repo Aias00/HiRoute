@@ -91,7 +91,7 @@ export function cProtocolScenarios({ fresh, routing, click, until, all, text, ca
     for(const language of ['zh','en']){
       await fresh(()=>{control().handlers.decision_services=()=>({services:[service]});control().handlers.test_classifier_decision=({input})=>{assert(input.classifier?.service.revision===7&&!input.request,'Connection switched contract');return {schema:'hiroute.classifier-decision-test-result/v1',outcome:'passed',duration_millis:1};};});
       localStorage.setItem('hiroute.language',language);control().remount();const t=(zh,en)=>language==='zh'?zh:en;
-      await click(t('模型','Models'));await click(t('决策模型','Decision models'));await until(()=>all('.master-list .list-row').length,'connection list');await click(service.name);await click(t('测试连接','Test connection'));
+      await click(t('模型','Models'));await click(t('决策模型','Decision models'));await until(()=>document.querySelector('.decision-heading h2')?.textContent===service.name,'connection details');await click(t('测试连接','Test connection'));
       await until(()=>text().includes(t('连接测试通过','Connection test passed')),'connection test');
       assert(!all('select').some(e=>e.getAttribute('aria-label')?.includes('shape')),'Shape selector remains');assert(calls('test_classifier_decision').length===1,'Connection sent more than one request');assertCopy();
     }

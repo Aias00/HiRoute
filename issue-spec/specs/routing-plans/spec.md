@@ -228,68 +228,47 @@ in current CLI schemas. Fixed-model, ordered and free-first behavior is unchange
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/133#issuecomment-6220134774
 
-### Requirement: Native protocol adoption and rollback require effective-scope review
+### Requirement: Default assessments follow the active route configuration
 
-Historical problem applicability MUST remain an explicit route-level native
-selection for smart-saving or custom branches in this increment. It is neither a
-connection/branch-judgment setting nor the global creation default. Absent native
-protocol means legacy. Supported old drafts, authoring, publications and canonical
-identities remain unchanged through their owning released adapters; no bulk rewrite
-or global relaxation of strict decoding is permitted. Freeze actual fixed/effective
-questions, criteria, thresholds, context cap and content identity, never a preset
-name resolved to later binary defaults. Unsupported/corrupt/mismatched content
-fails explicitly while preserving the active/last-known-good publication.
+Historical problem applicability MUST remain a route-level capability, off by default; old routes, global creation defaults, local rules and custom-extension v1 keep their behavior. Each effective scope's assessment is default or custom. Defaults resolve at compilation from the active configuration and silently follow enabling or disabling the capability through ordinary Preview/Apply. User-authored custom instructions and all criteria MUST survive both directions byte-for-byte. Editing assessment text makes it custom; Reset to default returns to the active default while preserving thresholds and unrelated settings. Inherited branch assessments retain existing inheritance; independent overrides retain their identity.
 
-Protocol transition acknowledgment MUST belong to Preview/Apply, outside editable
-configuration. Preview lists each transitioning effective assessment scope with
-server-composed destination text, its digest and available stock, reviewed-custom
-or retained historical choices. New applicability scopes require acknowledgment.
-Inherited branches share the effective default scope; complete independent
-overrides retain stable IDs. Choices contain only method and pinned source, never
-a caller-computed digest. The server copies only selected assessment text/criteria,
-refreshes the final Preview, and preserves thresholds, degree/category settings,
-candidates and unrelated/parked edits. Apply binds the complete final choice,
-scope/protocol/content and observed revisions to the accepted server Preview.
-Changing any of these invalidates confirmation. Missing/invalid choices identify
-the affected scope and reason. Save/publication never tests a provider implicitly.
+Current authoring MUST record default/custom intent rather than repeatedly infer user intent from equality. Supported released input without that marker uses a bounded adapter: exact built-in legacy instructions and all three criteria mean default, including v0.3.1 Plans; any differing text means custom. Do not trim or normalize text, or use changed thresholds as evidence of custom text. Explicit custom intent remains custom even if its bytes equal a default. Existing frozen PlanVersions, canonical identities and historical evidence are never reinterpreted or rewritten on read; the new behavior takes effect at the next edit and publication.
 
-The chosen method, exact source and server-composed digest MUST be sealed with the
-published revision and inspectable through existing Plan reads. Later editor state
-carries no review record or review-removal control. Same-protocol ordinary edits
-require no protocol re-review while retaining normal publication confirmation.
-Known incompatible state references and dangling stock-C suffixes remain explicit
-Preview diagnostics. A bare C-to-legacy toggle, including C stock text without
-state-path literals, cannot acknowledge rollback. Draft/mode changes cannot bypass
-a required transition. Stock adoption never silently follows string equality.
+Editor protocol selection contains the supported identity and background cap, not the entire fixed bundle or a digest. The compiler MUST freeze actual fixed/effective prompts, criteria, thresholds, context layout/cap, assessment standard and content digest into the publication. Unsupported identities, mismatches and corrupt contents fail explicitly while preserving the active/last-known-good publication. A bare preset ID is insufficient for published execution.
 
-Rollback MUST offer retained pre-C assessment restoration, legacy defaults, or
-reviewed custom text per scope. Historical selection binds an exact validated Plan
-reference/scope and copies only its instructions/criteria. A missing, stale or
-reclaimed source identifies the scope and fails rather than substituting content.
-A new/removed scope can lack history; the remaining explicit alternatives stay
-available. Introduce no permanent hold, new backup promise, whole-Plan restore or
-runtime dependency on the source. Old observations and published execution retain
-their meanings. This is configuration rollback, not old-binary downgrade support.
+There MUST be no assessment review record/digest, per-scope adoption choice, historical revision restoration, assessment_review_plan opt-in, dangling_c rule or special omission rule. Ordinary Preview/Apply remains the only confirmation for toggles and edits. Known unavailable native state paths in custom text remain ordinary validation errors naming the scope and field; user confirmation cannot waive them. No semantic extraction, state alias or C-suffix migration is introduced. Save, reopen and publication never send implicit provider probes.
 
-#### Scenario: Edit after completed rollback
+Desktop authoring, testing and observations MUST use the capability name and default/custom wording, with no protocol/assessment revision, experiment letter, question number or content digest. Existing connection configuration and route publication versions remain as before. Machine output retains versioned identities and digests. No startup adoption, SQL migration, new retention promise or old-binary downgrade support is implied.
 
-- **WHEN** a legacy route with a retained review later edits its assessment
-- **THEN** A stale review MUST fail validation; explicit removal permits an ordinary legacy edit after completed rollback, but cannot approve a C-to-legacy transition.
+#### Scenario: Default silently follows the active configuration
 
-#### Scenario: Bare rollback
+- **WHEN** a never-edited native route is enabled and disabled
+- **THEN** Each direction MUST be one ordinary Preview/Apply, resolve the matching default, and preserve thresholds and independent settings without adoption/review steps.
 
-- **WHEN** a published C route switches to legacy without a new scope choice and review
-- **THEN** Preview/Apply MUST reject the transition while preserving editable input and the last effective publication.
+#### Scenario: Released literal default
 
-#### Scenario: Exact retained restoration
+- **WHEN** an actual released v0.3.1 Plan stores built-in legacy assessment text
+- **THEN** The next edit MUST recognize default intent and switch silently; the existing PlanVersion, execution content and digests remain unchanged.
 
-- **WHEN** a user chooses a retained matching non-C source assessment and reviews its legacy composition
-- **THEN** The new revision MUST copy only that assessment while preserving thresholds and unrelated settings.
+#### Scenario: Custom text remains exact
 
-#### Scenario: Reclaimed source
+- **WHEN** custom instructions or any criterion exists and the capability changes in either direction
+- **THEN** The compiler MUST preserve every custom byte, including whitespace and explicit custom text equal to defaults.
 
-- **WHEN** the selected historical source is removed before Apply
-- **THEN** Apply MUST fail stale/unavailable without substituting a different version or extending retention.
+#### Scenario: Reset to active default
+
+- **WHEN** the user edits assessment text or selects Reset to default
+- **THEN** Editing MUST record custom intent; reset MUST restore the active default and default intent, preserving thresholds.
+
+#### Scenario: Invalid custom state field
+
+- **WHEN** custom text references a state field unavailable in the destination configuration
+- **THEN** Preview MUST reject with the affected scope/field and preserve edits and the active publication.
+
+#### Scenario: Compact authoring freezes full publication
+
+- **WHEN** CLI input selects the capability using identity and background cap only
+- **THEN** Preview/Apply MUST freeze complete actual contents and digest without caller-supplied fixed content or review state.
 
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/139#issuecomment-6235110836

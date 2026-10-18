@@ -221,19 +221,13 @@ inherited/fallback source; project that marker into safe facts. Known non-C coun
 are separate and never enter C denominators. Absent historical protocol evidence
 remains unknown; do not infer it from Plan identity or rewrite authenticated facts.
 
-C detail records full-content/bundle identity, actual shape standard, provider/model,
+C detail records full-content/bundle identity, authored default/custom assessment standard, provider/model,
 target/completeness/eligibility, applicability dispatch/state/reason/probability,
 P/T, s/F, fixed 0.5 applicability boundary, action and bounded byte/turn counts.
 Selection and actual execution/relay remain separate. Safe metadata includes no
 prompt, conversation, tool-result, credential or free-form diagnostic text.
 
-One current versioned observation request/result MUST include facts routing detail
-and plan-quality summaries through existing read operations, without include flags.
-A registered released-query adapter with owner/removal conditions preserves old
-strict fields, nested selections, errors, authorization and exact cursor bindings.
-Normalize old input into the current business path. Current and old-version
-cursors cannot be substituted across result contracts. Current CLI/Desktop use the
-current version; a stage-opening sample is not an all-decision denominator.
+Existing observation query versions and the optional include_routing_observations flag MUST remain. Omitted/false preserves released strict request/result fields, nested selections, errors, authorization encoding and cursor bindings. True exposes bounded facts detail and plan-quality summaries through the same protected operations, with the flag bound to opt-in cursors. Do not add a query version or separate legacy-v2 business path. A stage-opening sample is not an all-decision denominator.
 
 Summaries MUST cover all matching authorized retained route decisions independently
 of page, model/score/grade filters, scoped by Plan/session, time, configured

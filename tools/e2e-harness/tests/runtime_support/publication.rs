@@ -407,6 +407,7 @@ pub(super) fn use_builtin_branch_decision(
     };
     let judgment = |id: &str| hiroute_domain::JudgmentSettingsV1 {
         competence: CompetencePolicyV1 {
+            standard: None,
             instructions: format!("Evaluate actual {id} execution"),
             floor_millis: 500,
             criteria: [
