@@ -161,9 +161,7 @@
               }
             },
             "prior_context_max_turns": {
-              "maximum": 8,
-              "minimum": 0,
-              "type": "integer"
+              "const": 8
             },
             "schema": {
               "const": "hiroute.system-one-c/v1"

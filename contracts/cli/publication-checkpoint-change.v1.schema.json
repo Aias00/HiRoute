@@ -468,21 +468,6 @@
                   "maxLength": 128,
                   "type": "string"
                 },
-                "historical_applicability": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "prior_context_max_turns": {
-                      "default": 8,
-                      "maximum": 8,
-                      "minimum": 0,
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "prior_context_max_turns"
-                  ],
-                  "type": "object"
-                },
                 "judgment": {
                   "$ref": "#/$defs/judgment"
                 },
@@ -782,21 +767,6 @@
             },
             "economy": {
               "$ref": "#/$defs/candidates"
-            },
-            "historical_applicability": {
-              "additionalProperties": false,
-              "properties": {
-                "prior_context_max_turns": {
-                  "default": 8,
-                  "maximum": 8,
-                  "minimum": 0,
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "prior_context_max_turns"
-              ],
-              "type": "object"
             },
             "judgment": {
               "$ref": "#/$defs/judgment"

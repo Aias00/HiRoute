@@ -1,5 +1,5 @@
 {
-  "descriptor_digest": "sha256:c925b26d08aebd6694ad01285573b1acbcf7998160ca5e68dcaf8906994a63f5",
+  "descriptor_digest": "sha256:27176d84c9069f46e2e885261a4b4921c1454388eee93136ebb07defbb664907",
   "expected_red_reasons": [],
   "planned_commands": [
     "schema.list",
@@ -28,6 +28,7 @@
     "compute.list",
     "compute.show",
     "compute.refresh",
+    "compute.connection.prepare",
     "compute.connection.options",
     "compute.connection.preview",
     "compute.connection.apply",
@@ -117,6 +118,7 @@
     "compute.scan",
     "compute.list",
     "compute.show",
+    "compute.connection.prepare",
     "compute.connection.options",
     "compute.connection.preview",
     "compute.connection.apply",
@@ -145,6 +147,9 @@
     "decision.services.apply",
     "decision.services.test",
     "models.show",
+    "prices.effective",
+    "prices.override.preview",
+    "prices.override.apply",
     "operations.get",
     "sessions.list",
     "sessions.show",

@@ -1,7 +1,7 @@
 import { branchRouting } from '../../../src/features/decision-services/types.ts';
 import { defaultJudgment } from '../../../src/features/decision-services/types.ts';
 import stock from '../../../../../crates/domain/src/routing/fixtures/system_one_c_v1.json' with { type: 'json' };
-import { fixturePlanAuthoring } from './product-fixtures.ts';
+import { resolveAssessment } from '../../../src/features/decision-services/native-protocol.ts';
 import { scenario } from './scenario-selection.mjs';
 
 export function cProtocolScenarios({ fresh, routing, click, until, all, text, calls, setInput, control }) {
@@ -29,7 +29,16 @@ export function cProtocolScenarios({ fresh, routing, click, until, all, text, ca
         const result=structuredClone(control().fixtureResponse('plan_editor_options',payload));
         if(payload?.input?.authoring){
           control().handlers.desktop_snapshot({});
-          result.authoring=fixturePlanAuthoring(selectedPlan);
+          const editor=result.authoring.editor,strategy=structuredClone(selectedPlan.desired.strategy);
+          editor.mode=selectedPlan.desired.mode;
+          const native=j=>resolveAssessment(j,true);
+          if(editor.mode==='custom_branches'){
+            editor.branch_routing=strategy.routing;
+            editor.branch_routing.judgment=native(editor.branch_routing.judgment);
+            editor.branch_routing.branches=editor.branch_routing.branches.map(b=>b.judgment?{...b,judgment:native(b.judgment)}:b);
+          }else{
+            editor.smart={...editor.smart,...strategy,judgment:native(strategy.judgment)};
+          }
         }
         return result;
       };

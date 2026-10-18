@@ -365,6 +365,20 @@
       }
     },
     {
+      "command_id": "compute.connection.prepare",
+      "lifecycle": "released",
+      "negative": {
+        "polarity": "negative",
+        "scenario_id": "p0.compute.connection.prepare.negative",
+        "state": "executable"
+      },
+      "positive": {
+        "polarity": "positive",
+        "scenario_id": "p0.compute.connection.prepare.positive",
+        "state": "executable"
+      }
+    },
+    {
       "command_id": "compute.connection.options",
       "lifecycle": "released",
       "negative": {
@@ -1010,44 +1024,44 @@
     },
     {
       "command_id": "prices.effective",
-      "lifecycle": "planned",
+      "lifecycle": "released",
       "negative": {
         "polarity": "negative",
         "scenario_id": "p0.prices.effective.negative",
-        "state": "planned"
+        "state": "executable"
       },
       "positive": {
         "polarity": "positive",
         "scenario_id": "p0.prices.effective.positive",
-        "state": "planned"
+        "state": "executable"
       }
     },
     {
       "command_id": "prices.override.preview",
-      "lifecycle": "planned",
+      "lifecycle": "released",
       "negative": {
         "polarity": "negative",
         "scenario_id": "p0.prices.override.preview.negative",
-        "state": "planned"
+        "state": "executable"
       },
       "positive": {
         "polarity": "positive",
         "scenario_id": "p0.prices.override.preview.positive",
-        "state": "planned"
+        "state": "executable"
       }
     },
     {
       "command_id": "prices.override.apply",
-      "lifecycle": "planned",
+      "lifecycle": "released",
       "negative": {
         "polarity": "negative",
         "scenario_id": "p0.prices.override.apply.negative",
-        "state": "planned"
+        "state": "executable"
       },
       "positive": {
         "polarity": "positive",
         "scenario_id": "p0.prices.override.apply.positive",
-        "state": "planned"
+        "state": "executable"
       }
     },
     {
@@ -1219,7 +1233,7 @@
       }
     }
   ],
-  "descriptor_digest": "sha256:c925b26d08aebd6694ad01285573b1acbcf7998160ca5e68dcaf8906994a63f5",
+  "descriptor_digest": "sha256:27176d84c9069f46e2e885261a4b4921c1454388eee93136ebb07defbb664907",
   "schema_version": {
     "major": 1,
     "minor": 0
