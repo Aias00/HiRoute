@@ -58,6 +58,7 @@ struct Request {
     models: BTreeMap<u32, String>,
     partial: bool,
     body_bytes: usize,
+    request_bytes: usize,
     fact_count: usize,
     usage_count: usize,
 }
@@ -134,6 +135,11 @@ impl crate::LocalObservationStore {
             .filter(|c| c.visibility == visibility && now_ms < c.expires_at);
         let mut state = cached.unwrap_or_default();
         let frozen = cursor.snapshot.is_some();
+        if frozen && state.position != Some(target) {
+            // Mutable request/link projections cannot reconstruct an old frozen
+            // page after eviction or restart. Re-admit a fresh snapshot instead.
+            return Err(ObservationV2Error::Stale);
+        }
         // A frozen page must never use the no-change shortcut: it still owes rows.
         if state.position != Some(target) || query.after_watermark.is_none() {
             let can_update = query.after_watermark.is_some()

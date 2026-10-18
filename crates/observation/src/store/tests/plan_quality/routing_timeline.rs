@@ -450,3 +450,61 @@ fn timeline_long_session_read_cost() {
         }
     }
 }
+
+#[test]
+fn timeline_other_session_changes_advance_scan_without_reading_this_session() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    let f = Fixture::new("gate-own");
+    let c = fact_channel(&f, 256 * 1024);
+    let w = writer(&store);
+    assert!(matches!(
+        offer_fact(
+            &w,
+            &c,
+            f.fact(
+                1,
+                finished(&f, "stage", "turn", 1, "smart_saving", 1000),
+                1000
+            )
+        ),
+        WriterCycleOutcome::Ack(_)
+    ));
+    let mut q = RoutingTimelineQueryV1 {
+        session_id: f.session.to_string(),
+        after_watermark: None,
+        limit: 50,
+    };
+    let page = store
+        .observed_routing_timeline(&reader(), &q, 5000)
+        .unwrap();
+    q.after_watermark = Some(page.watermark.clone());
+    let work = store.timeline_work();
+    let other = Fixture::new("gate-other");
+    let oc = fact_channel(&other, 256 * 1024);
+    assert!(matches!(
+        offer_fact(
+            &w,
+            &oc,
+            other.fact(
+                1,
+                finished(&other, "other-stage", "other-turn", 1, "smart_saving", 1100),
+                1100
+            )
+        ),
+        WriterCycleOutcome::Ack(_)
+    ));
+    let next = store
+        .observed_routing_timeline(&reader(), &q, 5000)
+        .unwrap();
+    assert!(next.turns.is_empty());
+    assert!(next.complete);
+    assert_ne!(next.watermark, page.watermark);
+    assert_eq!(work, store.timeline_work());
+    q.after_watermark = Some(next.watermark.clone());
+    let again = store
+        .observed_routing_timeline(&reader(), &q, 5000)
+        .unwrap();
+    assert_eq!(again.watermark, next.watermark);
+    assert_eq!(work, store.timeline_work());
+}

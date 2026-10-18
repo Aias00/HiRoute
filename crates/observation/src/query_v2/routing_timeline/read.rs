@@ -131,6 +131,7 @@ pub(super) fn read(
                 models: BTreeMap::new(),
                 partial: conflicted == Some(true),
                 body_bytes: request_bytes,
+                request_bytes,
                 fact_count: 0,
                 usage_count: 0,
             },

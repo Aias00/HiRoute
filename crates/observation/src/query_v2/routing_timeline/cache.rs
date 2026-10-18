@@ -76,6 +76,12 @@ impl Snapshot {
             Position::default()
         };
         if self.requests.len() > 10_000
+            || self
+                .requests
+                .values()
+                .map(|r| r.request_bytes)
+                .sum::<usize>()
+                > 16 * 1024 * 1024
             || self.requests.values().map(|r| r.fact_count).sum::<usize>() > 50_000
             || self.requests.values().map(|r| r.usage_count).sum::<usize>() > 50_000
             || self.requests.values().map(|r| r.body_bytes).sum::<usize>() > 32 * 1024 * 1024

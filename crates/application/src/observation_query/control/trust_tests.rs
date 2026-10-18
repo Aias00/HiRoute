@@ -20,6 +20,7 @@ struct Ports {
     visibility: AtomicU64,
     context: AtomicU64,
     reads: AtomicUsize,
+    stages: AtomicUsize,
     fail_first: Mutex<bool>,
 }
 impl ControlStatePort for Ports {
@@ -99,7 +100,10 @@ impl ObservationQueryPort for Ports {
         if q.plan_id == "plan/oversized" && *self.fail_first.lock().unwrap() {
             return Err(ObservationQueryError::ScopeTooLarge);
         }
-        Ok(trial_population(40, 0.9))
+        Ok(trial_population(
+            self.stages.load(Ordering::Relaxed).max(40),
+            0.9,
+        ))
     }
     fn list_sessions(
         &self,
@@ -197,4 +201,45 @@ fn trust_suggestion_oversized_plan_keeps_healthy_plan_available() {
         result["unavailable"],
         json!([{"plan_id":"plan/oversized","reason":"scope_too_large"}])
     );
+}
+
+#[test]
+#[ignore = "application cache timing evidence; run explicitly in release mode"]
+fn trust_suggestions_cached_read_cost() {
+    let ports = Arc::new(Ports::default());
+    ports.stages.store(49_999, Ordering::Relaxed);
+    let control =
+        ObservationControl::new(ports.clone(), ports.clone(), ports.clone(), ports.clone());
+    let reader = ObservationReaderContext::local_user(
+        WorkspaceId::default(),
+        "user".into(),
+        1,
+        100_000,
+        false,
+        false,
+    )
+    .unwrap();
+    let started = std::time::Instant::now();
+    let cold = control.trust_suggestions(&reader, 5000).unwrap();
+    let cold_ms = started.elapsed().as_secs_f64() * 1000.;
+    assert_eq!(cold["suggestions"].as_array().unwrap().len(), 2);
+    assert_eq!(ports.reads.load(Ordering::Relaxed), 2);
+    let mut times = Vec::new();
+    for i in 1..=40 {
+        let started = std::time::Instant::now();
+        let result = control.trust_suggestions(&reader, 5000 + i).unwrap();
+        times.push(started.elapsed().as_secs_f64() * 1000.);
+        assert_eq!(cold, result);
+    }
+    times.sort_by(f64::total_cmp);
+    eprintln!(
+        "SUGGESTION_CACHE plans=2 stages_per_plan=49999 samples=40 cold_application_ms={cold_ms:.3} cached_p50_ms={:.3} cached_p95_ms={:.3}",
+        times[20], times[38]
+    );
+    assert_eq!(
+        ports.reads.load(Ordering::Relaxed),
+        2,
+        "cache hits must not read the population"
+    );
+    assert!(times[38] < 20.);
 }
