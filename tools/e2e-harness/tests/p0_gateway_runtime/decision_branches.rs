@@ -507,7 +507,7 @@ fn builtin_decision_reselects_groups_and_observes_actual_execution_in_both_modes
     }
 }
 
-fn enable_c(fixture: &RuntimeFixture) {
+fn enable_c(fixture: &RuntimeFixture) -> hiroute_domain::FrozenNativeProtocolV1 {
     use hiroute_domain::*;
     use hiroute_gateway::server::publication::AliasRequestOwnedRouteV1;
     let mut publication = fixture.publication();
@@ -570,6 +570,20 @@ fn enable_c(fixture: &RuntimeFixture) {
     }
     publication.publication_revision += 1;
     fixture.publish(&mut publication);
+    match &publication.aliases[0]
+        .routing
+        .as_ref()
+        .unwrap()
+        .request_owned
+    {
+        AliasRequestOwnedRouteV1::Classified {
+            native_protocol, ..
+        }
+        | AliasRequestOwnedRouteV1::Branches {
+            native_protocol, ..
+        } => native_protocol.as_ref().unwrap().clone(),
+        _ => unreachable!(),
+    }
 }
 fn c_answer(smart: bool, applicable: bool) -> &'static [u8] {
     match (smart,applicable) {
@@ -597,24 +611,7 @@ fn c_protocol_rejudges_current_work_and_observes_protection_and_release_on_real_
         ]);
         let fixture =
             RuntimeFixture::launch_builtin_branches(&[&regular, &primary, &decider], smart);
-        enable_c(&fixture);
-        let publication = fixture.publication();
-        let frozen = match &publication.aliases[0]
-            .routing
-            .as_ref()
-            .unwrap()
-            .request_owned
-        {
-            hiroute_gateway::server::publication::AliasRequestOwnedRouteV1::Classified {
-                native_protocol,
-                ..
-            }
-            | hiroute_gateway::server::publication::AliasRequestOwnedRouteV1::Branches {
-                native_protocol,
-                ..
-            } => native_protocol.as_ref().unwrap(),
-            _ => unreachable!(),
-        };
+        let frozen = enable_c(&fixture);
         let mut input = Vec::new();
         for (index, text) in [
             "Provide the requested title.",
