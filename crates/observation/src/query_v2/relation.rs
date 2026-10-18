@@ -42,6 +42,7 @@ impl LocalObservationStore {
                 [],
             )?;
         }
+        crate::analysis::sync(&transaction, 200, crate::analysis::now_ms())?;
         transaction.commit()?;
         Ok(())
     }
@@ -139,6 +140,7 @@ impl LocalObservationStore {
             super::invalidate_visibility(&transaction)?;
             transaction.execute("UPDATE observation_meta SET value=CAST(value AS INTEGER)+1 WHERE key='store_revision'",[])?;
         }
+        crate::analysis::sync(&transaction, 200, crate::analysis::now_ms())?;
         transaction.commit()?;
         if conflict {
             Err(ObservationV2Error::RelationshipConflict)

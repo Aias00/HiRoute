@@ -3,14 +3,14 @@ use crate::CanonicalDigest;
 use serde::{Deserialize, Serialize};
 use serde_json::Number;
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ApplicabilityStateV1 {
     NotRequested,
     Valid,
     Unavailable,
 }
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ApplicabilityReasonV1 {
     NoTarget,
@@ -27,7 +27,7 @@ pub enum ApplicabilityReasonV1 {
     EndpointRejected,
     RequiredQuestionMissing,
 }
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HistoricalProtectionActionV1 {
     NotConsidered,
@@ -36,7 +36,7 @@ pub enum HistoricalProtectionActionV1 {
     Suppressed,
     RetainedUnavailable,
 }
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProtectionEligibilityV1 {
     InvalidBoundary,
@@ -51,7 +51,7 @@ pub enum ProtectionEligibilityV1 {
     Eligible,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct RoutingObservationV1 {
     pub protocol: String,

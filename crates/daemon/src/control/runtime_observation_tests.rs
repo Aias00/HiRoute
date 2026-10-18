@@ -36,6 +36,58 @@ use super::*;
 mod worker_read_empty_tests;
 
 #[test]
+fn analysis_does_not_wait_for_a_busy_control_writer() {
+    #[cfg(unix)]
+    if crate::test_support::isolated_agent_home(
+        "control::runtime::tests::analysis_does_not_wait_for_a_busy_control_writer",
+    ) {
+        return;
+    }
+    let temp = tempfile::tempdir().unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(temp.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    let runtime = ProductionControlRuntime::open_with_release_catalog(
+        temp.path(),
+        crate::release_catalog::fixture_catalog(),
+    )
+    .unwrap();
+    let application = ApplicationService::new(runtime.application_ports());
+    let q = hiroute_application_api::ObservationReadRequestV2::new(
+        hiroute_application_api::ObservationReadIntentV2::Analysis(
+            hiroute_domain::ObservationAnalysisQueryV1::new(
+                hiroute_domain::AnalysisViewV1::Conversations,
+            ),
+        ),
+    );
+    let request = LocalControlRequestV2 {
+        schema_version: LOCAL_CONTROL_SCHEMA_V2,
+        request_id: "busy-analysis".into(),
+        principal: PrincipalV1::ambient_local_peer(),
+        operation_id: q.operation().into(),
+        payload: serde_json::to_value(&q).unwrap(),
+        protected_grant: None,
+    };
+    let guard = runtime.adapter.stores.lock().unwrap();
+    let (tx, rx) = std::sync::mpsc::channel();
+    let thread = std::thread::spawn(move || {
+        tx.send(application.dispatch(request)).unwrap();
+    });
+    // Release before asserting so a regression cannot hang the test process.
+    let result = rx.recv_timeout(Duration::from_millis(200));
+    drop(guard);
+    thread.join().unwrap();
+    let response = result.expect("analysis blocked behind the control writer");
+    let wire = serde_json::to_value(response).unwrap();
+    assert_eq!(
+        wire["error"]["observation_read"]["reason"], "reader_busy",
+        "{wire}"
+    );
+}
+
+#[test]
 fn production_writer_store_drives_application_owned_defaults_and_all_plan_scope() {
     #[cfg(unix)]
     if crate::test_support::isolated_agent_home(
@@ -189,14 +241,9 @@ fn production_writer_store_drives_application_owned_defaults_and_all_plan_scope(
         payload: serde_json::to_value(&search).unwrap(),
         protected_grant: None,
     };
-    assert_eq!(
-        application
-            .dispatch(search_wire.clone())
-            .error
-            .unwrap()
-            .code,
-        hiroute_application_api::ErrorCode::CapabilityDenied
-    );
+    let same_user_search = application.dispatch(search_wire.clone());
+    assert!(same_user_search.error.is_none(), "{same_user_search:?}");
+    assert!(same_user_search.data.unwrap()["hits"].is_array());
     search_wire.protected_grant = Some(grant(
         search.protected_operation(),
         CanonicalDigest::of(&search).unwrap(),
@@ -1037,7 +1084,7 @@ fn ingest_value(store: &Arc<LocalObservationStore>, suffix: &str, plan: &str, oc
     }
 }
 
-fn envelope(
+pub(super) fn envelope(
     stream: &ObservationStreamV1,
     suffix: &str,
     plan: &str,

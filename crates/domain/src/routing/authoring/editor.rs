@@ -15,8 +15,6 @@ impl AgentPlanAuthoringV2 {
             branch_routing: None,
             candidates: vec![],
             smart: SmartEditorV2 {
-                historical_applicability: None,
-
                 economy: vec![],
                 primary: vec![],
                 judgment: Default::default(),
@@ -42,7 +40,7 @@ impl AgentPlanAuthoringV2 {
                 editor.candidates = candidates.clone();
             }
             AgentPlanStrategyV2::SmartSaving {
-                native_protocol,
+                native_protocol: _,
                 economy,
                 primary,
                 judgment,
@@ -51,8 +49,6 @@ impl AgentPlanAuthoringV2 {
                 complex_keywords,
             } => {
                 editor.smart = SmartEditorV2 {
-                    historical_applicability: native_protocol.as_ref().map(Into::into),
-
                     economy: economy.clone(),
                     primary: primary.clone(),
                     judgment: judgment.clone(),
@@ -71,6 +67,30 @@ impl AgentPlanAuthoringV2 {
                     primary: primary.clone(),
                     primary_fallback: *primary_fallback,
                 };
+            }
+        }
+        // Opening an edit prepares the current defaults without mutating the publication.
+        if super::super::native_mode(&editor.smart.classifier) {
+            editor.smart.judgment = editor
+                .smart
+                .judgment
+                .resolve_assessment(Some(&super::super::NativeProtocolSelectionV1::default()))
+                .map_err(PlanAuthoringError::NativeProtocol)?;
+        }
+        if let Some(routing) = &mut editor.branch_routing
+            && super::super::native_mode(&routing.classifier)
+        {
+            let protocol = super::super::NativeProtocolSelectionV1::default();
+            routing.judgment = routing
+                .judgment
+                .resolve_assessment(Some(&protocol))
+                .map_err(PlanAuthoringError::NativeProtocol)?;
+            for branch in &mut routing.branches {
+                if let Some(judgment) = &mut branch.judgment {
+                    *judgment = judgment
+                        .resolve_assessment(Some(&protocol))
+                        .map_err(PlanAuthoringError::NativeProtocol)?;
+                }
             }
         }
         Ok(editor)

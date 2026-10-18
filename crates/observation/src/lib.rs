@@ -7,6 +7,7 @@
 //! writer owns activity/content mutations and never has access to routing/runtime correctness
 //! state.
 
+mod analysis;
 pub mod content;
 pub mod maintenance;
 pub mod managed_text;

@@ -247,23 +247,10 @@ fn c_rejects_oversized_current_input_without_truncating_it() {
 }
 #[test]
 fn c_partitions_cap_only_background_and_preserve_a_ten_turn_target() {
-    for cap in [0, 2, 8] {
-        let mut a = c_authority();
-        let mut p = a.native_protocol.as_ref().unwrap().protocol.clone();
-        p.prior_context_max_turns = cap;
-        a.native_protocol = Some(
-            hiroute_domain::FrozenNativeProtocolV1::freeze(
-                &p,
-                a.decision.clone(),
-                [(
-                    SMART_SAVING_SCOPE_ID.into(),
-                    a.smart_judgment.clone().unwrap(),
-                )],
-            )
-            .unwrap(),
-        );
+    for background in [0, 2, 8, 12] {
+        let a = c_authority();
         let mut h = c_history(&a);
-        h.visible_conversation = (0..22)
+        h.visible_conversation = (0..background + 10)
             .map(|i| {
                 let mut turn = (*h.visible_conversation[0]).clone();
                 turn.user = vec![VisibleContentPart::Text {
@@ -272,12 +259,12 @@ fn c_partitions_cap_only_background_and_preserve_a_ten_turn_target() {
                 Arc::new(turn)
             })
             .collect();
-        h.assessment_from = Some(12);
+        h.assessment_from = Some(background);
         let prepared = request_template(&a, &diagnostic_request(), &h).unwrap();
         let wire: Value = serde_json::from_slice(&prepared.template.bytes).unwrap();
         assert_eq!(
             wire["state"]["prior_context"].as_array().unwrap().len(),
-            cap as usize
+            background.min(8)
         );
         assert_eq!(
             wire["state"]["assessment_stage"].as_array().unwrap().len(),

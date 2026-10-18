@@ -239,76 +239,73 @@ fn native_editor() -> PlanEditorStateV2 {
 }
 
 #[test]
-fn default_assessment_follows_both_directions_without_changing_thresholds_or_old_bytes() {
+fn released_defaults_move_only_at_next_publication_without_editor_controls() {
     use crate::*;
-    let mut value = native_editor();
+    let mut editor = native_editor();
     let released: serde_json::Value =
         serde_json::from_str(include_str!("fixtures/released-default-assessment.v1.json")).unwrap();
-    value.smart.judgment.competence.instructions = released["assessment"]["instructions"]
+    editor.smart.judgment.competence.instructions = released["assessment"]["instructions"]
         .as_str()
         .unwrap()
         .into();
-    value.smart.judgment.competence.criteria = std::array::from_fn(|i| {
+    editor.smart.judgment.competence.criteria = std::array::from_fn(|i| {
         released["assessment"]["criteria"][i]
             .as_str()
             .unwrap()
             .into()
     });
-    assert_eq!(value.smart.judgment.competence.standard, None);
-    let old = serde_json::to_vec(&value).unwrap();
-    value.smart.judgment.degree.simple_threshold_millis = 913;
-    value.smart.judgment.competence.floor_millis = 612;
-    value.smart.historical_applicability = Some(HistoricalApplicabilityV1::default());
-    let enabled = value.effective().unwrap();
-    let j = enabled.assessment_scopes()[SMART_SAVING_SCOPE_ID];
-    assert_eq!(j.competence.standard, Some(AssessmentStandardV1::Default));
+    editor.smart.judgment.degree.simple_threshold_millis = 913;
+    editor.smart.judgment.competence.floor_millis = 612;
+    let before = serde_json::to_vec(&editor).unwrap();
+    let current = editor.effective().unwrap();
+    let j = current.assessment_scopes()[SMART_SAVING_SCOPE_ID];
     assert_eq!(
         composed_assessment(Some(&NativeProtocolV1::default()), j),
         stock_c_questions()["q1"]
     );
+    assert_eq!(j.competence.standard, Some(AssessmentStandardV1::Default));
     assert_eq!(
         (j.degree.simple_threshold_millis, j.competence.floor_millis),
         (913, 612)
     );
-    let mut reopened = enabled.editor(None).unwrap();
-    reopened.smart.historical_applicability = None;
-    let disabled = reopened.effective().unwrap();
-    let j = disabled.assessment_scopes()[SMART_SAVING_SCOPE_ID];
-    assert_eq!(j.competence.instructions, DEFAULT_COMPETENCE_INSTRUCTIONS);
     assert_eq!(
-        j.competence.criteria,
-        DEFAULT_COMPETENCE_CRITERIA.map(str::to_owned)
+        current.native_protocol(),
+        Some(&NativeProtocolSelectionV1::default())
     );
-    assert_eq!(
-        (j.degree.simple_threshold_millis, j.competence.floor_millis),
-        (913, 612)
-    );
-    assert_eq!(serde_json::to_vec(&native_editor()).unwrap(), old);
-    let selection = serde_json::to_value(enabled.native_protocol().unwrap()).unwrap();
-    assert_eq!(selection.as_object().unwrap().len(), 2);
-    assert!(selection.get("fixed").is_none());
-    let mut unknown = selection;
-    unknown["fixed"] = serde_json::json!({});
-    assert!(serde_json::from_value::<NativeProtocolSelectionV1>(unknown).is_err());
-    let editor = serde_json::to_value(enabled.editor(None).unwrap()).unwrap();
-    assert_eq!(
-        editor["smart"]["historical_applicability"],
-        serde_json::json!({"prior_context_max_turns":8})
-    );
-    assert!(editor["smart"].get("native_protocol").is_none());
-    for forbidden in ["schema", "fixed", "digest"] {
-        let mut input = editor.clone();
-        input["smart"]["historical_applicability"][forbidden] =
-            serde_json::json!("caller-supplied");
+    assert_eq!(serde_json::to_vec(&editor).unwrap(), before);
+    let readback = current.editor(None).unwrap();
+    assert_eq!(readback.effective().unwrap(), current);
+    let json = serde_json::to_value(&readback).unwrap();
+    for field in [
+        "native_protocol",
+        "historical_applicability",
+        "prior_context_max_turns",
+    ] {
+        assert!(json["smart"].get(field).is_none(), "{field}");
+        let mut invalid = json.clone();
+        invalid["smart"][field] = serde_json::json!({"prior_context_max_turns":8});
         assert!(
-            serde_json::from_value::<PlanEditorStateV2>(input).is_err(),
-            "{forbidden}"
+            serde_json::from_value::<PlanEditorStateV2>(invalid).is_err(),
+            "{field}"
         );
     }
-    let mut input = editor;
-    input["smart"]["native_protocol"] =
-        serde_json::json!({"schema":SYSTEM_ONE_C_V1,"prior_context_max_turns":8});
-    assert!(serde_json::from_value::<PlanEditorStateV2>(input).is_err());
+    // A sealed earlier publication is not normalized on read, but its next edit is current.
+    let mut legacy = current;
+    if let AgentPlanStrategyV2::SmartSaving {
+        native_protocol,
+        judgment,
+        ..
+    } = &mut legacy.strategy
+    {
+        *native_protocol = None;
+        *judgment = JudgmentSettingsV1::default();
+    }
+    let old = serde_json::to_vec(&legacy).unwrap();
+    let reopened: AgentPlanAuthoringV2 = serde_json::from_slice(&old).unwrap();
+    assert_eq!(serde_json::to_vec(&reopened).unwrap(), old);
+    let next = reopened.editor(None).unwrap().effective().unwrap();
+    assert!(next.native_protocol().is_some());
+    assert_eq!(serde_json::to_vec(&legacy).unwrap(), old);
 }
 
 #[test]
@@ -323,8 +320,7 @@ fn custom_text_and_criteria_remain_byte_exact_even_when_equal_to_a_default() {
             value.smart.judgment.competence.criteria[1] = " criterion with spaces  ".into();
         }
         let original = value.smart.judgment.competence.clone();
-        for on in [true, false, true] {
-            value.smart.historical_applicability = on.then(HistoricalApplicabilityV1::default);
+        for _ in 0..3 {
             let authored = value.effective().unwrap();
             assert_eq!(
                 authored.assessment_scopes()[SMART_SAVING_SCOPE_ID].competence,
@@ -335,7 +331,6 @@ fn custom_text_and_criteria_remain_byte_exact_even_when_equal_to_a_default() {
     }
     let mut value = native_editor();
     value.smart.judgment.competence.criteria[2].push(' ');
-    value.smart.historical_applicability = Some(HistoricalApplicabilityV1::default());
     assert_eq!(
         value.effective().unwrap().assessment_scopes()[SMART_SAVING_SCOPE_ID]
             .competence
@@ -357,7 +352,6 @@ fn inherited_defaults_and_independent_custom_overrides_resolve_separately() {
     let mut custom = JudgmentSettingsV1::default();
     custom.competence.criteria[0].push_str(" Custom.");
     value.branch_routing = Some(BranchRoutingEditorV1 {
-        historical_applicability: Some(HistoricalApplicabilityV1::default()),
         classifier: value.smart.classifier.clone(),
         default_branch_id: "code".into(),
         judgment: JudgmentSettingsV1::default(),
@@ -381,10 +375,15 @@ fn inherited_defaults_and_independent_custom_overrides_resolve_separately() {
         SYSTEM_ONE_C_V1
     );
     let editor = serde_json::to_value(authored.editor(None).unwrap()).unwrap();
-    assert_eq!(
-        editor["branch_routing"]["historical_applicability"],
-        serde_json::json!({"prior_context_max_turns":8})
+    assert!(
+        editor["branch_routing"]
+            .get("historical_applicability")
+            .is_none()
     );
+    let mut invalid = editor.clone();
+    invalid["branch_routing"]["historical_applicability"] =
+        serde_json::json!({"prior_context_max_turns":8});
+    assert!(serde_json::from_value::<PlanEditorStateV2>(invalid).is_err());
     assert!(editor["branch_routing"].get("native_protocol").is_none());
     assert_eq!(
         serde_json::from_value::<PlanEditorStateV2>(editor)

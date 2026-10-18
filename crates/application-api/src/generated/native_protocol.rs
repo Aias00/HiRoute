@@ -14,16 +14,10 @@ fn threshold() -> Value {
     json!({"type":"integer","minimum":0,"maximum":1000})
 }
 
-pub(super) fn authoring() -> Value {
-    object(
-        &["prior_context_max_turns"],
-        json!({"prior_context_max_turns":{"type":"integer","minimum":0,"maximum":8,"default":8}}),
-    )
-}
 fn resolved_protocol() -> Value {
     object(
         &["schema", "fixed", "prior_context_max_turns"],
-        json!({"schema":{"const":hiroute_domain::SYSTEM_ONE_C_V1},"fixed":{"const":hiroute_domain::NativeFixedContentV1::c_v1()},"prior_context_max_turns":{"type":"integer","minimum":0,"maximum":8}}),
+        json!({"schema":{"const":hiroute_domain::SYSTEM_ONE_C_V1},"fixed":{"const":hiroute_domain::NativeFixedContentV1::c_v1()},"prior_context_max_turns":{"const":8}}),
     )
 }
 fn frozen() -> Value {

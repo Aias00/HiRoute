@@ -216,6 +216,8 @@ pub enum StaticCostPolicyV1 {
     SubscriptionAndFree,
     BudgetedPaid,
     ExplicitFixed,
+    /// Product-authorized frozen Plan candidates, independent of price availability.
+    PublishedCandidates,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

@@ -1,19 +1,17 @@
-import { NativeProtocolEditor } from './features/decision-services/NativeProtocolEditor';
-import { resolveAssessment, type NativeProtocol, type NativeProtocolSelection } from './features/decision-services/native-protocol';
 import { candidateUnavailableMessage, type UnavailableCandidate } from './plan-candidate-availability';
 import type { OpenDecisionConnection } from './features/decision-services/presentation';
 import { BranchRoutingEditor } from './features/decision-services/BranchRoutingEditor';
-import { branchRouting, branchSelections, classifierIssue, judgmentIssue, defaultJudgment, emptyService, routingIssue, type Judgment, type BranchRouting, type Classifier, type DecisionService } from './features/decision-services/types';
+import { branchRouting, branchSelections, classifierIssue, judgmentIssue, routingIssue, type Judgment, type BranchRouting, type Classifier, type DecisionService } from './features/decision-services/types';
 import { DecisionSelector } from './features/decision-services/DecisionSelector';
 import { JudgmentFields, judgmentSummary } from './features/decision-services/JudgmentSettings';
 import { AgentProtocolChoice, type ProtocolAdvice } from './features/AgentProtocolChoice';
 import { contextWindowError, type ContextWindowBounds } from './plan-context-window';
-import { DEFAULT_REQUEST_TIMEOUT_MS, requestTimeoutError } from './plan-request-timeout';
+import { requestTimeoutError } from './plan-request-timeout';
 import { ProviderIcon } from './ui/ProviderIcon';
 import { planErrorCode, planErrorMessage } from './plan-editor-errors';
 import { ReasoningDialog, type NativeReasoning } from './ui/ReasoningDialog';
 import { ModelPicker } from './ui/ModelPicker';
-import { BrandIcon, Disclosure, UiIcon } from './ui';
+import { BrandIcon, Disclosure, UiIcon, type BrandKind } from './ui';
 import { WorkerDependencies } from './features/WorkerDependencies';
 import { PlanQuality, type PlanQualityModel } from './features/PlanQuality';
 import { PlanRuntimeSettings } from './features/PlanRuntimeSettings';
@@ -27,11 +25,11 @@ type Work = { harness: 'codex_cli' | 'claude_code' | 'qoder_cli' | 'pi' | 'deeps
 type SmartClassifier = Classifier;
 // Inactive inputs belong to this editing session, never to the persisted plan.
 export type PlanEditorMemory = { branchRouting?: BranchRouting; customWindowTokens?: number };
-export type Smart = { historical_applicability?: NativeProtocol; economy: Selection[]; primary: Selection[]; judgment: Judgment; /** @deprecated Accepted only for saved plans and drafts. */ reselect_on_user_message?: boolean; classifier: SmartClassifier; complex_keywords: string[] };
+export type Smart = { economy: Selection[]; primary: Selection[]; judgment: Judgment; /** @deprecated Accepted only for saved plans and drafts. */ reselect_on_user_message?: boolean; classifier: SmartClassifier; complex_keywords: string[] };
 type Free = { candidates: Selection[]; primary: Selection[]; primary_fallback: boolean };
 export type Editor = { schema: string; display_name: string; purpose: string; custom_alias?: string; mode: Mode; branch_routing?: BranchRouting | null; candidates: Selection[]; smart: Smart; free: Free; delegation_enabled: boolean; work?: Work; requirements: Record<string, unknown>; limits: { context_window_tokens?: number; maximum_attempts: number; request_timeout_ms: number; attempt_timeout_ms: number } };
-type StoredRouting = Omit<BranchRouting, 'historical_applicability'> & { native_protocol?: NativeProtocolSelection };
-type StoredSmart = Omit<Smart, 'historical_applicability'> & { native_protocol?: NativeProtocolSelection };
+type StoredRouting = BranchRouting & { native_protocol?: unknown };
+type StoredSmart = Smart & { native_protocol?: unknown };
 export type Plan = { protocol_advice?: ProtocolAdvice; agent_plan_id: string; desired: { display_name: string; purpose: string; mode: Mode; strategy: { mode: string; candidates?: Selection[]; routing?: StoredRouting } & Partial<StoredSmart & Free>; delegation_enabled: boolean; work?: Work; requirements: Record<string, unknown>; limits: Editor['limits'] }; head: { head_revision: number; status: string }; agent_plan_revision: number; model_alias: string; publication: { revision: number; digest: string }; execution: string };
 export type Draft = { draft_id: string; plan_id?: string; base_head_revision?: number; revision: number; editor: Editor };
 type Native = NativeReasoning;
@@ -41,7 +39,8 @@ type CodexCapabilityIssue = { kind: 'plan_compilation' | 'invalid_compiled_plan'
 type CodexCapabilities = { state: 'available'; context_window: number; input_modalities: ('text' | 'image')[]; reasoning: 'route_configuration'; limitations: CodexCapabilityLimit[]; fixed_limits: ('parallel_tool_calls_disabled')[] }
   | { state: 'unavailable'; issues: CodexCapabilityIssue[] };
 export type ClaudeCapabilities = { state: 'available'; context_window: number; plan_window: number } | { state: 'unavailable'; reason: string };
-export type Options = { unavailable_candidate_count?: number; unavailable_candidates?: UnavailableCandidate[]; claude_capabilities?: ClaudeCapabilities | null; context_window: ContextWindowBounds | null; suggested_alias: string | null; candidates: Candidate[]; free_suggestions: { candidates: { selection: Selection }[]; unavailable: Record<string, string> } | null; codex_capabilities: CodexCapabilities | null };
+export type AuthoringOptions = { editor: Editor; plan_id: string | null; expected_head_revision: number | null; required_choices: { field: string; reason: string }[]; candidate_defaults: { binding_id: string; economy: Selection['reasoning'] | null; primary: Selection['reasoning'] | null }[] };
+export type Options = { authoring?: AuthoringOptions; unavailable_candidate_count?: number; unavailable_candidates?: UnavailableCandidate[]; claude_capabilities?: ClaudeCapabilities | null; context_window: ContextWindowBounds | null; suggested_alias: string | null; candidates: Candidate[]; free_suggestions: { candidates: { selection: Selection }[]; unavailable: Record<string, string> } | null; codex_capabilities: CodexCapabilities | null };
 type ValidationIssue = { selector?: string; message: string; group?: string; bindingId?: string; field?: 'alias' | 'context_window' | 'request_timeout' };
 export type PlanEditorHandle = {
   saveDraft(): Promise<boolean>;
@@ -61,27 +60,6 @@ function workerProtocolAdvice(editor: Editor, options: Options | null): Protocol
     native: protocols.filter(p => candidates.every(c => c!.native_ingress_protocols?.includes(p))) };
 }
 
-function defaultReasoning(native: Native | undefined, preferred: 'low' | 'high' = 'high'): Selection['reasoning'] {
-  if (!native || native.kind === 'fixed' || native.kind === 'budget') return undefined;
-  if (native.kind === 'toggle') return { kind: 'toggle', enabled: preferred === 'high' };
-  const enabled = native.profiles.filter(profile => !['none', 'off', 'disabled'].includes(profile.toLocaleLowerCase()));
-  const profiles = enabled.length ? enabled : native.profiles;
-  const profile = preferred === 'low' ? profiles[0] : profiles.at(-1);
-  return profile ? { kind: 'profile', profile } : undefined;
-}
-export function emptyEditor(): Editor { return { schema: 'hiroute.plan-editor/v2', display_name: '', purpose: '', mode: 'fixed_model', candidates: [], smart: { economy: [], primary: [], judgment: structuredClone(defaultJudgment), classifier: { kind: 'decision_service', service: emptyService() }, complex_keywords: [] }, free: { candidates: [], primary: [], primary_fallback: false }, delegation_enabled: false, requirements: {}, limits: { maximum_attempts: 6, request_timeout_ms: DEFAULT_REQUEST_TIMEOUT_MS, attempt_timeout_ms: 30000 } }; }
-export function reopen(plan: Plan): Editor {
-  const e = { ...emptyEditor(), display_name: plan.desired.display_name, purpose: plan.desired.purpose, custom_alias: plan.model_alias, mode: plan.desired.mode, delegation_enabled: plan.desired.delegation_enabled, work: plan.desired.work, requirements: plan.desired.requirements, limits: plan.desired.limits };
-  const s = plan.desired.strategy;
-  if (s.mode === 'branches' && s.routing) {
-    const { native_protocol, ...routing } = structuredClone(s.routing);
-    e.branch_routing = { ...routing, ...(native_protocol && { historical_applicability: { prior_context_max_turns: native_protocol.prior_context_max_turns } }) };
-  }
-  else if (e.mode === 'fixed_model') e.candidates = s.candidates ?? [];
-  else if (e.mode === 'smart_saving') e.smart = { ...(s.native_protocol && { historical_applicability: { prior_context_max_turns: s.native_protocol.prior_context_max_turns } }), economy: s.economy ?? [], primary: s.primary ?? [], judgment: structuredClone(s.judgment!), ...(s.reselect_on_user_message !== undefined && { reselect_on_user_message: s.reselect_on_user_message }), classifier: s.classifier as SmartClassifier, complex_keywords: s.complex_keywords ?? [] };
-  else e.free = { candidates: s.candidates ?? [], primary: s.primary ?? [], primary_fallback: s.primary_fallback ?? false };
-  return e;
-}
 function activePlanSelections(plan: Plan): Selection[] {
   const strategy = plan.desired.strategy;
   if (strategy.routing) return branchSelections(strategy.routing);
@@ -115,11 +93,41 @@ function activePlanQualityModels(plan: Plan, candidates: Candidate[]): PlanQuali
   }
   return models;
 }
-export const PlanEditor = forwardRef<PlanEditorHandle, { plan?: Plan; draft?: Draft; creating?: boolean; initialBindingId?: string; editingMemory?: PlanEditorMemory; language: 'zh' | 'en'; active?: boolean; refreshVersion?: number; usedBy?: { id: string; name: string; brand: 'codex' | 'claude-code' | 'qoder' | 'pi' | 'dsh' | 'agent'; isDefault: boolean }[]; onOpenAgent?: (agentId: string) => void; onOpenSession?: (sessionId: string, requestId: string) => void; onOpenServices?: OpenDecisionConnection; onDone: () => Promise<void>; onClose: () => void; onDirty?: (dirty: boolean) => void; onEdit?: () => void; onBusyChange?: (busy: boolean) => void; onOperation?: (operation: PlanOperation | null) => void; onPersisted?: (editor: PersistedEditor<Plan, Draft> | null, action: 'save_draft' | 'publish', identity: PersistenceIdentity, operation: PlanOperation | null) => void }>(function PlanEditor({ plan, draft, creating = false, initialBindingId, editingMemory, language, active = true, refreshVersion = 0, usedBy = [], onOpenAgent, onOpenSession, onOpenServices, onDone, onClose, onDirty, onEdit, onBusyChange, onOperation, onPersisted }, ref) {
+export type PlanEditorProps = { plan?: Plan; draft?: Draft; creating?: boolean; initialBindingId?: string; editingMemory?: PlanEditorMemory; language: 'zh' | 'en'; active?: boolean; refreshVersion?: number; usedBy?: { id: string; name: string; brand: BrandKind; isDefault: boolean }[]; onOpenAgent?: (agentId: string) => void; onOpenSession?: (sessionId: string, requestId: string) => void; onOpenServices?: OpenDecisionConnection; onDone: () => Promise<void>; onClose: () => void; onDirty?: (dirty: boolean) => void; onEdit?: () => void; onBusyChange?: (busy: boolean) => void; onOperation?: (operation: PlanOperation | null) => void; onPersisted?: (editor: PersistedEditor<Plan, Draft> | null, action: 'save_draft' | 'publish', identity: PersistenceIdentity, operation: PlanOperation | null) => void };
+
+export const PlanEditor = forwardRef<PlanEditorHandle, PlanEditorProps>(function PlanEditor(props, ref) {
+  const [seed, setSeed] = useState<{ editor: Editor; head: number | null } | null>(() => props.draft
+    ? { editor: structuredClone(props.draft.editor), head: props.draft.base_head_revision ?? null } : null);
+  const [failure, setFailure] = useState<unknown>(null);
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    if (seed || props.active === false) return;
+    let current = true;
+    setFailure(null);
+    void invoke<Options>('plan_editor_options', { input: { authoring: props.plan ? { plan_id: props.plan.agent_plan_id } : {}, include_unavailable: true } })
+      .then(value => {
+        if (!value.authoring) throw { code: 'SCHEMA_INCOMPATIBLE' };
+        if (current) setSeed({ editor: value.authoring.editor, head: value.authoring.expected_head_revision });
+      }).catch(cause => { if (current) setFailure(cause); });
+    return () => { current = false; };
+  }, [seed, props.active, props.plan?.agent_plan_id, retry]);
+  if (seed) return <LoadedPlanEditor {...props} ref={ref} initialEditor={seed.editor} initialHead={seed.head} />;
+  const en = props.language === 'en';
+  return <section className="plan-editor" aria-busy={!failure} aria-label={en ? 'Plan settings' : '计划设置'}>
+    <div className={`callout${failure ? ' bad' : ''}`} role={failure ? 'alert' : 'status'} data-error-code={failure ? planErrorCode(failure) : undefined}>
+      <UiIcon name={failure ? 'warning' : 'info'} />
+      <div><p>{failure ? (en ? 'Unable to load plan settings. Retry to continue editing.' : '未能读取计划设置，请重试后继续编辑。') : (en ? 'Loading plan settings…' : '正在读取计划设置…')}</p>
+        {Boolean(failure) && <button type="button" className="btn" onClick={() => setRetry(value => value + 1)}>{en ? 'Retry' : '重试'}</button>}
+      </div>
+    </div>
+  </section>;
+});
+
+const LoadedPlanEditor = forwardRef<PlanEditorHandle, PlanEditorProps & { initialEditor: Editor; initialHead: number | null }>(function LoadedPlanEditor({ initialEditor, initialHead, plan, draft, creating = false, initialBindingId, editingMemory, language, active = true, refreshVersion = 0, usedBy = [], onOpenAgent, onOpenSession, onOpenServices, onDone, onClose, onDirty, onEdit, onBusyChange, onOperation, onPersisted }, ref) {
   const en = language === 'en', text = (zh: string, eng: string) => en ? eng : zh;
-  const [editor, setEditor] = useState<Editor>(() => structuredClone(draft?.editor ?? (plan ? reopen(plan) : emptyEditor())));
+  const [editor, setEditor] = useState<Editor>(() => structuredClone(initialEditor));
   const [draftId] = useState(() => draft?.draft_id ?? 'draft/' + crypto.randomUUID());
-  const [base, setBase] = useState(() => ({ expected_head_revision: draft ? draft.base_head_revision ?? null : plan?.head.head_revision ?? null, expected_draft_revision: draft?.revision ?? null }));
+  const [base, setBase] = useState(() => ({ expected_head_revision: initialHead, expected_draft_revision: draft?.revision ?? null }));
   const [options, setOptions] = useState<Options | null>(null), [busy, setBusy] = useState(false), [error, setError] = useState('');
   const [baseline, setBaseline] = useState(() => JSON.stringify(editor));
   const [notice, setNotice] = useState('');
@@ -176,7 +184,8 @@ export const PlanEditor = forwardRef<PlanEditorHandle, { plan?: Plan; draft?: Dr
     let current = true;
     const timer = setTimeout(async () => {
       try {
-        const value = await invoke<Options>('plan_editor_options', { input: { display_name: editor.display_name, requirements: editor.requirements, editor, include_unavailable: true } });
+        const value = await invoke<Options>('plan_editor_options', { input: { display_name: editor.display_name, requirements: editor.requirements, editor, authoring: {}, include_unavailable: true } });
+        if (!value.authoring) throw { code: 'SCHEMA_INCOMPATIBLE' };
         if (current) { setOptions(value); setOptionsError(''); setOptionsErrorCode(''); }
       } catch (cause) {
         if (current) {
@@ -192,8 +201,12 @@ export const PlanEditor = forwardRef<PlanEditorHandle, { plan?: Plan; draft?: Dr
     if (!creating || !options || editor.mode !== 'fixed_model' || editor.candidates.length) return;
     const first = options.candidates.find(candidate => candidate.routable && (!initialBindingId || candidate.binding_id === initialBindingId));
     if (!first) return;
-    update({ candidates: [{ binding_id: first.binding_id, reasoning: defaultReasoning(first.reasoning) }] });
+    update({ candidates: [{ binding_id: first.binding_id, reasoning: defaultReasoning(first.binding_id) }] });
   }, [creating, options, editor.mode, editor.candidates.length, initialBindingId]);
+  function defaultReasoning(bindingId: string, preferred: 'low' | 'high' = 'high'): Selection['reasoning'] {
+    const defaults = options?.authoring?.candidate_defaults.find(value => value.binding_id === bindingId);
+    return structuredClone((preferred === 'low' ? defaults?.economy : defaults?.primary) ?? undefined);
+  }
   function focusField(selector: string) {
     const element = document.querySelector<HTMLElement>(selector);
     let details = element?.closest('details');
@@ -351,7 +364,7 @@ export const PlanEditor = forwardRef<PlanEditorHandle, { plan?: Plan; draft?: Dr
       update({ mode, candidates: editor.candidates.length ? editor.candidates : candidate
         ? [current?.binding_id === candidate.binding_id
           ? current
-          : { binding_id: candidate.binding_id, reasoning: defaultReasoning(candidate.reasoning) }]
+          : { binding_id: candidate.binding_id, reasoning: defaultReasoning(candidate.binding_id) }]
         : [] });
       return;
     }
@@ -360,15 +373,15 @@ export const PlanEditor = forwardRef<PlanEditorHandle, { plan?: Plan; draft?: Dr
     }
     if (mode === 'smart_saving') {
       const smart = { ...editor.smart };
-      if (!smart.economy.length) smart.economy = ready.slice(0, 1).map(c => ({ binding_id: c.binding_id, reasoning: defaultReasoning(c.reasoning, 'low') }));
-      if (!smart.primary.length) smart.primary = ready.slice(-1).map(c => ({ binding_id: c.binding_id, reasoning: defaultReasoning(c.reasoning, 'high') }));
+      if (!smart.economy.length) smart.economy = ready.slice(0, 1).map(c => ({ binding_id: c.binding_id, reasoning: defaultReasoning(c.binding_id, 'low') }));
+      if (!smart.primary.length) smart.primary = ready.slice(-1).map(c => ({ binding_id: c.binding_id, reasoning: defaultReasoning(c.binding_id, 'high') }));
       if (smart.classifier.kind === 'decision_service' && !smart.classifier.service.name) {
         const service = services.find(s => s.connection.kind === 'system_one');
         if (service) smart.classifier = { kind: 'decision_service', service: structuredClone(service) };
       }
       update({ mode, smart }); return;
     }
-    const candidates = editor.free.candidates.length ? editor.free.candidates : ready.filter(candidate => candidate.billing_class === 'free').map(candidate => ({ binding_id: candidate.binding_id, reasoning: defaultReasoning(candidate.reasoning, 'low') }));
+    const candidates = editor.free.candidates.length ? editor.free.candidates : ready.filter(candidate => candidate.billing_class === 'free').map(candidate => ({ binding_id: candidate.binding_id, reasoning: defaultReasoning(candidate.binding_id, 'low') }));
     update({ mode, free: { ...editor.free, candidates } });
   }
   function group(title: string, subtitle: string, values: Selection[], replace: (s: Selection[]) => void, { free = false, preferred, primary = false, groupId = '' }: { free?: boolean; preferred?: 'low' | 'high'; primary?: boolean; groupId?: string } = {}) {
@@ -413,8 +426,7 @@ export const PlanEditor = forwardRef<PlanEditorHandle, { plan?: Plan; draft?: Dr
       <DecisionSelector classifier={editor.smart.classifier} smart services={services} language={language} onChange={classifier => update({ smart: { ...editor.smart, classifier } })} onOpenServices={onOpenServices} error={validationIssue?.group === 'classifier' ? validationIssue.message : undefined} />
       <section className="editor-section">{group(text('省钱模型', 'Economy models'), text('处理简单任务，按顺序尝试。', 'For simple tasks, tried in this order.'), editor.smart.economy, economy => update({ smart: { ...editor.smart, economy } }), { groupId: 'economy', preferred: 'low' })}</section>
       <section className="editor-section">{group(text('主力模型', 'Primary models'), text('任务复杂或上一阶段不胜任时使用，按顺序尝试。', 'For complex tasks or low competence, tried in this order.'), editor.smart.primary, primary => update({ smart: { ...editor.smart, primary } }), { groupId: 'primary', preferred: 'high' })}</section>
-      {editor.smart.classifier.kind === 'decision_service' && editor.smart.classifier.service.connection.kind === 'system_one' && <NativeProtocolEditor protocol={editor.smart.historical_applicability} scopes={[{ id: 'smart_saving', label: text('智能省钱评分范围', 'Smart saving assessment scope'), judgment: editor.smart.judgment }]} service={editor.smart.classifier.service} language={language} onProtocol={historical_applicability => update({ smart: { ...editor.smart, historical_applicability, judgment: resolveAssessment(editor.smart.judgment, historical_applicability) } })} />}
-      {editor.smart.classifier.kind !== 'local_rules' && <section className="editor-section"><Disclosure label={text(`判断设置 · ${judgmentSummary(editor.smart.judgment, true, language)}`, `Judgment settings · ${judgmentSummary(editor.smart.judgment, true, language)}`)} language={language}><JudgmentFields protocol={editor.smart.historical_applicability} value={editor.smart.judgment} onChange={judgment => update({ smart: { ...editor.smart, judgment } })} id="smart" language={language} /></Disclosure></section>}
+      {editor.smart.classifier.kind !== 'local_rules' && <section className="editor-section"><Disclosure label={text(`判断设置 · ${judgmentSummary(editor.smart.judgment, true, language)}`, `Judgment settings · ${judgmentSummary(editor.smart.judgment, true, language)}`)} language={language}><JudgmentFields native={editor.smart.classifier.kind === 'decision_service' && editor.smart.classifier.service.connection.kind === 'system_one'} value={editor.smart.judgment} onChange={judgment => update({ smart: { ...editor.smart, judgment } })} id="smart" language={language} /></Disclosure></section>}
     </>}
     {editor.branch_routing && editor.mode === 'custom_branches' && <BranchRoutingEditor routing={editor.branch_routing} services={services} language={language} onChange={branch_routing => update({ branch_routing })} onOpenServices={onOpenServices} group={group} errorGroup={validationIssue?.group} error={validationIssue?.message} />}
     {editor.mode === 'free_first' && <section className="editor-section"><div className="editor-section-heading"><div><h3>{text('免费候选', 'Free candidates')}</h3><p>{text('当前候选与顺序在发布后保持固定。', 'Candidates and order stay fixed after publication.')}</p></div><button className="btn" type="button" onClick={() => void useAllFree()}>{text('使用当前全部可用免费模型', 'Use all available free models')}</button></div><div className="free-lane">{group(text('免费模型', 'Free models'), text('固定顺序', 'Fixed order'), editor.free.candidates, candidates => update({ free: { ...editor.free, candidates } }), { free: true, preferred: 'low', groupId: 'free' })}</div><div className="editor-section-heading fallback-heading"><div><h3>{text('免费模型都不可用时', 'When all free models are unavailable')}</h3></div></div><div className="option-panel"><button type="button" className="option-row" aria-pressed={!editor.free.primary_fallback} onClick={() => update({ free: { ...editor.free, primary_fallback: false } })}><div><strong>{text('停止并提示，只使用免费模型', 'Stop and report; free models only')}</strong><span>{text('绝不会进入订阅或付费模型', 'Never use subscription or paid models')}</span></div><span className={`badge ${!editor.free.primary_fallback ? 'info' : ''} no-dot`}>{!editor.free.primary_fallback ? text('已选择', 'Selected') : text('选择', 'Choose')}</span></button><button type="button" className="option-row" aria-pressed={editor.free.primary_fallback} onClick={() => update({ free: { ...editor.free, primary_fallback: true } })}><div><strong>{text('继续使用主力模型', 'Continue with primary models')}</strong><span>{text('只有免费池全部不可用时才进入主力组合', 'Use primary only when the free pool is unavailable')}</span></div><span className={`badge ${editor.free.primary_fallback ? 'info' : ''} no-dot`}>{editor.free.primary_fallback ? text('已选择', 'Selected') : text('选择', 'Choose')}</span></button></div>{editor.free.primary_fallback && <div className="free-lane">{group(text('主力模型', 'Primary models'), text('免费池的兜底', 'Fallback for free pool'), editor.free.primary, primary => update({ free: { ...editor.free, primary } }), { preferred: 'high', primary: true, groupId: 'free-primary' })}</div>}</section>}
@@ -480,7 +492,7 @@ export const PlanEditor = forwardRef<PlanEditorHandle, { plan?: Plan; draft?: Dr
           const previous = picker.values.find(value => value.binding_id === id);
           if (previous) return previous;
           const candidate = options?.candidates.find(value => value.binding_id === id);
-          return { binding_id: id, reasoning: defaultReasoning(candidate?.reasoning, picker.preferred) };
+          return { binding_id: id, reasoning: defaultReasoning(id, picker.preferred) };
         });
         picker.replace(selections);
         setValidationIssue(null);

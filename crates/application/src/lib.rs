@@ -6,12 +6,11 @@
 //! daemon; the CLI and a future Desktop cannot reach storage, discovery, or observation ports.
 
 use hiroute_application_api::{
-    AgentCheckRequestV1, ApplyRequestV1, ApplyResultV1, CanonicalDigest, ClientEmptyRequestV1,
-    CommandLifecycle, ErrorCode, ErrorV1, LocalControlRequestV2, MachineEnvelopeV2,
-    OperationCancelRequestV1, OperationLookupV1, OperationReferenceV1, PreviewRequestV1,
-    RevisionSetV1, SetupApplyRequestV1, SetupRequestV1, WORKER_SETTINGS_GET_OPERATION_V1,
-    WORKER_SETTINGS_SET_OPERATION_V1, command_by_id, command_by_operation, release_manifest,
-    reserved_operation,
+    AgentCheckRequestV1, ApplyRequestV1, ApplyResultV1, CanonicalDigest, CommandLifecycle,
+    ErrorCode, ErrorV1, LocalControlRequestV2, MachineEnvelopeV2, OperationCancelRequestV1,
+    OperationLookupV1, OperationReferenceV1, PreviewRequestV1, RevisionSetV1, SetupApplyRequestV1,
+    SetupRequestV1, WORKER_SETTINGS_GET_OPERATION_V1, WORKER_SETTINGS_SET_OPERATION_V1,
+    command_by_id, command_by_operation, release_manifest, reserved_operation,
 };
 use hiroute_domain::{ObservationQueryError, WorkspaceId};
 use serde_json::{Value, json};
@@ -144,9 +143,10 @@ impl ApplicationService {
                     return failed(ErrorCode::DaemonUnavailable, request.request_id);
                 };
                 match port.decision_services(&WorkspaceId::default()) {
-                    Ok(services) => {
-                        succeeded(serde_json::json!({"services":services}), request.request_id)
-                    }
+                    Ok(services) => succeeded(
+                        hiroute_application_api::DecisionServicesListV1 { services },
+                        request.request_id,
+                    ),
                     Err(error) => failed(map_control_error(error), request.request_id),
                 }
             }
@@ -233,14 +233,28 @@ impl ApplicationService {
         if request.protected_grant.is_some() {
             return failed(ErrorCode::CapabilityDenied, request.request_id);
         }
-        if serde_json::from_value::<ClientEmptyRequestV1>(request.payload).is_err() {
+        let Ok(input) =
+            serde_json::from_value::<hiroute_application_api::AgentScanRequestV1>(request.payload)
+        else {
+            return failed(ErrorCode::InvalidArguments, request.request_id);
+        };
+        if input.native_target.is_some() && request.operation_id != "ScanAgents" {
             return failed(ErrorCode::InvalidArguments, request.request_id);
         }
         let Some(ports) = self.ports.as_ref() else {
             return failed(ErrorCode::DaemonUnavailable, request.request_id);
         };
-        match ports.discovery.discover() {
-            Ok(agents) => succeeded(json!({"agents": agents}), request.request_id),
+        let result = match &input.native_target {
+            Some(target) if target.validate().is_ok() => ports.discovery.discover_target(target),
+            Some(_) => return failed(ErrorCode::InvalidArguments, request.request_id),
+            None if request.operation_id == "ListAgents" => ports.discovery.list(),
+            None => ports.discovery.discover(),
+        };
+        match result {
+            Ok(agents) => succeeded(
+                hiroute_application_api::AgentDiscoveryListV1 { agents },
+                request.request_id,
+            ),
             Err(error) => failed(map_control_error(error), request.request_id),
         }
     }
@@ -659,7 +673,15 @@ impl ApplicationService {
             ports.control.clone(),
             ports.clock.clone(),
             ports.value_scope.clone(),
-        );
+        )
+        .with_prices(ports.prices.clone())
+        .with_routing(ports.routing.clone());
+        let analysis_details = request
+            .payload
+            .get("intent")
+            .and_then(|intent| intent.get("view"))
+            .and_then(Value::as_str)
+            == Some("analysis");
         let result = match operation {
             ObservationOperation::List => control.list(
                 request.principal.kind,
@@ -690,7 +712,21 @@ impl ApplicationService {
         };
         match result {
             Ok(value) => succeeded(value, request.request_id),
-            Err(error) => failed(map_observation_error(error), request.request_id),
+            Err(error) => {
+                let details = if analysis_details {
+                    observation_read_failure(&error)
+                } else {
+                    None
+                };
+                let retryable = !matches!(error, ObservationQueryError::Corrupt);
+                let mut reply = failed(map_observation_error(error), request.request_id);
+                if let (Some(error), Some(details)) = (reply.error.as_mut(), details) {
+                    error.retryable = retryable;
+                    error.details_schema = "hiroute.observation.read-failure/v1".into();
+                    error.observation_read = Some(details);
+                }
+                reply
+            }
         }
     }
 
@@ -755,12 +791,36 @@ fn map_observation_error(error: ObservationQueryError) -> ErrorCode {
         ObservationQueryError::Unauthorized => ErrorCode::CapabilityDenied,
         ObservationQueryError::NotFound => ErrorCode::ResourceNotFound,
         ObservationQueryError::InvalidQuery => ErrorCode::InvalidArguments,
-        ObservationQueryError::Unavailable | ObservationQueryError::Corrupt => {
-            ErrorCode::ObservationUnavailable
-        }
+        ObservationQueryError::Unavailable
+        | ObservationQueryError::Corrupt
+        | ObservationQueryError::ReadTimeout
+        | ObservationQueryError::ReaderBusy
+        | ObservationQueryError::IndexUnavailable => ErrorCode::ObservationUnavailable,
         ObservationQueryError::StalePreview => ErrorCode::ChangePreviewStale,
         ObservationQueryError::RevisionConflict => ErrorCode::RevisionConflict,
     }
+}
+
+fn observation_read_failure(
+    error: &ObservationQueryError,
+) -> Option<hiroute_application_api::ObservationReadFailureV1> {
+    use hiroute_application_api::{ObservationReadFailureReasonV1 as R, ObservationReadFailureV1};
+    let (reason, retry_after_ms, action) = match error {
+        ObservationQueryError::ReadTimeout => (R::Timeout, 100, "retry_scoped_read"),
+        ObservationQueryError::ReaderBusy => (R::ReaderBusy, 100, "retry_read"),
+        ObservationQueryError::IndexUnavailable => {
+            (R::IndexUnavailable, 1000, "check_observation_index_status")
+        }
+        ObservationQueryError::Unavailable | ObservationQueryError::Corrupt => {
+            (R::StorageUnavailable, 1000, "check_service_and_storage")
+        }
+        _ => return None,
+    };
+    Some(ObservationReadFailureV1 {
+        reason,
+        retry_after_ms,
+        action: action.into(),
+    })
 }
 
 fn accepted_apply(

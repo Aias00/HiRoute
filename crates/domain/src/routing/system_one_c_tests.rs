@@ -93,7 +93,12 @@ fn legacy_omission_and_rubric_digest_remain_byte_stable() {
             .get("assessment_review")
             .is_none()
     );
-    assert!(editor.smart.historical_applicability.is_none());
+    assert!(
+        serde_json::to_value(&editor.smart)
+            .unwrap()
+            .get("historical_applicability")
+            .is_none()
+    );
     let j = JudgmentSettingsV1::default();
     assert_eq!(
         j.execution_policy("old").criteria_digest,

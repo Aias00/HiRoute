@@ -206,6 +206,16 @@ impl ProductionGatewayRuntime {
                 })
                 .collect(),
             };
+        if hiroute_domain::native_mode(mode) {
+            let protocol = hiroute_domain::FrozenNativeProtocolV1::freeze(
+                &hiroute_domain::NativeProtocolV1::default(),
+                classifier.decision.clone(),
+                ["local", "general"]
+                    .map(|id| (id.to_owned(), hiroute_domain::JudgmentSettingsV1::default())),
+            )
+            .map_err(|_| ClassifierDiagnosticError::InvalidConfig)?;
+            Arc::make_mut(&mut classifier).native_protocol = Some(protocol);
+        }
         let config_digest = hiroute_domain::CanonicalDigest::of(mode)
             .map_err(|_| ClassifierDiagnosticError::InvalidConfig)?;
         let strategy = ComplexityV1::compile_with_classifier(

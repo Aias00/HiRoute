@@ -3,44 +3,15 @@ use super::*;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AssessmentStandardV1 {
     Default,
     Custom,
 }
 
-/// User-facing capability option. Protocol identity is supplied by HiRoute.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct HistoricalApplicabilityV1 {
-    pub prior_context_max_turns: u8,
-}
-impl Default for HistoricalApplicabilityV1 {
-    fn default() -> Self {
-        Self {
-            prior_context_max_turns: 8,
-        }
-    }
-}
-impl HistoricalApplicabilityV1 {
-    pub fn selection(&self) -> NativeProtocolSelectionV1 {
-        NativeProtocolSelectionV1 {
-            prior_context_max_turns: self.prior_context_max_turns,
-            ..Default::default()
-        }
-    }
-}
-impl From<&NativeProtocolSelectionV1> for HistoricalApplicabilityV1 {
-    fn from(value: &NativeProtocolSelectionV1) -> Self {
-        Self {
-            prior_context_max_turns: value.prior_context_max_turns,
-        }
-    }
-}
-
 /// Internal selection retained in effective authoring and sealed Plan configuration.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct NativeProtocolSelectionV1 {
     pub schema: String,

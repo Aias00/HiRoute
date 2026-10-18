@@ -77,11 +77,10 @@ fn definitions() -> Value {
             "candidates":reference("candidates"),"primary_candidates":reference("candidates"),"judgment":{"oneOf":[{"type":"null"},reference("judgment")]}
         }),
     );
-    let native = super::native_protocol::authoring();
     let routing = object(
         &["classifier", "branches", "default_branch_id", "judgment"],
         json!({
-            "historical_applicability":native,"classifier":classifier,"branches":{"type":"array","maxItems":16,"items":branch},"default_branch_id":{"type":"string","maxLength":128},"judgment":reference("judgment"),"reselect_on_user_message":{"type":"boolean","deprecated":true,"description":"Compatibility-only no-op. Follow-ups always prefer a valid held candidate within the newly selected group."}
+            "classifier":classifier,"branches":{"type":"array","maxItems":16,"items":branch},"default_branch_id":{"type":"string","maxLength":128},"judgment":reference("judgment"),"reselect_on_user_message":{"type":"boolean","deprecated":true,"description":"Compatibility-only no-op. Follow-ups always prefer a valid held candidate within the newly selected group."}
         }),
     );
     let smart = object(
@@ -92,7 +91,7 @@ fn definitions() -> Value {
             "classifier",
             "complex_keywords",
         ],
-        json!({"historical_applicability":native,"economy":reference("candidates"),"primary":reference("candidates"),"judgment":reference("judgment"),"reselect_on_user_message":{"type":"boolean","deprecated":true,"description":"Compatibility-only no-op. Follow-ups always prefer a valid held candidate within the newly selected group."},"classifier":classifier,"complex_keywords":{"type":"array","maxItems":64,"items":{"type":"string","maxLength":64}}}),
+        json!({"economy":reference("candidates"),"primary":reference("candidates"),"judgment":reference("judgment"),"reselect_on_user_message":{"type":"boolean","deprecated":true,"description":"Compatibility-only no-op. Follow-ups always prefer a valid held candidate within the newly selected group."},"classifier":classifier,"complex_keywords":{"type":"array","maxItems":64,"items":{"type":"string","maxLength":64}}}),
     );
     let free = object(
         &["candidates", "primary", "primary_fallback"],

@@ -23,7 +23,10 @@ fn qoder_model_entry_is_explicit_and_never_adopts_worker_or_mixed_credentials() 
             inbound_authorization(target, &headers).as_deref(),
             Some("Bearer local-model-grant")
         );
-        assert!(inbound_authorization("/v1/responses", &headers).is_none());
+        assert_eq!(
+            inbound_authorization("/v1/responses", &headers).as_deref(),
+            Some("Bearer local-model-grant")
+        );
         headers.insert(
             "x-hiroute-token",
             HeaderValue::from_static("local-model-grant"),
@@ -121,13 +124,37 @@ fn native_messages_api_key_carrier_is_limited_to_run_model_authority() {
 }
 
 #[test]
-fn model_entry_uses_independent_grant_without_native_bearer_fallback() {
+fn ordinary_model_entries_share_the_standard_bearer_carrier() {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        AUTHORIZATION,
+        HeaderValue::from_static("Bearer local-model-grant"),
+    );
+    for path in [
+        "/v1/responses",
+        "/v1/chat/completions",
+        "/v1/messages",
+        "/v1/models",
+    ] {
+        assert_eq!(
+            inbound_authorization(path, &headers).as_deref(),
+            Some("Bearer local-model-grant")
+        );
+    }
+    headers.remove(AUTHORIZATION);
+    headers.insert("x-api-key", HeaderValue::from_static("local-model-grant"));
+    assert!(inbound_authorization("/v1/messages", &headers).is_none());
+}
+
+#[test]
+fn explicit_model_grant_keeps_precedence_over_native_sdk_authorization() {
     let mut headers = HeaderMap::new();
     headers.insert(
         AUTHORIZATION,
         HeaderValue::from_static("Bearer native-oauth"),
     );
-    assert!(inbound_authorization("/v1/responses", &headers).is_none());
+    // Extraction alone does not authenticate native-oauth; the issued-grant
+    // verifier denies it. A retained explicit carrier still takes precedence.
     headers.insert("x-hiroute-token", HeaderValue::from_static("model-grant"));
     assert_eq!(
         inbound_authorization("/v1/responses", &headers).as_deref(),
@@ -135,6 +162,10 @@ fn model_entry_uses_independent_grant_without_native_bearer_fallback() {
     );
     assert_eq!(
         inbound_authorization("/v1/messages", &headers).as_deref(),
+        Some("Bearer model-grant")
+    );
+    assert_eq!(
+        inbound_authorization("/v1/chat/completions", &headers).as_deref(),
         Some("Bearer model-grant")
     );
     headers.insert("x-hiroute-token", HeaderValue::from_static(""));
@@ -147,12 +178,33 @@ fn repeated_or_combined_grant_headers_are_rejected() {
     headers.append("x-hiroute-token", HeaderValue::from_static("first"));
     headers.append("x-hiroute-token", HeaderValue::from_static("second"));
     assert!(inbound_authorization("/v1/responses", &headers).is_none());
+    assert!(inbound_authorization("/v1/chat/completions", &headers).is_none());
     headers.insert("x-hiroute-token", HeaderValue::from_static("first,second"));
     assert!(inbound_authorization("/v1/responses", &headers).is_none());
     headers.remove("x-hiroute-token");
     headers.append(AUTHORIZATION, HeaderValue::from_static("Bearer first"));
     headers.append(AUTHORIZATION, HeaderValue::from_static("Bearer second"));
     assert!(inbound_authorization("/v1/messages", &headers).is_none());
+    headers.clear();
+    for invalid in [
+        "Basic local-model-grant",
+        "Bearer ",
+        "Bearer first,second",
+        "Bearer first second",
+    ] {
+        headers.insert(AUTHORIZATION, HeaderValue::from_static(invalid));
+        for path in [
+            "/v1/responses",
+            "/v1/chat/completions",
+            "/v1/messages",
+            "/v1/models",
+        ] {
+            assert!(
+                inbound_authorization(path, &headers).is_none(),
+                "{path}: {invalid}"
+            );
+        }
+    }
 }
 
 #[test]

@@ -27,6 +27,8 @@ pub(crate) fn insert(
     )?;
     super::sensitive::project_model(transaction, envelope)?;
     super::safe_facts::project(transaction, envelope, digest)?;
+    crate::analysis::project_metadata(transaction, envelope)
+        .map_err(|_| ObservationStoreError::ActivityUnavailable)?;
     transaction
         .execute(
             "INSERT INTO execution_fact_events

@@ -25,7 +25,7 @@ pub fn native_mode(mode: &super::ComplexityClassifierModeV1) -> bool {
     matches!(mode, super::ComplexityClassifierModeV1::DecisionService { service } if matches!(service.connection, super::DecisionConnectionV1::SystemOne { .. }))
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct NativeFixedContentV1 {
     pub degree_prefix: String,
@@ -68,7 +68,7 @@ impl NativeFixedContentV1 {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct NativeProtocolV1 {
     pub schema: String,
@@ -94,7 +94,7 @@ impl NativeProtocolV1 {
         if self.fixed != NativeFixedContentV1::c_v1() {
             return Err(NativeProtocolError::FixedContent);
         }
-        if self.prior_context_max_turns > 8 {
+        if self.prior_context_max_turns != 8 {
             return Err(NativeProtocolError::HistoryCap);
         }
         Ok(())
@@ -161,7 +161,7 @@ pub fn incompatible_native_reference(c: bool, text: &str) -> bool {
     paths.iter().any(|p| text.contains(p))
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct FrozenAssessmentScopeV1 {
     #[serde(
@@ -174,7 +174,7 @@ pub struct FrozenAssessmentScopeV1 {
     pub standard: String,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct FrozenNativeProtocolV1 {
     pub protocol: NativeProtocolV1,
@@ -366,7 +366,7 @@ pub fn c_v1_branch_decision_definition(
     super::legacy_category::compose(branches, default_id, &template)
 }
 
-#[derive(Clone, Debug, Error, Eq, PartialEq)]
+#[derive(schemars::JsonSchema, Clone, Debug, Error, Eq, PartialEq)]
 pub enum NativeProtocolError {
     #[error("native protocol semantic version is unsupported")]
     Unsupported,

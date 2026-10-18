@@ -1,4 +1,4 @@
-"""Opt-in C through real CLI, retained versions, publication and explicit diagnostics.
+"""Built-in native default through real CLI, publication and explicit diagnostics.
 
 The only upstream is the caller's counted local deterministic HTTP fixture.
 """
@@ -49,7 +49,7 @@ def frozen_from(preview):
 
 
 def exercise(product, cli, service, endpoint, selection):
-    protocol, stock = native_protocol(product.repo)
+    _, stock = native_protocol(product.repo)
     smart = copy.deepcopy(product.editor['smart'])
     released = json.loads((product.repo / 'crates/domain/src/routing/authoring/fixtures/released-default-assessment.v1.json').read_text())
     smart['judgment']['competence'].update(released['assessment'])
@@ -58,18 +58,19 @@ def exercise(product, cli, service, endpoint, selection):
     smart['judgment']['competence']['floor_millis'] = 317
     original = copy.deepcopy(smart['judgment'])
     calls = len(endpoint.requests)
+    editor = copy.deepcopy(product.editor)
+    editor.update(mode='smart_saving', smart=smart)
 
-    def change_for(editor):
-        return plan_change(product, 'update', **editor)
+    def change_for(value):
+        return plan_change(product, 'update', **value)
 
-    def publish(editor, key):
-        change = change_for(editor)
+    def publish(value, key):
+        change = change_for(value)
         preview = product.preview('routing preview', {'change': change})
-        assert 'assessment_transition' not in preview and 'assessment_choices' not in change
+        assert 'assessment_transition' not in preview
         product.apply('routing apply', 'ApplyAgentPlanChange', preview, {'change': change}, key)
-        product.stop()
-        product.start()
-        assert len(endpoint.requests) == calls, 'save/publication/restart implicitly probed a provider'
+        product.stop(); product.start()
+        assert len(endpoint.requests) == calls, 'publication/restart implicitly probed a provider'
         saved = cli('routing show ' + product.plan_id)['data']
         assert 'assessment_transition' not in saved
         return preview, saved
@@ -77,40 +78,27 @@ def exercise(product, cli, service, endpoint, selection):
     def judgment(saved):
         return saved['desired']['strategy']['judgment']
 
-    editor = copy.deepcopy(product.editor)
-    editor.update(mode='smart_saving', smart=smart)
-    _, legacy = publish(editor, 'applicability-off-default')
-    legacy_identity = copy.deepcopy(legacy['head']['reference'])
-    smart['historical_applicability'] = protocol
-    preview, saved = publish(editor, 'applicability-on-default')
+    preview, saved = publish(editor, 'native-current-default')
     frozen = frozen_from(preview)
-    assert 'fixed' not in protocol and 'digest' not in protocol
-    assert frozen['protocol']['schema'] == C and 'fixed' in frozen['protocol']
+    assert frozen['protocol']['schema'] == C and frozen['protocol']['prior_context_max_turns'] == 8
     assert frozen['scopes']['smart_saving']['standard'] == 'default'
     assert judgment(saved)['degree'] == original['degree']
     assert judgment(saved)['competence']['floor_millis'] == 317
     assert judgment(saved)['competence']['instructions'] == stock['instructions']
-    smart['judgment'] = copy.deepcopy(judgment(saved))
-    smart.pop('historical_applicability')
-    _, saved = publish(editor, 'applicability-off-default-again')
-    assert judgment(saved)['competence']['instructions'] == original['competence']['instructions']
-    assert judgment(saved)['competence']['criteria'] == original['competence']['criteria']
-    assert judgment(saved)['competence']['floor_millis'] == 317
-    smart['judgment'] = copy.deepcopy(judgment(saved))
-    smart['historical_applicability'] = protocol
-    _, saved = publish(editor, 'applicability-on-default-again')
+    assert judgment(saved)['competence']['criteria'] == stock['criteria']
+    assert not any(field in editor['smart'] for field in ['native_protocol', 'historical_applicability', 'prior_context_max_turns'])
+    for field in ['native_protocol', 'historical_applicability', 'prior_context_max_turns']:
+        invalid = copy.deepcopy(editor)
+        invalid['smart'][field] = {'prior_context_max_turns': 8}
+        assert cli('routing preview', {'change': change_for(invalid)}, ok=False)['status'] != 'succeeded'
     smart['judgment'] = copy.deepcopy(judgment(saved))
     smart['judgment']['competence']['standard'] = 'custom'
-    smart['judgment']['competence']['instructions'] += '\n  Assess the requested deliverable.  '
+    smart['judgment']['competence']['instructions'] = '  Preserve this custom instruction.\nSecond line.  '
     smart['judgment']['competence']['criteria'][1] += '  '
     custom = copy.deepcopy(smart['judgment'])
-    for enabled in [True, False, True]:
-        if enabled:
-            smart['historical_applicability'] = protocol
-        else:
-            smart.pop('historical_applicability', None)
-        preview, saved = publish(editor, 'applicability-custom-' + str(enabled) + '-' + str(len(endpoint.requests)) + '-' + str(time.monotonic_ns()))
-        assert judgment(saved) == custom, 'toggle rewrote custom text or thresholds'
+    for index in range(2):
+        preview, saved = publish(editor, 'native-custom-republish-' + str(index))
+        assert judgment(saved) == custom, 'republication rewrote custom text or thresholds'
     frozen = frozen_from(preview)
     assert frozen['scopes']['smart_saving']['standard'] == 'custom'
     bad = copy.deepcopy(editor)
@@ -118,19 +106,19 @@ def exercise(product, cli, service, endpoint, selection):
     rejected = cli('routing preview', {'change': change_for(bad)}, ok=False)
     assert rejected['status'] != 'succeeded' and rejected['data']['field'] == 'smart_saving.competence.instructions', rejected
 
-    legacy_test = cli('decision services test', {'schema': 'hiroute.classifier-decision-test/v1',
-        'classifier': smart['classifier']})['data']
+    connectivity = cli('decision services test', {'schema': 'hiroute.classifier-decision-test/v1', 'classifier': smart['classifier']})['data']
     calls += 1
-    assert legacy_test['outcome'] == 'passed' and 'state' not in legacy_test
+    assert connectivity['outcome'] == 'passed' and 'state' not in connectivity
+    connection_body = endpoint.requests[-1][1]
+    assert set(connection_body['state']) == {'latest_user', 'prior_context', 'assessment_stage', 'history_partial'}
+    assert connection_body['state']['assessment_stage'] == []
     request = {'schema': 'hiroute.historical-applicability-test/v1', 'service_id': service['id'],
                'service_revision': service['revision'], 'protocol': frozen, 'shape': 'standard'}
     endpoint.c_vectors = False
-    negative = cli('decision services test', request)['data']
-    calls += 1
+    negative = cli('decision services test', request)['data']; calls += 1
     assert negative['state'] == 'unsupported', negative
     endpoint.c_vectors = True
-    positive = cli('decision services test', request)['data']
-    calls += 1
+    positive = cli('decision services test', request)['data']; calls += 1
     assert positive['state'] == 'verified' and positive['question_count'] == 3, positive
     assert positive['service_revision'] == service['revision'] and positive['protocol_digest'] == frozen['digest']
     assert positive['endpoint_digest'] == digest(service['connection']['endpoint'])
@@ -141,41 +129,27 @@ def exercise(product, cli, service, endpoint, selection):
     assert cli('decision services test', stale, ok=False)['status'] != 'succeeded'
     assert len(endpoint.requests) == calls, 'missing saved revision dispatched a request'
 
-    routing_calls = 0
-    if product.cpa_args:
-        routing_calls = execute_and_inspect(product, endpoint, saved)
-        calls += routing_calls
-
+    routing_calls = execute_and_inspect(product, endpoint, saved) if product.cpa_args else 0
+    calls += routing_calls
     branches = [{'id': f'category-{i}', 'name': f'Category {i}', 'condition': f'Synthetic work {i}',
                  'candidates': [selection], 'primary_candidates': [selection], 'judgment': None} for i in range(16)]
-    default = copy.deepcopy(original)
-    default['competence']['standard'] = 'default'
+    default = copy.deepcopy(original); default['competence']['standard'] = 'default'
     routing = {'classifier': smart['classifier'], 'branches': branches, 'default_branch_id': branches[0]['id'],
-               'judgment': default, 'historical_applicability': protocol, 'reselect_on_user_message': False}
-    maximum_change = plan_change(product, 'update', mode='custom_branches', branch_routing=routing)
-    maximum = frozen_from(product.preview('routing preview', {'change': maximum_change}))
+               'judgment': default, 'reselect_on_user_message': False}
+    maximum = frozen_from(product.preview('routing preview', {'change': plan_change(product, 'update', mode='custom_branches', branch_routing=routing)}))
     assert all(scope['standard'] == 'default' for scope in maximum['scopes'].values())
     request.update(protocol=maximum, shape='max_branches')
-    result = cli('decision services test', request)['data']
-    calls += 1
+    result = cli('decision services test', request)['data']; calls += 1
     assert result['state'] == 'verified' and result['question_count'] == 19, result
     assert len(endpoint.requests[-1][1]['questions']) == 19
-
-    smart.pop('historical_applicability')
-    _, saved = publish(editor, 'applicability-off-custom-final')
-    assert judgment(saved) == custom
-    if product.cpa_args:
-        calls += inspect_mixed_after_rollback(product, endpoint)
-        routing_calls += 1
-    # Reset uses only the current default, with no retained-revision dependency.
     smart['judgment']['competence']['standard'] = 'default'
-    smart['judgment']['competence']['instructions'] = original['competence']['instructions']
-    smart['judgment']['competence']['criteria'] = original['competence']['criteria']
-    _, reset = publish(editor, 'applicability-reset-default')
-    assert judgment(reset)['competence']['instructions'] == original['competence']['instructions']
+    _, reset = publish(editor, 'native-reset-default')
+    assert judgment(reset)['competence']['instructions'] == stock['instructions']
+    assert judgment(reset)['competence']['criteria'] == stock['criteria']
     assert judgment(reset)['degree'] == original['degree']
+    assert judgment(reset)['competence']['floor_millis'] == 317
     endpoint.c_vectors = False
-    print(json.dumps({'scenario': 'default-custom-toggle-restart-connectivity-and-purpose-named-applicability-probes',
+    print(json.dumps({'scenario': 'native-default-custom-republication-restart-and-explicit-diagnostics',
                       'state': 'green', 'explicit_calls': 4, 'routing_calls': routing_calls, 'implicit_calls': 0}), flush=True)
 
 
@@ -252,37 +226,3 @@ def execute_and_inspect(product, endpoint, saved):
     return 2
 
 
-def inspect_mixed_after_rollback(product, endpoint):
-    """A current legacy decision and C decisions share one complete retained Plan scope."""
-    before = len(endpoint.requests)
-    client = http.client.HTTPConnection('127.0.0.1', product.port, timeout=30)
-    try:
-        client.request('POST', '/v1/responses', encoded({'model': product.model_alias,
-            'input': 'Execute the deterministic step after explicit rollback.', 'stream': True}),
-            {'Content-Type': 'application/json', 'X-HiRoute-Token': product.bearer(product.agent_connection),
-             'session-id': 'c-protocol-product-retained'})
-        response = client.getresponse(); body = response.read()
-        assert response.status == 200, (response.status, body[:500])
-    finally:
-        client.close()
-    assert len(endpoint.requests) == before + 1
-    query = {'plan_id': product.plan_id, 'include_routing_observations': True, 'from_ms': product.c_observation_from_ms,
-             'to_ms': int(time.time() * 1000) + 60000, 'limit': 20}
-    deadline = time.monotonic() + 30
-    while True:
-        result = product.control('GetPlanQualitySamples', {'schema': 'hiroute.observation.query/v2',
-            'intent': {'view': 'plan_quality', 'query': query}}, success=False)
-        if result.get('error'):
-            assert result['error']['code'] == 'CHANGE_PREVIEW_STALE', result
-        else:
-            summary = result['data']['routing_observations']
-            if summary['retained_decisions'] >= 3:
-                break
-        assert time.monotonic() < deadline, 'Rolled-back native decision did not reach retained observations'
-        time.sleep(.05)
-    assert summary['coverage'] == 'complete' and summary['known_non_c_decisions'] == 1 and summary['legacy_or_unknown_decisions'] == 0, summary
-    counts = summary['cohorts'][0]['counts']
-    assert counts['c_decisions'] == 2 and counts['suppressed_per_opportunity'] == 1.0 and counts['suppressed_per_c_decision'] == 0.5, counts
-    print(json.dumps({'scenario':'current-c-and-legacy-all-revisions-product-query','state':'green',
-                      'known_non_c_decisions':1,'c_decisions':2,'coverage':'complete'}), flush=True)
-    return 1

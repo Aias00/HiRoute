@@ -7,8 +7,14 @@
 //! transport.
 
 mod agent_connection;
+mod agent_discovery;
+mod agent_effective_state;
+pub use agent_effective_state::*;
 mod agent_grant_raw;
 mod agent_settings;
+mod agent_settings_preview;
+pub use agent_discovery::*;
+pub use agent_settings_preview::*;
 mod classifier_diagnostic;
 mod classifier_diagnostic_c;
 pub use classifier_diagnostic_c::*;
@@ -23,9 +29,13 @@ mod worker_actions;
 pub use worker_actions::*;
 mod delegation_tasks;
 pub use delegation_tasks::*;
+mod management_results;
+pub use management_results::*;
+mod command_schemas;
 mod commands;
 pub use classifier_diagnostic::*;
 pub use client_access::*;
+pub use command_schemas::{CommandSchemasV1, command_schemas};
 mod compute_control;
 mod compute_key_masks;
 mod compute_management;
@@ -66,11 +76,11 @@ pub use hiroute_domain::delegation::{
 pub use hiroute_domain::{
     AgentActivationModeV1, AgentPlanId, CHANGE_SPEC_SCHEMA_V1, CanonicalDigest, ChangeSpecV1,
     ComputeCredentialSelectionError, ComputeCredentialSelectionV2, ContentMode,
-    HIDDEN_AGENT_GRANT_HELPER_VERB_V1, MANAGED_CLAUDE_SETTING_SOURCES_ARGUMENT_V1,
-    MANAGED_CLAUDE_SETTINGS_ARGUMENT_V1, ManagedClaudeLaunchDescriptorV2, ManagedLaunchProfileV1,
-    MaterializationState, ModelAlias, ModelSwitchFilter, PRODUCT_CONTRACT_REVISION,
-    PROPOSAL_MAP_REVISION, RevisionSetV1, SchemaVersion, SessionId, SessionListQueryV1,
-    UpstreamProtocol, ValueGroupByV1, ValueQueryV1,
+    DecisionServiceChangeV1, HIDDEN_AGENT_GRANT_HELPER_VERB_V1,
+    MANAGED_CLAUDE_SETTING_SOURCES_ARGUMENT_V1, MANAGED_CLAUDE_SETTINGS_ARGUMENT_V1,
+    ManagedClaudeLaunchDescriptorV2, ManagedLaunchProfileV1, MaterializationState, ModelAlias,
+    ModelSwitchFilter, PRODUCT_CONTRACT_REVISION, PROPOSAL_MAP_REVISION, RevisionSetV1,
+    SchemaVersion, SessionId, SessionListQueryV1, UpstreamProtocol, ValueGroupByV1, ValueQueryV1,
 };
 pub use protocol::{
     AgentCheckRequestV1, AgentCheckScopeV1, AgentCheckSuiteV1, AgentModelCheckTargetV2,
@@ -256,14 +266,14 @@ mod protocol_tests {
     #[test]
     fn p0_registry_and_staging_invariants_remain_closed() {
         let commands = planned_commands();
-        assert_eq!(commands.len(), 87);
+        assert_eq!(commands.len(), 88);
         assert_eq!(
             commands
                 .iter()
                 .map(|command| &command.command_id)
                 .collect::<BTreeSet<_>>()
                 .len(),
-            87
+            88
         );
         assert_eq!(
             commands
@@ -271,7 +281,7 @@ mod protocol_tests {
                 .map(|command| &command.path)
                 .collect::<BTreeSet<_>>()
                 .len(),
-            87
+            88
         );
         assert_eq!(
             commands
@@ -279,7 +289,7 @@ mod protocol_tests {
                 .map(|command| &command.operation_id)
                 .collect::<BTreeSet<_>>()
                 .len(),
-            87
+            88
         );
         for operation in ["GetClientServiceStatus", "ListWorkPlans"] {
             let command = command_by_operation(operation).unwrap();
@@ -304,7 +314,7 @@ mod protocol_tests {
             CommandLifecycle::Released
         );
         let release = release_manifest();
-        assert_eq!(release.commands.len(), 51);
+        assert_eq!(release.commands.len(), 55);
         assert!(release.commands.iter().all(|command| {
             command.lifecycle == CommandLifecycle::Released
                 && command.positive.state == CoverageState::Executable

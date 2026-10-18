@@ -98,7 +98,7 @@ async fn edited_draft_publish_uses_submitted_content_and_consumes_the_exact_draf
     );
 }
 #[tokio::test]
-async fn protocol_capability_toggle_preserves_defaults_and_custom_text_in_native_publication() {
+async fn native_default_preserves_custom_text_across_publication_and_restart() {
     use hiroute_domain::*;
     let root = prepare();
     let mut session = open(root.path());
@@ -137,10 +137,8 @@ async fn protocol_capability_toggle_preserves_defaults_and_custom_text_in_native
     editor.smart.classifier = ComplexityClassifierModeV1::DecisionService {
         service: Box::new(service),
     };
-    editor.smart.historical_applicability = Some(HistoricalApplicabilityV1::default());
     let mut current = original.clone();
-    for enabled in [true, false, true] {
-        editor.smart.historical_applicability = enabled.then(HistoricalApplicabilityV1::default);
+    for _ in 0..2 {
         let confirmation = session
             .preview_editor(editor_input("publish", &current, &editor, None))
             .await
@@ -159,23 +157,16 @@ async fn protocol_capability_toggle_preserves_defaults_and_custom_text_in_native
             scope.competence.standard,
             Some(AssessmentStandardV1::Default)
         );
-        if enabled {
-            assert_eq!(
-                scope.competence.criteria,
-                stock_c_questions()["q1"]["criteria"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|v| v.as_str().unwrap().to_owned())
-                    .collect::<Vec<_>>()
-                    .as_slice()
-            );
-        } else {
-            assert_eq!(
-                scope.competence.instructions,
-                DEFAULT_COMPETENCE_INSTRUCTIONS
-            );
-        }
+        assert_eq!(
+            scope.competence.criteria,
+            stock_c_questions()["q1"]["criteria"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v.as_str().unwrap().to_owned())
+                .collect::<Vec<_>>()
+                .as_slice()
+        );
         editor = current.desired.editor(None).unwrap();
     }
     editor.smart.judgment.competence.standard = Some(AssessmentStandardV1::Custom);
@@ -183,8 +174,7 @@ async fn protocol_capability_toggle_preserves_defaults_and_custom_text_in_native
         "  Preserve custom text.\nSecond line.  ".into();
     editor.smart.judgment.competence.criteria[1].push_str("  ");
     let custom = editor.smart.judgment.competence.clone();
-    for enabled in [true, false] {
-        editor.smart.historical_applicability = enabled.then(HistoricalApplicabilityV1::default);
+    for _ in 0..2 {
         let confirmation = session
             .preview_editor(editor_input("publish", &current, &editor, None))
             .await

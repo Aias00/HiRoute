@@ -70,6 +70,7 @@ pub(crate) struct CompiledModelExecution {
 
 #[derive(Clone, Debug)]
 pub(crate) struct CompiledGrant {
+    pub consumer: Option<hiroute_domain::AgentModelConsumerV1>,
     pub grant_id: Arc<str>,
     pub generation: u64,
     pub bearer_token_sha256: Arc<str>,
@@ -785,7 +786,7 @@ fn compile_planner_policy(
                     .collect(),
             }],
             None,
-            StaticCostPolicyV1::SubscriptionAndFree,
+            StaticCostPolicyV1::PublishedCandidates,
         ),
         Some(routing) => compile_routing(routing, &candidate_key_by_local_id)?,
     };
@@ -894,7 +895,9 @@ fn compile_routing(
                     reselect_on_user_message: *reselect_on_user_message,
                 },
                 Some(strategy),
-                StaticCostPolicyV1::SubscriptionAndFree,
+                // Product has already authorized these explicit, frozen group members,
+                // including paid API bindings. Cost labels are not an entitlement gate.
+                StaticCostPolicyV1::PublishedCandidates,
             )
         }
         AliasRequestOwnedRouteV1::Classified {
@@ -951,7 +954,9 @@ fn compile_routing(
                     )
                     .map_err(|_| PublicationInstallError::InvalidPlannerPolicy)?,
                 ),
-                StaticCostPolicyV1::SubscriptionAndFree,
+                // Product has already authorized these explicit, frozen group members,
+                // including paid API bindings. Cost labels are not an entitlement gate.
+                StaticCostPolicyV1::PublishedCandidates,
             )
         }
         AliasRequestOwnedRouteV1::Ordered {
@@ -963,7 +968,9 @@ fn compile_routing(
                     group_id: "custom".into(),
                 },
                 None,
-                StaticCostPolicyV1::SubscriptionAndFree,
+                // Product has already authorized these explicit, frozen group members,
+                // including paid API bindings. Cost labels are not an entitlement gate.
+                StaticCostPolicyV1::PublishedCandidates,
             ),
             [AliasGroupIdV1::Free] => (
                 MaterializedRouteV1::FreeFirst {
@@ -985,7 +992,7 @@ fn compile_routing(
                 None,
                 match cost_policy {
                     AliasCostPolicyV1::StrictFree => StaticCostPolicyV1::StrictFree,
-                    AliasCostPolicyV1::ApiEquivalent => StaticCostPolicyV1::SubscriptionAndFree,
+                    AliasCostPolicyV1::ApiEquivalent => StaticCostPolicyV1::PublishedCandidates,
                 },
             ),
             _ => return Err(PublicationInstallError::InvalidPlannerPolicy),
@@ -1115,6 +1122,7 @@ fn compile_grant(grant: &GrantV1, revision: u64) -> Result<CompiledGrant, Public
         })
         .collect::<Result<BTreeMap<_, _>, PublicationInstallError>>()?;
     Ok(CompiledGrant {
+        consumer: grant.consumer,
         grant_id: grant.grant_id.clone().into(),
         generation: grant.generation,
         bearer_token_sha256: grant.bearer_token_sha256.clone().into(),

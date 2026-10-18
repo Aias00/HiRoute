@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use super::AgentTurnAttributionV1;
 
 /// One bounded query over the latest persisted quality value for each execution segment.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanQualitySamplesQuery {
     #[serde(default, skip_serializing_if = "routing_observations_disabled")]
@@ -37,7 +37,7 @@ pub struct PlanQualitySamplesQuery {
     pub cursor: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanQualityAssessment {
     pub event_id: String,
@@ -54,7 +54,7 @@ pub struct PlanQualityAssessment {
     pub evidence_available: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanQualitySample {
     /// The stage-opening selection; actual execution and later assessment stay separate.
@@ -97,7 +97,7 @@ pub struct PlanQualitySample {
     pub assessment: Option<PlanQualityAssessment>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanQualitySamplesPage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -113,7 +113,7 @@ fn routing_observations_disabled(value: &bool) -> bool {
 }
 
 /// Full authorized scope, independent of the stage page and detail filters.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanQualitySummary {
     pub models: Vec<PlanQualityModelSummary>,
@@ -123,7 +123,7 @@ pub struct PlanQualitySummary {
     pub available_revisions: Vec<u64>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanQualityModelSummary {
     pub branch_policy: Option<crate::BranchExecutionPolicyV1>,
@@ -136,7 +136,7 @@ pub struct PlanQualityModelSummary {
 }
 
 /// The exact aggregate key, also used for stage drill-down (including nulls).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanQualityExecutionIdentity {
     pub group: Option<crate::ExecutionGroupV1>,
@@ -150,14 +150,14 @@ pub struct PlanQualityExecutionIdentity {
     pub attribution: AgentTurnAttributionV1,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PlanCompetenceFilter {
     BelowFloor,
     MeetsFloor,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanQualityUpgrade {
     pub decision: crate::CompetenceProtectionV1,

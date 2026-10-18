@@ -60,6 +60,46 @@ const SCOPE: &str = "
           AND t.delete_scope='content_only'))
 ";
 
+const SAMPLE_SELECT: &str = "SELECT q.segment_id,q.session_id,q.plan_id,q.plan_revision,
+                        q.selected_branch_id,q.executed_branch_id,q.model_configuration_id,
+                        q.profile_digest,q.attribution,q.first_turn_id,q.first_turn_ordinal,
+                        q.last_observed_turn_id,q.last_observed_turn_ordinal,q.first_at_ms,
+                        q.last_at_ms,q.history_partial,q.first_request_id,q.last_request_id,
+                        EXISTS(SELECT 1 FROM logical_requests first_req
+                          WHERE first_req.workspace_id=q.workspace_id
+                            AND first_req.session_id=q.session_id
+                            AND first_req.request_id=q.first_request_id)
+                          AND EXISTS(SELECT 1 FROM logical_requests last_req
+                          WHERE last_req.workspace_id=q.workspace_id
+                            AND last_req.session_id=q.session_id
+                            AND last_req.request_id=q.last_request_id),
+                        CASE WHEN COALESCE(l.conflicted,0)=0 THEN json_extract(l.body_json,'$.task_id') END,
+                        CASE WHEN COALESCE(l.conflicted,0)=0 THEN l.run_id END,
+                        q.assessment_event_id,q.assessment_trigger_request_id,q.assessed_at_ms,
+                        q.target_from_turn_id,q.target_through_turn_id,q.target_from_ordinal,
+                        q.target_through_ordinal,q.score,q.assessment_partial,
+                        CASE WHEN q.reason_present=1
+                          THEN json_extract(p.body_json,'$.fact.reason') END,
+                        q.assessment_event_id IS NOT NULL AND EXISTS(
+                          SELECT 1 FROM logical_requests trigger_req
+                          WHERE trigger_req.workspace_id=q.workspace_id
+                            AND trigger_req.session_id=q.session_id
+                            AND trigger_req.request_id=q.assessment_trigger_request_id),
+                        q.native_model,q.reasoning_profile_id,q.branch_execution_json,q.upgrade_json,
+                        (SELECT json_extract(pick.body_json,'$.fact.complexity')
+                         FROM execution_fact_events chosen
+                         JOIN observation_sensitive_payloads_v2 pick ON pick.id='fact:'||chosen.envelope_digest
+                         WHERE chosen.workspace_id=q.workspace_id AND chosen.request_id=q.first_request_id
+                           AND json_extract(pick.body_json,'$.fact.kind')='route_decision'
+                         ORDER BY chosen.sequence DESC LIMIT 1)
+                 FROM quality q
+                 LEFT JOIN observation_run_links l ON l.workspace_id=q.workspace_id
+                    AND l.request_id=q.first_request_id
+                 LEFT JOIN execution_fact_events e ON e.workspace_id=q.workspace_id
+                    AND e.event_id=q.assessment_event_id
+                 LEFT JOIN observation_sensitive_payloads_v2 p
+                    ON p.id='fact:'||e.envelope_digest";
+
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Cursor {
@@ -151,45 +191,7 @@ impl LocalObservationStore {
         let mut rows = {
             let sql = format!(
                 "WITH quality AS ({SCOPE})
-                 SELECT q.segment_id,q.session_id,q.plan_id,q.plan_revision,
-                        q.selected_branch_id,q.executed_branch_id,q.model_configuration_id,
-                        q.profile_digest,q.attribution,q.first_turn_id,q.first_turn_ordinal,
-                        q.last_observed_turn_id,q.last_observed_turn_ordinal,q.first_at_ms,
-                        q.last_at_ms,q.history_partial,q.first_request_id,q.last_request_id,
-                        EXISTS(SELECT 1 FROM logical_requests first_req
-                          WHERE first_req.workspace_id=q.workspace_id
-                            AND first_req.session_id=q.session_id
-                            AND first_req.request_id=q.first_request_id)
-                          AND EXISTS(SELECT 1 FROM logical_requests last_req
-                          WHERE last_req.workspace_id=q.workspace_id
-                            AND last_req.session_id=q.session_id
-                            AND last_req.request_id=q.last_request_id),
-                        CASE WHEN COALESCE(l.conflicted,0)=0 THEN json_extract(l.body_json,'$.task_id') END,
-                        CASE WHEN COALESCE(l.conflicted,0)=0 THEN l.run_id END,
-                        q.assessment_event_id,q.assessment_trigger_request_id,q.assessed_at_ms,
-                        q.target_from_turn_id,q.target_through_turn_id,q.target_from_ordinal,
-                        q.target_through_ordinal,q.score,q.assessment_partial,
-                        CASE WHEN q.reason_present=1
-                          THEN json_extract(p.body_json,'$.fact.reason') END,
-                        q.assessment_event_id IS NOT NULL AND EXISTS(
-                          SELECT 1 FROM logical_requests trigger_req
-                          WHERE trigger_req.workspace_id=q.workspace_id
-                            AND trigger_req.session_id=q.session_id
-                            AND trigger_req.request_id=q.assessment_trigger_request_id),
-                        q.native_model,q.reasoning_profile_id,q.branch_execution_json,q.upgrade_json,
-                        (SELECT json_extract(pick.body_json,'$.fact.complexity')
-                         FROM execution_fact_events chosen
-                         JOIN observation_sensitive_payloads_v2 pick ON pick.id='fact:'||chosen.envelope_digest
-                         WHERE chosen.workspace_id=q.workspace_id AND chosen.request_id=q.first_request_id
-                           AND json_extract(pick.body_json,'$.fact.kind')='route_decision'
-                         ORDER BY chosen.sequence DESC LIMIT 1)
-                 FROM quality q
-                 LEFT JOIN observation_run_links l ON l.workspace_id=q.workspace_id
-                    AND l.request_id=q.first_request_id
-                 LEFT JOIN execution_fact_events e ON e.workspace_id=q.workspace_id
-                    AND e.event_id=q.assessment_event_id
-                 LEFT JOIN observation_sensitive_payloads_v2 p
-                    ON p.id='fact:'||e.envelope_digest
+                 {SAMPLE_SELECT}
                  WHERE (:segment IS NULL OR q.segment_id=:segment)
                    AND (:model IS NULL OR q.model_configuration_id=:model)
                    AND (:unrated=0 OR q.reliable_score IS NULL)
@@ -351,6 +353,35 @@ fn summarize(
         models,
         available_revisions: revisions,
     })
+}
+
+/// Resolve a recorded stage for one selected request. This is evidence lookup,
+/// never a new classifier call, and shares the caller's transaction/deadline.
+pub(crate) fn routing_reason(
+    db: &Connection,
+    workspace: &str,
+    session: &str,
+    request: &str,
+) -> Result<Option<PlanQualitySample>, ObservationV2Error> {
+    use rusqlite::OptionalExtension;
+    Ok(db
+        .query_row(
+            &format!(
+                "WITH quality AS ({SCOPE}) {SAMPLE_SELECT}
+      WHERE q.session_id=:session
+        AND (q.first_request_id=:request OR q.last_request_id=:request OR q.segment_id=(
+          SELECT t.segment_id FROM observation_analysis_turns_v1 t WHERE t.workspace_id=q.workspace_id
+            AND t.request_id=:request AND t.partial=0))
+        AND EXISTS(SELECT 1 FROM logical_requests request WHERE request.workspace_id=q.workspace_id
+          AND request.session_id=q.session_id AND request.request_id=:request)
+      ORDER BY q.first_at_ms DESC,q.segment_id LIMIT 1"
+            ),
+            named_params! {":workspace":workspace,":from":0i64,":to":i64::MAX,
+            ":plan":Option::<String>::None,":session":session,":revision":Option::<u64>::None,
+            ":runs":Option::<String>::None,":request":request},
+            sample,
+        )
+        .optional()?)
 }
 
 fn sample(row: &rusqlite::Row<'_>) -> rusqlite::Result<PlanQualitySample> {

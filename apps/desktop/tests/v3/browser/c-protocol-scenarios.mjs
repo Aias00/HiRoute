@@ -1,46 +1,52 @@
 import { branchRouting } from '../../../src/features/decision-services/types.ts';
 import { defaultJudgment } from '../../../src/features/decision-services/types.ts';
-import { nativeProtocol, stockAssessment, contentDigest, C_PROTOCOL } from '../../../src/features/decision-services/native-protocol.ts';
+import stock from '../../../../../crates/domain/src/routing/fixtures/system_one_c_v1.json' with { type: 'json' };
+import { fixturePlanAuthoring } from './product-fixtures.ts';
 import { scenario } from './scenario-selection.mjs';
 
 export function cProtocolScenarios({ fresh, routing, click, until, all, text, calls, setInput, control }) {
   const assert = (value, message) => { if (!value) throw new Error(message); };
   const service = { id:'decision/ui-fixture',revision:7,name:'Saved decision fixture',connection:{kind:'system_one',provider:'compatible',model:'synthetic-model',endpoint:'https://decision.example/systemone',timeout_ms:3000,auth_header:{name:'Authorization',value_secret_ref:'decision/ui-fixture/r7'}} };
-  async function open(language, { enabled=false, branches=false, custom=false }={}) {
+  async function open(language, { branches=false, custom=false }={}) {
     await fresh(() => {
       control().handlers.decision_services=()=>({services:[service]});
+      let selectedPlan;
       control().handlers.desktop_snapshot=payload=>{
         const snapshot=structuredClone(control().fixtureResponse('desktop_snapshot',payload));
         const plan=snapshot.catalog.plans[0],strategy=plan.desired.strategy;
         strategy.classifier={kind:'decision_service',service};
-        if(enabled){strategy.native_protocol={schema:C_PROTOCOL,...nativeProtocol()};strategy.judgment=stockAssessment(strategy.judgment,nativeProtocol());}
         if(custom){strategy.judgment.competence.standard='custom';strategy.judgment.competence.instructions='  Keep this exact text.\nSecond line.  ';strategy.judgment.competence.criteria[1]+='  ';}
         plan.desired.delegation_enabled=false;
         if(branches){
           const route=branchRouting(service);route.judgment=structuredClone(strategy.judgment);
-          if(enabled)route.native_protocol={schema:C_PROTOCOL,...nativeProtocol()};
           route.branches.forEach((b,i)=>{b.name='Category '+i;b.condition='Work '+i;b.candidates=structuredClone(strategy.economy);b.primary_candidates=structuredClone(strategy.primary);b.judgment=i===0?structuredClone(strategy.judgment):null;});
           plan.desired.mode='custom_branches';plan.desired.strategy={mode:'branches',routing:route};
         }
+        selectedPlan=plan;
         return snapshot;
+      };
+      control().handlers.plan_editor_options=payload=>{
+        const result=structuredClone(control().fixtureResponse('plan_editor_options',payload));
+        if(payload?.input?.authoring){
+          control().handlers.desktop_snapshot({});
+          result.authoring=fixturePlanAuthoring(selectedPlan);
+        }
+        return result;
       };
     });
     localStorage.setItem('hiroute.language',language);control().remount();
     if(language==='zh')await routing();else {await click('Smart routing');await until(()=>all('.master-list .list-row').length,'routes');all('.master-list .list-row')[0].click();}
-    await until(()=>document.querySelector('.native-protocol-editor input[type="checkbox"]'),'capability toggle');
+    await until(()=>document.querySelector('.decision-judgment-fields'),'native judgment settings');
     await until(()=>calls('plan_editor_options').some(c=>c.payload.input.editor?.smart.classifier.kind==='decision_service'),'loaded route options');
   }
-  const toggle=()=>document.querySelector('.native-protocol-editor input[type="checkbox"]');
   function assertCopy(){
     const visible=text();
     assert(!/hiroute\.system-one|sha256:|Stock wording|Stock C|C decisions|Question 3|第三问|恢复版本|Confirm assessments|审阅/.test(visible),'Implementation or review wording remains visible');
     assert(!document.querySelector('[data-assessment-transition]'),'Extra transition review remains');
   }
   function geometry(){
-    for(const e of all('.native-protocol-editor .field-label,.native-prompt,.native-protocol-editor button'))assert(e.scrollWidth<=e.clientWidth+1,'Capability content overflows');
-    const input=toggle(),label=input.closest('label').querySelector('span'),a=input.getBoundingClientRect(),b=label.getBoundingClientRect();
-    assert(b.left>=a.right-1 && b.left-a.right<=16,'Capability toggle separated from its label');
-    assert(Math.abs((a.top+a.bottom-b.top-b.bottom)/2)<=12,'Capability toggle and label are vertically misaligned');
+    assert(!document.querySelector('.native-protocol-editor'),'Retired capability section remains');
+    for(const e of all('.decision-judgment-fields .field-label,.decision-judgment-fields textarea,.decision-judgment-fields button'))assert(e.scrollWidth<=e.clientWidth+1,'Judgment content overflows');
   }
   async function publish(t){
     const before=calls('preview_plan_editor').length;
@@ -51,73 +57,30 @@ export function cProtocolScenarios({ fresh, routing, click, until, all, text, ca
     assert(!calls('plan_editor_transition_preview').length,'Extra Preview operation remains');
     return input;
   }
-  return [scenario('desktop.routing.capability-toggle',['routing-editor','decision-services','c-protocol'],'Defaults silently follow the capability through ordinary publication',async()=>{
+  return [scenario('desktop.routing.native-default',['routing-editor','decision-services','c-protocol'],'Native editing has one default and ordinary publication without capability controls',async()=>{
     for(const language of ['zh','en']){
-      const t=(zh,en)=>language==='zh'?zh:en;await open(language);assert(!toggle().checked,'Released route enabled itself');
-      assert(!document.querySelector('.native-protocol-editor details'),'Disabled capability exposes composed assessment');
-      toggle().click();await until(()=>toggle().checked,'enabled');
-      assert(document.querySelector('.native-protocol-editor details'),'Enabled capability hides composed assessment');
+      const t=(zh,en)=>language==='zh'?zh:en;await open(language);
       assertCopy();geometry();
-      const on=await publish(t);assert(Object.keys(on.editor.smart.historical_applicability).length===1,'Editor requires fixed bundle');
-      assert(on.editor.smart.judgment.competence.standard==='default','Default intent lost');
-      assert(on.editor.smart.judgment.competence.floor_millis===500&&on.editor.smart.judgment.degree.simple_threshold_millis===800,'Threshold changed');
-      await until(()=>!all('.plan-editor fieldset')[0]?.disabled,'publication completed');
-      toggle().click();await until(()=>!toggle().checked,'disabled');
-      assert(!document.querySelector('.native-protocol-editor details'),'Disabling leaves composed assessment visible');
-      assert(document.querySelector('[data-decision-field="smart-competence-instructions"]').value===defaultJudgment.competence.instructions,'Default failed to follow toggle off');
-      assertCopy();geometry();assert(!calls('test_classifier_decision').length,'Toggle/publication dispatched a model request');
+      for(const field of all('.decision-judgment-fields'))for(const detail of field.querySelectorAll('details'))if(!detail.open)detail.querySelector('summary').click();
+      const criteria=stock.q1.criteria;
+      assert(document.querySelector('[data-decision-field="smart-criterion-0"]').value===criteria[0],'Released default did not resolve to current native default');
+      const input=await publish(t);
+      for(const key of ['historical_applicability','native_protocol','prior_context_max_turns'])assert(!(key in input.editor.smart),'Retired field entered editor input: '+key);
+      assert(input.editor.smart.judgment.competence.floor_millis===500&&input.editor.smart.judgment.degree.simple_threshold_millis===800,'Threshold changed');
+      assert(!calls('test_classifier_decision').length,'Opening/publication dispatched a model request');
     }
-  }),scenario('desktop.routing.custom-assessment',['routing-editor','decision-services','c-protocol'],'Custom text survives both toggle directions and reset restores active defaults',async()=>{
+  }),scenario('desktop.routing.custom-assessment',['routing-editor','decision-services','c-protocol'],'Custom text survives native editing and reset restores current defaults',async()=>{
     for(const language of ['zh','en'])for(const branches of [false,true]){
       const t=(zh,en)=>language==='zh'?zh:en;await open(language,{custom:true,branches});
       const selector=`[data-decision-field="${branches?'branch-0':'smart'}-competence-instructions"]`;
-      const original=document.querySelector(selector).value;
-      toggle().click();await until(()=>toggle().checked,'enabled');assert(document.querySelector(selector).value===original,'Custom changed on enable');
-      toggle().click();await until(()=>!toggle().checked,'disabled');assert(document.querySelector(selector).value===original,'Custom changed on disable');
-      toggle().click();await until(()=>toggle().checked,'enabled again');
-      const field=document.querySelector(selector),parents=[];for(let p=field.parentElement;p;p=p.parentElement)if(p.tagName==='DETAILS')parents.unshift(p);for(const p of parents)if(!p.open)p.querySelector('summary').click();
+      const field=document.querySelector(selector),original=field.value;
+      assert(original==='  Keep this exact text.\nSecond line.  ','Opening rewrote custom bytes');
+      const parents=[];for(let p=field.parentElement;p;p=p.parentElement)if(p.tagName==='DETAILS')parents.unshift(p);for(const p of parents)if(!p.open)p.querySelector('summary').click();
       const disclosure=field.closest('details');const reset=[...disclosure.querySelectorAll('button')].find(b=>b.textContent===t('恢复默认','Reset to default'));assert(reset,'Reset missing');reset.click();
-      await until(()=>document.querySelector(selector).value!==original,'reset active default');assertCopy();geometry();
+      await until(()=>document.querySelector(selector).value!==original,'reset current default');assertCopy();geometry();
       const input=await publish(t);const j=branches?input.editor.branch_routing.branches[0].judgment:input.editor.smart.judgment;
-      assert(j.competence.standard==='default','Reset did not record intent');assert(!calls('test_classifier_decision').length,'Edit implicitly probed');
-    }
-  }),scenario('desktop.routing.applicability-test',['routing-editor','decision-services','c-protocol'],'The route test binds actual content and discards evidence after changes',async()=>{
-    for(const language of ['zh','en']){
-      const t=(zh,en)=>language==='zh'?zh:en;await open(language,{enabled:true});
-      control().handlers.test_classifier_decision=async({input})=>{
-        const request=input.request;assert(request.schema==='hiroute.historical-applicability-test/v1'&&request.service_revision===7,'Wrong purpose or revision');
-        return {schema:'hiroute.historical-applicability-test-result/v1',state:'verified',service_id:service.id,service_revision:7,model:service.connection.model,endpoint_digest:await contentDigest(service.connection.endpoint),protocol_digest:request.protocol.digest,shape:request.shape,question_count:3,tested_at_unix_ms:Date.now(),duration_millis:1,reason:'complete'};
-      };
-      await click(t('测试此路由的适用性（1 次请求）','Test route applicability (1 request)'));
-      await until(()=>text().includes(t('历史问题适用性测试通过','Historical problem applicability test passed')),'exact capability evidence');
-      setInput(document.querySelector('.native-protocol-editor input[type="number"]'),'0');await until(()=>text().includes(t('背景为 0','With zero background')),'zero background');
-      assert(text().includes(t('本次打开尚未测试历史问题适用性','Not tested in this session')),'Changed content reused evidence');
-      setInput(document.querySelector('.native-protocol-editor input[type="number"]'),'8');
-      await until(()=>!text().includes(t('历史问题适用性测试通过','Historical problem applicability test passed')),'Old evidence resurrected');
-      // A response that arrives after edits are reverted is still from an invalidated test.
-      for (const fails of [false, true]) {
-        const complete = control().handlers.test_classifier_decision;
-        let release, started = false;
-        const pending = new Promise(resolve => { release = resolve; });
-        control().handlers.test_classifier_decision = async payload => {
-          started = true;
-          await pending;
-          if (fails) throw new Error('Synthetic delayed native failure');
-          return complete(payload);
-        };
-        await click(t('测试此路由的适用性（1 次请求）','Test route applicability (1 request)'));
-        await until(()=>started,'pending applicability test');
-        setInput(document.querySelector('.native-protocol-editor input[type="number"]'),'0');
-        await until(()=>text().includes(t('背景为 0','With zero background')),'pending test input changed');
-        setInput(document.querySelector('.native-protocol-editor input[type="number"]'),'8');
-        await until(()=>!text().includes(t('背景为 0','With zero background')),'pending test input reverted');
-        release();
-        await until(()=>!document.querySelector('.native-protocol-editor button').disabled,'invalidated test settled');
-        assert(text().includes(t('本次打开尚未测试历史问题适用性','Not tested in this session')),'An in-flight result survived a change and revert');
-        assert(!text().includes(t('适用性测试未完成。','Applicability test did not complete.')),'A stale failure appeared on the reverted configuration');
-        control().handlers.test_classifier_decision = complete;
-      }
-      assertCopy();geometry();
+      assert(j.competence.standard==='default','Reset did not record intent');assert(JSON.stringify(j.competence.criteria)===JSON.stringify(stock.q1.criteria),'Reset returned legacy defaults');
+      assert(!calls('test_classifier_decision').length,'Edit implicitly probed');
     }
   }),scenario('desktop.decisions.connectivity-test',['decision-services','c-protocol'],'The connection page retains its original single V1 connectivity test',async()=>{
     for(const language of ['zh','en']){
