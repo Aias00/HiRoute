@@ -29,7 +29,7 @@ export function RoutingObservations({ summary, language }: { summary: RoutingSum
     {(summary.legacy_or_unknown_decisions > 0 || summary.unknown_scope_decisions > 0 || summary.missing_projection_events > 0 || summary.scan_limited) && <p className="quality-coverage">{text('旧协议或未知决策 ', 'Legacy or unknown decisions ')}{summary.legacy_or_unknown_decisions} · {text('范围未知 ', 'Unknown scope ')}{summary.unknown_scope_decisions} · {text('缺少安全投影的事件 ', 'Events missing safe projection ')}{summary.missing_projection_events}{summary.scan_limited && text(' · 达到读取上限', ' · Read limit reached')}</p>}
     {summary.cohorts.length === 0 && <p className="oc-meta">{text('此范围内暂无可用的 C 决策记录。', 'No C decision records are available in this scope.')}</p>}
     {summary.cohorts.map(({ cohort, counts }, index) => <section className="routing-cohort" key={index}>
-      <strong>{cohort.scope_id} · {cohort.provider} / {cohort.model} · {cohort.standard === 'stock' ? text('标准 C', 'Stock C') : text('自定义标准', 'Custom standard')}</strong>
+      <strong>{cohort.scope_id} · {cohort.provider} / {cohort.model} · {cohort.standard === 'stock' ? text('标准措辞', 'Stock wording') : text('自定义标准', 'Custom standard')}</strong>
       <p>{text('简单阈值 ', 'Simple threshold ')}{cohort.simple_threshold_millis / 1000} · {text('胜任下限 ', 'Competence floor ')}{cohort.competence_floor_millis / 1000}</p>
       <dl className="routing-counts">
         <div><dt>{text('C 决策 / 同轮继承', 'C decisions / inherited')}</dt><dd>{counts.c_decisions} / {counts.inherited}</dd></div>
@@ -41,7 +41,7 @@ export function RoutingObservations({ summary, language }: { summary: RoutingSum
       </dl>
       <Disclosure label={text('内容标识', 'Content identity')} language={language}><div className="quality-diagnostic-identity">{cohort.protocol}<br />{cohort.content_digest}<br />{cohort.bundle_digest}</div></Disclosure>
     </section>)}
-    <p className="oc-meta">{text('比例仅描述保留记录中的路由行为，不代表准确率或质量提升。零分母与覆盖缺口均显示为 —。', 'Rates describe retained routing behavior, not accuracy or quality improvement. A zero denominator or incomplete coverage is shown as —.')}</p>
+    <p className="oc-meta">{text('标准措辞不表示复现相同实验条件。比例仅描述保留记录中的路由行为，不代表准确率或质量提升。零分母与覆盖缺口均显示为 —。', 'Stock wording does not imply the same experimental condition. Rates describe retained routing behavior, not accuracy or quality improvement. A zero denominator or incomplete coverage is shown as —.')}</p>
   </Disclosure>;
 }
 

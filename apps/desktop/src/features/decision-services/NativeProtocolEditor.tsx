@@ -5,11 +5,13 @@ import type { DecisionService, Judgment, RouteBranch } from './types';
 import { C_PROTOCOL, LEGACY_PROTOCOL, composedAssessment, contentDigest, freezeNative, nativeProtocol, nativeReferenceIssue, stockAssessment, type AssessmentReview, type AssessmentReviews, type CCapability, type NativeProtocol, type RollbackOption } from './native-protocol';
 
 export type AssessmentScope = { id: string; label: string; judgment: Judgment };
-export function NativeProtocolEditor({ protocol, reviews, scopes, service, branches, defaultId, sources = [], wasC = false, allowReviewRemoval = false, language, onProtocol, onScope }: {
-  protocol?: NativeProtocol; reviews?: AssessmentReviews; scopes: AssessmentScope[]; service: DecisionService; branches?: RouteBranch[]; defaultId?: string; sources?: RollbackOption[]; wasC?: boolean; allowReviewRemoval?: boolean; language: 'zh' | 'en';
+export function NativeProtocolEditor({ protocol, reviews, scopes, service, branches, defaultId, sources = [], wasC = false, allowReviewRemoval = false, publishedRevision, language, onProtocol, onScope }: {
+  protocol?: NativeProtocol; reviews?: AssessmentReviews; scopes: AssessmentScope[]; service: DecisionService; branches?: RouteBranch[]; defaultId?: string; sources?: RollbackOption[]; wasC?: boolean; allowReviewRemoval?: boolean; publishedRevision?: number; language: 'zh' | 'en';
   onProtocol(value?: NativeProtocol): void; onScope(id: string, judgment: Judgment, review?: AssessmentReview): void;
 }) {
   const t = (zh: string, en: string) => language === 'zh' ? zh : en;
+  const [transitionReview, setTransitionReview] = useState(false);
+  useEffect(() => setTransitionReview(false), [publishedRevision]);
   const [choices, setChoices] = useState<Record<string, { method: AssessmentReview['method']; source?: RollbackOption['source'] }>>({});
   const [digests, setDigests] = useState<Record<string, string>>({});
   const [frozenDigest, setFrozenDigest] = useState('');
@@ -20,7 +22,7 @@ export function NativeProtocolEditor({ protocol, reviews, scopes, service, branc
   useEffect(() => { let cancelled = false; void Promise.all(scopes.map(async s => [s.id, await contentDigest(composedAssessment(protocol, s.judgment))] as const)).then(v => { if (!cancelled) setDigests(Object.fromEntries(v)); }); return () => { cancelled = true; }; }, [key]);
   useEffect(() => { let cancelled = false; setFrozenDigest(''); if (protocol) void freezeNative(protocol, scopes[0].judgment, branches, defaultId).then(p => { if (!cancelled) setFrozenDigest(p.digest); }); return () => { cancelled = true; }; }, [key]);
   const destination = protocol ? C_PROTOCOL : LEGACY_PROTOCOL;
-  const needsReview = !!protocol || Object.keys(reviews ?? {}).length > 0 || wasC;
+  const needsReview = !!protocol || Object.keys(reviews ?? {}).length > 0 || wasC || transitionReview;
   const capability = result?.key === key ? result.value : undefined;
   async function review(scope: AssessmentScope) {
     const snapshot = key; setBusy(true);
@@ -44,7 +46,7 @@ export function NativeProtocolEditor({ protocol, reviews, scopes, service, branc
     } catch { setFailure(t('C 能力测试未完成。', 'C capability test did not complete.')); } finally { setBusy(false); }
   }
   return <section className="editor-section native-protocol-editor">
-    <label className="field"><span className="field-label">{t('决策协议', 'Decision protocol')}</span><select className="input" value={protocol ? 'c' : 'legacy'} disabled={busy} onChange={e => onProtocol(e.target.value === 'c' ? nativeProtocol() : undefined)}><option value="legacy">{t('现有协议', 'Existing protocol')}</option><option value="c">{t('C · 历史问题适用性', 'C · historical problem applicability')}</option></select></label>
+    <label className="field"><span className="field-label">{t('决策协议', 'Decision protocol')}</span><select className="input" value={protocol ? 'c' : 'legacy'} disabled={busy} onChange={e => { setTransitionReview(true); onProtocol(e.target.value === 'c' ? nativeProtocol() : undefined); }}><option value="legacy">{t('现有协议', 'Existing protocol')}</option><option value="c">{t('C · 历史问题适用性', 'C · historical problem applicability')}</option></select></label>
     {protocol && <><label className="field"><span className="field-label">{t('目标阶段之前的背景轮数', 'Background turns before the assessed stage')}</span><input className="input" type="number" min={0} max={8} step={1} value={protocol.prior_context_max_turns} onChange={e => onProtocol({ ...protocol, prior_context_max_turns: Number(e.target.value) })} /><span className="field-help">{t('默认 8 轮；不限制完整目标阶段的轮数。', 'Defaults to 8 turns; the complete assessed stage is not limited by this cap.')}</span></label>{protocol.prior_context_max_turns === 0 && <p role="status" className="field-help">{t('背景为 0：不会提供目标阶段之前的要求和引用。', 'With zero background, requirements and references before the assessed stage are not supplied.')}</p>}<p className="field-help">{t('C 保留当前难度和胜任度阈值。每个生效的评分范围都需要明确选择并审阅标准。', 'C preserves your degree and competence thresholds. Explicitly choose and review each effective assessment scope.')}</p></>}
     {needsReview && branches?.filter(b => nativeReferenceIssue(!!protocol, b.condition)).map(b => <p role="alert" className="field-error" key={b.id}>{b.name} · {t('任务条件包含目标协议不支持的历史字段。', 'The category condition references history fields unavailable in the destination protocol.')}</p>)}
     {needsReview && scopes.map(scope => {
@@ -54,7 +56,7 @@ export function NativeProtocolEditor({ protocol, reviews, scopes, service, branc
       const source = sources.find(s => s.source.scope === scope.id);
       return <div className="native-assessment-scope" key={scope.id} data-native-scope={scope.id}>
         <h4>{scope.label}</h4><p className="field-help" role="status">{valid ? t('已审阅当前协议与完整评分标准', 'Current protocol and composed assessment reviewed') : t('需要审阅此范围的完整评分标准', 'Review the complete assessment for this scope')}</p>
-        {!protocol && !wasC && allowReviewRemoval && reviews?.[scope.id] && <button type="button" className="btn btn-quiet" disabled={busy} onClick={() => onScope(scope.id, scope.judgment)}>{t('移除此审阅记录', 'Remove this review record')}</button>}
+        {!protocol && !wasC && !transitionReview && allowReviewRemoval && reviews?.[scope.id] && <button type="button" className="btn btn-quiet" disabled={busy} onClick={() => onScope(scope.id, scope.judgment)}>{t('移除此审阅记录', 'Remove this review record')}</button>}
         <div className="field-actions"><button type="button" className="btn" disabled={busy} onClick={() => { setChoices(c => ({ ...c, [scope.id]: { method: 'stock' } })); onScope(scope.id, stockAssessment(scope.judgment, protocol)); }}>{protocol ? t('采用标准 C 评分', 'Adopt stock C assessment') : t('采用旧默认评分', 'Adopt legacy default assessment')}</button>
           {!protocol && <button type="button" className="btn" disabled={busy || !source} title={!source ? t('没有可用的保留版本或匹配范围。', 'No retained source or matching scope is available.') : undefined} onClick={() => { if (!source) return; setChoices(c => ({ ...c, [scope.id]: { method: 'historical', source: source.source } })); onScope(scope.id, { ...scope.judgment, competence: { ...scope.judgment.competence, instructions: source.instructions, criteria: source.criteria } }); }}>{source ? t(`恢复版本 ${source.source.plan.content_revision} 的评分`, `Restore revision ${source.source.plan.content_revision} assessment`) : t('历史评分不可用', 'Historical assessment unavailable')}</button>}
         </div>

@@ -9,8 +9,8 @@ import { newBranch, type BranchRouting, type DecisionService, type RouteBranch }
 import { JudgmentFields, judgmentSummary } from './JudgmentSettings';
 
 export type DecisionModelGroup = (title: string, subtitle: string, values: Selection[], replace: (values: Selection[]) => void, options: { groupId: string; preferred?: 'low' | 'high' }) => ReactNode;
-export function BranchRoutingEditor({ routing, services, language, onChange, onOpenServices, group, errorGroup, error, sources, wasC, allowReviewRemoval }: {
-  sources?: RollbackOption[]; wasC?: boolean; allowReviewRemoval?: boolean; routing: BranchRouting; services: DecisionService[]; language: 'zh' | 'en';
+export function BranchRoutingEditor({ routing, services, language, onChange, onOpenServices, group, errorGroup, error, sources, wasC, allowReviewRemoval, publishedRevision }: {
+  sources?: RollbackOption[]; wasC?: boolean; allowReviewRemoval?: boolean; publishedRevision?: number; routing: BranchRouting; services: DecisionService[]; language: 'zh' | 'en';
   onChange(value: BranchRouting): void; onOpenServices?: OpenDecisionConnection; errorGroup?: string; error?: string; group: DecisionModelGroup;
 }) {
   const t = (zh: string, en: string) => language === 'zh' ? zh : en;
@@ -19,7 +19,7 @@ export function BranchRoutingEditor({ routing, services, language, onChange, onO
   const put = (branch: RouteBranch, value: Partial<RouteBranch>) => patch({ branches: routing.branches.map(b => b.id === branch.id ? { ...b, ...value } : b) });
   return <>
     <DecisionSelector classifier={routing.classifier} smart={false} services={services} language={language} onChange={classifier => patch({ classifier })} onOpenServices={onOpenServices} error={errorGroup === 'classifier' ? error : undefined} />
-    {routing.classifier.kind === 'decision_service' && routing.classifier.service.connection.kind === 'system_one' && <NativeProtocolEditor protocol={routing.native_protocol} reviews={routing.assessment_review} service={routing.classifier.service} branches={routing.branches} defaultId={routing.default_branch_id} language={language} sources={sources} wasC={wasC} allowReviewRemoval={allowReviewRemoval} scopes={[
+    {routing.classifier.kind === 'decision_service' && routing.classifier.service.connection.kind === 'system_one' && <NativeProtocolEditor protocol={routing.native_protocol} reviews={routing.assessment_review} service={routing.classifier.service} branches={routing.branches} defaultId={routing.default_branch_id} language={language} sources={sources} wasC={wasC} allowReviewRemoval={allowReviewRemoval} publishedRevision={publishedRevision} scopes={[
       ...(routing.branches.some(b => !b.judgment) ? [{ id: 'default', label: t('计划默认 · 跟随分支：', 'Plan defaults · inherited by: ') + routing.branches.filter(b => !b.judgment).map(b => b.name).join(', '), judgment: routing.judgment }] : []),
       ...routing.branches.filter(b => b.judgment).map(b => ({ id: b.id, label: b.name, judgment: b.judgment! })),
     ]} onProtocol={native_protocol => patch({ native_protocol })} onScope={(id, judgment, review) => {
