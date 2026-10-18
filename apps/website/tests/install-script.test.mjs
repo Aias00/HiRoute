@@ -38,7 +38,7 @@ test(`generated installer selects the ${machine} stable manifest without startin
   fs.writeFileSync(path.join(bin, 'uname'), `#!/bin/sh\n[ "\${1:-}" = "-s" ] && echo Linux || echo ${machine}\n`, { mode: 0o755 });
   fs.writeFileSync(path.join(bin, 'curl'), '#!/bin/sh\nprintf "curl %s\\n" "$*" >> "$INSTALL_TEST_LOG"\nwhile [ "$#" -gt 0 ]; do [ "$1" = "-o" ] && { shift; printf "# fixture\\n" > "$1"; exit 0; }; shift; done\nexit 1\n', { mode: 0o755 });
   fs.writeFileSync(path.join(bin, 'python3'), '#!/bin/sh\nprintf "python3 %s\\n" "$*" >> "$INSTALL_TEST_LOG"\n', { mode: 0o755 });
-  const result = spawnSync('/bin/sh', [], {
+  const result = spawnSync('/bin/sh', ['-s', '--', '--console-mode', 'network', '--console-listen', '192.0.2.1', '--console-port', '8123', '--allow-plaintext-network'], {
     input: script, encoding: 'utf8', env: {
       ...process.env, PATH: `${bin}:/usr/bin:/bin`, INSTALL_TEST_LOG: log, TMPDIR: root,
     },
@@ -48,6 +48,7 @@ test(`generated installer selects the ${machine} stable manifest without startin
   assert.match(calls, /curl .*https:\/\/hiroute\.ai\/install\/standalone\.py/);
   assert.ok(calls.includes(`install --manifest-url https://hiroute.ai/releases/1.2.3/${expected.manifest_filename}`));
   assert.ok(script.includes(`https://hiroute.ai/releases/1.2.3/${armStandalone.manifest_filename}`));
+  assert.match(calls, /--console-mode network --console-listen 192\.0\.2\.1 --console-port 8123 --allow-plaintext-network/);
   assert.doesNotMatch(calls, /service start/);
   assert.match(result.stdout, /No service was started automatically/);
 });

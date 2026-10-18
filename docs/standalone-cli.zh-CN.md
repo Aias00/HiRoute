@@ -11,6 +11,11 @@ Standalone 与 HiRoute Desktop 不应同时管理同一用户的安装，不提�
 
 ## 安装
 
+安装的 daemon 同时提供 [Web 控制台](web-console.md)。Linux 默认关闭；可在安装时通过
+`--console-mode`、`--console-listen`、`--console-port` 配置，或安装后运行
+`hiroute console init`，再启动/重启服务。`hiroute console open` 只为实际已监听的
+本地或远程端点生成一次性登录 URL，不会启动监听。远程 HTTP 会持续提示明文传输风险。
+
 从 [hiroute.ai](https://hiroute.ai/download/) 安装适用于 `x86_64` 或 ARM64（`aarch64`）的
 最新稳定 Linux 版本：
 
