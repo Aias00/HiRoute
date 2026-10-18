@@ -60,7 +60,7 @@ def user_prompt(product, candidate, value, expected=0, format='bearer'):
             raise AssertionError('protected user prompt did not finish')
         assert sent
         assert termios.tcgetattr(terminal) == original, 'terminal state was not restored'
-        assert os.waitstatus_to_exitcode(status) == expected
+        assert os.WIFEXITED(status) and os.WEXITSTATUS(status) == expected
         output = stdout.read_bytes()
         errors = stderr.read_bytes()
         product.outputs.extend((bytes(transcript), output, errors))
