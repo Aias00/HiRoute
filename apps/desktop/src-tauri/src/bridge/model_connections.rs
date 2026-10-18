@@ -272,7 +272,8 @@ pub async fn compute_management_snapshot(
 pub async fn compute_scan(
     window: WebviewWindow,
     state: State<'_, DesktopState>,
-) -> Result<WebComputeScanResultV1, DesktopFailure> {
+    native_target: Option<hiroute_domain::AgentNativeTargetV1>,
+) -> Result<WebComputeScanResultV2, DesktopFailure> {
     main_window(&window)?;
     let broker = window.state::<WebConfirmationState>();
     let active = || window.is_visible().unwrap_or(false);
@@ -297,7 +298,7 @@ pub async fn compute_scan(
         &state.2,
         &state.3,
     );
-    hiroute_product_session::commands::compute_scan(&context, &product_state).await
+    hiroute_product_session::commands::compute_scan(&context, &product_state, native_target).await
 }
 #[tauri::command]
 pub async fn prepare_discovered_model_connection(

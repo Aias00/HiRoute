@@ -73,3 +73,23 @@ scenarios exercise the production Sessions component; native acceptance must
 type the keyword in Desktop, find a known body after a large nonmatching corpus,
 continue across unrelated Worker activity and open the original anchor. Browser
 fixtures alone do not establish authorization or product completion.
+
+## Scoped analysis consumers
+
+The opt-in analysis views live in [`../analysis`](../analysis/): `read` composes the existing bounded
+content and stage owners, `scope` pins relation/numeric/price watermarks, `members` resolves physical
+members for both content and money, and `comparison` shares source matching and per-attempt rounding
+with the legacy explicit-reference report. Numeric inputs and native relations use additive auxiliary
+tables, not new execution-fact/receipt variants or changes to shared storage admission markers.
+
+Application composition supplies one 500 ms deadline, including nonblocking control/price reads.
+The existing reader semaphore and SQLite progress handler remain authoritative. Analysis scopes are
+signed, expire within one hour and disclose retention-safe effective bounds; ordinary cleanup removes
+expired membership/price leases. Used-source deletion and withdrawn proofs invalidate affected scopes;
+append-only unrelated traffic does not. Released cursors retain their original validation rules.
+
+Content selection hydrates only the selected page and bounds public text/tool snippets; references
+lead to the existing V2 content pager. Provider state/private reasoning is not conversation content.
+Recorded stages explain routing but never create user-turn adjacency. Verified native compression is
+a continuation boundary with reset turn context. Requests lacking reliable lineage/turn evidence
+remain separate or unknown rather than acquiring inferred links.

@@ -1,4 +1,5 @@
 //! Finite CLI codecs for observation and value reads.
+mod analysis;
 
 #[cfg(test)]
 use std::io::Read;
@@ -84,6 +85,9 @@ pub(super) fn sessions_list(options: &[String]) -> Result<Value, ErrorCode> {
             input.read(MAX_REQUEST_BYTES)?,
         );
     }
+    if options.iter().any(|flag| flag == "--view") {
+        return analysis::sessions(options, None);
+    }
     let mut query = SessionListRequestV1::default();
     let mut index = 0;
     while index < options.len() {
@@ -126,6 +130,9 @@ pub(super) fn session_show(options: &[String]) -> Result<Value, ErrorCode> {
     let Some(id) = options.first().filter(|value| valid_positional(value)) else {
         return Err(ErrorCode::InvalidArguments);
     };
+    if options.iter().any(|flag| flag == "--view") {
+        return analysis::sessions(&options[1..], Some(id));
+    }
     let content = if options.len() == 1 {
         None
     } else if options.len() == 3 && options[1] == "--content" {
@@ -172,10 +179,25 @@ pub(super) fn value_show(options: &[String]) -> Result<Value, ErrorCode> {
             input.read(MAX_REQUEST_BYTES)?,
         );
     }
+    if options
+        .iter()
+        .any(|flag| matches!(flag.as_str(), "--view" | "--analysis-scope" | "--order-by"))
+        || options.windows(2).any(|pair| {
+            pair[0] == "--group-by" && matches!(pair[1].as_str(), "session" | "request")
+        })
+    {
+        return analysis::value(options);
+    }
     let mut query = ObservationValueReportOptionsV2::default();
+    let mut basis = None;
+    let mut reference = None;
     let mut index = 0;
     while index < options.len() {
         match options[index].as_str() {
+            "--basis" if basis.is_none() => basis = Some(next(options, &mut index)?),
+            "--reference-binding" if reference.is_none() => {
+                reference = Some(next(options, &mut index)?)
+            }
             "--routing" => {
                 query.agent_plan_id = Some(
                     AgentPlanId::parse(next(options, &mut index)?)
@@ -210,10 +232,21 @@ pub(super) fn value_show(options: &[String]) -> Result<Value, ErrorCode> {
         }
         index += 1;
     }
-    serde_json::to_value(ObservationReadRequestV2::new(
-        ObservationReadIntentV2::ValueReport(query),
-    ))
-    .map_err(|_| ErrorCode::Internal)
+    let intent = match (basis.as_deref(), reference) {
+        (None, None) => ObservationReadIntentV2::ValueReport(query),
+        (Some("api-equivalent"), Some(reference_binding_id))
+            if query.currency.is_some() && query.group_by == ValueGroupByV1::None =>
+        {
+            ObservationReadIntentV2::ApiEquivalentValue(
+                hiroute_application_api::ApiEquivalentValueOptionsV1 {
+                    report: query,
+                    reference_binding_id,
+                },
+            )
+        }
+        _ => return Err(ErrorCode::InvalidArguments),
+    };
+    serde_json::to_value(ObservationReadRequestV2::new(intent)).map_err(|_| ErrorCode::Internal)
 }
 
 #[derive(Clone, Copy)]
@@ -238,8 +271,41 @@ fn observation_value_payload(
     value: Value,
 ) -> Result<Value, ErrorCode> {
     let request: ObservationReadRequestV2 = crate::request_input::deserialize(value)?;
+    if let ObservationReadIntentV2::Analysis(ref q) = request.intent {
+        let allowed = match command {
+            ObservationCommand::Sessions => matches!(
+                q.view,
+                hiroute_application_api::AnalysisViewV1::Conversations
+                    | hiroute_application_api::AnalysisViewV1::Switches
+            ),
+            ObservationCommand::Timeline => {
+                matches!(
+                    q.view,
+                    hiroute_application_api::AnalysisViewV1::Conversation
+                        | hiroute_application_api::AnalysisViewV1::Routing
+                ) && q.session_id.is_some()
+            }
+            ObservationCommand::Value => q.view.monetary(),
+            _ => false,
+        };
+        if !allowed {
+            return Err(ErrorCode::InvalidArguments);
+        }
+        return serde_json::to_value(request).map_err(|_| ErrorCode::Internal);
+    }
     let matches_command = match (command, &request.intent) {
-        (ObservationCommand::Sessions, ObservationReadIntentV2::Sessions(_)) => true,
+        (
+            ObservationCommand::Sessions,
+            ObservationReadIntentV2::Sessions(_)
+            | ObservationReadIntentV2::Search(_)
+            | ObservationReadIntentV2::SessionSearch(_),
+        ) => true,
+        (
+            ObservationCommand::Timeline,
+            ObservationReadIntentV2::Catalog(_)
+            | ObservationReadIntentV2::Ancestry(_)
+            | ObservationReadIntentV2::Content(_),
+        ) => true,
         (ObservationCommand::Facts, ObservationReadIntentV2::Facts(_)) => true,
         (ObservationCommand::Timeline, ObservationReadIntentV2::Timeline(query)) => {
             query.session_id.is_some()
@@ -248,7 +314,8 @@ fn observation_value_payload(
             ObservationCommand::Value,
             ObservationReadIntentV2::Value(_)
             | ObservationReadIntentV2::HomeValue(_)
-            | ObservationReadIntentV2::ValueReport(_),
+            | ObservationReadIntentV2::ValueReport(_)
+            | ObservationReadIntentV2::ApiEquivalentValue(_),
         ) => true,
         (ObservationCommand::PlanQuality, ObservationReadIntentV2::PlanQuality(query)) => {
             query.plan_id.is_some() || query.session_id.is_some()
@@ -457,5 +524,23 @@ mod tests {
             .unwrap(),
             value
         );
+    }
+    #[test]
+    fn api_equivalent_is_explicit_and_old_value_flags_keep_their_intent() {
+        let args = |s: &str| s.split_whitespace().map(str::to_owned).collect::<Vec<_>>();
+        assert_eq!(value_show(&[]).unwrap()["intent"]["view"], "value_report");
+        let value = value_show(&args(
+            "--basis api-equivalent --reference-binding binding/primary --currency CNY --period 7d",
+        ))
+        .unwrap();
+        assert_eq!(value["intent"]["view"], "api_equivalent_value");
+        for invalid in [
+            "--basis api-equivalent",
+            "--reference-binding binding/one",
+            "--basis cash --reference-binding binding/one --currency USD",
+            "--basis api-equivalent --reference-binding binding/one --currency USD --group-by day",
+        ] {
+            assert!(value_show(&args(invalid)).is_err());
+        }
     }
 }

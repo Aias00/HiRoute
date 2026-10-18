@@ -135,6 +135,13 @@ impl LocalObservationStore {
             delete_session_tombstones(&transaction, spec)?;
         }
         if spec.data_class == DeletionDataClass::FactsAndContent {
+            crate::analysis::full_delete(
+                &transaction,
+                spec.workspace_id.as_str(),
+                spec.session_id.as_str(),
+                deletion_through,
+            )
+            .map_err(|_| ObservationQueryError::Unavailable)?;
             if !spec.delete_rollups {
                 archive_session_value(&transaction, spec)?;
             }

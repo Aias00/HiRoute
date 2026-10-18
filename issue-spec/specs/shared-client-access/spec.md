@@ -187,6 +187,309 @@ cannot rely on build directories/libraries. Compile success does not prove runti
 compatibility; rejected file/dependency evidence is retained. Candidate/platform
 identity is explicit, and this evidence cannot replace macOS native or Windows checks.
 
+### Requirement: CLI and Desktop management of Hermes connections
+
+HiRoute SHALL add the selected effective Hermes profile as a managed target in the existing public CLI and Desktop Agent settings workflow. Both clients SHALL support selecting a published Plan, connecting or adjusting the profile, restoring managed settings and reading connection state through the shared backend. The CLI workflow SHALL be usable without Desktop. HiRoute SHALL make the existing management Skill discoverable in that profile independently of a model connection or task collaboration, with guidance for the existing source, decision-service and Plan commands. The existing shared-client-access and agent-connections contracts govern access, input, Operations and failures; this increment does not introduce a separate management API.
+
+#### Scenario: Configure Hermes through the headless CLI
+
+- **WHEN** a caller configures a routing Plan using existing public commands and connects a selected Hermes profile
+- **THEN** the Hermes-specific target and connection operations are available through the public CLI without a graphical step; a missing required service/profile capability is reported for that target.
+
+#### Scenario: Use the same connection from either client
+
+- **WHEN** the owner selects a locally accessible Hermes profile in Desktop or updates its connection through the CLI
+- **THEN** the existing Desktop Agent flow can configure, adjust, restore and read that same scoped backend state without manual native-file editing.
+
+#### Scenario: Prepare management guidance independently
+
+- **WHEN** the owner prepares the management Skill for a selected Hermes profile before connecting a model
+- **THEN** the Skill is discoverable and explains the public routing-configuration workflow without requiring a Plan, model grant or collaboration setup; unavailable CLI/service prerequisites remain explicit.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/119#issuecomment-6165289916
+
+### Requirement: Management Skill is available to supported local Agents
+
+HiRoute SHALL provide independent management-Skill preparation, status and owned restoration through Desktop Agent settings and the public CLI for Codex, Claude Code, Qoder, Pi, DeepSeek Harness and Hermes, using each selected effective native Skill root and the same canonical management instructions. Preparation SHALL NOT require a managed model connection, a published Plan or an available Worker, and SHALL NOT enable automatic delegation, change model configuration or add CLI authority. Both clients SHALL reflect the same saved state and distinguish installed preparation, prerequisites and unverified runtime loading. Unknown or incompatible Skill roots SHALL produce an actionable result without writing another root.
+
+#### Scenario: Prepare without model routing
+
+- **WHEN** a supported Agent has a valid Skill root but no HiRoute model connection or published Plan, and the owner enables management instructions
+- **THEN** only the selected management resource is prepared; the model and task-delegation settings remain unchanged.
+
+#### Scenario: Cross-client control
+
+- **WHEN** management preparation is applied from Desktop or CLI and the other client reads the same context
+- **THEN** both report the same management state and expose owned restoration without requiring unrelated configuration.
+
+#### Scenario: Unavailable prerequisite
+
+- **WHEN** the selected root or native Skill loading interface is unavailable
+- **THEN** the affected action identifies the prerequisite, writes no alternate root and does not claim runtime loading.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/125#issuecomment-6186243593
+
+### Requirement: Intent-led CLI configuration binds an explicit target and resumes existing work
+
+HiRoute SHALL provide a CLI Quickstart for connecting a selected supported local Agent through an existing Plan or a new fixed-model or smart-saving Plan, and for inspecting, adjusting and restoring that connection. The calling Agent and managed target SHALL be independent. The caller supplies meaningful source, model/group and target choices; product defaults and existing business operations prepare the complete configuration without requiring hand-authored internal editors or transfer of digests/revisions. Existing selected sources, Plans and connections SHALL be reusable. Ambiguous targets or names SHALL return explicit choices before target writes. An explicitly selected unavailable target SHALL NOT fall back to another profile. A complete prior user choice SHALL NOT acquire repeated confirmation questions. Source preparation, publication and native settings retain their existing separate recoverable Operations; interrupted or uncertain work SHALL be queried or retried with its original identity rather than silently recreated. Quickstart SHALL present remaining activation and verification actions instead of declaring completion from saved configuration alone.
+
+#### Scenario: Configure another Agent
+
+- **WHEN** a supported management Agent or human selects a different supported target and an existing compatible Plan
+- **THEN** the same public CLI path prepares the selected target only, reports its native scope and leaves the caller's model and unrelated facets unchanged.
+
+#### Scenario: Choose smart saving directly
+
+- **WHEN** the user selects economy and primary models and a supported decision method
+- **THEN** the workflow prepares the smart-saving Plan directly with authoritative defaults and explicit choices; no temporary fixed-model Plan or full editor JSON is required.
+
+#### Scenario: Ambiguous or unavailable target
+
+- **WHEN** multiple native contexts match the selection or the explicit target becomes unreadable
+- **THEN** the workflow returns disambiguation or repair actions without choosing the first match, switching roots or reporting successful configuration.
+
+#### Scenario: Resume and preserve completed work
+
+- **WHEN** a source or Plan already exists, or an Apply response is lost after submission
+- **THEN** the workflow identifies reusable state and queries or retries the exact original operation; it does not create duplicate sources/Plans or roll back unrelated completed work.
+
+#### Scenario: Adjust or restore one facet
+
+- **WHEN** the user changes a selected route choice or restores the model facet
+- **THEN** only the requested intent is previewed/applied through the existing owners, other settings remain intact and any required native follow-up is reported.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/125#issuecomment-6206259270
+
+### Requirement: Core management CLI exposes callable contracts and authoritative initial configuration
+
+For the Quickstart and its supported branches, HiRoute SHALL expose navigable family help, complete installed request/response schema definitions including supported wrapper variants, valid input examples and bounded field-level input errors. Dynamic IDs and model choices SHALL come from current queries rather than examples or invented references. The fixed-model and smart-saving convenience paths SHALL obtain initial settings from a common product-owned defaults/capability projection also consumed by Desktop, including judgment settings, request limits, context bounds and valid native reasoning choices. Querying defaults SHALL NOT save, publish, import credentials or invoke models. Existing Plan edits SHALL retain unmodified settings. A supported decision service and local rules SHALL remain explicit distinct choices; a normal Chat execution binding SHALL NOT be silently treated as a compatible decision service. Existing released machine output, exit semantics, protected channels and request interpretation SHALL remain compatible; new explanatory fields SHALL use a compatible or explicitly selected contract.
+
+#### Scenario: Discover a valid request offline
+
+- **WHEN** a caller has the installed CLI but no source checkout or validation artifacts and requests help/schema for a Quickstart command
+- **THEN** the caller can determine required fields, enums, request wrappers and a valid minimal input; examples identify the queries supplying dynamic references.
+
+#### Scenario: Prepare defaults without copying a sample
+
+- **WHEN** a caller chooses fixed-model or smart-saving authoring and current candidates
+- **THEN** the product returns the complete valid initial structure and effective defaults/capability bounds; neither the Skill nor CLI invents maximum context, retry limits or highest reasoning settings.
+
+#### Scenario: Diagnose invalid input
+
+- **WHEN** a request contains a missing required member, wrong wrapper, unsupported enum, wrong type or unknown field
+- **THEN** the failure identifies the bounded field location and expected correction, retains usage failure semantics and does not expose credentials or echo the raw request.
+
+#### Scenario: Unsupported decision binding
+
+- **WHEN** a caller requests an ordinary Chat model as the decision service
+- **THEN** the workflow identifies the unsupported role and offers explicit supported-service or local-rules choices without changing the requested policy silently.
+
+#### Scenario: Preserve an existing editor
+
+- **WHEN** a caller changes one field of an existing Plan using the convenience path
+- **THEN** all other existing settings retain their values rather than being reset from new-plan defaults.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/125#issuecomment-6206259606
+
+### Requirement: One canonical management Skill guides complete generic CLI journeys
+
+HiRoute SHALL ship one canonical management Skill for all supported management Agent families, with the core Quickstart and bounded references for important branches: absent service/target/source, ambiguous scope, unavailable models or decision service, existing/partial setup, adjustment, effective-state diagnosis, observation and owned restoration. The Skill SHALL separate the caller from the managed target and consume installed public CLI capabilities, generated defaults and machine results rather than assuming Hermes, a particular filesystem layout or repository access. It SHALL explain how to obtain prerequisite CLI/Skill availability without coupling management to model routing or delegation. Instructions SHALL capture stdout, stderr and the CLI exit status separately when the native terminal merges them, inspect business/Operation results, preserve submission identity and avoid first-line JSON parsing or treating accepted as complete. Generated configuration and personal experience notes SHALL NOT be written into the product-managed Skill. Existing independent facet ownership, user-authorized effects, protected credentials and collaboration trigger policy remain authoritative. Before a restoration, reconnect or credential replacement that may revoke the current caller's own HiRoute access, the Skill SHALL establish an independent continuation path or leave that effect pending for an external operator. Verification SHALL distinguish saved state, native loading, request outcomes and actual classifier/group selection; manual model substitution or missing observations cannot establish a semantic decision branch or native activation. Before changing an existing Plan, the Skill SHALL retain its complete prior effective configuration and provide fully resolved recovery commands to the user, usable from an independent terminal if the caller fails. Plan restoration SHALL be distinguished from owned Agent-facet restoration. Restoring candidate names alone is not full configuration recovery; compare all effective settings after restoration.
+ The same Skill SHALL guide a complete read-only analysis path for transition explanations, linked conversations, session/request spending ranking and recent savings using installed public commands. It SHALL resolve an unambiguous requested scope, reference and saved rates from current public facts, ask only for genuinely ambiguous/missing choices, and show basis/coverage with the answer. It SHALL distinguish retrying uncertain delivery from a new later restoration: after a completed restoration and subsequent edits, recovery uses a fresh current-head Preview and new Apply identity; replaying the old completed operation is not a new restore. The canonical Skill SHALL remain installable within the existing managed Skill resource limit and ownership contract; detailed options, enums, units and examples SHALL come from installed command help and schemas rather than an enlarged, copied or second Skill resource.
+
+#### Scenario: Use the same Skill across callers
+
+- **WHEN** any supported Agent invokes management for itself or another supported local target
+- **THEN** the shared instructions guide the same public capability path and use the selected target's returned native requirements, without a per-caller copy of management logic.
+
+#### Scenario: Operate without development artifacts
+
+- **WHEN** an installed management Agent is asked to connect, adjust, inspect or restore an Agent
+- **THEN** the instructions and installed public commands provide the needed path without source code, binary inspection, test fixtures or manually patched Skill contents.
+
+#### Scenario: Capture a merged terminal result
+
+- **WHEN** the native tool presents stdout and stderr together or wraps command execution
+- **THEN** the guidance captures and parses the complete stdout JSON and preserves the real CLI return code separately; diagnostic text or a later shell command cannot be mistaken for CLI success.
+
+#### Scenario: Keep capabilities independent
+
+- **WHEN** the user enables management only or delegation only while leaving the caller's model native
+- **THEN** the Skill uses the requested facet and applicable collaboration policy without configuring a model route or creating a Worker requirement for management.
+
+#### Scenario: Preserve managed instructions
+
+- **WHEN** an Agent learns an environment-specific workaround or encounters externally modified Skill content
+- **THEN** it keeps operational notes outside the managed resource and reports existing drift/ownership rather than silently rewriting or force-upgrading the resource.
+
+#### Scenario: Preserve the managing caller continuation
+
+- **WHEN** a requested change may invalidate the active caller's model access
+- **THEN** the guidance establishes independent access or an external handoff before the effect; restoring files alone is not evidence that the running caller has reloaded them.
+
+#### Scenario: Report actual decision and execution evidence
+
+- **WHEN** a smart-saving journey is verified
+- **THEN** the guidance checks actual classifier/group/model facts and every matching request outcome, distinguishes pending or failed requests, and does not infer complex-branch coverage from changing the economy model or infer built-in rule behavior solely from custom keywords.
+
+#### Scenario: Provide complete recovery before a change
+
+- **WHEN** an Agent prepares a change to an existing Plan or managed connection
+- **THEN** it retains the complete applicable baseline, identifies recovery scope, supplies concrete CLI Preview and Apply commands with real identities and paths, and verifies restored effective settings rather than only model names; uncertainty, foreign edits and caller continuation follow existing contracts.
+
+#### Scenario: Follow one analysis journey across supported callers
+
+- **WHEN** the user asks any supported management Agent why a model changed, which conversation cost most or what routing saved recently
+- **THEN** the installed shared instructions navigate summary/ranking, exact request evidence and relevant paged content without repository access, model probes or caller-specific playbooks; they disclose missing evidence and do not silently tune settings.
+
+#### Scenario: Reuse saved rates and resolve a comparison
+
+- **WHEN** the requested Plan has one primary model and applicable saved rates in one currency
+- **THEN** the Skill resolves and discloses the exact reference and basis without repeated technical-ID entry; ambiguous choices or missing rates lead to bounded choices or the existing price-completion branch.
+
+#### Scenario: Restore again after a later change
+
+- **WHEN** a previous recovery Apply succeeded and the user later changes the Plan again
+- **THEN** the instructions generate a new Preview and Apply file using the retained complete baseline and current head; the prior successful operation is never presented as a fresh restoration.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/125#issuecomment-6206260381
+
+### Requirement: Discover and securely connect reusable decision services
+
+HiRoute SHALL provide an installed, discoverable CLI path for choosing and connecting a supported decision service during smart-saving setup. It SHALL first expose reusable saved connection identities and revisions, separately from connectivity or decision-quality evidence, and expose the installed decision-provider presets and compatible/custom extension choices with their required non-secret inputs. Presets SHALL NOT assert current provider availability or account entitlement. CLI and Desktop SHALL consume one preset definition. A user SHALL be able to enter a credential in their own terminal without echo or inclusion in chat, command arguments, shell history, environment variables, ordinary request files or logs, using the existing protected-input and Secret lifecycle. Agents SHALL receive registration results and references only. Cancelling input or lacking a controlling terminal SHALL fail without saving a service or changing existing credentials. The journey SHALL continue through existing reviewable save, explicit connection test, exact revision selection for a Plan and publication, preserving exact retry identity and unrelated state. Local rules SHALL remain an explicit alternative, without a claimed model decision or implicit replacement of a selected service. This path SHALL NOT reinterpret an ordinary Chat model as a decision service.
+
+#### Scenario: Reuse a saved service with honest readiness
+
+- **WHEN** smart saving is configured and decision connections already exist
+- **THEN** the installed path lists exact identities and revisions for explicit reuse, with testing unknown until a current explicit probe establishes its outcome; a saved record is not presented as usable solely because it exists.
+
+#### Scenario: Choose a supported connection
+
+- **WHEN** no suitable saved service is selected
+- **THEN** the installed path exposes its preset provider/model/endpoint choices, required endpoint/model choices for compatible/custom connections, and the secure user credential step without requiring a source checkout or claiming account access.
+
+#### Scenario: Register a credential outside the conversation
+
+- **WHEN** the user runs the provided terminal prompt
+- **THEN** input is hidden, the selected authorization format is applied without exposing the credential, and only a registration result/reference is returned through the ordinary output; cancellation or no controlling terminal leaves saved resources unchanged.
+
+#### Scenario: Continue from registration to published routing
+
+- **WHEN** a protected credential has been registered and the user authorizes the connection
+- **THEN** existing Preview/Apply saves a revision with an exact replayable request, an explicit probe reports its own result, and the selected immutable revision can be bound to a Plan and published without new duplicate services or a new routing backend.
+
+#### Scenario: Retain an explicit local alternative
+
+- **WHEN** a user chooses local rules or cannot yet provide a usable decision connection
+- **THEN** the CLI keeps that choice explicit, preserves existing setup, explains remaining verification and does not claim semantic model decisions or silently downgrade an existing service.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/125#issuecomment-6213380806
+
+### Requirement: Recover complete saved Plan configuration through the public CLI
+
+HiRoute SHALL let an installed CLI caller retain the complete effective configuration of an existing Plan and prepare restoration of that configuration without reconstructing editor fields or guessing defaults. Recovery SHALL preserve candidate order and reasoning, decision service and judgment, requirements, limits/context, alias and supported mode/delegation settings. It SHALL target the same existing Plan, use current revision-checked Preview and exact Apply, report invalid or unavailable referenced resources and preserve unrelated resources and observation history. A failed, malformed or different-target saved response SHALL NOT become a restoration. Plan configuration recovery does not rewind immutable revisions or replace native Agent-facet restoration.
+
+#### Scenario: Recover after candidate replacement
+
+- **WHEN** a caller changes a group candidate and later restores a retained complete Plan configuration
+- **THEN** the restored effective configuration matches the retained baseline including reasoning and policy, even if selecting that candidate afresh would choose different defaults.
+
+#### Scenario: Review and submit recovery
+
+- **WHEN** a valid saved configuration for the selected Plan is supplied
+- **THEN** the installed path resolves the current target revision, produces a reviewable existing Plan content Preview and optionally an exact private Apply file; no restoration occurs until the caller applies it.
+
+#### Scenario: Reject invalid or different-target recovery
+
+- **WHEN** the saved output is incomplete, unsuccessful, malformed, from another Plan/workspace, or includes incompatible extra change inputs
+- **THEN** the CLI rejects it before target writes, without silently creating a Plan or dropping saved fields.
+
+#### Scenario: Keep stale and dependency failures safe
+
+- **WHEN** a prepared restore becomes stale or its retained resource references are unavailable
+- **THEN** existing revision/dependency failures remain authoritative; the caller reviews current facts and prepares a fresh request instead of bypassing checks or silently substituting models/services.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/125#issuecomment-6219937964
+
+### Requirement: Analyze retained session evidence through same-user CLI management
+
+HiRoute SHALL let the authenticated same-OS-user Local Control CLI read retained session timelines, explicit message/tool content, searchable content and routing/competence evidence for user-authorized model and decision analysis without a separate graphical approval or protected read ticket. Content remains explicitly selected, bounded, paginated and subject to current workspace/run visibility and retention. An explicitly supplied protected grant SHALL still be validated and a model Gateway credential SHALL NOT grant Local Control access. The common management Skill SHALL connect actual content to request/publication, decision source, branch and competence evidence, distinguish missing evidence, and propose reviewable changes with complete recovery rather than silently tune routing.
+ The installed management path SHALL provide navigable bounded conversation and search results at retained-history scale, associated with actual request/model/reasoning and available routing/value evidence. Relevant reads SHALL constrain the selected scope before expensive expansion; query/price/routing facts SHALL NOT depend on loading full bodies or a ready full-text index. Search SHALL distinguish actual no-match from pending indexes, incomplete scanning and failure. Timeout, busy-reader, index and storage unavailability SHALL have safe distinguishable reasons and actionable continuation through compatible public results, rather than falsely implying all content is absent. Default-period and calendar-day filters SHALL report the effective timezone and absolute bounds, and a continuation SHALL keep that resolved scope. Existing resource limits and retained old interfaces remain constraints; new paged views are explicit. Opt-in conversation/search views SHALL apply session-history's "Verified native compaction links preserve session identity" to expose proven compaction continuations with member anchors, current visibility and explicit gaps; unchanged legacy calls retain their physical-session scope. Related opt-in pages and conversation/member/request drill-down SHALL accept the originating result's relation watermark, without re-resolving a different live grouping; later relation additions do not invalidate that pinned scope. Invalidated proof and current visibility remain explicit. A new analysis scope SHALL disclose requested and retention-safe effective bounds and its lifetime before pagination. Within that lifetime, routine retention cleanup SHALL NOT change its selected population, grouping, coverage or monetary totals. Any clipped interval SHALL be explicit; complete results apply only to the effective interval, never an omitted part of the requested period. This SHALL NOT extend original evidence retention. Explicit deletion, proof withdrawal and authorization changes still apply, while token expiry has a distinct refresh action. A normal reopen with already aligned retained projections SHALL reuse them without introducing reconciliation pending. Only views requiring known missing or stale retained projections may report catch-up pending, with scoped progress and a supported retry action; ready reads and valid scopes SHALL remain usable under current source/visibility checks. Interrupted catch-up SHALL resume without restarting for unrelated aware traffic, and stalled work SHALL report its reason rather than remain indefinitely plain pending. Missing historical evidence is an explicit gap, not unfinished reconciliation.
+
+#### Scenario: Analyze a historical conversation
+
+- **WHEN** a local management Agent requests a retained session and explicitly selected content
+- **THEN** the CLI returns the available conversation and request evidence without requiring a Desktop-created grant; missing or expired content is reported rather than fabricated.
+
+#### Scenario: Follow bounded evidence pages
+
+- **WHEN** analysis requires content search, request facts or competence samples
+- **THEN** the public CLI can follow the existing scoped queries and continuations, preserving identifiers, visibility and partial coverage.
+
+#### Scenario: Preserve actual authority
+
+- **WHEN** a caller supplies an invalid protected grant or only a model Gateway credential
+- **THEN** the invalid authority is rejected; the read change does not grant remote model clients management access.
+
+#### Scenario: Review an evidence-based adjustment
+
+- **WHEN** an Agent identifies an apparent simple/complex or competence mismatch
+- **THEN** it reports the linked evidence and uncertainty, retains complete prior configuration and uses the existing reviewable change/recovery path.
+
+#### Scenario: Read a small relevant page among large unrelated history
+
+- **WHEN** a retained session/request has readable content and substantial unrelated history exists
+- **THEN** the supported bounded CLI view returns the relevant page and continuation without requiring a whole-history scan or exposing unrelated content; an old unpageable request outside supported bounds gives an actionable bounded path.
+
+#### Scenario: Search without fabricated emptiness
+
+- **WHEN** the user searches within a selected interval or session and indexing is pending or the query cannot complete
+- **THEN** the result identifies partial coverage or a safe failure reason with a supported next action; it does not report a complete empty match set or fabricate content loss.
+
+#### Scenario: Read facts independently of body indexing
+
+- **WHEN** full-text indexing or selected body data is unavailable but retained request/routing/usage facts remain readable
+- **THEN** the CLI still exposes those facts and exact evidence references while reporting body availability independently.
+
+#### Scenario: Preserve scoped continuation
+
+- **WHEN** an Agent follows a body/search page while unrelated traffic arrives or a body is deleted
+- **THEN** the continuation retains its declared query semantics, rechecks current visibility and follows existing retention/deletion rules without inventing a missing body or crossing sessions.
+
+#### Scenario: Read across a proven compaction boundary
+
+- **WHEN** retained content spans physical sessions linked by verified native compression evidence
+- **THEN** the bounded conversation/search view can navigate the visible chain with member/request anchors and honest gaps, without counting repeated captured context as new messages or usage.
+
+#### Scenario: Keep a conversation drill-down on the originating relations
+
+- **WHEN** a caller opens a ranked or searched conversation after a new native compression has been recorded
+- **THEN** reusing the originating analysis scope retains its relation watermark and member anchors; a new analysis is needed to include the later continuation, and current visibility is still enforced.
+
+#### Scenario: Continue through routine history cleanup
+
+- **WHEN** a paged analysis is opened near the rolling retention boundary and ordinary cleanup runs during its declared valid lifetime
+- **THEN** the upfront effective bounds and retained evidence keep pagination and drill-down consistent, without global invalidation from unrelated cleanup; clipping and token expiry remain visible and deleted content is never restored.
+
+#### Scenario: Reuse aligned history after an ordinary restart
+
+- **WHEN** HiRoute reopens already aligned retained data without an intervening unaware writer or interrupted catch-up
+- **THEN** new analysis reads reuse the saved projections without a new reconciliation-pending period; actual source gaps, unsettled usage and turn incompleteness keep their distinct meanings.
+
+#### Scenario: Expose genuine catch-up without blocking ready reads
+
+- **WHEN** retained data needed by one view is missing from derived projections after compatible writer mutations
+- **THEN** only the affected view reports scoped progress and retry guidance; ready reads continue, interrupted work resumes, and stalled or unavailable work has an explicit reason instead of endless plain pending.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/125#issuecomment-6220387323
+
 ### Requirement: Windows headless preserves the logged-on user's native authority
 
 Windows standalone MUST use the actual user's Profile and LocalAppData KnownFolders for installation and runtime ownership. HOME/XDG values cannot redirect an installed instance. Native headless operation uses the shared CLI, role-all daemon, Application, Gateway and business stores without requiring Desktop or WSL. Windows installation, update and uninstall are performed by the native installation transaction used by the Windows Desktop installer; no separate Windows headless installer or Python runtime is required, and a user who needs only the CLI and daemon installs the same package.
@@ -341,9 +644,6 @@ Source SPEC comments:
 
 - [Client Core](../../../crates/client-core/src) and
   [CLI request-input guide](../../../crates/cli/INPUT.md).
-- [Windows installation and manager boundaries](../../../docs/standalone-windows.md),
-  [native platform owners](../../../crates/platform/README.md), and
-  [installed background and upgrade scenarios](../../../crates/daemon/tests/windows_background.rs).
 - [Real argv scenarios](../../../crates/cli/tests/request_input.rs) and
   [stateless Worker submission scenarios](../../../crates/cli/tests/worker_submission.rs).
 - [Release builder/installation contract](../../../docs/release-builds.md).

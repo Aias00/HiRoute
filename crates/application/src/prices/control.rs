@@ -29,11 +29,18 @@ pub struct PriceSourceBinding {
     pub binding_id: String,
     pub binding_revision: u64,
     pub model_configuration_id: String,
+    pub execution_model_configuration_id: Option<String>,
     pub billing_class: BillingClass,
     pub offer_ref: Option<String>,
 }
 pub trait SourcePriceControlPort: Send + Sync {
     fn price_control_facts(&self) -> Result<PriceControlFactsV1, ControlReadError>;
+    fn try_price_control_facts(
+        &self,
+        _deadline: std::time::Instant,
+    ) -> Result<crate::control::ControlReadAttempt<PriceControlFactsV1>, ControlReadError> {
+        Err(ControlReadError::Unavailable)
+    }
 }
 
 pub fn resolve_price_target(

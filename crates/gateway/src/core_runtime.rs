@@ -643,6 +643,7 @@ impl ProductionGatewayRuntime {
                 protocol,
                 &identity,
                 self.capture_observation_content,
+                Some(&request.headers),
             );
             let _observation_guard = ObservationRequestGuard(request_observation.clone());
             request_observation.record_pipeline_stages(
@@ -1494,8 +1495,10 @@ fn inbound_authorization<'a>(
         return Some(std::borrow::Cow::Borrowed(authorization));
     }
     if headers.contains_key("x-hiroute-token") {
-        if !matches!(path, "/v1/responses" | "/v1/messages" | "/v1/models")
-            || headers.get_all("x-hiroute-token").iter().count() != 1
+        if !matches!(
+            path,
+            "/v1/responses" | "/v1/chat/completions" | "/v1/messages" | "/v1/models"
+        ) || headers.get_all("x-hiroute-token").iter().count() != 1
         {
             return None;
         }
@@ -1532,9 +1535,16 @@ fn inbound_authorization<'a>(
         return None;
     }
     let authorization = headers.get(AUTHORIZATION)?.to_str().ok()?;
-    if path == "/v1/responses" && !authorization.starts_with("Bearer hr_run_model_") {
+    let token = authorization.strip_prefix("Bearer ")?;
+    if token.is_empty()
+        || token
+            .bytes()
+            .any(|byte| byte.is_ascii_whitespace() || byte == b',')
+    {
         return None;
     }
+    // The carrier does not identify authority. Publication/run verification below
+    // must still resolve an issued current token and its exact protocol/aliases.
     Some(std::borrow::Cow::Borrowed(authorization))
 }
 

@@ -3,13 +3,15 @@
 
 mod arithmetic;
 mod comparison;
+mod reference_usage;
 pub use comparison::{ReferenceComparisonV2, compare_reference};
+pub(crate) use reference_usage::{reference_usage, reference_usage_semantics};
 mod ingest;
 mod retention;
 mod schema;
 mod usage_archive;
 mod worker;
-pub(crate) use ingest::ingest;
+pub(crate) use ingest::{RawUsage, ingest};
 pub(crate) use retention::{archive_request, archive_session};
 pub(crate) use schema::migrate;
 pub use worker::{ValuationAmountV2, ValuationRecordV2};
@@ -20,6 +22,7 @@ use hiroute_domain::{FrozenPriceQuoteV1, PriceValuationKindV1};
 use serde::{Deserialize, Serialize};
 
 pub use arithmetic::value_attempt;
+pub(crate) use arithmetic::{amount_only, validate_quote};
 pub const VALUATION_ALGORITHM: &str = "hiroute.valuation/2-micros-half-up-per-attempt";
 
 pub(crate) const CACHE_HIT_ARCHIVE_SCHEMA: &str = "cache_hit_schema_v1";

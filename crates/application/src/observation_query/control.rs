@@ -29,6 +29,8 @@ pub(crate) struct ObservationControl {
     clock: Arc<dyn ApplicationClockPort>,
     value_scope: Arc<dyn ValueScopePort>,
     workspace_id: WorkspaceId,
+    prices: Option<Arc<dyn crate::prices::SourcePriceControlPort>>,
+    routing: Option<Arc<dyn crate::control::RoutingFactsPort>>,
 }
 
 impl ObservationControl {
@@ -44,7 +46,25 @@ impl ObservationControl {
             clock,
             value_scope,
             workspace_id: WorkspaceId::default(),
+            prices: None,
+            routing: None,
         }
+    }
+
+    pub(crate) fn with_prices(
+        mut self,
+        prices: Option<Arc<dyn crate::prices::SourcePriceControlPort>>,
+    ) -> Self {
+        self.prices = prices;
+        self
+    }
+
+    pub(crate) fn with_routing(
+        mut self,
+        routing: Option<Arc<dyn crate::control::RoutingFactsPort>>,
+    ) -> Self {
+        self.routing = routing;
+        self
     }
 
     pub(crate) fn list(
@@ -67,7 +87,7 @@ impl ObservationControl {
                 "ListSessions"
             },
             &request,
-            request.query.is_none(),
+            true,
         )?;
         let cursor = request.cursor.as_deref().map(decode_cursor).transpose()?;
         let to_ms = match request.to_ms.or_else(|| cursor.as_ref().map(|c| c.to_ms)) {
@@ -141,7 +161,7 @@ impl ObservationControl {
         let principal = if content == ContentMode::None {
             self.local_or_protected_principal(grant, "GetSession", &lookup, true)?
         } else {
-            self.protected_principal(grant, "ReadSessionContent", &lookup)?
+            self.local_or_protected_principal(grant, "ReadSessionContent", &lookup, true)?
         };
         serde_json::to_value(self.service.get_session(&principal, &session_id, content)?)
             .map_err(|_| ObservationQueryError::Corrupt)
@@ -412,6 +432,35 @@ mod tests {
     }
 
     impl ControlStatePort for FixedPorts {
+        fn try_observation_revision(
+            &self,
+            _: &WorkspaceId,
+            _: std::time::Instant,
+        ) -> Result<crate::control::ControlReadAttempt<u64>, ControlReadError> {
+            Ok(crate::control::ControlReadAttempt::Ready(9))
+        }
+
+        fn try_validate_observation_capability(
+            &self,
+            capability: &str,
+            workspace: &WorkspaceId,
+            principal: PrincipalKind,
+            operation: &str,
+            digest: &CanonicalDigest,
+            deadline: std::time::Instant,
+        ) -> Result<crate::control::ControlReadAttempt<u64>, ControlReadError> {
+            let snapshot = self.snapshot(workspace)?;
+            self.validate_protected_capability(
+                capability,
+                workspace,
+                principal,
+                operation,
+                digest,
+                &snapshot.revisions,
+            )?;
+            self.try_observation_revision(workspace, deadline)
+        }
+
         fn snapshot(
             &self,
             _workspace_id: &WorkspaceId,
@@ -558,7 +607,7 @@ mod tests {
     }
 
     #[test]
-    fn same_uid_peer_reads_facts_but_not_search_or_content_without_a_grant() {
+    fn same_uid_peer_reads_explicit_content_and_search_without_an_extra_grant() {
         let ports = Arc::new(FixedPorts::new(10 * DAY_MILLIS, &[]));
         let control = control(ports.clone());
         for kind in [
@@ -568,13 +617,11 @@ mod tests {
         ] {
             assert!(control.list(kind, None, json!({})).is_ok());
             assert!(control.show(kind, None, json!({"id":"session"})).is_ok());
-            assert_eq!(
-                control.list(kind, None, json!({"query":"secret"})),
-                Err(ObservationQueryError::Unauthorized)
-            );
-            assert_eq!(
-                control.show(kind, None, json!({"id":"session","content":"messages"})),
-                Err(ObservationQueryError::Unauthorized)
+            assert!(control.list(kind, None, json!({"query":"secret"})).is_ok());
+            assert!(
+                control
+                    .show(kind, None, json!({"id":"session","content":"messages"}))
+                    .is_ok()
             );
         }
         assert_eq!(
@@ -583,10 +630,17 @@ mod tests {
         );
         assert!(control.status(None).is_ok());
         assert!(control.value(None, json!({})).is_ok());
-        assert_eq!(ports.queries.lock().unwrap().len(), 3);
+        assert_eq!(ports.queries.lock().unwrap().len(), 6);
         assert_eq!(
             ports.content_modes.lock().unwrap().as_slice(),
-            [ContentMode::None; 3]
+            [
+                ContentMode::None,
+                ContentMode::Messages,
+                ContentMode::None,
+                ContentMode::Messages,
+                ContentMode::None,
+                ContentMode::Messages
+            ]
         );
     }
 
@@ -618,17 +672,16 @@ mod tests {
     }
 
     #[test]
-    fn generated_content_spelling_reaches_handler_only_with_protected_grant() {
+    fn explicit_cli_content_and_valid_grant_reach_the_same_handler() {
         let ports = Arc::new(FixedPorts::new(10 * DAY_MILLIS, &[]));
         let payload = serde_json::to_value(SessionLookupV1 {
             id: "session-content".to_owned(),
             content: Some(SessionContentModeV1::MessagesAndTools),
         })
         .unwrap();
-        assert_eq!(
-            control(ports.clone()).show(PrincipalKind::Skill, None, payload.clone()),
-            Err(ObservationQueryError::Unauthorized)
-        );
+        control(ports.clone())
+            .show(PrincipalKind::Skill, None, payload.clone())
+            .unwrap();
         control(ports.clone())
             .show(
                 PrincipalKind::Skill,
@@ -641,7 +694,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             *ports.content_modes.lock().unwrap(),
-            [ContentMode::MessagesAndTools]
+            [ContentMode::MessagesAndTools, ContentMode::MessagesAndTools]
         );
     }
 

@@ -179,8 +179,13 @@
   },
   {
     "name": "compute_scan",
-    "args": [],
-    "result": "Result<WebComputeScanResultV1, DesktopFailure>",
+    "args": [
+      {
+        "name": "native_target",
+        "type": "Option<hiroute_domain::AgentNativeTargetV1>"
+      }
+    ],
+    "result": "Result<WebComputeScanResultV2, DesktopFailure>",
     "host_only": false
   },
   {
@@ -407,7 +412,12 @@
   },
   {
     "name": "agent_snapshot",
-    "args": [],
+    "args": [
+      {
+        "name": "native_targets",
+        "type": "Option<Vec<hiroute_domain::AgentNativeTargetV1>>"
+      }
+    ],
     "result": "Result<AgentSnapshot, DesktopFailure>",
     "host_only": false
   },

@@ -7,6 +7,7 @@ pub(super) fn messages(
     connection: &rusqlite::Connection,
     authority: &crate::DigestAuthority,
     workspace_id: &WorkspaceId,
+    session_id: &SessionId,
     turn_id: &TurnId,
     content_mode: ContentMode,
     remaining_bytes: &mut usize,
@@ -19,7 +20,9 @@ pub(super) fn messages(
                     c.created_at_unix_nanos, b.object_path, c.request_id, c.fork_id,
                     m.message_ordinal, c.part_ordinal, s.attempt_id, c.has_content_ref,
                     c.expected_byte_count, c.transport_frame_id, c.downstream_delivery
-             FROM content_instances_v2 c
+             FROM logical_requests r INDEXED BY requests_session
+             CROSS JOIN content_instances_v2 c INDEXED BY content_instances_v2_request
+               ON c.workspace_id=r.workspace_id AND c.request_id=r.request_id
              JOIN content_message_instances_v2 m
                ON m.workspace_id=c.workspace_id AND m.message_instance_id=c.message_instance_id
              JOIN content_blobs_v2 b
@@ -27,37 +30,39 @@ pub(super) fn messages(
              LEFT JOIN conversation_content_streams_v2 s
                ON s.workspace_id=c.workspace_id AND s.request_id=c.request_id
               AND s.direction=c.direction AND s.fork_id=c.fork_id
-             JOIN logical_requests r
-               ON r.workspace_id=c.workspace_id AND r.request_id=c.request_id
-             WHERE c.workspace_id=?1 AND r.turn_id=?2 AND c.state='complete'
+             WHERE r.workspace_id=?1 AND r.session_id=?2 AND r.turn_id=?3
+               AND c.state='complete'
              ORDER BY m.message_ordinal, c.part_ordinal, c.content_id LIMIT 201",
         )
         .map_err(|_| ObservationQueryError::Unavailable)?;
     let rows = statement
-        .query_map(params![workspace_id.as_str(), turn_id.as_str()], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, Option<String>>(3)?,
-                row.get::<_, Option<String>>(4)?,
-                row.get::<_, String>(5)?,
-                row.get::<_, String>(6)?,
-                row.get::<_, String>(7)?,
-                row.get::<_, String>(8)?,
-                row.get::<_, i64>(9)?,
-                row.get::<_, String>(10)?,
-                row.get::<_, String>(11)?,
-                row.get::<_, String>(12)?,
-                row.get::<_, i64>(13)?,
-                row.get::<_, i64>(14)?,
-                row.get::<_, Option<String>>(15)?,
-                row.get::<_, bool>(16)?,
-                row.get::<_, Option<i64>>(17)?,
-                row.get::<_, Option<String>>(18)?,
-                row.get::<_, Option<String>>(19)?,
-            ))
-        })
+        .query_map(
+            params![workspace_id.as_str(), session_id.as_str(), turn_id.as_str()],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, String>(6)?,
+                    row.get::<_, String>(7)?,
+                    row.get::<_, String>(8)?,
+                    row.get::<_, i64>(9)?,
+                    row.get::<_, String>(10)?,
+                    row.get::<_, String>(11)?,
+                    row.get::<_, String>(12)?,
+                    row.get::<_, i64>(13)?,
+                    row.get::<_, i64>(14)?,
+                    row.get::<_, Option<String>>(15)?,
+                    row.get::<_, bool>(16)?,
+                    row.get::<_, Option<i64>>(17)?,
+                    row.get::<_, Option<String>>(18)?,
+                    row.get::<_, Option<String>>(19)?,
+                ))
+            },
+        )
         .map_err(|_| ObservationQueryError::Unavailable)?;
     let mut messages = Vec::new();
     for row in rows {

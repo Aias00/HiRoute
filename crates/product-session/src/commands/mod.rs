@@ -444,6 +444,7 @@ pub async fn effective_price_query(
 pub async fn agent_snapshot(
     window: &ClientContext<'_>,
     state: &CommandState<'_>,
+    native_targets: Option<Vec<hiroute_domain::AgentNativeTargetV1>>,
 ) -> Result<AgentSnapshot, DesktopFailure> {
     main_window(window)?;
     state
@@ -452,7 +453,7 @@ pub async fn agent_snapshot(
         .await
         .as_mut()
         .ok_or("RESIDENT_UNAVAILABLE")?
-        .agent_snapshot()
+        .agent_snapshot_for_targets(native_targets.unwrap_or_default())
         .await
 }
 pub async fn retry_agent_settings(

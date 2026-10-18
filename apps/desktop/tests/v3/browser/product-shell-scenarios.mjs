@@ -283,7 +283,7 @@ const scenarios = [
     await until(() => all('button').some(item => item.textContent.includes('新建 API 接入')), 'new connection entry');
     all('button').find(item => item.textContent.includes('新建 API 接入')).click();
     await until(() => all('.connection-provider-card').length === 13, 'complete provider directory');
-    assert(document.querySelector('.connection-directory-intro').textContent.includes('18 种接入方式'), 'Directory omits supported products');
+    assert(document.querySelector('.connection-directory-intro').textContent.includes('19 种接入方式'), 'Directory omits supported products');
     assert(getComputedStyle(document.querySelector('.connection-provider-grid')).display === 'grid', 'Production provider layout missing');
     for (const row of all('.connection-provider-card')) {
       assert(getComputedStyle(row).display === 'grid' && getComputedStyle(row).alignItems === 'center', 'Provider card is not aligned');
@@ -499,7 +499,7 @@ const scenarios = [
     assert(calls('preview_compute_save').at(-1).payload.change.expected_revisions.target === c().management.revisions.target, 'Credential change reused the revision from before the decision save');
     await until(() => text().includes('接入凭据已保存'), 'credential save completed');
   }),
-  scenario('desktop.routing.follow-up-preference', ['routing-editor', 'decision-services'], 'New routes omit the retired setting; both editors preserve saved legacy values without exposing a control', async () => {
+  scenario('desktop.routing.follow-up-preference', ['routing-editor', 'decision-services'], 'Both editors preserve authoritative compatibility values without exposing or generating a follow-up control', async () => {
     await fresh(); await routing(); await click('新建智能路由');
     const fields = all('.plan-identity-fields input');
     setInput(fields[0], 'Continuous routing'); setInput(fields[1], 'Check routing without a follow-up setting');
@@ -516,7 +516,9 @@ const scenarios = [
     await click('保存草稿');
     await until(() => calls('preview_plan_editor').length > 0, 'draft without follow-up setting');
     const editor = calls('preview_plan_editor').at(-1).payload.input.editor;
-    assert(!('reselect_on_user_message' in editor.smart) && !('reselect_on_user_message' in editor.branch_routing), 'New frontend drafts still generate the retired setting');
+    const seed = c().fixtureResponse('plan_editor_options', { input: { authoring: {} } }).authoring.editor;
+    assert(editor.smart.reselect_on_user_message === seed.smart.reselect_on_user_message && Object.hasOwn(editor.smart, 'reselect_on_user_message') === Object.hasOwn(seed.smart, 'reselect_on_user_message'), 'Frontend changed the authoritative compatibility value');
+    assert(!('reselect_on_user_message' in editor.branch_routing), 'New frontend branches generate the retired setting');
     for (const mode of ['smart_saving', 'custom_branches']) {
       for (const legacy of [true, false, undefined]) {
         const label = `${mode}, legacy=${legacy}`;

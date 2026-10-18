@@ -16,7 +16,7 @@ fn checked_in_contracts_are_exact_generator_output() {
 #[test]
 fn each_p0_leaf_has_stable_positive_and_negative_plans() {
     let commands = planned_commands();
-    assert_eq!(commands.len(), 91); // Full staged surface including decision services.
+    assert_eq!(commands.len(), 92); // Full staged surface including decision services.
     for command in commands {
         assert!(command.positive.scenario_id.ends_with(".positive"));
         assert!(command.negative.scenario_id.ends_with(".negative"));
@@ -55,6 +55,7 @@ fn release_manifest_is_a_strict_subset_of_planned_registry() {
             "compute.scan",
             "compute.list",
             "compute.show",
+            "compute.connection.prepare",
             "compute.connection.options",
             "compute.connection.preview",
             "compute.connection.apply",
@@ -83,6 +84,9 @@ fn release_manifest_is_a_strict_subset_of_planned_registry() {
             "decision.services.apply",
             "decision.services.test",
             "models.show",
+            "prices.effective",
+            "prices.override.preview",
+            "prices.override.apply",
             "operations.get",
             "sessions.list",
             "sessions.show",
@@ -110,18 +114,27 @@ fn released_worker_dependency_selection_declares_both_json_sources() {
 #[test]
 fn packaged_management_skill_explains_discovery_dependency_selection_and_recovery() {
     let skill = include_str!("../../../assets/skills/hiroute-management/SKILL.md");
+    assert!(
+        skill.len() <= 15_360,
+        "leave room within the unchanged 16 KiB installer limit"
+    );
     for required in [
-        "hiroute --help",
-        "hiroute service --help",
-        "hiroute gateway --help",
-        "hiroute protected-input --help",
-        "Application/Local Control commands",
+        "family/leaf --help",
+        "schema show --command-id",
         "worker dependencies discover --harness",
-        "--output json",
         "selection_revisions[].revision",
         "expected_selection_revision",
-        "replay that exact JSON unchanged",
         "not a CLI/package version",
+        "identical request/key",
+        "hiroute value show --view summary",
+        "--order-by cost-desc",
+        "--view routing --analysis-scope",
+        "--view conversation --analysis-scope",
+        "continuation_boundary",
+        "turn_context_reset",
+        "--restore-from",
+        "complete baseline",
+        "outside chat",
     ] {
         assert!(
             skill.contains(required),
@@ -142,7 +155,7 @@ fn packaged_headless_docs_distinguish_host_and_application_discovery() {
         "hiroute subscription-proxy --help",
         "Application/Local Control",
         "hiroute schema list --output json",
-        "hiroute schema show --command-id compute.connection.test --output json",
+        "hiroute schema show --command-id compute.connection.test --include-schema --output json",
     ] {
         assert!(
             docs.contains(required),

@@ -155,6 +155,54 @@ To clear a saved proxy, unset all six variables and restart. Proxy failure does 
 fall back to direct connections. Do not share the private snapshot: proxy URLs may
 contain credentials. This does not change native Codex login or token refresh ownership.
 
+## CLI Quickstart: connect, inspect, and adjust
+
+The same path works from a terminal or any Agent with the HiRoute management Skill. The caller can manage a different Agent; its own model need not use HiRoute. Model routing, management and task delegation remain independent.
+
+```sh
+hiroute quickstart
+hiroute quickstart --context CONTEXT_ID --plan PLAN_ID
+```
+
+Quickstart is read-only: it shows the current service, exact targets, reusable sources/Plans, missing choices and next commands. It does not start a service, import credentials, save changes, restart an Agent or call a model. For a specific Hermes configuration, add `--hermes-root /ABSOLUTE/EFFECTIVE/ROOT`. Preserve a missing selected root; do not silently substitute another profile.
+
+1. Reuse a saved source from `compute list`, or scan a connection point and explicitly prepare its credentials with `compute connection prepare`. Use `compute scan --request-stdin` with `{"schema":"hiroute.compute-scan-request/v2"}`; add the selected typed `native_target` for Hermes. The returned candidate contains its exact reference/revision and selectable models.
+2. Preview the selected models, then save the generated request:
+
+   ```sh
+   hiroute compute connection preview --candidate CANDIDATE_REF --candidate-revision REV --all-selectable --apply-file source-apply.json
+   hiroute compute connection apply --request-file source-apply.json
+   ```
+
+   Use repeated `--model-ref REF` for a subset. `--all-selectable` freezes concrete current refs; zero selectable models blocks saving. Preparation, save, provider checks and real native requests are different effects.
+3. Select returned binding IDs with `routing options --request-stdin` and `{}`. Create a fixed route with `--mode fixed_model --model BINDING_ID`, or go directly to smart saving:
+
+   ```sh
+   hiroute routing preview --name 'Economy work' --purpose 'Routine and complex development' --mode smart_saving --economy ECONOMY_BINDING --primary PRIMARY_BINDING --decision local_rules --apply-file route-apply.json
+   hiroute routing apply --request-file route-apply.json
+   ```
+
+   Replace all example IDs with current returned IDs. Repeat group flags for explicit order. Choose `--decision local_rules` or `--decision-service ID@REVISION` explicitly; an ordinary Chat model is not a decision-service connection. Shared backend defaults fill the editor. To change one choice, use `routing preview --plan PLAN_ID` with only that change and a new Apply file; other saved settings are preserved.
+4. Run `agents connect preview --context CONTEXT_ID --plan PLAN_ID` with the native choices from `--help`, and add `--apply-file connect-apply.json`. Hermes requires an explicit protocol; Codex requires native-model/default choices; Claude requires selected presets; Qoder/Pi/DSH add entries without claiming a global default. `--management enable` and `--collaboration explicit|delegate_by_default` configure independent Skills; neither needs caller model routing. Review the result, then run `agents connect apply --request-file connect-apply.json`.
+5. Inspect the Operation and `agents connect status --effective --context CONTEXT_ID --plan PLAN_ID`. Follow the returned native activation/selection guidance. Saved files do not prove loading, and a provider check does not prove the Agent used the route. Without consent for a model call, verification remains pending. A matching request identifies its route, actual model, outcome and reported usage only for that request/session. Unknown price is not zero cost.
+
+Apply files are new private files, never overwritten, and contain exact requests and stable keys. Keep `submission.operation_lookup` for `operations find`, or replay the identical Apply file after uncertain delivery. Do not reconstruct a new request/key to retry accepted work. Rerun Quickstart to reuse completed steps. To restore only one capability, use `agents restore preview --context CONTEXT_ID --facet management_skill --apply-file restore-apply.json`, then `agents restore apply --request-file restore-apply.json`; `model` and `collaboration` select the other facets. Restore preserves unrelated data and may leave native loading/selection to the user.
+
+Use family/leaf help for branches and `schema show --command-id routing.preview --include-schema` for complete installed definitions. The unflagged schema command remains a descriptor. JSON input and convenience flags are alternatives; `--apply-file` may accompany either supported Preview form. Desktop resident-service prerequisites must be completed through Desktop, not a fabricated CLI declaration.
+
+Business output is one complete JSON document on stdout. Capture stderr separately and save the real exit code; an accepted Operation is not completed work. In a terminal tool that merges streams:
+
+```sh
+(
+  hiroute quickstart > quickstart.stdout.json 2> quickstart.stderr.txt
+  hiroute_exit=$?
+  printf '%s\n' "$hiroute_exit" > quickstart.exit.txt
+  exit "$hiroute_exit"
+)
+```
+
+Read the whole JSON file, diagnostics and saved code separately. Never parse only the first line or use a later shell command's status. Exit 2 is invalid input; `--error-details` adds bounded field diagnostics. Keep personal notes outside the managed Skill file.
+
 ## Discover the current public contract first
 
 The CLI has two public-contract layers:
@@ -171,7 +219,7 @@ hiroute gateway --help
 hiroute protected-input --help
 hiroute subscription-proxy --help
 hiroute schema list --output json
-hiroute schema show --command-id compute.connection.test --output json
+hiroute schema show --command-id compute.connection.test --include-schema --output json
 hiroute compute connection test --help
 ```
 
@@ -402,8 +450,7 @@ Query real candidates instead of hand-writing an internal binding:
 printf '{}\n' | hiroute routing options --request-stdin --output json > routing-options.json
 ```
 
-Select a `binding_id` from `data.candidates[]` and construct a complete editor. A fixed single
-model is a valid minimal plan:
+For the ordinary path, use Quickstart convenience inputs above and shared authoring defaults. The following advanced JSON example demonstrates an explicitly chosen fixed policy; its limits are not product defaults, and it is not required before smart saving:
 
 ```json
 {
@@ -510,6 +557,55 @@ A corrupt or incompatible record stops replay; deleting it must not hide uncerta
 The advanced JSON interfaces below retain exact context semantics. A collaboration request
 using Codex's model profile still returns `CAPABILITY_DENIED`, with
 `COLLABORATION_ROOT_CONTEXT_REQUIRED` guidance, instead of silently redirecting the request.
+
+## Hermes profile discovery and connection
+
+Select the absolute effective Hermes profile root explicitly. Agent discovery uses
+`agents scan --request-stdin --output json` with
+`{"native_target":{"kind":"hermes","config_root":"/ABSOLUTE/HERMES_PROFILE"}}`.
+Use the returned context ID in the shared settings Preview/Apply workflow and
+retain the same `native_target` in the settings spec.
+
+For source discovery, use `compute scan --request-stdin --output json` with
+`{"schema":"hiroute.compute-scan-request/v2","native_target":{"kind":"hermes","config_root":"/ABSOLUTE/HERMES_PROFILE"}}`.
+Choose a returned connection's opaque discovery reference and revision, then use
+`compute connection prepare` with that discovery and a stable `prepare_id`.
+This preparation privately rereads source credentials; no manual credential copy
+or model call is required. Select all returned selectable models initially, or an
+explicit subset requested by the user. Save an exact nonempty
+`selected_model_refs` array through compute Preview/Apply. Catalog candidates are
+distinct from native declarations and account entitlement; refresh never expands
+an accepted selection. Empty scan input retains the released V1 shape and
+one-model handles.
+
+Set `model.intent` to `configure` with
+`{"mode":"hermes_default","plan_id":"PUBLISHED_PLAN_ID","protocol":"responses"}`
+or choose `chat_completions` / `messages` explicitly when supported. Native Chat
+uses the existing OpenAI Chat SDK and the Gateway Chat path; a Chat upstream must
+not be relabeled Responses to bypass request-fidelity checks. Normal Apply installs/enables the bundled
+adapter together with the default/provider settings. The selected native SDK and
+interfaces must support that transport. Saved state does not prove loading in a
+running Hermes process; follow the reload/selection guidance.
+
+For native Chat, Hermes v0.21.7 or newer is recommended to preserve reasoning
+content across tool calls. Compatible older versions, including 0.19.1, can connect;
+missing optional reasoning replay is not a save gate. Only incompatible required
+plugin/configuration interfaces or the selected SDK's header delivery block admission.
+Source distributions may report `0.0.0`, so actual integration interfaces are checked
+independently of version labels. HiRoute does not upgrade Hermes automatically or
+change native reasoning payloads. Passive scanning, management preparation and safe
+restore retain their own capability checks.
+
+Prepare the management Skill independently with
+`"management_skill":{"intent":"configure","settings":{}}` and `model: keep`.
+Use the shared restore workflow for either facet; model restore keeps an
+independent Skill. Hermes can also independently configure the shared collaboration
+facet with `{"trigger_mode":"explicit"}` or `{"trigger_mode":"delegate_by_default"}`,
+keeping `model` unchanged. It uses public Worker commands with its existing native
+model; no HiRoute model plugin is required. Hermes remains unavailable as a Worker
+executor.
+The [native guide](../crates/integrations/src/agents/hermes/README.md) explains
+ownership, support and native channel/session selection.
 
 ## Connect, check, and restore Codex
 
@@ -638,8 +734,9 @@ RoutingReceipt facts such as `route_decision`, `attempt_started`, and `usage_and
 the actual plan, model choice, Attempt, and known upstream-reported tokens. `value show`
 returns only existing ledger value. Without trustworthy price evidence, an amount stays
 `null`; unknown amounts or tokens without value-ledger rows are never fabricated as zero
-cost. Bodies, search, catalog, and ancestry each require their own precise protected
-capability.
+cost. Same-user Local Control can explicitly read bodies, search, catalog, and ancestry
+without a second read ticket. Supplied grants still bind their precise operation and scope;
+run-scoped callers retain their existing limits.
 
 `observation plan-quality samples` returns the same stage facts used by the plan's
 competence view. Each sample's `branch_execution` identifies its actual model group,
@@ -781,6 +878,17 @@ IPv6, multiple listeners, and firewall management are not supported.
 
 ## Management Skill
 
+Desktop provides an independent HiRoute management control for Codex, Claude Code,
+Qoder, Pi, DeepSeek Harness and Hermes. Public CLI uses the same settings interface:
+set `management_skill` to `{"intent":"configure","settings":{}}` with `model` and
+`collaboration` kept, or configure both Skills in the same request. Preview/Apply
+retains its normal exact revisions, digests and idempotency key. Use the returned
+effective context; Hermes also retains its explicit `native_target`. Current CLI
+status reads include Skill scope, shared/external ownership and unconfirmed loading;
+raw status requests can opt in with `include_skills: true`. Restore only the selected
+facet's returned reference. A retained external/shared file may remain available
+natively after this context releases its reference.
+
 The package installs the same `hiroute-management` Skill in the generic Agent and Claude Code
 Skill directories. It organizes only the public commands on this page: service checks,
 source/routing configuration, Agent integration/restoration, observation queries, and Worker
@@ -806,6 +914,55 @@ sessions are retained by default. Deleting retained data requires a separate con
 the exact directory and that its contents are no longer needed.
 
 ## Decision services and branch routing
+
+### Connect a decision service from the CLI
+
+Run `hiroute decision services options` before creating a connection. Reuse an explicitly selected
+saved `ID@REVISION`; a saved record is not a connectivity test. Installed presets include Bailian
+Token Plan/workspace, OpenRouter and TypeSafe, plus System One compatible and custom extensions.
+They describe integration defaults, not current provider availability, account entitlement or price.
+Workspace/compatible entries require the endpoint/model shown in their options. Ordinary Chat
+execution models are not decision services. Local rules remain an explicit alternative.
+
+A credential is a human step outside chat. In your own terminal on the HiRoute host (for example
+an SSH session), run the following with a fresh non-secret candidate reference:
+
+```sh
+hiroute protected-input register --candidate CANDIDATE_REF --prompt --format bearer
+```
+
+Paste only the API key into the hidden prompt. HiRoute adds `Bearer` and returns registration
+status. Never give a key to an Agent through chat or a terminal tool, arguments, environment or
+ordinary JSON/files. Use `--format raw` for a custom full header value. Cancellation or no controlling
+terminal saves no service. Tell the managing Agent only whether registration succeeded, then
+continue with the same reference. Desktop's existing password field is also supported.
+
+```sh
+hiroute decision services apply --id daily-decision --name 'Daily decisions' --provider typesafe --candidate CANDIDATE_REF --apply-file decision-apply.json
+hiroute decision services apply --request-file decision-apply.json
+hiroute decision services test --service daily-decision@SAVED_REVISION
+hiroute routing preview --plan PLAN_ID --decision-service daily-decision@SAVED_REVISION --apply-file decision-route-apply.json
+hiroute routing apply --request-file decision-route-apply.json
+```
+
+Choose the actual preset; provide `--endpoint` and `--model` where required. A custom connection
+uses `--provider custom --endpoint URL` with a protected candidate and optional `--header NAME`,
+or explicit `--no-auth`. New connections require an exact ID and name; edits use `--id` and preserve
+omitted fields. Endpoint changes require new credential input or explicit custom no-auth. Review
+each Preview and inspect its Operation; use the returned saved revision, not the placeholder.
+The exact private Apply file and lookup identity support identical retry. Keep completed source/Plan
+steps and release unused candidate references.
+
+The explicit synthetic test may incur provider charges. Inspect `data.outcome` and `failure_code`:
+a successful CLI query can report a failed connection test. Passing proves that probe, not semantic
+quality, actual execution-model access or native loading. After publishing, verify the actual decision
+source, execution group, model and outcome in matching requests. Manual model substitution does not
+prove a complex decision. Empty custom keywords do not disable built-in local rules; report unmatched
+natural tasks honestly. Include cancelled and transport-failed requests in results.
+
+Before restoring or reconnecting the managing caller's own model route, establish independent native
+access or an external operator handoff. A successful restore can revoke the grant still held by a
+running process. Restored files do not prove reload; arrange continuation before that effect.
 
 Desktop manages these connections under **Models → Decision models**; the Released CLI keeps
 `decision services list/apply/test`. Decision models and custom extensions are independent of
@@ -976,3 +1133,112 @@ and Claude subscription checks, not Worker tools or Native API connections.
 Manual URLs cannot contain credentials. PAC and ALL_PROXY are unsupported.
 An applied policy is not proof of remote availability: check the subscription and
 complete a real inference request separately.
+
+## Recover the complete Plan configuration
+
+Before modifying an existing Plan, retain its complete successful read in a fresh private file:
+
+```sh
+(umask 077; set -C; hiroute routing show PLAN_ID --output json > /ABS/plan-before.json)
+```
+
+Check the actual exit code and whole response. Before applying a change, provide the user with
+recovery commands populated with the installed CLI's absolute path, real Plan ID and unique absolute
+files. The commands remain usable from an independent terminal if the managing Agent cannot continue:
+
+```sh
+hiroute routing preview --plan PLAN_ID --restore-from /ABS/plan-before.json --apply-file /ABS/restore-apply.json
+hiroute routing apply --request-file /ABS/restore-apply.json
+hiroute routing show PLAN_ID --output json
+```
+
+The first command only previews: it reads the saved public response, uses the current head revision
+and existing complete editor projection, and prepares the normal exact Apply file. Do not combine
+`--restore-from` with individual edit flags or typed request input. Invalid, unsuccessful or
+different-target responses are rejected. Missing dependencies and revision conflicts stay explicit.
+After uncertain delivery, inspect/replay the same Apply; a certainly stale request needs a fresh
+Preview and new file. Never bypass revision checks.
+
+Compare every restored `data.desired` field, including candidate order/reasoning, decision service and
+judgment, context/limits, requirements, mode/delegation/work, plus the alias. Revision/publication
+numbers advance. Replacing a candidate can select role defaults; choosing its old model again does
+not restore custom reasoning. Sources, credentials and native Agent facets retain their own recovery
+owners: a saved Plan response is not a whole-installation backup.
+
+For native settings provide the matching concrete `agents restore preview --context ... --facet ...
+--apply-file ...` and `agents restore apply --request-file ...` commands, with actual native-root or
+selection flags and the owned restore reference. Arrange independent access before a restore/reconnect
+can revoke the caller's grant. Native loading/selection remains a separate reported action.
+
+
+## Analyze historical conversations and estimated API savings
+
+The installed CLI uses authenticated same-OS-user Local Control. Explicit content/search needs no
+Desktop-created read grant; supplied grants are still validated. Gateway model keys grant no management access.
+Use the installed management Skill and command help to choose a path:
+
+| Goal | Initial command |
+| --- | --- |
+| Recent estimated savings | `hiroute value show --view summary --period 7d` |
+| Most expensive sessions | `hiroute value show --group-by session --order-by cost-desc --period 7d` |
+| Actual model transitions and reasons | `hiroute sessions list --view switches --period 7d` |
+| Find conversations by content | `hiroute sessions list --view conversations --period 7d --query TEXT` |
+
+Keep the returned `analysis_scope` for related views and narrower drill-downs:
+
+```sh
+hiroute sessions show SESSION_ID --view routing --analysis-scope TOKEN
+hiroute sessions show SESSION_ID --view conversation --analysis-scope TOKEN
+hiroute value show --group-by request --order-by cost-desc --session SESSION_ID --analysis-scope TOKEN
+hiroute sessions show SESSION_ID --view conversation --request REQUEST_ID --analysis-scope TOKEN
+```
+
+Choose one time mode: `--period today|yesterday|7d|30d`, `--day YYYY-MM-DD`, or `--from-ms N --to-ms N`.
+Civil dates follow the service host's local day; absolute bounds are UTC milliseconds and half-open.
+Report both returned requested/effective bounds and boundary offsets. Retention can clip the start to keep
+covered evidence available for the scope's lifetime; a range without retained evidence is not complete coverage.
+Follow `next_cursor` with the same view, filters and limit, without a new time selector. Page lengths and
+bounded member previews are not totals. Follow-ups inherit the relation/numeric/price watermarks and can only
+narrow the initial scope. New requests, settlement, unrelated compaction and price edits do not silently
+change its totals. Explicit affected deletion, proof withdrawal, authority change or expiry requires a fresh
+initial query; keep the old and refreshed results distinct.
+
+Selection and competence stages explain decisions, but stage boundaries are not switches. `between_turn`
+requires proven adjacent completed user turns. `continuation_boundary` describes verified native compression,
+including compression within a turn; it carries `turn_context_reset` and is not an adjacent-turn change.
+Missing proof leaves physical sessions separate. Credential relay and within-request fallback are separate
+kinds. Compare actual accepted endpoints and explicit reasoning settings, not whole-profile digests. Open
+linked physical members, request IDs and receipts; count each request and attempt once.
+
+Conversation pages return bounded messages/tools. For `reference_only` or partial entries, the installed
+`sessions.show` schema describes V2 catalog/content pagination using their returned IDs. `sessions receipt`
+opens immutable facts and `observation plan-quality samples` opens recorded stages. Legacy `sessions list
+--include-unlinked --query/--model-switch` and `sessions show --content messages-and-tools` keep their meanings;
+`--model-switch` is invalid for the new views. No analysis read calls a model or changes routing.
+
+Cost ranking needs no reference model. Select one currency and recorded valuation kind, or choose
+`--basis api-equivalent` to recalculate recorded attempts with current source-specific prices. Summary defaults
+to that estimate and an unambiguous primary binding; resolve returned reference/currency choices explicitly.
+Do not mix recorded estimates, current-price recalculation, currencies or valuation kinds. Full-scope totals
+are computed before pagination. Missing usage/prices are unknown, not free/zero; incomplete rankings are
+`highest_known_only`. Savings reports signed paired subtotals and missing/excluded coverage, with no percentage
+for a zero denominator. Decision overhead remains unmeasured. Coding Plan API-equivalent estimates prove
+neither cash savings nor equal output quality, and do not rewrite frozen receipts or subscription billing.
+
+A pending index, missing capture or deleted/expired content is a coverage gap. `pending` reconciliation reports
+progress, last-progress and stall information. Retryable read errors distinguish `timeout`, `reader_busy`,
+`index_unavailable` and `storage_unavailable`; they are not empty results. Inspect task/answer/tool evidence,
+decision source/group/probability/threshold, competence and reasoning before proposing policy changes. Keep a
+fresh complete before-image and fully populated recovery commands before applying an authorized change.
+
+The legacy explicit-reference report remains available with its original response/time semantics:
+
+```sh
+hiroute value show --routing PLAN_ID --period 7d --basis api-equivalent --reference-binding PRIMARY_BINDING --currency CNY --output json
+```
+
+It has no day grouping. Ordinary `value show` retains its historical valuation meaning.
+
+For missing rates, read the installed `prices.effective` and `prices.override.preview` schemas. Query the exact Binding locator with currency and `valuation_kind: "api_equivalent"`; copy the returned `edit_context` revisions into a price Preview. Manual `rates` use integer currency micros per million tokens, with separate input/output/cache rates. Use verified prices or ask for these non-secret values; do not invent them. Apply the exact returned spec/digest/revisions with one retained key. Before changing a price, retain its prior setting and give fully populated price-restore Preview/Apply commands; `follow_catalog` restores catalog lookup when no manual override existed. API-equivalent prices can be set for subscriptions without changing their entitlement or ordinary billing class. Free, subscription, paid and unknown remain distinct.
+
+When cache creation is charged at the ordinary input rate, set its reference rate equal to input. The amount then does not depend on an unreported input/creation split; HiRoute can combine equal-rate calculation buckets without filling or rewriting recorded usage. Different rates still require the missing count.

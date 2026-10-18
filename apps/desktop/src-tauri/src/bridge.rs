@@ -3,7 +3,7 @@ use hiroute_product_session::commands::{
     ClassifierDecisionTestInput, ClassifierHeaderSecretSaveInput, DecisionServiceSaveInput,
     ObservationDeleteInput, ProtectedModelInputRegistration, WebComputeCandidateViewV2,
     WebComputeConnectionApplyRequestV1, WebComputeDiscoveryRefV1, WebComputeManagementChangeV2,
-    WebComputeSavePreviewV2, WebComputeSaveResultV2, WebComputeScanResultV1,
+    WebComputeSavePreviewV2, WebComputeSaveResultV2, WebComputeScanResultV2,
     WebComputeSubscriptionCandidatesV2, WebComputeSubscriptionCheckResultV2, WebValidationRefV2,
     WorkerDependencyConfirmationInput, WorkerDependencyConfirmationState,
     WorkerDependencyConfirmationV1,
@@ -374,6 +374,7 @@ pub async fn effective_price_query(
 pub async fn agent_snapshot(
     window: WebviewWindow,
     state: State<'_, DesktopState>,
+    native_targets: Option<Vec<hiroute_domain::AgentNativeTargetV1>>,
 ) -> Result<AgentSnapshot, DesktopFailure> {
     main_window(&window)?;
     let broker = window.state::<WebConfirmationState>();
@@ -399,7 +400,8 @@ pub async fn agent_snapshot(
         &state.2,
         &state.3,
     );
-    hiroute_product_session::commands::agent_snapshot(&context, &product_state).await
+    hiroute_product_session::commands::agent_snapshot(&context, &product_state, native_targets)
+        .await
 }
 #[tauri::command]
 pub async fn retry_agent_settings(

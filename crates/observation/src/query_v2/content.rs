@@ -33,8 +33,22 @@ impl crate::LocalObservationStore {
         query: &ObservationContentQueryV2,
         now_ms: i64,
     ) -> Result<ObservationContentPageV2, ObservationV2Error> {
+        self.observed_content_page_admitted(reader, query, now_ms, false)
+    }
+
+    pub(crate) fn observed_content_page_admitted(
+        &self,
+        reader: &ObservationReaderContext,
+        query: &ObservationContentQueryV2,
+        now_ms: i64,
+        admitted: bool,
+    ) -> Result<ObservationContentPageV2, ObservationV2Error> {
         reader.check(now_ms, true, false)?;
-        let _permit = self.query_permit()?;
+        let _permit = if admitted {
+            None
+        } else {
+            Some(self.query_permit()?)
+        };
         if !identifier(&query.content_id)
             || query
                 .anchor_offset
