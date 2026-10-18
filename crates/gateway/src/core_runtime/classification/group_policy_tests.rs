@@ -356,3 +356,23 @@ fn c_applicability_never_overrides_attribution_or_a_partial_target() {
         );
     }
 }
+
+#[test]
+fn c_omission_reasons_survive_final_group_policy_without_creating_protection() {
+    use hiroute_domain::ProtectionEligibilityV1 as E;
+    for reason in [E::Unrated, E::DifferentCategory, E::DifferentPolicy] {
+        let input = c_input();
+        let mut result = outcome(&input, Some(0.9), None);
+        let p = native_protocol(&input).unwrap();
+        let mut observation = hiroute_domain::RoutingObservationV1::not_dispatched(p, "code");
+        observation.target_segment = Some("old-stage".into());
+        observation.eligibility = reason;
+        result.decision.routing_observation = Some(observation);
+        apply(&input, &history(), &mut result);
+        assert_eq!(
+            result.decision.routing_observation.unwrap().eligibility,
+            reason
+        );
+        assert_eq!(result.decision.execution_group, ExecutionGroupV1::Regular);
+    }
+}

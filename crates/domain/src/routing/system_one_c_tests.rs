@@ -116,15 +116,36 @@ fn categorical_stock_wording_is_not_the_stock_experimental_question_shape() {
     let mut j = JudgmentSettingsV1::default();
     p.stock_assessment(&mut j);
     let branch = super::super::MaterializedBranchV1 {
-        id: "writing".into(), name: "Writing".into(), condition: "Write an article".into(),
+        id: "writing".into(),
+        name: "Writing".into(),
+        condition: "Write an article".into(),
         group: super::super::MaterializedGroupId::Branch(0),
-        primary_group: Some(super::super::MaterializedGroupId::BranchPrimary(0)), judgment: j.clone(),
+        primary_group: Some(super::super::MaterializedGroupId::BranchPrimary(0)),
+        judgment: j.clone(),
     };
-    let frozen = FrozenNativeProtocolV1::freeze(&p, branch_decision_definition(std::slice::from_ref(&branch), "writing"), [("writing".into(), j)]).unwrap();
+    let frozen = FrozenNativeProtocolV1::freeze(
+        &p,
+        branch_decision_definition(std::slice::from_ref(&branch), "writing"),
+        [("writing".into(), j)],
+    )
+    .unwrap();
     let before = serde_json::to_vec(&frozen).unwrap();
     // Preserve the existing frozen provenance and digest; qualify the actual request.
     assert_eq!(frozen.scopes["writing"].standard, "stock");
-    assert_eq!(crate::RoutingObservationV1::not_dispatched(&frozen, "writing").standard, "custom");
+    assert_eq!(
+        crate::RoutingObservationV1::not_dispatched(&frozen, "writing").standard,
+        "custom"
+    );
     frozen.validate_branches(&[branch], "writing").unwrap();
     assert_eq!(serde_json::to_vec(&frozen).unwrap(), before);
+}
+
+#[test]
+fn native_category_v1_text_is_immutable_supported_publication_content() {
+    let template: Value =
+        serde_json::from_str(include_str!("fixtures/native_category_v1.json")).unwrap();
+    assert_eq!(
+        CanonicalDigest::of(&template).unwrap().as_str(),
+        "sha256:b3bdc8c141db782c4e405557bcde84945c3401f1443e35dac023daf57a29086d"
+    );
 }

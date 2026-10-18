@@ -305,4 +305,13 @@ fn c_rollback_requires_destination_review_and_copied_history_does_not_depend_on_
         .instructions
         .push_str(" edited");
     assert!(draft.effective().is_err());
+    // A later edit may discard obsolete provenance after rollback has completed.
+    // The same removal must never bypass the C -> legacy transition itself.
+    draft.smart.assessment_review = None;
+    let later = draft.effective().unwrap();
+    validate_assessment_transition(&later, Some(&restored), None, &[]).unwrap();
+    assert_eq!(
+        validate_assessment_transition(&later, Some(&before), None, &[]),
+        Err(NativeProtocolError::Review)
+    );
 }

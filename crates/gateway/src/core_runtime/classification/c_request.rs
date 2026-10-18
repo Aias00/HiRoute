@@ -1,11 +1,9 @@
 //! Deterministic allocation: reserve Q3, admit the target, then optional background.
 //! Dropping a historical question never starts another history admission pass.
-use super::protocol::{assessment_definition, latest_user_wire_value};
+use super::protocol::{assessment_definition_result, latest_user_wire_value};
 use super::system_one::{base_questions, question_id};
 use super::{CallFailure, PreparedDecisionRequest};
-use crate::agent_turn_history::{
-    AgentTurnHistorySnapshot, AgentTurnStatus, ExecutionAttribution, VisibleAgentTurn,
-};
+use crate::agent_turn_history::{AgentTurnHistorySnapshot, ExecutionAttribution, VisibleAgentTurn};
 use crate::server::core_runtime::{
     adapters::prepare_replay_json_template, model_ir::ModelRequestIRV1,
 };
@@ -31,7 +29,9 @@ pub(super) fn request_template(
     let mut refs = Vec::new();
     let latest =
         latest_user_wire_value(request, &mut refs).map_err(|_| CallFailure::RejectedInput)?;
-    let target = assessment_definition(history, authority);
+    let target_result = assessment_definition_result(history, authority);
+    let omitted_eligibility = target_result.as_ref().err().copied().unwrap_or(E::Unrated);
+    let target = target_result.ok();
     let (mut questions, mut bindings) = base_questions(authority);
     let scope = history
         .assessment_target
@@ -68,20 +68,11 @@ pub(super) fn request_template(
     let background = from.map_or(history.visible_conversation.as_slice(), |i| {
         &history.visible_conversation[..i]
     });
-    let complete_start = background
-        .iter()
-        .rposition(|t| {
-            !matches!(
-                t.status,
-                AgentTurnStatus::Completed | AgentTurnStatus::Failed
-            )
-        })
-        .map_or(0, |i| i + 1);
-    let cap_start = complete_start.max(
-        background
-            .len()
-            .saturating_sub(usize::from(protocol.protocol.prior_context_max_turns)),
-    );
+    // Snapshot turns already have boundaries. Execution status does not invalidate
+    // their user requirements, and filtering individual turns would break chronology.
+    let cap_start = background
+        .len()
+        .saturating_sub(usize::from(protocol.protocol.prior_context_max_turns));
     let mut budget = MAX_REQUEST_BYTES.saturating_sub(base.wire_len);
     let admitted_stage = if base.wire_len > MAX_REQUEST_BYTES {
         0
@@ -119,20 +110,6 @@ pub(super) fn request_template(
         return Err(CallFailure::RejectedInput);
     }
     let requested = bindings.applicability.is_some();
-    let omitted_eligibility = if let Some(t) = &history.assessment_target {
-        if history
-            .assessment_from
-            .is_none_or(|i| i >= history.visible_conversation.len())
-        {
-            E::InvalidBoundary
-        } else if !matches!(t.attribution, ExecutionAttribution::Single { .. }) {
-            E::AmbiguousAttribution
-        } else {
-            E::DifferentPolicy
-        }
-    } else {
-        E::NoTarget
-    };
     let observation = RoutingObservationV1 {
         protocol: protocol.protocol.schema.clone(),
         content_digest: protocol.digest.clone(),
@@ -140,7 +117,7 @@ pub(super) fn request_template(
             .map_err(|_| CallFailure::RejectedInput)?,
         provider: authority.decision_provider.clone(),
         model: authority.system_one_model.clone().unwrap_or_default(),
-        standard: scope.map_or("custom", |s| s.standard.as_str()).into(),
+        standard: protocol.effective_standard(scope).into(),
         target_segment: history
             .assessment_target
             .as_ref()

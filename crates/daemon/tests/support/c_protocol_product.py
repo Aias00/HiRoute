@@ -160,6 +160,17 @@ def exercise(product, cli, service, endpoint, selection):
     assert 'native_protocol' not in restored
     assert restored['judgment'] == original, 'rollback altered thresholds or degree text'
     assert restored['assessment_review']['smart_saving']['source'] == source['source']
+    # After completed rollback, stale provenance can be removed on an ordinary edit.
+    later = copy.deepcopy(rollback)
+    later['judgment']['competence']['instructions'] += ' Assess only the explicitly requested deliverable.'
+    invalid = plan_change(product, 'update', mode='smart_saving', smart=later)
+    assert cli('routing preview', {'change': invalid}, ok=False)['status'] != 'succeeded', 'stale review approved edited text'
+    later.pop('assessment_review')
+    editor['smart'] = later
+    _, saved = publish(editor, 'legacy-edit-with-explicit-review-removal')
+    assert saved['desired']['strategy']['judgment'] == later['judgment']
+    assert 'assessment_review' not in saved['desired']['strategy']
+    assert 'native_protocol' not in saved['desired']['strategy']
     endpoint.c_vectors = False
     print(json.dumps({'scenario': 'c-reviewed-adoption-restart-explicit-3-and-19-question-diagnostics-exact-scope-rollback',
                       'state': 'green', 'explicit_calls': 3, 'routing_calls': routing_calls, 'implicit_calls': 0}), flush=True)

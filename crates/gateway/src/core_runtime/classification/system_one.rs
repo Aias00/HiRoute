@@ -93,8 +93,12 @@ pub(super) fn base_questions(
     authority: &RestBranchClassifierAuthorityV1,
 ) -> (Map<String, Value>, Bindings) {
     let mut questions = Map::new();
+    let definition = authority
+        .native_protocol
+        .as_ref()
+        .map_or(&authority.decision, |p| &p.decision);
     let mut bindings = Bindings {
-        definition: authority.decision.clone(),
+        definition: definition.clone(),
         choice: None,
         degrees: BTreeMap::new(),
         assessment: None,
@@ -104,7 +108,7 @@ pub(super) fn base_questions(
         "Assess state.latest_user only, not historical competence.",
         |p| p.protocol.fixed.degree_prefix.as_str(),
     );
-    match &authority.decision {
+    match definition {
         DecisionDefinitionV1::Ordinal {
             instructions,
             levels,

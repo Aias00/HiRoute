@@ -1,3 +1,4 @@
+import { composedAssessment, contentDigest } from '../../../src/features/decision-services/native-protocol.ts';
 import { scenario } from './scenario-selection.mjs';
 
 export function cProtocolScenarios({ fresh, routing, click, until, all, text, calls, setInput, control }) {
@@ -59,6 +60,7 @@ export function cProtocolScenarios({ fresh, routing, click, until, all, text, ca
       await click(t('保存草稿', 'Save draft'));
       await until(() => calls('preview_plan_editor').at(-1).payload.input.editor.smart.assessment_review.smart_saving.protocol === 'hiroute.system-one-legacy/v1', 'destination-specific rollback review');
       assert(!calls('preview_plan_editor').at(-1).payload.input.editor.smart.native_protocol, 'Rollback retained C execution mode');
+      assert(!all('.native-protocol-editor button').some(b => b.textContent === t('移除此审阅记录', 'Remove this review record')), 'Unpublished transition offered review removal');
       assert(calls('test_classifier_decision').length === 1, 'Draft save or rollback dispatched another probe');
       // Leave the full C composition open for host screenshot inspection.
       choose(select(), 'c'); await click(t('采用标准 C 评分', 'Adopt stock C assessment'));
@@ -71,6 +73,42 @@ export function cProtocolScenarios({ fresh, routing, click, until, all, text, ca
       }
       const footer = document.querySelector('.plan-editor-footer, .editor-actions, .plan-editor .modal-foot');
       if (footer) assert(footer.getBoundingClientRect().bottom <= innerHeight + 1, 'Save actions left the supported viewport');
+    }
+  }), scenario('desktop.routing.legacy-review-removal', ['routing-editor', 'decision-services', 'c-protocol'], 'Completed rollback permits explicit review removal without changing the legacy rubric', async () => {
+    for (const language of ['zh', 'en']) {
+      const t = (zh, en) => language === 'zh' ? zh : en;
+      let original;
+      await fresh(() => {
+        control().handlers.decision_services = () => ({ services: [service] });
+        control().handlers.desktop_snapshot = async payload => {
+          const snapshot = structuredClone(control().fixtureResponse('desktop_snapshot', payload));
+          const plan = snapshot.catalog.plans[0];
+          const strategy = plan.desired.strategy;
+          strategy.classifier = { kind: 'decision_service', service };
+          strategy.assessment_review = { smart_saving: { protocol: 'hiroute.system-one-legacy/v1', method: 'reviewed_custom', assessment_digest: await contentDigest(composedAssessment(undefined, strategy.judgment)) } };
+          original = structuredClone(strategy.judgment);
+          return snapshot;
+        };
+      });
+      localStorage.setItem('hiroute.language', language); control().remount();
+      if (language === 'zh') await routing();
+      else {
+        await click('Smart routing');
+        await until(() => all('.master-list .list-row').length, 'saved routes'); all('.master-list .list-row')[0].click();
+        await until(() => document.querySelector('.plan-identity-fields input'), 'route editor');
+      }
+      await until(() => all('[data-native-scope="smart_saving"]').length, 'retained legacy review');
+      const button = all('.native-protocol-editor button').find(b => b.textContent === t('移除此审阅记录', 'Remove this review record'));
+      assert(button, 'Completed legacy rollback has no review-removal action');
+      assert(button.scrollWidth <= button.clientWidth + 1, 'Review-removal action overflows');
+      button.click();
+      await until(() => !all('[data-native-scope="smart_saving"]').length, 'review removed');
+      await click(t('保存草稿', 'Save draft'));
+      await until(() => calls('preview_plan_editor').length, 'legacy draft submitted');
+      const smart = calls('preview_plan_editor').at(-1).payload.input.editor.smart;
+      assert(!smart.native_protocol && !smart.assessment_review, 'Clear action retained C or an empty review map');
+      assert(JSON.stringify(smart.judgment) === JSON.stringify(original), 'Clearing provenance changed the rubric or thresholds');
+      assert(calls('test_classifier_decision').length === 0, 'Clearing review implicitly called a provider');
     }
   }), scenario('desktop.quality.c-observations', ['routing-editor', 'sessions', 'c-protocol'], 'Retained C counts, denominators, partial coverage and empty states remain readable', async () => {
     for (const language of ['zh', 'en']) {

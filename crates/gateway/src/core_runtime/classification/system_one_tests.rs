@@ -331,24 +331,38 @@ fn c_background_keeps_bounded_interrupted_and_unknown_turns_in_chronology() {
                 let a = c_authority();
                 let mut h = c_history(&a);
                 let original = h.visible_conversation[0].clone();
-                h.visible_conversation = (0..10).map(|i| {
-                    let mut turn = (*original).clone();
-                    turn.user = vec![VisibleContentPart::Text { text: format!("Requirement {i}") }];
-                    if i == position { turn.status = status; }
-                    Arc::new(turn)
-                }).collect();
+                h.visible_conversation = (0..10)
+                    .map(|i| {
+                        let mut turn = (*original).clone();
+                        turn.user = vec![VisibleContentPart::Text {
+                            text: format!("Requirement {i}"),
+                        }];
+                        if i == position {
+                            turn.status = status;
+                        }
+                        Arc::new(turn)
+                    })
+                    .collect();
                 h.assessment_from = with_target.then_some(9);
-                if !with_target { h.assessment_target = None; }
+                if !with_target {
+                    h.assessment_target = None;
+                }
                 let p = request_template(&a, &diagnostic_request(), &h).unwrap();
                 let wire: Value = serde_json::from_slice(&p.template.bytes).unwrap();
                 let background = wire["state"]["prior_context"].as_array().unwrap();
                 let start = if with_target { 1 } else { 2 };
                 assert_eq!(background.len(), 8, "{status:?}, {position}, {with_target}");
                 for (i, turn) in background.iter().enumerate() {
-                    assert_eq!(turn["user"][0]["text"], format!("Requirement {}", start + i));
+                    assert_eq!(
+                        turn["user"][0]["text"],
+                        format!("Requirement {}", start + i)
+                    );
                 }
                 if position >= start {
-                    assert_eq!(background[position-start]["status"], serde_json::to_value(status).unwrap());
+                    assert_eq!(
+                        background[position - start]["status"],
+                        serde_json::to_value(status).unwrap()
+                    );
                 }
                 assert_eq!(p.routing_observation.unwrap().target_complete, with_target);
                 assert_eq!(p.bindings.unwrap().applicability.is_some(), with_target);
@@ -359,32 +373,97 @@ fn c_background_keeps_bounded_interrupted_and_unknown_turns_in_chronology() {
 
 #[test]
 fn c_reopened_frozen_questions_ignore_changed_current_authority_defaults() {
-    let mut a = c_authority();
-    let bytes = serde_json::to_vec(a.native_protocol.as_ref().unwrap()).unwrap();
-    let original = request_template(&a, &diagnostic_request(), &c_history(&a)).unwrap();
-    // Model a later binary's independently changed current category/degree defaults.
-    a.decision = DecisionDefinitionV1::Categorical {
-        instructions: "Changed current default; never execute for this publication".into(),
-        options: vec![CategoryOptionV1 { id: "new-default".into(), criterion: "New default".into(), refinement: None }],
-    };
-    a.native_protocol = Some(serde_json::from_slice(&bytes).unwrap());
-    a.native_protocol.as_ref().unwrap().validate_smart(a.smart_judgment.as_ref().unwrap()).unwrap();
-    let reopened = request_template(&a, &diagnostic_request(), &c_history(&a)).unwrap();
-    assert_eq!(reopened.template.bytes, original.template.bytes);
-    assert_eq!(reopened.bindings.unwrap().definition, a.native_protocol.unwrap().decision);
+    for smart in [true, false] {
+        let mut a = c_authority();
+        if !smart {
+            let j = a.smart_judgment.clone().unwrap();
+            a.branch_policies = ["writing", "general"]
+                .into_iter()
+                .enumerate()
+                .map(|(i, id)| hiroute_domain::MaterializedBranchV1 {
+                    id: id.into(),
+                    name: id.into(),
+                    condition: format!("{id} work"),
+                    group: hiroute_domain::MaterializedGroupId::Branch(i as u16),
+                    primary_group: Some(hiroute_domain::MaterializedGroupId::BranchPrimary(
+                        i as u16,
+                    )),
+                    judgment: j.clone(),
+                })
+                .collect();
+            let definition =
+                hiroute_domain::branch_decision_definition(&a.branch_policies, "general");
+            a.native_protocol = Some(
+                hiroute_domain::FrozenNativeProtocolV1::freeze(
+                    &hiroute_domain::NativeProtocolV1::default(),
+                    definition,
+                    a.branch_policies
+                        .iter()
+                        .map(|b| (b.id.clone(), b.judgment.clone())),
+                )
+                .unwrap(),
+            );
+        }
+        let bytes = serde_json::to_vec(a.native_protocol.as_ref().unwrap()).unwrap();
+        let original = request_template(&a, &diagnostic_request(), &history(false)).unwrap();
+        // Model a later binary's independently changed current category/degree defaults.
+        a.decision = DecisionDefinitionV1::Categorical {
+            instructions: "Changed current default; never execute for this publication".into(),
+            options: vec![CategoryOptionV1 {
+                id: "new-default".into(),
+                criterion: "New default".into(),
+                refinement: None,
+            }],
+        };
+        a.native_protocol = Some(serde_json::from_slice(&bytes).unwrap());
+        let frozen = a.native_protocol.as_ref().unwrap();
+        if smart {
+            frozen
+                .validate_smart(a.smart_judgment.as_ref().unwrap())
+                .unwrap();
+        } else {
+            frozen
+                .validate_branches(&a.branch_policies, "general")
+                .unwrap();
+        }
+        let reopened = request_template(&a, &diagnostic_request(), &history(false)).unwrap();
+        assert_eq!(reopened.template.bytes, original.template.bytes);
+        assert_eq!(
+            reopened.bindings.unwrap().definition,
+            a.native_protocol.unwrap().decision
+        );
+    }
 }
 
 #[test]
 fn c_omitted_target_distinguishes_absent_evidence_from_policy_mismatch() {
     use hiroute_domain::ProtectionEligibilityV1 as E;
-    for (variant, expected) in [(0, E::Unrated), (1, E::DifferentCategory), (2, E::DifferentPolicy)] {
+    for (variant, expected) in [
+        (0, E::Unrated),
+        (1, E::DifferentCategory),
+        (2, E::DifferentPolicy),
+    ] {
         let a = c_authority();
         let mut h = c_history(&a);
         let target = h.assessment_target.as_mut().unwrap();
         match variant {
             0 => target.branch_execution = None,
-            1 => if let ExecutionAttribution::Single { executed_branch_id, .. } = &mut target.attribution { *executed_branch_id = "removed-category".into(); },
-            _ => target.branch_execution.as_mut().unwrap().policy.floor_millis += 1,
+            1 => {
+                if let ExecutionAttribution::Single {
+                    executed_branch_id, ..
+                } = &mut target.attribution
+                {
+                    *executed_branch_id = "removed-category".into();
+                }
+            }
+            _ => {
+                target
+                    .branch_execution
+                    .as_mut()
+                    .unwrap()
+                    .policy
+                    .floor_millis += 1
+            }
         }
         let prepared = request_template(&a, &diagnostic_request(), &h).unwrap();
         assert_eq!(prepared.routing_observation.unwrap().eligibility, expected);

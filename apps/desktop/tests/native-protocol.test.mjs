@@ -45,3 +45,12 @@ test('explicit saved-service probes bind the standard and maximum branch shapes'
   assert.equal(nativeReferenceIssue(true, 'Use state.visible_conversation'), true);
   assert.equal(nativeReferenceIssue(false, 'Use state.assessment_stage'), true);
 });
+
+test('native category v1 composition is pinned independently of current defaults', async () => {
+  const { default: categoryV1 } = await import('../../../crates/domain/src/routing/fixtures/native_category_v1.json', { with: { type: 'json' } });
+  const p = await stockProbe({ id: 'fixture', revision: 1 }, 'max_branches');
+  assert.equal(p.protocol.decision.instructions, categoryV1.category_prefix + 'probe-1' + categoryV1.category_suffix);
+  const option = p.protocol.decision.options[0];
+  assert.ok(option.refinement.instructions.startsWith(categoryV1.degree_prefix));
+  assert.ok(option.refinement.instructions.includes(categoryV1.degree_suffix));
+});

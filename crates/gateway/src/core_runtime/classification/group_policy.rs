@@ -201,7 +201,7 @@ fn finalize_observation(input: &PlannerInputV1, outcome: &mut ClassificationOutc
     let Some(scope) = p.scopes.get(&outcome.decision.branch_id) else {
         return;
     };
-    o.standard = scope.standard.clone();
+    o.standard = p.effective_standard(Some(scope)).into();
     o.simple_probability = outcome.decision.simple_probability.clone();
     o.simple_threshold_millis = scope.simple_threshold_millis;
     o.competence_floor_millis = scope.competence_floor_millis;
@@ -218,9 +218,7 @@ fn finalize_observation(input: &PlannerInputV1, outcome: &mut ClassificationOutc
     };
     o.eligibility = if !dual {
         E::SingleGroup
-    } else if !o.target_complete
-        && !matches!(o.eligibility, E::NoTarget | E::PartialTarget | E::Unrated)
-    {
+    } else if !o.target_complete && !matches!(o.eligibility, E::NoTarget | E::PartialTarget) {
         o.eligibility
     } else if o.target_segment.is_none() {
         E::NoTarget

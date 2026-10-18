@@ -89,7 +89,7 @@ impl RoutingObservationV1 {
             bundle_digest: CanonicalDigest::of(&p.protocol.fixed).expect("validated bundle"),
             provider: "unknown".into(),
             model: "unknown".into(),
-            standard: settings.map_or("custom", |s| s.standard.as_str()).into(),
+            standard: p.effective_standard(settings).into(),
             target_segment: None,
             target_complete: false,
             eligibility: ProtectionEligibilityV1::Unrated,

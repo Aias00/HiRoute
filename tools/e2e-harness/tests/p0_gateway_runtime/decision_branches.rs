@@ -598,6 +598,23 @@ fn c_protocol_rejudges_current_work_and_observes_protection_and_release_on_real_
         let fixture =
             RuntimeFixture::launch_builtin_branches(&[&regular, &primary, &decider], smart);
         enable_c(&fixture);
+        let publication = fixture.publication();
+        let frozen = match &publication.aliases[0]
+            .routing
+            .as_ref()
+            .unwrap()
+            .request_owned
+        {
+            hiroute_gateway::server::publication::AliasRequestOwnedRouteV1::Classified {
+                native_protocol,
+                ..
+            }
+            | hiroute_gateway::server::publication::AliasRequestOwnedRouteV1::Branches {
+                native_protocol,
+                ..
+            } => native_protocol.as_ref().unwrap(),
+            _ => unreachable!(),
+        };
         let mut input = Vec::new();
         for (index, text) in [
             "Provide the requested title.",
@@ -638,6 +655,28 @@ fn c_protocol_rejudges_current_work_and_observes_protection_and_release_on_real_
         for (i, request) in wire.iter().enumerate() {
             let offset = request.windows(4).position(|w| w == b"\r\n\r\n").unwrap() + 4;
             let body: Value = serde_json::from_slice(&request[offset..]).unwrap();
+            match &frozen.decision {
+                hiroute_domain::DecisionDefinitionV1::Ordinal { instructions, .. } => {
+                    assert_eq!(
+                        body["questions"]["q0"]["instructions"],
+                        format!("{} {instructions}", frozen.protocol.fixed.degree_prefix)
+                    );
+                }
+                hiroute_domain::DecisionDefinitionV1::Categorical {
+                    instructions,
+                    options,
+                } => {
+                    assert_eq!(body["questions"]["q0"]["instructions"], *instructions);
+                    let degree = options[0].refinement.as_ref().unwrap();
+                    assert_eq!(
+                        body["questions"]["q1"]["instructions"],
+                        format!(
+                            "{} {}",
+                            frozen.protocol.fixed.degree_prefix, degree.instructions
+                        )
+                    );
+                }
+            }
             assert!(body["state"].get("visible_conversation").is_none());
             assert!(body["state"].get("assessment_stage").is_some());
             let applicability = if smart { "q2" } else { "q3" };

@@ -249,3 +249,58 @@ fn impossible_applicability_combinations_are_rejected() {
     o.protection_action = HistoricalProtectionActionV1::Suppressed;
     assert!(!o.validate());
 }
+
+#[test]
+fn known_plan_identity_without_c_metadata_keeps_mixed_revision_rates_partial() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = open_store(directory.path());
+    let fixture = Fixture::new("c-mixed-retained-revisions");
+    let channel = fact_channel(&fixture, 1024 * 1024);
+    let writer = writer(&store);
+    for is_c in [true, false] {
+        let mut request = fixture.clone();
+        request.request = LogicalRequestId::parse(if is_c {
+            "c-current"
+        } else {
+            "legacy-or-missing-c"
+        })
+        .unwrap();
+        let mut fact = route_decision(PLAN);
+        let ExecutionFactV1::RouteDecision(decision) = &mut fact else {
+            unreachable!()
+        };
+        decision.complexity.as_mut().unwrap().routing_observation = is_c.then(|| observation(3));
+        assert!(matches!(
+            offer_fact(&writer, &channel, request.fact(1, fact, 1000)),
+            WriterCycleOutcome::Ack(_)
+        ));
+    }
+    let mut q = query(None);
+    q.include_routing_observations = true;
+    let report = store
+        .observed_plan_quality_samples(&reader(), &q, 5000)
+        .unwrap()
+        .routing_observations
+        .unwrap();
+    assert_eq!(report.retained_decisions, 2);
+    assert_eq!(
+        report.unknown_scope_decisions, 0,
+        "both decisions have known Plan identity"
+    );
+    assert_eq!(report.legacy_or_unknown_decisions, 1);
+    assert_eq!(report.coverage, "partial");
+    assert_eq!(report.cohorts.len(), 1);
+    let c = &report.cohorts[0].counts;
+    assert_eq!(
+        (
+            c.c_decisions,
+            c.requested,
+            c.gate_opportunities,
+            c.suppressed
+        ),
+        (1, 1, 1, 1)
+    );
+    assert_eq!(c.suppressed_per_opportunity, None);
+    assert_eq!(c.unavailable_per_requested, None);
+    assert_eq!(c.suppressed_per_c_decision, None);
+}
