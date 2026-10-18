@@ -1,4 +1,4 @@
-import { composedAssessment, contentDigest } from '../../../src/features/decision-services/native-protocol.ts';
+import { composedAssessment, contentDigest, nativeProtocol, stockAssessment } from '../../../src/features/decision-services/native-protocol.ts';
 import { scenario } from './scenario-selection.mjs';
 
 export function cProtocolScenarios({ fresh, routing, click, until, all, text, calls, setInput, control }) {
@@ -109,6 +109,42 @@ export function cProtocolScenarios({ fresh, routing, click, until, all, text, ca
       assert(!smart.native_protocol && !smart.assessment_review, 'Clear action retained C or an empty review map');
       assert(JSON.stringify(smart.judgment) === JSON.stringify(original), 'Clearing provenance changed the rubric or thresholds');
       assert(calls('test_classifier_decision').length === 0, 'Clearing review implicitly called a provider');
+    }
+  }), scenario('desktop.routing.c-cross-mode-rollback', ['routing-editor', 'decision-services', 'c-protocol'], 'Changing a published C smart route to legacy branches retains required destination review', async () => {
+    for (const language of ['zh', 'en']) {
+      const t = (zh, en) => language === 'zh' ? zh : en;
+      await fresh(() => {
+        control().handlers.decision_services = () => ({ services: [service] });
+        control().handlers.desktop_snapshot = async payload => {
+          const snapshot = structuredClone(control().fixtureResponse('desktop_snapshot', payload));
+          const strategy = snapshot.catalog.plans[0].desired.strategy;
+          strategy.classifier = { kind: 'decision_service', service };
+          strategy.native_protocol = nativeProtocol();
+          strategy.judgment = stockAssessment(strategy.judgment, strategy.native_protocol);
+          strategy.assessment_review = { smart_saving: { protocol: 'hiroute.system-one-c/v1', method: 'stock', assessment_digest: await contentDigest(composedAssessment(strategy.native_protocol, strategy.judgment)) } };
+          return snapshot;
+        };
+      });
+      localStorage.setItem('hiroute.language', language); control().remount();
+      if (language === 'zh') await routing();
+      else {
+        await click('Smart routing');
+        await until(() => all('.master-list .list-row').length, 'saved routes'); all('.master-list .list-row')[0].click();
+        await until(() => document.querySelector('.plan-identity-fields input'), 'route editor');
+      }
+      await until(() => all('.mode-card').length, 'mode selector');
+      all('.mode-card').find(b => b.querySelector('strong')?.textContent === t('自定义分支', 'Custom branches')).click();
+      await until(() => document.querySelector('.native-protocol-editor select')?.value === 'legacy', 'legacy branch destination');
+      await until(() => document.querySelector('[data-native-scope="default"]'), 'destination review after mode change');
+      await click(t('采用旧默认评分', 'Adopt legacy default assessment'));
+      const details = document.querySelector('[data-native-scope="default"] details');
+      details.querySelector('summary').click();
+      await click(t('已审阅，确认此范围', 'Reviewed: confirm this scope'));
+      assert(!all('.native-protocol-editor button').some(b => b.textContent === t('移除此审阅记录', 'Remove this review record')), 'Cross-mode rollback offered provenance removal');
+      await click(t('保存草稿', 'Save draft'));
+      await until(() => calls('preview_plan_editor').length, 'reviewed branch draft');
+      const draftRouting = calls('preview_plan_editor').at(-1).payload.input.editor.branch_routing;
+      assert(!draftRouting.native_protocol && draftRouting.assessment_review.default.protocol === 'hiroute.system-one-legacy/v1', 'Cross-mode rollback lost destination scope review');
     }
   }), scenario('desktop.quality.c-observations', ['routing-editor', 'sessions', 'c-protocol'], 'Retained C counts, denominators, partial coverage and empty states remain readable', async () => {
     for (const language of ['zh', 'en']) {
