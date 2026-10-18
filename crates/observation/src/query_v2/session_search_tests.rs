@@ -17,6 +17,12 @@ fn live_search_250k_occurrences_and_60k_sources_under_real_deadline() {
     search_scale(60_000, 250_000);
 }
 
+#[test]
+#[ignore = "targeted retained-native-history scale gate; execute outside ordinary parallel unit tests"]
+fn live_search_450k_occurrences_and_100k_sources_under_real_deadline() {
+    search_scale(100_000, 450_000);
+}
+
 fn search_scale(distinct: usize, occurrences: usize) {
     let root = tempfile::tempdir().unwrap();
     let store = LocalObservationStore::open(root.path(), DigestAuthority::new([2; 32])).unwrap();
@@ -170,12 +176,11 @@ fn search_scale(distinct: usize, occurrences: usize) {
                     "deduplication must read the covering source index, not large metadata pages: {plan:?}"
                 );
                 assert!(
-                    plan.iter()
-                        .any(|(_, _, step)| step == "MATERIALIZE sources")
+                    plan.iter().any(|(_, _, step)| step == "MERGE (EXCEPT)")
                         && plan
                             .iter()
                             .any(|(_, _, step)| step == "MATERIALIZE unready_sources"),
-                    "ready repeated history must be removed before occurrence metadata is read: {plan:?}"
+                    "ready history must be subtracted by ordered merge, without materializing complete source sets: {plan:?}"
                 );
                 assert!(
                     plan.iter().any(|(_, _, step)| step.starts_with(
