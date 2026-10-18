@@ -597,3 +597,56 @@ fn a_reused_native_id_with_older_retained_requests_is_not_a_new_child() {
         );
     }
 }
+
+#[test]
+fn later_source_evidence_rechecks_a_previously_admitted_native_origin() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    let [_, b, _] = chain(&store);
+    delete(&store, &b, DeletionDataClass::FactsAndContent, false, 2000);
+    new_request(&store, &b.session, "late-origin-parent");
+    let d = new_request(
+        &store,
+        &Fixture::new("late-origin-child").session,
+        "late-origin-child",
+    );
+    let mut proof = event(&d, vec![b.session.to_string(), d.session.to_string()], 70);
+    proof.ingress_at_ms = 10_000;
+    proof.current_state = Some(NativeCurrentStateV1 {
+        value: NativeSessionStateV1::Open,
+        observation: NativeProofObservationV1 {
+            observer_id: "late-origin".into(),
+            sequence: 70,
+            observed_at_ms: 10_000,
+            age_ms: 0,
+        },
+        started_at_ms: Some(5000),
+    });
+    store.ingest_native_continuation(&proof).unwrap();
+    check(&store, 3, 4, true);
+    let pinned = read(
+        &store,
+        ObservationAnalysisQueryV1::new(AnalysisViewV1::Conversations),
+    );
+    // Delayed retained evidence can contradict a physical-ID creation claim.
+    // Rechecking live sources must not wait for the next native lookup or GC.
+    new_request_at(&store, &d.session, "late-origin-older-request", 0);
+    let reader = ObservationReaderContext::local_user(
+        WorkspaceId::default(),
+        "delete-analysis".into(),
+        1,
+        1_020_000,
+        true,
+        true,
+    )
+    .unwrap();
+    let mut q = ObservationAnalysisQueryV1::new(AnalysisViewV1::Conversations);
+    q.analysis_scope = pinned.analysis_scope;
+    assert!(matches!(
+        store.observed_analysis(&reader, &q, None, None, 20_000),
+        Err(crate::query_v2::ObservationV2Error::Stale)
+    ));
+    check(&store, 4, 5, true);
+    store.reconcile_analysis_batch(20_000).unwrap();
+    check(&store, 4, 5, true);
+}
