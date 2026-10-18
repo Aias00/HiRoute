@@ -16,7 +16,6 @@ pub struct ObservationReaderContext {
     search_content: bool,
     authorization_generation: u64,
     expires_at_ms: i64,
-    legacy_query_v2: bool,
 }
 
 impl ObservationReaderContext {
@@ -51,7 +50,6 @@ impl ObservationReaderContext {
             return Err(ObservationQueryError::InvalidQuery);
         }
         Ok(Self {
-            legacy_query_v2: false,
             cancelled: Default::default(),
             workspace,
             subject,
@@ -108,15 +106,6 @@ impl ObservationReaderContext {
             return Err(ObservationQueryError::Unauthorized);
         }
         Ok(())
-    }
-
-    /// Only the explicit released-query adapter selects legacy cursor bindings.
-    pub fn with_legacy_query_v2(mut self) -> Self {
-        self.legacy_query_v2 = true;
-        self
-    }
-    pub fn is_legacy_query_v2(&self) -> bool {
-        self.legacy_query_v2
     }
 
     pub fn binding(&self) -> Result<String, ObservationQueryError> {
@@ -546,6 +535,8 @@ pub struct ObservationTextChunkV2 {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ObservationFactsQueryV2 {
+    #[serde(default, skip_serializing_if = "routing_observations_disabled")]
+    pub include_routing_observations: bool,
     pub request_id: LogicalRequestId,
     pub limit: u16,
     pub cursor: Option<String>,
@@ -577,11 +568,12 @@ pub struct ObservationSafeFactV2 {
     pub sensitive_fields_deleted: bool,
 }
 
+fn routing_observations_disabled(value: &bool) -> bool {
+    !value
+}
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ObservationFactsPageV2 {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub schema: Option<String>,
     pub facts: Vec<ObservationSafeFactV2>,
     pub next_cursor: Option<String>,
     pub projection_partial: bool,

@@ -82,13 +82,9 @@ impl LocalObservationStore {
         let _permit = self.query_permit()?;
         let mut normalized = query.clone();
         normalized.cursor = None;
-        let binding = if reader.is_legacy_query_v2() {
-            CanonicalDigest::of(&(reader.binding()?, &normalized))
-        } else {
-            CanonicalDigest::of(&(reader.binding()?, &normalized, 3u8))
-        }
-        .map_err(|_| ObservationV2Error::Invalid)?
-        .to_string();
+        let binding = CanonicalDigest::of(&(reader.binding()?, normalized))
+            .map_err(|_| ObservationV2Error::Invalid)?
+            .to_string();
         let mut connection =
             Connection::open_with_flags(&self.activity_path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
         let _deadline = QueryDeadline::start_for(&connection, reader)?;
@@ -133,7 +129,8 @@ impl LocalObservationStore {
             .transpose()
             .map_err(|_| ObservationV2Error::Invalid)?;
         let summary = summarize(&transaction, reader, query, from_ms, to_ms, &runs)?;
-        let routing_observations = (!reader.is_legacy_query_v2())
+        let routing_observations = query
+            .include_routing_observations
             .then(|| {
                 super::routing_observations::summarize(
                     &transaction,
@@ -237,11 +234,10 @@ impl LocalObservationStore {
         };
         let more = rows.len() > usize::from(query.limit);
         rows.truncate(usize::from(query.limit));
-        if reader.is_legacy_query_v2() {
+        if !query.include_routing_observations {
             for row in &mut rows {
                 if let Some(selection) = row.selection.as_mut() {
                     selection.routing_observation = None;
-                    selection.decision_protocol = None;
                 }
             }
         }
@@ -267,7 +263,6 @@ impl LocalObservationStore {
         }
         reader.check(now_ms, false, false)?;
         Ok(PlanQualitySamplesPage {
-            schema: Some("hiroute.plan-quality.samples/v2".into()),
             routing_observations,
             samples: rows,
             summary,

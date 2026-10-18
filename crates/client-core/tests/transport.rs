@@ -201,7 +201,7 @@ async fn observation_session_correlation_survives_typed_transport() {
         .await;
     });
     let query =
-        ObservationReadRequestV3::new(ObservationReadIntentV3::Sessions(ObservationRequestQuery {
+        ObservationReadRequestV2::new(ObservationReadIntentV2::Sessions(ObservationRequestQuery {
             from_ms: 0,
             to_ms: 10,
             session_id: None,

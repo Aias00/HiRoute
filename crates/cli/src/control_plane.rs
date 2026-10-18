@@ -147,8 +147,8 @@ fn classifier_request(options: &[String]) -> Result<Value, ErrorCode> {
 
 fn classifier_value(value: Value) -> Result<Value, ErrorCode> {
     match value.get("schema").and_then(Value::as_str) {
-        Some(hiroute_application_api::CLASSIFIER_DECISION_TEST_SCHEMA_V2) => {
-            typed_value::<hiroute_application_api::ClassifierDecisionTestRequestV2>(value)
+        Some(hiroute_application_api::HISTORICAL_APPLICABILITY_TEST_SCHEMA_V1) => {
+            typed_value::<hiroute_application_api::HistoricalApplicabilityTestRequestV1>(value)
         }
         _ => typed_value::<hiroute_application_api::ClassifierDecisionTestRequestV1>(value),
     }
@@ -477,7 +477,7 @@ mod classifier_codec_tests {
             [(SMART_SAVING_SCOPE_ID.into(), judgment)],
         )
         .unwrap();
-        let request = json!({"schema":"hiroute.classifier-decision-test/v2","target":{"kind":"saved","service_id":"saved-fixture","service_revision":7,"shape":"standard","protocol":frozen}});
+        let request = json!({"schema":"hiroute.historical-applicability-test/v1","service_id":"saved-fixture","service_revision":7,"shape":"standard","protocol":frozen});
         assert_eq!(classifier_value(request.clone()).unwrap(), request);
         let mut injected = request.clone();
         injected["state"] = json!("verified");
@@ -508,8 +508,8 @@ mod classifier_codec_tests {
             options.into_iter().map(|o| (o.id, judgment.clone())),
         )
         .unwrap();
-        let request = json!({"schema":"hiroute.classifier-decision-test/v2","target":{"kind":"saved","service_id":"saved-fixture","service_revision":7,"shape":"max_branches","protocol":frozen}});
-        let decoded: hiroute_application_api::ClassifierDecisionTestRequestV2 =
+        let request = json!({"schema":"hiroute.historical-applicability-test/v1","service_id":"saved-fixture","service_revision":7,"shape":"max_branches","protocol":frozen});
+        let decoded: hiroute_application_api::HistoricalApplicabilityTestRequestV1 =
             serde_json::from_value(request.clone()).unwrap();
         assert!(decoded.validate());
         assert_eq!(classifier_value(request.clone()).unwrap(), request);

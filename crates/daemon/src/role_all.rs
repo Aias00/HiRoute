@@ -8,8 +8,9 @@ use std::time::{Duration, Instant};
 use hiroute_application::ApplicationService;
 use hiroute_application::control::{ClassifierDiagnosticPort, ControlReadError};
 use hiroute_application_api::{
-    CLASSIFIER_DECISION_TEST_LATEST_USER, ClassifierConnectivityProbeV1,
-    ClassifierConnectivityResultV1, ClassifierDecisionTestOutcomeV1,
+    CLASSIFIER_DECISION_TEST_LATEST_USER, CLASSIFIER_DECISION_TEST_RESULT_SCHEMA_V1,
+    ClassifierDecisionTestOutcomeV1, ClassifierDecisionTestRequestV1,
+    ClassifierDecisionTestResultV1,
 };
 use hiroute_cpa_bridge::{
     BorrowedCodexAuthSpec, CpaAccountKind, CpaAttemptError, CpaDownstreamCredentialPort,
@@ -132,12 +133,13 @@ struct GatewayClassifierDiagnostic {
 impl ClassifierDiagnosticPort for GatewayClassifierDiagnostic {
     fn test_classifier_c(
         &self,
-        request: &hiroute_application_api::ClassifierCapabilityProbeV1,
+        request: &hiroute_application_api::HistoricalApplicabilityTestRequestV1,
         service: &hiroute_domain::DecisionServiceV1,
-    ) -> Result<hiroute_application_api::ClassifierDecisionTestResultV2, ControlReadError> {
+    ) -> Result<hiroute_application_api::HistoricalApplicabilityTestResultV1, ControlReadError>
+    {
         use hiroute_application_api::{
-            CCapabilityStateV1 as S, CLASSIFIER_DECISION_TEST_RESULT_SCHEMA_V2,
-            ClassifierDecisionTestResultV2,
+            CCapabilityStateV1 as S, HISTORICAL_APPLICABILITY_TEST_RESULT_SCHEMA_V1,
+            HistoricalApplicabilityTestResultV1,
         };
         let hiroute_domain::DecisionConnectionV1::SystemOne {
             model, endpoint, ..
@@ -187,39 +189,18 @@ impl ClassifierDiagnosticPort for GatewayClassifierDiagnostic {
                 },
             ),
         };
-        Ok(ClassifierDecisionTestResultV2 {
-            schema: CLASSIFIER_DECISION_TEST_RESULT_SCHEMA_V2.into(),
+        Ok(HistoricalApplicabilityTestResultV1 {
+            schema: HISTORICAL_APPLICABILITY_TEST_RESULT_SCHEMA_V1.into(),
             state,
             reason,
             question_count: count,
-            verified_shapes: if state == S::Verified {
-                let mut shapes = vec!["historical_assessment".into(), "applicability".into()];
-                match &request.protocol.decision {
-                    hiroute_domain::DecisionDefinitionV1::Ordinal { .. } => {
-                        shapes.push("degree".into())
-                    }
-                    hiroute_domain::DecisionDefinitionV1::Categorical { options, .. } => {
-                        shapes.push("category".into());
-                        if options.iter().any(|o| o.refinement.is_some()) {
-                            shapes.push("degree".into());
-                        }
-                    }
-                }
-                shapes
-            } else {
-                vec![]
-            },
-            branch_id: None,
-            failure_code: None,
-            service_id: Some(service.id.clone()),
-            service_revision: Some(service.revision),
-            endpoint_digest: Some(
-                hiroute_domain::CanonicalDigest::of(endpoint)
-                    .map_err(|_| ControlReadError::Corrupt)?,
-            ),
-            model: Some(model.clone()),
-            protocol_digest: Some(request.protocol.digest.clone()),
-            shape: Some(request.shape),
+            service_id: service.id.clone(),
+            service_revision: service.revision,
+            endpoint_digest: hiroute_domain::CanonicalDigest::of(endpoint)
+                .map_err(|_| ControlReadError::Corrupt)?,
+            model: model.clone(),
+            protocol_digest: request.protocol.digest.clone(),
+            shape: request.shape,
             tested_at_unix_ms: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_err(|_| ControlReadError::Unavailable)?
@@ -231,8 +212,8 @@ impl ClassifierDiagnosticPort for GatewayClassifierDiagnostic {
     }
     fn test_classifier_decision(
         &self,
-        request: &ClassifierConnectivityProbeV1,
-    ) -> Result<ClassifierConnectivityResultV1, ControlReadError> {
+        request: &ClassifierDecisionTestRequestV1,
+    ) -> Result<ClassifierDecisionTestResultV1, ControlReadError> {
         debug_assert_eq!(
             CLASSIFIER_DECISION_TEST_LATEST_USER,
             hiroute_gateway::server::core_runtime::CLASSIFIER_DIAGNOSTIC_LATEST_USER
@@ -243,13 +224,15 @@ impl ClassifierDiagnosticPort for GatewayClassifierDiagnostic {
             .map_err(|_| ControlReadError::Unavailable)?;
         let result = runtime.block_on(self.runtime.test_classifier_decision(&request.classifier));
         Ok(match result {
-            Ok(outcome) => ClassifierConnectivityResultV1 {
+            Ok(outcome) => ClassifierDecisionTestResultV1 {
+                schema: CLASSIFIER_DECISION_TEST_RESULT_SCHEMA_V1.into(),
                 outcome: ClassifierDecisionTestOutcomeV1::Passed,
                 branch_id: Some(outcome.branch_id),
                 duration_millis: Some(outcome.duration_millis),
                 failure_code: None,
             },
-            Err(error) => ClassifierConnectivityResultV1 {
+            Err(error) => ClassifierDecisionTestResultV1 {
+                schema: CLASSIFIER_DECISION_TEST_RESULT_SCHEMA_V1.into(),
                 outcome: ClassifierDecisionTestOutcomeV1::Failed,
                 branch_id: None,
                 duration_millis: None,

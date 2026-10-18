@@ -23,7 +23,13 @@ pub(super) fn validate_execution(
                     reselect_on_user_message,
                 },
             ) => {
-                if routing.native_protocol.as_ref() != native_protocol.as_ref().map(|p| &p.protocol)
+                if routing
+                    .native_protocol
+                    .as_ref()
+                    .map(|p| p.resolve())
+                    .transpose()
+                    .map_err(|_| PlanVersionError::Invalid)?
+                    != native_protocol.as_ref().map(|p| p.protocol.clone())
                 {
                     return Err(PlanVersionError::Invalid);
                 }
@@ -82,7 +88,13 @@ pub(super) fn validate_execution(
                     complex_groups,
                 },
             ) => {
-                if native_protocol.as_ref() != frozen_native.as_ref().map(|p| &p.protocol) {
+                if native_protocol
+                    .as_ref()
+                    .map(|p| p.resolve())
+                    .transpose()
+                    .map_err(|_| PlanVersionError::Invalid)?
+                    != frozen_native.as_ref().map(|p| p.protocol.clone())
+                {
                     return Err(PlanVersionError::Invalid);
                 }
                 if simple_groups != &[G::Economy, G::Primary]

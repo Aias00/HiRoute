@@ -1,5 +1,5 @@
 use super::*;
-use hiroute_application_api::ObservationReadIntentV3;
+use hiroute_application_api::{ObservationReadIntentV2, ObservationReadRequestV2};
 use hiroute_domain::ObservationReaderContext;
 impl ObservationControl {
     pub(super) fn read_v2(
@@ -8,10 +8,8 @@ impl ObservationControl {
         payload: Value,
         operation: &str,
     ) -> Result<Value, ObservationQueryError> {
-        let (request, version) = hiroute_application_api::decode_observation_read(payload)
-            .map_err(|_| ObservationQueryError::InvalidQuery)?;
-        let wire = hiroute_application_api::observation_wire_value(&request, version)
-            .map_err(|_| ObservationQueryError::InvalidQuery)?;
+        let request: ObservationReadRequestV2 =
+            serde_json::from_value(payload).map_err(|_| ObservationQueryError::InvalidQuery)?;
         if request.operation() != operation {
             return Err(ObservationQueryError::InvalidQuery);
         }
@@ -24,18 +22,18 @@ impl ObservationControl {
             .target;
         let content = matches!(
             request.intent,
-            ObservationReadIntentV3::Catalog(_)
-                | ObservationReadIntentV3::Ancestry(_)
-                | ObservationReadIntentV3::Content(_)
-                | ObservationReadIntentV3::Search(_)
-                | ObservationReadIntentV3::SessionSearch(_)
+            ObservationReadIntentV2::Catalog(_)
+                | ObservationReadIntentV2::Ancestry(_)
+                | ObservationReadIntentV2::Content(_)
+                | ObservationReadIntentV2::Search(_)
+                | ObservationReadIntentV2::SessionSearch(_)
         );
         let search = matches!(
             request.intent,
-            ObservationReadIntentV3::Search(_) | ObservationReadIntentV3::SessionSearch(_)
+            ObservationReadIntentV2::Search(_) | ObservationReadIntentV2::SessionSearch(_)
         );
         if grant.is_some() || content {
-            self.protected_principal(grant, request.protected_operation(), &wire)?;
+            self.protected_principal(grant, request.protected_operation(), &request)?;
         }
         // A new short-lived context follows actual grant validation on EVERY
         // page. Its expiry is not a cursor scope: renewing this same local-user
@@ -48,21 +46,11 @@ impl ObservationControl {
             content,
             search,
         )?;
-        let reader = if version == hiroute_application_api::ObservationWireVersion::LegacyV2 {
-            reader.with_legacy_query_v2()
-        } else {
-            reader
-        };
-        let legacy_fields = match &request.intent {
-            ObservationReadIntentV3::Facts(_) => Some("facts"),
-            ObservationReadIntentV3::PlanQuality(_) => Some("quality"),
-            _ => None,
-        };
-        let mut result = match request.intent {
-            ObservationReadIntentV3::Status(_) => {
+        let result = match request.intent {
+            ObservationReadIntentV2::Status(_) => {
                 serde_json::to_value(self.service.observed_maintenance_status(&reader, now)?)
             }
-            ObservationReadIntentV3::HomeValue(q) => {
+            ObservationReadIntentV2::HomeValue(q) => {
                 let from_ms = match q
                     .period
                     .unwrap_or(hiroute_application_api::ValuePeriodV1::Today)
@@ -93,34 +81,34 @@ impl ObservationControl {
                     now,
                 )?)
             }
-            ObservationReadIntentV3::Sessions(q) => {
+            ObservationReadIntentV2::Sessions(q) => {
                 serde_json::to_value(self.service.observed_sessions(&reader, &q, now)?)
             }
-            ObservationReadIntentV3::Timeline(q) => {
+            ObservationReadIntentV2::Timeline(q) => {
                 serde_json::to_value(self.service.observed_timeline(&reader, &q, now)?)
             }
-            ObservationReadIntentV3::Catalog(q) => {
+            ObservationReadIntentV2::Catalog(q) => {
                 serde_json::to_value(self.service.observed_catalog(&reader, &q, now)?)
             }
-            ObservationReadIntentV3::Ancestry(q) => {
+            ObservationReadIntentV2::Ancestry(q) => {
                 serde_json::to_value(self.service.observed_ancestry(&reader, &q, now)?)
             }
-            ObservationReadIntentV3::Content(q) => {
+            ObservationReadIntentV2::Content(q) => {
                 serde_json::to_value(self.service.observed_content_page(&reader, &q, now)?)
             }
-            ObservationReadIntentV3::Facts(q) => {
+            ObservationReadIntentV2::Facts(q) => {
                 serde_json::to_value(self.service.observed_facts(&reader, &q, now)?)
             }
-            ObservationReadIntentV3::Search(q) => {
+            ObservationReadIntentV2::Search(q) => {
                 serde_json::to_value(self.service.search_observed_text(&reader, &q, now)?)
             }
-            ObservationReadIntentV3::SessionSearch(q) => {
+            ObservationReadIntentV2::SessionSearch(q) => {
                 serde_json::to_value(self.service.search_observed_sessions(&reader, &q, now)?)
             }
-            ObservationReadIntentV3::Value(q) => {
+            ObservationReadIntentV2::Value(q) => {
                 serde_json::to_value(self.service.observed_value_totals(&reader, &q, now)?)
             }
-            ObservationReadIntentV3::ValueReport(q) => {
+            ObservationReadIntentV2::ValueReport(q) => {
                 if q.from_ms.is_some() && q.period.is_some() {
                     return Err(ObservationQueryError::InvalidQuery);
                 }
@@ -158,20 +146,12 @@ impl ObservationControl {
                     now,
                 )?)
             }
-            ObservationReadIntentV3::PlanQuality(q) => serde_json::to_value(
+            ObservationReadIntentV2::PlanQuality(q) => serde_json::to_value(
                 self.service
                     .observed_plan_quality_samples(&reader, &q, now)?,
             ),
         }
         .map_err(|_| ObservationQueryError::Corrupt)?;
-        if version == hiroute_application_api::ObservationWireVersion::LegacyV2
-            && legacy_fields.is_some()
-        {
-            if let Some(object) = result.as_object_mut() {
-                object.remove("schema");
-                object.remove("routing_observations");
-            }
-        }
         if serde_json::to_vec(&result)
             .map_err(|_| ObservationQueryError::Corrupt)?
             .len()

@@ -3,7 +3,7 @@ use crate::compiler::test_fixtures::compilation_facts;
 
 fn change() -> PlanContentChangeV2 {
     PlanContentChangeV2 {
-            assessment_choices: Default::default(),
+
         schema: PLAN_CONTENT_CHANGE_SCHEMA_V2.into(), target: PlanContentTargetV2::Create { creation_key: "editor-one".into() },
         editor: serde_json::from_value(serde_json::json!({
             "schema": PLAN_EDITOR_SCHEMA_V2, "display_name": "日常编码", "purpose": "辅助日常编码",
@@ -17,8 +17,6 @@ fn change() -> PlanContentChangeV2 {
 }
 fn state() -> PlanAuthoringSnapshotV2 {
     PlanAuthoringSnapshotV2 {
-        previous_configuration: None,
-        assessment_sources: vec![],
         workspace: WorkspaceId::default(),
         aliases: AliasRegistryV1::default(),
         active_publication: None,
@@ -388,13 +386,13 @@ fn ordinary_publication_confirmation_binds_edit_target_versions_and_draft_intent
 }
 
 #[test]
-fn transition_preview_seals_server_rubric_outside_editor_and_preserves_old_digest() {
+fn ordinary_preview_resolves_defaults_and_seals_concrete_contents_without_review() {
     let mut change = change();
     let mut state = state();
     let service = DecisionServiceV1 {
         id: "decision/preview".into(),
         revision: 1,
-        name: "Preview fixture".into(),
+        name: "Fixture".into(),
         connection: DecisionConnectionV1::SystemOne {
             provider: "compatible".into(),
             model: "fixture".into(),
@@ -402,7 +400,7 @@ fn transition_preview_seals_server_rubric_outside_editor_and_preserves_old_diges
             timeout_ms: 3000,
             auth_header: ClassifierAuthHeaderV1 {
                 name: "Authorization".into(),
-                value_secret_ref: "decision/preview".into(),
+                value_secret_ref: "fixture".into(),
             },
         },
     };
@@ -414,119 +412,54 @@ fn transition_preview_seals_server_rubric_outside_editor_and_preserves_old_diges
     change.editor.smart.primary = change.editor.candidates.clone();
     state.decision_service = Some(service);
     let legacy = preview_plan_content(&change, &state).unwrap();
-    assert!(legacy.assessment_transition.is_none());
+    let old_bytes = serde_json::to_vec(&legacy.plan_version).unwrap();
     assert_eq!(
         legacy.change_digest,
         plan_content_confirmation_digest(&change, &state.expected_revisions).unwrap()
     );
-    let base_digest = CanonicalDigest::of(&(
-        PLAN_VERSION_SCHEMA_V1,
-        &state.workspace,
-        &legacy.plan_version.configuration,
-        &StoredPlanV1::freeze(&legacy.plan_version.compiled).unwrap(),
-    ))
-    .unwrap();
-    assert_eq!(
-        base_digest, legacy.plan_version.reference.content_digest,
-        "released absent-metadata identity stays exact"
-    );
-    state.previous_configuration = Some(legacy.plan_version.configuration);
-    state.current_head = Some(legacy.plan_head.clone());
-    state
-        .aliases
-        .allocate_named(
-            legacy.plan_head.reference.plan_id.clone(),
-            change.editor.display_name.as_str(),
-        )
-        .unwrap();
-    change.target = PlanContentTargetV2::Update {
-        plan_id: legacy.plan_head.reference.plan_id,
-        expected_head_revision: legacy.plan_head.head_revision,
-    };
-    change.editor.smart.native_protocol = Some(NativeProtocolV1::default());
-    let pending = preview_plan_content(&change, &state).unwrap();
+    change.editor.smart.native_protocol = Some(NativeProtocolSelectionV1::default());
+    let enabled = preview_plan_content(&change, &state).unwrap();
+    enabled.plan_version.validate().unwrap();
+    let encoded = serde_json::to_value(&enabled).unwrap();
+    assert!(encoded.get("assessment_transition").is_none());
     assert!(
-        pending
-            .assessment_transition
-            .unwrap()
-            .require_acknowledged()
-            .is_err()
-    );
-    change.assessment_choices.insert(
-        SMART_SAVING_SCOPE_ID.into(),
-        AssessmentChoiceV1 {
-            method: AssessmentAdoptionV1::Stock,
-            source: None,
-        },
-    );
-    let ready = preview_plan_content(&change, &state).unwrap();
-    let records = ready.plan_version.assessment_transition.as_ref().unwrap();
-    assert_eq!(
-        records[SMART_SAVING_SCOPE_ID].assessment_digest,
-        ready.assessment_transition.as_ref().unwrap().scopes[0].assessment_digest
-    );
-    assert_eq!(
-        records[SMART_SAVING_SCOPE_ID].from_protocol.as_deref(),
-        Some(SYSTEM_ONE_LEGACY)
-    );
-    assert!(
-        serde_json::to_value(&ready.plan_version.configuration).unwrap()["strategy"]
-            .get("assessment_review")
+        encoded["plan_version"]
+            .get("assessment_transition")
             .is_none()
     );
-    let reopened: PlanVersionV1 =
-        serde_json::from_slice(&serde_json::to_vec(&ready.plan_version).unwrap()).unwrap();
-    reopened.validate().unwrap();
-    let mut tampered = reopened.clone();
-    tampered
-        .assessment_transition
-        .as_mut()
-        .unwrap()
-        .get_mut(SMART_SAVING_SCOPE_ID)
-        .unwrap()
-        .method = AssessmentAdoptionV1::ReviewedCustom;
-    assert!(tampered.validate().is_err());
-    state.previous_configuration = Some(reopened.configuration.clone());
-    state.current_head = Some(ready.plan_head.clone());
-    change.editor = reopened.configuration.editor(None).unwrap();
-    change.target = PlanContentTargetV2::Update {
-        plan_id: ready.plan_head.reference.plan_id,
-        expected_head_revision: ready.plan_head.head_revision,
-    };
-    change.assessment_choices.clear();
-    change
-        .editor
-        .smart
-        .judgment
-        .competence
-        .instructions
-        .push_str(" Review the requested deliverable.");
-    let ordinary = preview_plan_content(&change, &state).unwrap();
-    assert!(
-        ordinary.assessment_transition.is_none()
-            && ordinary.plan_version.assessment_transition.is_none()
-    );
-    change.editor.smart.native_protocol = None;
-    let rollback = preview_plan_content(&change, &state).unwrap();
-    assert!(
-        rollback
-            .assessment_transition
-            .unwrap()
-            .require_acknowledged()
-            .is_err()
-    );
-    change.assessment_choices.insert(
-        SMART_SAVING_SCOPE_ID.into(),
-        AssessmentChoiceV1 {
-            method: AssessmentAdoptionV1::Stock,
-            source: None,
-        },
-    );
-    let restored = preview_plan_content(&change, &state).unwrap();
     assert_eq!(
-        restored.plan_version.configuration.assessment_scopes()[SMART_SAVING_SCOPE_ID]
+        enabled.change_digest,
+        plan_content_confirmation_digest(&change, &state.expected_revisions).unwrap()
+    );
+    let route = &enabled
+        .plan_version
+        .compiled
+        .body
+        .materialized
+        .request_owned;
+    let RequestOwnedRouteV1::Classified {
+        native_protocol: Some(frozen),
+        ..
+    } = route
+    else {
+        panic!("native execution missing")
+    };
+    assert_eq!(frozen.scopes[SMART_SAVING_SCOPE_ID].standard, "default");
+    assert_eq!(
+        frozen.scopes[SMART_SAVING_SCOPE_ID].assessment,
+        stock_c_questions()["q1"]
+    );
+    assert_eq!(frozen.protocol.fixed, NativeFixedContentV1::c_v1());
+    let mut reopened = enabled.plan_version.configuration.editor(None).unwrap();
+    reopened.smart.native_protocol = None;
+    change.editor = reopened;
+    let off = preview_plan_content(&change, &state).unwrap();
+    off.plan_version.validate().unwrap();
+    assert_eq!(
+        off.plan_version.configuration.assessment_scopes()[SMART_SAVING_SCOPE_ID]
             .competence
             .instructions,
-        JudgmentSettingsV1::default().competence.instructions
+        DEFAULT_COMPETENCE_INSTRUCTIONS
     );
+    assert_eq!(serde_json::to_vec(&legacy.plan_version).unwrap(), old_bytes);
 }

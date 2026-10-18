@@ -510,7 +510,7 @@ impl Resident {
     }
     pub(crate) fn register_observation(
         &mut self,
-        request: &hiroute_application_api::ObservationReadRequestV3,
+        request: &hiroute_application_api::ObservationReadRequestV2,
         revisions: &RevisionSetV1,
     ) -> Result<Zeroizing<String>, String> {
         let digest = CanonicalDigest::of(request).map_err(|_| "OBSERVATION_REQUEST_INVALID")?;

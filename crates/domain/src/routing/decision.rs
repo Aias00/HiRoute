@@ -110,6 +110,8 @@ impl DecisionServiceV1 {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CompetencePolicyV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub standard: Option<super::AssessmentStandardV1>,
     /// Integer thousandths keep published policy canonical and comparable.
     pub floor_millis: u16,
     pub instructions: String,
@@ -119,6 +121,7 @@ pub struct CompetencePolicyV1 {
 impl Default for CompetencePolicyV1 {
     fn default() -> Self {
         Self {
+            standard: None,
             floor_millis: 500,
             instructions: DEFAULT_COMPETENCE_INSTRUCTIONS.into(),
             criteria: DEFAULT_COMPETENCE_CRITERIA.map(str::to_owned),
@@ -244,7 +247,7 @@ pub struct RouteBranchV1 {
 #[serde(deny_unknown_fields)]
 pub struct BranchRoutingV1 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub native_protocol: Option<super::NativeProtocolV1>,
+    pub native_protocol: Option<super::NativeProtocolSelectionV1>,
 
     pub classifier: ComplexityClassifierModeV1,
     pub branches: Vec<RouteBranchV1>,

@@ -61,7 +61,7 @@ fn definitions() -> Value {
         &["degree", "competence"],
         json!({
             "degree":object(&["simple_threshold_millis","instructions","simple","complex"],json!({"simple_threshold_millis":threshold,"instructions":prompt,"simple":prompt,"complex":prompt})),
-            "competence":object(&["floor_millis","instructions","criteria"],json!({"floor_millis":threshold,"instructions":prompt,"criteria":{"type":"array","minItems":3,"maxItems":3,"items":prompt}}))
+            "competence":object(&["floor_millis","instructions","criteria"],json!({"standard":{"enum":["default","custom"]},"floor_millis":threshold,"instructions":prompt,"criteria":{"type":"array","minItems":3,"maxItems":3,"items":prompt}}))
         }),
     );
     let branch = object(
@@ -78,7 +78,6 @@ fn definitions() -> Value {
         }),
     );
     let native = super::native_protocol::authoring();
-    let choices = super::native_protocol::choices();
     let routing = object(
         &["classifier", "branches", "default_branch_id", "judgment"],
         json!({
@@ -129,7 +128,7 @@ fn definitions() -> Value {
         json!({"schema":{"const":"hiroute.plan-content-change/v2"},"target":{"oneOf":[
         object(&["intent","creation_key"],json!({"intent":{"const":"create"},"creation_key":{"type":"string","minLength":1,"maxLength":128}})),
         object(&["intent","plan_id","expected_head_revision"],json!({"intent":{"const":"update"},"plan_id":{"type":"string","minLength":1},"expected_head_revision":{"type":"integer","minimum":1}}))]},
-        "editor":reference("editor"),"assessment_choices":choices,"consumed_draft":{"oneOf":[{"type":"null"},object(&["draft_id","revision"],json!({"draft_id":{"type":"string","minLength":1},"revision":{"type":"integer","minimum":1}}))]}}),
+        "editor":reference("editor"),"consumed_draft":{"oneOf":[{"type":"null"},object(&["draft_id","revision"],json!({"draft_id":{"type":"string","minLength":1},"revision":{"type":"integer","minimum":1}}))]}}),
     );
     let lifecycle = object(
         &["schema", "plan_id", "expected_head_revision", "status"],

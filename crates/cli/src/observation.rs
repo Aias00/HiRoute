@@ -4,7 +4,7 @@
 use std::io::Read;
 
 use hiroute_application_api::{
-    AgentPlanId, ErrorCode, ModelSwitchFilter, ObservationReadIntentV3, ObservationReadRequestV3,
+    AgentPlanId, ErrorCode, ModelSwitchFilter, ObservationReadIntentV2, ObservationReadRequestV2,
     ObservationValueReportOptionsV2, SessionContentModeV1, SessionListRequestV1, SessionLookupV1,
     ValueGroupByV1, ValuePeriodV1,
 };
@@ -23,6 +23,7 @@ pub(super) fn plan_quality_samples(options: &[String]) -> Result<Value, ErrorCod
         );
     }
     let mut query = hiroute_application_api::PlanQualitySamplesQuery {
+        include_routing_observations: true,
         competence: None,
         plan_id: None,
         session_id: None,
@@ -71,8 +72,8 @@ pub(super) fn plan_quality_samples(options: &[String]) -> Result<Value, ErrorCod
     if query.plan_id.is_none() && query.session_id.is_none() {
         return Err(ErrorCode::InvalidArguments);
     }
-    serde_json::to_value(ObservationReadRequestV3::new(
-        ObservationReadIntentV3::PlanQuality(query),
+    serde_json::to_value(ObservationReadRequestV2::new(
+        ObservationReadIntentV2::PlanQuality(query),
     ))
     .map_err(|_| ErrorCode::Internal)
 }
@@ -210,8 +211,8 @@ pub(super) fn value_show(options: &[String]) -> Result<Value, ErrorCode> {
         }
         index += 1;
     }
-    serde_json::to_value(ObservationReadRequestV3::new(
-        ObservationReadIntentV3::ValueReport(query),
+    serde_json::to_value(ObservationReadRequestV2::new(
+        ObservationReadIntentV2::ValueReport(query),
     ))
     .map_err(|_| ErrorCode::Internal)
 }
@@ -237,21 +238,20 @@ fn observation_value_payload(
     command: ObservationCommand,
     value: Value,
 ) -> Result<Value, ErrorCode> {
-    let (request, version) = hiroute_application_api::decode_observation_read(value)
-        .map_err(|_| ErrorCode::InvalidArguments)?;
+    let request: ObservationReadRequestV2 = crate::request_input::deserialize(value)?;
     let matches_command = match (command, &request.intent) {
-        (ObservationCommand::Sessions, ObservationReadIntentV3::Sessions(_)) => true,
-        (ObservationCommand::Facts, ObservationReadIntentV3::Facts(_)) => true,
-        (ObservationCommand::Timeline, ObservationReadIntentV3::Timeline(query)) => {
+        (ObservationCommand::Sessions, ObservationReadIntentV2::Sessions(_)) => true,
+        (ObservationCommand::Facts, ObservationReadIntentV2::Facts(_)) => true,
+        (ObservationCommand::Timeline, ObservationReadIntentV2::Timeline(query)) => {
             query.session_id.is_some()
         }
         (
             ObservationCommand::Value,
-            ObservationReadIntentV3::Value(_)
-            | ObservationReadIntentV3::HomeValue(_)
-            | ObservationReadIntentV3::ValueReport(_),
+            ObservationReadIntentV2::Value(_)
+            | ObservationReadIntentV2::HomeValue(_)
+            | ObservationReadIntentV2::ValueReport(_),
         ) => true,
-        (ObservationCommand::PlanQuality, ObservationReadIntentV3::PlanQuality(query)) => {
+        (ObservationCommand::PlanQuality, ObservationReadIntentV2::PlanQuality(query)) => {
             query.plan_id.is_some() || query.session_id.is_some()
         }
         _ => false,
@@ -259,8 +259,7 @@ fn observation_value_payload(
     if !matches_command {
         return Err(ErrorCode::InvalidArguments);
     }
-    hiroute_application_api::observation_wire_value(&request, version)
-        .map_err(|_| ErrorCode::Internal)
+    serde_json::to_value(request).map_err(|_| ErrorCode::Internal)
 }
 
 fn parse_i64(options: &[String], index: &mut usize) -> Result<i64, ErrorCode> {
@@ -301,9 +300,9 @@ mod tests {
         assert_eq!(sessions.limit, None);
         assert_eq!(sessions.cursor, None);
 
-        let request: ObservationReadRequestV3 =
+        let request: ObservationReadRequestV2 =
             serde_json::from_value(value_show(&[]).unwrap()).unwrap();
-        let ObservationReadIntentV3::ValueReport(value) = request.intent else {
+        let ObservationReadIntentV2::ValueReport(value) = request.intent else {
             panic!("human value options must read current observation totals");
         };
         assert_eq!(value.agent_plan_id, None);
@@ -333,10 +332,10 @@ mod tests {
             .map(str::to_owned),
         )
         .unwrap();
-        assert_eq!(payload["schema"], "hiroute.observation.query/v3");
+        assert_eq!(payload["schema"], "hiroute.observation.query/v2");
         assert_eq!(payload["intent"]["view"], "value_report");
-        let request: ObservationReadRequestV3 = serde_json::from_value(payload).unwrap();
-        let ObservationReadIntentV3::ValueReport(q) = request.intent else {
+        let request: ObservationReadRequestV2 = serde_json::from_value(payload).unwrap();
+        let ObservationReadIntentV2::ValueReport(q) = request.intent else {
             panic!()
         };
         assert_eq!(q.agent_plan_id.unwrap().as_str(), "plan/current");
@@ -363,8 +362,8 @@ mod tests {
             "0.8".into(),
         ])
         .unwrap();
-        let request: ObservationReadRequestV3 = serde_json::from_value(payload).unwrap();
-        let ObservationReadIntentV3::PlanQuality(query) = request.intent else {
+        let request: ObservationReadRequestV2 = serde_json::from_value(payload).unwrap();
+        let ObservationReadIntentV2::PlanQuality(query) = request.intent else {
             panic!("expected plan quality intent");
         };
         assert_eq!(query.plan_id.as_deref(), Some("plan/one"));

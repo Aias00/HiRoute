@@ -337,7 +337,6 @@ fn routing_operation(
         .unwrap()
         .clone();
     let change = PlanContentChangeV2 {
-        assessment_choices: Default::default(),
         schema: PLAN_CONTENT_CHANGE_SCHEMA_V2.into(),
         target: PlanContentTargetV2::Create {
             creation_key: key.to_owned(),

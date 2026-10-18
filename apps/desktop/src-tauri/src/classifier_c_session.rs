@@ -1,11 +1,13 @@
 use super::*;
-use hiroute_application_api::{ClassifierDecisionTestRequestV2, ClassifierDecisionTestResultV2};
+use hiroute_application_api::{
+    HistoricalApplicabilityTestRequestV1, HistoricalApplicabilityTestResultV1,
+};
 
 impl Session {
-    pub async fn test_classifier_decision(
+    pub async fn test_classifier_c(
         &mut self,
-        request: ClassifierDecisionTestRequestV2,
-    ) -> Result<ClassifierDecisionTestResultV2, DesktopFailure> {
+        request: HistoricalApplicabilityTestRequestV1,
+    ) -> Result<HistoricalApplicabilityTestResultV1, DesktopFailure> {
         #[cfg(unix)]
         {
             if !request.validate() {

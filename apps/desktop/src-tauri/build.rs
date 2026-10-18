@@ -27,7 +27,6 @@ fn main() {
             "save_classifier_openapi",
             "preview_rename",
             "preview_plan_editor",
-            "plan_editor_transition_preview",
             "refresh_route_references",
             "plan_editor_options",
             "preview_restore_name",

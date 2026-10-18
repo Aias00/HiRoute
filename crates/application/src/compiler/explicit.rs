@@ -98,7 +98,7 @@ pub fn compile_agent_plan_v2(
                         .as_ref()
                         .map(|p| {
                             FrozenNativeProtocolV1::freeze(
-                                p,
+                                &p.resolve()?,
                                 c_v1_branch_decision_definition(
                                     &branches,
                                     &routing.default_branch_id,
@@ -137,7 +137,7 @@ pub fn compile_agent_plan_v2(
                         .as_ref()
                         .map(|p| {
                             FrozenNativeProtocolV1::freeze(
-                                p,
+                                &p.resolve()?,
                                 judgment.degree.definition().into(),
                                 [(SMART_SAVING_SCOPE_ID.into(), judgment.clone())],
                             )

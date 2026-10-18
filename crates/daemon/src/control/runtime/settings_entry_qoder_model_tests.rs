@@ -506,7 +506,6 @@ pub(super) fn budget_change_operation(
         .unwrap();
     let record = PublicationRecordV1::from_publication(WorkspaceId::default(), &next).unwrap();
     let change = api::PlanContentChangeV2 {
-        assessment_choices: Default::default(),
         schema: api::PLAN_CONTENT_CHANGE_SCHEMA_V2.into(),
         target: api::PlanContentTargetV2::Update {
             plan_id: head.reference.plan_id.clone(),

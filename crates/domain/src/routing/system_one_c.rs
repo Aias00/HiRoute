@@ -113,33 +113,6 @@ impl NativeProtocolV1 {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum AssessmentAdoptionV1 {
-    Stock,
-    ReviewedCustom,
-    Historical,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct HistoricalAssessmentSourceV1 {
-    pub plan: PlanExecutionRef,
-    pub scope: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct AssessmentReviewV1 {
-    pub from_protocol: Option<String>,
-    pub protocol: String,
-    pub assessment_digest: CanonicalDigest,
-    pub method: AssessmentAdoptionV1,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source: Option<HistoricalAssessmentSourceV1>,
-}
-pub type AssessmentReviewsV1 = BTreeMap<String, AssessmentReviewV1>;
-
 pub fn composed_assessment(
     protocol: Option<&NativeProtocolV1>,
     judgment: &JudgmentSettingsV1,
@@ -150,76 +123,8 @@ pub fn composed_assessment(
     json!({"type":"score", "instructions":format!("{wrapper} {}", judgment.competence.instructions), "criteria":judgment.competence.criteria})
 }
 
-impl AssessmentReviewV1 {
-    pub fn new(
-        protocol: Option<&NativeProtocolV1>,
-        judgment: &JudgmentSettingsV1,
-        method: AssessmentAdoptionV1,
-        source: Option<HistoricalAssessmentSourceV1>,
-    ) -> Result<Self, NativeProtocolError> {
-        Ok(Self {
-            from_protocol: None,
-            protocol: protocol
-                .map_or(SYSTEM_ONE_LEGACY, |p| p.schema.as_str())
-                .into(),
-            assessment_digest: CanonicalDigest::of(&composed_assessment(protocol, judgment))
-                .map_err(|_| NativeProtocolError::Encoding)?,
-            method,
-            source,
-        })
-    }
-
-    pub fn validate(
-        &self,
-        protocol: Option<&NativeProtocolV1>,
-        judgment: &JudgmentSettingsV1,
-    ) -> Result<(), NativeProtocolError> {
-        let mut expected = Self::new(protocol, judgment, self.method, self.source.clone())?;
-        expected.from_protocol = self.from_protocol.clone();
-        if self
-            .from_protocol
-            .as_deref()
-            .is_some_and(|p| p != SYSTEM_ONE_LEGACY && p != SYSTEM_ONE_C_V1)
-            || self.from_protocol.as_deref() == Some(self.protocol.as_str())
-            || *self != expected
-        {
-            return Err(NativeProtocolError::Review {
-                scope: "assessment".into(),
-                reason: "invalid published transition provenance".into(),
-            });
-        }
-        if (self.method == AssessmentAdoptionV1::Historical) != self.source.is_some()
-            || self.source.as_ref().is_some_and(|s| {
-                protocol.is_some()
-                    || s.plan.validate().is_err()
-                    || !super::strategy::valid_reference(&s.scope)
-            })
-        {
-            return Err(NativeProtocolError::Review {
-                scope: "assessment".into(),
-                reason: "invalid published transition provenance".into(),
-            });
-        }
-        if self.method == AssessmentAdoptionV1::Stock {
-            let mut stock = JudgmentSettingsV1::default();
-            if let Some(p) = protocol {
-                p.stock_assessment(&mut stock);
-            }
-            if judgment.competence.instructions != stock.competence.instructions
-                || judgment.competence.criteria != stock.competence.criteria
-            {
-                return Err(NativeProtocolError::Review {
-                    scope: "assessment".into(),
-                    reason: "invalid published transition provenance".into(),
-                });
-            }
-        }
-        Ok(())
-    }
-}
-
 pub fn validate_assessment_scope(
-    protocol: Option<&NativeProtocolV1>,
+    protocol: Option<&super::NativeProtocolSelectionV1>,
     scope: &str,
     judgment: &JudgmentSettingsV1,
 ) -> Result<(), NativeProtocolError> {
@@ -235,7 +140,7 @@ pub fn validate_assessment_scope(
         ("competence.criteria.1", &judgment.competence.criteria[1]),
         ("competence.criteria.2", &judgment.competence.criteria[2]),
     ];
-    if protocol.is_some()
+    if (protocol.is_some() || judgment.competence.standard.is_some())
         && let Some((field, _)) = texts
             .iter()
             .find(|(_, t)| incompatible_native_reference(protocol.is_some(), t))
@@ -287,8 +192,6 @@ impl FrozenNativeProtocolV1 {
     ) -> Result<Self, NativeProtocolError> {
         protocol.validate()?;
         let mut scopes = BTreeMap::new();
-        let mut stock = JudgmentSettingsV1::default();
-        protocol.stock_assessment(&mut stock);
         for (id, judgment) in judgments {
             if !judgment.validate() {
                 return Err(NativeProtocolError::ContentMismatch);
@@ -302,21 +205,9 @@ impl FrozenNativeProtocolV1 {
                     )),
                     simple_threshold_millis: judgment.degree.simple_threshold_millis,
                     competence_floor_millis: judgment.competence.floor_millis,
-                    standard: if !matches!(&decision, DecisionDefinitionV1::Categorical { .. })
-                        && judgment.competence.instructions == stock.competence.instructions
-                        && judgment.competence.criteria == stock.competence.criteria
-                        && format!(
-                            "{} {}",
-                            protocol.fixed.degree_prefix, judgment.degree.instructions
-                        ) == stock_c_questions()["q0"]["instructions"].as_str().unwrap()
-                        && judgment.degree.simple
-                            == stock_c_questions()["q0"]["criteria"][0].as_str().unwrap()
-                        && judgment.degree.complex
-                            == stock_c_questions()["q0"]["criteria"][1].as_str().unwrap()
-                    {
-                        "stock"
-                    } else {
-                        "custom"
+                    standard: match judgment.competence.standard {
+                        Some(super::AssessmentStandardV1::Default) => "default",
+                        _ => "custom",
                     }
                     .into(),
                 },
@@ -369,13 +260,8 @@ impl FrozenNativeProtocolV1 {
             !score(&s.assessment)
                 || s.simple_threshold_millis > 1000
                 || s.competence_floor_millis > 1000
-                || !matches!(s.standard.as_str(), "stock" | "custom")
+                || !matches!(s.standard.as_str(), "default" | "custom")
         }) {
-            return Err(NativeProtocolError::ContentMismatch);
-        }
-        if matches!(self.decision, DecisionDefinitionV1::Categorical { .. })
-            && self.scopes.values().any(|scope| scope.standard != "custom")
-        {
             return Err(NativeProtocolError::ContentMismatch);
         }
         let degree = |instructions: &str, levels: &[super::OrdinalLevelV1]| {
@@ -475,18 +361,12 @@ pub fn c_v1_branch_decision_definition(
 
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum NativeProtocolError {
-    #[error(
-        "assessment scope {scope}: selected historical assessment is stale, unavailable, or mismatched"
-    )]
-    HistoricalUnavailable { scope: String },
     #[error("native protocol semantic version is unsupported")]
     Unsupported,
     #[error("native protocol fixed bundle is unsupported; select a supported bundle")]
     FixedContent,
     #[error("native prior context cap must be between 0 and 8")]
     HistoryCap,
-    #[error("assessment scope {scope}: {reason}")]
-    Review { scope: String, reason: String },
     #[error("native state reference is incompatible in scope {0}")]
     StateReference(String),
     #[error("native protocol digest does not match frozen content")]
@@ -507,8 +387,6 @@ impl NativeProtocolError {
             Self::Unsupported => "native.protocol.unsupported",
             Self::FixedContent => "native.protocol.fixed_content_invalid",
             Self::HistoryCap => "native.protocol.history_cap_invalid",
-            Self::Review { .. } => "native.assessment.review_required",
-            Self::HistoricalUnavailable { .. } => "native.assessment.source_unavailable",
             Self::StateReference(_) => "native.protocol.state_reference_invalid",
             Self::DigestMismatch => "native.protocol.digest_mismatch",
             Self::ContentMismatch => "native.protocol.content_mismatch",

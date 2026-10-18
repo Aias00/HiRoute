@@ -56,8 +56,6 @@ pub struct PlanContentChangeV2 {
     pub target: PlanContentTargetV2,
     pub editor: PlanEditorStateV2,
     pub consumed_draft: Option<PlanDraftRefV1>,
-    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
-    pub assessment_choices: AssessmentChoicesV1,
 }
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -72,8 +70,6 @@ pub struct PlanContentPreviewV2 {
     pub plan_head: PlanHeadV1,
     pub plan_version: PlanVersionV1,
     pub consumed_draft: Option<PlanDraftRefV1>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub assessment_transition: Option<AssessmentTransitionPreviewV1>,
 }
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]

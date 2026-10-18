@@ -212,18 +212,17 @@ fn retired_follow_up_field_can_be_omitted_without_rewriting_legacy_values() {
     assert!(serde_json::from_value::<PlanEditorStateV2>(omitted).is_err());
 }
 
-#[test]
-fn protocol_transitions_use_choices_without_client_hashes_and_same_protocol_edits_need_none() {
+fn native_editor() -> PlanEditorStateV2 {
     use crate::*;
-    let mut draft = editor();
-    draft.mode = PlanEditorMode::SmartSaving;
-    draft.smart.economy = draft.candidates.clone();
-    draft.smart.primary = draft.candidates.clone();
-    draft.smart.classifier = ComplexityClassifierModeV1::DecisionService {
+    let mut value = editor();
+    value.mode = PlanEditorMode::SmartSaving;
+    value.smart.economy = value.candidates.clone();
+    value.smart.primary = value.candidates.clone();
+    value.smart.classifier = ComplexityClassifierModeV1::DecisionService {
         service: Box::new(DecisionServiceV1 {
-            id: "decision/transition".into(),
+            id: "decision/defaults".into(),
             revision: 1,
-            name: "Transition fixture".into(),
+            name: "Fixture".into(),
             connection: DecisionConnectionV1::SystemOne {
                 provider: "compatible".into(),
                 model: "fixture".into(),
@@ -231,161 +230,130 @@ fn protocol_transitions_use_choices_without_client_hashes_and_same_protocol_edit
                 timeout_ms: 3000,
                 auth_header: ClassifierAuthHeaderV1 {
                     name: "Authorization".into(),
-                    value_secret_ref: "decision/transition".into(),
+                    value_secret_ref: "fixture".into(),
                 },
             },
         }),
     };
-    let old = draft.effective().unwrap();
-    draft.smart.native_protocol = Some(NativeProtocolV1::default());
-    draft.smart.judgment.degree.simple_threshold_millis = 913;
-    draft.smart.judgment.competence.floor_millis = 612;
-    let (_, pending) =
-        preview_assessment_transition(&draft, Some(&old), None, &[], &Default::default()).unwrap();
-    assert!(
-        matches!(pending.require_acknowledged(), Err(NativeProtocolError::Review {scope, ..}) if scope == SMART_SAVING_SCOPE_ID)
-    );
-    let choice = std::collections::BTreeMap::from([(
-        SMART_SAVING_SCOPE_ID.into(),
-        AssessmentChoiceV1 {
-            method: AssessmentAdoptionV1::Stock,
-            source: None,
-        },
-    )]);
-    let (adopted, ready) =
-        preview_assessment_transition(&draft, Some(&old), None, &[], &choice).unwrap();
-    ready.require_acknowledged().unwrap();
+    value
+}
+
+#[test]
+fn default_assessment_follows_both_directions_without_changing_thresholds_or_old_bytes() {
+    use crate::*;
+    let mut value = native_editor();
+    let old = serde_json::to_vec(&value).unwrap();
+    value.smart.judgment.degree.simple_threshold_millis = 913;
+    value.smart.judgment.competence.floor_millis = 612;
+    value.smart.native_protocol = Some(NativeProtocolSelectionV1::default());
+    let enabled = value.effective().unwrap();
+    let j = enabled.assessment_scopes()[SMART_SAVING_SCOPE_ID];
+    assert_eq!(j.competence.standard, Some(AssessmentStandardV1::Default));
     assert_eq!(
-        ready.scopes[0].assessment,
-        composed_assessment(
-            adopted.smart.native_protocol.as_ref(),
-            &adopted.smart.judgment
-        )
+        composed_assessment(Some(&NativeProtocolV1::default()), j),
+        stock_c_questions()["q1"]
     );
-    assert_eq!(adopted.smart.judgment.degree.simple_threshold_millis, 913);
-    assert_eq!(adopted.smart.judgment.competence.floor_millis, 612);
-    assert!(
-        serde_json::to_value(&adopted).unwrap()["smart"]
-            .get("assessment_review")
-            .is_none()
-    );
-    let before = adopted.effective().unwrap();
-    let mut later = adopted.clone();
-    later
-        .smart
-        .judgment
-        .competence
-        .instructions
-        .push_str(" custom change");
-    let (_, same) =
-        preview_assessment_transition(&later, Some(&before), None, &[], &Default::default())
-            .unwrap();
-    assert!(same.scopes.is_empty());
-    later.smart.native_protocol = None;
-    let (_, rollback) =
-        preview_assessment_transition(&later, Some(&before), None, &[], &Default::default())
-            .unwrap();
-    assert!(rollback.require_acknowledged().is_err());
-    let (rolled_back, ready) =
-        preview_assessment_transition(&later, Some(&before), None, &[], &choice).unwrap();
-    ready.require_acknowledged().unwrap();
     assert_eq!(
-        rolled_back.smart.judgment.competence.instructions,
-        JudgmentSettingsV1::default().competence.instructions
+        (j.degree.simple_threshold_millis, j.competence.floor_millis),
+        (913, 612)
     );
-    let restored = rolled_back.effective().unwrap();
-    let mut edit = rolled_back;
-    edit.smart
-        .judgment
-        .competence
-        .instructions
-        .push_str(" ordinary edit");
-    assert!(
-        preview_assessment_transition(&edit, Some(&restored), None, &[], &Default::default())
-            .unwrap()
-            .1
-            .scopes
-            .is_empty()
+    let mut reopened = enabled.editor(None).unwrap();
+    reopened.smart.native_protocol = None;
+    let disabled = reopened.effective().unwrap();
+    let j = disabled.assessment_scopes()[SMART_SAVING_SCOPE_ID];
+    assert_eq!(j.competence.instructions, DEFAULT_COMPETENCE_INSTRUCTIONS);
+    assert_eq!(
+        j.competence.criteria,
+        DEFAULT_COMPETENCE_CRITERIA.map(str::to_owned)
     );
-    let invalid = std::collections::BTreeMap::from([(
-        SMART_SAVING_SCOPE_ID.into(),
-        AssessmentChoiceV1 {
-            method: AssessmentAdoptionV1::Historical,
-            source: Some(HistoricalAssessmentSourceV1 {
-                plan: PlanExecutionRef {
-                    workspace_id: WorkspaceId::default(),
-                    plan_id: AgentPlanId::parse("plan/transition").unwrap(),
-                    content_revision: 1,
-                    content_digest: CanonicalDigest::of_bytes(b"missing"),
-                },
-                scope: SMART_SAVING_SCOPE_ID.into(),
-            }),
-        },
-    )]);
+    assert_eq!(
+        (j.degree.simple_threshold_millis, j.competence.floor_millis),
+        (913, 612)
+    );
+    assert_eq!(serde_json::to_vec(&native_editor()).unwrap(), old);
+    let selection = serde_json::to_value(enabled.native_protocol().unwrap()).unwrap();
+    assert_eq!(selection.as_object().unwrap().len(), 2);
+    assert!(selection.get("fixed").is_none());
+    let mut unknown = selection;
+    unknown["fixed"] = serde_json::json!({});
+    assert!(serde_json::from_value::<NativeProtocolSelectionV1>(unknown).is_err());
+}
+
+#[test]
+fn custom_text_and_criteria_remain_byte_exact_even_when_equal_to_a_default() {
+    use crate::*;
+    for equal_default in [false, true] {
+        let mut value = native_editor();
+        value.smart.judgment.competence.standard = Some(AssessmentStandardV1::Custom);
+        if !equal_default {
+            value.smart.judgment.competence.instructions =
+                "  Preserve this line.\nSecond line.  ".into();
+            value.smart.judgment.competence.criteria[1] = " criterion with spaces  ".into();
+        }
+        let original = value.smart.judgment.competence.clone();
+        for on in [true, false, true] {
+            value.smart.native_protocol = on.then(NativeProtocolSelectionV1::default);
+            let authored = value.effective().unwrap();
+            assert_eq!(
+                authored.assessment_scopes()[SMART_SAVING_SCOPE_ID].competence,
+                original
+            );
+            value = authored.editor(None).unwrap();
+        }
+    }
+    let mut value = native_editor();
+    value.smart.judgment.competence.criteria[2].push(' ');
+    value.smart.native_protocol = Some(NativeProtocolSelectionV1::default());
+    assert_eq!(
+        value.effective().unwrap().assessment_scopes()[SMART_SAVING_SCOPE_ID]
+            .competence
+            .standard,
+        Some(AssessmentStandardV1::Custom)
+    );
+    value.smart.judgment.competence.instructions =
+        "Use state.visible_conversation as evidence".into();
     assert!(
-        matches!(preview_assessment_transition(&later, Some(&before), None, &[], &invalid), Err(NativeProtocolError::HistoricalUnavailable {scope}) if scope == SMART_SAVING_SCOPE_ID)
+        matches!(value.effective(),Err(PlanAuthoringError::NativeProtocol(NativeProtocolError::StateReference(field))) if field=="smart_saving.competence.instructions")
     );
 }
 
 #[test]
-fn independent_category_named_default_cannot_replace_the_inherited_default_scope() {
+fn inherited_defaults_and_independent_custom_overrides_resolve_separately() {
     use crate::*;
-    let mut value = editor();
+    let mut value = native_editor();
     value.mode = PlanEditorMode::CustomBranches;
-    let mut routing = BranchRoutingV1 {
-        native_protocol: Some(NativeProtocolV1::default()),
-        classifier: ComplexityClassifierModeV1::DecisionService {
-            service: Box::new(DecisionServiceV1 {
-                id: "scope-fixture".into(),
-                revision: 1,
-                name: "Fixture".into(),
-                connection: DecisionConnectionV1::SystemOne {
-                    provider: "compatible".into(),
-                    model: "fixture".into(),
-                    endpoint: "https://decision.example/systemone".into(),
-                    timeout_ms: 3000,
-                    auth_header: ClassifierAuthHeaderV1 {
-                        name: "Authorization".into(),
-                        value_secret_ref: "scope-fixture".into(),
-                    },
-                },
-            }),
-        },
-        branches: vec![],
+    let mut custom = JudgmentSettingsV1::default();
+    custom.competence.criteria[0].push_str(" Custom.");
+    value.branch_routing = Some(BranchRoutingV1 {
+        native_protocol: Some(NativeProtocolSelectionV1::default()),
+        classifier: value.smart.classifier.clone(),
         default_branch_id: "code".into(),
         judgment: JudgmentSettingsV1::default(),
         reselect_on_user_message: false,
-    };
-    for id in ["default", "code"] {
-        routing.branches.push(RouteBranchV1 {
-            id: id.into(),
-            name: id.into(),
-            condition: format!("Handle {id}"),
-            candidates: value.candidates.clone(),
-            primary_candidates: vec![],
-            judgment: (id == "default").then(JudgmentSettingsV1::default),
-        });
-    }
-    value.branch_routing = Some(routing);
-    let (_, pending) =
-        preview_assessment_transition(&value, None, None, &[], &Default::default()).unwrap();
+        branches: [("code", None), ("default", Some(custom.clone()))]
+            .into_iter()
+            .map(|(id, judgment)| RouteBranchV1 {
+                id: id.into(),
+                name: id.into(),
+                condition: format!("Handle {id}"),
+                candidates: value.candidates.clone(),
+                primary_candidates: vec![],
+                judgment,
+            })
+            .collect(),
+    });
+    let authored = value.effective().unwrap();
+    let scopes = authored.assessment_scopes();
     assert_eq!(
-        pending
-            .scopes
-            .iter()
-            .map(|s| s.scope.as_str())
-            .collect::<Vec<_>>(),
-        vec!["branch/default", "default"]
+        scopes["default"].competence.standard,
+        Some(AssessmentStandardV1::Default)
     );
-    let choices = std::collections::BTreeMap::from([(
-        "default".into(),
-        AssessmentChoiceV1 {
-            method: AssessmentAdoptionV1::Stock,
-            source: None,
-        },
-    )]);
-    let (_, pending) = preview_assessment_transition(&value, None, None, &[], &choices).unwrap();
-    assert!(
-        matches!(pending.require_acknowledged(),Err(NativeProtocolError::Review{scope,..}) if scope=="branch/default")
+    assert_eq!(
+        scopes["branch/default"].competence.criteria,
+        custom.competence.criteria
+    );
+    assert_eq!(
+        scopes["branch/default"].competence.standard,
+        Some(AssessmentStandardV1::Custom)
     );
 }

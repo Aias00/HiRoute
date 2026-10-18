@@ -310,21 +310,6 @@ pub async fn preview_plan_editor(
     .await?
     .mutation()
 }
-/// Read-only publication Preview; all choices and composed content are server-owned.
-#[tauri::command]
-pub async fn plan_editor_transition_preview(
-    window: WebviewWindow,
-    state: State<'_, DesktopState>,
-    input: EditorInput,
-) -> Result<hiroute_application_api::PlanContentPreviewV2, DesktopFailure> {
-    main_window(&window)?;
-    let guard = state.0.lock().await;
-    guard
-        .as_ref()
-        .ok_or("RESIDENT_UNAVAILABLE")?
-        .preview_editor_transition(&input)
-        .await
-}
 #[tauri::command]
 pub async fn plan_editor_options(
     window: WebviewWindow,
@@ -1025,7 +1010,6 @@ pub fn run() {
             desktop_snapshot,
             preview_rename,
             preview_plan_editor,
-            plan_editor_transition_preview,
             refresh_route_references,
             plan_editor_options,
             preview_restore_name,
@@ -1153,7 +1137,7 @@ pub async fn quit_desktop(window: WebviewWindow) -> Result<(), DesktopFailure> {
 pub async fn observation_read(
     window: WebviewWindow,
     state: State<'_, DesktopState>,
-    request: hiroute_application_api::ObservationReadRequestV3,
+    request: hiroute_application_api::ObservationReadRequestV2,
 ) -> Result<serde_json::Value, DesktopFailure> {
     main_window(&window)?;
     state

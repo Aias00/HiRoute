@@ -44,7 +44,6 @@
     "allow-web-confirmation-snapshot",
     "allow-resolve-web-confirmation",
     "allow-preview-plan-editor",
-    "allow-plan-editor-transition-preview",
     "allow-refresh-route-references",
     "allow-plan-editor-options",
     "allow-observation-read",

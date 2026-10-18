@@ -478,6 +478,7 @@ fn content_deletion_erases_raw_carriers_preserves_digests_models_and_numeric_val
         .observed_facts(
             &reader,
             &ObservationFactsQueryV2 {
+                include_routing_observations: false,
                 request_id: fixture.request.clone(),
                 limit: 200,
                 cursor: None,

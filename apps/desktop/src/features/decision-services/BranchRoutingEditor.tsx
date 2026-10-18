@@ -1,3 +1,4 @@
+import { resolveAssessment } from './native-protocol';
 import { NativeProtocolEditor } from './NativeProtocolEditor';
 import { DecisionSelector } from './DecisionSelector';
 import type { OpenDecisionConnection } from './presentation';
@@ -21,7 +22,7 @@ export function BranchRoutingEditor({ routing, services, language, onChange, onO
     {routing.classifier.kind === 'decision_service' && routing.classifier.service.connection.kind === 'system_one' && <NativeProtocolEditor protocol={routing.native_protocol} service={routing.classifier.service} branches={routing.branches} defaultId={routing.default_branch_id} language={language} scopes={[
       ...(routing.branches.some(b => !b.judgment) ? [{ id: 'default', label: t('计划默认 · 跟随分支：', 'Plan defaults · inherited by: ') + routing.branches.filter(b => !b.judgment).map(b => b.name).join(', '), judgment: routing.judgment }] : []),
       ...routing.branches.filter(b => b.judgment).map(b => ({ id: b.id, label: b.name, judgment: b.judgment! })),
-    ]} onProtocol={native_protocol => patch({ native_protocol })} />}
+    ]} onProtocol={native_protocol => patch({ native_protocol, judgment: resolveAssessment(routing.judgment, native_protocol), branches: routing.branches.map(b => b.judgment ? { ...b, judgment: resolveAssessment(b.judgment, native_protocol) } : b) })} />}
     {routing.branches.map((branch, index) => {
       const judgment = branch.judgment ?? routing.judgment, dual = branch.primary_candidates.length > 0;
       return <section className="editor-section branch-routing-card" data-branch-id={branch.id} key={branch.id}>
@@ -34,12 +35,12 @@ export function BranchRoutingEditor({ routing, services, language, onChange, onO
         </> : <button className="btn" type="button" onClick={() => setPrimaryEditors(ids => [...ids, branch.id])}><UiIcon name="plus" />{t('添加主力模型（可选）', 'Add primary models (optional)')}</button>}
         <Disclosure label={t(`判断设置 · ${branch.judgment ? '单独调整' : '使用计划默认'} · ${judgmentSummary(judgment, dual, language)}`, `Judgment settings · ${branch.judgment ? 'Customized' : 'Plan defaults'} · ${judgmentSummary(judgment, dual, language)}`)} language={language}>
           <div className="field-actions"><p className="field-help">{branch.judgment ? t('本分支使用独立的完整判断设置。', 'This branch uses its own complete judgment settings.') : t('跟随计划默认，单独调整后整套设置独立生效。', 'Follows plan defaults. Customize to make all settings independent.')}</p><button className="btn" type="button" onClick={() => put(branch, { judgment: branch.judgment ? null : structuredClone(routing.judgment) })}>{branch.judgment ? t('恢复计划默认', 'Restore plan defaults') : t('单独调整', 'Customize')}</button></div>
-          <JudgmentFields value={judgment} onChange={judgment => put(branch, { judgment })} id={`branch-${index}`} dual={dual} disabled={!branch.judgment} language={language} />
+          <JudgmentFields protocol={routing.native_protocol} value={judgment} onChange={judgment => put(branch, { judgment })} id={`branch-${index}`} dual={dual} disabled={!branch.judgment} language={language} />
         </Disclosure>
       </section>;
     })}
     <section className="editor-section"><button className="btn" type="button" disabled={routing.branches.length >= 16} onClick={() => patch({ branches: [...routing.branches, newBranch(t(`分支 ${routing.branches.length + 1}`, `Branch ${routing.branches.length + 1}`))] })}><UiIcon name="plus" />{t('添加分支', 'Add branch')}</button></section>
-    <section className="editor-section"><Disclosure label={t(`计划默认判断设置 · ${judgmentSummary(routing.judgment, true, language)}`, `Plan default judgment · ${judgmentSummary(routing.judgment, true, language)}`)} language={language}><JudgmentFields value={routing.judgment} onChange={judgment => patch({ judgment })} id="global" language={language} /></Disclosure></section>
+    <section className="editor-section"><Disclosure label={t(`计划默认判断设置 · ${judgmentSummary(routing.judgment, true, language)}`, `Plan default judgment · ${judgmentSummary(routing.judgment, true, language)}`)} language={language}><JudgmentFields protocol={routing.native_protocol} value={routing.judgment} onChange={judgment => patch({ judgment })} id="global" language={language} /></Disclosure></section>
     <section className="editor-section"><Disclosure label={t('默认分支', 'Default branch')} language={language}>
       <label className="field"><span className="field-label">{t('默认分支', 'Default branch')}</span><select className="input" value={routing.default_branch_id} onChange={e => patch({ default_branch_id: e.target.value })}>{routing.branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select><span className="field-help">{t('没有匹配的任务条件时使用。整体决策失败时也使用此分支，有主力则使用主力。', 'Used when no task condition matches. Decision failures also use this branch, preferring its primary group when present.')}</span></label>
     </Disclosure></section>

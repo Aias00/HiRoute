@@ -7,7 +7,7 @@ export type DecisionConnection = {
 } | { kind: 'custom'; endpoint: string; timeout_ms: number; auth_header?: AuthHeader | null };
 export type DecisionService = { id: string; revision: number; name: string; connection: DecisionConnection };
 export type Classifier = { kind: 'local_rules' } | { kind: 'decision_service'; service: DecisionService };
-export type Competence = { floor_millis: number; instructions: string; criteria: [string, string, string] };
+export type Competence = { standard?: 'default' | 'custom'; floor_millis: number; instructions: string; criteria: [string, string, string] };
 export type Degree = { simple_threshold_millis: number; instructions: string; simple: string; complex: string };
 export type Judgment = { degree: Degree; competence: Competence };
 export type RouteBranch = {

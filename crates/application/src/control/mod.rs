@@ -7,12 +7,13 @@ use std::sync::Arc;
 
 use hiroute_application_api::{
     AgentConnectSpecV1, AgentConnectionStatusRequestV1, AgentConnectionStatusV1,
-    AgentLaunchDescriptorRequestV1, ApplyRequestV1, CanonicalDigest, ClassifierConnectivityProbeV1,
-    ClassifierConnectivityResultV1, ComputeConnectionApplyRequestV1, ComputeConnectionChangeV1,
-    ComputeConnectionOptionsResultV1, ComputeManagementQueryV2, ComputeManagementSnapshotV2,
-    ComputeSavePreviewV2, ComputeSaveResultV2, ComputeScanResultV1,
-    ComputeSubscriptionCandidatesV2, ComputeSubscriptionCheckPreviewV2,
-    ComputeSubscriptionCheckResultV2, ManagedClaudeLaunchDescriptorV2, ModelConnectionCheckViewV1,
+    AgentLaunchDescriptorRequestV1, ApplyRequestV1, CanonicalDigest,
+    ClassifierDecisionTestRequestV1, ClassifierDecisionTestResultV1,
+    ComputeConnectionApplyRequestV1, ComputeConnectionChangeV1, ComputeConnectionOptionsResultV1,
+    ComputeManagementQueryV2, ComputeManagementSnapshotV2, ComputeSavePreviewV2,
+    ComputeSaveResultV2, ComputeScanResultV1, ComputeSubscriptionCandidatesV2,
+    ComputeSubscriptionCheckPreviewV2, ComputeSubscriptionCheckResultV2,
+    ManagedClaudeLaunchDescriptorV2, ModelConnectionCheckViewV1,
     NativeModelConnectionCheckRequestV1, OperationReferenceV1, PreviewRequestV1, PreviewResultV1,
     PrincipalKind, RegisteredModelConnectionCheckRequestV1, RevisionSetV1,
     SavedModelConnectionCheckRequestV1,
@@ -51,15 +52,16 @@ pub enum ControlReadError {
 pub trait ClassifierDiagnosticPort: Send + Sync {
     fn test_classifier_c(
         &self,
-        _request: &hiroute_application_api::ClassifierCapabilityProbeV1,
+        _request: &hiroute_application_api::HistoricalApplicabilityTestRequestV1,
         _service: &hiroute_domain::DecisionServiceV1,
-    ) -> Result<hiroute_application_api::ClassifierDecisionTestResultV2, ControlReadError> {
+    ) -> Result<hiroute_application_api::HistoricalApplicabilityTestResultV1, ControlReadError>
+    {
         Err(ControlReadError::Unavailable)
     }
     fn test_classifier_decision(
         &self,
-        request: &ClassifierConnectivityProbeV1,
-    ) -> Result<ClassifierConnectivityResultV1, ControlReadError>;
+        request: &ClassifierDecisionTestRequestV1,
+    ) -> Result<ClassifierDecisionTestResultV1, ControlReadError>;
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -553,13 +555,6 @@ pub trait ComputeManagementControlPort: Send + Sync {
 }
 
 pub trait RoutingFactsPort: Send + Sync {
-    fn assessment_rollback_sources(
-        &self,
-        _workspace: &WorkspaceId,
-        _plan: &hiroute_application_api::PublishedPlanCapabilityRequestV1,
-    ) -> Result<Vec<hiroute_domain::AssessmentRollbackOptionV1>, ControlReadError> {
-        Err(ControlReadError::Unavailable)
-    }
     fn decision_service(
         &self,
         _workspace: &WorkspaceId,

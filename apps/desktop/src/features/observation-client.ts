@@ -12,7 +12,7 @@ export async function observationRead<T>(view: string, query: object, signal?: A
     if (signal?.aborted) throw new Error('OBSERVATION_QUERY_CANCELLED');
     return await invoke<T>('observation_read', {
       request: {
-        schema: 'hiroute.observation.query/v3',
+        schema: 'hiroute.observation.query/v2',
         intent: { view, query: view === 'facts' || view === 'plan_quality' ? { ...query, } : query },
       },
     });

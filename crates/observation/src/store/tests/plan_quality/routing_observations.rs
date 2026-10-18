@@ -141,6 +141,7 @@ fn routing_stats_use_all_decisions_and_preserve_safe_evidence_after_content_dele
     assert_eq!(c.suppressed_per_opportunity, Some(0.25));
     assert_eq!(c.suppressed_per_c_decision, Some(1.0 / 7.0));
     let mut fq = ObservationFactsQueryV2 {
+        include_routing_observations: true,
         request_id: fixture.request.clone(),
         limit: 1,
         cursor: None,
@@ -149,12 +150,28 @@ fn routing_stats_use_all_decisions_and_preserve_safe_evidence_after_content_dele
     assert!(facts.facts[0].routing_observation.is_some());
     fq.cursor = facts.next_cursor;
     assert!(matches!(
-        store.observed_facts(&reader().with_legacy_query_v2(), &fq, 5000),
+        store.observed_facts(
+            &reader(),
+            &{
+                let mut legacy = fq.clone();
+                legacy.include_routing_observations = false;
+                legacy
+            },
+            5000
+        ),
         Err(crate::query_v2::ObservationV2Error::Stale)
     ));
     fq.cursor = None;
     let old = store
-        .observed_facts(&reader().with_legacy_query_v2(), &fq, 5000)
+        .observed_facts(
+            &reader(),
+            &{
+                let mut legacy = fq.clone();
+                legacy.include_routing_observations = false;
+                legacy
+            },
+            5000,
+        )
         .unwrap();
     assert!(
         serde_json::to_value(&old.facts[0])

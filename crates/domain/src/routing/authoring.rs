@@ -32,7 +32,7 @@ pub struct WorkerPlanV1 {
 #[serde(deny_unknown_fields)]
 pub struct SmartEditorV2 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub native_protocol: Option<super::NativeProtocolV1>,
+    pub native_protocol: Option<super::NativeProtocolSelectionV1>,
 
     pub economy: Vec<CandidateSelectionV1>,
     pub primary: Vec<CandidateSelectionV1>,
@@ -145,7 +145,21 @@ impl PlanEditorStateV2 {
                 if !super::native_mode(&routing.classifier) {
                     routing.native_protocol = None;
                 }
-                AgentPlanStrategyV2::Branches { routing }
+                {
+                    routing.judgment = routing
+                        .judgment
+                        .resolve_assessment(routing.native_protocol.as_ref())
+                        .map_err(PlanAuthoringError::NativeProtocol)?;
+                    for branch in &mut routing.branches {
+                        if let Some(j) = &branch.judgment {
+                            branch.judgment = Some(
+                                j.resolve_assessment(routing.native_protocol.as_ref())
+                                    .map_err(PlanAuthoringError::NativeProtocol)?,
+                            );
+                        }
+                    }
+                    AgentPlanStrategyV2::Branches { routing }
+                }
             }
             PlanEditorMode::FixedModel => AgentPlanStrategyV2::Custom {
                 candidates: self.candidates.clone(),
@@ -158,7 +172,15 @@ impl PlanEditorStateV2 {
                 },
                 economy: self.smart.economy.clone(),
                 primary: self.smart.primary.clone(),
-                judgment: self.smart.judgment.clone(),
+                judgment: self
+                    .smart
+                    .judgment
+                    .resolve_assessment(if super::native_mode(&self.smart.classifier) {
+                        self.smart.native_protocol.as_ref()
+                    } else {
+                        None
+                    })
+                    .map_err(PlanAuthoringError::NativeProtocol)?,
                 reselect_on_user_message: self.smart.reselect_on_user_message,
                 classifier: self.smart.classifier.clone(),
                 complex_keywords: self.smart.complex_keywords.clone(),
@@ -214,7 +236,7 @@ pub enum AgentPlanStrategyV2 {
     },
     SmartSaving {
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        native_protocol: Option<super::NativeProtocolV1>,
+        native_protocol: Option<super::NativeProtocolSelectionV1>,
         economy: Vec<CandidateSelectionV1>,
         primary: Vec<CandidateSelectionV1>,
         judgment: super::JudgmentSettingsV1,

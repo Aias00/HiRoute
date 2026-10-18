@@ -133,7 +133,7 @@ impl RoutingObservationV1 {
             && CanonicalDigest::parse(self.bundle_digest.as_str()).is_ok()
             && text(&self.provider, 128)
             && text(&self.model, 256)
-            && matches!(self.standard.as_str(), "stock" | "custom")
+            && matches!(self.standard.as_str(), "default" | "custom")
             && self.target_segment.as_ref().is_none_or(|s| text(s, 256))
             && self.simple_threshold_millis <= 1000
             && self.competence_floor_millis <= 1000

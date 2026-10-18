@@ -24,8 +24,6 @@ pub struct EditorInput {
     pub expected_draft_revision: Option<u64>,
     pub editor: PlanEditorStateV2,
     pub language: String,
-    #[serde(default)]
-    pub assessment_choices: hiroute_domain::AssessmentChoicesV1,
 }
 impl EditorAction {
     pub(super) fn requires_confirmation(&self) -> bool {
@@ -94,39 +92,6 @@ impl Session {
                 idempotency_key: retry.unwrap_or(crate::random_id()?),
             },
         })
-    }
-    /// Read-only transition Preview; final publication repeats it under the writer.
-    pub async fn preview_editor_transition(
-        &self,
-        input: &EditorInput,
-    ) -> Result<PlanContentPreviewV2, DesktopFailure> {
-        let target = match &input.plan_id {
-            Some(id) => PlanContentTargetV2::Update {
-                plan_id: hiroute_domain::AgentPlanId::parse(id).map_err(|_| "EDITOR_INVALID")?,
-                expected_head_revision: input.expected_head_revision.ok_or("EDITOR_INVALID")?,
-            },
-            None => PlanContentTargetV2::Create {
-                creation_key: input.draft_id.clone(),
-            },
-        };
-        let change = PlanContentChangeV2 {
-            schema: PLAN_CONTENT_CHANGE_SCHEMA_V2.into(),
-            target,
-            editor: input.editor.clone(),
-            consumed_draft: input
-                .expected_draft_revision
-                .map(|revision| PlanDraftRefV1 {
-                    draft_id: input.draft_id.clone(),
-                    revision,
-                }),
-            assessment_choices: input.assessment_choices.clone(),
-        };
-        query(
-            &self.client,
-            "PreviewAgentPlanChange",
-            &PlanContentPreviewRequestV2 { change },
-        )
-        .await
     }
     pub async fn preview_editor(
         &mut self,
@@ -201,7 +166,6 @@ impl Session {
                         revision: d.revision,
                     });
                 serde_json::to_value(PlanContentChangeV2 {
-                    assessment_choices: input.assessment_choices.clone(),
                     schema: PLAN_CONTENT_CHANGE_SCHEMA_V2.into(),
                     target,
                     editor: input.editor.clone(),

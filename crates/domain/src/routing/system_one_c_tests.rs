@@ -7,26 +7,13 @@ fn stock_questions_and_composition_are_the_public_frozen_c_full() {
     j.competence.floor_millis = 317;
     j.degree.simple_threshold_millis = 819;
     p.stock_assessment(&mut j);
+    j.competence.standard = Some(super::super::AssessmentStandardV1::Default);
     assert_eq!(j.competence.floor_millis, 317);
     assert_eq!(j.degree.simple_threshold_millis, 819);
     assert_eq!(composed_assessment(Some(&p), &j), stock_c_questions()["q1"]);
     assert_eq!(
         CanonicalDigest::of(&stock_c_questions()).unwrap().as_str(),
         format!("sha256:{C_FULL_CHECKSUM}")
-    );
-    let review = AssessmentReviewV1::new(Some(&p), &j, AssessmentAdoptionV1::Stock, None).unwrap();
-    review.validate(Some(&p), &j).unwrap();
-    assert!(matches!(
-        review.validate(None, &j),
-        Err(NativeProtocolError::Review { .. })
-    ));
-    j.competence.instructions.push_str(" changed");
-    assert_eq!(
-        review.validate(Some(&p), &j),
-        Err(NativeProtocolError::Review {
-            scope: "assessment".into(),
-            reason: "invalid published transition provenance".into()
-        })
     );
 }
 
@@ -35,6 +22,7 @@ fn frozen_content_and_effective_authoring_must_both_agree() {
     let p = NativeProtocolV1::default();
     let mut j = JudgmentSettingsV1::default();
     p.stock_assessment(&mut j);
+    j.competence.standard = Some(super::super::AssessmentStandardV1::Default);
     let frozen = FrozenNativeProtocolV1::freeze(
         &p,
         j.degree.definition().into(),
@@ -116,10 +104,11 @@ fn legacy_omission_and_rubric_digest_remain_byte_stable() {
 }
 
 #[test]
-fn categorical_stock_wording_is_not_the_stock_experimental_question_shape() {
+fn categorical_default_assessment_is_labeled_from_authoring_intent() {
     let p = NativeProtocolV1::default();
     let mut j = JudgmentSettingsV1::default();
     p.stock_assessment(&mut j);
+    j.competence.standard = Some(super::super::AssessmentStandardV1::Default);
     let branch = super::super::MaterializedBranchV1 {
         id: "writing".into(),
         name: "Writing".into(),
@@ -143,10 +132,10 @@ fn categorical_stock_wording_is_not_the_stock_experimental_question_shape() {
     .unwrap();
     let before = serde_json::to_vec(&frozen).unwrap();
     // The frozen value is the actual shape; no runtime relabeling is needed.
-    assert_eq!(frozen.scopes["writing"].standard, "custom");
+    assert_eq!(frozen.scopes["writing"].standard, "default");
     assert_eq!(
         crate::RoutingObservationV1::not_dispatched(&frozen, "writing").standard,
-        "custom"
+        "default"
     );
     frozen.validate_branches(&branches, "writing").unwrap();
     assert_eq!(serde_json::to_vec(&frozen).unwrap(), before);

@@ -7,7 +7,7 @@ impl Client {
     pub async fn observation_read<R: DeserializeOwned>(
         &self,
         request_id: &str,
-        query: ObservationReadRequestV3,
+        query: ObservationReadRequestV2,
         grant: ProtectedClientGrantV2,
     ) -> Result<MachineEnvelopeV2<R>, ClientFailure> {
         self.call_typed(LocalControlWireRequestV2 {

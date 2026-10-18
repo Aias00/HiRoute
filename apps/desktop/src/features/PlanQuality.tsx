@@ -57,6 +57,7 @@ export function PlanQuality({
     setBusy(true); setError('');
     try {
       const page = await observationRead<Page>('plan_quality', {
+        include_routing_observations: true,
         plan_id: planId || null, session_id: sessionId || null, plan_revision: revision,
         execution: selected?.execution ?? null,
         from_ms: window.from, to_ms: window.to,

@@ -21,23 +21,11 @@ impl LocalControlAdapter {
             None,
             None,
             || {
-                // The transition choice may replace incompatible assessment text. Resolve the
-                // selected saved connection without prematurely validating that text.
-                let classifier = match change.editor.mode {
-                    hiroute_domain::PlanEditorMode::SmartSaving => {
-                        Some(&change.editor.smart.classifier)
-                    }
-                    hiroute_domain::PlanEditorMode::CustomBranches => {
-                        change.editor.branch_routing.as_ref().map(|r| &r.classifier)
-                    }
-                    _ => None,
-                };
-                let selected_service = classifier.and_then(|c| match c {
-                    hiroute_domain::ComplexityClassifierModeV1::DecisionService { service } => {
-                        Some(service.as_ref().clone())
-                    }
-                    _ => None,
-                });
+                let selected_service = change
+                    .editor
+                    .effective()
+                    .ok()
+                    .and_then(|configuration| configuration.decision_service().cloned());
                 let before = self.routing_compilation_snapshot(workspace)?;
                 let read_rows = || {
                     let stores = self.stores_lock().map_err(super::map_port)?;
@@ -73,43 +61,9 @@ impl LocalControlAdapter {
                         })
                         .transpose()?
                         .flatten();
-                    let previous = head
-                        .as_ref()
-                        .map(|h| {
-                            stores
-                                .control()
-                                .lookup_exact_plan_version(&h.reference)
-                                .map(|v| v.configuration)
-                                .map_err(|_| ControlReadError::Corrupt)
-                        })
-                        .transpose()?;
-                    let sources = head
-                        .as_ref()
-                        .map(|h| {
-                            stores
-                                .control()
-                                .assessment_rollback_sources(&h.reference)
-                                .map_err(|_| ControlReadError::Corrupt)
-                        })
-                        .transpose()?
-                        .unwrap_or_default();
-                    Ok::<_, ControlReadError>((
-                        head,
-                        draft,
-                        heads,
-                        decision_service,
-                        previous,
-                        sources,
-                    ))
+                    Ok::<_, ControlReadError>((head, draft, heads, decision_service))
                 };
-                let (
-                    mut current_head,
-                    draft,
-                    mut heads,
-                    decision_service,
-                    previous_configuration,
-                    assessment_sources,
-                ) = read_rows()?;
+                let (mut current_head, draft, mut heads, decision_service) = read_rows()?;
                 let after = self.routing_compilation_snapshot(workspace)?;
                 let repeated = read_rows()?;
                 if before.facts != after.facts
@@ -121,8 +75,6 @@ impl LocalControlAdapter {
                             draft.clone(),
                             heads.clone(),
                             decision_service.clone(),
-                            previous_configuration.clone(),
-                            assessment_sources.clone(),
                         )
                 {
                     return Err(ControlReadError::SnapshotChanged);
@@ -187,8 +139,6 @@ impl LocalControlAdapter {
                     None
                 };
                 Ok(PlanAuthoringSnapshotV2 {
-                    previous_configuration,
-                    assessment_sources,
                     workspace: workspace.clone(),
                     aliases: after
                         .active_publication

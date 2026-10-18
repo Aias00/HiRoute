@@ -581,7 +581,7 @@ fn c_native_publication_freezes_content_and_rejects_authoring_compiled_disagreem
     judgment.degree.simple_threshold_millis = 870;
     judgment.competence.floor_millis = 620;
     desired.strategy = AgentPlanStrategyV2::SmartSaving {
-        native_protocol: Some(p),
+        native_protocol: Some(NativeProtocolSelectionV1::default()),
         economy: vec![selection("economy-a")],
         primary: vec![selection("primary-a")],
         judgment,
