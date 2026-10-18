@@ -90,7 +90,31 @@ export function cProtocolScenarios({ fresh, routing, click, until, all, text, ca
       setInput(document.querySelector('.native-protocol-editor input[type="number"]'),'0');await until(()=>text().includes(t('背景为 0','With zero background')),'zero background');
       assert(text().includes(t('本次打开尚未测试历史问题适用性','Not tested in this session')),'Changed content reused evidence');
       setInput(document.querySelector('.native-protocol-editor input[type="number"]'),'8');
-      await until(()=>!text().includes(t('历史问题适用性测试通过','Historical problem applicability test passed')),'Old evidence resurrected');assertCopy();geometry();
+      await until(()=>!text().includes(t('历史问题适用性测试通过','Historical problem applicability test passed')),'Old evidence resurrected');
+      // A response that arrives after edits are reverted is still from an invalidated test.
+      for (const fails of [false, true]) {
+        const complete = control().handlers.test_classifier_decision;
+        let release, started = false;
+        const pending = new Promise(resolve => { release = resolve; });
+        control().handlers.test_classifier_decision = async payload => {
+          started = true;
+          await pending;
+          if (fails) throw new Error('Synthetic delayed native failure');
+          return complete(payload);
+        };
+        await click(t('测试此路由的适用性（1 次请求）','Test route applicability (1 request)'));
+        await until(()=>started,'pending applicability test');
+        setInput(document.querySelector('.native-protocol-editor input[type="number"]'),'0');
+        await until(()=>text().includes(t('背景为 0','With zero background')),'pending test input changed');
+        setInput(document.querySelector('.native-protocol-editor input[type="number"]'),'8');
+        await until(()=>!text().includes(t('背景为 0','With zero background')),'pending test input reverted');
+        release();
+        await until(()=>!document.querySelector('.native-protocol-editor button').disabled,'invalidated test settled');
+        assert(text().includes(t('本次打开尚未测试历史问题适用性','Not tested in this session')),'An in-flight result survived a change and revert');
+        assert(!text().includes(t('适用性测试未完成。','Applicability test did not complete.')),'A stale failure appeared on the reverted configuration');
+        control().handlers.test_classifier_decision = complete;
+      }
+      assertCopy();geometry();
     }
   }),scenario('desktop.decisions.connectivity-test',['decision-services','c-protocol'],'The connection page retains its original single V1 connectivity test',async()=>{
     for(const language of ['zh','en']){
