@@ -2,12 +2,20 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
+    "branch_id": {
+      "minLength": 1,
+      "type": "string"
+    },
     "duration_millis": {
       "minimum": 0,
       "type": "integer"
     },
     "endpoint_digest": {
       "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "failure_code": {
+      "minLength": 1,
       "type": "string"
     },
     "model": {
@@ -20,7 +28,7 @@
     },
     "question_count": {
       "maximum": 19,
-      "minimum": 3,
+      "minimum": 1,
       "type": "integer"
     },
     "reason": {
@@ -55,17 +63,24 @@
     "tested_at_unix_ms": {
       "minimum": 0,
       "type": "integer"
+    },
+    "verified_shapes": {
+      "items": {
+        "enum": [
+          "connectivity",
+          "category",
+          "degree",
+          "historical_assessment",
+          "applicability"
+        ]
+      },
+      "type": "array"
     }
   },
   "required": [
     "schema",
     "state",
-    "service_id",
-    "service_revision",
-    "endpoint_digest",
-    "model",
-    "protocol_digest",
-    "shape",
+    "verified_shapes",
     "question_count",
     "tested_at_unix_ms",
     "duration_millis",

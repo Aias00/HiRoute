@@ -150,6 +150,19 @@ fn categorical_stock_wording_is_not_the_stock_experimental_question_shape() {
     );
     frozen.validate_branches(&branches, "writing").unwrap();
     assert_eq!(serde_json::to_vec(&frozen).unwrap(), before);
+    let mut invalid = frozen.clone();
+    invalid.scopes.get_mut("writing").unwrap().standard = "stock".into();
+    invalid.digest = CanonicalDigest::of(&(
+        &invalid.protocol,
+        &invalid.context_layout,
+        &invalid.decision,
+        &invalid.scopes,
+    ))
+    .unwrap();
+    assert_eq!(
+        invalid.validate(),
+        Err(NativeProtocolError::ContentMismatch)
+    );
 }
 
 #[test]

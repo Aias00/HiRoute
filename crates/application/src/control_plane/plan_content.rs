@@ -22,7 +22,11 @@ fn preview(
             error.message_key = native.diagnostic_key().into();
             error.details_schema = "hiroute.native-protocol-diagnostic/v1".into();
             let field = match &native { hiroute_domain::NativeProtocolError::StateReference(field) => Some(field), _ => None };
-            let scope = match &native { hiroute_domain::NativeProtocolError::Review { scope, .. } | hiroute_domain::NativeProtocolError::HistoricalUnavailable {scope} => Some(scope), _ => None };
+            let scope = match &native {
+                hiroute_domain::NativeProtocolError::Review { scope, .. } | hiroute_domain::NativeProtocolError::HistoricalUnavailable {scope} => Some(scope.as_str()),
+                hiroute_domain::NativeProtocolError::StateReference(field) => field.rsplit_once(".degree.").or_else(|| field.rsplit_once(".competence.")).map(|(scope,_)| scope).or_else(|| field.strip_suffix(".condition")),
+                _ => None,
+            };
             (Box::new(error),Some(serde_json::json!({"schema":"hiroute.native-protocol-diagnostic/v1","reason":native.diagnostic_key(),"field":field,"scope":scope,"message":native.to_string()})))
         } else { (Box::new(ErrorV1::new(map_preview_error(e))),None) }
     })

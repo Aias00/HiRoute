@@ -60,6 +60,68 @@
     "content_change": {
       "additionalProperties": false,
       "properties": {
+        "assessment_choices": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "properties": {
+              "method": {
+                "enum": [
+                  "stock",
+                  "reviewed_custom",
+                  "historical"
+                ]
+              },
+              "source": {
+                "additionalProperties": false,
+                "properties": {
+                  "plan": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "content_digest": {
+                        "pattern": "^sha256:[0-9a-f]{64}$",
+                        "type": "string"
+                      },
+                      "content_revision": {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "plan_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "workspace_id": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "workspace_id",
+                      "plan_id",
+                      "content_revision",
+                      "content_digest"
+                    ],
+                    "type": "object"
+                  },
+                  "scope": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "plan",
+                  "scope"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "method"
+            ],
+            "type": "object"
+          },
+          "maxProperties": 17,
+          "type": "object"
+        },
         "consumed_draft": {
           "oneOf": [
             {
@@ -255,80 +317,6 @@
             {
               "additionalProperties": false,
               "properties": {
-                "assessment_review": {
-                  "additionalProperties": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "assessment_digest": {
-                        "pattern": "^sha256:[0-9a-f]{64}$",
-                        "type": "string"
-                      },
-                      "method": {
-                        "enum": [
-                          "stock",
-                          "reviewed_custom",
-                          "historical"
-                        ]
-                      },
-                      "protocol": {
-                        "enum": [
-                          "hiroute.system-one-c/v1",
-                          "hiroute.system-one-legacy/v1"
-                        ]
-                      },
-                      "source": {
-                        "additionalProperties": false,
-                        "properties": {
-                          "plan": {
-                            "additionalProperties": false,
-                            "properties": {
-                              "content_digest": {
-                                "pattern": "^sha256:[0-9a-f]{64}$",
-                                "type": "string"
-                              },
-                              "content_revision": {
-                                "minimum": 1,
-                                "type": "integer"
-                              },
-                              "plan_id": {
-                                "minLength": 1,
-                                "type": "string"
-                              },
-                              "workspace_id": {
-                                "minLength": 1,
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "workspace_id",
-                              "plan_id",
-                              "content_revision",
-                              "content_digest"
-                            ],
-                            "type": "object"
-                          },
-                          "scope": {
-                            "minLength": 1,
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "plan",
-                          "scope"
-                        ],
-                        "type": "object"
-                      }
-                    },
-                    "required": [
-                      "protocol",
-                      "assessment_digest",
-                      "method"
-                    ],
-                    "type": "object"
-                  },
-                  "maxProperties": 17,
-                  "type": "object"
-                },
                 "branches": {
                   "items": {
                     "additionalProperties": false,
@@ -704,80 +692,6 @@
         "smart": {
           "additionalProperties": false,
           "properties": {
-            "assessment_review": {
-              "additionalProperties": {
-                "additionalProperties": false,
-                "properties": {
-                  "assessment_digest": {
-                    "pattern": "^sha256:[0-9a-f]{64}$",
-                    "type": "string"
-                  },
-                  "method": {
-                    "enum": [
-                      "stock",
-                      "reviewed_custom",
-                      "historical"
-                    ]
-                  },
-                  "protocol": {
-                    "enum": [
-                      "hiroute.system-one-c/v1",
-                      "hiroute.system-one-legacy/v1"
-                    ]
-                  },
-                  "source": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "plan": {
-                        "additionalProperties": false,
-                        "properties": {
-                          "content_digest": {
-                            "pattern": "^sha256:[0-9a-f]{64}$",
-                            "type": "string"
-                          },
-                          "content_revision": {
-                            "minimum": 1,
-                            "type": "integer"
-                          },
-                          "plan_id": {
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "workspace_id": {
-                            "minLength": 1,
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "workspace_id",
-                          "plan_id",
-                          "content_revision",
-                          "content_digest"
-                        ],
-                        "type": "object"
-                      },
-                      "scope": {
-                        "minLength": 1,
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "plan",
-                      "scope"
-                    ],
-                    "type": "object"
-                  }
-                },
-                "required": [
-                  "protocol",
-                  "assessment_digest",
-                  "method"
-                ],
-                "type": "object"
-              },
-              "maxProperties": 17,
-              "type": "object"
-            },
             "classifier": {
               "oneOf": [
                 {

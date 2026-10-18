@@ -1,10 +1,10 @@
 {
-  "descriptor_digest": "sha256:d215e4972ce582a84a2a9ba3eb0b90d871fc80fc661925f56f043ade9f5196f1",
+  "descriptor_digest": "sha256:be753716ad99af8871e169d10f591577f2d77b89fc7e7bad343551e46385b0fe",
   "files": {
     "dependency-gate.v1.json": "sha256:b8ac81155266dca921f159d1cfabec6605f2e4bab0320ad6b23a3dbee51e6fa1",
     "product-action.v1.schema.json": "sha256:faf815b27fd292e564a7d51de20c5a2825abbe710315a2364a9932ae3b5e4b7e",
     "product-oracle-evidence.v1.schema.json": "sha256:faab6582bf3fba307b0f9f2949c51726409a209b0fa62e847114e0c6301038c6",
-    "product-oracle-manifest.v1.json": "sha256:7fbd1a71ba76edfc7f7d8dc07554fd075ac4560fa98b1fd0754bbc1c0256e64f",
+    "product-oracle-manifest.v1.json": "sha256:ea148fadc9b48500da452df519eab8f1be477bbaab3532c7a77a41121d6fff01",
     "product-result.v1.schema.json": "sha256:72fc76be77572e40eed7516754911b45fdc9d55a8c089ba74c21427a33809def"
   },
   "schema_version": {
