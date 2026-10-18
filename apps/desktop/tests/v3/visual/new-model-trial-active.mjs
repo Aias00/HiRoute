@@ -64,6 +64,7 @@ try {
  results.push({id:'feed.confirmed-corrupt-state-recovery',status:'passed'});
  await open('lang=en&view=timeline&scope-error=1'); await waitFor(client,`!!document.querySelector('.routing-timeline [role=alert]')`);
  const scopeReads=await evaluate(client,`trialTrace.filter(x=>x.command==='observation_read'&&x.payload.request.intent.view==='routing_timeline').length`);
+ await evaluate(client,`refreshTrialTimeline();true`); await evaluate(client,`hideTrialTimeline(true);true`); await evaluate(client,`hideTrialTimeline(false);true`);
  await new Promise(resolve=>setTimeout(resolve,2200));
  assert.equal(await evaluate(client,`trialTrace.filter(x=>x.command==='observation_read'&&x.payload.request.intent.view==='routing_timeline').length`),scopeReads);
  await click('.routing-timeline button','Retry'); await waitFor(client,`trialTrace.filter(x=>x.command==='observation_read'&&x.payload.request.intent.view==='routing_timeline').length===${scopeReads+1}`);

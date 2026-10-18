@@ -74,7 +74,13 @@ fn trial_comparison_scopes_revision_and_group_and_keeps_missing_prices_unknown()
     let actual = current_price("actual", "model-a", 1_000_000);
     let reference = current_price("reference", "model-ref", 4_000_000);
     let report = store
-        .observed_trust_cost(&reader(), &scope, &reference, &[actual.clone()], 1000)
+        .observed_trust_cost(
+            &reader(),
+            &scope,
+            &reference,
+            std::slice::from_ref(&actual),
+            1000,
+        )
         .unwrap();
     assert_eq!(report.request_count, 1);
     assert_eq!(report.coverage, ObservationMetricCoverageV2::Complete);
