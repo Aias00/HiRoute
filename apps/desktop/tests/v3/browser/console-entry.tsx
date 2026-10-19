@@ -5,11 +5,18 @@ import { consoleTransport } from '../../../src/host/console';
 import { hostCapabilities, setHostTransport } from '../../../src/host/index.ts';
 import { browserCapabilities } from '../../../src/host/types';
 import { DesktopApp } from '../../../src/product/DesktopApp';
-import { mockProductInvoke } from './product-fixtures';
+import { dailyPlan, readyAgents, readyDesktop, mockProductInvoke } from './product-fixtures';
 import '../../../src/occami/styles.css';
 
 const query = new URLSearchParams(location.search);
 const state = query.get('case') ?? 'login';
+if (query.get('landing')?.startsWith('suggestion:')) dailyPlan.desired.strategy.classifier = {kind:'decision_service',service:{id:'decision/landing',revision:1,name:'Landing fixture',connection:{kind:'custom',endpoint:'https://decision.example/choose',timeout_ms:3000,auth_header:null}}};
+if (query.get('landing') === 'agent:codex') {
+  const extras = Array.from({length:9},(_,i)=>({...structuredClone(dailyPlan),agent_plan_id:`plan/landing-${i}`,desired:{...structuredClone(dailyPlan.desired),display_name:i===8?'<Plan label> & extra':`Additional mapped Plan ${i+1}`}}));
+  readyDesktop.catalog.plans.push(...extras);readyAgents.plans.plans.push(...extras);
+  const selection = readyAgents.agents.find(a=>a.agent_id==='agent_codex_default')?.settings?.current_selection;
+  if (selection?.mode === 'codex_default') selection.allowed_plan_ids=[dailyPlan.agent_plan_id,...extras.map(p=>p.agent_plan_id)];
+}
 localStorage.setItem('hiroute.language', query.get('language') ?? 'zh');
 localStorage.setItem('hiroute.theme', query.get('theme') ?? 'light');
 sessionStorage.clear();
@@ -50,7 +57,7 @@ window.fetch = async (input, options) => {
   if (/\/session\/(launch|token)$/.test(url.pathname)) {
     if (state === 'rate-limited') return reply({ kind: 'native', code: 'CONSOLE_RATE_LIMITED' }, 429);
     if (state === 'session-limit') return reply({ kind: 'native', code: 'CONSOLE_SESSION_LIMIT' }, 503);
-    return reply({ bearer: 'b'.repeat(64) });
+    return reply({ bearer: 'b'.repeat(64), ...(url.pathname.endsWith('/launch') && query.get('landing') ? { landing: query.get('landing') } : {}) });
   }
   if (control.expired) return reply({ kind: 'native', code: 'CONSOLE_AUTH_REQUIRED' }, 401);
   if (url.pathname.endsWith('/session')) return reply({
@@ -59,6 +66,16 @@ window.fetch = async (input, options) => {
   });
   const command = decodeURIComponent(url.pathname.split('/').at(-1)!);
   const args = options?.body ? JSON.parse(String(options.body)) : {};
+  if (query.get('landing')?.startsWith('suggestion:') && command === 'observation_read') {
+    const view = args.request?.intent?.view;
+    const counts = {executed:40,complete:40,meets_floor:36,partial:0,awaiting_assessment:0,unscored:0,sessions:4};
+    const replay = {included:40,excluded_by_reason:{},recorded_share_at_current:1,estimate_only:true,thresholds:[650,800].map(threshold_millis=>({threshold_millis,regular:40,primary:0,protected_as_primary:0,regular_share:1,primary_share:0,protected_share:0,newly_regular:0}))};
+    const branch = {id:'trust-landing',branch_id:'smart_saving',threshold_millis:800,full_history:counts,upward_cohort:counts,upward_from_ms:0,suggestion:{kind:'step_up',threshold_millis:650},replay,protection_count:0,identity_stabilities:['pinned']};
+    if (view === 'plan_quality') return reply({samples:[],summary:{models:[],scored_stage_count:40,unrated_stage_count:0,session_count:4,available_revisions:[dailyPlan.agent_plan_revision]},next_cursor:null});
+    if (view === 'plan_trust_suggestions') return reply({suggestions:[{plan_id:dailyPlan.agent_plan_id,active_revision:dailyPlan.agent_plan_revision,branches:[branch],announcements:[],previous_routing:[]}],unavailable:[]});
+    if (view === 'plan_trust') return reply({plan_id:dailyPlan.agent_plan_id,active_revision:dailyPlan.agent_plan_revision,revision:'active',from_ms:Date.now()-86400000,to_ms:Date.now()+1,rows:[{branch_id:'smart_saving',group:'regular',model_configuration_id:'qwen3-coder-plus',reasoning_profile_id:null,attribution:'single',executor:null,identity_stability:'pinned',counts,execution_share:1,competence_rate:.9,scoring_coverage:1,protections:[],availability_relays:0,duration_p50_ms:100,duration_p90_ms:200,output_tokens_per_second:10}],branches:[branch],sessions:[],session_total:4,executors:[],announcements:[],cost:{kind:'unavailable',reason:'prices_unavailable'}});
+  }
+  if (command === 'decision_services') return reply({services:[]});
   if (command === 'observe_operation' || command === 'web_confirmation_snapshot') return reply(null);
   if (command === 'gateway_listener_status') return reply({config:{schema_version:'hiroute.gateway-listener/v1',desired:{address:'127.0.0.1',port_mode:'automatic'},applied:{address:'127.0.0.1',port:5829,applied_at_unix:1}},connect_address:'127.0.0.1:5829',suggested_agent_base_url:'http://127.0.0.1:5829',existing_agent_count:0,ready:true});
   if (command === 'worker_task_list') return reply({ status: 'succeeded', data: { schema: 'hiroute.worker-task-list/v1', tasks: [], next_cursor: null }, next_actions: [], error: null });

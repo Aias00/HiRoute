@@ -10,7 +10,7 @@ const desktopRoot = path.resolve(here, '../../..');
 const outputRoot = path.resolve(process.argv[2] ?? path.join(desktopRoot, 'test-results/v3-agent-trust'));
 const subscriptionProxyOnly = process.argv[3] === '--subscription-proxy-only';
 const shellOnly = process.argv[3] === '--shell-only' || subscriptionProxyOnly;
-if (process.argv[3] && !['--shell-host-only', '--console-only', '--shell-only', '--subscription-proxy-only', '--route-save-only', '--worker-replacement-only', '--claude-collaboration-only', '--route-options-only', '--claude-independent-only', '--token-share-only'].includes(process.argv[3])) throw new Error(`Unknown scenario selection: ${process.argv[3]}`);
+if (process.argv[3] && !['--shell-host-only', '--console-only', '--shell-only', '--subscription-proxy-only', '--route-save-only', '--worker-replacement-only', '--claude-collaboration-only', '--route-options-only', '--claude-independent-only', '--token-share-only', '--omarchy-landing-only'].includes(process.argv[3])) throw new Error(`Unknown scenario selection: ${process.argv[3]}`);
 const routeSaveOnly = process.argv[3] === '--route-save-only';
 const workerReplacementOnly = process.argv[3] === '--worker-replacement-only';
 const claudeCollaborationOnly = process.argv[3] === '--claude-collaboration-only';
@@ -79,8 +79,8 @@ try {
   chrome.stderr.on('data', data => { chromeErrors = (chromeErrors + data).slice(-8000); });
   try { await waitFor(`http://127.0.0.1:${cdpPort}/json/version`); }
   catch (error) { throw new Error(`${error.message}\n${chromeErrors}`); }
-  const consoleOnly = process.argv[3] === '--console-only';
-  const runner = spawn(process.execPath, [path.join(here, 'agent-trust-active.mjs'), String(cdpPort), `http://${consoleOnly ? 'console.test' : '127.0.0.1'}:${httpPort}/`, outputRoot, ...(process.argv[3] === '--token-share-only' ? ['--token-share-only'] : process.argv[3] === '--claude-independent-only' ? ['--claude-independent-only'] : process.argv[3] === '--shell-host-only' ? ['--shell-host-only'] : consoleOnly ? ['--console-only'] : subscriptionProxyOnly ? ['--subscription-proxy-only'] : shellOnly ? ['--shell-only'] : routeSaveOnly ? ['--route-save-only'] : workerReplacementOnly ? ['--worker-replacement-only'] : claudeCollaborationOnly ? ['--claude-collaboration-only'] : routeOptionsOnly ? ['--route-options-only'] : [])], { cwd: desktopRoot, stdio: 'inherit' });
+  const consoleOnly = ['--console-only','--omarchy-landing-only'].includes(process.argv[3]);
+  const runner = spawn(process.execPath, [path.join(here, 'agent-trust-active.mjs'), String(cdpPort), `http://${consoleOnly ? 'console.test' : '127.0.0.1'}:${httpPort}/`, outputRoot, ...(process.argv[3] === '--omarchy-landing-only' ? ['--omarchy-landing-only'] : process.argv[3] === '--token-share-only' ? ['--token-share-only'] : process.argv[3] === '--claude-independent-only' ? ['--claude-independent-only'] : process.argv[3] === '--shell-host-only' ? ['--shell-host-only'] : consoleOnly ? ['--console-only'] : subscriptionProxyOnly ? ['--subscription-proxy-only'] : shellOnly ? ['--shell-only'] : routeSaveOnly ? ['--route-save-only'] : workerReplacementOnly ? ['--worker-replacement-only'] : claudeCollaborationOnly ? ['--claude-collaboration-only'] : routeOptionsOnly ? ['--route-options-only'] : [])], { cwd: desktopRoot, stdio: 'inherit' });
   const outcome = await waitForExit(runner);
   if (outcome.code !== 0) process.exitCode = outcome.code ?? 1;
 } finally {

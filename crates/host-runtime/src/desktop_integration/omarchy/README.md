@@ -1,0 +1,14 @@
+# Optional Omarchy host integration
+
+The [CLI owner](../../../../cli/src/host_commands/omarchy.rs) parses explicit host actions. This module owns the current user's optional desktop files, file manifests, recoverable publication and notification delivery records. It does not configure native Agent accounts, publish routes, or start/stop/restart the service.
+
+- [files.rs](files.rs) admits fixed paths without aliases, preserves existing directory modes, stages public 0644 files and conditionally replaces only owned unchanged content. A private journal retains the previous manifest, replaced bytes and created file identities. Recovery preserves later edits instead of forcing rollback. Disable preserves changed or substituted items and reports them.
+- [mod.rs](mod.rs) uses only the public Omarchy plugin commands. Registration is asynchronous: validate, wait for discovery, enable, and verify within bounded deadlines. Refresh retains the current placement; a disabled retained manifest does not reactivate its files.
+- [assets.rs](assets.rs) projects the exact installed asset group and three deterministic desktop entries. Desktop argv quoting has both desktop string and Exec escaping layers. `Terminal=false` uses `omarchy-launch-tui --app-id=org.omarchy.agent`; launch policy stays with the existing generic Agent launcher.
+- [launch.rs](launch.rs) owns the HOME-to-existing-Work convention. It applies to the wrapper's child processes, without changing the caller's global process directory. Console URL admission permits only a bounded loopback one-use launch path.
+- [notifications.rs](notifications.rs) saves delivery decisions before spawning any waiter. Suggestion identities are retained without silent pruning; service warnings require a ready-to-unavailable transition. Opt-out drops queued deliveries. Capacity exhaustion fails closed. A bounded batch prevents a poll from starting unbounded desktop processes.
+- [process.rs](process.rs) runs argv with finite deadlines and a shared stdout/stderr limit, through the common [owned child primitive](../../../../platform/src/owned_child.rs). It never evaluates a shell command string supplied by a Plan or console response.
+
+The installed CLI remains available when the Linux uninstaller invokes disable. A failed disable blocks removal. Upgrade refresh runs after the verified candidate is installed; integration failure is reported without guessing ownership or removing changed files.
+
+[Temporary-tree tests](tests.rs), notification tests and process tests exercise file conflict, delayed discovery, rollback, user edits, recovery, delivery decisions, output limits and process lifetime. These tests do not establish desktop discovery, notification action delivery or installed-package acceptance on a real Omarchy session.

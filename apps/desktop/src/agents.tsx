@@ -1,3 +1,5 @@
+import './features/agents/mapped-plans.css';
+import { mappedPlanList } from './features/agents/mapped-plans';
 import { SecretTransportWarning } from './host/ConsoleUi';
 import { AgentDiscoveryFeedback } from './features/agents/AgentDiscoveryFeedback';
 import { AgentSkillDetails } from './features/agents/AgentSkillDetails';
@@ -71,7 +73,7 @@ export function Agents({
   operation?: OperationReference | null;
   onUnverifiedOperation?: (presentation: { kind: 'agent-settings'; target: string }) => void;
   initialAgentId?: string | null;
-  initialFacet?: Facet;
+  initialFacet?: Facet | null;
   refreshVersion?: number;
   mutationAllowed?: boolean;
   taskRead?: AgentTaskRead;
@@ -206,11 +208,11 @@ export function Agents({
     if (!snapshot || !initialAgentId || initialTargetHandled.current) return;
     const agent = snapshot.agents.find(item => item.agent_id === initialAgentId);
     const source = document.querySelector<HTMLElement>(
-      `[data-agent-id="${CSS.escape(initialAgentId)}"] [data-agent-facet="${initialFacet}"]`,
+      `[data-agent-id="${CSS.escape(initialAgentId)}"] ${initialFacet === null ? "[data-agent-plan-list]" : `[data-agent-facet="${initialFacet}"]`}`,
     );
     initialTargetHandled.current = true;
     source?.scrollIntoView({ block: 'center' });
-    if (agent && source && agent.context_id && snapshot.trusted_authority && mutationAllowed) open(agent, initialFacet, source);
+    if (initialFacet !== null && agent && source && agent.context_id && snapshot.trusted_authority && mutationAllowed) open(agent, initialFacet, source);
     else source?.focus();
   }, [initialAgentId, initialFacet, mutationAllowed, snapshot]);
 
@@ -571,6 +573,11 @@ export function Agents({
                   <p>{modelSelection ? <>{text('当前选择：', 'Current selection: ')}<strong>{selectionSummary}</strong></> : selected.agent_id === 'agent_qoder_default'
                     ? text('添加可在 Qoder 中明确选择的 HiRoute 路由，保留原有模型和默认值。', 'Add HiRoute routes you can explicitly select in Qoder, while keeping native models and defaults.')
                     : text('为此 Agent 配置固定模型，或通过智能路由自动选择模型。', 'Configure a fixed model for this Agent, or use smart routing to choose a model automatically.')}</p>
+                  {initialFacet === null && <div data-agent-plan-list tabIndex={-1}>
+                    <h4>{text('全部映射 Plan', 'All mapped Plans')}</h4>
+                    {!modelSelection ? <p className="field-help">{text('当前映射暂时无法核实。请刷新实际状态。', 'Current mappings cannot be verified. Refresh the actual state.')}</p>
+                      : <ul className="agent-mapped-plan-list">{mappedPlanList(modelSelection).map(row => <li key={row.planId} data-agent-mapped-plan={row.planId}><strong>{plans.find(plan => plan.agent_plan_id === row.planId)?.desired.display_name ?? row.planId}</strong>{row.slots.length > 0 && <span>{row.slots.map(slot => slot === 'default' ? text('默认', 'Default') : slot[0].toUpperCase() + slot.slice(1)).join(' · ')}</span>}</li>)}</ul>}
+                  </div>}
                   {modelSelection?.mode === 'claude_launcher' && (selectedModel?.activation_mode === 'managed_launch'
                     ? <ClaudeLaunchCommand language={language} />
                     : <p className="field-help">{text('直接启动 claude，使用 Opus、Sonnet、Haiku 原生预设选择已映射路由；其他计划不会自动出现在模型菜单中。若未显式选择当前模型，Claude Default 取决于账号；预设映射不证明 Default 可用，请通过真实调用验证。', 'Start claude normally and use its native Opus, Sonnet, or Haiku preset for mapped routes. Other plans do not automatically appear in the model picker. Without an explicit model selection, Claude Default depends on the account; preset mappings do not prove it works. Verify with a live call.')}</p>)}

@@ -51,7 +51,25 @@ pub(crate) fn split_globals(
     let mut remaining = Vec::new();
     let mut globals = Globals::default();
     let mut index = 0;
+    let token_breakdown = arguments
+        .windows(2)
+        .any(|pair| pair == ["--breakdown", "billing_class"]);
     while index < arguments.len() {
+        // This opt-in leaf's Agent is a read filter. All other invocations, and
+        // globals before the leaf, retain the released collaboration identity.
+        if token_breakdown
+            && arguments[index] == "--agent"
+            && remaining.starts_with(&["value".to_owned(), "show".to_owned()])
+        {
+            remaining.push(arguments[index].clone());
+            let Some(agent) = arguments.get(index + 1) else {
+                return Err(split_error(globals, worker));
+            };
+            remaining.push(agent.clone());
+            index += 2;
+            continue;
+        }
+
         if collaboration && matches!(arguments[index].as_str(), "--trigger" | "--idempotency-key") {
             remaining.push(arguments[index].clone());
             let Some(value) = arguments.get(index + 1) else {
@@ -280,6 +298,51 @@ fn parse_duration(value: &str) -> Result<Duration, ErrorCode> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn token_share_agent_filter_does_not_select_collaboration_authority() {
+        for args in [
+            vec![
+                "value",
+                "show",
+                "--breakdown",
+                "billing_class",
+                "--agent",
+                "codex_cli",
+            ],
+            vec![
+                "value",
+                "show",
+                "--agent",
+                "codex_cli",
+                "--period",
+                "today",
+                "--breakdown",
+                "billing_class",
+            ],
+        ] {
+            let (remaining, globals) =
+                split_globals(args.into_iter().map(str::to_owned).collect()).unwrap();
+            assert!(globals.agent.is_none());
+            let payload = crate::command_payload("value.show", &remaining[2..]).unwrap();
+            assert_eq!(payload["intent"]["query"]["agent"], "codex_cli");
+        }
+        for args in [
+            vec!["value", "show", "--agent", "codex"],
+            vec![
+                "--agent",
+                "codex",
+                "value",
+                "show",
+                "--breakdown",
+                "billing_class",
+            ],
+        ] {
+            let (_, globals) =
+                split_globals(args.into_iter().map(str::to_owned).collect()).unwrap();
+            assert_eq!(globals.agent.as_deref(), Some("codex"));
+        }
+    }
 
     #[cfg(windows)]
     #[test]

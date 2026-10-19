@@ -14,6 +14,14 @@ pub struct Output {
 const LIMIT: usize = 64 * 1024;
 
 pub fn run(program: &Path, arguments: &[OsString], timeout: Duration) -> io::Result<Output> {
+    run_in(program, arguments, timeout, None)
+}
+pub fn run_in(
+    program: &Path,
+    arguments: &[OsString],
+    timeout: Duration,
+    directory: Option<&Path>,
+) -> io::Result<Output> {
     use nix::fcntl::{FcntlArg, OFlag, fcntl};
     fn nonblocking(fd: impl AsFd) -> io::Result<()> {
         let flags = fcntl(&fd, FcntlArg::F_GETFL)?;
@@ -44,7 +52,11 @@ pub fn run(program: &Path, arguments: &[OsString], timeout: Duration) -> io::Res
         }
     }
     let start = Instant::now();
-    let mut child = Command::new(program)
+    let mut command = Command::new(program);
+    if let Some(directory) = directory {
+        command.current_dir(directory);
+    }
+    let mut child = command
         .args(arguments)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())

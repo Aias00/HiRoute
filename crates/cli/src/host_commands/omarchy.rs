@@ -330,11 +330,14 @@ pub(crate) fn launch(arguments: &[OsString]) -> CliExecution {
         Ok(value) => value,
         Err(_) => return failure(ErrorCode::ActionRequired, None),
     };
-    if std::env::set_current_dir(host::launch::working_directory(&context.home, &cwd)).is_err() {
-        return failure(ErrorCode::ActionRequired, None);
-    }
-    let check =
-        reads::check_with_tail(&context.stable_cli(), &agent, &tail, Duration::from_secs(5));
+    let working = host::launch::working_directory(&context.home, &cwd);
+    let check = reads::check_at(
+        &context.stable_cli(),
+        &agent,
+        &tail,
+        Duration::from_secs(5),
+        Some(&working),
+    );
     if !check.launchable {
         let _ = context.queue_launch_failure(
             &agent,
@@ -347,6 +350,7 @@ pub(crate) fn launch(arguments: &[OsString]) -> CliExecution {
     }
     use std::os::unix::process::CommandExt;
     let error = Command::new(context.stable_cli())
+        .current_dir(working)
         .args([
             "agent",
             "launch",

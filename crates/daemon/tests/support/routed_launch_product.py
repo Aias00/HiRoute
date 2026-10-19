@@ -110,6 +110,19 @@ def run(repository):
         product.public_cli('protected-input release --candidate candidate/native/product')
         publish_plan_and_agent(product, saved['binding_id'], native_model_mode='hiroute_only')
         context = product.agent_context_id
+        # Exercise the actual CLI global parser and daemon read, not the leaf parser alone.
+        _, old_value = product.public_cli('value show')
+        assert 'token_share' not in old_value['data']
+        for period in ['today', 'last_7d']:
+            _, breakdown = product.public_cli('value show --breakdown billing_class --period ' + period)
+            share = breakdown['data']['token_share']
+            assert share['period']['kind'] == period and share['period']['timezone']
+            assert share['headline'] == {'kind': 'no_routed_requests'}
+            _, filtered = product.public_cli('value show --breakdown billing_class --period ' + period + ' --agent codex_cli')
+            assert filtered['data']['token_share']['agent_filter'] == 'codex_cli'
+            assert filtered['data']['token_share']['headline'] == {'kind': 'no_routed_requests'}
+        invalid_period, invalid_result = product.public_cli('value show --breakdown billing_class --period last_30d', success=False)
+        assert invalid_period == 2 and invalid_result['error']['code'] == 'INVALID_ARGUMENTS'
         for arguments in (check_args, ['--output', 'json', *check_args],
                           [*check_args, '--context', context]):
             ready = invoke(product, arguments, env)
@@ -184,7 +197,7 @@ def run(repository):
         assert observed['home'] == env['CODEX_HOME'] and observed['inherited'] == env['LAUNCH_TEST_INHERITED']
         print(json.dumps({'scenario': 'routed-launch-real-cli-daemon', 'state': 'green',
                           'routed_sessions': 4, 'native_fallbacks': 1,
-                          'terminal_refusals': 3, 'signal_cases': 2, 'live_model_calls': 0}), flush=True)
+                          'terminal_refusals': 3, 'signal_cases': 2, 'value_breakdown_reads': 4, 'legacy_value_reads': 1, 'invalid_period_cases': 1, 'live_model_calls': 0}), flush=True)
     finally:
         product.close()
         upstream.close()

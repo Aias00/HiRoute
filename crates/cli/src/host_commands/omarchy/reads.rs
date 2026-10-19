@@ -198,12 +198,21 @@ pub(super) fn check_with_tail(
     tail: &[OsString],
     timeout: Duration,
 ) -> Check {
+    check_at(program, agent, tail, timeout, None)
+}
+pub(super) fn check_at(
+    program: &Path,
+    agent: &str,
+    tail: &[OsString],
+    timeout: Duration,
+    directory: Option<&Path>,
+) -> Check {
     let mut args: Vec<OsString> = ["agent", "launch", "--agent", agent, "--check", "--"]
         .map(OsString::from)
         .into();
     args.extend_from_slice(tail);
     let result = (!timeout.is_zero())
-        .then(|| host::process::run(program, &args, timeout))
+        .then(|| host::process::run_in(program, &args, timeout, directory))
         .and_then(Result::ok)
         .and_then(|out| serde_json::from_slice::<serde_json::Value>(&out.stdout).ok())
         .and_then(|v| v.get("data").cloned())

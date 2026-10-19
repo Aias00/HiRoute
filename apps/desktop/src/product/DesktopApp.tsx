@@ -80,7 +80,7 @@ type RoutingIntent = {
 type AgentIntent = {
   key: string;
   agentId?: string | null;
-  facet?: 'model' | 'collaboration';
+  facet?: 'model' | 'collaboration' | null;
   tab?: 'configuration' | 'tasks';
   taskId?: string | null;
 };
@@ -570,7 +570,7 @@ export function DesktopApp() {
     }
     if (consoleLanding.startsWith('agent:')) {
       landingHandled.current = true;
-      setAgentIntent({ key: `omarchy/${randomId()}`, agentId: consoleLanding === 'agent:codex' ? 'agent_codex_default' : 'agent_claude_default', facet: 'model' });
+      setAgentIntent({ key: `omarchy/${randomId()}`, agentId: consoleLanding === 'agent:codex' ? 'agent_codex_default' : 'agent_claude_default', facet: null });
       setVisited(current => new Set([...current, 'agents'])); setPage('agents'); return;
     }
     if (trustSuggestions.status === 'loading') return;
@@ -703,7 +703,7 @@ export function DesktopApp() {
       }}>
         <div className="window-controls" data-tauri-drag-region aria-hidden="true" />
         <div className="titlebar-main" data-tauri-drag-region>
-          <div className="window-title"><span>{trialOpen ? (language === 'zh' ? '试用新模型' : 'Try a new model') : text.pages[page]}</span></div>
+          <div className="window-title"><span className="page-label">{trialOpen ? (language === 'zh' ? '试用新模型' : 'Try a new model') : text.pages[page]}</span></div>
         </div>
       </header>
       <HomeNavigation

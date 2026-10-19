@@ -301,6 +301,9 @@
     "hiroute.observation.serialization-failure/v1",
     "hiroute.observation.valuation-summary/v2",
     "hiroute.observation.value-report/v2",
+    "hiroute.omarchy-integration/v1",
+    "hiroute.omarchy-notifications/v1",
+    "hiroute.omarchy-transaction/v1",
     "hiroute.operation-cancel-request/v1",
     "hiroute.operation-event/v1",
     "hiroute.operation-idempotency-lookup/v1",
@@ -431,6 +434,7 @@
     "hiroute.system-one-legacy/v1",
     "hiroute.system-status/v1",
     "hiroute.trust-levels/v1",
+    "hiroute.trust-suggestion/v1",
     "hiroute.upgrade-installer-decision/v1",
     "hiroute.upgrade-installer-started/v1",
     "hiroute.upgrade-source-backup/v1",
@@ -1273,6 +1277,30 @@
         "hiroute.settings-claude-launch-state/v1"
       ],
       "legacy_support": []
+    },
+    {
+      "subject": "omarchy_desktop_ownership",
+      "audited_prefixes": [
+        "hiroute.omarchy-integration",
+        "hiroute.omarchy-transaction",
+        "hiroute.omarchy-notifications"
+      ],
+      "current_contracts": [
+        "hiroute.omarchy-integration/v1",
+        "hiroute.omarchy-transaction/v1",
+        "hiroute.omarchy-notifications/v1"
+      ],
+      "legacy_support": []
+    },
+    {
+      "subject": "trust_suggestion_identity",
+      "audited_prefixes": [
+        "hiroute.trust-suggestion"
+      ],
+      "current_contracts": [
+        "hiroute.trust-suggestion/v1"
+      ],
+      "legacy_support": []
     }
   ],
   "forbidden_contracts": [
@@ -1348,7 +1376,7 @@
       "field": "context_window_tokens",
       "mode": "recovery_read_only",
       "owner": "agent-connections",
-      "reason": "A descriptor reconstructed from a pre-window immutable settings operation has no managed context policy. It retains that operation’s behavior until settings are saved again.",
+      "reason": "A descriptor reconstructed from a pre-window immutable settings operation has no managed context policy. It retains that operation\u2019s behavior until settings are saved again.",
       "removal_condition": "Retire with the pre-window settings operation recovery reader.",
       "allowed_paths": [
         "crates/domain/src/agents/managed_launch.rs",
@@ -1952,6 +1980,32 @@
         "crates/domain/src/observation/value_summary.rs",
         "crates/observation/src/query_v2/totals.rs",
         "apps/desktop/src/product/use-desktop-home.ts"
+      ]
+    },
+    {
+      "contract": "hiroute.console-launch-request/v1",
+      "field": "omitted landing and omitted route hint on legacy single-use credential exchanges",
+      "mode": "legacy_adapter",
+      "owner": "web-console",
+      "reason": "Existing launch requests retain their loopback default and original response shape. Only an explicitly requested bounded landing is bound to the one-use code and returned after its successful exchange. Token login and subsequent session reads do not manufacture or replay a landing.",
+      "removal_condition": "Remove only through an explicit versioned retirement of supported console launch callers.",
+      "allowed_paths": [
+        "crates/application-api/src/console.rs",
+        "crates/daemon/src/console/auth/mod.rs",
+        "crates/daemon/src/console/control.rs",
+        "apps/desktop/src/host/console.ts"
+      ]
+    },
+    {
+      "contract": "hiroute.standalone-package/v1",
+      "field": "optional complete Linux Omarchy asset inventory",
+      "mode": "legacy_adapter",
+      "owner": "standalone-installation",
+      "reason": "Readers still accept existing V1 packages without the optional Linux asset group. Current Linux producers ship its complete six-file set; macOS and Windows inventory is unchanged. Installing a package without the assets while an integration record exists requires explicit disable before replacement.",
+      "removal_condition": "Remove the legacy inventory only after supported released packages no longer require it and an explicit versioned retirement is approved.",
+      "allowed_paths": [
+        "scripts/package-standalone.py",
+        "scripts/install-standalone.py"
       ]
     }
   ]

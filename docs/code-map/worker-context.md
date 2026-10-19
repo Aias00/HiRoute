@@ -41,6 +41,14 @@ primary roles retain their original resource meanings; the second Skill has a se
 registered effect and per-facet restore reference. Hermes initiates delegation through
 the existing local Worker CLI and does not become a Worker executor.
 
+The [routed main-Agent launcher](../../crates/cli/src/routed_launch.rs) admits
+service, connection, mapped publications and native launch state before starting
+Codex or Claude. Codex uses the accepted executable/HOME/profile snapshot and
+rechecks installation identity. Independent Claude state lives in the existing
+settings Operation; it creates no native configuration effect. Both paths preserve
+the generic supervisor and opaque native argv. Their explicit terminal-confirmed
+native fallback is separate from Worker routing and never runs unattended.
+
 ## Follow a task through its owners
 
 | Step / question | Production owner | Boundary to preserve |

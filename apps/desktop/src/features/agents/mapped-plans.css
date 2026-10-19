@@ -1,0 +1,5 @@
+[data-agent-plan-list] { scroll-margin-top: 72px; }
+.agent-mapped-plan-list { display: grid; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
+.agent-mapped-plan-list li { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; }
+.agent-mapped-plan-list strong { min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+.agent-mapped-plan-list span { flex-shrink: 0; color: var(--text-soft); font-size: 12px; }

@@ -25,7 +25,9 @@ try {
   await mkdir(outputRoot, { recursive: true });
   const client = await connectPage(port);
   try {
-    if (process.argv[5] === '--shell-host-only') {
+    if (process.argv[5] === '--omarchy-landing-only') {
+      await (await import('./omarchy-landing-captures.mjs')).runOmarchyLandingCaptures(client, baseUrl, outputRoot);
+    } else if (process.argv[5] === '--shell-host-only') {
       await (await import('./shell-host-scenarios.mjs')).runShellHostScenarios(client, baseUrl, outputRoot);
     } else if (process.argv[5] === '--console-only') {
       await (await import('./console-scenarios.mjs')).runConsoleScenarios(client, baseUrl, outputRoot);

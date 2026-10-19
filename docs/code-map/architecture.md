@@ -37,6 +37,13 @@ are x64 NSIS installers only; headless x64/ARM64 archives stay internal. The
 installer and tests invoke `__windows-install` / `__windows-uninstall`, with no
 Python installer or offered SCM installation entry.
 
+The optional [Omarchy host integration](../../crates/host-runtime/src/desktop_integration/omarchy/README.md)
+owns desktop files and delivery records through the CLI. It calls public plugin
+commands and composes public Local Control reads; it never owns service lifecycle
+or native Agent settings. Console landing hints bind to one-use launch credentials
+and reach the shared product only after successful exchange. Browser navigation
+cannot mint authority or apply a routing change.
+
 ## Shared layers
 
 | Responsibility | Production owner | Boundary |
@@ -45,7 +52,7 @@ Python installer or offered SCM installation entry.
 | Local control contract | [Application API](../../crates/application-api/src), [client-core](../../crates/client-core/src) | Shared requests/responses for CLI and Desktop; generated schemas come from typed producers |
 | Business workflows | [Application](../../crates/application/src) | Planning and authorization through ports; external effects are supplied by the daemon |
 | Composition and process lifecycle | [Daemon control](../../crates/daemon/src/control/runtime), [delegation](../../crates/daemon/src/delegation) | Concrete adapters, accepted operations, Worker execution and recovery |
-| Operating-system primitives | [Platform](../../crates/platform/README.md) | Cross-platform private filesystem creation/reads and owned cleanup; native handles, ACLs, file identity and local byte streams. Business authority and lifecycle remain with callers |
+| Operating-system primitives | [Platform](../../crates/platform/README.md) | Cross-platform private filesystem creation/reads and owned process/file cleanup; native handles, ACLs, file identity and local byte streams. Business authority and lifecycle remain with callers |
 | Durable state and external effects | [Local Storage](../../crates/local-storage/src), [Integrations](../../crates/integrations/src) | Store current state; read or conditionally change external Agent configuration through its native leaf |
 | Request execution | [Gateway](../../crates/gateway/README.md), [gateway-core](../../crates/gateway-core/src) | Authenticate against published authority, plan attempts, adapt protocols and enforce execution budgets |
 | Business evidence | [Observation](../../crates/observation/src), [authorized queries](../../crates/application/src/observation_query) | Execution facts, managed content, session queries and valuation; [diagnostics](../../crates/diagnostics/src) remain separate |

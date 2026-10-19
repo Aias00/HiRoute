@@ -22,6 +22,8 @@ to their production owners and executable contracts.
 | [collaboration-check-feedback.ts](collaboration-check-feedback.ts) | Versioned collaboration-check failures become safe login, Skill recovery and retry guidance; native output is never display text. |
 | [CodexAccessPanel.tsx](CodexAccessPanel.tsx) | Profile/root facts, mode controls, launch commands, ordinary file-conflict diagnosis and an existing pending Operation's recovery entry. |
 | [codex-launch.ts](codex-launch.ts), [codex-surfaces.ts](codex-surfaces.ts) | Confirmed command-copy eligibility and the distinction between detected executables and mode applicability. |
+| [mapped-plans.ts](mapped-plans.ts) | Complete read-only Codex/Claude Plan mappings for authenticated agent landing; distinct start slots annotate the list without truncation or opening a settings draft. |
+| [ClaudeActivationChoice.tsx](ClaudeActivationChoice.tsx), [ClaudeLaunchCommand.tsx](ClaudeLaunchCommand.tsx) | Explicit ordinary/independent use and the confirmed independent launch command. Preview/Apply and frozen backend state retain authority. |
 | [mutation-feedback.ts](mutation-feedback.ts) | Submitted, pre-apply cancelled and uncertain outcomes; truthful disable/recovery messages. |
 | [Agents page](../../agents.tsx) | Snapshot refresh, selected Agent/tab, in-memory draft and mode, discard guard, native calls, Operation handoff, confirmation-dependent copy effect and task-history composition. |
 

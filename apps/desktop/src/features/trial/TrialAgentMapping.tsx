@@ -34,6 +34,7 @@ export function TrialAgentChoice({ snapshot, value, onChange, language, disabled
       <span className="trial-presets-title">{t(`${agentDisplayName(value.agentId, language)} 的模型预设`, `${agentDisplayName(value.agentId, language)} model presets`)}</span>
       {(['opus', 'sonnet', 'haiku'] as const).map(preset => <label key={preset} className="trial-preset"><input type="checkbox" checked={value.presets.includes(preset)} onChange={e => onChange({ ...value, presets: e.target.checked ? [...value.presets, preset] : value.presets.filter(p => p !== preset) })} /><strong>{preset[0].toUpperCase() + preset.slice(1)}</strong><span>{t('现在：', 'Now: ')}{current(preset)}</span></label>)}
     </div> : value.agentId && <p className="field-help">{agentDisplayName(value.agentId, language)} · {agentEcosystem(value.agentId) === 'codex' ? t('将此路由设为默认模型；保留已有可用路由。', 'Use this route as the default model and retain existing allowed routes.') : t('将此路由加入可用路由。', 'Add this route to the allowed routes.')}</p>}
+    {value.omarchy && <p className="field-help" data-omarchy-target>{agentEcosystem(value.agentId) === 'codex' ? t('Codex · 独立 Profile', 'Codex · Independent profile') : t('Claude Code · 仅通过 HiRoute 启动的会话', 'Claude Code · Only sessions started through HiRoute')}</p>}
     <p className="field-help">{t('只调整选中的模型路由。权限、工具审批和任务协作不变。', 'Only the selected model routing changes. Permissions, tool approval and task collaboration stay unchanged.')}</p>
   </fieldset>;
 }

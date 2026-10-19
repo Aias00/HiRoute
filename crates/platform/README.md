@@ -13,6 +13,13 @@ broadcasts the environment change. `shell_open` admits bounded HTTP(S) URLs befo
 the native browser association. These leaves do not mint console credentials,
 select releases or authorize product operations.
 
+`owned_child::NativeChildScope` retains a spawned process group's identity while
+observing exit without reaping its leader, then bounds group shutdown and reaping.
+Unix callers create the group; Windows callers provide the existing Job child.
+The Agent probe and optional desktop-command runner share this primitive while
+keeping their own argv, output limits and policy. Existing probe lifetime cases
+remain with [the probe consumer](../integrations/src/agents/native_probe_process.rs).
+
 `private_fs` is the cross-platform entry for new private directories/files, storage
 directory preparation, regular/private handle reads, single-link checks and owned
 temporary directory removal. Unix and Windows implementations stay in separate

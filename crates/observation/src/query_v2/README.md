@@ -136,3 +136,15 @@ lead to the existing V2 content pager. Provider state/private reasoning is not c
 Recorded stages explain routing but never create user-turn adjacency. Verified native compression is
 a continuation boundary with reset turn context. Requests lacking reliable lineage/turn evidence
 remain separate or unknown rather than acquiring inferred links.
+
+## Billing-class token share
+
+[token_share.rs](token_share.rs) is an opt-in value/Home projection. It reuses the
+current authorized request scope and normalized attempt usage, binding each actual
+attempt to its retained frozen candidate class. Unused candidates and current
+source metadata never establish consumption. Unknown billing class and unknown
+usage remain separate; absent usage is different from a recorded zero. Input,
+cache-read, cache-write and output are exclusive buckets under the recorded usage
+semantics. Execution-group stage counts use actual admitted Agent-turn evidence.
+The percentage is a token distribution approximation, not cost, quota relief or
+cash savings. Existing requests retain their original response fields and periods.
