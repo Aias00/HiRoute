@@ -187,6 +187,35 @@ pub(crate) fn trial_population(count: usize, score: f64) -> TrustPopulationV1 {
     }
 }
 #[test]
+fn live_trust_suggestion_counts_protected_primary_stages() {
+    let context = trial_context(900);
+    let mut population = trial_population(40, 0.9);
+    let mut protected = stage("protected", Some((0.9, false)), true);
+    protected.sample.branch_execution.as_mut().unwrap().group = ExecutionGroupV1::Primary;
+    let mut decision = selection(0.98, "low_competence", "primary");
+    decision.competence_trigger = Some(
+        serde_json::from_value(json!({
+            "segment_id":"stage/0", "score":0.1, "floor_millis":500, "from_group":"regular"
+        }))
+        .unwrap(),
+    );
+    protected.sample.selection = Some(decision);
+    population.stages.push(protected.clone());
+    population.active_stages.push(protected);
+    let query = PlanTrustQueryV1 {
+        plan_id: "plan/a".into(),
+        branch_id: None,
+        revision: Default::default(),
+        from_ms: None,
+        to_ms: None,
+        group_by: Default::default(),
+    };
+    let evidence = suggestion_evidence(&query, &context, &population, &BTreeMap::new());
+    assert_eq!(evidence["branches"][0]["protection_count"], 1);
+    assert_eq!(evidence["branches"][0]["upward_cohort"]["complete"], 40);
+}
+
+#[test]
 fn suggestion_projection_matches_report_for_every_direction_without_report_rows() {
     for (threshold, count, score) in [
         (800, 40, 0.9),

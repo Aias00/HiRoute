@@ -72,6 +72,34 @@ fn trial_turn(f: &Fixture, revision: u64, group: ExecutionGroupV1) -> ExecutionF
     }
 }
 #[test]
+fn live_trust_cost_accepts_current_millisecond_window() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    trial_request(&store, "current-window", 17, ExecutionGroupV1::Regular);
+    let mut scope = TrustCostScopeV1 {
+        plan_id: "plan/codex-daily".into(),
+        revision: Some(17),
+        branch_id: Some("smart_saving".into()),
+        group: ExecutionGroupV1::Regular,
+        from_ms: 0,
+        to_ms: 1001,
+        currency: "USD".into(),
+    };
+    let prices = [current_price("actual", "model-a", 1_000_000)];
+    let reference = current_price("reference", "model-ref", 4_000_000);
+    let report = store
+        .observed_trust_cost(&reader(), &scope, &reference, &prices, 1000)
+        .unwrap();
+    assert_eq!(report.request_count, 1);
+    assert_eq!(report.coverage, ObservationMetricCoverageV2::Complete);
+    scope.to_ms = 1002;
+    assert!(matches!(
+        store.observed_trust_cost(&reader(), &scope, &reference, &prices, 1000),
+        Err(crate::query_v2::ObservationV2Error::Invalid)
+    ));
+}
+
+#[test]
 fn trial_comparison_scopes_revision_and_group_and_keeps_missing_prices_unknown() {
     let dir = tempfile::tempdir().unwrap();
     let store = open_store(dir.path());
