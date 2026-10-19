@@ -36,6 +36,13 @@ fn record(
             || unmapped && matches!(e.fact, ExecutionFactV1::CandidateDecision(_)))
     });
     for e in &mut events {
+        if unmapped
+            && let ExecutionFactV1::RequestFinished {
+                facts_completeness, ..
+            } = &mut e.fact
+        {
+            *facts_completeness = FactsCompleteness::Partial;
+        }
         if let ExecutionFactV1::CandidateDecision(candidate) = &mut e.fact {
             candidate.cost_class = class;
         }
