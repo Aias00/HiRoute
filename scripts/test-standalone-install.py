@@ -28,6 +28,20 @@ package = load("package_standalone", "package-standalone.py")
 installer = load("install_standalone", "install-standalone.py")
 
 
+class PreflightTransportTests(unittest.TestCase):
+    def test_provisional_helper_rejects_malformed_or_unknown_success_reports(self):
+        good = {"schema":"hiroute.upgrade-preflight/v1", "history_cutover_required":False, "required_bytes":0, "available_bytes":1000, "recovery":None}
+        with tempfile.TemporaryDirectory() as directory:
+            helper = Path(directory) / "preflight"
+            for value in [[], {}, dict(good, schema="future"), dict(good, required_bytes=-1), dict(good, history_cutover_required="false")]:
+                helper.write_text("#!" + sys.executable + "\nprint(" + repr(json.dumps(value)) + ")\n")
+                helper.chmod(0o700)
+                with self.assertRaisesRegex(ValueError, "invalid"):
+                    installer.candidate_preflight(helper, Path(directory), Path(directory))
+            helper.write_text("#!" + sys.executable + "\nprint(" + repr(json.dumps(good)) + ")\n")
+            self.assertEqual(installer.candidate_preflight(helper, Path(directory), Path(directory)), good)
+
+
 class HTTPSResponse(io.BytesIO):
     def __init__(self, body, status=200, headers=None, url="https://downloads.example/package"):
         super().__init__(body)
@@ -289,6 +303,51 @@ class MacInstallerTests(StandaloneFixture):
 
 @unittest.skipUnless(os.name == "posix" and os.uname().sysname == "Linux", "Linux layout test")
 class InstallerTests(StandaloneFixture):
+    def test_upgrade_retains_the_complete_original_package_and_restoration_entries(self):
+        old_manifest, old_archive = self.build("0.1.0")
+        with self.environment(), patch.object(installer.subprocess, "run"), patch("builtins.print"):
+            installer.install(self.install_args(old_manifest, old_archive))
+            paths = installer.layout(self.home)
+            old_program, old_resources, service = installer.validate_marker(paths, installer.read_marker(paths))
+            original_program = (old_program / "hirouted").read_bytes()
+            original_service = service.read_bytes()
+            self.sources["hirouted"].write_bytes(b"new verified daemon")
+            manifest, archive = self.build("0.2.0")
+            installer.install(self.install_args(manifest, archive))
+            handoff = json.loads((paths["state"] / "upgrade-package.json").read_text())
+            retained = Path(handoff["package_root"])
+            self.assertEqual((retained / "program/hirouted").read_bytes(), original_program)
+            self.assertEqual((retained / "installation/service-definition").read_bytes(), original_service)
+            self.assertFalse(old_program.exists())
+            self.assertFalse(old_resources.exists())
+            self.assertEqual(handoff["target_daemon_sha256"], installer.digest(paths["lib"] / "0.2.0/hirouted"))
+            self.assertEqual(handoff["storage_root"], str(paths["state"] / "storage"))
+            locations = json.loads((retained / "restore-locations.json").read_text())
+            self.assertEqual(locations["program"], str(old_program))
+            self.assertEqual(locations["links"], {str(paths["bin"] / name): str(old_program / name) for name in ("hiroute", "hirouted")})
+            for name, expected in handoff["files"].items():
+                self.assertEqual(installer.digest(retained / name), expected)
+            self.assertNotIn(b"HIROUTE_RECOVERY_PACKAGE", service.read_bytes())
+
+    def test_preflight_refusal_preserves_the_original_installation_and_service(self):
+        old_manifest, old_archive = self.build("0.1.0")
+        with self.environment(), patch.object(installer.subprocess, "run"), patch("builtins.print"):
+            installer.install(self.install_args(old_manifest, old_archive))
+            paths = installer.layout(self.home)
+            old_program, old_resources, service = installer.validate_marker(paths, installer.read_marker(paths))
+            before = {path: path.read_bytes() for path in [paths["marker"], old_program / "hirouted", service]}
+            original_link = (paths["bin"] / "hiroute").readlink()
+            manifest, archive = self.build("0.2.0")
+            with patch.object(installer, "candidate_preflight", side_effect=ValueError("insufficient_space")):
+                with self.assertRaisesRegex(ValueError, "insufficient_space"):
+                    installer.install(self.install_args(manifest, archive))
+            for path, content in before.items():
+                self.assertEqual(path.read_bytes(), content)
+            self.assertEqual((paths["bin"] / "hiroute").readlink(), original_link)
+            self.assertTrue(old_resources.is_dir())
+            self.assertFalse((paths["lib"] / "0.2.0").exists())
+            self.assertFalse((paths["state"] / "upgrade-package.json").exists())
+
     def test_accessible_service_home_preserves_permissions(self):
         manifest, archive = self.build()
         self.home.chmod(0o775)

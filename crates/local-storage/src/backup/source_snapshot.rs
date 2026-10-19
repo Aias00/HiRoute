@@ -292,6 +292,33 @@ pub(super) fn publish(
                 }
                 steps.push_str(&format!("- recovery-package/{name} → {target}\n"));
             }
+            if let Some(links) = locations.get("links") {
+                let links = links.as_object().ok_or(LocalStorageError::InvalidData)?;
+                if links.len() != 2 {
+                    return Err(LocalStorageError::InvalidData);
+                }
+                steps.push_str("\nRecreate the following symbolic links after restoring the old directories. Replace only these installer-owned entries; preserve a foreign entry and seek support. / 还原旧目录后，重建以下符号链接。只替换这些安装器自有入口；遇到外来文件请保留并寻求支持。\n\n");
+                let program = Path::new(
+                    locations["program"]
+                        .as_str()
+                        .ok_or(LocalStorageError::InvalidData)?,
+                );
+                for (link, target) in links {
+                    let link = Path::new(link);
+                    let target = Path::new(target.as_str().ok_or(LocalStorageError::InvalidData)?);
+                    if !link.is_absolute()
+                        || !matches!(
+                            link.file_name().and_then(|n| n.to_str()),
+                            Some("hiroute" | "hirouted")
+                        )
+                        || target
+                            != program.join(link.file_name().ok_or(LocalStorageError::InvalidData)?)
+                    {
+                        return Err(LocalStorageError::InvalidData);
+                    }
+                    steps.push_str(&format!("- {} → {}\n", link.display(), target.display()));
+                }
+            }
             write_private(&stage.join("PROGRAM-LOCATIONS.md"), steps.as_bytes())?;
         }
     }

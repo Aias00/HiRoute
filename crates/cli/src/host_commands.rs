@@ -56,10 +56,21 @@ pub(crate) fn execute(arguments: &[String], globals: &Globals) -> Option<CliExec
         "protected-input" => protected_input_command(&arguments[1..], globals),
         _ => unreachable!(),
     };
-    Some(match result {
+    let mut execution = match result {
         Ok(value) => success(value, request_id),
         Err(error) => failure(error, request_id),
-    })
+    };
+    if execution.exit_code == 6
+        && family == "service"
+        && matches!(
+            arguments.get(1).map(String::as_str),
+            Some("start" | "restart")
+        )
+        && service::recovery().is_ok_and(|report| report["recovery"].is_object())
+    {
+        execution.stderr.push_str("Storage startup needs attention. Run `hiroute service recovery --output text` for the cause, safe next action and diagnostic location. Keep all data and packages.\n");
+    }
+    Some(execution)
 }
 
 fn host_help(family: &str) -> &'static str {

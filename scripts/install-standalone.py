@@ -699,20 +699,35 @@ def console_component(paths, desired):
 
 
 def candidate_preflight(program, storage, package):
-    result = subprocess.run([str(program), "--upgrade-preflight", "--storage-root", str(storage), "--recovery-package", str(package)], stdin=subprocess.DEVNULL, capture_output=True, timeout=15, check=False)
-    if len(result.stdout) > 16 * 1024:
-        raise ValueError("candidate upgrade preflight returned an invalid response")
+    # Only our verified, short-lived helper may be killed. Never buffer arbitrary
+    # child diagnostics or start a business service for a provisional check.
     try:
-        report = load_json_bytes(result.stdout)
+        child = subprocess.Popen([str(program), "--upgrade-preflight", "--storage-root", str(storage), "--recovery-package", str(package)], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        try:
+            code = child.wait(timeout=15)
+            body = child.stdout.read(16 * 1024 + 1)
+        finally:
+            if child.poll() is None:
+                child.kill()
+                child.wait()
+            child.stdout.close()
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise ValueError("candidate upgrade preflight is unavailable; the installed program was not replaced. Preserve data and use the verified transition route or startup diagnostics") from error
+    try:
+        report = load_json_bytes(body)
     except (ValueError, UnicodeError) as error:
         raise ValueError("candidate cannot perform the required upgrade preflight; use the supported transition release") from error
-    if report.get("schema") != "hiroute.upgrade-preflight/v1":
-        raise ValueError("candidate upgrade preflight is unavailable; use the supported transition release")
-    if result.returncode or report.get("recovery"):
-        cause = (report.get("recovery") or {}).get("cause", "unknown_state")
-        # A closed reason is useful to operators; never echo arbitrary child output.
+    fields = {"schema", "history_cutover_required", "required_bytes", "available_bytes", "recovery"}
+    if (len(body) > 16 * 1024 or not isinstance(report, dict) or set(report) != fields
+            or report["schema"] != "hiroute.upgrade-preflight/v1"
+            or type(report["history_cutover_required"]) is not bool
+            or any(type(report[name]) is not int or not 0 <= report[name] <= 2**64 - 1 for name in ("required_bytes", "available_bytes"))):
+        raise ValueError("candidate upgrade preflight is invalid; the installed program was not replaced. Preserve data and use the verified transition route")
+    if code or report["recovery"] is not None:
+        recovery = report["recovery"]
+        cause = recovery.get("cause") if isinstance(recovery, dict) else "unknown_state"
         allowed = {"missing_package", "invalid_package", "insufficient_space", "access_denied", "locked", "missing_key", "unsupported_format", "namespace_unavailable", "migration_failed", "unknown_state"}
-        raise ValueError("upgrade preflight refused: " + (cause if cause in allowed else "unknown_state") + "; preserve data and old packages, correct the prerequisite before retrying")
+        raise ValueError("upgrade preflight refused: " + (cause if cause in allowed else "unknown_state") + "; the installed program was not replaced. Preserve data and old packages, correct the prerequisite before retrying")
     return report
 
 
@@ -793,7 +808,8 @@ def retain_recovery_package(paths, current, target_daemon):
             shutil.copy2(source, target)
             files["installation/" + name] = digest(target)
             restore_files["installation/" + name] = str(source)
-    locations.write_text(json.dumps({"schema": "hiroute.standalone-program-restore/v1", "program": str(old_program), "resources": str(old_resources), "files": restore_files}, sort_keys=True) + "\n")
+    links = {str(paths["bin"] / name): str(old_program / name) for name in ("hiroute", "hirouted")}
+    locations.write_text(json.dumps({"schema": "hiroute.standalone-program-restore/v1", "program": str(old_program), "resources": str(old_resources), "files": restore_files, "links": links}, sort_keys=True) + "\n")
     locations.chmod(0o600)
     files["restore-locations.json"] = digest(locations)
     record = {"schema": "hiroute.retained-recovery-package/v1", "storage_root": str(paths["state"] / "storage"), "package_root": str(retained), "target_daemon_sha256": digest(target_daemon), "files": files}

@@ -125,8 +125,22 @@ is insufficient.
 
 Explicit headless operators may still provide the absolute complete old-package
 directory via `HIROUTE_RECOVERY_PACKAGE` on the daemon's first sealing startup.
-Set it for the actual foreground daemon or the managed service's supported
-environment configuration. Exporting a variable in a shell and calling systemctl
+For systemd, first stop the failed service with `hiroute service stop --output json`.
+Run `systemctl --user edit ai.hiroute.cli.service` and add a temporary override:
+
+```ini
+[Service]
+Environment="HIROUTE_RECOVERY_PACKAGE=/absolute/path/to/verified-complete-old-package"
+```
+
+Use the actual retained package path, then run `systemctl --user daemon-reload`
+and `hiroute service start --output json`. Inspect `hiroute service recovery
+--output text` if startup still refuses. After successful cutover, remove only
+this temporary `Environment` entry, reload the manager, restart the service and
+verify actual readiness and a request. Preserve unrelated overrides; do not use
+`systemctl revert` to discard them.
+
+Set it on the foreground daemon's actual invocation when running without a manager. Exporting a variable in a shell and calling systemctl
 does not deliver it to the managed daemon. Ordinary installer upgrades use their
 protected handoff instead. Missing keys, unverified sources and unknown phases
 require preservation and diagnosis/support; repeated restarts cannot recreate them.

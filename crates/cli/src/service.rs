@@ -83,13 +83,19 @@ pub(crate) fn start(timeout: Duration) -> Result<ServiceStatus, ServiceFailure> 
     let (layout, _) = installed()?;
     ensure_not_maintaining(&layout)?;
     if !manager_active(&layout) {
+        hiroute_host_runtime::StorageRecovery::clear(&layout.storage_root())
+            .map_err(|_| ServiceFailure::Unavailable)?;
         capture_proxy_environment(&layout)?;
     }
     manager_start(&layout)?;
     #[cfg(windows)]
     wait_ready(deadline.saturating_duration_since(Instant::now()))?;
     #[cfg(not(windows))]
-    wait_ready(timeout)?;
+    if let Err(error) = wait_ready(timeout) {
+        #[cfg(target_os = "linux")]
+        stop_failed_storage_start(&layout);
+        return Err(error);
+    }
     status()
 }
 
@@ -110,6 +116,8 @@ pub(crate) fn restart(timeout: Duration) -> Result<ServiceStatus, ServiceFailure
     let deadline = Instant::now() + timeout;
     let (layout, _) = installed()?;
     ensure_not_maintaining(&layout)?;
+    hiroute_host_runtime::StorageRecovery::clear(&layout.storage_root())
+        .map_err(|_| ServiceFailure::Unavailable)?;
     capture_proxy_environment(&layout)?;
     #[cfg(windows)]
     windows::restart(&layout, timeout)?;
@@ -118,7 +126,11 @@ pub(crate) fn restart(timeout: Duration) -> Result<ServiceStatus, ServiceFailure
     #[cfg(windows)]
     wait_ready(deadline.saturating_duration_since(Instant::now()))?;
     #[cfg(not(windows))]
-    wait_ready(timeout)?;
+    if let Err(error) = wait_ready(timeout) {
+        #[cfg(target_os = "linux")]
+        stop_failed_storage_start(&layout);
+        return Err(error);
+    }
     status()
 }
 
@@ -378,9 +390,31 @@ fn wait_ready(timeout: Duration) -> Result<(), ServiceFailure> {
         ) {
             return Ok(());
         }
+        if StandaloneLayout::from_environment().is_ok_and(|layout| {
+            hiroute_host_runtime::StorageRecovery::read(&layout.storage_root())
+                .is_ok_and(|report| report.is_some())
+        }) {
+            return Err(ServiceFailure::Unavailable);
+        }
         std::thread::sleep(Duration::from_millis(100));
     }
     Err(ServiceFailure::Unavailable)
+}
+
+#[cfg(target_os = "linux")]
+fn stop_failed_storage_start(layout: &StandaloneLayout) {
+    if hiroute_host_runtime::StorageRecovery::read(&layout.storage_root())
+        .is_ok_and(|report| report.is_some())
+    {
+        // Deterministic storage admission needs correction, not an automatic
+        // manager restart loop. Stop only this verified installation's manager.
+        let _ = run_checked(Command::new("systemctl").args([
+            "--user",
+            "--no-block",
+            "stop",
+            SERVICE_LABEL,
+        ]));
+    }
 }
 
 #[cfg(not(windows))]
