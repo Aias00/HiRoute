@@ -337,6 +337,7 @@ class InstallerTests(StandaloneFixture):
             old_program, old_resources, service = installer.validate_marker(paths, installer.read_marker(paths))
             before = {path: path.read_bytes() for path in [paths["marker"], old_program / "hirouted", service]}
             original_link = (paths["bin"] / "hiroute").readlink()
+            self.sources["hirouted"].write_bytes(b"changed candidate daemon")
             manifest, archive = self.build("0.2.0")
             with patch.object(installer, "candidate_preflight", side_effect=ValueError("insufficient_space")):
                 with self.assertRaisesRegex(ValueError, "insufficient_space"):

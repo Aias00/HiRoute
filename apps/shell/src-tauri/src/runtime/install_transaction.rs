@@ -577,9 +577,10 @@ pub(super) fn rollback(allow_unavailable_agent_restore: bool) -> io::Result<()> 
         super::service::manager(&["service", "start", "--output", "json"])
             .map_err(|_| invalid())?;
     }
+    let service_available = value.service_active && super::service::available_blocking();
     write(
         &data()?.join("update-outcome.json"),
-        &serde_json::json!({"schema":"hiroute.windows-shell-update-outcome/v1","status":"failed","code":"UPGRADE_INSTALL_FAILED","service_available":value.service_active}),
+        &serde_json::json!({"schema":"hiroute.windows-shell-update-outcome/v1","status":"failed","code":"UPGRADE_INSTALL_FAILED","service_available":service_available}),
     )?;
     clear(&data()?, &value.old)?;
     cleanup_committed();

@@ -153,6 +153,22 @@ export 后调用 systemctl 不代表后台进程收到了变量。正常安装�
 格式切换保留配置、凭据和路由，封存旧 HiRoute 历史，当前历史和统计从切换后开始；
 原生 Agent 历史不变，当前格式的新记录在正常重启后继续保留。
 
+
+使用 systemd 手工补充旧恢复包时，先运行 `hiroute service stop --output json`
+停止失败服务，再运行 `systemctl --user edit ai.hiroute.cli.service`，添加临时配置：
+
+```ini
+[Service]
+Environment="HIROUTE_RECOVERY_PACKAGE=/absolute/path/to/verified-complete-old-package"
+```
+
+将路径替换为实际校验过的完整旧包目录。运行 `systemctl --user daemon-reload`，
+再运行 `hiroute service start --output json`。仍被拒绝时，运行
+`hiroute service recovery --output text` 查看原因、下一步与诊断目录。
+升级成功后，只移除此临时环境项，重新加载并重启服务，确认实际就绪和一次请求。
+保留其它用户配置，不要用 `systemctl revert` 一并删除它们。仅在终端导出变量，
+不会把该变量交给 systemd 管理的进程。
+
 ## 启动并确认真实就绪
 
 ```sh
@@ -1157,19 +1173,3 @@ hiroute value show --routing PLAN_ID --period 7d --basis api-equivalent --refere
 缺单价时，读取已安装的 `prices.effective` / `prices.override.preview` schema，以实际 Binding、币种和 `valuation_kind: "api_equivalent"` 查询，使用返回的 `edit_context` 修订号生成价格 Preview。手动 rates 单位是每百万 token 的整数货币微单位，输入/输出/缓存分别设置；使用有依据的价格或让用户提供这些非敏感数值，不猜测单价。保留原设置，提前给出填好参数的价格恢复 Preview/Apply 命令；原先没有手动覆盖时可用 `follow_catalog` 恢复目录价格。使用 Preview 返回的完整 spec/digest/revisions 和同一个提交 key 应用。订阅也能设置 API 等价参考价，不改变权益或普通计费分类；免费、订阅、付费和未知保持区别。
 
 若参考计价中缓存创建按普通输入单价收费，可将参考缓存写入价设为输入价。此时金额与未上报的普通输入/缓存创建拆分无关，HiRoute 可合并同价计算桶，但不会补造或改写用量；两者单价不同时仍需要该细分计数。
-
-
-使用 systemd 手工补充旧恢复包时，先运行 `hiroute service stop --output json`
-停止失败服务，再运行 `systemctl --user edit ai.hiroute.cli.service`，添加临时配置：
-
-```ini
-[Service]
-Environment="HIROUTE_RECOVERY_PACKAGE=/absolute/path/to/verified-complete-old-package"
-```
-
-将路径替换为实际校验过的完整旧包目录。运行 `systemctl --user daemon-reload`，
-再运行 `hiroute service start --output json`。仍被拒绝时，运行
-`hiroute service recovery --output text` 查看原因、下一步与诊断目录。
-升级成功后，只移除此临时环境项，重新加载并重启服务，确认实际就绪和一次请求。
-保留其它用户配置，不要用 `systemctl revert` 一并删除它们。仅在终端导出变量，
-不会把该变量交给 systemd 管理的进程。

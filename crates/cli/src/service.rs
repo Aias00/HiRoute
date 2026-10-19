@@ -441,7 +441,13 @@ fn control_ready(timeout: Duration) -> bool {
     LocalControlClient::cli_from_environment()
         .map(|client| client.with_timeout(timeout))
         .and_then(|client| client.call(request))
-        .is_ok_and(|response| response.status == MachineStatus::Succeeded)
+        .is_ok_and(|response| {
+            response.status == MachineStatus::Succeeded
+                && response.error.is_none()
+                && response
+                    .data
+                    .is_some_and(|data| data["daemon"] == "role_all" && data["gateway"] == "ready")
+        })
 }
 
 #[cfg(target_os = "linux")]
