@@ -135,7 +135,8 @@ try {
       for (const { id } of selected) {
         const viewport = ['desktop.models.subscription-scan.recommended-login',
           'desktop.models.view-switch', 'desktop.presentation.control-layout',
-          'desktop.routing.additional-budget-consumers'].includes(id)
+          'desktop.routing.additional-budget-consumers',
+          'desktop.models.subscription-login.callback-modes'].includes(id)
           ? { width: 755, height: 600 } : { width: 1280, height: 900 };
         await client.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
         const batch = await evaluate(client, `import('/product-shell-scenarios.mjs').then(module => module.runProductShellScenarios(${JSON.stringify({ ids: [id], requiredIds: [id] })}))`);

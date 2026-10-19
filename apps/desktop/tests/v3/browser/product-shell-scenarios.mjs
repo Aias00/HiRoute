@@ -79,6 +79,61 @@ const scenarios = [
     assert(document.querySelector('.plan-identity-fields input').value === draftName, 'Rival revision discarded the local draft');
     assert(calls('preview_plan_editor').length === 1, 'Stale publication was retried automatically');
   }),
+  scenario('desktop.models.subscription-login.callback-modes', ['subscription-proxy', 'subscription-login'], 'Automatic callback opens the browser; manual fallback explains the conflict before opening and keeps callback text protected', async () => {
+    for (const language of (window.cpaCallbackLanguages ?? ['zh', 'en'])) {
+      for (const provider of ['codex', 'claude']) {
+        for (const manual of [false, true]) {
+          let session;
+          await fresh(() => {
+            session = { provider, login_ref: `login/fixture-${provider}`, status: 'pending',
+              authorization_url: 'https://example.invalid/oauth/authorize',
+              ...(manual ? { reason_code: 'SUBSCRIPTION_LOGIN_MANUAL_CALLBACK' } : {}) };
+            c().handlers.manage_subscription_login = ({ request }) => ({ schema: 'hiroute.subscription-login-result/v1',
+              sessions: request.action === 'list' ? [] : [{ ...session, ...(request.action === 'cancel' ? { status: 'cancelled' } : {}) }] });
+            c().handlers.open_external_url = () => undefined;
+            c().handlers.submit_subscription_login_callback = () => {
+              session = { ...session, status: 'authorized', reason_code: undefined,
+                candidate: { candidate_ref: 'candidate/cpa/fixture', candidate_revision: 1 } };
+              return { schema: 'hiroute.subscription-login-result/v1', sessions: [session] };
+            };
+          });
+          localStorage.setItem('hiroute.language', language); c().remount();
+          const label = (zh, en) => language === 'zh' ? zh : en;
+          await click(label('模型', 'Models')); await click(label('添加模型', 'Add models'));
+          await until(() => all('.add-choice').some(item => item.textContent.includes(label('连接订阅', 'Connect subscription'))), 'subscription sign-in entry');
+          all('.add-choice').find(item => item.textContent.includes(label('连接订阅', 'Connect subscription'))).click();
+          const name = provider === 'codex' ? 'Codex' : 'Claude Code';
+          await until(() => all('.oc-status-row').some(row => row.querySelector('strong')?.textContent === name && !row.querySelector('button')?.disabled), 'ready provider sign-in');
+          all('.oc-status-row').find(row => row.querySelector('strong')?.textContent === name).querySelector('button').click();
+          await until(() => button(label('手动完成授权', 'Complete authorization manually')), 'pending callback mode');
+          assert(calls('open_external_url').length === (manual ? 0 : 1), 'Manual conflict opened a browser before guidance or automatic mode did not open it');
+          assert(text().includes(manual ? label('无法自动接收浏览器授权', 'Automatic callback reception is unavailable') : label('HiRoute 会自动接收结果', 'HiRoute will receive the result automatically')), 'Callback mode guidance missing');
+          if (manual) { await click(label('打开登录页面', 'Open sign-in page')); assert(calls('open_external_url').length === 1, 'Explicit manual browser action did not dispatch'); }
+          await click(label('手动完成授权', 'Complete authorization manually'));
+          await until(() => all('input[type="password"]').length === 1, 'protected manual callback form');
+          const dialog = all('[role="dialog"]')[0];
+          const input = all('input[type="password"]')[0];
+          assert(dialog.scrollWidth <= dialog.clientWidth + 1, 'Sign-in dialog overflows horizontally');
+          assert(input.getBoundingClientRect().width > 150, 'Callback field is squeezed');
+          assert(text().includes(label('返回页面无法打开时', 'even if the return page cannot load')), 'Manual copy lacks the unavailable-page instruction');
+          setInput(input, 'synthetic-callback-material');
+          await click(label('提交授权', 'Submit authorization'));
+          await until(() => button(label('检查并选择模型', 'Check and choose models')), 'confirmed authorized state');
+          assert(calls('submit_subscription_login_callback').length === 1 && calls('submit_subscription_login_callback')[0].payload.callback === 'synthetic-callback-material', 'Manual material did not enter the native protected command exactly once');
+          assert(!all('input[type="password"]').length, 'Submitted callback form retained its value');
+          assert(!JSON.stringify(calls('manage_subscription_login')).includes('synthetic-callback-material'), 'Callback material entered ordinary control requests');
+          assert(!calls('check_subscription').length && !calls('apply_compute_save').length, 'Login automatically checked or saved a connection');
+          // Leave the empty fallback form visible for production-style screenshots.
+          if (provider === 'claude' && manual) {
+            session = { ...session, login_ref: `login/fixture-${provider}-next`, status: 'pending', reason_code: 'SUBSCRIPTION_LOGIN_MANUAL_CALLBACK', candidate: undefined };
+            all('.oc-status-row').find(row => row.querySelector('strong')?.textContent === name).querySelector('button').click();
+            await until(() => button(label('手动完成授权', 'Complete authorization manually')), 'fallback form after status observation');
+            await click(label('手动完成授权', 'Complete authorization manually'));
+          }
+        }
+      }
+    }
+  }),
   scenario('desktop.models.subscription-scan.append-to-login', ['subscription-proxy', 'subscription-login'], 'Independent sign-in from an append scan creates a new connection instead of retaining the previous append target', async () => {
     let previous;
     await fresh(() => {
@@ -99,7 +154,9 @@ const scenarios = [
     await click('模型'); await click('向此接入添加模型');
     await until(() => button('返回') && text().includes('Codex 本机订阅'), 'append subscription detail');
     await click('返回'); await click('连接订阅（推荐）');
-    await click('检查并选择模型'); await click('检查订阅');
+    await click('检查并选择模型');
+    assert(all('[role="dialog"] h2').some(item => item.textContent === '连接订阅') && !document.querySelector('[data-hermes-source-scope]'), 'Independent subscription check leaked the device-scan title or Hermes controls');
+    await click('检查订阅');
     await until(() => button('保存接入'), 'new account checked');
     await click('保存接入');
     await until(() => calls('preview_compute_save').length || document.querySelector('[data-error-code]'), 'save outcome');
@@ -167,6 +224,7 @@ const scenarios = [
     assert(!text().includes('订阅连接代理') && calls('subscription_proxy_status').length === 0, 'Settings still owns the proxy entry');
     await deviceScan();
     await until(() => button('调整模型'), 'scanned subscription');
+    assert(document.querySelector('[data-hermes-source-scope]'), 'Device scan lost its optional Hermes profile entry');
     const dialog = document.querySelector('[role="dialog"]');
     const list = document.querySelector('.oc-scan-list');
     await click('设置订阅连接代理');
@@ -193,11 +251,15 @@ const scenarios = [
     assert(calls('subscription_proxy_apply').length === 0, 'Cancel applied a draft');
     await click('调整模型');
     const detail = document.querySelector('.oc-scan-detail');
+    assert(all('[role="dialog"] h2').some(item => item.textContent === '连接订阅') && !document.querySelector('[data-hermes-source-scope]'), 'Selected subscription leaked device-scan controls');
     await click('设置订阅连接代理');
     await until(() => document.querySelector('[aria-label="订阅代理地址"]')?.value === saved.config.policy.url, 'discarded draft and saved readback');
     document.querySelector('[role="dialog"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await until(() => !document.querySelector('.subscription-proxy-panel'), 'Escape collapses editor');
     assert(document.querySelector('.oc-scan-detail') === detail && document.querySelector('[role="dialog"]') === dialog, 'Escape lost the selected subscription');
+    await click('返回');
+    await until(() => document.querySelector('.oc-scan-list'), 'returned to device scan');
+    assert(all('[role="dialog"] h2').some(item => item.textContent === '扫描本机') && document.querySelector('[data-hermes-source-scope]'), 'Returning from a subscription did not restore the device-scan context');
   }),
   scenario('desktop.models.subscription-proxy.read-retry', ['subscription-proxy'], 'An unread proxy policy cannot be overwritten and retry loads the saved mode', async () => {
     let attempts = 0;

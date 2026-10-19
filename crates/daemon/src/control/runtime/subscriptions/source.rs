@@ -234,6 +234,7 @@ mod tests {
             kind: CpaAccountKind::Claude,
             state: CpaLoginState::Authorized,
             account_ref: Some("account/cpa/opaque".into()),
+            manual_callback_required: false,
         };
         let candidate_ref = session.candidate_ref();
         let source = SubscriptionSource::managed(session).unwrap();
@@ -262,6 +263,7 @@ mod tests {
                 kind: CpaAccountKind::Codex,
                 state,
                 account_ref: Some("account/cpa/opaque".into()),
+                manual_callback_required: false,
             };
             assert!(SubscriptionSource::managed(session).is_err());
         }
