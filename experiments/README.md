@@ -96,6 +96,14 @@ recorded. The article's
 cache-cost figures are rebuilt with the other figures by
 `python3 experiments/render_figures.py`.
 
+## Research manuscripts
+
+[System One routing for long-running agents](system-one-routing-paper/README.md)
+contains a community-review manuscript, bilingual datasets, exact study questions,
+curated model responses and an offline evaluator for policy-conditioned routing
+and historical protection. Follow its [reproduction guide](system-one-routing-paper/REPRODUCE.md);
+the earlier case-study commands above do not cover that manuscript.
+
 ## Add an experiment
 
 Create `cases/<name>/` with a README, task inputs, parameter/provenance record,

@@ -1,0 +1,225 @@
+{
+  "scope": "Hashes of local frozen source files. Public file hashes are separate because curated ledgers remove service metadata and pseudonymize undisclosed systems. Local paths and private human submissions are excluded.",
+  "sources": [
+    {
+      "source_id": "engineering-independent/data/inputs.jsonl",
+      "sha256": "8af2a3b63e094807624b7378b39acad6a4654e82cc54e30ebada033fef531da7"
+    },
+    {
+      "source_id": "engineering-independent/data/labels.jsonl",
+      "sha256": "be4e717bf74678c251a1e922a7023289fbb9d3af0dd1ac07eb0b2a08f6db497e"
+    },
+    {
+      "source_id": "engineering-independent/data/family-metadata-final.jsonl",
+      "sha256": "d18934a1730954a78fa17e10e3d84a512a50c4e8f0c2e740427460676a68bec0"
+    },
+    {
+      "source_id": "mathematics-matched/data/inputs.jsonl",
+      "sha256": "7f3cdabd636f953955798035134fd9e6432cc281d35a6f8a4327b98dd3ae0bed"
+    },
+    {
+      "source_id": "mathematics-matched/data/labels.jsonl",
+      "sha256": "c8323a97b6852cc70629e6be00d510e1781437b070f9b83a30430199ec10145a"
+    },
+    {
+      "source_id": "development-v3/data/inputs.jsonl",
+      "sha256": "4bc1d40294f15fe2e64b9d40162d5a4a2672e80efd5f34d16e584266acbada82"
+    },
+    {
+      "source_id": "development-v3/data/labels.jsonl",
+      "sha256": "688e0f9cabfca5155641874e1dc30a0c98e74524b807c1e51e7def37dd0f13ff"
+    },
+    {
+      "source_id": "direct-encoding-control-v1/probes.jsonl",
+      "sha256": "e4af00deef69ed4c2a1d819584df59479c06c3fe27d264c8f6df524148fc13a6"
+    },
+    {
+      "source_id": "engineering-independent/data/author-inputs.jsonl",
+      "sha256": "f8c792808acdb7b07c931fa48709d904608ce47999ec913c6ba7e46b0a174bb6"
+    },
+    {
+      "source_id": "engineering-independent/data/author-labels.jsonl",
+      "sha256": "cdd53a5ea077af1aec11fc76ee7fe746094ea975c19956a16582cb48ca6cf194"
+    },
+    {
+      "source_id": "engineering-independent/data/reviewer-initial-inputs.jsonl",
+      "sha256": "f8c792808acdb7b07c931fa48709d904608ce47999ec913c6ba7e46b0a174bb6"
+    },
+    {
+      "source_id": "engineering-independent/data/reviewer-initial-labels.jsonl",
+      "sha256": "18c35de5187d955b08f7b6cac91dd7820fb84d7054f96f54d12475180c4ee03d"
+    },
+    {
+      "source_id": "engineering-independent/data/supplement-author-inputs.jsonl",
+      "sha256": "c8c95fde74a5eb762651d97d9f602412ee00397b9eba6330ca6f62385cbef47c"
+    },
+    {
+      "source_id": "engineering-independent/data/supplement-author-labels.jsonl",
+      "sha256": "94a3c75ae6ff9ae266e14d07b06ca7a526a1951fab999f27a7cc931bcd578b9b"
+    },
+    {
+      "source_id": "engineering-independent/data/supplement-reviewer-initial-inputs.jsonl",
+      "sha256": "c8c95fde74a5eb762651d97d9f602412ee00397b9eba6330ca6f62385cbef47c"
+    },
+    {
+      "source_id": "engineering-independent/data/supplement-reviewer-initial-labels.jsonl",
+      "sha256": "c73a25d5a057a4cb3fbf633faab3c85b0c8886fae95279d4f60a0289af15bda1"
+    },
+    {
+      "source_id": "development-v3/data/author-inputs.jsonl",
+      "sha256": "4bc1d40294f15fe2e64b9d40162d5a4a2672e80efd5f34d16e584266acbada82"
+    },
+    {
+      "source_id": "development-v3/data/author-labels.jsonl",
+      "sha256": "164e24c53d8a4b36e38247e7bee823d9026e39300b97e8cea4abbedc65cf7914"
+    },
+    {
+      "source_id": "development-v3/data/reviewer-initial-inputs.jsonl",
+      "sha256": "4bc1d40294f15fe2e64b9d40162d5a4a2672e80efd5f34d16e584266acbada82"
+    },
+    {
+      "source_id": "development-v3/data/reviewer-initial-labels.jsonl",
+      "sha256": "e1aa12a3104b09bafe20e638072c88dddd8ed7ccf5bf86cf319b72e66b32032c"
+    },
+    {
+      "source_id": "math-research-policy-v1/validation-v1/prepared-data/ai-reviewed-labels.jsonl",
+      "sha256": "edaf5d14aa7e9e5c5168e6735961f8419659b612ce0411916c952103e1d4c0b9"
+    },
+    {
+      "source_id": "mathematics-matched/data/label-changes.json",
+      "sha256": "b205477d0c15406a592c0ffb762c44338d9c11566de6d52408af3c0ddd989064"
+    },
+    {
+      "source_id": "engineering-matched/reference/legacy_source_questions.json",
+      "sha256": "0a1b33fdbd4c5f85e6323295fb1ce9cbc756fdd7e94aca6717b45c5c323796c5"
+    },
+    {
+      "source_id": "engineering-matched/reference/partition_only_questions.json",
+      "sha256": "32fd65284f938d32d6057f6a0a08886855edfe8c873f7e58e3b863e6e9c77230"
+    },
+    {
+      "source_id": "engineering-matched/reference/C_minus_cross_target.json",
+      "sha256": "22f551f17928763e4ef845501903886a71f336fd354189e0e0623427770f0e6e"
+    },
+    {
+      "source_id": "engineering-matched/reference/direct-policy.txt",
+      "sha256": "305ca3ec7ae1976e7da1e1127099b6aae4d088c1704da4dfb683d0991c228b2e"
+    },
+    {
+      "source_id": "engineering-matched/run/backends.json",
+      "sha256": "c87ed7cb77919ac49015064fa0d52a015af6a0648367b533b1c6310820ac7351"
+    },
+    {
+      "source_id": "engineering-matched/run/requests.jsonl",
+      "sha256": "2241d0c6f465c811669da6619aade3cf9b963392c103f302ab017dcf2dce0c75"
+    },
+    {
+      "source_id": "engineering-matched/run/jobs.jsonl",
+      "sha256": "9f80ef22e781f5f402ba40119255de17055724c49ba55c796451cd9fec1926ac"
+    },
+    {
+      "source_id": "engineering-matched/run/events.jsonl",
+      "sha256": "9556638cdaad2a938f9fffc79cbc01cabbfaa68ff7ee75230870c8c05032c5df"
+    },
+    {
+      "source_id": "engineering-independent/run/requests.jsonl",
+      "sha256": "87a936981e34e3b5a8dafb6fa60529b925c4122699f01cf741542538d017b584"
+    },
+    {
+      "source_id": "engineering-independent/run/jobs.jsonl",
+      "sha256": "6772740eac88f2a05ee3d674ceb2903c1802feac5de379e91177f698428f1d36"
+    },
+    {
+      "source_id": "engineering-independent/run/events.jsonl",
+      "sha256": "1ef85439fc35264edaeaaff220f5c16e56d9524defdb4b063f6cf52acfb228a6"
+    },
+    {
+      "source_id": "mathematics-matched/requests.jsonl",
+      "sha256": "a927ee8d76acf9135fb6b129caa9e555f28c83bae76cd0d2c39272c41af6af04"
+    },
+    {
+      "source_id": "mathematics-matched/events.jsonl",
+      "sha256": "98f77edf058f7b023bed6de38ec186bd19569712bc9d2aad3efeac62f6d95d71"
+    },
+    {
+      "source_id": "direct-encoding-sensitivity-v1/requests.jsonl",
+      "sha256": "0df17223839680c9af7dbe3349392bf1017aea5e605208ce73ac5639b543a9fa"
+    },
+    {
+      "source_id": "direct-encoding-sensitivity-v1/events.jsonl",
+      "sha256": "2a0a2bd2efeb5f7915f5fdf46c37ba1df65ab65062ba24a445b6d5833a9d2faf"
+    },
+    {
+      "source_id": "direct-encoding-control-v1/requests.jsonl",
+      "sha256": "723feac1613f5f8e3cad48efe9f292d54370b75372b7f904cdd2b35cf77e9cb1"
+    },
+    {
+      "source_id": "direct-encoding-control-v1/events.jsonl",
+      "sha256": "18e3f90ee88ecf99124f63415b0a574abce0561de6ce8dc812509ca9036c9456"
+    },
+    {
+      "source_id": "development-v3/run/requests.jsonl",
+      "sha256": "999e729ba636ee2c90c8099ee74e61af38d2699d520091ca8f2eee5b638f5641"
+    },
+    {
+      "source_id": "development-v3/run/jobs.jsonl",
+      "sha256": "aad1d6728b2cd4487fb63ccc62947f6df5ce5194485859f0310ef94ce98344f0"
+    },
+    {
+      "source_id": "development-v3/run/events.jsonl",
+      "sha256": "8de43c377704cbd0d572c4f82a8274f3e2d9109c3f735386f23180ba2d0c07c6"
+    },
+    {
+      "source_id": "aborted-engineering/run/requests.jsonl",
+      "sha256": "fd632fe76b738a2113eaacd44452cd2d83e5bdfd9c5a1e14b305f9a3a2cfed6a"
+    },
+    {
+      "source_id": "aborted-engineering/run/jobs.jsonl",
+      "sha256": "9f80ef22e781f5f402ba40119255de17055724c49ba55c796451cd9fec1926ac"
+    },
+    {
+      "source_id": "aborted-engineering/run/events.jsonl",
+      "sha256": "fe2dec9e88fe0cc844b3e4ee242b87bddb3a0772464d9ec602c214bb1a69d8dc"
+    },
+    {
+      "source_id": "human-audit-20261018/report.json",
+      "sha256": "1b1817088ba81c290443c4b2291d2f576c7c0d8a706af090e00f1494c0cb8200"
+    },
+    {
+      "source_id": "math-research-policy-v1/validation-v1/human-audit-20261018/report.json",
+      "sha256": "596e46f5a33504e01458016d46cfcde0eae9c802181cbd051f237f84d190ec0d"
+    },
+    {
+      "source_id": "engineering-independent/author/output-v1/AUTHOR-NOTES.md",
+      "sha256": "f80c981c4cfeb7c351916d03dc3a0fae529914bee101da6dc1152ca1ae3ea13f"
+    },
+    {
+      "source_id": "engineering-independent/coverage-supplement/author/output/AUTHOR-NOTES.md",
+      "sha256": "8cdf6bc1cae4504d4cd5496d7fb8a00472eb4c8c3c1d16433c07fe266531d627"
+    },
+    {
+      "source_id": "math-research-policy-v1/validation-v1/author/output/AUTHOR-NOTES.md",
+      "sha256": "6d55da4ff705d85206bd941dcb043467763dc334fb8267740ea0bb936dd66cd7"
+    },
+    {
+      "source_id": "engineering-independent/review/phase-a/BRIEF.md",
+      "sha256": "636eaef7e3b4c0fae802322107ddff8a8000a394f78da3355b7f9b60a74296be"
+    },
+    {
+      "source_id": "engineering-matched/dev/requests.jsonl",
+      "sha256": "12c530a932568a1b7bad1b4f16dfbb578800695990f894667c02cffa0c5d5791"
+    },
+    {
+      "source_id": "engineering-matched/dev/events.jsonl",
+      "sha256": "4dd5e9b2a30cccf74dd0d149201cdad6d5134f24aedb25aaf9dd6d0bb0dcd515"
+    },
+    {
+      "source_id": "engineering-matched/dev-rev1/requests.jsonl",
+      "sha256": "190fe4aa8608ef36748cf0106ab592e0f0896484855d12948ee1a05875977727"
+    },
+    {
+      "source_id": "engineering-matched/dev-rev1/events.jsonl",
+      "sha256": "e7c6ccedfc077532f4defbf672487c88af281dc5fb2f6264a959bbf404f80201"
+    }
+  ]
+}

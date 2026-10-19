@@ -1,0 +1,36 @@
+[
+  {
+    "id": "MR005_a_en",
+    "old": {
+      "stage_grade": 1,
+      "allowed_grades": [
+        1
+      ]
+    },
+    "new": {
+      "stage_grade": null,
+      "allowed_grades": [
+        0,
+        1
+      ]
+    },
+    "reason": "Both useful partial structure and non-delivery of the only missing proof argument are explicit. The two human reviewers disagree between 0 and 1; the rubric does not uniquely weigh these facts. Preserve [0,1], withhold single-grade accuracy. The pending unsupplied argument independently requires primary."
+  },
+  {
+    "id": "MR005_a_zh",
+    "old": {
+      "stage_grade": 1,
+      "allowed_grades": [
+        1
+      ]
+    },
+    "new": {
+      "stage_grade": null,
+      "allowed_grades": [
+        0,
+        1
+      ]
+    },
+    "reason": "Both useful partial structure and non-delivery of the only missing proof argument are explicit. The two human reviewers disagree between 0 and 1; the rubric does not uniquely weigh these facts. Preserve [0,1], withhold single-grade accuracy. The pending unsupplied argument independently requires primary."
+  }
+]

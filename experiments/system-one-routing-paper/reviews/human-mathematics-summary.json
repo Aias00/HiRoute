@@ -1,0 +1,578 @@
+{
+  "submitted_each": [
+    64,
+    64
+  ],
+  "languages_each": [
+    {
+      "en": 32,
+      "zh": 32
+    },
+    {
+      "en": 32,
+      "zh": 32
+    }
+  ],
+  "agreement": {
+    "current_demand": {
+      "same": 62,
+      "total": 64,
+      "kappa": 0.9267734553775744
+    },
+    "stage_grade": {
+      "same": 58,
+      "total": 64,
+      "kappa": 0.8476190476190476
+    },
+    "applicability": {
+      "same": 60,
+      "total": 64,
+      "kappa": 0.8677685950413223
+    },
+    "final_action": {
+      "same": 60,
+      "total": 64,
+      "kappa": 0.9021406727828746
+    },
+    "realism": {
+      "same": 37,
+      "total": 64,
+      "kappa": 0.12016293279022404
+    }
+  },
+  "against_ai_reviewed_labels": [
+    {
+      "label": "审核员 1",
+      "action_status_matches_ai_reviewed": 62,
+      "total": 64,
+      "clear_matches": 50,
+      "clear_total": 50,
+      "realism": {
+        "plausible": 11,
+        "natural": 53
+      }
+    },
+    {
+      "label": "审核员 2",
+      "action_status_matches_ai_reviewed": 62,
+      "total": 64,
+      "clear_matches": 50,
+      "clear_total": 50,
+      "realism": {
+        "plausible": 30,
+        "natural": 34
+      }
+    }
+  ],
+  "disagreements": [
+    {
+      "id": "MR001_b_en",
+      "between_reviewers": {
+        "realism": [
+          "natural",
+          "plausible"
+        ]
+      },
+      "ai_reviewed_action_status": "primary",
+      "human_action_status": [
+        "primary",
+        "primary"
+      ]
+    },
+    {
+      "id": "MR001_b_zh",
+      "between_reviewers": {
+        "realism": [
+          "natural",
+          "plausible"
+        ]
+      },
+      "ai_reviewed_action_status": "primary",
+      "human_action_status": [
+        "primary",
+        "primary"
+      ]
+    },
+    {
+      "id": "MR002_b_en",
+      "between_reviewers": {
+        "realism": [
+          "natural",
+          "plausible"
+        ]
+      },
+      "ai_reviewed_action_status": "boundary",
+      "human_action_status": [
+        "boundary",
+        "boundary"
+      ]
+    },
+    {
+      "id": "MR002_b_zh",
+      "between_reviewers": {
+        "realism": [
+          "natural",
+          "plausible"
+        ]
+      },
+      "ai_reviewed_action_status": "boundary",
+      "human_action_status": [
+        "boundary",
+        "boundary"
+      ]
+    },
+    {
+      "id": "MR003_b_zh",
+      "between_reviewers": {
+        "realism": [
+          "natural",
+          "plausible"
+        ]
+      },
+      "ai_reviewed_action_status": "economy",
+      "human_action_status": [
+        "economy",
+        "economy"
+      ]
+    },
+    {
+      "id": "MR005_a_en",
+      "between_reviewers": {
+        "stage_grade": [
+          "1",
+          "0"
+        ]
+      },
+      "ai_reviewed_action_status": "primary",
+      "human_action_status": [
+        "primary",
+        "primary"
+      ]
+    },
+    {
+      "id": "MR005_a_zh",
+      "between_reviewers": {
+        "stage_grade": [
+          "1",
+          "0"
+        ]
+      },
+      "ai_reviewed_action_status": "primary",
+      "human_action_status": [
+        "primary",
+        "primary"
+      ]
+    },
+    {
+      "id": "MR005_b_en",
+      "between_reviewers": {
+        "realism": [
+          "natural",
+          "plausible"
+        ]
+      },
+      "ai_reviewed_action_status": "boundary",
+      "human_action_status": [
+        "boundary",
+        "boundary"
+      ]
+    },
+    {
+      "id": "MR005_b_zh",
+      "between_reviewers": {
+        "realism": [
+          "natural",
+          "plausible"
+        ]
+      },
+      "ai_reviewed_action_status": "boundary",
+      "human_action_status": [
+        "boundary",
+        "boundary"
+      ]
+    },
+    {
+      "id": "MR006_b_en",
+      "between_reviewers": {
+        "realism": [
+          "plausible",
+          "natural"
+        ]
+      },
+      "ai_reviewed_action_status": "economy",
+      "human_action_status": [
+        "economy",
+        "economy"
+      ]
+    },
+    {
+      "id": "MR006_b_zh",
+      "between_reviewers": {
+        "realism": [
+          "plausible",
+          "natural"
+        ]
+      },
+      "ai_reviewed_action_status": "economy",
+      "human_action_status": [
+        "economy",
+        "economy"
+      ]
+    },
+    {
+      "id": "MR008_a_en",
+      "between_reviewers": {
+        "realism": [
+          "plausible",
+          "natural"
+        ]
+      },
+      "ai_reviewed_action_status": "economy",
+      "human_action_status": [
+        "economy",
+        "economy"
+      ]
+    },
+    {
+      "id": "MR008_a_zh",
+      "between_reviewers": {
+        "realism": [
+          "plausible",
+          "natural"
+        ]
+      },
+      "ai_reviewed_action_status": "economy",
+      "human_action_status": [
+        "economy",
+        "economy"
+      ]
+    },
+    {
+      "id": "MR009_b_en",
+      "between_reviewers": {
+        "realism": [
+          "natural",
+          "plausible"
+        ]
+      },
+      "ai_reviewed_action_status": "economy",
+      "human_action_status": [
+        "economy",
+        "economy"
+      ]
+    },
+    {
+      "id": "MR009_b_zh",
+      "between_reviewers": {
+        "realism": [
+          "natural",
+          "plausible"
+        ]
+      },
+      "ai_reviewed_action_status": "economy",
+      "human_action_status": [
+        "economy",
+        "economy"
+      ]
+    },
+    {
+      "id": "MR010_b_en",
+      "between_reviewers": {
+        "current_demand": [
+          "routine",
+          "insufficient"
+        ],
+        "stage_grade": [
+          "0",
+          "insufficient"
+        ],
+        "applicability": [
+          "applicable",
+          "insufficient"
+        ],
+        "final_action": [
+          "primary",
+          "insufficient"
+        ]
+      },
+      "ai_reviewed_action_status": "insufficient",
+      "human_action_status": [
+        "primary",
+        "insufficient"
+      ]
+    },
+    {
+      "id": "MR010_b_zh",
+      "between_reviewers": {
+        "current_demand": [
+          "routine",
+          "insufficient"
+        ],
+        "stage_grade": [
+          "0",
+          "insufficient"
+        ],
+        "applicability": [
+          "applicable",
+          "insufficient"
+        ],
+        "final_action": [
+          "primary",
+          "insufficient"
+        ]
+      },
+      "ai_reviewed_action_status": "insufficient",
+      "human_action_status": [
+        "primary",
+        "insufficient"
+      ]
+    },
+    {
+      "id": "MR012_a_en",
+      "between_reviewers": {
+        "realism": [
+          "natural",
+          "plausible"
+        ]
+      },
+      "ai_reviewed_action_status": "primary",
+      "human_action_status": [
+        "primary",
+        "primary"
+      ]
+    },
+    {
+      "id": "MR012_a_zh",
+      "between_reviewers": {
+        "realism": [
+          "natural",
+          "plausible"
+        ]
+      },
+      "ai_reviewed_action_status": "primary",
+      "human_action_status": [
+        "primary",
+        "primary"
+      ]
+    },
+    {
+      "id": "MR013_a_en",
+      "between_reviewers": {
+        "realism": [
+          "natural",
+          "plausible"
+        ]
+      },
+      "ai_reviewed_action_status": "economy",
+      "human_action_status": [
+        "economy",
+        "economy"
+      ]
+    },
+    {
+      "id": "MR013_a_zh",
+      "between_reviewers": {
+        "realism": [
+          "natural",
+          "plausible"
+        ]
+      },
+      "ai_reviewed_action_status": "economy",
+      "human_action_status": [
+        "economy",
+        "economy"
+      ]
+    },
+    {
+      "id": "MR013_b_en",
+      "between_reviewers": {
+        "realism": [
+          "natural",
+          "plausible"
+        ]
+      },
+      "ai_reviewed_action_status": "boundary",
+      "human_action_status": [
+        "boundary",
+        "boundary"
+      ]
+    },
+    {
+      "id": "MR013_b_zh",
+      "between_reviewers": {
+        "realism": [
+          "natural",
+          "plausible"
+        ]
+      },
+      "ai_reviewed_action_status": "boundary",
+      "human_action_status": [
+        "boundary",
+        "boundary"
+      ]
+    },
+    {
+      "id": "MR014_a_en",
+      "between_reviewers": {
+        "realism": [
+          "natural",
+          "plausible"
+        ]
+      },
+      "ai_reviewed_action_status": "economy",
+      "human_action_status": [
+        "economy",
+        "economy"
+      ]
+    },
+    {
+      "id": "MR014_a_zh",
+      "between_reviewers": {
+        "realism": [
+          "natural",
+          "plausible"
+        ]
+      },
+      "ai_reviewed_action_status": "economy",
+      "human_action_status": [
+        "economy",
+        "economy"
+      ]
+    },
+    {
+      "id": "MR014_b_en",
+      "between_reviewers": {
+        "applicability": [
+          "applicable",
+          "not_established"
+        ],
+        "realism": [
+          "natural",
+          "plausible"
+        ]
+      },
+      "ai_reviewed_action_status": "primary",
+      "human_action_status": [
+        "primary",
+        "primary"
+      ]
+    },
+    {
+      "id": "MR014_b_zh",
+      "between_reviewers": {
+        "applicability": [
+          "applicable",
+          "not_established"
+        ],
+        "realism": [
+          "natural",
+          "plausible"
+        ]
+      },
+      "ai_reviewed_action_status": "primary",
+      "human_action_status": [
+        "primary",
+        "primary"
+      ]
+    },
+    {
+      "id": "MR015_a_en",
+      "between_reviewers": {
+        "stage_grade": [
+          "1",
+          "0"
+        ],
+        "final_action": [
+          "boundary",
+          "primary"
+        ]
+      },
+      "ai_reviewed_action_status": "boundary",
+      "human_action_status": [
+        "boundary",
+        "primary"
+      ]
+    },
+    {
+      "id": "MR015_a_zh",
+      "between_reviewers": {
+        "stage_grade": [
+          "1",
+          "0"
+        ],
+        "final_action": [
+          "boundary",
+          "primary"
+        ]
+      },
+      "ai_reviewed_action_status": "boundary",
+      "human_action_status": [
+        "boundary",
+        "primary"
+      ]
+    },
+    {
+      "id": "MR016_a_en",
+      "between_reviewers": {
+        "realism": [
+          "natural",
+          "plausible"
+        ]
+      },
+      "ai_reviewed_action_status": "primary",
+      "human_action_status": [
+        "primary",
+        "primary"
+      ]
+    },
+    {
+      "id": "MR016_a_zh",
+      "between_reviewers": {
+        "realism": [
+          "natural",
+          "plausible"
+        ]
+      },
+      "ai_reviewed_action_status": "primary",
+      "human_action_status": [
+        "primary",
+        "primary"
+      ]
+    },
+    {
+      "id": "MR016_b_en",
+      "between_reviewers": {
+        "realism": [
+          "natural",
+          "plausible"
+        ]
+      },
+      "ai_reviewed_action_status": "primary",
+      "human_action_status": [
+        "primary",
+        "primary"
+      ]
+    },
+    {
+      "id": "MR016_b_zh",
+      "between_reviewers": {
+        "realism": [
+          "natural",
+          "plausible"
+        ]
+      },
+      "ai_reviewed_action_status": "primary",
+      "human_action_status": [
+        "primary",
+        "primary"
+      ]
+    }
+  ],
+  "qualification": {
+    "user_confirmed": "Primarily AI-assisted; the human reviewers have no mathematical research experience.",
+    "use": "Independent AI-assisted non-expert human review; retain data as consistency/readability evidence, not mathematical-domain expert validation.",
+    "original_requirement": "At least one mathematical-workflow-familiar human review before the planned formal mathematical campaign remains unmet; no mathematical model API results in this directory."
+  },
+  "snapshot_stage": "Human-review collection before the explicit pre-call amendment.",
+  "later_resolution": "The domain-expert prerequisite was explicitly amended before the matched campaign. Both participants reported no mathematical research experience. This preserves the original collection snapshot and does not claim expert review."
+}
