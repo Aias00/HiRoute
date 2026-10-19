@@ -49,6 +49,23 @@ pub struct StorageStartupOptions {
 }
 
 impl LocalStorageSet {
+    /// Retain the storage-owner disposition if fresh Observation initialization
+    /// fails after the coordinated core stores opened. `self` keeps their startup
+    /// writer exclusion alive while the original batch is verified.
+    pub fn record_observation_startup_failure(
+        &self,
+        storage: &Path,
+        cause: hiroute_host_runtime::StorageRecoveryCause,
+    ) {
+        let _ = migrations::startup_recovery::publish_failure(
+            storage,
+            LocalStorageError::InvalidData.with_recovery(
+                cause,
+                hiroute_host_runtime::StorageRecoveryAction::PreserveAndDiagnose,
+            ),
+        );
+    }
+
     /// Provisional read-only checks; startup repeats admission under its writer lock.
     pub fn preflight_upgrade(
         storage: &Path,
@@ -118,8 +135,6 @@ impl LocalStorageSet {
         migrations::prepare_storage_root(storage_root)?;
         let startup_lock = std::sync::Arc::new(migrations::acquire_startup_lock(storage_root)?);
         hiroute_host_runtime::StorageRecovery::clear(storage_root)?;
-        let original = options.preserve_observation_source
-            && migrations::startup_recovery::original_group_admitted(storage_root).unwrap_or(false);
         let result = migrations::validate_startup_format(storage_root).and_then(|()| {
             Self::open_locked_stores(
                 authority,
@@ -129,9 +144,7 @@ impl LocalStorageSet {
                 Some(options),
             )
         });
-        result.map_err(|error| {
-            migrations::startup_recovery::publish_failure(storage_root, error, original)
-        })
+        result.map_err(|error| migrations::startup_recovery::publish_failure(storage_root, error))
     }
 
     // SQL coordinator component harness only: unsupported formats never pass through the

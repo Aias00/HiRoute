@@ -39,7 +39,13 @@ pub(super) fn run_if_requested() -> Option<i32> {
     .unwrap_or(0);
     let (history_cutover_required, required_bytes, recovery) = match result {
         Ok((seal, required)) => (seal, required, None),
-        Err(e) => (false, 0, Some(e)),
+        Err(e) => (
+            false,
+            e.storage_space
+                .as_ref()
+                .map_or(0, |space| space.required_bytes),
+            Some(e),
+        ),
     };
     let failed = recovery.is_some();
     let report = UpgradePreflight {

@@ -20,3 +20,13 @@ test('Windows does not instruct users to reinstall a macOS App and low space pre
   assert.equal(low.canRetry,true);
   assert.match(low.instructions,/Do not delete upgrade backups/);
 });
+
+test('resume requires a portable original batch and measured space stays bounded',()=>{
+  for (const id of [undefined,'../foreign','..','',42]) {
+    const value={...report('migration_failed','resume_current'),backup_batch:id};
+    assert.equal(storageRecoveryText(value,'en','windows').canRetry,false);
+  }
+  assert.equal(storageRecoveryText({...report('migration_failed','resume_current'),backup_batch:'set_original'},'en','windows').canRetry,true);
+  const low=storageRecoveryText({...report('insufficient_space','retry_current'),storage_space:{required_bytes:1048576000,available_bytes:1048576}},'en','windows');
+  assert.match(low.instructions,/1,000 MiB.*1 MiB/);
+});

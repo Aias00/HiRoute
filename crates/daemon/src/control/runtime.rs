@@ -345,7 +345,13 @@ impl ProductionControlRuntime {
         let mut startup = overrides.storage_startup.clone();
         startup.preserve_observation_source =
             LocalObservationStore::legacy_history_requires_seal(storage_root.join("observation"))
-                .map_err(|error| format!("{error}; preserve all storage generations and use the original whole-group recovery guide"))?
+                .map_err(|error| {
+                    let _ = hiroute_host_runtime::StorageRecovery::new(
+                        hiroute_host_runtime::StorageRecoveryCause::UnsupportedFormat,
+                        hiroute_host_runtime::StorageRecoveryAction::PreserveAndDiagnose,
+                    ).store(storage_root);
+                    format!("{error}; preserve all storage generations and use the original whole-group recovery guide")
+                })?
                 || LocalStorageSet::observation_cutover_pending(storage_root);
         if startup.preserve_observation_source
             && let Some(progress) = &startup.upgrade_progress
@@ -556,7 +562,13 @@ impl ProductionControlRuntime {
             } else {
                 LocalObservationStore::open(observation_root, digest_authority.clone())
             }
-            .map_err(|error| error.to_string())?,
+            .map_err(|error| {
+                stores.record_observation_startup_failure(
+                    storage_root,
+                    hiroute_host_runtime::StorageRecoveryCause::MigrationFailed,
+                );
+                error.to_string()
+            })?,
         );
         if startup.preserve_observation_source
             && let Some(progress) = &startup.upgrade_progress

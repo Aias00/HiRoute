@@ -711,7 +711,7 @@ def candidate_preflight(program, storage, package):
     if result.returncode or report.get("recovery"):
         cause = (report.get("recovery") or {}).get("cause", "unknown_state")
         # A closed reason is useful to operators; never echo arbitrary child output.
-        allowed = {"missing_package", "invalid_package", "insufficient_space", "access_denied", "locked", "missing_key", "unsupported_format", "migration_failed", "unknown_state"}
+        allowed = {"missing_package", "invalid_package", "insufficient_space", "access_denied", "locked", "missing_key", "unsupported_format", "namespace_unavailable", "migration_failed", "unknown_state"}
         raise ValueError("upgrade preflight refused: " + (cause if cause in allowed else "unknown_state") + "; preserve data and old packages, correct the prerequisite before retrying")
     return report
 

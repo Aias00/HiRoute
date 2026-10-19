@@ -1,63 +1,13 @@
 //! Recovery disposition is decided while the startup writer lock is held.
 use super::*;
-use hiroute_host_runtime::{StorageRecoveryAction as Action, StorageRecoveryCause as Cause};
+use hiroute_host_runtime::StorageRecoveryAction as Action;
 
-/// A deliberately narrow no-cutover case. Combined core upgrades, prior batches,
-/// missing authorities and unknown Observation formats never authorize old-program use.
-pub(crate) fn original_group_admitted(root: &Path) -> Result<bool, LocalStorageError> {
-    if hiroute_host_runtime::storage_upgrade_started(root)? {
-        return Ok(false);
-    }
-    for path in live_database_paths(&root.join("live")) {
-        if database_version(&path)? != Some(LATEST_SCHEMA_VERSION) {
-            return Ok(false);
-        }
-        validate_owner_file(&path)?;
-        let db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
-        let integrity: String = db.query_row("PRAGMA quick_check(1)", [], |row| row.get(0))?;
-        if integrity != "ok" {
-            return Ok(false);
-        }
-    }
-    if crate::LocalSecretStore::migration_binding(
-        &root.join("live/secrets.db"),
-        &root.join("master-key"),
-    )?
-    .is_none()
-    {
-        return Ok(false);
-    }
-    let key = root.join("observation-hmac-key");
-    validate_owner_file(&key)?;
-    if fs::metadata(key)?.len() != 32 {
-        return Ok(false);
-    }
-    let path = root.join("observation/activity.db");
-    validate_owner_file(&path)?;
-    let db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
-    let version: String = db.query_row(
-        "SELECT value FROM observation_meta WHERE key='schema_version'",
-        [],
-        |row| row.get(0),
-    )?;
-    Ok(matches!(version.as_str(), "1" | "2" | "3" | "4"))
-}
-
-pub(crate) fn publish_failure(
-    root: &Path,
-    error: LocalStorageError,
-    original: bool,
-) -> LocalStorageError {
+pub(crate) fn publish_failure(root: &Path, error: LocalStorageError) -> LocalStorageError {
     let mut recovery = error.recovery();
-    // The missing-package branch precedes source publication and core writes.
-    // No other error, even low space after a prepared batch, borrows this proof.
-    if original && recovery.cause == Cause::MissingPackage {
-        recovery.action = Action::ReinstallOriginal;
-        if recovery.bind_original_state(root).is_err() {
-            recovery.action = Action::PreserveAndDiagnose;
-            recovery.original_state_digest = None;
-        }
-    }
+    // Missing package and matching SQL markers cannot establish that a complete
+    // original group is readable by the exact old program. In particular,
+    // current Gateway payloads can be incompatible without a SQL version change.
+    // No unproven program-only downgrade is authorized here.
     if recovery.action == Action::PreserveAndDiagnose {
         if let Ok((name, id, phase)) = verified_original_source(root) {
             recovery.backup_name = Some(name);
@@ -127,9 +77,9 @@ fn verified_original_source(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use hiroute_host_runtime::StorageRecovery;
+    use hiroute_host_runtime::{StorageRecovery, StorageRecoveryCause as Cause};
     #[test]
-    fn missing_package_proves_the_complete_original_group_and_rejects_prior_upgrade_state() {
+    fn missing_package_never_infers_original_program_compatibility_from_sql_markers() {
         for prior_upgrade in [false, true] {
             let directory = crate::test_tempdir().unwrap();
             let root = directory.path().join("storage");
@@ -176,14 +126,7 @@ mod tests {
             );
             let recovery = StorageRecovery::read(&root).unwrap().unwrap();
             assert_eq!(recovery.cause, Cause::MissingPackage);
-            assert_eq!(
-                recovery.action,
-                if prior_upgrade {
-                    Action::PreserveAndDiagnose
-                } else {
-                    Action::ReinstallOriginal
-                }
-            );
+            assert_eq!(recovery.action, Action::PreserveAndDiagnose);
             for (path, before) in paths.iter().zip(original) {
                 assert_eq!(fs::read(root.join(path)).unwrap(), before, "changed {path}");
             }

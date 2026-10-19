@@ -44,9 +44,24 @@ pub(crate) struct ServiceStatus {
 pub(crate) fn recovery() -> Result<serde_json::Value, ServiceFailure> {
     let layout = StandaloneLayout::from_environment().map_err(|_| ServiceFailure::Unavailable)?;
     let record = hiroute_host_runtime::StorageRecovery::read(&layout.storage_root())
-        .map_err(|_| ServiceFailure::Unavailable)?;
+        .unwrap_or_else(|_| {
+            Some(hiroute_host_runtime::StorageRecovery::new(
+                hiroute_host_runtime::StorageRecoveryCause::UnknownState,
+                hiroute_host_runtime::StorageRecoveryAction::PreserveAndDiagnose,
+            ))
+        });
+    let instructions = record.as_ref().map(|record| {
+        let mut text = record.operator_guidance().to_owned();
+        if let Some(space) = &record.storage_space {
+            text.push_str(&format!(
+                " Storage volume: approximately {} bytes required, {} bytes available.",
+                space.required_bytes, space.available_bytes
+            ));
+        }
+        text
+    });
     Ok(
-        json!({"schema":"hiroute.service-recovery/v1", "recovery":record, "instructions":record.as_ref().map(|r|r.operator_guidance()), "diagnostics_root":layout.diagnostics_root()}),
+        json!({"schema":"hiroute.service-recovery/v1", "recovery":record, "instructions":instructions, "diagnostics_root":layout.diagnostics_root()}),
     )
 }
 

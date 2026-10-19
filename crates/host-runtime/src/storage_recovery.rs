@@ -8,6 +8,14 @@ use std::{
 
 pub const STORAGE_RECOVERY_SCHEMA: &str = "hiroute.storage-startup-recovery/v1";
 pub const STORAGE_RECOVERY_FILE: &str = "startup-recovery.json";
+mod batch;
+
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct RecoverySpace {
+    pub required_bytes: u64,
+    pub available_bytes: u64,
+}
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -19,6 +27,7 @@ pub enum StorageRecoveryCause {
     Locked,
     MissingKey,
     UnsupportedFormat,
+    NamespaceUnavailable,
     MigrationFailed,
     UnknownState,
 }
@@ -43,6 +52,8 @@ pub struct StorageRecovery {
     pub backup_batch: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub backup_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub storage_space: Option<RecoverySpace>,
 }
 impl StorageRecovery {
     pub fn new(cause: StorageRecoveryCause, action: StorageRecoveryAction) -> Self {
@@ -53,6 +64,7 @@ impl StorageRecovery {
             original_state_digest: None,
             backup_batch: None,
             backup_name: None,
+            storage_space: None,
         }
     }
     pub fn read(storage: &Path) -> io::Result<Option<Self>> {
@@ -75,6 +87,12 @@ impl StorageRecovery {
                     != Some(original_state_digest(storage)?.as_str()))
         {
             return Err(io::Error::other("STORAGE_RECOVERY_STALE"));
+        }
+        if matches!(
+            record.action,
+            StorageRecoveryAction::ResumeCurrent | StorageRecoveryAction::RestoreCompleteGroup
+        ) {
+            batch::validate(storage, &record)?;
         }
         Ok(Some(record))
     }
@@ -119,6 +137,9 @@ impl StorageRecovery {
             }
             (StorageRecoveryCause::AccessDenied | StorageRecoveryCause::Locked, _) => {
                 "Close other owned HiRoute instances and resolve the reported file access or ownership problem. Preserve all data and retry the current version. Do not change permissions recursively or delete recovery material."
+            }
+            (StorageRecoveryCause::NamespaceUnavailable, _) => {
+                "Keep all data and recovery material. The original history and recovery destination must be on the same filesystem and permit an atomic directory move. Correct the recorded locations or file-use problem before retrying the current version; do not copy or delete history to bypass this check."
             }
             _ => {
                 "Keep all storage generations, keys, packages and journals. Do not downgrade or delete data. Inspect startup diagnostics and the matching complete-group recovery guide; preserve newer data separately before restoration. Missing keys or source material may require support and cannot be repaired by repeated retries."
@@ -203,8 +224,10 @@ pub fn storage_upgrade_started(storage: &Path) -> io::Result<bool> {
         "observation.v5-target",
         "migration-set",
     ] {
-        if storage.join(name).try_exists()? {
-            return Ok(true);
+        match std::fs::symlink_metadata(storage.join(name)) {
+            Ok(_) => return Ok(true),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
         }
     }
     let Some(parent) = storage.parent() else {
@@ -216,8 +239,12 @@ pub fn storage_upgrade_started(storage: &Path) -> io::Result<bool> {
     let mut backup = name.to_os_string();
     backup.push(".upgrade-backups");
     let backup = parent.join(backup);
-    if backup.try_exists()? {
-        let metadata = std::fs::symlink_metadata(&backup)?;
+    let metadata = match std::fs::symlink_metadata(&backup) {
+        Ok(metadata) => Some(metadata),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error),
+    };
+    if let Some(metadata) = metadata {
         if metadata.file_type().is_symlink() || !metadata.is_dir() {
             return Err(std::io::Error::other("STORAGE_BACKUP_ROOT_INVALID"));
         }

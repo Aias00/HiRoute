@@ -346,6 +346,20 @@ pub(crate) fn preflight_space(
     backup: Option<&Path>,
     options: &crate::StorageStartupOptions,
 ) -> Result<u64, LocalStorageError> {
+    if options.preserve_observation_source {
+        // The final source will be published under this sibling backup root.
+        // Its parent already exists; no directories or history are written here.
+        let backup_root = crate::upgrade_backup_root(root)?;
+        let parent = backup_root.parent().ok_or(LocalStorageError::InvalidData)?;
+        let destination = match fs::symlink_metadata(parent) {
+            Ok(_) => parent,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                parent.parent().ok_or(LocalStorageError::InvalidData)?
+            }
+            Err(e) => return Err(e.into()),
+        };
+        seal::preflight(root, destination)?;
+    }
     fn bytes(path: &Path) -> Result<u64, LocalStorageError> {
         let meta = fs::symlink_metadata(path)?;
         if meta.file_type().is_symlink() {
@@ -404,8 +418,18 @@ pub(crate) fn preflight_space(
         }
         required = required.saturating_add(bytes(package)?);
     }
-    if fs2::available_space(root)? < required {
-        return Err(LocalStorageError::InvalidData.at_upgrade_stage("Insufficient space for recovery material and startup headroom; preserve the source and free unrelated space before retrying").with_recovery(hiroute_host_runtime::StorageRecoveryCause::InsufficientSpace, hiroute_host_runtime::StorageRecoveryAction::RetryCurrent));
+    let available = fs2::available_space(root)?;
+    if available < required {
+        let mut recovery = hiroute_host_runtime::StorageRecovery::new(
+            hiroute_host_runtime::StorageRecoveryCause::InsufficientSpace,
+            hiroute_host_runtime::StorageRecoveryAction::RetryCurrent,
+        );
+        recovery.storage_space = Some(hiroute_host_runtime::RecoverySpace {
+            required_bytes: required,
+            available_bytes: available,
+        });
+        return Err(LocalStorageError::Recovery { recovery,
+            source: Box::new(LocalStorageError::InvalidData.at_upgrade_stage("Insufficient space for recovery material and startup headroom; preserve the source and free unrelated space before retrying")) });
     }
     Ok(required)
 }
