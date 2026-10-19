@@ -119,6 +119,27 @@ fn routing_summary_bounds_unrelated_execution_history_work() {
 }
 
 #[test]
+fn routing_summary_bounds_unrelated_safe_projection_work() {
+    let (_root, store) = seed();
+    let db = store.connection.lock();
+    let (before, baseline) = measured(&db, SUMMARY_SQL);
+    db.execute_batch(
+        "WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<8192)
+         INSERT INTO observation_safe_facts_v2
+         SELECT workspace_id,'unrelated-'||i,'digest-unrelated-'||i,
+           json_set(body_json,'$.event_kind','request_started')
+         FROM (SELECT * FROM observation_safe_facts_v2 LIMIT 1),n;",
+    )
+    .unwrap();
+    let (after, retained) = measured(&db, SUMMARY_SQL);
+    assert_eq!(after, before);
+    assert!(
+        retained < baseline * 2 + 1000,
+        "routing summary grew from {baseline} to {retained} VM steps for unrelated safe history"
+    );
+}
+
+#[test]
 fn quality_reasoning_filters_known_unrelated_payloads_before_opening_them() {
     let (_root, store) = seed();
     let db = store.connection.lock();
