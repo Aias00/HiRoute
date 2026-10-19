@@ -81,17 +81,15 @@ def main():
     if args.json:
         print(json.dumps(rows, indent=2))
         return
-    by_cell = {(r['backend'], r['method'], r['route']): r for r in rows}
-    print('| Model | Format | Proxy: total | Proxy: post-connection | No app proxy: total | No app proxy: post-connection |')
-    print('|---|---|---:|---:|---:|---:|')
-    for backend in data['models']:
-        for method, label in (('direct', 'Original direct'), ('decomposed', 'Three questions')):
-            proxy = by_cell[backend, method, 'explicit_proxy']
-            other = by_cell[backend, method, 'no_application_proxy']
-            name = data['models'][backend].split('/')[1].split('-2026')[0].replace('jev-', 'Jev ')
-            values = [r[k] for r in (proxy, other)
-                      for k in ('median_elapsed_ms', 'median_post_connection_ms')]
-            print('| ' + ' | '.join([name, label] + [f'{v:,.0f} ms' for v in values]) + ' |')
+    print('| Model | Format | Median excluding connection setup (n=10) |')
+    print('|---|---|---:|')
+    for row in rows:
+        if row['route'] != 'explicit_proxy':
+            continue
+        name = data['models'][row['backend']].split('/')[1].split('-2026')[0].replace('jev-', 'Jev ')
+        label = 'Direct' if row['method'] == 'direct' else 'Decomposed'
+        value = row['median_post_connection_ms']
+        print(f'| {name} | {label} | {value:,.0f} ms |')
 
 
 if __name__ == '__main__':

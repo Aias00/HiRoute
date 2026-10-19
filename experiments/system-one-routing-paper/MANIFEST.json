@@ -19,8 +19,8 @@
     },
     {
       "path": "REPRODUCE.md",
-      "sha256": "e4292de839af1b6fc0d97a74dc47b5c05cbc4eafc7e5e47aa13cee9c5d96b2a7",
-      "bytes": 6434
+      "sha256": "c2ef9d75982102b6261814f4eda5ba460a9f199c3c9a07251bf91dcf305ab1a2",
+      "bytes": 6474
     },
     {
       "path": "analysis/context_eval.py",
@@ -89,8 +89,8 @@
     },
     {
       "path": "diagnostics/connection_timing.py",
-      "sha256": "cff745ef0143a42c1e41852ec8108e2d1f9b86a193deaa1f5c2809be880d0822",
-      "bytes": 4561
+      "sha256": "d35b92d8ef0b18353c4e934f1fdb59df3f4af673c77bb01d957635ad7c91415a",
+      "bytes": 4198
     },
     {
       "path": "execution/README.md",
@@ -244,8 +244,8 @@
     },
     {
       "path": "main.md",
-      "sha256": "506d8e68821ba34bb05eaa6eebebd6c24319f17e075dda518a1418cc3ac574c1",
-      "bytes": 69989
+      "sha256": "c3aa17aa478cae106d431d6c8458dfde35bd4a175bef4cff463030ce846c2eb7",
+      "bytes": 67044
     },
     {
       "path": "policies/engineering-direct-explicit.json",

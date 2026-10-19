@@ -33,8 +33,9 @@ python3 experiments/system-one-routing-paper/diagnostics/connection_timing.py
 python3 experiments/system-one-routing-paper/diagnostics/connection_timing.py --json
 ```
 
-The first command reproduces Appendix C's supplemental latency table; the second
-also prints each cell's median connection duration. The reducer excludes eight
+The first command reproduces the setup-excluded Jev column of Appendix C's
+latency table; the second prints all recorded timing cells and their median
+connection durations. The reducer excludes eight
 warmups, checks all 40 matched route pairs and balanced path order, and subtracts
 each call's own connection duration before taking medians. It contains no network
 execution. This small diagnostic does not replace the original 256-call latency
