@@ -207,7 +207,11 @@ mod tests {
     #[cfg(unix)]
     fn observation_source_locator_requires_verified_material_and_rejects_another_batch() {
         use sha2::{Digest, Sha256};
-        use std::os::unix::fs::MetadataExt;
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        let write = |path: PathBuf, bytes: &[u8]| {
+            std::fs::write(&path, bytes).unwrap();
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        };
         let temporary = tempfile::tempdir().unwrap();
         let root = temporary.path();
         let storage = root.join("storage");
@@ -233,7 +237,7 @@ mod tests {
         ] {
             let path = source.join(name);
             hiroute_diagnostics::files::PrivateDir::open_or_create(path.parent().unwrap()).unwrap();
-            hiroute_platform::durable::write_private_new(&path, b"retained original").unwrap();
+            write(path, b"retained original");
             files.insert(
                 name.into(),
                 serde_json::json!(format!("sha256:{:x}", Sha256::digest(b"retained original"))),
@@ -250,11 +254,7 @@ mod tests {
                 serde_json::json!({"schema":"hiroute.sqlite-backup-set/v2","set_id":"retained-batch"}),
             ),
         ] {
-            hiroute_platform::durable::write_private_new(
-                &path,
-                &serde_json::to_vec(&value).unwrap(),
-            )
-            .unwrap();
+            write(path, &serde_json::to_vec(&value).unwrap());
         }
         std::fs::write(
             batch.join("source-location.json"),
