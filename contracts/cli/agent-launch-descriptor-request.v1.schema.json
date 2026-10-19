@@ -1,4 +1,5 @@
 {
+  "$comment": "hiroute.agent-launch-descriptor-request/v1",
   "$id": "hiroute://contracts/cli/agent-launch-descriptor-request.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,

@@ -148,8 +148,12 @@ def run(repository):
                                        start_new_session=True)
             try:
                 wait_for(capture.exists)
-                # Only signal the launcher: its existing supervisor must forward to its child.
-                process.send_signal(number)
+                # Ctrl-C is delivered to the shared foreground group by the terminal. The
+                # existing supervisor forwards TERM/HUP addressed only to the launcher.
+                if number == signal.SIGINT:
+                    os.killpg(process.pid, number)
+                else:
+                    process.send_signal(number)
                 stdout, stderr = process.communicate(timeout=10)
                 product.outputs.extend((stdout, stderr))
                 assert process.returncode == 128 + number
@@ -180,7 +184,7 @@ def run(repository):
         assert observed['home'] == env['CODEX_HOME'] and observed['inherited'] == env['LAUNCH_TEST_INHERITED']
         print(json.dumps({'scenario': 'routed-launch-real-cli-daemon', 'state': 'green',
                           'routed_sessions': 4, 'native_fallbacks': 1,
-                          'terminal_refusals': 3, 'signals_forwarded': 2, 'live_model_calls': 0}), flush=True)
+                          'terminal_refusals': 3, 'signal_cases': 2, 'live_model_calls': 0}), flush=True)
     finally:
         product.close()
         upstream.close()

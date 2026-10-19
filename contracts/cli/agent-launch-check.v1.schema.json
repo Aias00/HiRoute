@@ -1,0 +1,1332 @@
+{
+  "$defs": {
+    "variant_0": {
+      "$defs": {
+        "AgentKindV1": {
+          "enum": [
+            "codex",
+            "claude_code",
+            "qoder",
+            "pi",
+            "deepseek_harness",
+            "hermes"
+          ],
+          "type": "string"
+        },
+        "AgentLaunchCheckEntryV1": {
+          "additionalProperties": false,
+          "properties": {
+            "check": {
+              "type": "string"
+            },
+            "ok": {
+              "type": "boolean"
+            },
+            "reason_code": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "repair": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "check",
+            "ok",
+            "reason_code",
+            "repair"
+          ],
+          "type": "object"
+        },
+        "AgentLaunchCheckV1": {
+          "additionalProperties": false,
+          "properties": {
+            "agent": {
+              "$ref": "#/$defs/variant_0/$defs/RoutedLaunchAgentV1"
+            },
+            "candidate_contexts": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "checks": {
+              "items": {
+                "$ref": "#/$defs/variant_0/$defs/AgentLaunchCheckEntryV1"
+              },
+              "type": "array"
+            },
+            "context": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "launchable": {
+              "type": "boolean"
+            },
+            "schema": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "schema",
+            "agent",
+            "context",
+            "checks",
+            "launchable"
+          ],
+          "type": "object"
+        },
+        "AgentModelBudgetBlockerV1": {
+          "additionalProperties": false,
+          "properties": {
+            "agent_kind": {
+              "$ref": "#/$defs/variant_0/$defs/AgentKindV1"
+            },
+            "context_id": {
+              "type": "string"
+            },
+            "declared": {
+              "$ref": "#/$defs/variant_0/$defs/AgentModelTokenBudgetV1"
+            },
+            "model_alias": {
+              "type": "string"
+            },
+            "plan_id": {
+              "type": "string"
+            },
+            "proposed": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/variant_0/$defs/AgentModelTokenBudgetV1"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "reason": {
+              "$ref": "#/$defs/variant_0/$defs/AgentModelBudgetReasonV1"
+            }
+          },
+          "required": [
+            "agent_kind",
+            "context_id",
+            "plan_id",
+            "model_alias",
+            "reason",
+            "declared",
+            "proposed"
+          ],
+          "type": "object"
+        },
+        "AgentModelBudgetConflictV1": {
+          "additionalProperties": false,
+          "properties": {
+            "blockers": {
+              "items": {
+                "$ref": "#/$defs/variant_0/$defs/AgentModelBudgetBlockerV1"
+              },
+              "type": "array"
+            },
+            "schema": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "schema",
+            "blockers"
+          ],
+          "type": "object"
+        },
+        "AgentModelBudgetReasonV1": {
+          "enum": [
+            "capacity_reduced",
+            "plan_missing",
+            "budget_unavailable"
+          ],
+          "type": "string"
+        },
+        "AgentModelTokenBudgetV1": {
+          "additionalProperties": false,
+          "properties": {
+            "context_window_tokens": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "max_output_tokens": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "context_window_tokens",
+            "max_output_tokens"
+          ],
+          "type": "object"
+        },
+        "ErrorCategory": {
+          "enum": [
+            "usage",
+            "conflict",
+            "authorization",
+            "not_found",
+            "unavailable",
+            "action_required",
+            "recovery",
+            "internal"
+          ],
+          "type": "string"
+        },
+        "ErrorCode": {
+          "enum": [
+            "UNKNOWN_COMMAND",
+            "INVALID_ARGUMENTS",
+            "SCHEMA_INCOMPATIBLE",
+            "MACHINE_SCHEMA_INCOMPATIBLE",
+            "FEATURE_NOT_ENABLED",
+            "NOT_IMPLEMENTED",
+            "REVISION_CONFLICT",
+            "CONTROL_WAIT_CAPACITY_EXCEEDED",
+            "WORKER_CAPACITY_EXCEEDED",
+            "CHANGE_PREVIEW_STALE",
+            "IDEMPOTENCY_KEY_REUSED",
+            "AGENT_AUTH_PRECEDENCE_CONFLICT",
+            "QODER_MODEL_BUDGET_CONFLICT",
+            "CAPABILITY_DENIED",
+            "CAPABILITY_UNAVAILABLE",
+            "RESOURCE_NOT_FOUND",
+            "SNAPSHOT_UNAVAILABLE",
+            "DAEMON_UNAVAILABLE",
+            "GATEWAY_UNAVAILABLE",
+            "OBSERVATION_UNAVAILABLE",
+            "SCOPE_TOO_LARGE",
+            "NO_SUPPORTED_AGENT",
+            "ACTION_REQUIRED",
+            "OPERATION_NEEDS_ATTENTION",
+            "INTERNAL"
+          ],
+          "type": "string"
+        },
+        "ErrorV1": {
+          "properties": {
+            "category": {
+              "$ref": "#/$defs/variant_0/$defs/ErrorCategory"
+            },
+            "code": {
+              "$ref": "#/$defs/variant_0/$defs/ErrorCode"
+            },
+            "details_schema": {
+              "type": "string"
+            },
+            "message_key": {
+              "type": "string"
+            },
+            "model_budget_conflict": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/variant_0/$defs/AgentModelBudgetConflictV1"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "observation_read": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/variant_0/$defs/ObservationReadFailureV1"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "operation_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "retryable": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "category",
+            "message_key",
+            "retryable",
+            "details_schema"
+          ],
+          "type": "object"
+        },
+        "MachineStatus": {
+          "enum": [
+            "succeeded",
+            "accepted",
+            "usage_error",
+            "conflict",
+            "denied",
+            "not_found",
+            "unavailable",
+            "action_required",
+            "needs_attention",
+            "internal_error"
+          ],
+          "type": "string"
+        },
+        "NextActionV1": {
+          "properties": {
+            "command_id": {
+              "type": "string"
+            },
+            "input": true,
+            "reason_code": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "command_id",
+            "input",
+            "reason_code"
+          ],
+          "type": "object"
+        },
+        "ObservationReadFailureReasonV1": {
+          "enum": [
+            "timeout",
+            "reader_busy",
+            "index_unavailable",
+            "storage_unavailable"
+          ],
+          "type": "string"
+        },
+        "ObservationReadFailureV1": {
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/variant_0/$defs/ObservationReadFailureReasonV1"
+            },
+            "retry_after_ms": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "reason",
+            "retry_after_ms",
+            "action"
+          ],
+          "type": "object"
+        },
+        "OperationReferenceV1": {
+          "properties": {
+            "cancellable": {
+              "type": "boolean"
+            },
+            "operation_id": {
+              "type": "string"
+            },
+            "sequence": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "state": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation_id",
+            "state",
+            "sequence",
+            "cancellable"
+          ],
+          "type": "object"
+        },
+        "RoutedLaunchAgentV1": {
+          "enum": [
+            "codex",
+            "claude-code"
+          ],
+          "type": "string"
+        },
+        "SchemaVersion": {
+          "properties": {
+            "major": {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "minor": {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "major",
+            "minor"
+          ],
+          "type": "object"
+        },
+        "WarningV1": {
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "details_schema": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "details_schema"
+          ],
+          "type": "object"
+        }
+      },
+      "description": "Enriched machine envelope negotiated only with machine-schema v2 clients.",
+      "properties": {
+        "data": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/variant_0/$defs/AgentLaunchCheckV1"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/variant_0/$defs/ErrorV1"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "next_actions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/variant_0/$defs/NextActionV1"
+          },
+          "type": "array"
+        },
+        "operation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/variant_0/$defs/OperationReferenceV1"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "request_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "schema_version": {
+          "$ref": "#/$defs/variant_0/$defs/SchemaVersion"
+        },
+        "status": {
+          "$ref": "#/$defs/variant_0/$defs/MachineStatus"
+        },
+        "warnings": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/variant_0/$defs/WarningV1"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "schema_version",
+        "status",
+        "warnings",
+        "next_actions"
+      ],
+      "title": "MachineEnvelopeV2",
+      "type": "object"
+    },
+    "variant_1": {
+      "$defs": {
+        "AgentKindV1": {
+          "enum": [
+            "codex",
+            "claude_code",
+            "qoder",
+            "pi",
+            "deepseek_harness",
+            "hermes"
+          ],
+          "type": "string"
+        },
+        "AgentModelBudgetBlockerV1": {
+          "additionalProperties": false,
+          "properties": {
+            "agent_kind": {
+              "$ref": "#/$defs/variant_1/$defs/AgentKindV1"
+            },
+            "context_id": {
+              "type": "string"
+            },
+            "declared": {
+              "$ref": "#/$defs/variant_1/$defs/AgentModelTokenBudgetV1"
+            },
+            "model_alias": {
+              "type": "string"
+            },
+            "plan_id": {
+              "type": "string"
+            },
+            "proposed": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/variant_1/$defs/AgentModelTokenBudgetV1"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "reason": {
+              "$ref": "#/$defs/variant_1/$defs/AgentModelBudgetReasonV1"
+            }
+          },
+          "required": [
+            "agent_kind",
+            "context_id",
+            "plan_id",
+            "model_alias",
+            "reason",
+            "declared",
+            "proposed"
+          ],
+          "type": "object"
+        },
+        "AgentModelBudgetConflictV1": {
+          "additionalProperties": false,
+          "properties": {
+            "blockers": {
+              "items": {
+                "$ref": "#/$defs/variant_1/$defs/AgentModelBudgetBlockerV1"
+              },
+              "type": "array"
+            },
+            "schema": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "schema",
+            "blockers"
+          ],
+          "type": "object"
+        },
+        "AgentModelBudgetReasonV1": {
+          "enum": [
+            "capacity_reduced",
+            "plan_missing",
+            "budget_unavailable"
+          ],
+          "type": "string"
+        },
+        "AgentModelTokenBudgetV1": {
+          "additionalProperties": false,
+          "properties": {
+            "context_window_tokens": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "max_output_tokens": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "context_window_tokens",
+            "max_output_tokens"
+          ],
+          "type": "object"
+        },
+        "CliInputDiagnosticDataV1": {
+          "properties": {
+            "command_id": {
+              "type": "string"
+            },
+            "diagnostic": {
+              "$ref": "#/$defs/variant_1/$defs/CliInputDiagnosticV1"
+            },
+            "schema": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "schema",
+            "command_id",
+            "diagnostic"
+          ],
+          "type": "object"
+        },
+        "CliInputDiagnosticV1": {
+          "description": "Included only when the CLI caller explicitly requests detailed input errors.",
+          "properties": {
+            "category": {
+              "maxLength": 64,
+              "type": "string"
+            },
+            "expected": {
+              "maxLength": 128,
+              "type": "string"
+            },
+            "path": {
+              "maxLength": 256,
+              "type": "string"
+            }
+          },
+          "required": [
+            "category",
+            "path",
+            "expected"
+          ],
+          "type": "object"
+        },
+        "ErrorCategory": {
+          "enum": [
+            "usage",
+            "conflict",
+            "authorization",
+            "not_found",
+            "unavailable",
+            "action_required",
+            "recovery",
+            "internal"
+          ],
+          "type": "string"
+        },
+        "ErrorCode": {
+          "enum": [
+            "UNKNOWN_COMMAND",
+            "INVALID_ARGUMENTS",
+            "SCHEMA_INCOMPATIBLE",
+            "MACHINE_SCHEMA_INCOMPATIBLE",
+            "FEATURE_NOT_ENABLED",
+            "NOT_IMPLEMENTED",
+            "REVISION_CONFLICT",
+            "CONTROL_WAIT_CAPACITY_EXCEEDED",
+            "WORKER_CAPACITY_EXCEEDED",
+            "CHANGE_PREVIEW_STALE",
+            "IDEMPOTENCY_KEY_REUSED",
+            "AGENT_AUTH_PRECEDENCE_CONFLICT",
+            "QODER_MODEL_BUDGET_CONFLICT",
+            "CAPABILITY_DENIED",
+            "CAPABILITY_UNAVAILABLE",
+            "RESOURCE_NOT_FOUND",
+            "SNAPSHOT_UNAVAILABLE",
+            "DAEMON_UNAVAILABLE",
+            "GATEWAY_UNAVAILABLE",
+            "OBSERVATION_UNAVAILABLE",
+            "SCOPE_TOO_LARGE",
+            "NO_SUPPORTED_AGENT",
+            "ACTION_REQUIRED",
+            "OPERATION_NEEDS_ATTENTION",
+            "INTERNAL"
+          ],
+          "type": "string"
+        },
+        "ErrorV1": {
+          "properties": {
+            "category": {
+              "$ref": "#/$defs/variant_1/$defs/ErrorCategory"
+            },
+            "code": {
+              "$ref": "#/$defs/variant_1/$defs/ErrorCode"
+            },
+            "details_schema": {
+              "type": "string"
+            },
+            "message_key": {
+              "type": "string"
+            },
+            "model_budget_conflict": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/variant_1/$defs/AgentModelBudgetConflictV1"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "observation_read": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/variant_1/$defs/ObservationReadFailureV1"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "operation_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "retryable": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "category",
+            "message_key",
+            "retryable",
+            "details_schema"
+          ],
+          "type": "object"
+        },
+        "MachineStatus": {
+          "enum": [
+            "succeeded",
+            "accepted",
+            "usage_error",
+            "conflict",
+            "denied",
+            "not_found",
+            "unavailable",
+            "action_required",
+            "needs_attention",
+            "internal_error"
+          ],
+          "type": "string"
+        },
+        "NextActionV1": {
+          "properties": {
+            "command_id": {
+              "type": "string"
+            },
+            "input": true,
+            "reason_code": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "command_id",
+            "input",
+            "reason_code"
+          ],
+          "type": "object"
+        },
+        "ObservationReadFailureReasonV1": {
+          "enum": [
+            "timeout",
+            "reader_busy",
+            "index_unavailable",
+            "storage_unavailable"
+          ],
+          "type": "string"
+        },
+        "ObservationReadFailureV1": {
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/variant_1/$defs/ObservationReadFailureReasonV1"
+            },
+            "retry_after_ms": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "reason",
+            "retry_after_ms",
+            "action"
+          ],
+          "type": "object"
+        },
+        "OperationReferenceV1": {
+          "properties": {
+            "cancellable": {
+              "type": "boolean"
+            },
+            "operation_id": {
+              "type": "string"
+            },
+            "sequence": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "state": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation_id",
+            "state",
+            "sequence",
+            "cancellable"
+          ],
+          "type": "object"
+        },
+        "SchemaVersion": {
+          "properties": {
+            "major": {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "minor": {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "major",
+            "minor"
+          ],
+          "type": "object"
+        },
+        "WarningV1": {
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "details_schema": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "details_schema"
+          ],
+          "type": "object"
+        }
+      },
+      "description": "Enriched machine envelope negotiated only with machine-schema v2 clients.",
+      "properties": {
+        "data": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/variant_1/$defs/CliInputDiagnosticDataV1"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/variant_1/$defs/ErrorV1"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "next_actions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/variant_1/$defs/NextActionV1"
+          },
+          "type": "array"
+        },
+        "operation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/variant_1/$defs/OperationReferenceV1"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "request_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "schema_version": {
+          "$ref": "#/$defs/variant_1/$defs/SchemaVersion"
+        },
+        "status": {
+          "$ref": "#/$defs/variant_1/$defs/MachineStatus"
+        },
+        "warnings": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/variant_1/$defs/WarningV1"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "schema_version",
+        "status",
+        "warnings",
+        "next_actions"
+      ],
+      "title": "MachineEnvelopeV2",
+      "type": "object"
+    },
+    "variant_2": {
+      "$defs": {
+        "AgentKindV1": {
+          "enum": [
+            "codex",
+            "claude_code",
+            "qoder",
+            "pi",
+            "deepseek_harness",
+            "hermes"
+          ],
+          "type": "string"
+        },
+        "AgentModelBudgetBlockerV1": {
+          "additionalProperties": false,
+          "properties": {
+            "agent_kind": {
+              "$ref": "#/$defs/variant_2/$defs/AgentKindV1"
+            },
+            "context_id": {
+              "type": "string"
+            },
+            "declared": {
+              "$ref": "#/$defs/variant_2/$defs/AgentModelTokenBudgetV1"
+            },
+            "model_alias": {
+              "type": "string"
+            },
+            "plan_id": {
+              "type": "string"
+            },
+            "proposed": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/variant_2/$defs/AgentModelTokenBudgetV1"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "reason": {
+              "$ref": "#/$defs/variant_2/$defs/AgentModelBudgetReasonV1"
+            }
+          },
+          "required": [
+            "agent_kind",
+            "context_id",
+            "plan_id",
+            "model_alias",
+            "reason",
+            "declared",
+            "proposed"
+          ],
+          "type": "object"
+        },
+        "AgentModelBudgetConflictV1": {
+          "additionalProperties": false,
+          "properties": {
+            "blockers": {
+              "items": {
+                "$ref": "#/$defs/variant_2/$defs/AgentModelBudgetBlockerV1"
+              },
+              "type": "array"
+            },
+            "schema": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "schema",
+            "blockers"
+          ],
+          "type": "object"
+        },
+        "AgentModelBudgetReasonV1": {
+          "enum": [
+            "capacity_reduced",
+            "plan_missing",
+            "budget_unavailable"
+          ],
+          "type": "string"
+        },
+        "AgentModelTokenBudgetV1": {
+          "additionalProperties": false,
+          "properties": {
+            "context_window_tokens": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "max_output_tokens": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "context_window_tokens",
+            "max_output_tokens"
+          ],
+          "type": "object"
+        },
+        "CliRequiredChoicesV1": {
+          "properties": {
+            "available": true,
+            "required_choices": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "schema": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "schema",
+            "required_choices",
+            "available"
+          ],
+          "type": "object"
+        },
+        "ErrorCategory": {
+          "enum": [
+            "usage",
+            "conflict",
+            "authorization",
+            "not_found",
+            "unavailable",
+            "action_required",
+            "recovery",
+            "internal"
+          ],
+          "type": "string"
+        },
+        "ErrorCode": {
+          "enum": [
+            "UNKNOWN_COMMAND",
+            "INVALID_ARGUMENTS",
+            "SCHEMA_INCOMPATIBLE",
+            "MACHINE_SCHEMA_INCOMPATIBLE",
+            "FEATURE_NOT_ENABLED",
+            "NOT_IMPLEMENTED",
+            "REVISION_CONFLICT",
+            "CONTROL_WAIT_CAPACITY_EXCEEDED",
+            "WORKER_CAPACITY_EXCEEDED",
+            "CHANGE_PREVIEW_STALE",
+            "IDEMPOTENCY_KEY_REUSED",
+            "AGENT_AUTH_PRECEDENCE_CONFLICT",
+            "QODER_MODEL_BUDGET_CONFLICT",
+            "CAPABILITY_DENIED",
+            "CAPABILITY_UNAVAILABLE",
+            "RESOURCE_NOT_FOUND",
+            "SNAPSHOT_UNAVAILABLE",
+            "DAEMON_UNAVAILABLE",
+            "GATEWAY_UNAVAILABLE",
+            "OBSERVATION_UNAVAILABLE",
+            "SCOPE_TOO_LARGE",
+            "NO_SUPPORTED_AGENT",
+            "ACTION_REQUIRED",
+            "OPERATION_NEEDS_ATTENTION",
+            "INTERNAL"
+          ],
+          "type": "string"
+        },
+        "ErrorV1": {
+          "properties": {
+            "category": {
+              "$ref": "#/$defs/variant_2/$defs/ErrorCategory"
+            },
+            "code": {
+              "$ref": "#/$defs/variant_2/$defs/ErrorCode"
+            },
+            "details_schema": {
+              "type": "string"
+            },
+            "message_key": {
+              "type": "string"
+            },
+            "model_budget_conflict": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/variant_2/$defs/AgentModelBudgetConflictV1"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "observation_read": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/variant_2/$defs/ObservationReadFailureV1"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "operation_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "retryable": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "category",
+            "message_key",
+            "retryable",
+            "details_schema"
+          ],
+          "type": "object"
+        },
+        "MachineStatus": {
+          "enum": [
+            "succeeded",
+            "accepted",
+            "usage_error",
+            "conflict",
+            "denied",
+            "not_found",
+            "unavailable",
+            "action_required",
+            "needs_attention",
+            "internal_error"
+          ],
+          "type": "string"
+        },
+        "NextActionV1": {
+          "properties": {
+            "command_id": {
+              "type": "string"
+            },
+            "input": true,
+            "reason_code": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "command_id",
+            "input",
+            "reason_code"
+          ],
+          "type": "object"
+        },
+        "ObservationReadFailureReasonV1": {
+          "enum": [
+            "timeout",
+            "reader_busy",
+            "index_unavailable",
+            "storage_unavailable"
+          ],
+          "type": "string"
+        },
+        "ObservationReadFailureV1": {
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/variant_2/$defs/ObservationReadFailureReasonV1"
+            },
+            "retry_after_ms": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "reason",
+            "retry_after_ms",
+            "action"
+          ],
+          "type": "object"
+        },
+        "OperationReferenceV1": {
+          "properties": {
+            "cancellable": {
+              "type": "boolean"
+            },
+            "operation_id": {
+              "type": "string"
+            },
+            "sequence": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "state": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation_id",
+            "state",
+            "sequence",
+            "cancellable"
+          ],
+          "type": "object"
+        },
+        "SchemaVersion": {
+          "properties": {
+            "major": {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "minor": {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "major",
+            "minor"
+          ],
+          "type": "object"
+        },
+        "WarningV1": {
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "details_schema": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "details_schema"
+          ],
+          "type": "object"
+        }
+      },
+      "description": "Enriched machine envelope negotiated only with machine-schema v2 clients.",
+      "properties": {
+        "data": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/variant_2/$defs/CliRequiredChoicesV1"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/variant_2/$defs/ErrorV1"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "next_actions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/variant_2/$defs/NextActionV1"
+          },
+          "type": "array"
+        },
+        "operation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/variant_2/$defs/OperationReferenceV1"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "request_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "schema_version": {
+          "$ref": "#/$defs/variant_2/$defs/SchemaVersion"
+        },
+        "status": {
+          "$ref": "#/$defs/variant_2/$defs/MachineStatus"
+        },
+        "warnings": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/variant_2/$defs/WarningV1"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "schema_version",
+        "status",
+        "warnings",
+        "next_actions"
+      ],
+      "title": "MachineEnvelopeV2",
+      "type": "object"
+    }
+  },
+  "$id": "hiroute://contracts/cli/agent-launch-check.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "$ref": "#/$defs/variant_0"
+    },
+    {
+      "$ref": "#/$defs/variant_1"
+    },
+    {
+      "$ref": "#/$defs/variant_2"
+    }
+  ]
+}

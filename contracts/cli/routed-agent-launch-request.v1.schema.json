@@ -1,0 +1,39 @@
+{
+  "$defs": {
+    "variant_0": {
+      "$defs": {
+        "RoutedLaunchAgentV1": {
+          "enum": [
+            "codex",
+            "claude-code"
+          ],
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "agent": {
+          "$ref": "#/$defs/variant_0/$defs/RoutedLaunchAgentV1"
+        },
+        "context": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "agent"
+      ],
+      "title": "RoutedLaunchRequestV1",
+      "type": "object"
+    }
+  },
+  "$id": "hiroute://contracts/cli/routed-agent-launch-request.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "$ref": "#/$defs/variant_0"
+    }
+  ]
+}
