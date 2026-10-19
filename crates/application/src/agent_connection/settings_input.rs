@@ -182,18 +182,38 @@ impl AgentSettingsPlanningInput {
                                 .ok_or_else(invalid)?,
                         )?;
                         snapshot.context_window_tokens = preview.claude_context_window;
-                        SettingsModelAction::Claude(ClaudeModelFileAction::Configure {
-                            previous_operation: file.active_configuration.clone(),
-                            change: claude_native_change(
-                                &snapshot,
-                                claude,
-                                &self.facts.context_id,
-                                file.active_configuration.is_some(),
-                            )?,
-                            snapshot: Box::new(snapshot),
-                            gateway_base_url: claude.gateway_base_url.clone(),
-                            trusted_hiroute_executable: claude.trusted_hiroute_executable.clone(),
-                        })
+                        if preview.spec.activation_preference
+                            == hiroute_domain::AgentActivationPreferenceV1::ManagedLaunch
+                        {
+                            SettingsModelAction::ClaudeLaunch(
+                                ClaudeIndependentLaunchStateV1::new(
+                                    self.facts.context_id.clone(),
+                                    ClaudeIndependentLaunchActionV1::Configure {
+                                        snapshot: Box::new(snapshot),
+                                        gateway_base_url: claude.gateway_base_url.clone(),
+                                        trusted_hiroute_executable: claude
+                                            .trusted_hiroute_executable
+                                            .clone(),
+                                    },
+                                )
+                                .map_err(|_| invalid())?,
+                            )
+                        } else {
+                            SettingsModelAction::Claude(ClaudeModelFileAction::Configure {
+                                previous_operation: file.active_configuration.clone(),
+                                change: claude_native_change(
+                                    &snapshot,
+                                    claude,
+                                    &self.facts.context_id,
+                                    file.active_configuration.is_some(),
+                                )?,
+                                snapshot: Box::new(snapshot),
+                                gateway_base_url: claude.gateway_base_url.clone(),
+                                trusted_hiroute_executable: claude
+                                    .trusted_hiroute_executable
+                                    .clone(),
+                            })
+                        }
                     }
                 };
                 let material_action = match &preview.spec.access_token {
@@ -255,9 +275,23 @@ impl AgentSettingsPlanningInput {
                         },
                     ),
                     SettingsModelTargetFacts::Claude(_) => {
-                        SettingsModelAction::Claude(ClaudeModelFileAction::Restore {
-                            original_operation: operation.clone(),
-                        })
+                        if preview.spec.activation_preference
+                            == hiroute_domain::AgentActivationPreferenceV1::ManagedLaunch
+                        {
+                            SettingsModelAction::ClaudeLaunch(
+                                ClaudeIndependentLaunchStateV1::new(
+                                    self.facts.context_id.clone(),
+                                    ClaudeIndependentLaunchActionV1::Restore {
+                                        original_operation: operation.clone(),
+                                    },
+                                )
+                                .map_err(|_| invalid())?,
+                            )
+                        } else {
+                            SettingsModelAction::Claude(ClaudeModelFileAction::Restore {
+                                original_operation: operation.clone(),
+                            })
+                        }
                     }
                 };
                 (
@@ -309,6 +343,9 @@ impl AgentSettingsPlanningInput {
             "skill_reference_change":&skill.reference_change,
             "collaboration":self.collaboration_state,
         });
+        if let Some(SettingsModelAction::ClaudeLaunch(state)) = &model_action {
+            mutations["claude_launch"] = json!(state);
+        }
         if !matches!(
             preview.spec.skill_intent_for(additional_facet),
             AgentFacetIntent::Keep
@@ -412,6 +449,9 @@ impl AgentSettingsPlanningInput {
                                 pi_settings_content,
                             )?);
                         }
+                        // The accepted control state is the complete independent configuration.
+                        // Its only external effect is the existing grant-scoped publication below.
+                        SettingsModelAction::ClaudeLaunch(_) => {}
                         SettingsModelAction::Claude(change) => {
                             external.push(settings_claude_model_file_intent(
                                 control,
@@ -536,6 +576,7 @@ enum SettingsModelAction {
     Additional(Option<CanonicalDigest>, super::AdditionalModelFileAction),
     Codex(CodexModelFileAction),
     Claude(ClaudeModelFileAction),
+    ClaudeLaunch(ClaudeIndependentLaunchStateV1),
 }
 
 #[derive(Default)]

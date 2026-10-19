@@ -33,6 +33,7 @@ use super::{
 mod claude_settings;
 #[path = "dsh_native.rs"]
 mod dsh_native;
+mod launch_preflight;
 #[path = "claude_observation.rs"]
 mod main_observation;
 #[path = "pi_native.rs"]
@@ -856,32 +857,7 @@ impl FilesystemAgentScannerV1 {
     }
 
     pub(super) fn claude_sources(&self) -> Vec<ClaudeSource> {
-        let mut sources = vec![ClaudeSource::Process];
-        if let Some(path) = &self.layout.claude_launch_settings {
-            sources.push(ClaudeSource::File(ConfigLayerV1::Launch, path.clone()));
-        }
-        sources.extend(
-            self.layout
-                .claude_project_settings
-                .iter()
-                // Launching from HOME makes .claude/settings.json the user settings file,
-                // not an independent project override of the fields we just installed.
-                .filter(|path| !same_claude_settings_file(path, &self.layout.claude_user_settings))
-                .cloned()
-                .map(|path| ClaudeSource::File(ConfigLayerV1::Project, path)),
-        );
-        sources.push(ClaudeSource::File(
-            ConfigLayerV1::User,
-            self.layout.claude_user_settings.clone(),
-        ));
-        sources.extend(
-            self.layout
-                .claude_managed_settings
-                .iter()
-                .cloned()
-                .map(|path| ClaudeSource::File(ConfigLayerV1::Managed, path)),
-        );
-        sources
+        launch_preflight::sources(&self.layout, true)
     }
 }
 

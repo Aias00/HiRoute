@@ -109,6 +109,33 @@ pub fn preview_agent_settings(
             return Err(SettingsPlanningError::InvalidContext);
         }
     }
+    let claude = facts.model.as_ref().and_then(SettingsModelFacts::claude);
+    if matches!(spec.model, AgentFacetIntent::Restore { .. })
+        && claude
+            .and_then(|facts| facts.active_connection.as_ref())
+            .is_some_and(|slot| {
+                slot.activation_mode == hiroute_domain::AgentActivationModeV1::ManagedLaunch
+            })
+    {
+        // A restore follows the sealed owner, including a caller using the old restore shape.
+        spec.activation_preference = hiroute_domain::AgentActivationPreferenceV1::ManagedLaunch;
+    }
+    if spec.activation_preference == hiroute_domain::AgentActivationPreferenceV1::ManagedLaunch
+        && (claude.is_none() || matches!(spec.model, AgentFacetIntent::Keep))
+    {
+        return Err(SettingsPlanningError::InvalidSelection);
+    }
+    let activation_mode = claude
+        .filter(|_| !matches!(spec.model, AgentFacetIntent::Keep))
+        .map(|_| {
+            if spec.activation_preference
+                == hiroute_domain::AgentActivationPreferenceV1::ManagedLaunch
+            {
+                hiroute_domain::AgentActivationModeV1::ManagedLaunch
+            } else {
+                hiroute_domain::AgentActivationModeV1::ManagedConfiguration
+            }
+        });
     spec.protected_native_model_ids.clear();
     if let Some(model) = facts.model.as_ref().and_then(SettingsModelFacts::codex) {
         spec.protected_native_model_ids = if model.require_native_model_routes {
@@ -149,6 +176,7 @@ pub fn preview_agent_settings(
             return Err(SettingsPlanningError::InvalidSelection);
         }
         blockers.push(AgentSettingsBlock {
+            connection_conflict: None,
             facet: AgentSettingsFacet::Model,
             reason,
             capabilities: Vec::new(),
@@ -157,6 +185,41 @@ pub fn preview_agent_settings(
     }
     let mut model_grant = None;
     let mut collaboration_trigger_mode = None;
+    if let Some(claude) = claude {
+        if matches!(spec.model, AgentFacetIntent::Configure { .. })
+            && activation_mode == Some(hiroute_domain::AgentActivationModeV1::ManagedLaunch)
+            && !claude.supports_managed_launch
+        {
+            blockers.push(AgentSettingsBlock {
+                connection_conflict: None,
+                facet: AgentSettingsFacet::Model,
+                reason: SettingsBlockReason::ManagedLaunchUnsupported,
+                capabilities: Vec::new(),
+                model_ids: Vec::new(),
+            });
+        }
+        let active_conflict = claude
+            .active_connection
+            .as_ref()
+            .filter(|slot| {
+                matches!(spec.model, AgentFacetIntent::Configure { .. })
+                    && (Some(slot.activation_mode) != activation_mode
+                        || slot.conflict.connection_id
+                            != format!("agent-connection/{}", spec.context_id))
+            })
+            .map(|slot| &slot.conflict);
+        if !matches!(spec.model, AgentFacetIntent::Keep)
+            && let Some(conflict) = claude.pending_connection.as_ref().or(active_conflict)
+        {
+            blockers.push(AgentSettingsBlock {
+                connection_conflict: Some(conflict.clone()),
+                facet: AgentSettingsFacet::Model,
+                reason: SettingsBlockReason::ClaudeConnectionInUse,
+                capabilities: Vec::new(),
+                model_ids: Vec::new(),
+            });
+        }
+    }
     match &spec.model {
         AgentFacetIntent::Keep => {}
         AgentFacetIntent::Configure { settings } => {
@@ -187,6 +250,7 @@ pub fn preview_agent_settings(
                 .collect();
                 if !capabilities.is_empty() {
                     blockers.push(AgentSettingsBlock {
+                        connection_conflict: None,
                         facet: AgentSettingsFacet::Model,
                         reason: SettingsBlockReason::CapabilityUnavailable,
                         capabilities,
@@ -246,6 +310,7 @@ pub fn preview_agent_settings(
                 && model.codex().is_some_and(|facts| facts.context_override)
             {
                 blockers.push(AgentSettingsBlock {
+                    connection_conflict: None,
                     facet: AgentSettingsFacet::Model,
                     reason: SettingsBlockReason::CodexContextOverride,
                     capabilities: Vec::new(),
@@ -264,6 +329,7 @@ pub fn preview_agent_settings(
                             .is_none()
                     {
                         blockers.push(AgentSettingsBlock {
+                            connection_conflict: None,
                             facet: AgentSettingsFacet::Model,
                             reason: SettingsBlockReason::CapabilityUnavailable,
                             capabilities: vec![hiroute_domain::CapabilityBlock {
@@ -294,6 +360,7 @@ pub fn preview_agent_settings(
                             && (required.is_empty() || !missing.is_empty())
                         {
                             blockers.push(AgentSettingsBlock {
+                                connection_conflict: None,
                                 facet: AgentSettingsFacet::Model,
                                 reason: SettingsBlockReason::NativeModelCoverageUnavailable,
                                 capabilities: Vec::new(),
@@ -307,6 +374,7 @@ pub fn preview_agent_settings(
                                 .is_some_and(|default| !required.contains(default))
                         {
                             blockers.push(AgentSettingsBlock {
+                                connection_conflict: None,
                                 facet: AgentSettingsFacet::Model,
                                 reason: SettingsBlockReason::NativeDefaultInvalid,
                                 capabilities: Vec::new(),
@@ -317,6 +385,7 @@ pub fn preview_agent_settings(
                     model_grant = Some(grant)
                 }
                 Err(_) => blockers.push(AgentSettingsBlock {
+                    connection_conflict: None,
                     facet: AgentSettingsFacet::Model,
                     reason: SettingsBlockReason::ModelPlanUnavailable,
                     capabilities: Vec::new(),
@@ -354,6 +423,7 @@ pub fn preview_agent_settings(
                 });
                 if !valid {
                     blockers.push(AgentSettingsBlock {
+                        connection_conflict: None,
                         facet: AgentSettingsFacet::Model,
                         reason: SettingsBlockReason::RestoreNativeModelInvalid,
                         capabilities: Vec::new(),
@@ -378,6 +448,7 @@ pub fn preview_agent_settings(
             collaboration_trigger_mode = Some(settings.trigger_mode);
             if facts.collaboration_file_conflict {
                 blockers.push(AgentSettingsBlock {
+                    connection_conflict: None,
                     facet: AgentSettingsFacet::Collaboration,
                     reason: SettingsBlockReason::SkillFileConflict,
                     capabilities: Vec::new(),
@@ -396,6 +467,7 @@ pub fn preview_agent_settings(
             );
             if facts.collaboration_file_conflict {
                 blockers.push(AgentSettingsBlock {
+                    connection_conflict: None,
                     facet: AgentSettingsFacet::Collaboration,
                     reason: SettingsBlockReason::SkillFileConflict,
                     capabilities: Vec::new(),
@@ -411,6 +483,7 @@ pub fn preview_agent_settings(
             AgentFacetIntent::Configure { .. } => {
                 if facts.management_file_conflict {
                     blockers.push(AgentSettingsBlock {
+                        connection_conflict: None,
                         facet,
                         reason: SettingsBlockReason::SkillFileConflict,
                         capabilities: Vec::new(),
@@ -428,6 +501,7 @@ pub fn preview_agent_settings(
             AgentFacetIntent::Restore { restore_point_ref } => {
                 if facts.management_file_conflict {
                     blockers.push(AgentSettingsBlock {
+                        connection_conflict: None,
                         facet,
                         reason: SettingsBlockReason::SkillFileConflict,
                         capabilities: Vec::new(),
@@ -446,6 +520,7 @@ pub fn preview_agent_settings(
         }
         if !matches!(intent, AgentFacetIntent::Keep) && facts.collaboration_file_conflict {
             blockers.push(AgentSettingsBlock {
+                connection_conflict: None,
                 facet,
                 reason: SettingsBlockReason::SkillFileConflict,
                 capabilities: Vec::new(),
@@ -497,6 +572,7 @@ pub fn preview_agent_settings(
         Ok(windows) => windows.unwrap_or_default(),
         Err(_) => {
             blockers.push(AgentSettingsBlock {
+                connection_conflict: None,
                 facet: AgentSettingsFacet::Model,
                 reason: SettingsBlockReason::ModelPlanUnavailable,
                 capabilities: Vec::new(),
@@ -521,6 +597,7 @@ pub fn preview_agent_settings(
             .ok_or(SettingsPlanningError::InvalidSelection)?;
         if model.plan_capability_unavailable {
             blockers.push(AgentSettingsBlock {
+                connection_conflict: None,
                 facet: AgentSettingsFacet::Model,
                 reason: SettingsBlockReason::ClaudePlanCapabilityUnavailable,
                 capabilities: Vec::new(),
@@ -534,6 +611,7 @@ pub fn preview_agent_settings(
             .and_then(hiroute_domain::claude_context_window);
         if model.context_override || window.is_none() {
             blockers.push(AgentSettingsBlock {
+                connection_conflict: None,
                 facet: AgentSettingsFacet::Model,
                 reason: if model.context_override {
                     SettingsBlockReason::ClaudeContextOverride
@@ -562,6 +640,8 @@ pub fn preview_agent_settings(
     ))
     .map_err(|_| SettingsPlanningError::Encoding)?;
     Ok(AgentSettingsPreview {
+        activation_mode: activation_mode
+            .filter(|mode| *mode == hiroute_domain::AgentActivationModeV1::ManagedLaunch),
         context_windows,
         claude_context_window,
         spec,
@@ -680,6 +760,7 @@ fn require(
 ) {
     if let Err(capabilities) = facts.capabilities.require(action, &facts.dependency_digest) {
         blockers.push(AgentSettingsBlock {
+            connection_conflict: None,
             facet,
             reason: SettingsBlockReason::CapabilityUnavailable,
             capabilities,
@@ -699,6 +780,7 @@ fn restore(
     }
     if !identity(reference) || facts.restore_points.get(reference) != Some(&facet) {
         blockers.push(AgentSettingsBlock {
+            connection_conflict: None,
             facet,
             reason: SettingsBlockReason::RestorePointUnavailable,
             capabilities: Vec::new(),

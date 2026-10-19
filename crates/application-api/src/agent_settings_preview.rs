@@ -6,6 +6,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(schemars::JsonSchema, Clone, Debug, Serialize, Deserialize)]
 pub struct AgentSettingsPreview {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub activation_mode: Option<hiroute_domain::AgentActivationModeV1>,
     pub context_windows: BTreeMap<String, u64>,
     pub claude_context_window: Option<u64>,
     pub spec: AgentSettingsSpecV2,
@@ -21,6 +23,8 @@ pub struct AgentSettingsPreview {
 
 #[derive(schemars::JsonSchema, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct AgentSettingsBlock {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connection_conflict: Option<AgentSettingsConnectionConflictV1>,
     pub facet: AgentSettingsFacet,
     pub reason: SettingsBlockReason,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -28,9 +32,20 @@ pub struct AgentSettingsBlock {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub model_ids: Vec<String>,
 }
+
+#[derive(schemars::JsonSchema, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentSettingsConnectionConflictV1 {
+    pub connection_id: String,
+    pub restore_point_ref: Option<String>,
+    pub operation_id: Option<String>,
+    pub repair: String,
+}
 #[derive(schemars::JsonSchema, Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SettingsBlockReason {
+    ManagedLaunchUnsupported,
+    ClaudeConnectionInUse,
     QoderDefaultInUse,
     AdditionalDefaultInUse,
     QoderModelFileConflict,

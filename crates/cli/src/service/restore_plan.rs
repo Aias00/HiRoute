@@ -115,6 +115,7 @@ pub(super) fn spec(
         None
     };
     Some(AgentSettingsSpecV2 {
+        activation_preference: Default::default(),
         schema_version: AGENT_SETTINGS_SCHEMA_V2,
         context_id: context.id.clone(),
         native_target: context.native_target.clone(),

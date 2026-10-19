@@ -22,6 +22,7 @@ const PUBLICATION_EFFECT: &str = "agent-connection-grant-publication";
 fn settings_spec() -> AgentSettingsSpecV2 {
     let plan_id = AgentPlanId::parse("plan/tail").unwrap();
     AgentSettingsSpecV2 {
+        activation_preference: Default::default(),
         native_target: None,
         management_skill: None,
         schema_version: AGENT_SETTINGS_SCHEMA_V2,

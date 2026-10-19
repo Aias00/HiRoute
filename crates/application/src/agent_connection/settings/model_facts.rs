@@ -40,10 +40,19 @@ pub struct SettingsCodexModelFacts {
 
 #[derive(Default)]
 pub struct SettingsClaudeNativeFacts {
+    pub supports_managed_launch: bool,
+    pub active_connection: Option<ClaudeModelSlotFacts>,
+    pub pending_connection: Option<hiroute_application_api::AgentSettingsConnectionConflictV1>,
     pub context_override: bool,
     pub plan_capability_unavailable: bool,
     pub native_default_model: Option<String>,
     pub presets: Option<hiroute_domain::AgentClaudePresetValuesV2>,
+}
+
+#[derive(serde::Serialize)]
+pub struct ClaudeModelSlotFacts {
+    pub activation_mode: hiroute_domain::AgentActivationModeV1,
+    pub conflict: hiroute_application_api::AgentSettingsConnectionConflictV1,
 }
 
 pub struct SettingsAdditionalModelFacts {

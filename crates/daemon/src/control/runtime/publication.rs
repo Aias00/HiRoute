@@ -172,6 +172,11 @@ impl LocalControlAdapter {
             .find(|record| Some(&record.digest) == intent.before_fingerprint())
             .ok_or_else(|| PortError::new(PortErrorCode::Conflict, "publication.agent.base"))?;
         if settings {
+            // Independent launch has no native artifact stage. Validate its original sealed
+            // state here on both first execution and recovery before publishing the grant.
+            let _ = hiroute_application::agent_connection::claude_independent_launch_for_operation(
+                operation,
+            )?;
             return hiroute_domain::settings_model_publication_record(
                 operation,
                 intent,

@@ -16,11 +16,25 @@ pub(crate) fn read(
     }
     let facts = port.routed_launch_context(request)?;
     let mut read = RoutedLaunchReadV1 {
+        activation_mode: facts.activation_mode,
         check: AgentLaunchCheckV1::new(request.agent, Some(facts.context.clone())),
         descriptor: None,
     };
     read.check.candidate_contexts = facts.candidate_contexts;
     let repair = "hiroute agents connect preview --help";
+    if request.agent == RoutedLaunchAgentV1::ClaudeCode
+        && request.context.is_none()
+        && facts.activation_mode != Some(hiroute_domain::AgentActivationModeV1::ManagedLaunch)
+    {
+        read.check.candidate_contexts.clear();
+        read.check.record(
+            "connection",
+            false,
+            "independent_connection_missing",
+            repair,
+        );
+        return Ok(read);
+    }
     if request.context.is_none() && read.check.candidate_contexts.len() > 1 {
         read.check.record(
             "connection",
@@ -164,6 +178,7 @@ mod tests {
         ) -> Result<RoutedLaunchContextFacts, ControlReadError> {
             self.calls.lock().unwrap().push("context");
             Ok(RoutedLaunchContextFacts {
+                activation_mode: Some(hiroute_domain::AgentActivationModeV1::ManagedLaunch),
                 context: "scope".into(),
                 candidate_contexts: self.candidates.clone(),
                 connection_current: self.current,

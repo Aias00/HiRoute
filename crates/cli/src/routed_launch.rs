@@ -68,6 +68,8 @@ pub(super) fn execute(arguments: &[OsString]) -> CliExecution {
         );
         return refused(&invocation, check);
     };
+    let claude_independent =
+        read.activation_mode == Some(hiroute_application_api::AgentActivationModeV1::ManagedLaunch);
     check.context = read.check.context.clone();
     check.candidate_contexts = read.check.candidate_contexts.clone();
     if read.check.schema != "hiroute.agent-launch-check/v1"
@@ -194,6 +196,31 @@ pub(super) fn execute(arguments: &[OsString]) -> CliExecution {
             launched(managed_launch::spawn_and_wait(&mut command))
         }
         RoutedLaunchDescriptorV1::ClaudeCode(d) => {
+            if claude_independent {
+                let preflight = std::env::var_os("HOME")
+                    .or_else(|| std::env::var_os("USERPROFILE"))
+                    .map(std::path::PathBuf::from)
+                    .zip(std::env::current_dir().ok())
+                    .and_then(|(home, project)| {
+                        hiroute_integrations::AgentFilesystemLayoutV1::from_process(&home, &project)
+                            .claude_independent_launch_preflight(
+                                d.executable.clone(),
+                                std::env::var_os("CLAUDE_CODE_OAUTH_TOKEN").is_some(),
+                            )
+                            .ok()
+                    });
+                if preflight
+                    .as_ref()
+                    .is_none_or(|facts| !facts.is_launchable())
+                {
+                    let repair = preflight.as_ref().and_then(|facts| facts.conflicts.first())
+                        .map(|conflict| format!("Remove routing/auth overrides from {:?} {} and retry hiroute agent launch --check", conflict.layer, conflict.source_ref))
+                        .unwrap_or_else(|| "Repair unreadable project or managed Claude settings, then retry hiroute agent launch --check".into());
+                    check.checks.pop();
+                    check.record("managed_launch", false, "managed_launch_conflict", &repair);
+                    return refused(&invocation, check);
+                }
+            }
             let mut native = vec![
                 OsString::from("--agent"),
                 OsString::from("claude-code"),

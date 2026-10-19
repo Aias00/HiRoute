@@ -14,6 +14,7 @@ fn fixture(id: &str, previous: Option<&str>, opus: &str, sonnet: &str) -> Node {
             ("haiku".into(), serde_json::json!("native-haiku")),
         ]),
         spec: AgentSettingsSpecV2 {
+            activation_preference: Default::default(),
             schema_version: AGENT_SETTINGS_SCHEMA_V2,
             context_id: "context".into(),
             model: AgentFacetIntent::Configure {

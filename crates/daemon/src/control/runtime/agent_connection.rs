@@ -557,21 +557,47 @@ impl AgentConnectionControlPort for LocalControlAdapter {
         let Some(join) = self.configured_model_settings_join(context_id)? else {
             return Err(ControlReadError::Denied);
         };
-        let payload =
-            hiroute_application::agent_connection::decode_settings_claude_model_file(&join.intent)
-                .map_err(super::map_port)?;
-        let hiroute_application::agent_connection::ClaudeModelFileAction::Configure {
-            snapshot: expected_snapshot,
-            gateway_base_url,
-            trusted_hiroute_executable,
-            ..
-        } = payload.change
-        else {
-            return Err(ControlReadError::Corrupt);
+        let independent = {
+            let stores = self.stores_lock().map_err(super::map_port)?;
+            let operation = stores
+                .control()
+                .load_operation(&join.operation_id)
+                .map_err(super::map_port)?
+                .ok_or(ControlReadError::Corrupt)?;
+            hiroute_application::agent_connection::claude_independent_launch_for_operation(
+                &operation,
+            )
+            .map_err(super::map_port)?
         };
-        if payload.context_id != context_id {
-            return Err(ControlReadError::Corrupt);
-        }
+        let (expected_snapshot, gateway_base_url, trusted_hiroute_executable) = match independent {
+            Some(state) => {
+                if state.context_id != context_id {
+                    return Err(ControlReadError::Corrupt);
+                }
+                let hiroute_application::agent_connection::ClaudeIndependentLaunchActionV1::Configure { snapshot, gateway_base_url, trusted_hiroute_executable, .. } = state.action else { return Err(ControlReadError::Corrupt); };
+                (snapshot, gateway_base_url, trusted_hiroute_executable)
+            }
+            None => {
+                let payload =
+                    hiroute_application::agent_connection::decode_settings_claude_model_file(
+                        &join.intent,
+                    )
+                    .map_err(super::map_port)?;
+                if payload.context_id != context_id {
+                    return Err(ControlReadError::Corrupt);
+                }
+                let hiroute_application::agent_connection::ClaudeModelFileAction::Configure {
+                    snapshot,
+                    gateway_base_url,
+                    trusted_hiroute_executable,
+                    ..
+                } = payload.change
+                else {
+                    return Err(ControlReadError::Corrupt);
+                };
+                (snapshot, gateway_base_url, trusted_hiroute_executable)
+            }
+        };
         let snapshot_digest =
             CanonicalDigest::of(&expected_snapshot).map_err(|_| ControlReadError::Corrupt)?;
         let presets = expected_snapshot.presets;

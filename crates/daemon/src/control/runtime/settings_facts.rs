@@ -136,6 +136,11 @@ impl LocalControlAdapter {
                 self.additional_settings_snapshot(spec, class)?,
             );
         }
+        let claude_slots = if class == SettingsAgentClass::Claude {
+            Some(self.claude_model_slot_facts(&spec.context_id)?)
+        } else {
+            None
+        };
         let owned_claude = if class == SettingsAgentClass::Claude {
             if let Some(join) = self.configured_model_settings_join(&spec.context_id)? {
                 let stores = self.stores_lock().map_err(super::map_port)?;
@@ -144,20 +149,30 @@ impl LocalControlAdapter {
                     .load_operation(&join.operation_id)
                     .map_err(super::map_port)?
                     .ok_or(ControlReadError::Corrupt)?;
-                let payload = settings_claude_model_file_for_operation(&operation, &join.intent)
-                    .map_err(super::map_port)?;
-                let hiroute_application::agent_connection::ClaudeModelFileAction::Configure {
-                    change,
-                    ..
-                } = payload.change
-                else {
-                    return Err(ControlReadError::Corrupt);
-                };
-                Some(
-                    self.scanner
-                        .claude_installation_for_applied_user_change(&change)
-                        .map_err(|_| ControlReadError::SnapshotChanged)?,
+                if hiroute_application::agent_connection::claude_independent_launch_for_operation(
+                    &operation,
                 )
+                .map_err(super::map_port)?
+                .is_some()
+                {
+                    None
+                } else {
+                    let payload =
+                        settings_claude_model_file_for_operation(&operation, &join.intent)
+                            .map_err(super::map_port)?;
+                    let hiroute_application::agent_connection::ClaudeModelFileAction::Configure {
+                        change,
+                        ..
+                    } = payload.change
+                    else {
+                        return Err(ControlReadError::Corrupt);
+                    };
+                    Some(
+                        self.scanner
+                            .claude_installation_for_applied_user_change(&change)
+                            .map_err(|_| ControlReadError::SnapshotChanged)?,
+                    )
+                }
             } else {
                 None
             }
@@ -423,19 +438,14 @@ impl LocalControlAdapter {
                         settings_codex_model_file_for_operation(&original, intent)
                             .map(|payload| matches!(payload.change, CodexModelFileAction::Configure { .. }))
                     }),
-                SettingsAgentClass::Claude => original
-                    .plan
-                    .external()
-                    .iter()
-                    .find(|intent| super::native_claude_model::is_settings_claude_model(intent))
-                    .map(|intent| {
-                        settings_claude_model_file_for_operation(&original, intent).map(|payload| {
-                            matches!(
-                                payload.change,
-                                hiroute_application::agent_connection::ClaudeModelFileAction::Configure { .. }
-                            )
-                        })
-                    }),
+                SettingsAgentClass::Claude => {
+                    match hiroute_application::agent_connection::claude_independent_launch_for_operation(&original).map_err(super::map_port)? {
+                        Some(state) => Some(Ok(matches!(state.action, hiroute_application::agent_connection::ClaudeIndependentLaunchActionV1::Configure { .. }))),
+                        None => original.plan.external().iter()
+                            .find(|intent| super::native_claude_model::is_settings_claude_model(intent))
+                            .map(|intent| settings_claude_model_file_for_operation(&original, intent).map(|payload| matches!(payload.change, hiroute_application::agent_connection::ClaudeModelFileAction::Configure { .. }))),
+                    }
+                },
             };
             let Some(is_configure) = model else {
                 continue;
@@ -601,20 +611,32 @@ impl LocalControlAdapter {
                     .load_operation(active)
                     .map_err(super::map_port)?
                     .ok_or(ControlReadError::Corrupt)?;
-                let intent = operation
-                    .plan
-                    .external()
-                    .iter()
-                    .find(|intent| super::native_claude_model::is_settings_claude_model(intent))
-                    .ok_or(ControlReadError::Corrupt)?;
-                let payload = settings_claude_model_file_for_operation(&operation, intent)
-                    .map_err(super::map_port)?;
-                match payload.change {
+                if let Some(state) =
+                    hiroute_application::agent_connection::claude_independent_launch_for_operation(
+                        &operation,
+                    )
+                    .map_err(super::map_port)?
+                {
+                    match state.action {
+                        hiroute_application::agent_connection::ClaudeIndependentLaunchActionV1::Configure { snapshot, .. } => Some(snapshot.native_presets),
+                        _ => return Err(ControlReadError::Corrupt),
+                    }
+                } else {
+                    let intent = operation
+                        .plan
+                        .external()
+                        .iter()
+                        .find(|intent| super::native_claude_model::is_settings_claude_model(intent))
+                        .ok_or(ControlReadError::Corrupt)?;
+                    let payload = settings_claude_model_file_for_operation(&operation, intent)
+                        .map_err(super::map_port)?;
+                    match payload.change {
                     hiroute_application::agent_connection::ClaudeModelFileAction::Configure {
                         snapshot,
                         ..
                     } => Some(snapshot.native_presets),
                     _ => return Err(ControlReadError::Corrupt),
+                }
                 }
             } else {
                 Some(hiroute_domain::AgentClaudePresetValuesV2 {
@@ -818,6 +840,7 @@ impl LocalControlAdapter {
             None
         };
         let dependency_digest = CanonicalDigest::of(&serde_json::json!({
+            "claude_slots": &claude_slots,
             "codex_launch_snapshot": &codex_launch_snapshot,
             "codex_profile_dependencies": self.codex_profile_dependencies(class, spec, active_configuration.as_ref())?,
             "claude_context_override": claude_context_override,
@@ -952,7 +975,12 @@ impl LocalControlAdapter {
                             restored_native_model,
                         }))
                     } else {
+                        let (active_connection, pending_connection) =
+                            claude_slots.unwrap_or((None, None));
                         SettingsModelNativeFacts::Claude(SettingsClaudeNativeFacts {
+                            supports_managed_launch: installation.profile.supports_managed_launch(),
+                            active_connection,
+                            pending_connection,
                             context_override: claude_context_override,
                             plan_capability_unavailable: claude_plan_capability_unavailable,
                             native_default_model,

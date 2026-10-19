@@ -81,6 +81,8 @@ pub enum RoutedLaunchDescriptorV1 {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct RoutedLaunchReadV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub activation_mode: Option<crate::AgentActivationModeV1>,
     pub check: AgentLaunchCheckV1,
     pub descriptor: Option<RoutedLaunchDescriptorV1>,
 }

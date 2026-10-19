@@ -79,6 +79,18 @@ pub(super) fn decode_spec(
     let hermes = settings
         .context_id
         .starts_with("agent-context/hermes/sha256:");
+    if settings.activation_preference == crate::AgentActivationPreferenceV1::ManagedLaunch
+        && !matches!(
+            &settings.model,
+            AgentFacetIntent::Configure {
+                settings: crate::AgentModelSelectionV2::ClaudeLauncher { .. }
+            }
+        )
+        && !(matches!(settings.model, AgentFacetIntent::Restore { .. })
+            && settings.context_id.starts_with("agent-context/claude/"))
+    {
+        return Err(OperationValidationError::UnregisteredEffectPlan);
+    }
     if hermes {
         let target = settings
             .native_target
@@ -179,10 +191,10 @@ pub(super) fn validate_effects(
     }
     let mut required = BTreeSet::new();
     if !matches!(settings.model, AgentFacetIntent::Keep) {
-        required.extend([
-            AgentConnectionEffectRoleV1::GrantScopedPublication,
-            AgentConnectionEffectRoleV1::ManagedConfiguration,
-        ]);
+        required.insert(AgentConnectionEffectRoleV1::GrantScopedPublication);
+        if settings.activation_preference != crate::AgentActivationPreferenceV1::ManagedLaunch {
+            required.insert(AgentConnectionEffectRoleV1::ManagedConfiguration);
+        }
     }
     if !matches!(settings.model, AgentFacetIntent::Keep)
         && settings.context_id.starts_with("agent-context/hermes/")

@@ -291,6 +291,7 @@ pub enum CodexLaunchDescriptorRead {
 
 /// Captured default-scope settings facts. Selection and launch policy stay in Application.
 pub struct RoutedLaunchContextFacts {
+    pub activation_mode: Option<hiroute_domain::AgentActivationModeV1>,
     pub context: String,
     pub candidate_contexts: Vec<String>,
     pub connection_current: bool,

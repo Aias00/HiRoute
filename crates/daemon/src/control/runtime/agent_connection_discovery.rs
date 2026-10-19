@@ -65,7 +65,7 @@ impl LocalControlAdapter {
         Ok(())
     }
 
-    pub(super) fn latest_connection_operation(
+    pub(in crate::control::runtime) fn latest_connection_operation(
         &self,
         connection_id: &str,
     ) -> Result<

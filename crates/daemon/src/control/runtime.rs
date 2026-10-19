@@ -93,6 +93,7 @@ mod protected_inputs;
 mod publication;
 mod release_install;
 mod routing;
+mod settings_claude_slot;
 mod settings_codex_profile;
 mod settings_facts;
 mod settings_retry;

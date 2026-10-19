@@ -5,6 +5,23 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const AGENT_SETTINGS_SCHEMA_V2: SchemaVersion = SchemaVersion::new(2, 0);
 
+/// An absent preference retains the released ordinary settings transaction.
+#[derive(
+    schemars::JsonSchema, Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentActivationPreferenceV1 {
+    #[default]
+    Automatic,
+    ManagedLaunch,
+}
+
+impl AgentActivationPreferenceV1 {
+    pub fn is_automatic(&self) -> bool {
+        *self == Self::Automatic
+    }
+}
+
 #[derive(schemars::JsonSchema, Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "intent", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AgentFacetIntent<T> {
@@ -249,6 +266,11 @@ pub enum AgentCollaborationTriggerModeV2 {
 pub struct AgentSettingsSpecV2 {
     pub schema_version: SchemaVersion,
     pub context_id: String,
+    #[serde(
+        default,
+        skip_serializing_if = "AgentActivationPreferenceV1::is_automatic"
+    )]
+    pub activation_preference: AgentActivationPreferenceV1,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native_target: Option<crate::AgentNativeTargetV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

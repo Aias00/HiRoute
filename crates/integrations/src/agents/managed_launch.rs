@@ -29,6 +29,7 @@ pub const AGENT_AUTH_PRECEDENCE_CONFLICT_V1: &str = "AGENT_AUTH_PRECEDENCE_CONFL
 pub enum AgentAuthRoutingFieldV1 {
     AnthropicApiKey,
     AnthropicAuthToken,
+    ClaudeOAuthToken,
     AnthropicBaseUrl,
     AnthropicCustomHeaders,
     AnthropicModel,
@@ -85,6 +86,23 @@ impl ManagedClaudeLaunchPreflightV1 {
         profile: &ManagedLaunchProfileV1,
         observations: &[super::filesystem_config::ObservedClaudeSettings],
     ) -> Self {
+        Self::from_observations_inner(executable, profile, observations, false)
+    }
+
+    pub(super) fn from_independent_observations(
+        executable: String,
+        profile: &ManagedLaunchProfileV1,
+        observations: &[super::filesystem_config::ObservedClaudeSettings],
+    ) -> Self {
+        Self::from_observations_inner(executable, profile, observations, true)
+    }
+
+    fn from_observations_inner(
+        executable: String,
+        profile: &ManagedLaunchProfileV1,
+        observations: &[super::filesystem_config::ObservedClaudeSettings],
+        independent: bool,
+    ) -> Self {
         let inherited_environment_removals = observations
             .iter()
             .filter(|observation| observation.layer == ConfigLayerV1::Process)
@@ -110,7 +128,7 @@ impl ManagedClaudeLaunchPreflightV1 {
                 matches!(
                     observation.layer,
                     ConfigLayerV1::Launch | ConfigLayerV1::Managed
-                )
+                ) || (independent && observation.layer == ConfigLayerV1::Project)
             })
             .filter_map(|observation| {
                 let mut fields = observation

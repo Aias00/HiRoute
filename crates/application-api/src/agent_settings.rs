@@ -1,12 +1,12 @@
 //! Wire confirmation for independent main-Agent settings.
 use hiroute_domain::CanonicalDigest;
 pub use hiroute_domain::{
-    AGENT_SETTINGS_SCHEMA_V2, AgentAccessTokenIntentV1, AgentClaudePresetMappingsV2,
-    AgentClaudePresetSelectionV2, AgentClaudePresetValuesV2, AgentCollaborationSelectionV2,
-    AgentCollaborationTriggerModeV2, AgentFacetIntent, AgentFixedModelSelectionV2,
-    AgentManagementSkillSelectionV1, AgentModelDefaultSelectionV2, AgentModelSelectionV2,
-    AgentModelSurfaceV2, AgentNativeTargetV1, AgentSettingsFacet, AgentSettingsSpecV2,
-    CodexNativeModelModeV2,
+    AGENT_SETTINGS_SCHEMA_V2, AgentAccessTokenIntentV1, AgentActivationPreferenceV1,
+    AgentClaudePresetMappingsV2, AgentClaudePresetSelectionV2, AgentClaudePresetValuesV2,
+    AgentCollaborationSelectionV2, AgentCollaborationTriggerModeV2, AgentFacetIntent,
+    AgentFixedModelSelectionV2, AgentManagementSkillSelectionV1, AgentModelDefaultSelectionV2,
+    AgentModelSelectionV2, AgentModelSurfaceV2, AgentNativeTargetV1, AgentSettingsFacet,
+    AgentSettingsSpecV2, CodexNativeModelModeV2,
 };
 use serde::{Deserialize, Serialize};
 
@@ -188,6 +188,9 @@ impl AgentSettingsStatusV2 {
 #[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AgentModelSettingsStatusV2 {
+    /// Present only for the opt-in independent mode; ordinary released responses keep their shape.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub activation_mode: Option<hiroute_domain::AgentActivationModeV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native_target: Option<AgentNativeTargetV1>,
     pub schema: String,
@@ -376,6 +379,7 @@ mod tests {
     fn status() -> AgentModelSettingsStatusV2 {
         let revision = GatewayPublicationRevision::new(7).unwrap();
         AgentModelSettingsStatusV2 {
+            activation_mode: None,
             effective: None,
             native_target: None,
             management_skill: None,

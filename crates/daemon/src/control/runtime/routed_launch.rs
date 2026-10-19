@@ -22,6 +22,7 @@ impl LocalControlAdapter {
             .clone()
             .unwrap_or_else(|| self.settings_context(class));
         let mut facts = RoutedLaunchContextFacts {
+            activation_mode: None,
             context: context.clone(),
             candidate_contexts: Vec::new(),
             connection_current: false,
@@ -30,7 +31,7 @@ impl LocalControlAdapter {
         if self.settings_agent_for_context(&context) != Some(class) {
             return Ok(facts);
         }
-        let status = self.model_settings_status(&AgentSettingsStatusRequestV2 {
+        let (status, _, _) = self.evaluate_model_settings(&AgentSettingsStatusRequestV2 {
             schema_version: hiroute_application_api::AGENT_SETTINGS_SCHEMA_V2,
             context_id: context.clone(),
             native_target: None,
@@ -46,6 +47,7 @@ impl LocalControlAdapter {
             facts.candidate_contexts.push(context);
         }
         facts.connection_current = status.state == AgentModelSettingsStateV2::Configured;
+        facts.activation_mode = status.activation_mode;
         facts.selection = status.current_selection;
         Ok(facts)
     }

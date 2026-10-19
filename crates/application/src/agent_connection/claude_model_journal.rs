@@ -21,6 +21,29 @@ pub struct ClaudeLaunchSnapshotIntent {
     pub installation_digest: CanonicalDigest,
 }
 
+impl ClaudeLaunchSnapshotIntent {
+    pub(super) fn validate(&self) -> PortResult<()> {
+        if self
+            .context_window_tokens
+            .is_some_and(|value| hiroute_domain::claude_context_window(value) != Some(value))
+            || !Path::new(&self.executable).is_absolute()
+            || self.executable.contains(['\0', '\r', '\n'])
+            || CanonicalDigest::parse(self.installation_digest.as_str()).is_err()
+            || [&self.native_presets, &self.presets]
+                .into_iter()
+                .any(|presets| {
+                    [&presets.opus, &presets.sonnet, &presets.haiku]
+                        .into_iter()
+                        .filter_map(|value| value.as_deref())
+                        .any(|value| !hiroute_domain::valid_client_model_name(value))
+                })
+        {
+            return Err(invalid());
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ClaudeModelFileAction {
@@ -216,7 +239,7 @@ fn validate_payload(payload: &ClaudeModelFilePayload) -> Result<(), OperationVal
     Ok(())
 }
 
-fn local_gateway_base_url(value: &str) -> bool {
+pub(super) fn local_gateway_base_url(value: &str) -> bool {
     value
         .strip_suffix("/v1")
         .and_then(|origin| {

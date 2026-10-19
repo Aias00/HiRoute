@@ -47,6 +47,9 @@ fn facts() -> AgentSettingsFacts {
                 fixed_candidate_facts: Vec::new(),
             },
             native: SettingsModelNativeFacts::Claude(SettingsClaudeNativeFacts {
+                supports_managed_launch: true,
+                active_connection: None,
+                pending_connection: None,
                 context_override: false,
                 plan_capability_unavailable: false,
                 native_default_model: None,
@@ -194,6 +197,7 @@ fn legacy_collaboration_fields_are_rejected_and_capability_drift_still_blocks() 
         .is_err()
     );
     let spec = AgentSettingsSpecV2 {
+        activation_preference: Default::default(),
         native_target: None,
         management_skill: None,
         schema_version: AGENT_SETTINGS_SCHEMA_V2,
@@ -233,6 +237,7 @@ fn legacy_collaboration_fields_are_rejected_and_capability_drift_still_blocks() 
 #[test]
 fn agent_settings_restore_reference_cannot_cross_context_or_facet() {
     let spec = AgentSettingsSpecV2 {
+        activation_preference: Default::default(),
         native_target: None,
         management_skill: None,
         schema_version: AGENT_SETTINGS_SCHEMA_V2,
@@ -528,6 +533,7 @@ fn codex_plan_selections_preview_only_with_catalog_facts() {
         }
     };
     let catalog_block = |reason: hiroute_domain::CapabilityBlockReason| AgentSettingsBlock {
+        connection_conflict: None,
         facet: AgentSettingsFacet::Model,
         reason: SettingsBlockReason::CapabilityUnavailable,
         capabilities: vec![hiroute_domain::CapabilityBlock {
@@ -1191,3 +1197,5 @@ fn standalone_profile_restore_inherits_root_without_catalog_or_native_override()
 
 #[path = "collaboration_only_tests.rs"]
 mod collaboration_only_tests;
+
+mod activation;

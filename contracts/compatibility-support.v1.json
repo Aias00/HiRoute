@@ -387,6 +387,7 @@
     "hiroute.session-list/v1",
     "hiroute.session-lookup/v1",
     "hiroute.session-store-status/v1",
+    "hiroute.settings-claude-launch-state/v1",
     "hiroute.settings-claude-model-file/v1",
     "hiroute.settings-codex-model-file/v1",
     "hiroute.settings-codex-model-file/v2",
@@ -1262,6 +1263,16 @@
           ]
         }
       ]
+    },
+    {
+      "subject": "claude_independent_launch_state",
+      "audited_prefixes": [
+        "hiroute.settings-claude-launch-state"
+      ],
+      "current_contracts": [
+        "hiroute.settings-claude-launch-state/v1"
+      ],
+      "legacy_support": []
     }
   ],
   "forbidden_contracts": [

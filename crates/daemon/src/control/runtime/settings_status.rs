@@ -152,7 +152,7 @@ impl LocalControlAdapter {
         grant.ok_or(ControlReadError::Corrupt)
     }
 
-    fn evaluate_model_settings(
+    pub(super) fn evaluate_model_settings(
         &self,
         request: &AgentSettingsStatusRequestV2,
     ) -> Result<
@@ -193,6 +193,7 @@ impl LocalControlAdapter {
             None
         };
         let mut status = AgentModelSettingsStatusV2 {
+            activation_mode: None,
             effective: None,
             native_target,
             native_adapter: None,
@@ -245,6 +246,17 @@ impl LocalControlAdapter {
         };
         let intent = model_intent(class, &operation).ok_or(ControlReadError::Corrupt)?;
         let action = model_action(class, &operation, intent).map_err(super::map_port)?;
+        let independent = if class == SettingsAgentClass::Claude {
+            hiroute_application::agent_connection::claude_independent_launch_for_operation(
+                &operation,
+            )
+            .map_err(super::map_port)?
+        } else {
+            None
+        };
+        if independent.as_ref().is_some_and(|state| matches!(state.action, hiroute_application::agent_connection::ClaudeIndependentLaunchActionV1::Configure { .. })) {
+            status.activation_mode = Some(hiroute_domain::AgentActivationModeV1::ManagedLaunch);
+        }
         let current = stores
             .secrets()
             .inspect_agent_access_grant(
@@ -269,6 +281,10 @@ impl LocalControlAdapter {
                 } else if class == SettingsAgentClass::Hermes {
                     self.hermes_operation_files_applied(&operation, intent)
                         .map_err(super::map_port)?
+                } else if class == SettingsAgentClass::Claude && independent.is_some() {
+                    // The complete independent configuration is the accepted HiRoute state.
+                    // Native user/project/credential files have no owned effect to observe.
+                    true
                 } else if class == SettingsAgentClass::Claude {
                     let policy =
                         hiroute_application::agent_connection::decode_settings_claude_model_file(
@@ -552,6 +568,14 @@ fn model_intent(
     class: super::settings_facts::SettingsAgentClass,
     operation: &(impl hiroute_domain::AgentOperationRead + ?Sized),
 ) -> Option<&hiroute_domain::ExternalEffectIntentV1> {
+    if class == SettingsAgentClass::Claude
+        && operation.agent_input().spec.desired_state["activation_preference"] == "managed_launch"
+    {
+        return operation.agent_input().external.iter().find(|intent| {
+            intent.effect_id() == "agent-connection-grant-publication"
+                && intent.desired()["transaction"] == "settings"
+        });
+    }
     operation
         .agent_input()
         .external
@@ -607,6 +631,12 @@ fn model_action(
             }
         }
         super::settings_facts::SettingsAgentClass::Claude => {
+            if let Some(state) = hiroute_application::agent_connection::claude_independent_launch_for_operation(operation)? {
+                return Ok(match state.action {
+                    hiroute_application::agent_connection::ClaudeIndependentLaunchActionV1::Configure { .. } => ModelAction::Configure,
+                    hiroute_application::agent_connection::ClaudeIndependentLaunchActionV1::Restore { .. } => ModelAction::Restore,
+                });
+            }
             match settings_claude_model_file_for_operation(operation, intent)?.change {
                 ClaudeModelFileAction::Configure { .. } => Ok(ModelAction::Configure),
                 ClaudeModelFileAction::Restore { .. } => Ok(ModelAction::Restore),
@@ -635,11 +665,21 @@ fn model_endpoint_matches_runtime(
             settings_codex_model_file_for_operation(operation, intent)?.change,
             CodexModelFileAction::Configure { endpoint, .. } if endpoint == gateway_base_url
         )),
-        SettingsAgentClass::Claude => Ok(matches!(
-            settings_claude_model_file_for_operation(operation, intent)?.change,
-            ClaudeModelFileAction::Configure { gateway_base_url: endpoint, .. }
-                if endpoint == gateway_base_url
-        )),
+        SettingsAgentClass::Claude => {
+            if let Some(state) =
+                hiroute_application::agent_connection::claude_independent_launch_for_operation(
+                    operation,
+                )?
+            {
+                return Ok(
+                    matches!(state.action, hiroute_application::agent_connection::ClaudeIndependentLaunchActionV1::Configure { gateway_base_url: endpoint, .. } if endpoint == gateway_base_url),
+                );
+            }
+            Ok(
+                matches!(settings_claude_model_file_for_operation(operation, intent)?.change,
+                ClaudeModelFileAction::Configure { gateway_base_url: endpoint, .. } if endpoint == gateway_base_url),
+            )
+        }
         SettingsAgentClass::Qoder | SettingsAgentClass::Pi | SettingsAgentClass::Dsh => {
             let endpoint = super::native_additional_model::additional_model_endpoint(
                 additional_model_kind(intent)?,
