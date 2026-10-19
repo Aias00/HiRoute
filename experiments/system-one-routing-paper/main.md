@@ -80,7 +80,7 @@ $$
 \mathrm{enhanced} \iff s < 0.5\;\lor\;(h<1\;\land\;a\geq0.5).
 $$
 
-In every other case the rule selects the standard tier. The simple threshold is configurable: this paper fixes it at 0.5, whereas the tested product default is 0.8. HiRoute stores the normalized historical score $h/2$ with a corresponding strict threshold of 0.5, which is algebraically identical rather than a second scoring rule.
+Under these valid-answer conditions, the rule otherwise selects the standard tier. The simple threshold is configurable: this paper fixes it at 0.5, whereas the tested product default is 0.8. HiRoute stores the normalized historical score $h/2$ with a corresponding strict threshold of 0.5, which is algebraically identical rather than a second scoring rule.
 
 Because the historical score is continuous, a most-likely grade of one does not imply a score of exactly one. Probabilities $(0.06,0.93,0.01)$ for grades zero, one and two, for example, have modal grade one, but their weighted score is $0\times0.06+1\times0.93+2\times0.01=0.95$. If the supplied scalar is 0.95, the strict $h<1$ condition activates protection when applicability is high; a supplied score of exactly 1 does not. We keep HiRoute's continuous-score rule, so grade-one cases near this boundary need not have a unique standard-tier target. Routing uses the supplied scalar. The weighted example only explains the distinction, and any discrepancy between scalar and distribution is recorded rather than silently corrected.
 
