@@ -7,7 +7,7 @@ import { evaluate, navigate, waitFor } from './cdp-client.mjs';
 export async function runClaudeIndependentCaptures(client, fixtureUrl, outputRoot) {
   const checks = [];
   const read = expression => evaluate(client, expression);
-  const click = (selector, label) => read(`(() => { const e = [...document.querySelectorAll(${JSON.stringify(selector)})].find(e => ${label === undefined ? 'true' : `e.textContent.trim() === ${JSON.stringify(label)}`}); if (!e || e.disabled) throw Error('Control unavailable: ' + ${JSON.stringify(selector)}); e.scrollIntoView({block:'center'}); e.click(); return true; })()`);
+  const click = (selector, label) => read(`(() => { const e = [...document.querySelectorAll(${JSON.stringify(selector)})].find(e => ${label === undefined ? 'true' : `e.textContent.includes(${JSON.stringify(label)})`}); if (!e || e.disabled) throw Error('Control unavailable: ' + ${JSON.stringify(selector)}); e.scrollIntoView({block:'center'}); e.click(); return true; })()`);
   const choose = (selector, value) => read(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); if (!e) throw Error('Missing select'); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(e, ${JSON.stringify(value)}); e.dispatchEvent(new Event('change',{bubbles:true})); return true; })()`);
   for (const language of ['zh', 'en']) for (const width of [755, 1200]) for (const theme of ['light', 'dark']) {
     const viewport = { width, height: width === 755 ? 600 : 813 };
@@ -15,8 +15,9 @@ export async function runClaudeIndependentCaptures(client, fixtureUrl, outputRoo
     const prefix = `claude-independent-${language}-${width}-${theme}`;
     const shots = [];
     async function capture(state, selector) {
+      await read(`Promise.all(document.getAnimations().filter(a=>Number.isFinite(a.effect?.getComputedTiming().iterations)).map(a=>a.finished.catch(()=>{}))).then(()=>true)`);
       await read(`document.querySelector(${JSON.stringify(selector)}).scrollIntoView({block:'center'}); true`);
-      const bounds = await read(`(() => {const nodes=[...document.querySelectorAll(${JSON.stringify(selector + ', [data-claude-activation-choice] .field-label, [role=dialog] .modal-footer')})].filter(e=>e.getClientRects().length); return nodes.map(e=>{const r=e.getBoundingClientRect();return {width:e.clientWidth,scroll:e.scrollWidth,left:r.left,right:r.right,top:r.top,bottom:r.bottom};});})()`);
+      const bounds = await read(`(() => {const nodes=[...document.querySelectorAll(${JSON.stringify(selector + ', [data-claude-activation-choice] .field-label, [role=dialog] .modal-foot')})].filter(e=>e.getClientRects().length); return nodes.map(e=>{const r=e.getBoundingClientRect();return {width:e.clientWidth,scroll:e.scrollWidth,left:r.left,right:r.right,top:r.top,bottom:r.bottom};});})()`);
       assert.ok(bounds.length > 0);
       for (const r of bounds) { assert.ok(r.scroll <= r.width + 1, JSON.stringify(r)); assert.ok(r.left >= -1 && r.right <= width + 1, JSON.stringify(r)); }
       const file = `${prefix}-${state}.png`;
@@ -25,7 +26,7 @@ export async function runClaudeIndependentCaptures(client, fixtureUrl, outputRoo
     }
     await navigate(client, fixtureUrl(`agent-trust.html?language=${language}&theme=${theme}`), viewport);
     await waitFor(client, 'Boolean(window.agentTrust)');
-    await read(`(() => { const c=agentTrust; c.reset(); const a=c.agents.agents.find(a=>a.agent_id==='agent_claude_default'); a.settings={...a.settings,state:'not_configured',current_selection:null,restore_point_ref:null};
+    await read(`(() => { const c=agentTrust; c.reset(); c.agents.plans.plans=c.agents.plans.plans.filter(p=>p.head.status==='enabled').slice(0,1); const a=c.agents.agents.find(a=>a.agent_id==='agent_claude_default'); a.settings={...a.settings,state:'not_configured',current_selection:null,restore_point_ref:null};
       c.handlers.preview_agent_settings=({input:{spec}})=>{a.settings={...a.settings,state:'configured',activation_mode:spec.activation_preference==='managed_launch'?'managed_launch':undefined,current_selection:spec.model.settings,restore_point_ref:'restore/independent',operation_id:'operation/agent-settings-fixture',operation_state:'succeeded'};return {preview:{applicable:true,blockers:[]},mutation:{state:'applied',operation:{operation_id:'operation/agent-settings-fixture',state:'succeeded',sequence:1,cancellable:false}}};};
       c.handlers.preview_agent_previous_routing=()=>({status:'available',spec:{context_id:a.context_id,activation_preference:'managed_launch',model:{intent:'configure',settings:a.settings.current_selection}},restored_from:{opus:'operation/earlier'}});return true; })()`);
     await waitFor(client, '!!document.querySelectorAll(".native-list .list-row").length');
@@ -47,7 +48,7 @@ export async function runClaudeIndependentCaptures(client, fixtureUrl, outputRoo
     assert.equal(await read('agentTrust.commands.find(c=>c.command==="preview_agent_settings").payload.input.spec.activation_preference'), 'managed_launch');
     assert.equal(await read('document.querySelector("[data-claude-launch-command] code").textContent'), 'hiroute agent launch --agent claude-code --');
     await capture('connected', '[data-claude-launch-command]');
-    await read(`(() => {const s=[...document.querySelectorAll('summary')].find(e=>e.textContent.trim()===${JSON.stringify(t('回到之前的路由', 'Return to previous routing'))});s.click();return true;})()`);
+    await read(`(() => {const s=[...document.querySelectorAll('summary')].find(e=>e.querySelector('.disclosure-label')?.textContent===${JSON.stringify(t('回到之前的路由', 'Return to previous routing'))});s.click();return true;})()`);
     await click('button', t('查看之前的配置', 'Find previous mappings'));
     await waitFor(client, `Array.from(document.querySelectorAll('button')).some(e=>e.textContent===${JSON.stringify(t('审阅路由修改', 'Review routing changes'))})`);
     await click('button', t('审阅路由修改', 'Review routing changes'));
