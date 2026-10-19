@@ -7,9 +7,11 @@ use std::collections::{BTreeMap, BTreeSet};
 const MAX_DECISIONS: usize = 10_000;
 const MAX_SAFE_BYTES: usize = 32 * 1024 * 1024;
 
+// Filter retained safe decisions before looking up their producer identity.
+// A reorderable join can scan all workspace execution events first.
 pub(super) const SUMMARY_SQL: &str = "SELECT f.body_json,e.producer_id,e.producer_epoch,e.stream_id,e.event_id
         FROM observation_safe_facts_v2 f
-        JOIN execution_fact_events e ON e.workspace_id=f.workspace_id AND e.request_id=f.request_id AND e.envelope_digest=f.original_digest
+        CROSS JOIN execution_fact_events e ON e.workspace_id=f.workspace_id AND e.request_id=f.request_id AND e.envelope_digest=f.original_digest
         JOIN logical_requests r ON r.workspace_id=f.workspace_id AND r.request_id=f.request_id
         JOIN sessions s ON s.workspace_id=r.workspace_id AND s.session_id=r.session_id
         LEFT JOIN observation_run_links l ON l.workspace_id=r.workspace_id AND l.request_id=r.request_id

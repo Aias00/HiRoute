@@ -295,8 +295,9 @@ impl LocalObservationStore {
 }
 
 pub(super) fn summary_sql() -> String {
+    // Aggregate projected names once per stage; flattening repeats the correlated lookups.
     format!(
-        "WITH quality AS ({SCOPE})
+        "WITH quality AS MATERIALIZED ({SCOPE})
          SELECT plan_revision,
            CASE WHEN executed_branch_id IS NULL THEN selected_branch_id END,
            executed_branch_id,model_configuration_id,profile_digest,attribution,
