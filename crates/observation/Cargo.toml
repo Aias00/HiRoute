@@ -20,5 +20,5 @@ thiserror.workspace = true
 zeroize.workspace = true
 
 [dev-dependencies]
-rusqlite = { workspace = true, features = ["trace"] }
+rusqlite = { workspace = true, features = ["functions", "trace"] }
 tempfile.workspace = true
