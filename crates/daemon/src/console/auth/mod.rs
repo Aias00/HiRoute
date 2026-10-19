@@ -111,6 +111,7 @@ impl ConsoleAuth {
             failures: VecDeque::new(),
         })
     }
+    #[cfg(test)]
     pub fn create_launch(&mut self, target: LaunchTarget) -> Result<Zeroizing<String>, AuthError> {
         self.create_launch_with_landing(target, None)
     }

@@ -83,7 +83,6 @@ pub(super) fn service_ready(query: &Query) -> bool {
 }
 pub(super) struct Connection {
     pub agent: String,
-    pub read: RoutedLaunchReadV1,
     pub selection: Option<AgentModelSelectionV2>,
 }
 pub(super) fn connections(query: &Query) -> Result<Vec<Connection>, Failure> {
@@ -114,7 +113,6 @@ pub(super) fn connections(query: &Query) -> Result<Vec<Connection>, Failure> {
         };
         result.push(Connection {
             agent: agent.into(),
-            read,
             selection,
         });
     }
