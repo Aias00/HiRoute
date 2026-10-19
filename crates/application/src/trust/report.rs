@@ -405,8 +405,10 @@ pub fn suggestion_evidence(
                 .iter()
                 .filter(|s| branch(s) == b.branch_id && regular(s))
                 .collect();
-            let protections = regular
+            let protections = population
+                .active_stages
                 .iter()
+                .filter(|s| branch(s) == b.branch_id)
                 .filter(|s| {
                     s.sample
                         .selection
