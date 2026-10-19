@@ -78,6 +78,12 @@ fn real_process_native_model_save_publishes_and_reaches_gateway() {
     run_script("model_connections_product.py");
 }
 
+/// Native recorder only: no paid or subscription model is invoked by this launch contract.
+#[test]
+fn real_process_routed_launch_preserves_native_argv_and_explicit_fallback() {
+    run_script("routed_launch_product.py");
+}
+
 /// Execute both published recipes against the current catalog without mistaking local
 /// candidate preparation for provider reachability or credential verification.
 #[test]

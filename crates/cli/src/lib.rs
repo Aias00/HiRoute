@@ -54,10 +54,26 @@ where
     I: IntoIterator<Item = S>,
     S: Into<OsString>,
 {
-    let arguments = arguments
+    let mut arguments = arguments
         .into_iter()
         .map(Into::into)
         .collect::<Vec<OsString>>();
+    // The native child tail must bypass generic global parsing, including non-UTF-8 argv.
+    // Accept the published JSON-output global before this native command as well.
+    if arguments.first().is_some_and(|arg| arg == "--output=json")
+        && arguments.get(1).is_some_and(|arg| arg == "agent")
+        && arguments.get(2).is_some_and(|arg| arg == "launch")
+    {
+        arguments.remove(0);
+        arguments.insert(2, OsString::from("--output=json"));
+    } else if arguments.first().is_some_and(|arg| arg == "--output")
+        && arguments.get(1).is_some_and(|arg| arg == "json")
+        && arguments.get(2).is_some_and(|arg| arg == "agent")
+        && arguments.get(3).is_some_and(|arg| arg == "launch")
+    {
+        arguments.drain(..2);
+        arguments.insert(2, OsString::from("--output=json"));
+    }
     if arguments
         .first()
         .is_some_and(|argument| argument == "agent")

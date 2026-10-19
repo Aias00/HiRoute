@@ -69,21 +69,25 @@ pub(crate) fn read(
         None
     };
     let publication = port.routed_launch_publication()?;
+    let publication_digest = publication
+        .as_ref()
+        .map(|value| value.digest())
+        .transpose()
+        .map_err(|_| ControlReadError::Corrupt)?;
     let published = publication
         .as_ref()
         .map(|publication| publication.published_agent_plans())
         .transpose()
         .map_err(|_| ControlReadError::Corrupt)?;
     let plans_ready = match (&facts.selection, &publication, published) {
-        (Some(selection), Some(publication), Some(plans)) => {
-            codex
-                .as_ref()
-                .is_none_or(|descriptor| descriptor.publication_digest == publication.digest)
-                && selection.allowed_plan_ids().iter().all(|id| {
-                    plans
-                        .iter()
-                        .any(|plan| &plan.agent_plan_id == id && plan.active)
-                })
+        (Some(selection), Some(_publication), Some(plans)) => {
+            codex.as_ref().is_none_or(|descriptor| {
+                Some(&descriptor.publication_digest) == publication_digest.as_ref()
+            }) && selection.allowed_plan_ids().iter().all(|id| {
+                plans
+                    .iter()
+                    .any(|plan| &plan.agent_plan_id == id && plan.active)
+            })
         }
         _ => false,
     };
@@ -99,9 +103,7 @@ pub(crate) fn read(
         Some(descriptor) => Some(RoutedLaunchDescriptorV1::Codex(descriptor)),
         None => match port.managed_launch_descriptor(&descriptor_request) {
             Ok(descriptor)
-                if publication.as_ref().is_some_and(|publication| {
-                    descriptor.publication_digest == publication.digest
-                }) =>
+                if Some(&descriptor.publication_digest) == publication_digest.as_ref() =>
             {
                 read.check.record("managed_launch", true, "", "");
                 Some(RoutedLaunchDescriptorV1::ClaudeCode(Box::new(descriptor)))

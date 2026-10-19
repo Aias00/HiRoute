@@ -124,5 +124,6 @@ mod tests;
 mod windows_collaboration_tests;
 
 mod codex_launch;
+pub use codex_launch::codex_launch_executable_is_current;
 mod codex_profile;
 pub use codex_profile::*;

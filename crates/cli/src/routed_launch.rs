@@ -161,6 +161,16 @@ pub(super) fn execute(arguments: &[OsString]) -> CliExecution {
     }
     match descriptor {
         RoutedLaunchDescriptorV1::Codex(d) => {
+            if !hiroute_integrations::codex_launch_executable_is_current(&d.snapshot) {
+                check.checks.truncate(1);
+                check.record(
+                    "connection",
+                    false,
+                    "installation_changed",
+                    "hiroute agents connect preview --help",
+                );
+                return refused(&invocation, check);
+            }
             if invocation.check {
                 return super::success(check, Some(super::next_request_id()));
             }

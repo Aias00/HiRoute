@@ -49,6 +49,19 @@ impl FilesystemAgentScannerV1 {
     }
 }
 
+/// Recheck the frozen executable immediately before the CLI starts it. This reads no
+/// native configuration and does not resolve a replacement installation through PATH.
+pub fn codex_launch_executable_is_current(snapshot: &CodexLaunchSnapshotV1) -> bool {
+    snapshot.validate().is_ok()
+        && std::fs::canonicalize(&snapshot.executable)
+            .ok()
+            .is_some_and(|path| path.to_str() == Some(snapshot.executable.as_str()))
+        && executable_identity(Path::new(&snapshot.executable))
+            .ok()
+            .as_ref()
+            == Some(&snapshot.installation_identity)
+}
+
 fn executable_identity(path: &Path) -> Result<CanonicalDigest, AgentFilesystemScanError> {
     let unavailable = |_| AgentFilesystemScanError::SourceUnavailable;
     let metadata = std::fs::metadata(path).map_err(unavailable)?;
@@ -88,7 +101,41 @@ fn executable_identity(path: &Path) -> Result<CanonicalDigest, AgentFilesystemSc
             metadata.last_write_time(),
         ))
     };
+    #[cfg(any(unix, windows))]
+    {
+        identity.map_err(|_| AgentFilesystemScanError::InvalidConfig)
+    }
     #[cfg(not(any(unix, windows)))]
-    let identity = CanonicalDigest::of(&(path, metadata.len()));
-    identity.map_err(|_| AgentFilesystemScanError::InvalidConfig)
+    {
+        Err(AgentFilesystemScanError::SourceUnavailable)
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn frozen_executable_is_rechecked_without_following_a_replacement_link() {
+        let root = tempfile::tempdir().unwrap();
+        let file = root.path().join("codex");
+        std::fs::write(&file, b"#!/bin/sh\nexit 0\n").unwrap();
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let file = std::fs::canonicalize(file).unwrap();
+        let snapshot = CodexLaunchSnapshotV1 {
+            schema: CODEX_LAUNCH_SNAPSHOT_SCHEMA_V1.into(),
+            executable: file.to_str().unwrap().into(),
+            codex_home: file.parent().unwrap().to_str().unwrap().into(),
+            profile_name: "hiroute".into(),
+            installation_identity: executable_identity(&file).unwrap(),
+        };
+        assert!(codex_launch_executable_is_current(&snapshot));
+        let replacement = file.with_file_name("replacement");
+        std::fs::write(&replacement, b"#!/bin/sh\nexit 1\n").unwrap();
+        std::fs::rename(replacement, &file).unwrap();
+        assert!(!codex_launch_executable_is_current(&snapshot));
+        std::fs::remove_file(&file).unwrap();
+        assert!(!codex_launch_executable_is_current(&snapshot));
+    }
 }
