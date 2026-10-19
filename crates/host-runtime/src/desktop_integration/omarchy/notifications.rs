@@ -20,6 +20,10 @@ pub enum Notice {
         plan_name: String,
     },
     ServiceUnavailable,
+    ConsoleFailure {
+        id: String,
+        reason: String,
+    },
     LaunchFailure {
         id: String,
         agent: String,
@@ -31,7 +35,7 @@ impl Notice {
         match self {
             Self::Suggestion { id, .. } => Some(format!("suggestion:{id}")),
             Self::LaunchFailure { agent, .. } => Some(format!("agent:{agent}")),
-            Self::ServiceUnavailable => None,
+            Self::ServiceUnavailable | Self::ConsoleFailure { .. } => None,
         }
     }
     pub fn body(&self, zh: bool) -> String {
@@ -41,6 +45,12 @@ impl Notice {
             }
             Self::Suggestion { plan_name, .. } => {
                 format!("{plan_name} has a trust suggestion. Open its evidence.")
+            }
+            Self::ConsoleFailure { .. } if zh => {
+                "HiRoute 控制台未能打开。请检查控制台是否已在本机监听。".into()
+            }
+            Self::ConsoleFailure { .. } => {
+                "The HiRoute console could not open. Check its loopback listener.".into()
             }
             Self::ServiceUnavailable if zh => "HiRoute 服务暂时不可用。打开控制台检查。".into(),
             Self::ServiceUnavailable => {
@@ -76,6 +86,7 @@ impl Notice {
                         .bytes()
                         .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
             }
+            Self::ConsoleFailure { id, reason } => valid_id(id) && reason == "console_unavailable",
             Self::ServiceUnavailable => true,
         }
     }
@@ -119,10 +130,12 @@ impl Context {
             || value.sent_suggestions.len() > MAX_SENT
             || value.pending.len() > MAX_PENDING
             || value.sent_suggestions.iter().any(|id| !valid_id(id))
-            || value
-                .pending
-                .iter()
-                .any(|n| !matches!(n, Notice::LaunchFailure { .. }) || !n.validate())
+            || value.pending.iter().any(|n| {
+                !matches!(
+                    n,
+                    Notice::LaunchFailure { .. } | Notice::ConsoleFailure { .. }
+                ) || !n.validate()
+            })
         {
             return Err(Error::InvalidRecord);
         }
@@ -140,8 +153,20 @@ impl Context {
             agent: agent.into(),
             reason: reason.into(),
         };
+        self.queue_notice(notice)
+    }
+    pub fn queue_console_failure(&self, reason: &str) -> Result<(), Error> {
+        self.queue_notice(Notice::ConsoleFailure {
+            id: files::nonce()?,
+            reason: reason.into(),
+        })
+    }
+    fn queue_notice(&self, notice: Notice) -> Result<(), Error> {
         if !notice.validate() {
             return Err(Error::InvalidRecord);
+        }
+        if self.load()?.is_none() {
+            return Ok(());
         }
         let _lock = files::lock(self)?;
         let mut state = self.read_notifications()?;
@@ -171,6 +196,9 @@ impl Context {
         {
             return Err(Error::InvalidRecord);
         }
+        if self.load()?.is_none() && !self.notifications_path().try_exists()? {
+            return Ok(Vec::new());
+        }
         let _lock = files::lock(self)?;
         let mut state = self.read_notifications()?;
         if !self.load()?.is_some_and(|m| m.enabled && m.notifications) {
@@ -179,13 +207,18 @@ impl Context {
             self.save_notifications(&state)?;
             return Ok(Vec::new());
         }
-        let mut due = std::mem::take(&mut state.pending);
+        let mut due = Vec::new();
         if state.last_service_ready == Some(true) && !ready {
             due.push(Notice::ServiceUnavailable);
         }
         state.last_service_ready = Some(ready);
+        let available = (16_usize - due.len()).min(state.pending.len());
+        due.extend(state.pending.drain(..available));
         if ready {
             for suggestion in suggestions {
+                if due.len() >= 16 {
+                    break;
+                }
                 if state.sent_suggestions.contains(&suggestion.id) {
                     continue;
                 }

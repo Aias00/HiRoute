@@ -16,9 +16,28 @@ use crate::args::{Globals, OutputMode};
 use crate::{CliExecution, LocalControlClient, failure, service, success};
 
 mod console;
+#[cfg(unix)]
+mod omarchy;
+#[cfg(unix)]
+pub(crate) use omarchy::launch as omarchy_launch;
+#[cfg(unix)]
+pub(crate) use omarchy::notifications_worker;
 
 pub(crate) fn execute(arguments: &[String], globals: &Globals) -> Option<CliExecution> {
     let family = arguments.first()?.as_str();
+    if family == "integrations" {
+        #[cfg(unix)]
+        if arguments.get(1).is_some_and(|v| v == "omarchy") || globals.help {
+            return Some(omarchy::execute(
+                arguments.get(2..).unwrap_or_default(),
+                globals,
+            ));
+        }
+        return Some(failure(
+            ErrorCode::InvalidArguments,
+            globals.request_id.clone(),
+        ));
+    }
     if family == "console" {
         return Some(console::execute(&arguments[1..], globals));
     }

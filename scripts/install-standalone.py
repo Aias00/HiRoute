@@ -48,6 +48,12 @@ EXPECTED_FILES = {
 }
 
 
+OMARCHY_FILES = {"integrations/omarchy/" + name for name in (
+    "hiroute.svg", "hiroute.status/manifest.json", "hiroute.status/Panel.qml",
+    "hiroute.status/Summary.js", "hiroute.status/i18n/en.json", "hiroute.status/i18n/zh.json",
+)}
+
+
 def run_systemctl(*arguments):
     """Run the optional per-user systemd integration when it exists."""
     if platform.system() != "Linux":
@@ -310,8 +316,10 @@ def validate_manifest(manifest, archive):
 
 
 def valid_inventory(files):
-    extra = set(files) - EXPECTED_FILES
+    integration = set(files) & OMARCHY_FILES
+    extra = set(files) - EXPECTED_FILES - OMARCHY_FILES
     return (EXPECTED_FILES <= set(files) and len(extra) <= 2048
+            and (not integration or integration == OMARCHY_FILES and platform.system() == "Linux")
             and (not extra or "console/index.html" in extra)
             and all(len(name) <= 240 and name.startswith("console/")
                     and all(re.fullmatch(r"[A-Za-z0-9_@.-]+", part) and part not in {".", ".."}
@@ -710,6 +718,8 @@ def install(args):
         validate_manifest(manifest, archive)
         staging = temporary / "payload"
         extract_verified(manifest, archive, staging)
+        if omarchy_record_present(paths) and not OMARCHY_FILES <= set(manifest["files"]):
+            raise ValueError("disable the Omarchy integration before installing a package without its assets")
         if desktop_conflict(paths):
             raise ValueError("HiRoute Desktop conflicts with standalone installation")
         version = manifest["version"]
@@ -747,6 +757,8 @@ def install(args):
             shutil.copy2(staging / "bin/hirouted", staged_bin / "hirouted")
             if (staging / "console").is_dir():
                 shutil.copytree(staging / "console", staged_bin / "console")
+            if (staging / "integrations").is_dir():
+                shutil.copytree(staging / "integrations", staged_data / "integrations")
             for relative in ("libexec", "licenses", "docs", "skills"):
                 shutil.copytree(staging / relative, staged_data / relative)
             staged_components.extend(
@@ -813,8 +825,35 @@ def install(args):
                 remove_path(staged_bin)
             if staged_data.exists() or staged_data.is_symlink():
                 remove_path(staged_data)
+        if omarchy_record_present(paths):
+            omarchy_hook(paths, "refresh")
     run_systemctl("daemon-reload")
     print(json.dumps({"installed": True, "version": manifest["version"], "marker": str(paths["marker"])}, sort_keys=True))
+
+
+def omarchy_record_present(paths):
+    return platform.system() == "Linux" and any(
+        p.exists() or p.is_symlink() for p in (
+            paths["state"] / "integrations/omarchy.v1.json",
+            paths["state"] / "integrations/omarchy-transaction.v1.json",
+        )
+    )
+
+
+def omarchy_hook(paths, verb):
+    try:
+        completed = subprocess.run(
+            [str(paths["bin"] / "hiroute"), "integrations", "omarchy", verb, "--output", "json"],
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15, check=False,
+        )
+        if completed.returncode != 0 or len(completed.stdout) > 64 * 1024 or len(completed.stderr) > 64 * 1024:
+            raise ValueError("Omarchy integration hook failed; the installation is retained for recovery")
+        envelope = load_json_bytes(completed.stdout)
+        if not isinstance(envelope, dict) or envelope.get("status") != "succeeded" or not isinstance(envelope.get("data"), dict):
+            raise ValueError("Omarchy integration hook returned an invalid result")
+        return envelope["data"]
+    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError) as error:
+        raise ValueError("Omarchy integration hook failed; the installation is retained for recovery") from error
 
 
 def owned_skill(path, expected):
@@ -872,6 +911,11 @@ def uninstall_owned(paths):
             if directory.is_symlink() or not directory.is_dir() or directory.parent != parent:
                 raise ValueError(f"owned installation directory changed: {directory}")
 
+    kept_omarchy = []
+    if omarchy_record_present(paths):
+        # The installed CLI and its marker still exist. A failure blocks every
+        # subsequent stop/delete operation, leaving a usable recovery boundary.
+        kept_omarchy = omarchy_hook(paths, "disable").get("kept_changed", [])
     if platform.system() == "Linux":
         run_systemctl("disable", "--now", SERVICE_LABEL)
     else:
@@ -896,7 +940,9 @@ def uninstall_owned(paths):
         shutil.rmtree(resource_root)
     paths["marker"].unlink()
     run_systemctl("daemon-reload")
-    print(json.dumps({"installed": False, "data_preserved": True}, sort_keys=True))
+    result = {"installed": False, "data_preserved": True}
+    if kept_omarchy: result["omarchy_kept_changed"] = kept_omarchy
+    print(json.dumps(result, sort_keys=True))
 
 
 def parser():

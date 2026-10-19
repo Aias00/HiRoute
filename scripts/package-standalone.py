@@ -42,6 +42,12 @@ EXPECTED_FILES = {
 }
 
 
+OMARCHY_FILES = {"integrations/omarchy/" + name for name in (
+    "hiroute.svg", "hiroute.status/manifest.json", "hiroute.status/Panel.qml",
+    "hiroute.status/Summary.js", "hiroute.status/i18n/en.json", "hiroute.status/i18n/zh.json",
+)}
+
+
 def executable_names(target):
     suffix = ".exe" if target.endswith("-pc-windows-msvc") else ""
     return {"hiroute": "bin/hiroute" + suffix,
@@ -61,12 +67,29 @@ def console_name(name):
 
 
 def valid_inventory(names, target):
+    names = set(names)
     base = expected_files(target)
-    extra = set(names) - base
-    # V1 archives without console files remain readable during upgrades.
-    return (base <= set(names) and len(extra) <= 2048
+    integration = names & OMARCHY_FILES
+    extra = names - base - OMARCHY_FILES
+    # Existing V1 archives remain readable. The new optional group is Linux-only
+    # and complete, never a partially extracted plugin.
+    return (base <= names and len(extra) <= 2048
+            and (not integration or integration == OMARCHY_FILES and target.endswith("-unknown-linux-gnu"))
             and (not extra or "console/index.html" in extra)
             and all(console_name(name) for name in extra))
+
+
+def omarchy_payload(directory):
+    if directory.is_symlink() or not directory.is_dir():
+        raise ValueError("Omarchy assets must be a real directory")
+    actual = {"integrations/omarchy/" + p.relative_to(directory).as_posix()
+              for p in directory.rglob("*") if not p.is_dir() or p.is_symlink()}
+    if actual != OMARCHY_FILES:
+        raise ValueError("Omarchy asset inventory is incomplete")
+    result = {name: checked_source(directory / name.removeprefix("integrations/omarchy/")) for name in OMARCHY_FILES}
+    if any(path.stat().st_size > 512 * 1024 for path in result.values()):
+        raise ValueError("Omarchy asset exceeds its size bound")
+    return result
 
 
 def console_payload(directory):
@@ -197,6 +220,8 @@ def payload(args, notices):
         files[f"licenses/{name}"] = checked_source(notices / name)
     if getattr(args, "console_assets", None) is not None:
         files.update(console_payload(args.console_assets))
+    if args.target.endswith("-unknown-linux-gnu"):
+        files.update(omarchy_payload(REPO / "assets/integrations/omarchy"))
     if args.target.endswith("-pc-windows-msvc"):
         for key in names.values():
             verify_windows_image(files[key], args.target)

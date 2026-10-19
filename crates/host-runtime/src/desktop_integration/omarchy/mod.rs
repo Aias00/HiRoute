@@ -1,5 +1,7 @@
 //! Optional Omarchy files. Native Agent configuration and service lifecycle are not owned here.
+pub mod assets;
 mod files;
+pub mod launch;
 pub mod notifications;
 pub mod process;
 mod types;
@@ -261,6 +263,9 @@ impl Context {
         }
         Ok(())
     }
+    pub fn preflight_assets(&self, assets: &[Asset]) -> Result<(), Error> {
+        self.preflight(assets, false).map(|_| ())
+    }
     fn preflight(&self, assets: &[Asset], refresh: bool) -> Result<Option<Manifest>, Error> {
         self.check_assets(assets)?;
         let before = self.load()?;
@@ -363,6 +368,12 @@ impl Context {
         registration_timeout: Duration,
     ) -> Result<Manifest, Error> {
         if !self.transaction_path().try_exists()? {
+            if refresh
+                && let Some(m) = self.load()?
+                && !m.enabled
+            {
+                return Ok(m);
+            }
             self.preflight(assets, refresh)?;
         }
         let _lock = files::lock(self)?;

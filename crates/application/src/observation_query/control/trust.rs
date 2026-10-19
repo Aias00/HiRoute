@@ -121,6 +121,29 @@ impl ObservationControl {
                     value["previous_routing"] = serde_json::to_value(targets)
                         .map_err(|_| ObservationQueryError::Corrupt)?;
                 }
+                for branch in value["branches"]
+                    .as_array_mut()
+                    .ok_or(ObservationQueryError::Corrupt)?
+                {
+                    let action: hiroute_domain::TrustSuggestionV1 =
+                        serde_json::from_value(branch["suggestion"].clone())
+                            .map_err(|_| ObservationQueryError::Corrupt)?;
+                    let id = crate::trust::report::suggestion_id(
+                        plan_id,
+                        context.active.content_revision,
+                        branch["branch_id"]
+                            .as_str()
+                            .ok_or(ObservationQueryError::Corrupt)?,
+                        u16::try_from(
+                            branch["threshold_millis"]
+                                .as_u64()
+                                .ok_or(ObservationQueryError::Corrupt)?,
+                        )
+                        .map_err(|_| ObservationQueryError::Corrupt)?,
+                        &action,
+                    );
+                    branch["id"] = json!(id);
+                }
                 if self
                     .state
                     .trust_context(&self.workspace_id, plan_id)

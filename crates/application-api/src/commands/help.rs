@@ -104,7 +104,7 @@ pub(super) fn output(command_id: &str) -> &'static str {
     } else if command_id.starts_with("worker.") {
         "Default text renders the response for people. --output json emits the unchanged hiroute.machine-envelope/v2 object; --output quiet prints only a completed result and sends pending locators to stderr."
     } else if command_id == "agent.launch" {
-        "--check emits a machine envelope containing hiroute.agent-launch-check/v1. After spawn, stdout and stderr are native Agent streams and the descriptor is not printed. A refused launch states its reason and repair on stderr; --output json also carries the check in the machine envelope."
+        "--check emits a machine envelope containing hiroute.agent-launch-check/v1. After spawn, stdout and stderr are launched Agent streams and the descriptor is not printed. A refused launch states its reason and repair on stderr; --output json also carries the check in the machine envelope."
     } else {
         "One hiroute.machine-envelope/v2 JSON object on stdout; diagnostics belong on stderr."
     }

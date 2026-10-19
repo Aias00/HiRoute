@@ -447,7 +447,7 @@ pub fn suggestion_evidence(
     serde_json::json!({"plan_id":query.plan_id,"active_revision":context.active.content_revision,"branches":branches,"announcements":announcements,"previous_routing":[]})
 }
 
-fn suggestion_id(
+pub(crate) fn suggestion_id(
     plan: &str,
     revision: u64,
     branch: &str,

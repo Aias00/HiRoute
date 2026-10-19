@@ -63,6 +63,11 @@ class StandaloneFixture(unittest.TestCase):
         skill.chmod(0o644)
         docs.chmod(0o644)
         windows_docs.chmod(0o644)
+        for relative in package.OMARCHY_FILES:
+            item = self.repo / "assets" / relative
+            item.parent.mkdir(parents=True, exist_ok=True)
+            item.write_bytes(b"Omarchy package fixture\n")
+            item.chmod(0o644)
         self.skill = skill
         self.sources = {}
         for name in ("hiroute", "hirouted", "cliproxyapi"):
@@ -121,6 +126,63 @@ class StandaloneFixture(unittest.TestCase):
             },
             clear=False,
         )
+
+
+class OmarchyInstallationTests(StandaloneFixture):
+    @patch.object(installer.platform, "system", return_value="Linux")
+    def test_optional_linux_assets_are_complete_and_legacy_archives_remain_readable(self, _system):
+        base = package.expected_files(installer.host_target())
+        self.assertTrue(package.valid_inventory(base, installer.host_target()))
+        self.assertTrue(installer.valid_inventory(base))
+        self.assertTrue(package.valid_inventory(base | package.OMARCHY_FILES, installer.host_target()))
+        self.assertFalse(installer.valid_inventory(base | {next(iter(package.OMARCHY_FILES))}))
+        self.assertFalse(package.valid_inventory(base | package.OMARCHY_FILES, "aarch64-apple-darwin"))
+        manifest, archive = self.build()
+        value = json.loads(manifest.read_bytes())
+        self.assertTrue(package.OMARCHY_FILES <= set(value["files"]))
+        with self.environment(), patch.object(installer, "desktop_conflict", return_value=False), patch.object(installer, "run_systemctl"), patch("builtins.print"):
+            installer.install(self.install_args(manifest, archive))
+            for name in package.OMARCHY_FILES:
+                self.assertEqual((self.home / ".local/share/hiroute/0.1.0" / name).read_bytes(), b"Omarchy package fixture\n")
+
+    @patch.object(installer.platform, "system", return_value="Linux")
+    def test_upgrade_refresh_and_uninstall_disable_run_while_the_cli_is_still_installed(self, _system):
+        manifest, archive = self.build()
+        events = []
+        def fake_run(argv, **kwargs):
+            self.assertTrue((self.home / ".local/bin/hiroute").is_file())
+            self.assertTrue((self.home / ".local/share/hiroute/standalone.json").is_file())
+            events.append(argv[3])
+            return installer.subprocess.CompletedProcess(argv, 0, json.dumps({"status":"succeeded","data":{"kept_changed":["/fixture/user-edited.desktop"]}}).encode(), b"")
+        with self.environment(), patch.object(installer, "desktop_conflict", return_value=False), patch.object(installer, "run_systemctl", side_effect=lambda *a:events.append(a)), patch.object(installer.subprocess, "run", side_effect=fake_run), patch("builtins.print"):
+            installer.install(self.install_args(manifest, archive))
+            state = self.home / ".state/hiroute/integrations/omarchy.v1.json"
+            state.parent.mkdir(); state.write_text('{"schema":"hiroute.omarchy-integration/v1"}');state.chmod(0o600)
+            upgraded, upgraded_archive = self.build("0.1.1")
+            events.clear(); installer.install(self.install_args(upgraded, upgraded_archive))
+            self.assertEqual(events[0], "refresh")
+            events.clear(); installer.uninstall_owned(installer.layout(self.home))
+            self.assertEqual(events[0], "disable")
+            self.assertIn(("disable", "--now", installer.SERVICE_LABEL), events[1:])
+            self.assertTrue(state.exists())
+
+    @patch.object(installer.platform, "system", return_value="Linux")
+    def test_disable_failure_blocks_uninstall_and_old_package_downgrade_is_explicit(self, _system):
+        manifest, archive = self.build()
+        with self.environment(), patch.object(installer, "desktop_conflict", return_value=False), patch.object(installer, "run_systemctl") as systemctl, patch("builtins.print"):
+            installer.install(self.install_args(manifest, archive))
+            state = self.home / ".state/hiroute/integrations/omarchy.v1.json"
+            state.parent.mkdir(); state.write_text('{}');state.chmod(0o600)
+            systemctl.reset_mock()
+            with patch.object(installer.subprocess, "run", return_value=installer.subprocess.CompletedProcess([], 78, b"", b"")):
+                with self.assertRaises(ValueError): installer.uninstall_owned(installer.layout(self.home))
+            systemctl.assert_not_called()
+            self.assertTrue((self.home / ".local/bin/hiroute").is_file())
+            self.assertTrue((self.home / ".local/share/hiroute/standalone.json").exists())
+            with patch.object(package, "omarchy_payload", return_value={}): old, old_archive = self.build("0.0.9")
+            with self.assertRaisesRegex(ValueError, "disable the Omarchy integration"):
+                installer.install(self.install_args(old, old_archive))
+            self.assertEqual(json.loads((self.home / ".local/share/hiroute/standalone.json").read_bytes())["version"], "0.1.0")
 
 
 class ConsoleInstallationTests(StandaloneFixture):

@@ -58,6 +58,19 @@ where
         .into_iter()
         .map(Into::into)
         .collect::<Vec<OsString>>();
+    #[cfg(unix)]
+    {
+        if arguments.as_slice() == [OsString::from("__omarchy_notification")] {
+            return host_commands::notifications_worker();
+        }
+        if arguments.first().is_some_and(|a| a == "integrations")
+            && arguments.get(1).is_some_and(|a| a == "omarchy")
+            && arguments.get(2).is_some_and(|a| a == "launch")
+            && !arguments.get(3).is_some_and(|a| a == "--help" || a == "-h")
+        {
+            return host_commands::omarchy_launch(&arguments[3..]);
+        }
+    }
     // The native child tail must bypass generic global parsing, including non-UTF-8 argv.
     // Accept the published JSON-output global before this native command as well.
     if arguments.first().is_some_and(|arg| arg == "--output=json")
@@ -702,6 +715,7 @@ pub fn root_help() -> String {
         .map(|descriptor| descriptor.path[0].clone())
         .collect::<Vec<_>>();
     families.extend([
+        "integrations".into(),
         "gateway".into(),
         "protected-input".into(),
         "service".into(),
@@ -716,7 +730,7 @@ pub fn root_help() -> String {
         .collect::<Vec<_>>()
         .join("\n");
     format!(
-        "HiRoute headless product CLI\n\nUsage\n  hiroute <command> [options]\n\nPublic command families\n{commands}\n\nStart or resume: run 'hiroute quickstart --help'.\nDecision connections: run 'hiroute decision services options --help' for installed presets and reusable saved connections.\nHost management: run 'hiroute service --help', 'hiroute gateway --help', 'hiroute protected-input --help', 'hiroute subscription-proxy --help', or 'hiroute console --help'.\nAgent collaboration workflow: run 'hiroute agents collaboration --help' to enable, edit, disable or inspect collaboration independently of model settings.\nApplication/Local Control: run 'hiroute schema list --output json' and 'hiroute schema show --command-id <ID> --output json', then append '--help' to a complete command path, for example 'hiroute worker dependencies discover --help'.\n"
+        "HiRoute headless product CLI\n\nUsage\n  hiroute <command> [options]\n\nPublic command families\n{commands}\n\nStart or resume: run 'hiroute quickstart --help'.\nDecision connections: run 'hiroute decision services options --help' for installed presets and reusable saved connections.\nHost management: run 'hiroute service --help', 'hiroute gateway --help', 'hiroute protected-input --help', 'hiroute subscription-proxy --help', 'hiroute console --help', or 'hiroute integrations omarchy --help'.\nAgent collaboration workflow: run 'hiroute agents collaboration --help' to enable, edit, disable or inspect collaboration independently of model settings.\nApplication/Local Control: run 'hiroute schema list --output json' and 'hiroute schema show --command-id <ID> --output json', then append '--help' to a complete command path, for example 'hiroute worker dependencies discover --help'.\n"
     )
 }
 
