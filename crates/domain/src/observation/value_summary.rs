@@ -60,6 +60,7 @@ pub struct ObservationTokenShareReadV1 {
 #[serde(rename_all = "snake_case")]
 pub enum ObservationTokenSharePeriodKindV1 {
     Today,
+    #[serde(rename = "last_7d")]
     Last7d,
 }
 
@@ -201,4 +202,26 @@ pub struct ApiEquivalentValueReportV1 {
     pub compared_reference_subtotal_micros: Option<u64>,
     pub actual_cash_micros: Option<u64>,
     pub disclosure: String,
+}
+
+#[cfg(test)]
+mod token_share_wire_tests {
+    use super::*;
+    #[test]
+    fn token_share_period_names_match_the_published_cli_contract() {
+        for (value, wire) in [
+            (ObservationTokenSharePeriodKindV1::Today, "today"),
+            (ObservationTokenSharePeriodKindV1::Last7d, "last_7d"),
+        ] {
+            assert_eq!(serde_json::to_value(value).unwrap(), wire);
+            assert_eq!(
+                serde_json::from_value::<ObservationTokenSharePeriodKindV1>(serde_json::json!(
+                    wire
+                ))
+                .unwrap(),
+                value
+            );
+        }
+        assert!(serde_json::from_str::<ObservationTokenSharePeriodKindV1>("\"last7d\"").is_err());
+    }
 }
