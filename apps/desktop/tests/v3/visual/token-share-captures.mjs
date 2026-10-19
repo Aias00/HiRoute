@@ -34,6 +34,7 @@ export async function runTokenShareCaptures(client, fixtureUrl, outputRoot) {
         } return c.fixtureResponse('observation_read',p);};c.remount();return true;})()`);
       const labels = { share: '31%', no_routed_requests: t('此时段没有路由请求', 'No routed requests in this period'), no_subscription_in_period: t('此时段未使用订阅来源', 'No subscription source used in this period'),
         subscription_usage_unknown: t('订阅来源的用量未知', 'Subscription usage is unknown'), no_comparable_usage: t('没有可比较的用量', 'No comparable usage'), loading: t('正在读取', 'Reading'), error: t('暂时无法读取', 'Temporarily unavailable') };
+      await waitFor(client, 'tokenShareState.calls === 1');
       await waitFor(client, `document.querySelector('[data-token-share-headline]')?.textContent.includes(${JSON.stringify(labels[kind])})`);
       assert.equal(await evaluate(client, 'tokenShareState.calls'), 1);
       if (kind !== 'share') assert.equal(await evaluate(client, 'document.querySelector("[data-token-share-headline]").textContent.includes("%")'), false);

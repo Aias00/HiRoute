@@ -96,19 +96,28 @@ fn record(
             candidate_index: 0,
         }),
     };
-    events.push(fixture.fact_for_plan(100, turn, 120, "plan/codex-daily", None));
     for (index, mut event) in events.into_iter().enumerate() {
         event.sequence = index as u64 + 1;
-        if matches!(event.fact, ExecutionFactV1::AgentTurnFinished { .. }) {
-            event.schema_version = EXECUTION_FACT_SCHEMA_V2.into();
-            event.schema_digest = CanonicalDigest::parse(EXECUTION_FACT_PORT_DIGEST_V2).unwrap();
-        }
         let result = store.ingest_fact(&event, &[]).unwrap();
         assert!(
             matches!(result, IngestOutcome::Ack(_)),
             "fixture fact was not admitted: {result:?}"
         );
     }
+    // Session-history evidence arrives on its own stream, after the Gateway request
+    // has finished. Appending it to the frozen request stream is correctly refused.
+    let mut stage = Fixture::new(&format!("stage-{suffix}"));
+    stage.session = fixture.session.clone();
+    let result = store
+        .ingest_fact(
+            &stage.fact_for_plan(1, turn, 120, "plan/codex-daily", None),
+            &[],
+        )
+        .unwrap();
+    assert!(
+        matches!(result, IngestOutcome::Ack(_)),
+        "turn fact was not admitted: {result:?}"
+    );
     fixture
 }
 
