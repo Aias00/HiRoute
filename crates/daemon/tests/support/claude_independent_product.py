@@ -120,6 +120,29 @@ def run(repository):
         product.start()
         assert status(product)['state'] == 'configured'
         assert check(product)[0] == 0
+        # Interrupt the existing publication transaction after the accepted state and grant
+        # were staged. Recovery must consume that state, even if native user JSON is unreadable.
+        product.stop()
+        product.start('after_prepare')
+        ensure_native_model_evidence(product, 'agent_claude_default')
+        interrupted = dict(independent, access_token={'intent': 'regenerate'})
+        frozen = product.preview('agents connect preview', {'spec': interrupted})
+        assert frozen['applicable'], frozen.get('blockers')
+        body = {'spec': frozen['spec'], 'accept_digest': frozen['accept_digest'],
+                'dependency_digest': frozen['dependency_digest'], 'expected_revisions': frozen['expected_revisions'],
+                'idempotency_key': 'independent-interrupted'}
+        code, _ = product.cli('agents connect apply', body, success=False)
+        assert code == 6 and product.process.wait(timeout=5) == 86
+        product.stop(crash=True)
+        user_bytes = product.settings.read_bytes()
+        product.settings.write_bytes(b'unreadable native JSON during recovery')
+        product.start()
+        _, recovered = product.cli('agents connect apply', body)
+        assert recovered['data']['state'] == 'succeeded'
+        assert product.cli('agents connect apply', body)[1]['data'] == recovered['data']
+        assert check(product)[0] == 0
+        product.settings.write_bytes(user_bytes)
+        assert snapshot([product.settings, credentials, linked]) == native_before
         restore['model']['restore_point_ref'] = status(product)['restore_point_ref']
         restored_preview, _ = apply(product, restore, 'independent-restore')
         assert restored_preview['spec']['activation_preference'] == 'managed_launch', 'old restore input must follow its sealed owner'
@@ -128,7 +151,7 @@ def run(repository):
         assert check(product)[0] == 78
         print(json.dumps({'scenario': 'claude-independent-settings', 'state': 'green',
                           'native_files_unchanged': 3, 'cross_activation_refusals': 2,
-                          'launch_blockers': 2, 'reopen': True, 'live_model_calls': 0}), flush=True)
+                          'launch_blockers': 2, 'reopen': True, 'interrupted_recovery': True, 'live_model_calls': 0}), flush=True)
     finally:
         product.close()
         upstream.close()
