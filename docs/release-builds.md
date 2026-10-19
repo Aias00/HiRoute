@@ -23,6 +23,13 @@ sccache and native build tools. Linux additionally requires Docker: the same
 command enters the pinned glibc 2.31 build image and then a separate minimal
 runtime image. Host distribution libraries are never used as the release ABI
 baseline. The native architecture check applies to the host and both containers.
+Linux frontend preparation uses Node from the pinned build image, not the host.
+The policy pins its version and each native architecture's official archive
+SHA-256 from [Node's published checksums](https://nodejs.org/dist/v22.19.0/SHASUMS256.txt).
+The image verifies the download before extraction and checks Node/npm execution;
+candidate evidence records both versions. Mounting an arbitrary host Node would
+couple the build to that binary's host libc requirements, outside the fixed
+glibc 2.31 environment. Node is a build tool and is not added to the release payload.
 The CPA checkout must contain the commit in `vendor/cpa/source.json`; its current
 branch does not select the source. Invoke from the clean candidate checkout:
 
