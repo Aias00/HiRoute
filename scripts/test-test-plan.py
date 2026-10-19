@@ -20,6 +20,21 @@ runner_spec.loader.exec_module(runner)
 
 
 class SelectionTests(unittest.TestCase):
+    def test_installed_daemon_consumers_require_the_candidate_console(self):
+        for path in ('crates/daemon/tests/support/quickstart_analysis.py',
+                     'crates/daemon/tests/support/standalone_headless_product.py',
+                     'crates/daemon/src/lib.rs', 'crates/cli/src/lib.rs',
+                     'crates/observation/src/lib.rs', 'crates/integrations/src/lib.rs'):
+            with self.subTest(path=path):
+                result = plan.select([path])
+                self.assertEqual(result['mode'], 'affected')
+                self.assertTrue(result['frontend'])
+                self.assertFalse(result['native_required'])
+                self.assertTrue(any(command[:2] == ['cargo', 'test']
+                                    and 'hiroute-daemon' in command
+                                    and '--test' not in command
+                                    for command in result['commands']))
+
     def test_local_gc_selects_shared_cleanup_and_wrapper_without_product_builds(self):
         for path in sorted(plan.LOCAL_GC_TOOLING):
             with self.subTest(path=path):
@@ -364,7 +379,7 @@ class SelectionTests(unittest.TestCase):
                 result = plan.select(paths)
                 self.assertEqual(result["mode"], "affected")
                 self.assertTrue(result["rust"])
-                self.assertFalse(result["frontend"])
+                self.assertEqual(result["frontend"], "crates/daemon/src/lib.rs" in paths)
                 self.assertFalse(result["native_required"])
                 self.assertEqual(result["commands"].count(reader), 1)
                 self.assertIn(["cargo", "clippy", "--locked", "-p", "hiroute-host-runtime",

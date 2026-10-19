@@ -72,7 +72,7 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/ci-setup
       - name: Use the candidate console in installed-product tests
-        if: matrix.shard == 'integration-daemon'
+        if: matrix.shard == 'integration-daemon' || (matrix.shard == 'affected' && needs.selection.outputs.frontend == 'true')
         uses: actions/download-artifact@v4
         with:
           name: desktop-console-${{ github.run_id }}-${{ github.run_attempt }}
