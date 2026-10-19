@@ -12,6 +12,13 @@ problem. HiRoute supplies the open-source implementation of that decision contra
 
 ## Reading guide
 
+Start with the configuration-edit example in the [introduction](main.md#1-introduction).
+It follows one failure through protection and release. The [method](main.md#3-method)
+then explains why three judgments share one request and how their outputs select
+a group. In the results, distinguish direct-selector comparisons from rule
+ablations: they answer different questions. All action accuracies measure group
+selection under the declared policy; they are not executor task-completion rates.
+
 - [Method](main.md#3-method): state boundaries, three judgments, continuous scoring
   and the deterministic routing rule.
 - [Evaluation](main.md#4-policy-conditioned-evaluation): declared engineering and
