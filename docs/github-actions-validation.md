@@ -58,7 +58,8 @@ package and all-features context. `ci-shards.py check` compares every non-Deskto
 integration target with the explicit shard inventory; a missing, duplicate or same-name
 cross-shard target fails selection instead of being silently omitted. The frontend job
 exports its exact candidate console build; the daemon integration shard downloads those
-bytes for the installed Linux package scenario. Backend shards keep their configured
+bytes for the installed Linux package scenario. Affected PR plans that run the daemon
+package suite also build and download that candidate console. Backend shards keep their configured
 Rust runners and depend on the frontend result without rebuilding it there. The required
 `backend` status is a small aggregate job, so the public branch-protection contract remains
 stable while individual shard jobs can run concurrently.

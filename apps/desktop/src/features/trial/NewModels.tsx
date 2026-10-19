@@ -4,10 +4,11 @@ import type { Plan } from '../../plan-editor';
 import { UiIcon } from '../../ui';
 import type { AvailableModel, ModelAvailabilityResult } from '../model-feed/types';
 import { FeedDisclosure } from '../model-feed/FeedDisclosure';
-import { factTags, modelSubtitle, rollingIdentity } from '../model-feed/presentation';
+import { factTags, modelSubtitle, rollingIdentity, shortDate } from '../model-feed/presentation';
+import { modelAnnouncements } from '../model-feed/announcements';
 import './trial.css';
 
-type Entry = { key: string; model: AvailableModel; kind?: 'new_model' | 'model_update'; headline: string; note: string };
+type Entry = { key: string; model: AvailableModel; kind: 'new_model' | 'model_update'; headline: string; note: string; includedOn: string };
 
 export function NewModels({ language, active, plans, refreshVersion, onTry, onOpenPlan, mutable = true }: {
   language: 'zh' | 'en'; active: boolean; mutable?: boolean; plans: Plan[]; refreshVersion: number; onTry(modelId?: string): void; onOpenPlan?(planId: string): void;
@@ -29,11 +30,12 @@ export function NewModels({ language, active, plans, refreshVersion, onTry, onOp
     }
   }
   const usedBy = (model: AvailableModel) => [...new Set(model.binding_ids.flatMap(id => users.get(id) ?? []))];
-  const entries: Entry[] = data?.featured.length ? data.featured.slice(0, 6).flatMap(entry => {
-    const model = data.models.find(m => m.model_configuration_id === entry.model_configuration_id);
-    return model ? [{ key: entry.id, model, kind: entry.kind, headline: entry.headline[language], note: entry.note[language] }] : [];
-  }) : data?.models.filter(m => m.origin.kind === 'embedded' && ['executable', 'needs_connection'].includes(m.availability.kind) && !usedBy(m).length).slice(0, 6).map(model => ({ key: model.model_configuration_id, model, headline: '', note: '' })) ?? [];
-  const fromFeed = entries.some(e => e.model.origin.kind === 'feed') || Boolean(data?.featured.length);
+  const announcements = data ? modelAnnouncements(data) : null;
+  const entries: Entry[] = announcements?.entries.slice(0, 6).flatMap(entry => {
+    const model = data!.models.find(m => m.model_configuration_id === entry.model_configuration_id);
+    return model ? [{ key: entry.id, model, kind: entry.kind, headline: entry.headline[language], note: entry.note[language], includedOn: entry.included_on }] : [];
+  }) ?? [];
+  const fromFeed = announcements?.fromFeed ?? false;
   function state(model: AvailableModel) {
     const plansUsing = usedBy(model);
     if (model.availability.kind === 'needs_newer_client') return { tone: 'warn', label: t(`需要 HiRoute ${model.availability.version}`, `Requires HiRoute ${model.availability.version}`), action: t('需要更新 HiRoute', 'Update HiRoute first'), primary: false, run: undefined };
@@ -49,14 +51,14 @@ export function NewModels({ language, active, plans, refreshVersion, onTry, onOp
     </header>
     {error && <div className="callout warn" role="alert"><span>{t('模型目录暂时无法刷新，请重试后开始试用。', 'The model catalog could not refresh. Retry before starting a trial.')}</span><button className="btn" onClick={() => setRetry(n => n + 1)}>{t('重试', 'Retry')}</button></div>}
     {!!data && fromFeed && <FeedDisclosure language={language} mutable={mutable} />}
-    {entries.length > 0 && <div className="new-model-grid">{entries.map(({ key, model, kind, headline, note }) => {
+    {entries.length > 0 && <div className="new-model-grid">{entries.map(({ key, model, kind, headline, note, includedOn }) => {
       const s = state(model);
       const tags = factTags(model.facts, language);
       return <article key={key} className="new-model-card">
-        <div className="new-model-meta"><span>{modelSubtitle(model, language)}</span>{kind && <span className="badge info no-dot">{kind === 'model_update' ? t('模型更新', 'Update') : t('新模型', 'New')}</span>}</div>
-        <h3>{model.display_name}</h3>
+        <div className="new-model-meta"><span>{modelSubtitle(model, language)} · {t(`公告收录 ${shortDate(includedOn, language)}`, `Announcement added ${shortDate(includedOn, language)}`)}</span><span className="badge info no-dot">{kind === 'model_update' ? t('模型更新', 'Update') : t('新模型', 'New')}</span></div>
+        <h3>{headline || model.display_name}</h3>
         {tags.length > 0 && <div className="model-fact-tags">{tags.map(tag => <span key={tag} className="badge no-dot">{tag}</span>)}</div>}
-        {(note || (headline && headline !== model.display_name)) && <p className="new-model-note">{headline && headline !== model.display_name && <strong>{headline}</strong>}{note}</p>}
+        {note && <p className="new-model-note">{note}</p>}
         <div className="new-model-foot">
           <span className={`badge no-dot ${s.tone}`}>{s.label}</span>
           <button className={`btn${s.primary ? ' btn-primary' : ''}`} disabled={error || !s.run} onClick={s.run}>{s.action}</button>

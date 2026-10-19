@@ -449,12 +449,15 @@ def select(paths, full=False):
         else:
             full = True
             reasons.append("shared tooling, contract, dependency or unknown path: " + path)
-    if full:
+    packages = sorted({p for group in groups for p in GROUPS[group]})
+    # The daemon package suite includes installed management, whose package must
+    # contain the actual candidate console even when only backend code changed.
+    if (full or 'hiroute-daemon' in packages
+            or ('hiroute-daemon', 'publication_process') in targets):
         frontend = True
     commands = []
     if full or groups:
         commands.append(["cargo", "fmt", "--check"])
-        packages = sorted({p for group in groups for p in GROUPS[group]})
         flags = ["--workspace", "--exclude", "hiroute-desktop"] if full else [x for p in packages for x in ("-p", p)]
         commands.append(["cargo", "clippy", "--locked", *flags, "--all-targets", "--all-features", "--", "-D", "warnings"])
         commands.append(["cargo", "test", "--locked", *flags, "--all-features"])

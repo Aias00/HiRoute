@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Shared native product-fixture mechanics; no native Agent or product acceptance claim."""
 import os
+import json
 import shutil
 from pathlib import Path
 import subprocess
@@ -8,10 +9,122 @@ import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'crates/daemon/tests/support'))
 from agent_product_support import apply_settings, run_native_command, expose_native_installation
+import standalone_headless_product as headless
+
+
+class ObservationReadRetryTests(unittest.TestCase):
+    def setUp(self):
+        self.product = headless.InstalledProduct.__new__(headless.InstalledProduct)
+        self.product.cli_path = Path('/fixture/bin/hiroute')
+        self.product.project = Path('/fixture/project')
+        self.product.env = {}
+        self.product.outputs = []
+        self.product.daemon = None
+        self.now = 0
+        self.calls = []
+        for target, replacement in (
+            ('monotonic', lambda: self.now), ('sleep', self.sleep),
+        ):
+            mock = patch.object(headless.time, target, replacement)
+            mock.start()
+            self.addCleanup(mock.stop)
+
+    def sleep(self, seconds):
+        self.now += seconds
+
+    def response(self, envelope, code=0):
+        return subprocess.CompletedProcess([], code, json.dumps(envelope).encode(), b'')
+
+    def busy(self):
+        return {'status': 'unavailable', 'error': {
+            'code': 'OBSERVATION_UNAVAILABLE', 'retryable': True,
+            'details_schema': 'hiroute.observation.read-failure/v1',
+            'observation_read': {'reason': 'reader_busy', 'retry_after_ms': 100, 'action': 'retry_read'},
+        }}
+
+    def test_busy_then_success_reuses_exact_scope_cursor_and_body(self):
+        busy = self.response(self.busy(), 6)
+        success = self.response({'status': 'succeeded', 'data': {'costs': [7]}})
+        payload = {'analysis_scope': 'frozen-scope', 'cursor': 'same-page', 'limit': 1}
+        with patch.object(headless.subprocess, 'run', side_effect=[busy, success]) as execute:
+            observed = self.product.cli('value', 'show', '--request-stdin', payload=payload,
+                                        retry_reader_busy=True)
+        self.assertEqual(observed['data'], {'costs': [7]})
+        first, second = execute.call_args_list
+        self.assertEqual(first.args, second.args)
+        self.assertEqual(first.kwargs['input'], second.kwargs['input'])
+        self.assertEqual(json.loads(second.kwargs['input']), payload)
+        self.assertAlmostEqual(self.now, .1)
+        self.assertLessEqual(second.kwargs['timeout'], first.kwargs['timeout'])
+        self.assertEqual(self.product.outputs, [busy.stdout, b'', success.stdout, b''])
+
+    def test_persistent_busy_fails_with_last_envelope_within_retry_budget(self):
+        envelope = self.busy()
+        with patch.object(headless.subprocess, 'run', return_value=self.response(envelope, 6)) as execute:
+            with self.assertRaises(AssertionError) as failure:
+                self.product.cli('value', 'show', retry_reader_busy=True)
+        self.assertEqual(failure.exception.args[0][3], envelope)
+        self.assertGreater(execute.call_count, 1)
+        self.assertLessEqual(execute.call_count, 51)
+        self.assertLessEqual(self.now, 5)
+
+    def test_other_failures_are_not_retried(self):
+        cases = []
+        for key, value in (('retryable', False), ('code', 'CAPABILITY_DENIED'),
+                           ('details_schema', 'unknown')):
+            envelope = self.busy()
+            envelope['error'][key] = value
+            cases.append((6, envelope))
+        for key, value in (('reason', 'timeout'), ('reason', 'index_unavailable'),
+                           ('action', 'refresh_scope'), ('retry_after_ms', 0),
+                           ('retry_after_ms', True), ('retry_after_ms', 6000)):
+            envelope = self.busy()
+            envelope['error']['observation_read'][key] = value
+            cases.append((6, envelope))
+        cases.append((2, self.busy()))
+        for code, envelope in cases:
+            with self.subTest(code=code, envelope=envelope):
+                with patch.object(headless.subprocess, 'run', return_value=self.response(envelope, code)) as execute:
+                    with self.assertRaises(AssertionError):
+                        self.product.cli('value', 'show', retry_reader_busy=True)
+                self.assertEqual(execute.call_count, 1)
+        self.assertEqual(self.now, 0)
+
+    def test_mutations_and_negative_assertions_cannot_opt_in(self):
+        for arguments, options in (
+            (('prices', 'override', 'apply'), {}),
+            (('sessions', 'delete'), {}),
+            (('value', 'show'), {'expected': 6}),
+            (('value', 'show'), {'pass_fds': (3,)}),
+        ):
+            with self.subTest(arguments=arguments, options=options):
+                with patch.object(headless.subprocess, 'run') as execute:
+                    with self.assertRaisesRegex(AssertionError, 'requires an observation read'):
+                        self.product.cli(*arguments, **options, retry_reader_busy=True)
+                execute.assert_not_called()
+
+    def test_default_and_expected_error_calls_still_run_once(self):
+        for arguments, expected in ((('value', 'show'), 0), (('prices', 'override', 'apply'), 6)):
+            with self.subTest(arguments=arguments):
+                with patch.object(headless.subprocess, 'run', return_value=self.response(self.busy(), 6)) as execute:
+                    if expected == 0:
+                        with self.assertRaises(AssertionError):
+                            self.product.cli(*arguments)
+                    else:
+                        self.assertEqual(self.product.cli(*arguments, expected=6), self.busy())
+                self.assertEqual(execute.call_count, 1)
+
+    def test_invalid_json_is_not_retried(self):
+        response = subprocess.CompletedProcess([], 6, b'not-json', b'')
+        with patch.object(headless.subprocess, 'run', return_value=response) as execute:
+            with self.assertRaises(AssertionError):
+                self.product.cli('value', 'show', retry_reader_busy=True)
+        execute.assert_called_once()
 
 
 class NativeInstallationTests(unittest.TestCase):
