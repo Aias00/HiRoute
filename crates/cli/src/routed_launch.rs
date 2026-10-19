@@ -1,6 +1,7 @@
 //! Readiness checks precede every launch. Native fallback is an explicit terminal action;
 //! child streams, environment, working directory and process supervision keep their owners.
 mod args;
+mod process;
 
 use super::{CliExecution, LocalControlClient, managed_launch};
 use hiroute_application_api::{
@@ -11,7 +12,6 @@ use hiroute_application_api::{
 use serde_json::{Value, json};
 use std::ffi::OsString;
 use std::io::{BufRead, IsTerminal, Write};
-use std::process::Command;
 
 pub(super) fn execute(arguments: &[OsString]) -> CliExecution {
     let invocation = match args::parse(arguments) {
@@ -174,7 +174,11 @@ pub(super) fn execute(arguments: &[OsString]) -> CliExecution {
             if invocation.check {
                 return super::success(check, Some(super::next_request_id()));
             }
-            let mut command = Command::new(&d.snapshot.executable);
+            let mut command = match process::selected(std::path::Path::new(&d.snapshot.executable))
+            {
+                Ok(command) => command,
+                Err(error) => return launched(Err(error)),
+            };
             command
                 .args(["--profile", d.snapshot.profile_name.as_str()])
                 .args(&invocation.child)
@@ -289,7 +293,10 @@ fn refused(invocation: &args::Invocation, check: AgentLaunchCheckV1) -> CliExecu
                 RoutedLaunchAgentV1::Codex => "codex",
                 RoutedLaunchAgentV1::ClaudeCode => "claude",
             };
-            let mut command = Command::new(executable);
+            let mut command = match process::native(executable) {
+                Ok(command) => command,
+                Err(error) => return launched(Err(error)),
+            };
             command.args(&invocation.child);
             return launched(managed_launch::spawn_and_wait(&mut command));
         }
