@@ -221,7 +221,9 @@ pub(super) fn value_show(options: &[String]) -> Result<Value, ErrorCode> {
         match options[index].as_str() {
             "--breakdown" if query.breakdown.is_none() => {
                 query.breakdown = Some(match next(options, &mut index)?.as_str() {
-                    "billing_class" => hiroute_domain::ObservationValueBreakdownV1::BillingClass,
+                    "billing_class" => {
+                        hiroute_application_api::ObservationValueBreakdownV1::BillingClass
+                    }
                     _ => return Err(ErrorCode::InvalidArguments),
                 });
             }
@@ -469,7 +471,7 @@ mod tests {
         };
         assert_eq!(
             options.breakdown,
-            Some(hiroute_domain::ObservationValueBreakdownV1::BillingClass)
+            Some(hiroute_application_api::ObservationValueBreakdownV1::BillingClass)
         );
         assert_eq!(options.agent.as_deref(), Some("codex"));
         assert_eq!(options.period, Some(ValuePeriodV1::SevenDays));

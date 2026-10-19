@@ -75,6 +75,7 @@ fn console_store() -> Result<ConsoleListenerStore, Failure> {
     Ok(ConsoleListenerStore::new(layout.gateway_config_root()))
 }
 fn command(args: &[String], globals: &Globals) -> Result<serde_json::Value, Failure> {
+    validate(args)?;
     let Some(verb) = args.first() else {
         return Err(invalid());
     };
@@ -146,13 +147,16 @@ fn command(args: &[String], globals: &Globals) -> Result<serde_json::Value, Fail
         [verb] if verb == "status" => {
             let owned = assets(&context)?;
             let query = reads::Query::new(globals.timeout.unwrap_or(Duration::from_secs(5)))?;
-            let connections = reads::connections(&query).unwrap_or_default();
+            let (connections, agents_unavailable) = match reads::connections(&query) {
+                Ok(value) => (value, false),
+                Err(_) => (Vec::new(), true),
+            };
             let checks: Vec<_> = connections
                 .iter()
                 .map(|c| reads::check(&context.stable_cli(), &c.agent, query.remaining()))
                 .collect();
             Ok(
-                json!({"files":context.status(&owned).map_err(host_error)?,"agents":checks,"console":console_status(&console_store()?, globals)?,"account_boundary":host::ACCOUNT_BOUNDARY}),
+                json!({"files":context.status(&owned).map_err(host_error)?,"agents":checks,"agents_unavailable":agents_unavailable,"console":console_status(&console_store()?, globals)?,"account_boundary":host::ACCOUNT_BOUNDARY}),
             )
         }
         [verb, options @ ..] if verb == "open-console" => {
@@ -179,6 +183,25 @@ fn command(args: &[String], globals: &Globals) -> Result<serde_json::Value, Fail
         _ => Err(invalid()),
     }
 }
+fn validate(args: &[String]) -> Result<(), Failure> {
+    match args {
+        [verb, options @ ..] if verb == "enable" => enable_options(options).map(|_| ()),
+        [verb] if matches!(verb.as_str(), "status" | "disable" | "refresh" | "notify") => Ok(()),
+        [verb, flag, choice] if verb == "configure" && flag == "--notifications" => {
+            on_off(choice).map(|_| ())
+        }
+        [verb] if verb == "open-console" => Ok(()),
+        [verb, flag, hint]
+            if verb == "open-console"
+                && flag == "--landing"
+                && hiroute_application_api::valid_console_landing(hint) =>
+        {
+            Ok(())
+        }
+        _ => Err(invalid()),
+    }
+}
+
 fn enable_options(options: &[String]) -> Result<(Option<bool>, Option<bool>), Failure> {
     let (mut console, mut notifications) = (None, None);
     let mut it = options.iter();
