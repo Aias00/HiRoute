@@ -61,6 +61,18 @@ test('Claude configuration preserves independent native preset mappings and does
   });
 });
 
+test('independent Claude edits, token changes and restore retain the selected activation without changing collaboration', () => {
+  const values = { ...draft.values, activationPreference: 'managed_launch' };
+  const configured = { ...claude, settings: { ...claude.settings, activation_mode: 'managed_launch', current_selection:
+    agentSettingsSpec(claude, 'model', false, { ...draft, values }).model.settings } };
+  assert.equal(agentSettingsSpec(claude, 'model', false, { ...draft, values }).activation_preference, 'managed_launch');
+  assert.equal(agentEditorSeed(configured, 'model').activationPreference, 'managed_launch');
+  assert.equal(agentTokenSpec(configured, true).activation_preference, 'managed_launch');
+  assert.equal(agentSettingsSpec(configured, 'model', true, draft).activation_preference, 'managed_launch');
+  assert.equal(agentSettingsSpec(configured, 'collaboration', false, { ...draft, values }).activation_preference, undefined);
+  assert.equal(agentSettingsSpec(claude, 'model', false, draft).activation_preference, undefined);
+});
+
 test('ordinary disable requests restoration from the saved reference and keeps model and collaboration recovery separate', () => {
   const profile = wire(agentSettingsSpec(codex, 'model', true, draft));
   assert.deepEqual(profile, {

@@ -62,6 +62,8 @@ export function agentSettingsSpec(agent: Agent, facet: AgentFacet, restore: bool
     }
     return {
       schema_version: { major: 2, minor: 0 },
+      ...(ecosystem === 'claude' && (restore ? agentModelStatus(agent)?.activation_mode === 'managed_launch' : values.activationPreference === 'managed_launch')
+        ? { activation_preference: 'managed_launch' as const } : {}),
       ...target,
       context_id: agent.codex_access && !agent.codex_access.slot_occupied
         ? (codexMode === 'root' ? agent.codex_access.root_context_id : agent.codex_access.profile_context_id)
@@ -94,6 +96,7 @@ export function agentTokenSpec(agent: Agent, regenerate: boolean) {
   }
   return {
     schema_version: { major: 2, minor: 0 },
+    ...(agentModelStatus(agent)?.activation_mode === 'managed_launch' ? { activation_preference: 'managed_launch' as const } : {}),
     ...(agentEcosystem(agent.agent_id) === 'hermes' ? { native_target: agent.native_target } : {}),
     context_id: agent.context_id,
     model: { intent: 'configure', settings: selection },

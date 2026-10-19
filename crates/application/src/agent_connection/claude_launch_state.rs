@@ -21,6 +21,7 @@ pub struct ClaudeIndependentLaunchStateV1 {
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ClaudeIndependentLaunchActionV1 {
     Configure {
+        previous_operation: Option<OperationId>,
         snapshot: Box<ClaudeLaunchSnapshotIntent>,
         gateway_base_url: String,
         trusted_hiroute_executable: String,
@@ -52,6 +53,7 @@ impl ClaudeIndependentLaunchStateV1 {
                 snapshot,
                 gateway_base_url,
                 trusted_hiroute_executable,
+                ..
             } => {
                 snapshot.validate()?;
                 if !super::claude_model_journal::local_gateway_base_url(gateway_base_url)
@@ -99,8 +101,15 @@ pub fn claude_independent_launch_for_operation(
     match (&spec.model, &state.action) {
         (
             AgentFacetIntent::Configure { settings },
-            ClaudeIndependentLaunchActionV1::Configure { snapshot, .. },
+            ClaudeIndependentLaunchActionV1::Configure {
+                snapshot,
+                previous_operation,
+                ..
+            },
         ) => {
+            if previous_operation.as_ref() == Some(operation.operation_id()) {
+                return Err(invalid());
+            }
             let grant: AgentModelGrantV2 =
                 serde_json::from_value(input.control["payload"]["state"]["model_grant"].clone())
                     .map_err(|_| invalid())?;

@@ -36,6 +36,32 @@ fn node(operation: &OperationV1, context: &str, agent: &str) -> Result<Node, &'s
     let AgentFacetIntent::Configure { settings } = &spec.model else {
         return Err("history_not_configuration");
     };
+    if let Some(state) =
+        claude_independent_launch_for_operation(operation).map_err(|_| "history_invalid")?
+    {
+        if agent != "agent_claude_default" || state.context_id != context {
+            return Err("context_mismatch");
+        }
+        let ClaudeIndependentLaunchActionV1::Configure {
+            previous_operation,
+            snapshot,
+            ..
+        } = state.action
+        else {
+            return Err("history_not_configuration");
+        };
+        return Ok(Node {
+            id: operation.operation_id.clone(),
+            previous: previous_operation,
+            settings: settings.clone(),
+            resolved: BTreeMap::from([
+                ("opus".into(), serde_json::json!(snapshot.presets.opus)),
+                ("sonnet".into(), serde_json::json!(snapshot.presets.sonnet)),
+                ("haiku".into(), serde_json::json!(snapshot.presets.haiku)),
+            ]),
+            spec,
+        });
+    }
     let mut intents = input
         .external
         .iter()

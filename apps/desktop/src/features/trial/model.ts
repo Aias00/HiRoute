@@ -1,10 +1,10 @@
-import type { Agent, AgentSnapshot } from '../agents/types';
+import type { Agent, AgentSnapshot, AgentActivationPreference } from '../agents/types';
 import { agentEditorSeed } from '../agents/editor-state.ts';
 import { agentEcosystem } from '../agents/ecosystems.ts';
 import { agentModelStatus } from '../agents/status.ts';
 import type { Options, Plan, Selection } from '../../plan-editor';
 
-export type TrialMapping = { agentId: string; presets: ('opus' | 'sonnet' | 'haiku')[] };
+export type TrialMapping = { agentId: string; presets: ('opus' | 'sonnet' | 'haiku')[]; activationPreference?: AgentActivationPreference };
 
 /** Resolve recorded facts only. A provider alias or native preset name is not a model identity. */
 export function currentPrimary(agent: Agent | undefined, plans: Plan[]): Selection | undefined {
@@ -31,7 +31,8 @@ export function trialMappingValues(agent: Agent, planId: string, mapping: TrialM
   const ecosystem = agentEcosystem(agent.agent_id);
   if (ecosystem === 'claude') {
     if (!mapping.presets.length) throw new Error('TRIAL_PRESET_REQUIRED');
-    return { ...values, claudePresets: { ...values.claudePresets, ...Object.fromEntries(mapping.presets.map(preset => [preset, { kind: 'plan', plan_id: planId }])) } };
+    return { ...values, activationPreference: mapping.activationPreference ?? values.activationPreference,
+      claudePresets: { ...values.claudePresets, ...Object.fromEntries(mapping.presets.map(preset => [preset, { kind: 'plan', plan_id: planId }])) } };
   }
   if (ecosystem === 'codex') return { ...values, allowedPlanIds: [...new Set([...values.allowedPlanIds, planId])], defaultChoice: { kind: 'plan' as const, plan_id: planId } };
   if (['dsh', 'pi', 'qoder'].includes(ecosystem ?? '')) return { ...values, allowedPlanIds: [...new Set([...values.allowedPlanIds, planId])], planProtocols: { ...values.planProtocols, [planId]: 'responses' as const } };

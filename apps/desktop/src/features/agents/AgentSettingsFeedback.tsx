@@ -55,6 +55,10 @@ export function AgentSettingsFeedback({ preview, agent: selected, facet, default
           ? text('所选计划无法满足 Claude Code 的工具调用或流式请求能力，请检查全部候选模型。', 'A selected plan cannot meet Claude Code tool or streaming requirements. Check all candidate models.')
         : block.reason === 'claude_context_override'
           ? text('Claude Code 存在窗口覆盖或禁用自动压缩的设置。请移除进程、项目或托管配置中的窗口覆盖，以及禁用压缩的环境变量后重试。', 'Claude Code has window overrides or compaction disabled. Remove process, project, or managed window overrides and compaction-disabling environment variables, then retry.')
+        : block.reason === 'managed_launch_unsupported'
+          ? text('此 Claude Code 安装不支持独立启动。请更新本机安装后重新预览，或选择普通会话。', 'This Claude Code installation does not support independent launch. Update it and preview again, or choose ordinary sessions.')
+        : block.reason === 'claude_connection_in_use'
+          ? text('当前 Claude 配置范围已有连接或未完成的操作。请先在“连接详情与恢复”中停用原连接，或继续完成原操作，再切换使用范围。', 'This Claude configuration already has a connection or an unfinished operation. Disable the existing connection under Connection details and recovery, or resume its operation, before changing the routing scope.')
         : block.reason === 'claude_context_window_unsupported'
           ? text('所选计划的共同窗口低于 Claude Code 的 100K 最低值。请调整计划窗口或使用 Codex。', 'The shared plan window is below Claude Code’s 100K minimum. Adjust the plan window or use Codex.')
         : block.reason === 'skill_file_conflict'
@@ -74,7 +78,7 @@ export function AgentSettingsFeedback({ preview, agent: selected, facet, default
             ? text('尚未确认此 Agent 能加载管理 Skill。请检查所选安装及本机 CLI。', 'Management Skill loading is unconfirmed. Check the selected Agent installation and local CLI.')
             : text('任务委派技能尚未确认。', 'Task delegation skill capability is unconfirmed.')
           : text('有前置条件尚未满足，请检查当前 Agent 状态。', 'A prerequisite is unmet. Check the current Agent state.');
-      return <p key={index}>{message}</p>;
+      return <div key={index}><p>{message}</p>{block.connection_conflict && <p className="field-help" style={{ overflowWrap: 'anywhere' }}>{text('原连接：', 'Existing connection: ')}{block.connection_conflict.connection_id} · {text('恢复记录：', 'Restore record: ')}{block.connection_conflict.restore_point_ref}</p>}</div>;
     })}
     {preview.unproven_native_model_ids?.length ? <p>{text('目录中尚未证明可由原账号调用的模型（不会开放给 Codex）：', 'Catalog names not proven callable on the original account (not exposed to Codex): ')}{preview.unproven_native_model_ids.join(', ')}</p> : null}
     {blockedCheckScope && selected && <button className="btn" type="button" disabled={disabled} onClick={event => onCheck(blockedCheckScope, event.currentTarget)}>{blockedCheckScope === 'native_authentication' ? text('重新检查本机认证', 'Check local authentication again') : text('重新检查任务委派技能', 'Check task delegation skill again')}</button>}

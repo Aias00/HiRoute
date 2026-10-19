@@ -45,7 +45,8 @@ export async function quickStartInvoke(command:string,payload:any,params:URLSear
   // Match the native snapshot's map order rather than echoing the form object.
   const p=selection.preset_mappings;
   selection.preset_mappings={haiku:p.haiku,opus:p.opus,sonnet:p.sonnet};
-  agent.settings={state:'configured',restore_point_ref:'restore/test',model_verified:false,operation_id:'operation/map',operation_state:'succeeded',current_selection:selection};
+  agent.settings={state:'configured',restore_point_ref:'restore/test',model_verified:false,operation_id:'operation/map',operation_state:'succeeded',current_selection:selection,
+    ...(payload.input.spec.activation_preference==='managed_launch'?{activation_mode:'managed_launch' as const}:{})};
   return {preview:{applicable:true,blockers:[]},mutation:{state:'applied',operation:{operation_id:'operation/map',state:'succeeded',sequence:1,cancellable:false}}};
  }
  if(command==='observation_read') return {rows:[],branches:[],sessions:[],announcements:[]};

@@ -6,7 +6,8 @@ import type { AgentModelSelection } from './types';
 type PreviousPreview = { status: 'available'; spec: { context_id: string; model: { intent: 'configure'; settings: AgentModelSelection } }; restored_from: Record<string, string> }
   | { status: 'unavailable'; reason: string; restore_is_separate: boolean };
 
-export function PreviousRouting({ agent, language, disabled, onDraft, onRestore }: {
+export function PreviousRouting({ agent, independent = false, language, disabled, onDraft, onRestore }: {
+  independent?: boolean;
   agent: string; language: 'zh' | 'en'; disabled: boolean;
   onDraft(selection: AgentModelSelection, context: string, source: HTMLElement): void;
   onRestore?(source: HTMLElement): void;
@@ -30,7 +31,7 @@ export function PreviousRouting({ agent, language, disabled, onDraft, onRestore 
     {error && <p role="alert">{t('读取失败，请重试。', 'Could not read history. Please retry.')}</p>}
     {result?.status === 'unavailable' && <div role="status"><p>{result.reason === 'no_previous_configuration'
       ? t('没有可恢复的上一次 HiRoute 映射。', 'There is no earlier HiRoute mapping to recover.')
-      : t('配置历史缺失、不完整或无法确认，无法安全生成回退草稿。', 'The configuration history is missing, incomplete or cannot be verified, so a recovery draft is unavailable.')}</p><p className="field-help">{t('恢复原生配置是独立操作，不代表历史中的上一次路由。', 'Restore native configuration is a separate action, not a recovered historical mapping.')}</p>{onRestore && <button type="button" className="btn" disabled={disabled} onClick={event => onRestore(event.currentTarget)}>{t('审阅恢复原生配置', 'Review restore to native')}</button>}</div>}
+      : t('配置历史缺失、不完整或无法确认，无法安全生成回退草稿。', 'The configuration history is missing, incomplete or cannot be verified, so a recovery draft is unavailable.')}</p><p className="field-help">{independent ? t('停用独立连接是另一个操作，原生配置保持不变。', 'Disabling the independent connection is a separate action; native settings stay unchanged.') : t('恢复原生配置是独立操作，不代表历史中的上一次路由。', 'Restore native configuration is a separate action, not a recovered historical mapping.')}</p>{onRestore && <button type="button" className="btn" disabled={disabled} onClick={event => onRestore(event.currentTarget)}>{independent ? t('审阅停用独立连接', 'Review disabling independent connection') : t('审阅恢复原生配置', 'Review restore to native')}</button>}</div>}
     {result?.status === 'available' && <div><p>{t('已找到之前的映射。接下来可查看和修改草稿，再确认保存。', 'Earlier mappings are available. Review and edit the draft before confirming the save.')}</p><button type="button" className="btn" disabled={disabled} onClick={event => onDraft(result.spec.model.settings, result.spec.context_id, event.currentTarget)}>{t('审阅路由修改', 'Review routing changes')}</button></div>}
   </Disclosure>;
 }

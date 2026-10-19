@@ -137,6 +137,54 @@ fn previous_routing_never_infers_native_from_missing_or_cyclic_history() {
 }
 
 #[test]
+fn previous_independent_routing_keeps_the_activation_and_untouched_presets() {
+    let mut current = fixture(
+        "op_00000000000000000000000000000002",
+        Some("op_00000000000000000000000000000001"),
+        "plan/new",
+        "plan/current-sonnet",
+    );
+    current.spec.activation_preference = AgentActivationPreferenceV1::ManagedLaunch;
+    let result = recover(current, &BTreeSet::from(["opus".into()]), |_| {
+        let mut older = fixture(
+            "op_00000000000000000000000000000001",
+            None,
+            "plan/old",
+            "plan/old-sonnet",
+        );
+        older.spec.activation_preference = AgentActivationPreferenceV1::ManagedLaunch;
+        Ok(older)
+    });
+    let Preview::Available { spec, .. } = result else {
+        panic!("independent mapping should be recoverable")
+    };
+    assert_eq!(
+        spec.activation_preference,
+        AgentActivationPreferenceV1::ManagedLaunch
+    );
+    let AgentFacetIntent::Configure {
+        settings: AgentModelSelectionV2::ClaudeLauncher {
+            preset_mappings, ..
+        },
+    } = spec.model
+    else {
+        panic!()
+    };
+    assert_eq!(
+        preset_mappings.opus,
+        AgentClaudePresetSelectionV2::Plan {
+            plan_id: AgentPlanId::parse("plan/old").unwrap()
+        }
+    );
+    assert_eq!(
+        preset_mappings.sonnet,
+        AgentClaudePresetSelectionV2::Plan {
+            plan_id: AgentPlanId::parse("plan/current-sonnet").unwrap()
+        }
+    );
+}
+
+#[test]
 fn previous_routing_bound_is_explicit_even_when_every_mapping_is_unchanged() {
     let result = recover(
         fixture(

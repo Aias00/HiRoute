@@ -1,6 +1,6 @@
 import type {
   Agent, AgentFixedModel, AgentDefaultChoice, AgentClaudePresetChoice,
-  AgentClaudePresetMappings, AgentCollaborationTriggerMode, CodexNativeModelMode,
+  AgentClaudePresetMappings, AgentCollaborationTriggerMode, CodexNativeModelMode, AgentActivationPreference,
 } from './types';
 import { agentEcosystem, agentModelSelectionMatches, agentSupportsModelRouting } from './ecosystems.ts';
 import { agentModelStatus } from './status.ts';
@@ -10,6 +10,7 @@ export type {
 } from './types';
 
 export type AgentEditorValues = {
+  activationPreference: AgentActivationPreference;
   fixedModels: AgentFixedModel[];
   nativeModelMode: CodexNativeModelMode;
   allowedPlanIds: string[];
@@ -30,6 +31,7 @@ export function withModelSelection(values: AgentEditorValues, selection: import(
 }
 
 export const EMPTY_EDITOR_VALUES: AgentEditorValues = {
+  activationPreference: 'automatic',
   fixedModels: [],
   nativeModelMode: 'hiroute_only',
   allowedPlanIds: [],
@@ -50,6 +52,7 @@ export function editorFingerprint(value: AgentEditorValues): string {
   // Compare settings rather than JSON map insertion order or seed-only metadata.
   // Preserve array order except for the set of allowed Plan identities.
   return JSON.stringify({
+    activationPreference: value.activationPreference,
     fixedModels: value.fixedModels,
     nativeModelMode: value.nativeModelMode,
     allowedPlanIds: [...value.allowedPlanIds].sort(),
@@ -108,6 +111,7 @@ export function agentEditorSeed(
   const initialPlan = facet === 'model' && initial && known && !currentModel && availablePlanIds.length === 1
     ? availablePlanIds[0] : undefined;
   return {
+    activationPreference: facet === 'model' && agentModelStatus(agent)?.activation_mode === 'managed_launch' ? 'managed_launch' : 'automatic',
     known: facet === 'model'
       ? known && agentSupportsModelRouting(agent.agent_id) && (initial || Boolean(currentModel && agentModelSelectionMatches(agent.agent_id, currentModel)))
       : known,

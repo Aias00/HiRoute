@@ -189,6 +189,7 @@ impl AgentSettingsPlanningInput {
                                 ClaudeIndependentLaunchStateV1::new(
                                     self.facts.context_id.clone(),
                                     ClaudeIndependentLaunchActionV1::Configure {
+                                        previous_operation: file.active_configuration.clone(),
                                         snapshot: Box::new(snapshot),
                                         gateway_base_url: claude.gateway_base_url.clone(),
                                         trusted_hiroute_executable: claude

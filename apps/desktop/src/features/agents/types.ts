@@ -3,6 +3,7 @@ import type { OperationReference } from '../model-connections/types';
 
 export type AgentCollaborationTriggerMode = 'explicit' | 'delegate_by_default';
 export type CodexNativeModelMode = 'hiroute_only' | 'preserve_available';
+export type AgentActivationPreference = 'automatic' | 'managed_launch';
 export type AgentDefaultChoice =
   | { kind: 'preserve_native' }
   | { kind: 'fixed_model'; client_model_id: string }
@@ -120,6 +121,7 @@ export type AgentLiveCheckCompletion = {
   requested_call_count: number;
 };
 export type ModelStatus = {
+  activation_mode?: 'managed_configuration' | 'managed_launch';
   native_target?: AgentNativeTarget;
   management_skill?: ManagementSkillStatus;
   native_adapter?: { resources_installed: boolean; runtime_loading: 'unobserved'; next_action: 'reload_plugins_if_running' | 'repair_owned_resources'; known_channel_models?: string[] };
@@ -162,7 +164,8 @@ export type AgentSnapshot = {
 export type Preview = {
   applicable: boolean;
   unproven_native_model_ids?: string[];
-  blockers: { reason: string; capabilities?: { capability: string; reason: string }[]; model_ids?: string[] }[];
+  blockers: { reason: string; capabilities?: { capability: string; reason: string }[]; model_ids?: string[];
+    connection_conflict?: { connection_id: string; restore_point_ref: string | null; operation_id: string | null; repair: string } }[];
 };
 export type AgentMutationOutcome = {
   state: string;

@@ -11,6 +11,8 @@ import { AgentSettingsFeedback } from '../agents/AgentSettingsFeedback';
 import type { OperationReference } from '../model-connections/types';
 import type { Plan } from '../../plan-editor';
 import { initialTrialMapping, trialMappingValues, type TrialMapping } from './model';
+import { ClaudeActivationChoice } from '../agents/ClaudeActivationChoice';
+import { ClaudeLaunchCommand } from '../agents/ClaudeLaunchCommand';
 
 export function TrialAgentChoice({ snapshot, value, onChange, language, disabled = false }: {
   snapshot: AgentSnapshot; value: TrialMapping; onChange(value: TrialMapping): void; language: 'zh' | 'en'; disabled?: boolean;
@@ -25,8 +27,9 @@ export function TrialAgentChoice({ snapshot, value, onChange, language, disabled
     return t('原生模型', 'Native model');
   };
   return <fieldset disabled={disabled} className="trial-agent-choice">
-    {usable.length > 1 ? <label className="field"><span className="field-label">Agent</span><select className="input" value={value.agentId} onChange={e => onChange({ ...value, agentId: e.target.value })}><option value="">{t('选择 Agent', 'Select an Agent')}</option>{usable.map(item => <option key={item.agent_id} value={item.agent_id}>{agentDisplayName(item.agent_id, language)}</option>)}</select></label>
+    {usable.length > 1 ? <label className="field"><span className="field-label">Agent</span><select className="input" value={value.agentId} onChange={e => onChange({ ...value, agentId: e.target.value, activationPreference: undefined })}><option value="">{t('选择 Agent', 'Select an Agent')}</option>{usable.map(item => <option key={item.agent_id} value={item.agent_id}>{agentDisplayName(item.agent_id, language)}</option>)}</select></label>
       : !usable.length && <p className="field-help">{t('还没有可以修改模型设置的 Agent。发布后可以到 Agent 页面接入。', 'No Agent with editable model settings yet. You can connect one from Agents after publishing.')}</p>}
+    {agentEcosystem(value.agentId) === 'claude' && agent && <ClaudeActivationChoice value={value.activationPreference ?? agentEditorSeed(agent, 'model', []).activationPreference} language={language} onChange={activationPreference => onChange({ ...value, activationPreference })} />}
     {agentEcosystem(value.agentId) === 'claude' ? <div className="trial-presets" role="group" aria-label={t('应用到哪些预设', 'Presets to change')}>
       <span className="trial-presets-title">{t(`${agentDisplayName(value.agentId, language)} 的模型预设`, `${agentDisplayName(value.agentId, language)} model presets`)}</span>
       {(['opus', 'sonnet', 'haiku'] as const).map(preset => <label key={preset} className="trial-preset"><input type="checkbox" checked={value.presets.includes(preset)} onChange={e => onChange({ ...value, presets: e.target.checked ? [...value.presets, preset] : value.presets.filter(p => p !== preset) })} /><strong>{preset[0].toUpperCase() + preset.slice(1)}</strong><span>{t('现在：', 'Now: ')}{current(preset)}</span></label>)}
@@ -123,6 +126,7 @@ export function TrialAgentMapping({ plan, initial, language, mutable, onOperatio
     {preview && <AgentSettingsFeedback preview={preview} language={language} facet="model" defaultChoice={{ kind: 'plan', plan_id: plan.agent_plan_id }} disabled={busy || !!pending} onCheck={() => void apply()} />}
     {pending && <p role="status">{t('正在核实本次映射；刷新不会重复提交。', 'Verifying this mapping; refresh does not resubmit.')}</p>}
     {done !== null && <TrialSessionHandoff planId={plan.agent_plan_id} confirmedAt={done} language={language} onWatch={onOpenSessions} />}
+    {done !== null && snapshot?.agents.some(agent => agent.agent_id === mapping?.agentId && agentModelStatus(agent)?.activation_mode === 'managed_launch') && <ClaudeLaunchCommand language={language} />}
     <div className="actions">{done && onOpenPerformance && <button className="btn" onClick={onOpenPerformance}>{t('查看模型表现', 'View model performance')}</button>}{done && onOpenSessions && <button className="btn" onClick={() => onOpenSessions()}>{t('查看会话时间线', 'View session timelines')}</button>}<button className="btn btn-quiet" disabled={busy} onClick={() => void refresh()}>{t('刷新结果', 'Refresh result')}</button>{!done && <button className="btn btn-primary" disabled={busy || !!pending || !mutable || !snapshot?.trusted_authority || !mapping?.agentId || (agentEcosystem(mapping.agentId) === 'claude' && !mapping.presets.length)} onClick={() => void apply()}>{t('检查并映射 Agent', 'Review and map Agent')}</button>}{mapping?.agentId && onOpenAgent && <button className="btn btn-quiet" onClick={() => onOpenAgent(mapping.agentId)}>{t('查看 Agent 配置', 'Inspect Agent settings')}</button>}</div>
   </section>;
 }

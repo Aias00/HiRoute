@@ -44,6 +44,12 @@ def check(product, *, env=None):
 
 def run(repository):
     product = Product(repository)
+    # The fixture owns these settings. Caller policy is tested explicitly below,
+    # rather than inheriting the coding host's context overrides.
+    for key in ('CLAUDE_CODE_AUTO_COMPACT_WINDOW', 'CLAUDE_CODE_MAX_CONTEXT_TOKENS',
+                'CLAUDE_AUTOCOMPACT_PCT_OVERRIDE', 'CLAUDE_CODE_DISABLE_1M_CONTEXT',
+                'CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT', 'DISABLE_COMPACT', 'DISABLE_AUTO_COMPACT'):
+        product.env.pop(key, None)
     upstream = NativeUpstream(base_host='localhost')
     try:
         product.install_codex_fixture()
@@ -53,7 +59,7 @@ def run(repository):
         linked = product.root / 'other-account-settings.json'
         linked.symlink_to(product.settings)
         product.start()
-        saved = save_native_source(product, upstream, NATIVE_TOKEN, cli_input=True)
+        saved = save_native_source(product, upstream, NATIVE_TOKEN, context_tokens=262144, cli_input=True)
         product.public_cli('protected-input release --candidate candidate/native/product')
         product.editor = {'schema': 'hiroute.plan-editor/v2', 'display_name': 'Independent launch fixture',
                           'purpose': 'No native settings writes', 'mode': 'fixed_model',
@@ -67,6 +73,10 @@ def run(repository):
         preview = product.preview('routing preview', {'change': change})
         product.apply('routing apply', 'ApplyAgentPlanChange', preview, {'change': change}, 'claude-independent-plan')
         product.plan_id = preview['plan_head']['reference']['plan_id']
+        change = plan_change(product, 'create', 'claude-independent-second-plan', display_name='Earlier mapping fixture')
+        preview = product.preview('routing preview', {'change': change})
+        product.apply('routing apply', 'ApplyAgentPlanChange', preview, {'change': change}, 'claude-independent-second-plan')
+        second_plan = preview['plan_head']['reference']['plan_id']
         scan = product.preview('agents scan')
         agent = next(agent for agent in scan['agents'] if agent['agent_id'] == 'agent_claude_default')
         product.agent_context_id = agent['context_id']
@@ -115,6 +125,13 @@ def run(repository):
         assert code == 78 and 'CLAUDE_CODE_OAUTH_TOKEN' in blocked['checks'][-1]['repair']
         assert 'opaque-process-credential' not in json.dumps(blocked)
         apply(product, independent, 'independent-update')
+        changed = json.loads(json.dumps(independent))
+        changed['model']['settings']['preset_mappings']['opus'] = {'kind': 'plan', 'plan_id': second_plan}
+        apply(product, changed, 'independent-new-mapping')
+        previous = product.preview('agents previous-routing preview', {'agent': 'agent_claude_default', 'presets': ['opus']})
+        assert previous['status'] == 'available' and previous['spec']['activation_preference'] == 'managed_launch'
+        assert previous['spec']['model']['settings']['preset_mappings']['opus'] == mapped
+        apply(product, previous['spec'], 'independent-previous-mapping')
         assert snapshot([product.settings, credentials, linked]) == native_before
         product.stop()
         product.start()
