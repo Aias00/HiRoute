@@ -104,7 +104,7 @@ pub(super) fn output(command_id: &str) -> &'static str {
     } else if command_id.starts_with("worker.") {
         "Default text renders the response for people. --output json emits the unchanged hiroute.machine-envelope/v2 object; --output quiet prints only a completed result and sends pending locators to stderr."
     } else if command_id == "agent.launch" {
-        "On successful spawn, stdout and stderr are the launched Agent streams; the non-secret launch descriptor is not printed. Failures before spawn emit one hiroute.machine-envelope/v2 JSON object on stdout."
+        "--check emits a machine envelope containing hiroute.agent-launch-check/v1. After spawn, stdout and stderr are native Agent streams and the descriptor is not printed. A refused launch states its reason and repair on stderr; --output json also carries the check in the machine envelope."
     } else {
         "One hiroute.machine-envelope/v2 JSON object on stdout; diagnostics belong on stderr."
     }
@@ -113,7 +113,7 @@ pub(super) fn exit_status(command_id: &str) -> &'static str {
     if command_id.starts_with("worker.") {
         "0 accepted/query/pending; final exec/continue failure is nonzero; 2 usage; 3 conflict/busy; 4 denied; 5 not found; 6 unavailable; 7 action required; 8 needs attention; 1 execution failure. A result query may exit 0 while honestly reporting a failed run."
     } else if command_id == "agent.launch" {
-        "Returns the launched Agent exit code, or 128 plus its terminating Unix signal. Before spawn: 2 usage; 3 auth/routing conflict; 5 connection not found; 6 unavailable. Launcher lifecycle failures return 6."
+        "78 (EX_CONFIG) is reserved for a failed readiness check; no Agent starts unless terminal use explicitly confirms native fallback. 2 rejects arguments; 6 is a launcher lifecycle failure. Once started, the Agent exit code or 128 plus its terminating Unix signal is returned unchanged."
     } else {
         "0 success/accepted; 2 usage; 3 conflict/blocker; 4 capability denied; 5 not found; 6 unavailable; 7 action required; 8 needs attention."
     }
@@ -151,7 +151,7 @@ pub(super) fn effects(command_id: &str, kind: CommandKind) -> &'static str {
         return "Registers a private ephemeral candidate and protected credential reference after exact source reread. Does not save a source, mutate native files or call a model.";
     }
     if command_id == "agent.launch" {
-        return "Creates one owner-only temporary launch overlay, directly spawns the exact managed Agent executable without a shell, and removes the overlay after child exit; no persistent user configuration is changed.";
+        return "--check is read-only. Launch uses the frozen Codex profile facts or Claude's owner-only temporary overlay, then supervises the exact executable without changing persistent configuration. A confirmed native fallback uses the caller's original environment and argv.";
     }
     match kind {
         CommandKind::Query | CommandKind::Watch => "Read-only; no product side effect.",
@@ -186,7 +186,7 @@ pub(super) fn network_and_model_use(command_id: &str, kind: CommandKind) -> &'st
         return "Contacts only the explicitly selected, typed endpoint. Inventory checks make no inference call; selecting an inference model may send one bounded model request and consume provider quota.";
     }
     if command_id == "agent.launch" {
-        return "Local Control supplies a non-secret descriptor. The launched Claude process may send caller-requested model traffic only through the numeric-loopback HiRoute Gateway.";
+        return "Preflight and --check make no model request. A routed Agent uses the HiRoute Gateway. Only explicitly confirmed native fallback starts an unrouted session, labelled as such.";
     }
     match kind {
         CommandKind::Preview => "No model use and no non-fixture network access.",

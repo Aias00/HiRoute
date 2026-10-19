@@ -15,6 +15,7 @@ mod previous_routing;
 pub use previous_routing::*;
 mod restore;
 mod revocation;
+pub(crate) mod routed_launch;
 mod settings;
 mod settings_input;
 mod skill;

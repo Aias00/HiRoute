@@ -24,6 +24,7 @@
     "hiroute.agent-connection/v1",
     "hiroute.agent-discovery-list/v1",
     "hiroute.agent-effective-state/v1",
+    "hiroute.agent-launch-check/v1",
     "hiroute.agent-launch-descriptor-request/v1",
     "hiroute.agent-live-check-evidence/v1",
     "hiroute.agent-live-check-receipt/v1",
@@ -83,6 +84,7 @@
     "hiroute.codex-catalog/v1",
     "hiroute.codex-collaboration/v1",
     "hiroute.codex-field-restore/v1",
+    "hiroute.codex-launch-snapshot/v1",
     "hiroute.codex-native-files/v2",
     "hiroute.codex-native-responses/v1",
     "hiroute.codex-subscription-candidate/v1",
@@ -252,6 +254,7 @@
     "hiroute.managed-artifact-marker/v3",
     "hiroute.managed-artifact-marker/v4",
     "hiroute.managed-claude-launch-descriptor/v2",
+    "hiroute.managed-codex-launch-descriptor/v1",
     "hiroute.managed-collaboration-skill/v2",
     "hiroute.managed-launch-observation/v1",
     "hiroute.managed-launch-warning/v1",
@@ -361,6 +364,7 @@
     "hiroute.release-facts-cross-reference/v2",
     "hiroute.release-facts/v2",
     "hiroute.release-model-data/v2",
+    "hiroute.routed-agent-launch-request/v1",
     "hiroute.routing-control/v1",
     "hiroute.routing-control/v2",
     "hiroute.routing-observations/v1",
@@ -385,6 +389,7 @@
     "hiroute.session-store-status/v1",
     "hiroute.settings-claude-model-file/v1",
     "hiroute.settings-codex-model-file/v1",
+    "hiroute.settings-codex-model-file/v2",
     "hiroute.settings-dsh-model-file/v1",
     "hiroute.settings-hermes-model-file/v1",
     "hiroute.settings-hermes-plugin-file/v1",
@@ -1219,6 +1224,44 @@
         "hiroute.upgrade-source-backup/v2"
       ],
       "legacy_support": []
+    },
+    {
+      "subject": "codex_profile_launch",
+      "audited_prefixes": [
+        "hiroute.codex-launch-snapshot",
+        "hiroute.managed-codex-launch-descriptor",
+        "hiroute.agent-launch-check",
+        "hiroute.routed-agent-launch-request"
+      ],
+      "current_contracts": [
+        "hiroute.codex-launch-snapshot/v1",
+        "hiroute.managed-codex-launch-descriptor/v1",
+        "hiroute.agent-launch-check/v1",
+        "hiroute.routed-agent-launch-request/v1"
+      ],
+      "legacy_support": []
+    },
+    {
+      "subject": "codex_settings_journal",
+      "audited_prefixes": [
+        "hiroute.settings-codex-model-file"
+      ],
+      "current_contracts": [
+        "hiroute.settings-codex-model-file/v2"
+      ],
+      "legacy_support": [
+        {
+          "contract": "hiroute.settings-codex-model-file/v1",
+          "mode": "recovery_read_only",
+          "owner": "agent-connections",
+          "reason": "Retained accepted settings Operations keep their original canonical bytes, status, restore and unfinished-operation recovery. A legacy independent profile has no frozen launch snapshot; the new routed entry refuses it and requires an explicitly confirmed resave, without automatic writes or another login.",
+          "removal_condition": "Remove only after supported released sources and retained profile Operations/backups no longer require the v1 reader, with verified status, restore and recovery coverage.",
+          "allowed_paths": [
+            "crates/application/src/agent_connection/model_journal.rs",
+            "crates/local-storage/src/agents/native_restoration_ack.rs"
+          ]
+        }
+      ]
     }
   ],
   "forbidden_contracts": [
@@ -1294,7 +1337,7 @@
       "field": "context_window_tokens",
       "mode": "recovery_read_only",
       "owner": "agent-connections",
-      "reason": "A descriptor reconstructed from a pre-window immutable settings operation has no managed context policy. It retains that operation\u2019s behavior until settings are saved again.",
+      "reason": "A descriptor reconstructed from a pre-window immutable settings operation has no managed context policy. It retains that operation’s behavior until settings are saved again.",
       "removal_condition": "Retire with the pre-window settings operation recovery reader.",
       "allowed_paths": [
         "crates/domain/src/agents/managed_launch.rs",

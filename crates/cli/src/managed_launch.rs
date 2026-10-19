@@ -158,11 +158,24 @@ fn forbidden_caller_argument(argument: &OsStr, profile: &ManagedLaunchProfileV1)
     }
 }
 
+#[cfg(test)]
 pub(crate) fn launch(
     descriptor: &ManagedClaudeLaunchDescriptorV2,
     invocation: &ManagedLaunchInvocation,
     trusted_hiroute_executable: &str,
 ) -> Result<u8, ManagedLaunchFailure> {
+    let mut process = prepare(descriptor, invocation, trusted_hiroute_executable)?;
+    spawn_and_wait(process.command_mut())
+}
+
+pub(crate) fn prepare(
+    descriptor: &ManagedClaudeLaunchDescriptorV2,
+    invocation: &ManagedLaunchInvocation,
+    trusted_hiroute_executable: &str,
+) -> Result<ManagedClaudeProcessV1, ManagedLaunchFailure> {
+    if invocation.connection_id != descriptor.connection_id {
+        return Err(ManagedLaunchFailure::InvalidArguments);
+    }
     let mut process = ManagedClaudeProcessV1::prepare(
         descriptor,
         &invocation.user_settings,
@@ -171,7 +184,7 @@ pub(crate) fn launch(
     )
     .map_err(|_| ManagedLaunchFailure::Unavailable)?;
     prepend_validated_user_bin(process.command_mut(), trusted_hiroute_executable);
-    spawn_and_wait(process.command_mut())
+    Ok(process)
 }
 
 /// Desktop may expose its bundled CLI through one owner-controlled stable link. Managed Agents

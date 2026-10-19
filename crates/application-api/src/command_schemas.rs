@@ -94,6 +94,10 @@ macro_rules! response { ($($ty:ty),+ $(,)?) => { alternatives(vec![$(schema::<Ma
 
 pub fn command_schemas(command_id: &str) -> Option<CommandSchemasV1> {
     let (mut request, mut response) = match command_id {
+        "agent.launch" => (
+            request!(RoutedLaunchRequestV1),
+            response!(AgentLaunchCheckV1),
+        ),
         "prices.effective" => (
             request!(GetEffectivePricesV2),
             response!(EffectivePricesResultV2),
@@ -363,6 +367,10 @@ pub fn command_schemas(command_id: &str) -> Option<CommandSchemasV1> {
 
 fn examples(command_id: &str) -> Vec<Value> {
     match command_id {
+        "agent.launch" => vec![
+            json!({"agent":"codex"}),
+            json!({"agent":"claude-code","context":"agent-context/claude/example"}),
+        ],
         "compute.connection.test" => connection_test_examples(),
         "decision.services.apply" => {
             let change = json!({"id":"service/example", "expected_revision":0, "service":{

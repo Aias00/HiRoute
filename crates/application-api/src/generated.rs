@@ -312,6 +312,7 @@ fn agent_launch_descriptor_request_schema() -> Value {
     json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "$id": "hiroute://contracts/cli/agent-launch-descriptor-request.v1.schema.json",
+        "$comment": crate::agent_connection::AGENT_LAUNCH_DESCRIPTOR_REQUEST_SCHEMA_V1,
         "type": "object", "additionalProperties": false,
         "required": ["connection_id"],
         "properties": {
@@ -321,6 +322,21 @@ fn agent_launch_descriptor_request_schema() -> Value {
             }
         }
     })
+}
+
+fn routed_launch_schema(request: bool) -> Value {
+    let schemas = crate::command_schemas::command_schemas("agent.launch")
+        .expect("routed launch schema is registered");
+    let (mut schema, file) = if request {
+        (
+            schemas.request,
+            "routed-agent-launch-request.v1.schema.json",
+        )
+    } else {
+        (schemas.response, "agent-launch-check.v1.schema.json")
+    };
+    schema["$id"] = format!("hiroute://contracts/cli/{file}").into();
+    schema
 }
 
 fn agent_scan_request_schema() -> Value {
@@ -499,6 +515,14 @@ pub fn generated_contract_files() -> Vec<GeneratedContractFile> {
             pretty_json(&agent_launch_descriptor_request_schema()),
         ),
         (
+            "agent-launch-check.v1.schema.json",
+            pretty_json(&routed_launch_schema(false)),
+        ),
+        (
+            "routed-agent-launch-request.v1.schema.json",
+            pretty_json(&routed_launch_schema(true)),
+        ),
+        (
             "agent-scan-request.v1.schema.json",
             pretty_json(&agent_scan_request_schema()),
         ),
@@ -607,6 +631,7 @@ mod tests {
             paths,
             vec![
                 "agent-check-request.v1.schema.json",
+                "agent-launch-check.v1.schema.json",
                 "agent-launch-descriptor-request.v1.schema.json",
                 "agent-plan-catalog-query.v2.schema.json",
                 "agent-scan-request.v1.schema.json",
@@ -645,6 +670,7 @@ mod tests {
                 "planned-manifest.v1.json",
                 "prepare-discovered-model-connection-request.v1.schema.json",
                 "publication-checkpoint-change.v1.schema.json",
+                "routed-agent-launch-request.v1.schema.json",
                 "session-list-query.v1.schema.json",
                 "session-lookup.v1.schema.json",
                 "setup-apply-request.v1.schema.json",

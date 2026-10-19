@@ -119,6 +119,10 @@ pub struct AgentConnectionStatusV1 {
     pub grant_generation: Option<u64>,
 }
 
+/// The retained connection-id query remains available to released managed-launch callers.
+pub const AGENT_LAUNCH_DESCRIPTOR_REQUEST_SCHEMA_V1: &str =
+    "hiroute.agent-launch-descriptor-request/v1";
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AgentLaunchDescriptorRequestV1 {

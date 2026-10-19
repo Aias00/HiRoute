@@ -120,22 +120,43 @@ fn forbidden_codex_argument(arguments: &[OsString]) -> Option<&'static str> {
             index += 1;
             continue;
         };
-        if text == "--profile"
-            || text.starts_with("--profile=")
-            || text.starts_with("-p") && !text.starts_with("--")
-        {
+        if text == "--profile" || text.starts_with("--profile=") {
             return Some("--profile/-p");
         }
         if text == "--oss" || text.starts_with("--oss=") {
             return Some("--oss");
         }
-        let value = if text == "-c" || text == "--config" {
+        let value = if text == "--config" {
             index += 1;
             arguments.get(index).and_then(|value| value.to_str())
         } else if let Some(value) = text.strip_prefix("--config=") {
             Some(value)
-        } else if let Some(value) = text.strip_prefix("-c").filter(|_| !text.starts_with("--")) {
-            Some(value.strip_prefix('=').unwrap_or(value))
+        } else if let Some(cluster) = text.strip_prefix('-').filter(|s| !s.starts_with('-')) {
+            // Clap accepts short-option clusters. A value-taking option consumes the rest
+            // of its cluster (or the next argv), so letters inside its value are not flags.
+            let mut config = None;
+            for (offset, flag) in cluster.char_indices() {
+                if flag == 'p' {
+                    return Some("--profile/-p");
+                }
+                if flag == 'c' {
+                    let rest = &cluster[offset + 1..];
+                    config = if rest.is_empty() {
+                        index += 1;
+                        arguments.get(index).and_then(|value| value.to_str())
+                    } else {
+                        Some(rest.strip_prefix('=').unwrap_or(rest))
+                    };
+                    break;
+                }
+                if matches!(flag, 'a' | 'C' | 'i' | 'm' | 'o' | 's' | 'S') {
+                    if offset + 1 == cluster.len() {
+                        index += 1;
+                    }
+                    break;
+                }
+            }
+            config
         } else {
             None
         };
@@ -166,6 +187,8 @@ mod tests {
             vec!["-p", "other"],
             vec!["--profile=other"],
             vec!["-pother"],
+            vec!["-hpother"],
+            vec!["-hcmodel_provider='other'"],
             vec!["--oss"],
             vec!["-c", "profile='other'"],
             vec!["--config=profiles.hiroute.model='other'"],
@@ -182,6 +205,7 @@ mod tests {
             forbidden_codex_argument(&arguments(&[
                 "-m",
                 "hiroute-other",
+                "-mprofile-literal",
                 "--approve-for-me",
                 "-c",
                 "model_reasoning_effort='high'",

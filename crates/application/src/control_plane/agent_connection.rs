@@ -208,7 +208,7 @@ pub(crate) fn dispatch_launch_descriptor(
         else {
             return failed(ErrorCode::DaemonUnavailable, request.request_id);
         };
-        return match port.routed_launch(&payload) {
+        return match crate::agent_connection::routed_launch::read(port, &payload) {
             Ok(read) => succeeded(read, request.request_id),
             Err(error) => failed(map_control_error(error), request.request_id),
         };

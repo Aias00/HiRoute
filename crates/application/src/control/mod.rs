@@ -289,6 +289,14 @@ pub enum CodexLaunchDescriptorRead {
     SnapshotMissing,
 }
 
+/// Captured default-scope settings facts. Selection and launch policy stay in Application.
+pub struct RoutedLaunchContextFacts {
+    pub context: String,
+    pub candidate_contexts: Vec<String>,
+    pub connection_current: bool,
+    pub selection: Option<hiroute_domain::AgentModelSelectionV2>,
+}
+
 /// Read-only facts needed by the typed AgentConnection planner and managed-launch endpoint.
 /// The daemon adapter owns filesystem/publication joins; Application owns every product decision.
 pub trait AgentConnectionControlPort: Send + Sync {
@@ -371,10 +379,17 @@ pub trait AgentConnectionControlPort: Send + Sync {
         Err(ControlReadError::NotFound)
     }
 
-    fn routed_launch(
+    fn routed_launch_context(
         &self,
         _request: &hiroute_application_api::RoutedLaunchRequestV1,
-    ) -> Result<hiroute_application_api::RoutedLaunchReadV1, ControlReadError> {
+    ) -> Result<RoutedLaunchContextFacts, ControlReadError> {
+        Err(ControlReadError::Unavailable)
+    }
+
+    /// Returns only the current, installed publication. Never publishes or repairs it.
+    fn routed_launch_publication(
+        &self,
+    ) -> Result<Option<hiroute_domain::GatewayPublicationV1>, ControlReadError> {
         Err(ControlReadError::Unavailable)
     }
 }

@@ -95,6 +95,7 @@ pub(super) fn execute(arguments: &[OsString]) -> CliExecution {
     };
     if read.check.launchable
         && (read.check.candidate_contexts.len() != 1
+            || read.check.candidate_contexts.first() != read.check.context.as_ref()
             || read
                 .check
                 .checks
@@ -158,11 +159,11 @@ pub(super) fn execute(arguments: &[OsString]) -> CliExecution {
         );
         return refused(&invocation, check);
     }
-    if invocation.check {
-        return super::success(check, Some(super::next_request_id()));
-    }
     match descriptor {
         RoutedLaunchDescriptorV1::Codex(d) => {
+            if invocation.check {
+                return super::success(check, Some(super::next_request_id()));
+            }
             let mut command = Command::new(&d.snapshot.executable);
             command
                 .args(["--profile", d.snapshot.profile_name.as_str()])
@@ -199,7 +200,23 @@ pub(super) fn execute(arguments: &[OsString]) -> CliExecution {
                 .environment_removals
                 .iter()
                 .any(|name| std::env::var_os(name).is_some());
-            let mut result = launched(managed_launch::launch(&d, &native, &executable));
+            let mut process = match managed_launch::prepare(&d, &native, &executable) {
+                Ok(process) => process,
+                Err(_) => {
+                    check.checks.pop();
+                    check.record(
+                        "managed_launch",
+                        false,
+                        "managed_launch_conflict",
+                        "hiroute agent launch --help",
+                    );
+                    return refused(&invocation, check);
+                }
+            };
+            if invocation.check {
+                return super::success(check, Some(super::next_request_id()));
+            }
+            let mut result = launched(managed_launch::spawn_and_wait(process.command_mut()));
             if sanitized {
                 result.stderr.push_str("MANAGED_LAUNCH_ENV_SANITIZED\n");
             }
@@ -251,7 +268,12 @@ fn refused(invocation: &args::Invocation, check: AgentLaunchCheckV1) -> CliExecu
         drop(stderr);
         emitted = shown;
         let mut answer = String::new();
-        if shown && std::io::stdin().lock().read_line(&mut answer).is_ok() && answer.trim() == "y" {
+        if shown
+            && std::io::Read::take(std::io::stdin().lock(), 4)
+                .read_line(&mut answer)
+                .is_ok()
+            && matches!(answer.as_str(), "y" | "y\n" | "y\r\n")
+        {
             eprintln!("This session is not routed through HiRoute.");
             let executable = match invocation.agent {
                 RoutedLaunchAgentV1::Codex => "codex",

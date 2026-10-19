@@ -520,11 +520,17 @@ impl AgentConnectionControlPort for LocalControlAdapter {
         })
     }
 
-    fn routed_launch(
+    fn routed_launch_context(
         &self,
         request: &hiroute_application_api::RoutedLaunchRequestV1,
-    ) -> Result<hiroute_application_api::RoutedLaunchReadV1, ControlReadError> {
-        self.routed_launch_read(request)
+    ) -> Result<hiroute_application::control::RoutedLaunchContextFacts, ControlReadError> {
+        self.routed_launch_context_facts(request)
+    }
+
+    fn routed_launch_publication(
+        &self,
+    ) -> Result<Option<hiroute_domain::GatewayPublicationV1>, ControlReadError> {
+        self.routed_launch_installed_publication()
     }
 
     fn managed_codex_launch_descriptor(

@@ -460,7 +460,7 @@ const COMMANDS: &[StaticCommandDescriptor] = &[
         ["CLI-057", "APP-057"],
         Released,
         Action,
-        "Launch the managed Claude Code connection through the published three-slot snapshot."
+        "Check readiness and launch Codex or Claude Code through the applied independent connection."
     ),
     command!(
         "compute.scan",
