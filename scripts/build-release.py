@@ -137,6 +137,14 @@ class Candidate:
             raise ValueError("external Cargo targets are forbidden")
         self.version = json.loads((REPO / "apps/desktop/src-tauri/tauri.conf.json").read_text())["version"]
         module("package-desktop").validate_release_versions(self.version)
+        self.result["toolchain"] = {}
+        if not self.target.endswith("-apple-darwin"):
+            npm = "npm.cmd" if self.target.endswith("-pc-windows-msvc") else "npm"
+            try:
+                for name, executable in (("node", "node"), ("npm", npm)):
+                    self.result["toolchain"][name] = self.run(executable, "--version")
+            except FileNotFoundError as error:
+                raise ValueError(f"standalone release requires Node.js and npm on PATH; missing: {error.filename}") from error
         metadata = json.loads(self.run("cargo", "metadata", "--locked", "--no-deps", "--format-version", "1"))
         if Path(metadata["target_directory"]).resolve() != REPO / "target":
             raise ValueError("Cargo config must use checkout-local target/")
@@ -147,7 +155,7 @@ class Candidate:
                 raise ValueError("Linux release must run inside the pinned glibc 2.31 build image")
             self.result["linux_baseline"] = baseline
         self.result["version"] = self.version
-        self.result["toolchain"] = {name: self.run(name, "--version") for name in ("cargo", "rustc")}
+        self.result["toolchain"].update({name: self.run(name, "--version") for name in ("cargo", "rustc")})
 
     def desktop(self):
         arch = "arm64" if self.target.startswith("aarch64-") else "x86_64"
