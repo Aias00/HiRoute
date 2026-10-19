@@ -12,7 +12,7 @@ use crate::content::lifecycle::{ContentProjectionAck, ContentProjectionError};
 use crate::receipt::FactProjectionError;
 use crate::writer::{IngestOutcome, ObservationStoreError};
 
-use super::{gap, increment_store_revision};
+use super::{gap, increment_store_revision, records};
 
 #[derive(Clone, Copy, Debug)]
 pub(super) struct Checkpoint {
@@ -51,7 +51,7 @@ pub(super) fn preflight(
     if sequence <= checkpoint.accounted {
         let existing: Option<(String, String)> = transaction.query_row(
             "SELECT event_id, payload_digest FROM observation_events
-             WHERE channel=?1 AND producer_id=?2 AND producer_epoch=?3 AND stream_id=?4 AND sequence=?5",
+             WHERE stream_ref=(SELECT stream_ref FROM observation_streams_v5 WHERE channel=?1 AND producer_id=?2 AND producer_epoch=?3 AND stream_id=?4) AND sequence=?5",
             params![channel.as_str(), stream.producer_id.as_str(), stream.producer_epoch.as_str(),
                 stream.stream_id.as_str(), i64_from_u64(sequence)?],
             |row| Ok((row.get(0)?, row.get(1)?)),
@@ -83,7 +83,7 @@ pub(super) fn preflight(
     }
     let existing_event: Option<(i64, String)> = transaction.query_row(
         "SELECT sequence, payload_digest FROM observation_events
-         WHERE channel=?1 AND producer_id=?2 AND producer_epoch=?3 AND stream_id=?4 AND event_id=?5",
+         WHERE stream_ref=(SELECT stream_ref FROM observation_streams_v5 WHERE channel=?1 AND producer_id=?2 AND producer_epoch=?3 AND stream_id=?4) AND event_id=?5",
         params![channel.as_str(), stream.producer_id.as_str(), stream.producer_epoch.as_str(),
             stream.stream_id.as_str(), event_id], |row| Ok((row.get(0)?, row.get(1)?)),
     ).optional().map_err(|_| ObservationStoreError::ActivityUnavailable)?;
@@ -253,23 +253,12 @@ pub(super) fn insert_event(
     event_id: &str,
     payload_digest: &str,
 ) -> Result<(), ObservationStoreError> {
-    transaction
-        .execute(
-            "INSERT INTO observation_events
-         (channel, producer_id, producer_epoch, stream_id, sequence, event_id, payload_digest)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            params![
-                channel.as_str(),
-                stream.producer_id.as_str(),
-                stream.producer_epoch.as_str(),
-                stream.stream_id.as_str(),
-                i64_from_u64(sequence)?,
-                event_id,
-                payload_digest
-            ],
-        )
+    let stream_ref = records::stream_ref(transaction, channel.as_str(), stream)?;
+    transaction.execute("INSERT INTO observation_events(stream_ref,sequence,event_id,payload_digest) VALUES(?1,?2,?3,?4)",
+        params![stream_ref,i64_from_u64(sequence)?,event_id,payload_digest])
         .map_err(|_| ObservationStoreError::ActivityUnavailable)?;
     gap::resolve_sequence(transaction, channel, stream, sequence)?;
+
     Ok(())
 }
 
@@ -281,22 +270,11 @@ pub(super) fn insert_gap_event(
     event_id: &str,
     payload_digest: &str,
 ) -> Result<(), ObservationStoreError> {
-    transaction
-        .execute(
-            "INSERT INTO observation_events
-             (channel, producer_id, producer_epoch, stream_id, sequence, event_id, payload_digest)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            params![
-                channel.as_str(),
-                stream.producer_id.as_str(),
-                stream.producer_epoch.as_str(),
-                stream.stream_id.as_str(),
-                i64_from_u64(sequence)?,
-                event_id,
-                payload_digest,
-            ],
-        )
+    let stream_ref = records::stream_ref(transaction, channel.as_str(), stream)?;
+    transaction.execute("INSERT INTO observation_events(stream_ref,sequence,event_id,payload_digest) VALUES(?1,?2,?3,?4)",
+        params![stream_ref,i64_from_u64(sequence)?,event_id,payload_digest])
         .map_err(|_| ObservationStoreError::ActivityUnavailable)?;
+
     Ok(())
 }
 
@@ -312,17 +290,20 @@ pub(super) fn insert_content_event(
         .as_object_mut()
         .ok_or(ObservationStoreError::Corrupt)?
         .remove("canonical_bytes_base64");
+    let stream_ref = records::stream_ref(
+        transaction,
+        "conversation_content",
+        &envelope.producer.stream,
+    )?;
     transaction
         .execute(
             "INSERT INTO conversation_content_events_v2
-         (producer_id, producer_epoch, stream_id, sequence, event_id, workspace_id, request_id,
+         (stream_ref, sequence, event_id, workspace_id, request_id,
           direction, fork_id, phase, metadata_json, canonical_chunk_object_ref,
           canonical_chunk_byte_offset, canonical_chunk_byte_count, envelope_digest)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
-                envelope.producer.stream.producer_id.as_str(),
-                envelope.producer.stream.producer_epoch.as_str(),
-                envelope.producer.stream.stream_id.as_str(),
+                stream_ref,
                 i64_from_u64(envelope.sequence)?,
                 envelope.event_id.as_str(),
                 envelope.correlation.workspace_id.as_str(),
@@ -330,7 +311,9 @@ pub(super) fn insert_content_event(
                 envelope.direction.as_str(),
                 envelope.fork_id,
                 envelope.phase.as_str(),
-                serde_json::to_string(&metadata).map_err(|_| ObservationStoreError::Corrupt)?,
+                records::encode(
+                    &serde_json::to_vec(&metadata).map_err(|_| ObservationStoreError::Corrupt)?
+                )?,
                 projection.chunk_object_ref,
                 projection.chunk_byte_offset.map(i64_from_u64).transpose()?,
                 projection.chunk_byte_count.map(i64_from_u64).transpose()?,
@@ -358,22 +341,20 @@ pub(super) fn persist_feedback(
             serde_json::to_string(value),
         ),
     };
+    let stream_ref = records::stream_ref(transaction, channel, stream)?;
     transaction
         .execute(
             "INSERT INTO observation_feedback_v2
-         (channel, producer_id, producer_epoch, stream_id, rejected_or_acked_sequence,
+         (stream_ref, rejected_or_acked_sequence,
           event_id, envelope_digest, feedback_kind, feedback_json, created_at_unix_nanos)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
-                channel,
-                stream.producer_id.as_str(),
-                stream.producer_epoch.as_str(),
-                stream.stream_id.as_str(),
+                stream_ref,
                 i64_from_u64(sequence)?,
                 event_id,
                 envelope_digest,
                 kind,
-                json.map_err(|_| ObservationStoreError::Corrupt)?,
+                records::encode(json.map_err(|_| ObservationStoreError::Corrupt)?.as_bytes())?,
                 i64_from_u64(occurred_at_unix_nanos)?
             ],
         )
@@ -389,10 +370,10 @@ pub(super) fn load_feedback(
     event_id: &str,
     digest: &str,
 ) -> Result<Option<IngestOutcome>, ObservationStoreError> {
-    let row: Option<(String, String)> = transaction
+    let row: Option<(String, Vec<u8>)> = transaction
         .query_row(
             "SELECT feedback_kind, feedback_json FROM observation_feedback_v2
-         WHERE channel=?1 AND producer_id=?2 AND producer_epoch=?3 AND stream_id=?4
+         WHERE stream_ref=(SELECT stream_ref FROM observation_streams_v5 WHERE channel=?1 AND producer_id=?2 AND producer_epoch=?3 AND stream_id=?4)
            AND rejected_or_acked_sequence=?5 AND event_id=?6 AND envelope_digest=?7
          ORDER BY feedback_id DESC LIMIT 1",
             params![
@@ -409,14 +390,18 @@ pub(super) fn load_feedback(
         .optional()
         .map_err(|_| ObservationStoreError::ActivityUnavailable)?;
     match row {
-        Some((kind, json)) if kind == "ack" => serde_json::from_str::<ObservationAckV2>(&json)
-            .map(IngestOutcome::Ack)
-            .map(Some)
-            .map_err(|_| ObservationStoreError::Corrupt),
-        Some((kind, json)) if kind == "nack" => serde_json::from_str::<ObservationNackV1>(&json)
-            .map(IngestOutcome::Nack)
-            .map(Some)
-            .map_err(|_| ObservationStoreError::Corrupt),
+        Some((kind, json)) if kind == "ack" => {
+            serde_json::from_slice::<ObservationAckV2>(&records::decode(&json)?)
+                .map(IngestOutcome::Ack)
+                .map(Some)
+                .map_err(|_| ObservationStoreError::Corrupt)
+        }
+        Some((kind, json)) if kind == "nack" => {
+            serde_json::from_slice::<ObservationNackV1>(&records::decode(&json)?)
+                .map(IngestOutcome::Nack)
+                .map(Some)
+                .map_err(|_| ObservationStoreError::Corrupt)
+        }
         Some(_) => Err(ObservationStoreError::Corrupt),
         None => Ok(None),
     }

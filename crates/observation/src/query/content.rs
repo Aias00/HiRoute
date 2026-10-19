@@ -5,7 +5,7 @@ use std::io::Read;
 
 pub(super) fn messages(
     connection: &rusqlite::Connection,
-    authority: &crate::DigestAuthority,
+    store: &LocalObservationStore,
     workspace_id: &WorkspaceId,
     session_id: &SessionId,
     turn_id: &TurnId,
@@ -79,15 +79,19 @@ pub(super) fn messages(
             .checked_sub(4096)
             .ok_or(ObservationQueryError::InvalidQuery)?;
         let mut bytes = Vec::new();
-        fs::File::open(&row.10)
-            .map_err(|_| ObservationQueryError::Unavailable)?
-            .take((*remaining_bytes as u64) + 1)
-            .read_to_end(&mut bytes)
-            .map_err(|_| ObservationQueryError::Unavailable)?;
+        fs::File::open(
+            store
+                .object_path(&row.10)
+                .map_err(|_| ObservationQueryError::Corrupt)?,
+        )
+        .map_err(|_| ObservationQueryError::Unavailable)?
+        .take((*remaining_bytes as u64) + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| ObservationQueryError::Unavailable)?;
         *remaining_bytes = remaining_bytes
             .checked_sub(bytes.len())
             .ok_or(ObservationQueryError::InvalidQuery)?;
-        let mut accumulator = authority.content_accumulator(&row.8);
+        let mut accumulator = store.authority.content_accumulator(&row.8);
         accumulator.update(&bytes);
         if accumulator.finish().0 != blob_digest {
             return Err(ObservationQueryError::Corrupt);

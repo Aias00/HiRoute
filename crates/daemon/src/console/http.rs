@@ -350,6 +350,7 @@ fn audited(name: &str) -> bool {
             | "model_reference_query"
             | "effective_price_query"
             | "plan_editor_options"
+            | "observation_capacity_get"
             | "worker_settings_get"
             | "worker_executor_availability"
             | "worker_plans"

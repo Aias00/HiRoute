@@ -210,6 +210,12 @@ impl ApplicationService {
             "GetRoutingReceipt" => self.observation(request, ObservationOperation::Receipt),
             "GetObservationStatus" => self.observation(request, ObservationOperation::Status),
             "GetValue" => self.observation(request, ObservationOperation::Value),
+            "GetObservationCapacity" => {
+                self.observation(request, ObservationOperation::CapacityRead)
+            }
+            "SetObservationCapacity" => {
+                self.observation(request, ObservationOperation::CapacityUpdate)
+            }
             "GetPlanQualitySamples" => self.observation(request, ObservationOperation::PlanQuality),
             "GetRoutingTimeline" => {
                 self.observation(request, ObservationOperation::Trust("GetRoutingTimeline"))
@@ -709,6 +715,13 @@ impl ApplicationService {
             Some("analysis" | "routing_timeline")
         );
         let result = match operation {
+            ObservationOperation::CapacityRead | ObservationOperation::CapacityUpdate => control
+                .capacity(
+                    request.principal.kind,
+                    request.protected_grant.as_ref(),
+                    request.payload,
+                    matches!(operation, ObservationOperation::CapacityUpdate),
+                ),
             ObservationOperation::List => control.list(
                 request.principal.kind,
                 request.protected_grant.as_ref(),
@@ -775,6 +788,8 @@ impl ApplicationService {
 #[derive(Clone, Copy)]
 enum ObservationOperation {
     Trust(&'static str),
+    CapacityRead,
+    CapacityUpdate,
     DeletePreview,
     DeleteApply,
     List,

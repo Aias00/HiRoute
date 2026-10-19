@@ -95,11 +95,12 @@ fn blob_gc_live_lookup_stays_linear_and_existing_databases_gain_index() {
     store
         .connection
         .lock()
-        // Both current indexes can satisfy the workspace/digest lookup. Remove
-        // both to reproduce the original unindexed query, not a new fast path.
+        // Each current index can satisfy this lookup. Remove all alternatives
+        // so the negative control still represents the original unindexed path.
         .execute_batch(
             "DROP INDEX content_instances_v2_live_blob;
-             DROP INDEX content_instances_v2_search_blob;",
+             DROP INDEX content_instances_v2_search_blob;
+             DROP INDEX content_instances_v2_live_blob_global;",
         )
         .unwrap();
     // Negative control for the original correlated lookup. The current merge

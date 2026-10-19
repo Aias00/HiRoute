@@ -134,7 +134,7 @@ try {
       const results = [];
       for (const { id } of selected) {
         const viewport = ['desktop.models.subscription-scan.recommended-login',
-          'desktop.models.view-switch', 'desktop.presentation.control-layout',
+          'desktop.models.view-switch', 'desktop.presentation.control-layout', 'desktop.settings.storage-capacity',
           'desktop.routing.additional-budget-consumers',
           'desktop.models.subscription-login.callback-modes'].includes(id)
           ? { width: 755, height: 600 } : { width: 1280, height: 900 };
@@ -145,6 +145,9 @@ try {
       }
       assertScenarioResults(selected, results);
       checks.push(...results);
+      if (selected.some(s => s.id === 'desktop.settings.storage-capacity')) {
+        checks.push(...await (await import('./storage-capacity-captures.mjs')).runStorageCapacityCaptures(client, outputRoot));
+      }
     }
     if (checks.length === 0) throw new Error('No scenarios executed');
     const report = {

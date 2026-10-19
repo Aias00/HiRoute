@@ -395,6 +395,8 @@ fn command_payload(command_id: &str, options: &[String]) -> Result<Value, ErrorC
         "observation.plan-trust"
         | "observation.plan-trust.replay"
         | "observation.plan-trust.suggestions" => trust::payload(command_id, options),
+        "observation.storage.show" => observation::capacity_get(options),
+        "observation.storage.set" => observation::capacity_set(options),
         _ => control_plane::command_payload(command_id, options)
             .unwrap_or(Err(ErrorCode::UnknownCommand)),
     }
@@ -895,7 +897,7 @@ mod tests {
         assert_eq!(execution.exit_code, 0);
         assert_eq!(execution.stdout.lines().count(), 1);
         let value: Value = serde_json::from_str(&execution.stdout).unwrap();
-        assert_eq!(value["data"]["commands"].as_array().unwrap().len(), 70);
+        assert_eq!(value["data"]["commands"].as_array().unwrap().len(), 72);
         assert!(!execution.stdout.contains(HIDDEN_AGENT_GRANT_HELPER_VERB_V1));
     }
 

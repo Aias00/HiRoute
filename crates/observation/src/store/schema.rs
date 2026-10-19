@@ -3,10 +3,38 @@ use rusqlite::{Connection, Transaction, params};
 
 use crate::writer::ObservationStoreError;
 
-pub(super) const STORE_SCHEMA_VERSION: &str = "4";
+pub(super) const STORE_SCHEMA_VERSION: &str = "5";
 const LEGACY_AGENT_PLAN_ID: &str = "legacy/unknown";
 
 pub(super) fn migrate(connection: &mut Connection) -> Result<(), ObservationStoreError> {
+    migrate_inner(connection, true)
+}
+#[cfg(test)]
+pub(super) fn migrate_legacy(connection: &mut Connection) -> Result<(), ObservationStoreError> {
+    migrate_inner(connection, false)
+}
+fn migrate_inner(connection: &mut Connection, compact: bool) -> Result<(), ObservationStoreError> {
+    if connection
+        .query_row(
+            "SELECT value FROM observation_meta WHERE key='schema_version'",
+            [],
+            |r| r.get::<_, String>(0),
+        )
+        .ok()
+        .as_deref()
+        == Some("5")
+    {
+        let tables:u64=connection.query_row("SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name IN('logical_requests','observation_streams_v5','observation_events','observation_checkpoints','observation_feedback_v2','conversation_content_events_v2','content_blobs_v2','content_instances_v2')",[],|r|r.get(0)).map_err(|_|ObservationStoreError::Corrupt)?;
+        if tables != 8 {
+            return Err(ObservationStoreError::Corrupt);
+        }
+        connection
+            .execute_batch(
+                "PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;",
+            )
+            .map_err(|_| ObservationStoreError::ActivityUnavailable)?;
+        return create_schema_v5(connection);
+    }
     connection
         .execute_batch(
             r#"
@@ -32,7 +60,7 @@ pub(super) fn migrate(connection: &mut Connection) -> Result<(), ObservationStor
             |row| row.get(0),
         )
         .map_err(|_| ObservationStoreError::Corrupt)?;
-    match version.as_str() {
+    let result = match version.as_str() {
         "1" => {
             migrate_v1_to_v2(connection)?;
             migrate_v2_to_v3(connection)?;
@@ -43,9 +71,70 @@ pub(super) fn migrate(connection: &mut Connection) -> Result<(), ObservationStor
             migrate_v3_to_v4(connection)
         }
         "3" => migrate_v3_to_v4(connection),
-        STORE_SCHEMA_VERSION => create_schema_v4(connection),
+        "4" => create_schema_v4(connection),
+        STORE_SCHEMA_VERSION => Ok(()),
         _ => Err(ObservationStoreError::Corrupt),
+    };
+    result?;
+    if !compact || version == "5" {
+        return Ok(());
     }
+    let populated: bool = connection.query_row("SELECT EXISTS(SELECT 1 FROM observation_events) OR EXISTS(SELECT 1 FROM conversation_content_events_v2) OR EXISTS(SELECT 1 FROM observation_feedback_v2)",[],|r|r.get(0)).map_err(|_|ObservationStoreError::Corrupt)?;
+    if populated {
+        return Err(ObservationStoreError::Corrupt);
+    }
+    connection.execute_batch("DROP TABLE observation_events; DROP TABLE conversation_content_events_v2; DROP TABLE observation_feedback_v2;").map_err(|_|ObservationStoreError::ActivityUnavailable)?;
+    connection
+        .execute_batch(super::records::SCHEMA)
+        .map_err(|_| ObservationStoreError::ActivityUnavailable)?;
+    super::records::install_reference_triggers(connection)
+        .map_err(|_| ObservationStoreError::ActivityUnavailable)?;
+    connection
+        .execute(
+            "UPDATE observation_meta SET value='5' WHERE key='schema_version'",
+            [],
+        )
+        .map_err(|_| ObservationStoreError::ActivityUnavailable)?;
+    Ok(())
+}
+
+fn create_schema_v5(connection: &Connection) -> Result<(), ObservationStoreError> {
+    fn omit(mut sql: String, header: &str) -> String {
+        let start = sql.find(header).expect("known legacy definition");
+        let end = start + sql[start..].find(';').expect("known complete definition") + 1;
+        sql.replace_range(start..end, "");
+        sql
+    }
+    let auxiliary = omit(
+        AUXILIARY_SCHEMA_V2.to_owned(),
+        "CREATE TABLE IF NOT EXISTS observation_events",
+    );
+    let content = omit(
+        CONVERSATION_CONTENT_SCHEMA_V4.to_owned(),
+        "CREATE TABLE IF NOT EXISTS conversation_content_events_v2",
+    );
+    let content = omit(
+        content,
+        "CREATE TABLE IF NOT EXISTS observation_feedback_v2",
+    );
+    let content = omit(
+        content,
+        "CREATE INDEX IF NOT EXISTS observation_feedback_v2_lookup",
+    );
+    for ddl in [
+        BASE_SCHEMA_V2,
+        VALUE_SCHEMA_V2,
+        auxiliary.as_str(),
+        EXECUTION_FACT_SCHEMA_V3,
+        super::records::SCHEMA,
+        content.as_str(),
+    ] {
+        connection
+            .execute_batch(ddl)
+            .map_err(|_| ObservationStoreError::ActivityUnavailable)?;
+    }
+    super::records::install_reference_triggers(connection)
+        .map_err(|_| ObservationStoreError::ActivityUnavailable)
 }
 
 fn create_schema_v2(connection: &Connection) -> Result<(), ObservationStoreError> {

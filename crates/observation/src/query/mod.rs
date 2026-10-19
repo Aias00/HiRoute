@@ -25,6 +25,18 @@ use crate::value::aggregate_entries;
 use filters::{matches_switch, validate_list_query};
 
 impl ObservationQueryPort for LocalObservationStore {
+    fn observation_capacity(
+        &self,
+    ) -> Result<hiroute_domain::ObservationCapacityStatusV1, ObservationQueryError> {
+        self.capacity_status()
+    }
+    fn set_observation_capacity(
+        &self,
+        limit: Option<u64>,
+    ) -> Result<hiroute_domain::ObservationCapacityStatusV1, ObservationQueryError> {
+        self.set_capacity_limit(limit)
+    }
+
     fn observation_analysis(
         &self,
         reader: &hiroute_domain::ObservationReaderContext,
@@ -426,13 +438,7 @@ impl ObservationQueryPort for LocalObservationStore {
             model_switch,
             self.retention.detail_retention_ms,
         )?;
-        let turns = read_turns(
-            &connection,
-            &self.authority,
-            workspace_id,
-            session_id,
-            content_mode,
-        )?;
+        let turns = read_turns(&connection, self, workspace_id, session_id, content_mode)?;
         if query_visibility(&connection)? != visibility {
             return Err(ObservationQueryError::StalePreview);
         }
@@ -639,7 +645,7 @@ fn session_summary(
 
 fn read_turns(
     connection: &rusqlite::Connection,
-    authority: &crate::DigestAuthority,
+    store: &LocalObservationStore,
     workspace_id: &WorkspaceId,
     session_id: &SessionId,
     content_mode: ContentMode,
@@ -677,7 +683,7 @@ fn read_turns(
             } else {
                 content::messages(
                     connection,
-                    authority,
+                    store,
                     workspace_id,
                     session_id,
                     &turn_id,

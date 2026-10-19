@@ -141,6 +141,47 @@ impl ObservationControl {
         serde_json::to_value(page).map_err(|_| ObservationQueryError::Corrupt)
     }
 
+    pub(crate) fn capacity(
+        &self,
+        ambient: PrincipalKind,
+        grant: Option<&ProtectedClientGrantV2>,
+        payload: Value,
+        update: bool,
+    ) -> Result<Value, ObservationQueryError> {
+        if ambient == PrincipalKind::SealedCollaboration
+            || grant.is_some_and(|g| g.principal_kind.is_collaboration())
+        {
+            return Err(ObservationQueryError::Unauthorized);
+        }
+        let operation = if update {
+            "SetObservationCapacity"
+        } else {
+            "GetObservationCapacity"
+        };
+        // The local transport authenticates the OS owner, but deliberately maps
+        // an ambient CLI/Desktop peer to Skill rather than claiming a human
+        // identity. This narrow configuration operation admits that local peer;
+        // an explicitly supplied grant must still authorize this exact payload.
+        let principal = self.local_or_protected_principal(grant, operation, &payload, true)?;
+        super::require(
+            &principal,
+            hiroute_domain::ObservationCapabilityV1::ManageRetention,
+        )?;
+        let status = if update {
+            let input: hiroute_application_api::ObservationCapacityUpdateV1 =
+                serde_json::from_value(payload).map_err(|_| ObservationQueryError::InvalidQuery)?;
+            self.service
+                .port
+                .set_observation_capacity(input.max_active_bytes)?
+        } else {
+            if payload != json!({}) {
+                return Err(ObservationQueryError::InvalidQuery);
+            }
+            self.service.port.observation_capacity()?
+        };
+        serde_json::to_value(status).map_err(|_| ObservationQueryError::Corrupt)
+    }
+
     pub(crate) fn plan_quality(
         &self,
         grant: Option<&ProtectedClientGrantV2>,
@@ -418,6 +459,7 @@ mod tests {
 
     struct FixedPorts {
         now_ms: AtomicI64,
+        capacity_limit: Mutex<Option<u64>>,
         queries: Mutex<Vec<SessionListQueryV1>>,
         content_modes: Mutex<Vec<ContentMode>>,
         plans: Vec<AgentPlanId>,
@@ -427,6 +469,7 @@ mod tests {
         fn new(now_ms: i64, plans: &[&str]) -> Self {
             Self {
                 now_ms: AtomicI64::new(now_ms),
+                capacity_limit: Mutex::new(None),
                 queries: Mutex::new(Vec::new()),
                 content_modes: Mutex::new(Vec::new()),
                 plans: plans
@@ -545,6 +588,22 @@ mod tests {
     }
 
     impl ObservationQueryPort for FixedPorts {
+        fn observation_capacity(
+            &self,
+        ) -> Result<hiroute_domain::ObservationCapacityStatusV1, ObservationQueryError> {
+            Ok(hiroute_domain::ObservationCapacityStatusV1 {
+                max_active_bytes: *self.capacity_limit.lock().unwrap(),
+                ..Default::default()
+            })
+        }
+        fn set_observation_capacity(
+            &self,
+            limit: Option<u64>,
+        ) -> Result<hiroute_domain::ObservationCapacityStatusV1, ObservationQueryError> {
+            *self.capacity_limit.lock().unwrap() = limit;
+            self.observation_capacity()
+        }
+
         fn list_sessions(
             &self,
             _workspace_id: &WorkspaceId,
@@ -652,6 +711,77 @@ mod tests {
 
     fn control(ports: Arc<FixedPorts>) -> ObservationControl {
         ObservationControl::new(ports.clone(), ports.clone(), ports.clone(), ports)
+    }
+
+    #[test]
+    fn capacity_is_global_owner_authority_and_failed_or_delegated_input_cannot_change_it() {
+        let ports = Arc::new(FixedPorts::new(1000, &[]));
+        let controller = control(ports.clone());
+        assert_eq!(
+            controller
+                .capacity(
+                    hiroute_application_api::PrincipalV1::ambient_local_peer().kind,
+                    None,
+                    json!({"max_active_bytes":20_000_000_000u64}),
+                    true
+                )
+                .unwrap()["max_active_bytes"],
+            20_000_000_000u64
+        );
+        assert!(
+            controller
+                .capacity(
+                    PrincipalKind::SealedCollaboration,
+                    None,
+                    json!({"max_active_bytes":null}),
+                    true
+                )
+                .is_err()
+        );
+        let readonly = ProtectedClientGrantV2 {
+            principal_kind: PrincipalKind::InteractiveUser,
+            capability: "launcher-grant".into(),
+        };
+        assert!(
+            controller
+                .capacity(
+                    PrincipalKind::Skill,
+                    Some(&readonly),
+                    json!({"max_active_bytes":null}),
+                    true
+                )
+                .is_err()
+        );
+        let delegated = ProtectedClientGrantV2 {
+            principal_kind: PrincipalKind::SealedCollaboration,
+            capability: "launcher-grant".into(),
+        };
+        assert!(
+            controller
+                .capacity(
+                    PrincipalKind::SealedCollaboration,
+                    Some(&delegated),
+                    json!({"max_active_bytes":null}),
+                    true
+                )
+                .is_err()
+        );
+        assert!(
+            controller
+                .capacity(
+                    PrincipalKind::InteractiveUser,
+                    None,
+                    json!({"max_active_bytes":0}),
+                    true
+                )
+                .is_err()
+        );
+        assert_eq!(
+            controller
+                .capacity(PrincipalKind::InteractiveUser, None, json!({}), false)
+                .unwrap()["max_active_bytes"],
+            20_000_000_000u64
+        );
     }
 
     #[test]

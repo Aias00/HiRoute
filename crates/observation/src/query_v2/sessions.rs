@@ -27,6 +27,28 @@ impl crate::LocalObservationStore {
         query: &ObservationRequestQuery,
         now_ms: i64,
     ) -> Result<ObservationSessionPageV2, ObservationV2Error> {
+        if query.cursor.is_some() {
+            return self.observed_sessions_once(reader, query, now_ms);
+        }
+        let deadline = reader
+            .query_deadline()
+            .unwrap_or_else(|| std::time::Instant::now() + std::time::Duration::from_millis(500));
+        let reader = reader.clone().with_query_deadline(deadline);
+        match self.observed_sessions_once(&reader, query, now_ms) {
+            // Automatic retention can invalidate a snapshot while this first
+            // page is being read. Retry once under the SAME original deadline;
+            // never return removed membership or silently reset a paged cursor.
+            Err(ObservationV2Error::Stale) => self.observed_sessions_once(&reader, query, now_ms),
+            result => result,
+        }
+    }
+
+    fn observed_sessions_once(
+        &self,
+        reader: &ObservationReaderContext,
+        query: &ObservationRequestQuery,
+        now_ms: i64,
+    ) -> Result<ObservationSessionPageV2, ObservationV2Error> {
         reader.check(now_ms, false, false)?;
         if query.from_ms < 0
             || query.from_ms >= query.to_ms
@@ -190,6 +212,10 @@ impl crate::LocalObservationStore {
             None
         };
         tx.commit()?;
+        #[cfg(test)]
+        if let Some(hook) = self.session_read_test_hook.lock().take() {
+            hook(self);
+        }
         check_visibility(&connection, visibility)?;
         Ok(ObservationSessionPageV2 {
             sessions,

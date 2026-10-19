@@ -40,11 +40,22 @@ pub struct LocalStorageSet {
 #[derive(Clone, Debug, Default)]
 pub struct StorageStartupOptions {
     pub gateway_lkg: Option<std::path::PathBuf>,
+    /// Seal old Observation unchanged with the complete matching-version source.
+    pub preserve_observation_source: bool,
+    /// An admitted old package retained by the installer/operator for recovery.
+    pub recovery_package: Option<std::path::PathBuf>,
     pub upgrade_progress:
         Option<std::sync::mpsc::Sender<hiroute_host_runtime::StorageUpgradePhase>>,
 }
 
 impl LocalStorageSet {
+    /// A published source link also protects the intentionally absent live root
+    /// between the old-directory rename and fresh Observation initialization.
+    pub fn observation_cutover_pending(storage_root: &Path) -> bool {
+        storage_root.join("observation-source-backup.json").exists()
+            && !storage_root.join("observation/activity.db").exists()
+    }
+
     /// Opens and migrates the coordinated three-store set before daemon listeners or
     /// transaction admission become available. The authority and writer barrier are minted only
     /// inside this crate so daemon composition cannot open an individual store or assert an
@@ -68,14 +79,20 @@ impl LocalStorageSet {
         authority: &DaemonStorageAuthority,
         barrier: &SingleWriterBackupBarrier,
         storage_root: impl AsRef<Path>,
-        _options: &StorageStartupOptions,
+        options: &StorageStartupOptions,
     ) -> Result<Self, LocalStorageError> {
         let storage_root = storage_root.as_ref();
         migrations::prepare_storage_root(storage_root)?;
         migrations::validate_startup_format(storage_root)?;
         let startup_lock = std::sync::Arc::new(migrations::acquire_startup_lock(storage_root)?);
         migrations::validate_startup_format(storage_root)?;
-        Self::open_locked_stores(authority, barrier, storage_root, startup_lock)
+        Self::open_locked_stores(
+            authority,
+            barrier,
+            storage_root,
+            startup_lock,
+            Some(options),
+        )
     }
 
     // SQL coordinator component harness only: unsupported formats never pass through the
@@ -88,7 +105,7 @@ impl LocalStorageSet {
     ) -> Result<Self, LocalStorageError> {
         migrations::prepare_storage_root(storage_root)?;
         let lock = std::sync::Arc::new(migrations::acquire_startup_lock(storage_root)?);
-        Self::open_locked_stores(authority, barrier, storage_root, lock)
+        Self::open_locked_stores(authority, barrier, storage_root, lock, None)
     }
 
     fn open_locked_stores(
@@ -96,6 +113,7 @@ impl LocalStorageSet {
         barrier: &SingleWriterBackupBarrier,
         storage_root: &Path,
         startup_lock: std::sync::Arc<std::fs::File>,
+        options: Option<&StorageStartupOptions>,
     ) -> Result<Self, LocalStorageError> {
         let live_root = storage_root.join("live");
         let backup_root = upgrade_backup_root(storage_root)?;
@@ -125,6 +143,16 @@ impl LocalStorageSet {
             &backup_root,
             secret_binding.as_ref(),
         )?;
+        if let Some(options) = options {
+            migration.preserve_complete_source(
+                authority,
+                barrier,
+                storage_root,
+                &backup_root,
+                options,
+                secret_binding.as_ref(),
+            )?;
+        }
         let target_schema_version = migration.target_schema_version();
         let control_result = if migration.durable_set_prepared() {
             ControlStore::open_from_migration_set(
@@ -233,7 +261,13 @@ impl LocalStorageSet {
             drop(runtime);
             drop(control);
             drop(migration);
-            return Self::open_locked_stores(authority, barrier, storage_root, startup_lock);
+            return Self::open_locked_stores(
+                authority,
+                barrier,
+                storage_root,
+                startup_lock,
+                options,
+            );
         }
         control.startup_lock = Some(startup_lock.clone());
         runtime.startup_lock = Some(startup_lock.clone());

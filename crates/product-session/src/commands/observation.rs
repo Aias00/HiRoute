@@ -108,3 +108,45 @@ fn localized_confirmation(
         )
     }
 }
+
+pub async fn observation_capacity_get(
+    window: &ClientContext<'_>,
+    state: &CommandState<'_>,
+) -> Result<hiroute_domain::ObservationCapacityStatusV1, DesktopFailure> {
+    observation_capacity_call(window, state, None).await
+}
+pub async fn observation_capacity_set(
+    window: &ClientContext<'_>,
+    state: &CommandState<'_>,
+    input: hiroute_application_api::ObservationCapacityUpdateV1,
+) -> Result<hiroute_domain::ObservationCapacityStatusV1, DesktopFailure> {
+    if input.max_active_bytes == Some(0) {
+        return Err("REQUEST_INVALID".into());
+    }
+    observation_capacity_call(window, state, Some(input)).await
+}
+async fn observation_capacity_call(
+    window: &ClientContext<'_>,
+    state: &CommandState<'_>,
+    update: Option<hiroute_application_api::ObservationCapacityUpdateV1>,
+) -> Result<hiroute_domain::ObservationCapacityStatusV1, DesktopFailure> {
+    main_window(window)?;
+    let client = state
+        .0
+        .lock()
+        .await
+        .as_ref()
+        .ok_or("RESIDENT_UNAVAILABLE")?
+        .client
+        .clone();
+    let envelope = client
+        .observation_capacity(&crate::random_id()?, update)
+        .await?;
+    if envelope.error.is_some() {
+        let value = serde_json::to_value(envelope).map_err(|_| "RESPONSE_DATA_INVALID")?;
+        return Err(DesktopFailure::backend(
+            serde_json::from_value(value).map_err(|_| "RESPONSE_DATA_INVALID")?,
+        ));
+    }
+    envelope.data.ok_or_else(|| "RESPONSE_DATA_MISSING".into())
+}

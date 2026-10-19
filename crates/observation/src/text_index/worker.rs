@@ -206,7 +206,7 @@ fn next(store: &LocalObservationStore, after: &mut i64) -> Result<(Option<Buildi
     let Some((_, workspace, digest, path, expected_bytes, media)) = source else {
         return Ok((None, false));
     };
-    let file = File::open(path);
+    let file = File::open(store.object_path(&path).map_err(|_| Error::Corrupt)?);
     store.connection.lock().execute(
         "INSERT OR IGNORE INTO observation_text_index_v2(workspace,digest,state) VALUES(?1,?2,?3)",
         params![workspace,digest,if file.is_ok() {"building"} else {"failed"}],

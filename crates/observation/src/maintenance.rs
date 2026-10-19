@@ -87,6 +87,15 @@ fn run(
         let Some(store) = store.upgrade() else {
             break;
         };
+        let capacity_failed = store
+            .capacity_cycle(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .ok()
+                    .and_then(|t| i64::try_from(t.as_millis()).ok())
+                    .unwrap_or(0),
+            )
+            .is_err();
         let backfill_failed = store.backfill_inline_payloads().is_err();
         let settlement_failed = store.settle_pending_valuations(16).is_err();
         let now_ms = std::time::SystemTime::now()
@@ -146,7 +155,8 @@ fn run(
                 index.is_none()
             }
         };
-        if backfill_failed
+        if capacity_failed
+            || backfill_failed
             || settlement_failed
             || retention_failed
             || gc_failed

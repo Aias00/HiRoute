@@ -626,8 +626,11 @@ fn interleaved_runs_are_reconstructable_from_their_own_tokens() {
             .unwrap(),
         );
         let observation = Arc::new(
-            LocalObservationStore::open(temporary.path(), DigestAuthority::new([marker as u8; 32]))
-                .unwrap(),
+            LocalObservationStore::open(
+                temporary.path().join("observation"),
+                DigestAuthority::new([marker as u8; 32]),
+            )
+            .unwrap(),
         );
         PersistentWorkerRunJournal::new(
             Arc::new(MemoryRuntime::new(record.clone())),
