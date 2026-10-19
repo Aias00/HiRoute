@@ -383,6 +383,52 @@ fn isolated(name: &str) -> bool {
 }
 
 #[test]
+fn manual_callback_reason_survives_public_list_and_status() {
+    if isolated("manual_callback_reason_survives_public_list_and_status") {
+        return;
+    }
+    let fixture = Fixture::new();
+    fs::write(fixture.root.path().join("manual-callback"), b"").unwrap();
+    for provider in [
+        SubscriptionLoginProviderV1::Codex,
+        SubscriptionLoginProviderV1::Claude,
+    ] {
+        let started = fixture
+            .adapter()
+            .manage_subscription_login(ComputeSubscriptionLoginRequestV1::Start { provider })
+            .unwrap();
+        let session = &started.sessions[0];
+        assert_eq!(
+            session.reason_code.as_deref(),
+            Some("SUBSCRIPTION_LOGIN_MANUAL_CALLBACK")
+        );
+        for request in [
+            ComputeSubscriptionLoginRequestV1::List { provider },
+            ComputeSubscriptionLoginRequestV1::Status {
+                login_ref: session.login_ref.clone(),
+            },
+        ] {
+            let result = fixture
+                .adapter()
+                .manage_subscription_login(request)
+                .unwrap();
+            assert_eq!(result.sessions[0].reason_code, session.reason_code);
+            assert!(result.sessions[0].authorization_url.is_none());
+            assert!(result.sessions[0].callback_input_candidate.is_some());
+            assert!(result.sessions[0].candidate.is_none());
+        }
+        let cancelled = fixture
+            .adapter()
+            .manage_subscription_login(ComputeSubscriptionLoginRequestV1::Cancel {
+                login_ref: session.login_ref.clone(),
+            })
+            .unwrap();
+        assert!(cancelled.sessions[0].reason_code.is_none());
+    }
+    assert!(fixture.snapshot().sources.is_empty());
+}
+
+#[test]
 fn unsaved_prepared_save_cannot_resurrect_forgotten_login() {
     if isolated("unsaved_prepared_save_cannot_resurrect_forgotten_login") {
         return;

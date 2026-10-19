@@ -4,6 +4,38 @@
 `local-management-stdin.patch` includes the parent-pipe management credential
 bootstrap and Codex account model discovery. Build with `scripts/build-cpa.py`.
 
+## Browser sign-in callbacks
+
+The pinned browser flow receives Codex and Claude callbacks directly on temporary
+loopback listeners at their existing registered addresses. It binds available IPv4
+and IPv6 loopback interfaces; an occupied address releases any partial bind and
+keeps the same session for protected manual input. The private auth-URL response
+projects only `hiroute_callback_mode=automatic|manual`. An old artifact lacking
+this handshake must not be used with the current daemon.
+
+Reception checks the method, path, host and exact pending state. Browser callbacks
+and the management callback POST share atomic one-use admission, including after
+the waiting OAuth worker removes the callback file. CPA reception may retry failed
+file publication; HiRoute's manual-input owner does not resend an admitted code
+after a failed or uncertain submission. Observe status or cancel and start again.
+An accepted authorization code cannot be replaced. The browser response contains no code,
+state, provider error or management redirect and acknowledges reception only.
+The existing token exchange and credential persistence establish actual login.
+Completion, cancellation, timeout and owned-process exit release the listeners.
+There is one pending login per provider; saved accounts do not retain these ports.
+
+The patch carries `TestHiRouteBrowserCallbackValidationAndOneUse`, atomic admission,
+dual-loopback cleanup, occupied-port fallback, main-route error and actual Codex
+browser-to-file-store regressions. Run these on the exact prepared source with:
+
+```sh
+go test ./internal/api/handlers/management ./internal/api -run '^TestHiRoute' -count=1
+```
+
+The Codex exchange regression supplies synthetic tokens through the pinned OAuth
+service test seam. It proves callback reception and persistence, not fresh real-account
+authorization. No native credential store or paid model call is used.
+
 Codex OAuth registration queries `https://chatgpt.com/backend-api/codex/models`
 using the account's access token and account ID over CPA's existing proxy/TLS
 transport. For native access-only leases, `client_version` comes from the auth

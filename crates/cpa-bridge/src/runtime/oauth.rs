@@ -15,6 +15,7 @@ use super::{ManagedCpaRuntime, RuntimeInner};
 pub struct CpaOAuthLogin {
     pub authorization_url: String,
     pub state: String,
+    pub manual_callback_required: bool,
 }
 
 impl std::fmt::Debug for CpaOAuthLogin {
@@ -195,10 +196,10 @@ impl ManagedCpaRuntime {
         {
             return Err(CpaLifecycleError::InvalidOAuthSession);
         }
-        // Stock CPA's web UI forwarder binds all interfaces. The protected HiRoute callback
-        // input is used instead; this request must never opt into that forwarder.
+        // The pinned adapter receives browser callbacks only on loopback. If a
+        // callback port is unavailable it keeps this session for protected manual input.
         let path = format!(
-            "/v8/management/oauth/auth-url?provider={}&is_webui=false",
+            "/v8/management/oauth/auth-url?provider={}&is_webui=true",
             kind.stock_provider()
         );
         let value = self.oauth_request_locked(
@@ -495,6 +496,11 @@ fn parse_login(kind: CpaAccountKind, value: &Value) -> Result<CpaOAuthLogin, Cpa
     Ok(CpaOAuthLogin {
         authorization_url: raw_url.to_owned(),
         state: state.to_owned(),
+        manual_callback_required: match value.get("hiroute_callback_mode").and_then(Value::as_str) {
+            Some("automatic") => false,
+            Some("manual") => true,
+            _ => return Err(invalid()),
+        },
     })
 }
 

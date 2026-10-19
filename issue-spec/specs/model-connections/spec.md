@@ -258,6 +258,17 @@ Independent CPA sign-in is the default recommendation; NativeBorrowed is an expl
 option and saved choices do not migrate automatically. Login completion alone does
 not enable routes or import all models.
 
+Desktop subscription checks and model selection SHALL use subscription-specific
+titles. Native discovery controls, including Hermes profile scanning, SHALL remain
+on the device scan list and stay hidden in subscription details. Returning to the
+scan list restores its controls; cancelling proxy editing retains the selected
+subscription context.
+
+A successful subscription save ends its Desktop check interaction. A later explicit
+check, including another provider or account, MUST proceed without releasing or
+invalidating the saved access. Running checks and verified checks that have not
+completed saving retain their existing interaction ownership.
+
 | Mode | Credential authority | Repair action |
 | --- | --- | --- |
 | NativeBorrowed | Native client owns login/refresh; CPA receives current access leases only | Update native login and explicitly recheck |
@@ -273,6 +284,29 @@ and removal fence late callbacks and unsaved credentials. Disable revokes admiss
 and stops refresh while retaining credentials; remove-login first revokes saved
 route access, then stops the exact instance and deletes its owned credentials.
 Neither claims provider-global OAuth revocation.
+
+### Requirement: Independent sign-in receives browser callbacks locally
+
+CPA owns temporary browser callback listeners for the existing Codex
+`http://localhost:1455/auth/callback` and Claude `http://localhost:54545/callback`
+redirects. Bind only available IPv4/IPv6 loopback families. Each provider has at
+most one pending sign-in; saved accounts do not retain a callback listener.
+
+Browser and protected manual input MUST share atomic, one-use admission for the
+exact provider/session/state. Invalid, stale and duplicate input cannot replace
+an accepted callback. CPA reception permits retry after failed callback-file
+publication. HiRoute does not resend an admitted manual code after a failed or
+uncertain submission: observe status, or cancel and start a new sign-in. The browser
+acknowledges reception without claiming token exchange or sign-in success.
+Release listeners after reception, cancellation, expiry or failure, before slow
+token exchange. Do not redirect or reflect callback secrets in browser responses.
+
+A port conflict MUST close partial listeners and retain the same pending session
+for manual completion. Desktop explains this mode before the user explicitly opens
+the browser, and accepts the full return URL through the existing protected input.
+Automatic reception opens the browser normally and retains manual completion as
+a fallback. Successful sign-in still requires explicit Check/Save; it does not
+change enabled-account or routing limits.
 
 ### Requirement: Borrowed subscription refresh cannot enlarge saved membership
 

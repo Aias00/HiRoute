@@ -6,11 +6,19 @@ WebView never receives credential files, tokens or provider error bodies. Browse
 only in the current interaction. Manual callback text is cleared on submission and enters
 the native `submit_subscription_login_callback` command, which registers the exact pending
 session's protected input reference before ordinary Local Control submission.
+The pinned CPA receives normal browser callbacks on temporary loopback listeners.
+The existing optional `reason_code` identifies manual fallback when that listener
+is unavailable: show guidance before an explicit browser-open action. A received
+callback alone never establishes login; the existing status observer must confirm
+authorization. The manual completion form remains available in both modes.
 
 List/status recover server-owned sessions after reopening. Closing an interaction cancels
 the pending sessions it started, including a start response that arrives after closing.
 An authorized session remains a candidate: `ModelManagementPage.tsx` opens the existing
-check → model selection → Preview/Apply save flow. No sign-in action publishes a route.
+check → model selection → Preview/Apply save flow. Selected subscription details use
+the subscription title and hide device-discovery controls, including Hermes profile
+scanning; returning to the scan list restores those controls. No sign-in action
+publishes a route.
 
 The native reuse option opens the existing device scan. Background token synchronization
 does not grant refresh authority: native clients retain their refresh tokens. Copy must

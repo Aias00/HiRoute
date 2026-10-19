@@ -194,11 +194,9 @@ impl Session {
                     let result = self
                         .subscription_result_for_operation(&operation.operation_id)
                         .await?;
-                    if matches!(
-                        result.status,
-                        ComputeSubscriptionCheckStatusV2::Verified
-                            | ComputeSubscriptionCheckStatusV2::Retained
-                    ) {
+                    // Retained access belongs to a completed save, so it must not
+                    // reserve the current interaction or block another provider.
+                    if result.status == ComputeSubscriptionCheckStatusV2::Verified {
                         return Err("SUBSCRIPTION_CHECK_ACTIVE".into());
                     }
                 }
@@ -502,6 +500,7 @@ impl Session {
                 | ComputeSubscriptionCheckStatusV2::Unavailable
                 | ComputeSubscriptionCheckStatusV2::Failed
                 | ComputeSubscriptionCheckStatusV2::Released
+                | ComputeSubscriptionCheckStatusV2::Retained
         ) {
             return Ok(());
         }

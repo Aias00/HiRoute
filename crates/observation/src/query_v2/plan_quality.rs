@@ -294,16 +294,10 @@ impl LocalObservationStore {
     }
 }
 
-fn summarize(
-    transaction: &Transaction<'_>,
-    reader: &ObservationReaderContext,
-    query: &PlanQualitySamplesQuery,
-    from_ms: i64,
-    to_ms: i64,
-    runs: &Option<String>,
-) -> Result<PlanQualitySummary, ObservationV2Error> {
-    let sql = format!(
-        "WITH quality AS ({SCOPE})
+pub(super) fn summary_sql() -> String {
+    // Aggregate projected names once per stage; flattening repeats the correlated lookups.
+    format!(
+        "WITH quality AS MATERIALIZED ({SCOPE})
          SELECT plan_revision,
            CASE WHEN executed_branch_id IS NULL THEN selected_branch_id END,
            executed_branch_id,model_configuration_id,profile_digest,attribution,
@@ -315,7 +309,18 @@ fn summarize(
            executed_branch_id,model_configuration_id,profile_digest,attribution,execution_group,candidate_index
          ORDER BY plan_revision DESC,executed_branch_id,model_configuration_id,profile_digest,attribution
          LIMIT 1001"
-    );
+    )
+}
+
+fn summarize(
+    transaction: &Transaction<'_>,
+    reader: &ObservationReaderContext,
+    query: &PlanQualitySamplesQuery,
+    from_ms: i64,
+    to_ms: i64,
+    runs: &Option<String>,
+) -> Result<PlanQualitySummary, ObservationV2Error> {
+    let sql = summary_sql();
     let scope_params = named_params! {
         ":workspace": reader.workspace().as_str(), ":from": from_ms, ":to": to_ms,
         ":plan": query.plan_id, ":session": query.session_id,

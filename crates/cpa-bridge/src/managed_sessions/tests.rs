@@ -125,6 +125,39 @@ impl Fixture {
 }
 
 #[test]
+fn manual_callback_fallback_survives_listing_and_clears_after_authorization() {
+    let fixture = Fixture::new();
+    fs::write(fixture.root.path().join("manual-callback"), b"").unwrap();
+    let registry = fixture.registry();
+    let (session, url) = registry
+        .start(&fixture.templates, CpaAccountKind::Codex)
+        .unwrap();
+    assert!(session.manual_callback_required);
+    assert!(registry.list(CpaAccountKind::Codex)[0].manual_callback_required);
+    assert!(
+        registry
+            .status(&session.login_ref)
+            .unwrap()
+            .manual_callback_required
+    );
+    assert!(matches!(
+        registry.start(&fixture.templates, CpaAccountKind::Codex),
+        Err(CpaLifecycleError::AlreadyOwned)
+    ));
+    fixture.callback(&registry, &session, &url);
+    let authorized = registry.status(&session.login_ref).unwrap();
+    assert_eq!(authorized.state, CpaLoginState::Authorized);
+    assert!(!authorized.manual_callback_required);
+    // A retained account does not prevent the next account from signing in.
+    let (next, _) = registry
+        .start(&fixture.templates, CpaAccountKind::Codex)
+        .unwrap();
+    assert_ne!(next.login_ref, session.login_ref);
+    assert_eq!(registry.list(CpaAccountKind::Codex).len(), 2);
+    registry.cancel(&next.login_ref, false).unwrap();
+}
+
+#[test]
 fn callback_version_mismatch_fails_closed_and_never_resubmits_the_code() {
     let fixture = Fixture::new();
     fs::write(fixture.root.path().join("callback-version-mismatch"), b"").unwrap();

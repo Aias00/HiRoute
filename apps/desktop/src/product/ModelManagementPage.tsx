@@ -1108,11 +1108,14 @@ export function ModelManagementPage({
       editing={adding && addStage === 'scan' && editingSubscriptionProxy}
       writable={trustedAuthority}
       onCancel={cancelSubscriptionProxy}
-    >{({ panel, actions, saving }) => <Dialog open={adding && addStage === 'scan'} title={language === 'zh' ? '扫描本机' : 'Scan this device'} closeLabel={editingSubscriptionProxy ? (language === 'zh' ? '取消代理设置' : 'Cancel proxy settings') : subscriptionSaving || discoverySaving ? (language === 'zh' ? '正在保存' : 'Saving') : (language === 'zh' ? '关闭扫描' : 'Close scan')} closeDisabled={saving || subscriptionSaving || discoverySaving} onClose={editingSubscriptionProxy ? cancelSubscriptionProxy : closeScan} footer={editingSubscriptionProxy ? actions : scanFooter}>
+    >{({ panel, actions, saving }) => <Dialog open={adding && addStage === 'scan'}
+      title={selectedSubscription ? (language === 'zh' ? '连接订阅' : 'Connect subscription') : (language === 'zh' ? '扫描本机' : 'Scan this device')}
+      closeLabel={editingSubscriptionProxy ? (language === 'zh' ? '取消代理设置' : 'Cancel proxy settings') : subscriptionSaving || discoverySaving ? (language === 'zh' ? '正在保存' : 'Saving') : selectedSubscription ? (language === 'zh' ? '关闭订阅连接' : 'Close subscription connection') : (language === 'zh' ? '关闭扫描' : 'Close scan')}
+      closeDisabled={saving || subscriptionSaving || discoverySaving} onClose={editingSubscriptionProxy ? cancelSubscriptionProxy : closeScan} footer={editingSubscriptionProxy ? actions : scanFooter}>
       <p className="oc-meta">{language === 'zh' ? '订阅连接需要代理？' : 'Need a proxy for subscriptions?'} <button ref={proxyButton} className="btn" type="button" aria-expanded={editingSubscriptionProxy} disabled={!trustedAuthority || scanWorking || editingSubscriptionProxy} onClick={() => setEditingSubscriptionProxy(true)}>{language === 'zh' ? '设置订阅连接代理' : 'Configure subscription proxy'}</button></p>
       {panel}
       <fieldset className="subscription-proxy-scan-content" disabled={editingSubscriptionProxy}>
-      {!selectedDiscovery && <Disclosure label={language === 'zh' ? '扫描 Hermes 配置' : 'Scan a Hermes profile'} language={language}>
+      {!selectedDiscovery && !selectedSubscription && <Disclosure label={language === 'zh' ? '扫描 Hermes 配置' : 'Scan a Hermes profile'} language={language}>
         <form className="agent-form" data-hermes-source-scope onSubmit={event => {
           event.preventDefault();
           if (!hermesScanRoot.trim().startsWith('/') || scanWorking) return;
