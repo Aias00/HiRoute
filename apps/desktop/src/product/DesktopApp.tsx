@@ -644,7 +644,10 @@ export function DesktopApp() {
             <p>{startupFailureText(startupFailure.code, startupFailure.storage_recovery, language, 'macos').instructions}</p>
             {startupFailure.recovery_available && <button className="btn" type="button" onClick={() => {
               void invoke('open_startup_recovery_directory').catch(() => setNotice(language === 'zh' ? '无法安全打开恢复目录，请检查目录权限后重试。' : 'The recovery directory could not be opened safely. Check its permissions and try again.'));
-            }}>{startupFailure.backup_directory ? (language === 'zh' ? '查看保留的恢复材料与说明' : 'Inspect preserved recovery material and guide') : (language === 'zh' ? '打开恢复目录' : 'Open recovery directory')}</button>}
+            }}>{startupFailure.backup_directory ? (language === 'zh' ? '查看保留的恢复材料与说明' : 'Inspect preserved recovery material and guide') : (language === 'zh' ? '打开数据目录' : 'Open data directory')}</button>}
+            <button className="btn" type="button" onClick={() => {
+              void invoke('open_diagnostic_directory').catch(() => setNotice(language === 'zh' ? '无法安全打开诊断目录，请保留数据并联系支持。' : 'The diagnostic directory could not be opened safely. Keep your data and contact support.'));
+            }}>{language === 'zh' ? '打开诊断目录' : 'Open diagnostics'}</button>
           </div>
         </div>}
 

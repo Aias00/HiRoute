@@ -204,7 +204,10 @@ mod tests {
     use std::time::Duration;
 
     #[test]
-    fn observation_source_locator_handles_large_manifests_and_rejects_another_batch() {
+    #[cfg(unix)]
+    fn observation_source_locator_requires_verified_material_and_rejects_another_batch() {
+        use sha2::{Digest, Sha256};
+        use std::os::unix::fs::MetadataExt;
         let temporary = tempfile::tempdir().unwrap();
         let root = temporary.path();
         let storage = root.join("storage");
@@ -217,11 +220,42 @@ mod tests {
             br#"{"schema":1,"backup_name":"observation-format-5","set_id":"retained-batch"}"#,
         )
         .unwrap();
-        std::fs::write(
-            source.join("source-backup.json"),
-            vec![b' '; 5 * 1024 * 1024],
-        )
-        .unwrap();
+        let history = source.join("storage/observation");
+        hiroute_diagnostics::files::PrivateDir::open_or_create(&history).unwrap();
+        let mut files = serde_json::Map::new();
+        for name in [
+            "storage/live/control.db",
+            "storage/live/runtime.db",
+            "storage/live/secrets.db",
+            "storage/master-key",
+            "storage/observation-hmac-key",
+            "recovery-package/hirouted",
+        ] {
+            let path = source.join(name);
+            hiroute_diagnostics::files::PrivateDir::open_or_create(path.parent().unwrap()).unwrap();
+            hiroute_platform::durable::write_private_new(&path, b"retained original").unwrap();
+            files.insert(
+                name.into(),
+                serde_json::json!(format!("{:x}", Sha256::digest(b"retained original"))),
+            );
+        }
+        let identity = std::fs::metadata(&history).unwrap();
+        for (path, value) in [
+            (
+                source.join("source-backup.json"),
+                serde_json::json!({"schema":"hiroute.upgrade-source-backup/v2","complete":true,"source_info":{"batch_id":"retained-batch"},"files":files,"sealed_observation":{"identity":[identity.dev(),identity.ino()]}}),
+            ),
+            (
+                batch.join("backup-set.manifest.json"),
+                serde_json::json!({"schema":"hiroute.sqlite-backup-set/v2","set_id":"retained-batch"}),
+            ),
+        ] {
+            hiroute_platform::durable::write_private_new(
+                &path,
+                &serde_json::to_vec(&value).unwrap(),
+            )
+            .unwrap();
+        }
         std::fs::write(
             batch.join("source-location.json"),
             br#"{"schema":1,"complete":true,"batch_id":"retained-batch"}"#,

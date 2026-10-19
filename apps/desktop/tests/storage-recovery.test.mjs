@@ -38,3 +38,15 @@ test('healthy-storage listener failures do not recommend storage recovery',()=>{
     assert.doesNotMatch(value.instructions,language==='zh'?/完整旧数据组/:/restore the complete old group/);
   }
 });
+
+test('unverified missing packages give platform-specific repair steps and no blind retry',()=>{
+  for (const language of ['zh','en']) {
+    const mac=storageRecoveryText(report('missing_package','preserve_and_diagnose'),language,'macos');
+    assert.match(mac.instructions,language==='zh'?/尚未确认.*旧版读取/:/Compatibility with the old program has not been established/);
+    assert.match(mac.instructions,language==='zh'?/打开诊断目录/:/Open diagnostics/);
+    const managed=storageRecoveryText(report('invalid_package','preserve_and_diagnose'),language,'windows');
+    assert.match(managed.instructions,language==='zh'?/仅在终端设置环境变量并不够/:/terminal variable alone is insufficient/);
+    assert.equal(mac.canRetry,false);
+    assert.equal(managed.canRetry,false);
+  }
+});

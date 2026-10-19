@@ -2,6 +2,7 @@
 //! The storage owner still performs full admission before resume or restoration.
 use super::*;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::path::Component;
 
 fn invalid() -> io::Error {
@@ -75,7 +76,7 @@ pub(super) fn validate(storage: &Path, record: &StorageRecovery) -> io::Result<(
         .as_object()
         .filter(|f| !f.is_empty() && f.len() <= 10_000)
         .ok_or_else(invalid)?;
-    for name in files.keys() {
+    for (name, expected) in files {
         if name.contains(['\\', ':'])
             || !Path::new(name)
                 .components()
@@ -88,8 +89,21 @@ pub(super) fn validate(storage: &Path, record: &StorageRecovery) -> io::Result<(
             path.parent().ok_or_else(invalid)?,
         )
         .map_err(|_| invalid())?;
-        let file = private_fs::open_private_file(&path)?;
+        let mut file = private_fs::open_private_file(&path)?;
         private_fs::verify_single_link(&file)?;
+        let expected = expected.as_str().ok_or_else(invalid)?;
+        let mut digest = Sha256::new();
+        let mut buffer = [0; 64 * 1024];
+        loop {
+            let count = file.read(&mut buffer)?;
+            if count == 0 {
+                break;
+            }
+            digest.update(&buffer[..count]);
+        }
+        if format!("{:x}", digest.finalize()) != expected {
+            return Err(invalid());
+        }
     }
     for name in [
         "storage/live/control.db",
@@ -159,7 +173,7 @@ mod tests {
             durable::write_private_new(&source.join(name), b"retained source").unwrap();
             files.insert(
                 name.into(),
-                serde_json::json!("digest verified by the storage owner"),
+                serde_json::json!(format!("{:x}", Sha256::digest(b"retained source"))),
             );
         }
         #[cfg(unix)]
@@ -202,6 +216,15 @@ mod tests {
         report.backup_batch = Some("set_original".into());
         report.backup_name = Some("migration-set".into());
         report.store(&storage).unwrap();
+        assert_eq!(
+            StorageRecovery::read(&storage).unwrap(),
+            Some(report.clone())
+        );
+        // An extant file or unchanged length is insufficient: corruption of a
+        // retained key must revoke the otherwise correct batch's restore advice.
+        std::fs::write(source.join("storage/master-key"), b"corrupted value").unwrap();
+        assert!(StorageRecovery::read(&storage).is_err());
+        std::fs::write(source.join("storage/master-key"), b"retained source").unwrap();
         assert_eq!(StorageRecovery::read(&storage).unwrap(), Some(report));
         write(
             &storage.join("observation-source-backup.json"),
