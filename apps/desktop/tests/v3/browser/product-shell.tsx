@@ -54,6 +54,7 @@ mockIPC((command, payload) => {
   const args = (payload ?? {}) as Record<string, unknown>;
   control.commands.push({ command, payload: args });
   if (control.handlers[command]) return control.handlers[command](args);
+  if (command === 'plugin:window|set_theme') return undefined;
   if (command === 'startup_status') return { state: 'ready', recovery_available: false };
   if (command === 'desktop_snapshot') return structuredClone(control.desktop);
   if (command === 'agent_snapshot') return structuredClone(control.agents);

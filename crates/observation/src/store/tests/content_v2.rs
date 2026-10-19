@@ -209,14 +209,15 @@ fn direction_stream_persists_exact_metadata_and_returns_replay_stable_rich_ack()
     );
 
     let connection = fixture.store.connection.lock();
-    let metadata: String = connection
+    let metadata: Vec<u8> = connection
         .query_row(
             "SELECT metadata_json FROM conversation_content_events_v2 WHERE sequence=2",
             [],
             |row| row.get(0),
         )
         .unwrap();
-    let metadata: serde_json::Value = serde_json::from_str(&metadata).unwrap();
+    let metadata: serde_json::Value =
+        serde_json::from_slice(&crate::store::records::decode(&metadata).unwrap()).unwrap();
     assert!(metadata.get("canonical_bytes_base64").is_none());
     assert!(
         metadata
@@ -240,7 +241,10 @@ fn direction_stream_persists_exact_metadata_and_returns_replay_stable_rich_ack()
         )
         .unwrap();
     assert_eq!((chunk.1, chunk.2), (0, 5));
-    assert_eq!(&std::fs::read(chunk.0).unwrap()[0..5], b"hello");
+    assert_eq!(
+        &std::fs::read(fixture.store.object_path(&chunk.0).unwrap()).unwrap()[0..5],
+        b"hello"
+    );
     drop(connection);
 
     let detail = fixture
@@ -523,7 +527,7 @@ fn replay_revalidates_durable_chunk_bytes_instead_of_trusting_feedback_alone() {
             row.get(0)
         })
         .unwrap();
-    std::fs::write(path, b"z").unwrap();
+    std::fs::write(fixture.store.object_path(&path).unwrap(), b"z").unwrap();
     assert_eq!(
         fixture.store.ingest_content(&append, &[]).unwrap_err(),
         ObservationStoreError::Corrupt,
@@ -535,7 +539,7 @@ fn replay_revalidates_durable_chunk_bytes_instead_of_trusting_feedback_alone() {
 }
 
 #[test]
-fn schema_three_migrates_once_to_the_single_v2_content_schema() {
+fn legacy_schema_three_component_normalization_keeps_the_single_v2_content_schema() {
     let root = tempfile::tempdir().unwrap();
     let connection = Connection::open(root.path().join("activity.db")).unwrap();
     connection
@@ -563,6 +567,12 @@ fn schema_three_migrates_once_to_the_single_v2_content_schema() {
         .unwrap();
     drop(connection);
 
+    // Component coverage for the retained historical schema normalizer. Real
+    // startup seals this old store unchanged instead of invoking conversion.
+    let mut historical = Connection::open(root.path().join("activity.db")).unwrap();
+    super::super::schema::migrate_legacy(&mut historical).unwrap();
+    super::super::schema::migrate(&mut historical).unwrap();
+    drop(historical);
     let store = LocalObservationStore::open(root.path(), DigestAuthority::new([7; 32])).unwrap();
     let connection = store.connection.lock();
     let version: String = connection
@@ -572,7 +582,7 @@ fn schema_three_migrates_once_to_the_single_v2_content_schema() {
             |row| row.get(0),
         )
         .unwrap();
-    assert_eq!(version, "4");
+    assert_eq!(version, "5");
     let v2_tables: i64 = connection
         .query_row(
             "SELECT COUNT(*) FROM sqlite_master WHERE type='table'
@@ -613,7 +623,7 @@ fn schema_three_migrates_once_to_the_single_v2_content_schema() {
                 |row| row.get::<_, String>(0),
             )
             .unwrap(),
-        "4",
+        "5",
     );
 }
 

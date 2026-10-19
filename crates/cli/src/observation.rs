@@ -376,6 +376,40 @@ fn parse_score(options: &[String], index: &mut usize) -> Result<f64, ErrorCode> 
     }
 }
 
+pub(super) fn capacity_get(options: &[String]) -> Result<Value, ErrorCode> {
+    if let Some(input) = RequestInput::optional(options)? {
+        let request: hiroute_application_api::ClientEmptyRequestV1 =
+            serde_json::from_value(input.read(MAX_REQUEST_BYTES)?)
+                .map_err(|_| ErrorCode::InvalidArguments)?;
+        return serde_json::to_value(request).map_err(|_| ErrorCode::Internal);
+    }
+    if options.is_empty() {
+        Ok(serde_json::json!({}))
+    } else {
+        Err(ErrorCode::InvalidArguments)
+    }
+}
+pub(super) fn capacity_set(options: &[String]) -> Result<Value, ErrorCode> {
+    if let Some(input) = RequestInput::optional(options)? {
+        let request: hiroute_application_api::ObservationCapacityUpdateV1 =
+            serde_json::from_value(input.read(MAX_REQUEST_BYTES)?)
+                .map_err(|_| ErrorCode::InvalidArguments)?;
+        return serde_json::to_value(request).map_err(|_| ErrorCode::Internal);
+    }
+    let value = match options {
+        [flag] if flag == "--disable" => None,
+        [flag, value] if flag == "--max-active-bytes" => Some(
+            value
+                .parse::<u64>()
+                .ok()
+                .filter(|n| *n > 0)
+                .ok_or(ErrorCode::InvalidArguments)?,
+        ),
+        _ => return Err(ErrorCode::InvalidArguments),
+    };
+    Ok(serde_json::json!({"max_active_bytes":value}))
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;

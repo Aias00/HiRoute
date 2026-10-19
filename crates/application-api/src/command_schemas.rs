@@ -169,6 +169,14 @@ pub fn command_schemas(command_id: &str) -> Option<CommandSchemasV1> {
             request!(ClientEmptyRequestV1),
             response!(hiroute_domain::ObservationStatusV1),
         ),
+        "observation.storage.show" => (
+            schema::<ClientEmptyRequestV1>(false),
+            schema::<hiroute_domain::ObservationCapacityStatusV1>(true),
+        ),
+        "observation.storage.set" => (
+            schema::<ObservationCapacityUpdateV1>(false),
+            schema::<hiroute_domain::ObservationCapacityStatusV1>(true),
+        ),
         "observation.plan-quality.samples" => (
             observation_request(&["plan_quality"]),
             response!(PlanQualitySamplesPage),
@@ -367,6 +375,11 @@ fn examples(command_id: &str) -> Vec<Value> {
                 json!({"schema_version":hiroute_domain::CHANGE_SPEC_SCHEMA_V1,"spec":spec,"accept_digest":format!("sha256:{}", "0".repeat(64)),"expected_revisions":{"target":0},"idempotency_key":"replace-with-one-stable-key"}),
             ]
         }
+        "observation.storage.show" => vec![json!({})],
+        "observation.storage.set" => vec![
+            json!({"max_active_bytes":20_000_000_000u64}),
+            json!({"max_active_bytes":null}),
+        ],
         "routing.options" => vec![json!({}), json!({"authoring":{}})],
         "compute.scan" => vec![json!({}), json!({"schema":COMPUTE_SCAN_REQUEST_SCHEMA_V2})],
         "compute.connection.options"

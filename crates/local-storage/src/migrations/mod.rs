@@ -15,6 +15,8 @@ mod agent_surface_checks_v25;
 #[cfg(test)]
 mod agent_surface_checks_v25_tests;
 mod current_storage;
+mod observation_source;
+mod recovery_package;
 mod startup_format;
 pub(crate) use startup_format::validate_startup_format;
 #[cfg(test)]

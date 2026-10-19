@@ -65,10 +65,62 @@ pub struct StartupReport {
 }
 
 fn complete_upgrade_backup(root: &std::path::Path) -> Option<PathBuf> {
-    // The storage startup boundary publishes the source outside storage, under the host's
-    // existing private data root. No path from JSON or from the WebView is used for opening.
-    let backup = root.join("storage.upgrade-backups/migration-set/source");
+    // Select only known backup names and a portable owner-written batch identity.
+    // The WebView never supplies a filesystem path or restoration authority.
+    let parent = root.join("storage.upgrade-backups");
+    if let Ok(storage) =
+        hiroute_diagnostics::files::PrivateDir::open_existing(&root.join("storage"))
+        && let Ok(Some(mut file)) = storage.open_read("observation-source-backup.json")
+    {
+        if file.len() > 16 * 1024 {
+            return None;
+        }
+        let link: serde_json::Value =
+            serde_json::from_slice(&file.read_prefix(16 * 1024).ok()?).ok()?;
+        file.recheck().ok()?;
+        let name = link["backup_name"].as_str()?;
+        let id = link["set_id"].as_str()?;
+        if link["schema"] != 1
+            || !matches!(name, "migration-set" | "observation-format-5")
+            || id.is_empty()
+            || id.len() > 128
+            || id.contains("..")
+            || !id
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
+        {
+            return None;
+        }
+        for candidate in [
+            parent.join(name),
+            parent.join(format!("migration-set.{id}")),
+        ] {
+            if let Some(path) = published_source(&candidate, Some(id)) {
+                return Some(path);
+            }
+        }
+        return None;
+    }
+    published_source(&parent.join("migration-set"), None)
+}
+
+fn published_source(batch: &std::path::Path, expected_id: Option<&str>) -> Option<PathBuf> {
+    let backup = batch.join("source");
     let directory = hiroute_diagnostics::files::PrivateDir::open_existing(&backup).ok()?;
+    let batch_directory = hiroute_diagnostics::files::PrivateDir::open_existing(batch).ok()?;
+    if let Some(mut file) = batch_directory.open_read("source-location.json").ok()? {
+        if file.len() > 16 * 1024 {
+            return None;
+        }
+        let hint: serde_json::Value =
+            serde_json::from_slice(&file.read_prefix(16 * 1024).ok()?).ok()?;
+        file.recheck().ok()?;
+        return (hint["schema"] == 1
+            && hint["complete"] == true
+            && expected_id.is_none_or(|id| hint["batch_id"] == id))
+        .then_some(backup);
+    }
+    // Supported old small manifests predate the bounded directory hint.
     let mut manifest_file = directory.open_read("source-backup.json").ok()??;
     if manifest_file.len() > 4 * 1024 * 1024 {
         return None;
@@ -76,8 +128,10 @@ fn complete_upgrade_backup(root: &std::path::Path) -> Option<PathBuf> {
     let manifest: serde_json::Value =
         serde_json::from_slice(&manifest_file.read_prefix(4 * 1024 * 1024).ok()?).ok()?;
     manifest_file.recheck().ok()?;
-    (manifest["schema"] == "hiroute.upgrade-source-backup/v1" && manifest["complete"] == true)
-        .then_some(backup)
+    (manifest["schema"] == "hiroute.upgrade-source-backup/v1"
+        && manifest["complete"] == true
+        && expected_id.is_none_or(|id| manifest["source_info"]["batch_id"] == id))
+    .then_some(backup)
 }
 
 #[tauri::command]
@@ -145,6 +199,45 @@ mod tests {
     use super::*;
     use std::sync::atomic::Ordering;
     use std::time::Duration;
+
+    #[test]
+    fn observation_source_locator_handles_large_manifests_and_rejects_another_batch() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path();
+        let storage = root.join("storage");
+        let batch = root.join("storage.upgrade-backups/observation-format-5");
+        let source = batch.join("source");
+        hiroute_diagnostics::files::PrivateDir::open_or_create(&storage).unwrap();
+        hiroute_diagnostics::files::PrivateDir::open_or_create(&source).unwrap();
+        std::fs::write(
+            storage.join("observation-source-backup.json"),
+            br#"{"schema":1,"backup_name":"observation-format-5","set_id":"retained-batch"}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            source.join("source-backup.json"),
+            vec![b' '; 5 * 1024 * 1024],
+        )
+        .unwrap();
+        std::fs::write(
+            batch.join("source-location.json"),
+            br#"{"schema":1,"complete":true,"batch_id":"retained-batch"}"#,
+        )
+        .unwrap();
+        assert_eq!(complete_upgrade_backup(root), Some(source));
+        std::fs::write(
+            batch.join("source-location.json"),
+            br#"{"schema":1,"complete":true,"batch_id":"different-batch"}"#,
+        )
+        .unwrap();
+        assert_eq!(complete_upgrade_backup(root), None);
+        std::fs::write(
+            storage.join("observation-source-backup.json"),
+            br#"{"schema":1,"backup_name":"../outside","set_id":"retained-batch"}"#,
+        )
+        .unwrap();
+        assert_eq!(complete_upgrade_backup(root), None);
+    }
 
     #[test]
     #[cfg(unix)]

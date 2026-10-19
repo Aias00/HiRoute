@@ -59,6 +59,7 @@ export const focusedRequirements = {
 };
 
 export const productShellRequired = [
+  'desktop.settings.storage-capacity',
   'desktop.routing.native-default',
   'desktop.decisions.connectivity-test',
   'desktop.routing.custom-assessment',

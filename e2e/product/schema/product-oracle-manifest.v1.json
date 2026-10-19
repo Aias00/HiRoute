@@ -1,5 +1,5 @@
 {
-  "descriptor_digest": "sha256:21e25dbc02c16b81302640403044637b293ede80b3f085ead22bd18865f4b276",
+  "descriptor_digest": "sha256:b18d4b3eaa4e0ec39d26d15a87c35049433aebd5feeb241607231103a9cafe5b",
   "expected_red_reasons": [],
   "planned_commands": [
     "console.open",
@@ -104,6 +104,8 @@
     "observation.plan-trust",
     "observation.plan-trust.replay",
     "observation.plan-trust.suggestions",
+    "observation.storage.show",
+    "observation.storage.set",
     "observation.plan-quality.samples"
   ],
   "planned_native_paths": [
@@ -186,6 +188,8 @@
     "observation.plan-trust",
     "observation.plan-trust.replay",
     "observation.plan-trust.suggestions",
+    "observation.storage.show",
+    "observation.storage.set",
     "observation.plan-quality.samples"
   ],
   "release_state": "released",
