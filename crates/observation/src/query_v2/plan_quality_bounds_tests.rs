@@ -106,13 +106,13 @@ fn routing_summary_bounds_unrelated_execution_history_work() {
         1,
         "the one real route decision must remain included"
     );
-    let (previous_rows, previous) = measured(
-        &db,
-        &SUMMARY_SQL.replace(
-            "CROSS JOIN execution_fact_events",
-            "JOIN execution_fact_events",
-        ),
-    );
+    // Reproduce the former query without either optimization. The new partial
+    // filter also helps a reorderable join, so retaining it is no longer a
+    // negative control for the workspace execution scan.
+    let previous_sql = SUMMARY_SQL
+        .replace("CROSS JOIN execution_fact_events", "JOIN execution_fact_events")
+        .replace("          AND CASE WHEN json_valid(f.body_json) THEN json_extract(f.body_json,'$.event_kind') ELSE 'route_decision' END='route_decision'\n", "");
+    let (previous_rows, previous) = measured(&db, &previous_sql);
     assert_eq!(rows, previous_rows);
     assert!(
         bounded * 4 < previous,
