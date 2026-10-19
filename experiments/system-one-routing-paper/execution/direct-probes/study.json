@@ -1,0 +1,18 @@
+{
+  "id": "direct-probes",
+  "dataset": "direct-probes",
+  "kind": "probes",
+  "repeats": 1,
+  "planned_calls": 32,
+  "started_calls": 32,
+  "result_calls": 32,
+  "unknown_outcomes": [],
+  "not_started_calls": 0,
+  "expected_models": {
+    "jev113": "typesafe/jev-1.13-20260917",
+    "jev114": "typesafe/jev-1.14-20261014"
+  },
+  "jobs": "execution/direct-probes/jobs.jsonl.gz",
+  "requests": "execution/direct-probes/requests.jsonl.gz",
+  "responses": "responses/direct-probes.jsonl.gz"
+}

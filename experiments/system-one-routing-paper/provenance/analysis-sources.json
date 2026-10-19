@@ -1,0 +1,23 @@
+{
+  "scope": "Reused frozen parsers/scorers; reproduce.py is a new offline consolidation checked against frozen reductions.",
+  "files": [
+    {
+      "source_id": "frozen-engineering-analysis/runner/context_eval.py",
+      "source_sha256": "5bddb535ae387e81b5567b806122f574201986043cad51f1cbf1075d726ae33a",
+      "public_path": "analysis/context_eval.py",
+      "adaptation": "Byte-identical frozen validation, scoring and bootstrap implementation."
+    },
+    {
+      "source_id": "frozen-engineering-analysis/runner/methods.py",
+      "source_sha256": "2fc77ebfc0c86a9812986a1f930fd95d1212766a645c81fbd95e99f738fcb2f4",
+      "public_path": "analysis/methods.py",
+      "adaptation": "Only the four question-file paths are relocated to public policies/."
+    },
+    {
+      "source_id": "frozen-engineering-analysis/fair_methods.py",
+      "source_sha256": "ca80058a7116c06d8d221ed5a18ef2237b64b6109c92c2198aea809664dfe91c",
+      "public_path": "analysis/fair_methods.py",
+      "adaptation": "Only module/policy lookup paths are relocated; no transport code is copied."
+    }
+  ]
+}

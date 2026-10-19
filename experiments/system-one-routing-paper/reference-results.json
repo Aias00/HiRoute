@@ -1,0 +1,269 @@
+{
+  "scope": "Frozen local reductions for comparison only. The replay does not read these values when parsing or scoring.",
+  "studies": {
+    "engineering-matched": {
+      "action": {
+        "jev114/decomposed": {
+          "family_accuracy": 0.9663461538461539,
+          "correct_calls": 165,
+          "eligible_calls": 172
+        },
+        "jev113/direct": {
+          "family_accuracy": 0.6730769230769231,
+          "correct_calls": 116,
+          "eligible_calls": 172
+        },
+        "qwen38flash/decomposed": {
+          "family_accuracy": 0.9182692307692307,
+          "correct_calls": 155,
+          "eligible_calls": 172
+        },
+        "jev114/direct": {
+          "family_accuracy": 0.6730769230769231,
+          "correct_calls": 116,
+          "eligible_calls": 172
+        },
+        "jev113/decomposed": {
+          "family_accuracy": 0.9711538461538461,
+          "correct_calls": 166,
+          "eligible_calls": 172
+        },
+        "qwen38flash/direct": {
+          "family_accuracy": 0.9134615384615384,
+          "correct_calls": 154,
+          "eligible_calls": 172
+        }
+      },
+      "resources": {
+        "jev113/direct": {
+          "usage_charge_usd": 0.02668008,
+          "usd_per_1000_requests": 0.10421906249999999,
+          "known_charge_calls": 256
+        },
+        "jev113/decomposed": {
+          "usage_charge_usd": 0.021497616,
+          "usd_per_1000_requests": 0.0839750625,
+          "known_charge_calls": 256
+        },
+        "jev114/direct": {
+          "usage_charge_usd": 0.02668008,
+          "usd_per_1000_requests": 0.10421906249999999,
+          "known_charge_calls": 256
+        },
+        "jev114/decomposed": {
+          "usage_charge_usd": 0.021497616,
+          "usd_per_1000_requests": 0.0839750625,
+          "known_charge_calls": 256
+        }
+      }
+    },
+    "engineering-independent": {
+      "action": {
+        "jev113/c_three": {
+          "family_accuracy": 0.9711538461538461,
+          "correct_calls": 166,
+          "eligible_calls": 172
+        },
+        "jev114/legacy_full": {
+          "family_accuracy": 0.75,
+          "correct_calls": 130,
+          "eligible_calls": 172
+        },
+        "qwen38flash/llm_direct": {
+          "family_accuracy": 0.8798076923076923,
+          "correct_calls": 149,
+          "eligible_calls": 172
+        },
+        "jev114/c_three": {
+          "family_accuracy": 0.9615384615384616,
+          "correct_calls": 164,
+          "eligible_calls": 172
+        },
+        "jev114/c_two": {
+          "family_accuracy": 0.7307692307692307,
+          "correct_calls": 128,
+          "eligible_calls": 172
+        },
+        "jev113/c_two": {
+          "family_accuracy": 0.7307692307692307,
+          "correct_calls": 128,
+          "eligible_calls": 172
+        },
+        "jev113/legacy_full": {
+          "family_accuracy": 0.7884615384615384,
+          "correct_calls": 138,
+          "eligible_calls": 172
+        }
+      }
+    },
+    "mathematics-matched": {
+      "action": {
+        "jev113/direct": {
+          "family_accuracy": 0.96875,
+          "correct_calls": 96,
+          "eligible_calls": 100
+        },
+        "jev113/decomposed": {
+          "family_accuracy": 0.96875,
+          "correct_calls": 96,
+          "eligible_calls": 100
+        },
+        "jev114/direct": {
+          "family_accuracy": 0.953125,
+          "correct_calls": 94,
+          "eligible_calls": 100
+        },
+        "jev114/decomposed": {
+          "family_accuracy": 0.9765625,
+          "correct_calls": 97,
+          "eligible_calls": 100
+        },
+        "qwen38flash/direct": {
+          "family_accuracy": 0.921875,
+          "correct_calls": 90,
+          "eligible_calls": 100
+        },
+        "qwen38flash/decomposed": {
+          "family_accuracy": 0.984375,
+          "correct_calls": 98,
+          "eligible_calls": 100
+        }
+      },
+      "components": {
+        "jev113/decomposed": {
+          "current_demand": 0.984375,
+          "stage_grade": 0.8515625,
+          "applicability": 0.9296875
+        },
+        "jev114/decomposed": {
+          "current_demand": 0.984375,
+          "stage_grade": 0.890625,
+          "applicability": 0.921875
+        },
+        "qwen38flash/decomposed": {
+          "current_demand": 1,
+          "stage_grade": 0.84375,
+          "applicability": 0.7734375
+        }
+      },
+      "comparison": {
+        "jev113": {
+          "difference": 0.0,
+          "ci95": [
+            -0.046875,
+            0.046875
+          ]
+        },
+        "jev114": {
+          "difference": 0.0234375,
+          "ci95": [
+            -0.0234375,
+            0.09375
+          ]
+        },
+        "qwen38flash": {
+          "difference": 0.0625,
+          "ci95": [
+            -0.015625,
+            0.15625
+          ]
+        }
+      },
+      "resources": {
+        "jev113/direct": {
+          "usage_charge_usd": 0.014730996,
+          "usd_per_1000_requests": 0.11508590625,
+          "known_charge_calls": 128
+        },
+        "jev113/decomposed": {
+          "usage_charge_usd": 0.011059188,
+          "usd_per_1000_requests": 0.08639990624999999,
+          "known_charge_calls": 128
+        },
+        "jev114/direct": {
+          "usage_charge_usd": 0.014730996,
+          "usd_per_1000_requests": 0.11508590625,
+          "known_charge_calls": 128
+        },
+        "jev114/decomposed": {
+          "usage_charge_usd": 0.011059188,
+          "usd_per_1000_requests": 0.08639990624999999,
+          "known_charge_calls": 128
+        }
+      }
+    },
+    "direct-expression": {
+      "action": {
+        "jev113/original": {
+          "family_accuracy": 0.6730769230769231,
+          "correct_calls": 116,
+          "eligible_calls": 172
+        },
+        "jev113/explicit": {
+          "family_accuracy": 0.9230769230769231,
+          "correct_calls": 158,
+          "eligible_calls": 172
+        },
+        "jev114/original": {
+          "family_accuracy": 0.6730769230769231,
+          "correct_calls": 116,
+          "eligible_calls": 172
+        },
+        "jev114/explicit": {
+          "family_accuracy": 0.6826923076923077,
+          "correct_calls": 118,
+          "eligible_calls": 172
+        }
+      }
+    },
+    "development-v3": {
+      "action": {
+        "jev113/c_three": {
+          "family_accuracy": 0.9874131944444444,
+          "correct_calls": 615,
+          "eligible_calls": 624
+        },
+        "jev114/c_two": {
+          "family_accuracy": 0.8776041666666666,
+          "correct_calls": 535,
+          "eligible_calls": 624
+        },
+        "jev113/c_two": {
+          "family_accuracy": 0.8871527777777778,
+          "correct_calls": 541,
+          "eligible_calls": 624
+        },
+        "jev114/legacy_full": {
+          "family_accuracy": 0.9123263888888888,
+          "correct_calls": 558,
+          "eligible_calls": 624
+        },
+        "qwen38flash/llm_decomposed": {
+          "family_accuracy": 0.5811631944444444,
+          "correct_calls": 364,
+          "eligible_calls": 624
+        },
+        "jev114/c_three": {
+          "family_accuracy": 0.9986979166666666,
+          "correct_calls": 623,
+          "eligible_calls": 624
+        },
+        "jev113/legacy_full": {
+          "family_accuracy": 0.9197048611111112,
+          "correct_calls": 564,
+          "eligible_calls": 624
+        },
+        "qwen38flash/llm_direct@0.5": {
+          "family_accuracy": 0.9249131944444444,
+          "correct_calls": 574,
+          "eligible_calls": 624
+        },
+        "qwen38flash/llm_direct@0.8": {
+          "family_accuracy": 0.9522569444444444,
+          "correct_calls": 591,
+          "eligible_calls": 624
+        }
+      }
+    }
+  }
+}

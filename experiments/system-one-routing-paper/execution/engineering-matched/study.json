@@ -1,0 +1,19 @@
+{
+  "id": "engineering-matched",
+  "dataset": "engineering",
+  "kind": "matched",
+  "repeats": 2,
+  "planned_calls": 1536,
+  "started_calls": 1536,
+  "result_calls": 1536,
+  "unknown_outcomes": [],
+  "not_started_calls": 0,
+  "expected_models": {
+    "jev114": "typesafe/jev-1.14-20261014",
+    "jev113": "typesafe/jev-1.13-20260917",
+    "qwen38flash": "qwen3.8-flash"
+  },
+  "jobs": "execution/engineering-matched/jobs.jsonl.gz",
+  "requests": "execution/engineering-matched/requests.jsonl.gz",
+  "responses": "responses/engineering-matched.jsonl.gz"
+}

@@ -1,0 +1,25 @@
+{
+  "status": "post_hoc_reviewer_sensitivity_not_replacement_gold",
+  "dataset": "mathematics",
+  "changes": [
+    {
+      "id": "MR010_b_en",
+      "action_status": "determinate",
+      "panel": "clear",
+      "action": "primary",
+      "allowed_actions": [
+        "primary"
+      ]
+    },
+    {
+      "id": "MR010_b_zh",
+      "action_status": "determinate",
+      "panel": "clear",
+      "action": "primary",
+      "allowed_actions": [
+        "primary"
+      ]
+    }
+  ],
+  "reason": "The original stage did not supply the explicitly required inventory. It remains required by the pending request. Under the declared OR rule, an established historical protection branch can be sufficient for primary even when current demand is unknown. Original labels and main results remain unchanged."
+}
