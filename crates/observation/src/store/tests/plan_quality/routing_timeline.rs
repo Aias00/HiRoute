@@ -2,6 +2,157 @@ use super::*;
 use hiroute_domain::RoutingTimelineQueryV1;
 
 #[test]
+fn native_timeline_identity_uses_the_executed_candidate_not_the_last_evaluated_one() {
+    use super::super::support;
+    for primary in [false, true] {
+        let directory = tempfile::tempdir().unwrap();
+        let store = open_store(directory.path());
+        let fixture = Fixture::new(if primary {
+            "executed-primary"
+        } else {
+            "executed-regular"
+        });
+        let channel = fact_channel(&fixture, 256 * 1024);
+        let writer = writer(&store);
+        let mut regular = support::candidate("model/regular");
+        let mut other = support::candidate("model/primary");
+        if let ExecutionFactV1::CandidateDecision(candidate) = &mut regular {
+            candidate.reasoning_profile_id = Some("max".into());
+        }
+        if let ExecutionFactV1::CandidateDecision(candidate) = &mut other {
+            candidate.candidate_id = "candidate-b".into();
+            candidate.stable_binding_id = "binding-b".into();
+            candidate.reasoning_profile_id = Some("xhigh".into());
+        }
+        for (index, fact) in [support::route_decision(PLAN), regular, other]
+            .into_iter()
+            .enumerate()
+        {
+            assert!(matches!(
+                offer_fact(
+                    &writer,
+                    &channel,
+                    fixture.fact(index as u64 + 1, fact, 1000 + index as i64)
+                ),
+                WriterCycleOutcome::Ack(_)
+            ));
+        }
+        let query = RoutingTimelineQueryV1 {
+            session_id: fixture.session.to_string(),
+            after_watermark: None,
+            limit: 100,
+        };
+        let planned = store
+            .observed_routing_timeline(&reader(), &query, 5000)
+            .unwrap();
+        assert_eq!(
+            planned.turns[0].model_configuration_id, None,
+            "candidate evaluation is not execution proof"
+        );
+        let model = if primary {
+            "model/primary"
+        } else {
+            "model/regular"
+        };
+        let mut started = support::attempt_started(model);
+        let mut ended = support::attempt_finished();
+        if primary {
+            if let ExecutionFactV1::AttemptStarted {
+                candidate_id,
+                stable_binding_id,
+                ..
+            } = &mut started
+            {
+                *candidate_id = "candidate-b".into();
+                *stable_binding_id = "binding-b".into();
+            }
+            if let ExecutionFactV1::AttemptFinished(fact) = &mut ended {
+                fact.stable_binding_id = "binding-b".into();
+            }
+        }
+        for (index, fact) in [
+            started,
+            support::semantic_commit(),
+            support::usage_and_cache(),
+            ended,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            assert!(matches!(
+                offer_fact(
+                    &writer,
+                    &channel,
+                    fixture.attempt_fact(
+                        index as u64 + 4,
+                        "attempt/executed",
+                        fact,
+                        1010 + index as i64,
+                        PLAN
+                    )
+                ),
+                WriterCycleOutcome::Ack(_)
+            ));
+        }
+        assert!(matches!(
+            offer_fact(
+                &writer,
+                &channel,
+                fixture.fact(8, support::request_finished(), 1020)
+            ),
+            WriterCycleOutcome::Ack(_)
+        ));
+        let executed = store
+            .observed_routing_timeline(&reader(), &query, 5000)
+            .unwrap();
+        assert_eq!(
+            executed.turns[0].model_configuration_id.as_deref(),
+            Some(model)
+        );
+        assert_eq!(
+            executed.turns[0].reasoning_profile_id.as_deref(),
+            Some(if primary { "xhigh" } else { "max" })
+        );
+        assert_eq!(
+            executed.turns[0].requests[0].native_model.as_deref(),
+            Some("native-a"),
+            "both candidates share a native name; it cannot prove configuration identity"
+        );
+        assert!(matches!(
+            offer_fact(
+                &writer,
+                &channel,
+                fixture.fact(
+                    9,
+                    finished_for_model(
+                        &fixture,
+                        "segment/executed",
+                        "turn/executed",
+                        1,
+                        "smart_saving",
+                        1000,
+                        model
+                    ),
+                    1030
+                )
+            ),
+            WriterCycleOutcome::Ack(_)
+        ));
+        let closed = store
+            .observed_routing_timeline(&reader(), &query, 5000)
+            .unwrap();
+        assert_eq!(
+            closed.turns[0].model_configuration_id.as_deref(),
+            Some(model)
+        );
+        assert_eq!(
+            closed.turns[0].reasoning_profile_id,
+            executed.turns[0].reasoning_profile_id
+        );
+    }
+}
+
+#[test]
 fn timeline_pages_replay_late_scores_without_losing_or_repeating_changes() {
     let directory = tempfile::tempdir().unwrap();
     let store = open_store(directory.path());

@@ -2,6 +2,9 @@
 #[path = "tests/usage_order.rs"]
 mod usage_order;
 
+#[path = "tests/preplanner.rs"]
+mod preplanner;
+
 use serde_json::{Value, json};
 
 use hiroute_diagnostics::runtime::DiagnosticsPort;
