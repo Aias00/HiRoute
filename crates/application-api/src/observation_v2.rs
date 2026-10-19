@@ -166,3 +166,59 @@ pub struct ApiEquivalentValueOptionsV1 {
     pub report: ObservationValueReportOptionsV2,
     pub reference_binding_id: String,
 }
+
+/// Explicit null disables early capacity expiry; an omitted value is invalid.
+#[derive(schemars::JsonSchema, Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ObservationCapacityUpdateV1 {
+    #[serde(deserialize_with = "deserialize_capacity_limit")]
+    #[schemars(required)]
+    pub max_active_bytes: Option<u64>,
+}
+fn deserialize_capacity_limit<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<Option<u64>, D::Error> {
+    let value = Option::<u64>::deserialize(d)?;
+    if value == Some(0) {
+        return Err(serde::de::Error::custom(
+            "capacity must be positive or null",
+        ));
+    }
+    Ok(value)
+}
+
+#[cfg(test)]
+mod capacity_tests {
+    use super::*;
+    #[test]
+    fn capacity_requires_explicit_positive_integer_or_null() {
+        for input in [
+            "{}",
+            "{\"max_active_bytes\":0}",
+            "{\"max_active_bytes\":-1}",
+            "{\"max_active_bytes\":18446744073709551616}",
+            "{\"max_active_bytes\":1.5}",
+            "{\"max_active_bytes\":\"20G\"}",
+            "{\"max_active_bytes\":20,\"extra\":true}",
+        ] {
+            assert!(
+                serde_json::from_str::<ObservationCapacityUpdateV1>(input).is_err(),
+                "{input}"
+            );
+        }
+        assert_eq!(
+            serde_json::from_str::<ObservationCapacityUpdateV1>("{\"max_active_bytes\":null}")
+                .unwrap()
+                .max_active_bytes,
+            None
+        );
+        assert_eq!(
+            serde_json::from_str::<ObservationCapacityUpdateV1>(
+                "{\"max_active_bytes\":18446744073709551615}"
+            )
+            .unwrap()
+            .max_active_bytes,
+            Some(u64::MAX)
+        );
+    }
+}

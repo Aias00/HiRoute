@@ -48,6 +48,8 @@
     "allow-plan-editor-options",
     "allow-observation-read",
     "allow-observation-delete",
+    "allow-observation-capacity-get",
+    "allow-observation-capacity-set",
     "allow-test-classifier-decision",
     "allow-decision-services",
     "allow-save-decision-service",

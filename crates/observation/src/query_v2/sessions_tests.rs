@@ -3,6 +3,72 @@ use super::*;
 use hiroute_domain::{ContentCompleteness, FactsCompleteness, ObservationQueryPort};
 use rusqlite::params;
 
+fn retire_during_session_read(store: &crate::LocalObservationStore) {
+    let mut db = store.connection.lock();
+    let transaction = db.transaction().unwrap();
+    transaction
+        .execute("DELETE FROM logical_requests WHERE request_id='first'", [])
+        .unwrap();
+    invalidate_visibility(&transaction).unwrap();
+    transaction.commit().unwrap();
+}
+
+#[test]
+fn a_fresh_session_page_restarts_after_retirement_without_returning_expired_membership() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = open(directory.path());
+    seed(&store, "first", 100);
+    seed(&store, "second", 200);
+    *store.session_read_test_hook.lock() = Some(Box::new(retire_during_session_read));
+    let page = store
+        .observed_sessions(&reader(None), &query(50), 500)
+        .unwrap();
+    assert_eq!(page.sessions.len(), 1);
+    assert_eq!(page.sessions[0].request_count, 1);
+}
+
+#[test]
+fn a_paged_session_read_stays_stale_after_retirement_and_keeps_its_cursor_contract() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = open(directory.path());
+    seed(&store, "first", 100);
+    seed(&store, "second", 200);
+    {
+        let db = store.connection.lock();
+        db.execute("INSERT INTO sessions(workspace_id,session_id,started_at_ms,updated_at_ms) VALUES(?1,'other-session',200,200)", [WorkspaceId::DEFAULT]).unwrap();
+        db.execute(
+            "UPDATE logical_requests SET session_id='other-session' WHERE request_id='second'",
+            [],
+        )
+        .unwrap();
+    }
+    let first = store
+        .observed_sessions(&reader(None), &query(1), 500)
+        .unwrap();
+    assert!(first.next_cursor.is_some());
+    *store.session_read_test_hook.lock() = Some(Box::new(retire_during_session_read));
+    let next = ObservationRequestQuery {
+        cursor: first.next_cursor,
+        ..query(1)
+    };
+    assert!(matches!(
+        store.observed_sessions(&reader(None), &next, 500),
+        Err(ObservationV2Error::Stale)
+    ));
+}
+
+#[test]
+fn a_fresh_session_page_never_extends_an_existing_query_deadline() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = open(directory.path());
+    seed(&store, "first", 100);
+    let scope = reader(None).with_query_deadline(std::time::Instant::now());
+    assert!(matches!(
+        store.observed_sessions(&scope, &query(50), 500),
+        Err(ObservationV2Error::Timeout)
+    ));
+}
+
 #[test]
 fn session_content_completeness_covers_all_visible_requests_and_recovers() {
     let root = tempfile::tempdir().unwrap();

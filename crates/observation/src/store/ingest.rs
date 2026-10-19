@@ -420,9 +420,10 @@ impl ObservationCommitPort for LocalObservationStore {
             .commit()
             .map_err(|_| ObservationStoreError::ActivityUnavailable)?;
         for content_id in cleanup {
-            let _ = std::fs::remove_dir_all(
-                self.staging_directory(&envelope.correlation.workspace_id, &content_id),
-            );
+            let directory = self.staging_directory(&envelope.correlation.workspace_id, &content_id);
+            if std::fs::remove_dir_all(&directory).is_ok() {
+                self.note_removed_directory(&directory);
+            }
         }
         Ok(outcome)
     }
@@ -501,7 +502,7 @@ impl ObservationCommitPort for LocalObservationStore {
             let existing: Option<String> = transaction
                 .query_row(
                     "SELECT event_id FROM observation_events
-                     WHERE channel=?1 AND producer_id=?2 AND producer_epoch=?3 AND stream_id=?4
+                     WHERE stream_ref=(SELECT stream_ref FROM observation_streams_v5 WHERE channel=?1 AND producer_id=?2 AND producer_epoch=?3 AND stream_id=?4)
                        AND sequence=?5",
                     params![
                         channel.as_str(),

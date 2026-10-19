@@ -185,6 +185,24 @@ The shared product-session layer in `crates/product-session` owns Preview compos
 
 ## Changing boundaries
 
+Compact Observation format admission and fresh-generation initialization belong to
+[`store/upgrade`](../../crates/observation/src/store/upgrade.rs) and the
+[`store` factory](../../crates/observation/src/store/mod.rs); complete original-source
+preservation remains in the existing
+[startup coordinator](../../crates/local-storage/src/migrations/observation_source.rs).
+The [sealed-source publisher](../../crates/local-storage/src/backup/source_snapshot/seal.rs)
+uses same-filesystem directory publication without traversing historical contents.
+The optional capacity threshold uses the
+[existing maintenance lifecycle](../../crates/observation/src/maintenance.rs) and
+[bounded retirement owner](../../crates/observation/src/store/capacity.rs).
+Representative scenarios cover
+[format admission](../../crates/observation/src/store/upgrade/tests.rs),
+[interrupted sealing](../../crates/local-storage/src/backup/source_snapshot/seal/tests.rs),
+[production startup/restart](../../crates/daemon/src/control/runtime/history_cutover_tests.rs),
+and [shared survivors and rollback](../../crates/observation/src/store/capacity/tests.rs).
+Operating and recovery details are in the
+[Observation guide](../../crates/observation/README.md#compact-storage-and-capacity-retention).
+
 Windows process defaults and private handle validation belong to
 [native security](../../crates/platform/src/windows/security.rs), with suspended-child
 initialization in the [Job launcher](../../crates/platform/src/windows/job.rs).

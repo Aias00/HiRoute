@@ -277,9 +277,7 @@ fn add(store: &LocalObservationStore, session: &str, request: &str, at: i64, tex
         .authority
         .content_blob_digest("text/plain", text.as_bytes())
         .to_string();
-    let path = store
-        .activity_path
-        .with_file_name(format!("source-{request}"));
+    let path = store.blob_path(&digest);
     std::fs::write(&path, text).unwrap();
     let db = store.connection.lock();
     db.execute("INSERT OR IGNORE INTO sessions(workspace_id,session_id,started_at_ms,updated_at_ms,agent_id) VALUES(?1,?2,?3,?3,'test-agent')",params![WorkspaceId::DEFAULT,session,at]).unwrap();

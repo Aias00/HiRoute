@@ -234,6 +234,7 @@ fn apply_append(
         }
         Err(_) => return Err(ContentProjectionError::ContentStorage),
     }
+    store.note_object_path(&path);
     transaction
         .execute(
             "INSERT INTO content_chunks_v2
@@ -244,7 +245,9 @@ fn apply_append(
                 envelope.correlation.workspace_id.as_str(),
                 content_id.as_str(),
                 i64::from(rejected),
-                path.to_string_lossy(),
+                store
+                    .object_locator(&path)
+                    .map_err(|_| ContentProjectionError::ContentCorrupt)?,
                 prior_byte_count,
                 i64_from_u64(bytes.len() as u64)?,
                 envelope.event_id.as_str(),

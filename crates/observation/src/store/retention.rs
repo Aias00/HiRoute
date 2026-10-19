@@ -17,6 +17,7 @@ use super::{LocalObservationStore, increment_store_revision, store_revision};
 pub(super) const GARBAGE_CANDIDATES_SQL: &str =
     "SELECT workspace_id,blob_digest FROM content_blobs_v2
      EXCEPT SELECT workspace_id,content_blob_digest FROM content_instances_v2 WHERE state='complete'
+     EXCEPT SELECT workspace,digest FROM observation_capacity_blobs_v5
      ORDER BY 1,2 LIMIT ?1";
 
 #[cfg(test)]
@@ -363,16 +364,23 @@ impl LocalObservationStore {
             // under the writer reservation before touching any physical file.
             let path: Option<String> = transaction.query_row(
                 "SELECT b.object_path FROM content_blobs_v2 b WHERE b.workspace_id=?1 AND b.blob_digest=?2
-                 AND NOT EXISTS(SELECT 1 FROM content_instances_v2 c WHERE c.workspace_id=b.workspace_id AND c.content_blob_digest=b.blob_digest AND c.state='complete')",
+                 AND NOT EXISTS(SELECT 1 FROM content_instances_v2 c WHERE c.workspace_id=b.workspace_id AND c.content_blob_digest=b.blob_digest AND c.state='complete') AND NOT EXISTS(SELECT 1 FROM observation_capacity_blobs_v5 protected WHERE protected.workspace=b.workspace_id AND protected.digest=b.blob_digest)",
                 params![workspace,digest], |row|row.get(0),
             ).optional().map_err(|_|ObservationQueryError::Unavailable)?;
             let Some(path) = path else {
                 continue;
             };
-            match fs::remove_file(path) {
-                Ok(()) => {}
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                Err(_) => return Err(ObservationQueryError::Unavailable),
+            let path = self
+                .object_path(&path)
+                .map_err(|_| ObservationQueryError::Corrupt)?;
+            let shared:bool=transaction.query_row("SELECT EXISTS(SELECT 1 FROM content_instances_v2 WHERE content_blob_digest=?1 AND state='complete')",[digest],|row|row.get(0)).map_err(|_|ObservationQueryError::Unavailable)?;
+            if !shared {
+                match fs::remove_file(&path) {
+                    Ok(()) => {}
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(_) => return Err(ObservationQueryError::Unavailable),
+                }
+                self.note_object_path(&path);
             }
             transaction
                 .execute(
@@ -410,8 +418,16 @@ impl LocalObservationStore {
             let path = entry
                 .map_err(|_| ObservationQueryError::Unavailable)?
                 .path();
-            if path.is_file() && !referenced.contains(&path.to_string_lossy().into_owned()) {
-                fs::remove_file(path).map_err(|_| ObservationQueryError::Unavailable)?;
+            if path.is_file()
+                && !referenced.contains(
+                    &self
+                        .object_locator(&path)
+                        .map_err(|_| ObservationQueryError::Corrupt)?,
+                )
+                && !referenced.contains(&path.to_string_lossy().into_owned())
+            {
+                fs::remove_file(&path).map_err(|_| ObservationQueryError::Unavailable)?;
+                self.note_object_path(&path);
             }
         }
         Ok(())
@@ -451,9 +467,11 @@ impl LocalObservationStore {
                 .ok_or(ObservationQueryError::Corrupt)?;
             if !active.contains(name) {
                 if path.is_dir() {
-                    fs::remove_dir_all(path).map_err(|_| ObservationQueryError::Unavailable)?;
+                    fs::remove_dir_all(&path).map_err(|_| ObservationQueryError::Unavailable)?;
+                    self.note_removed_directory(&path);
                 } else {
-                    fs::remove_file(path).map_err(|_| ObservationQueryError::Unavailable)?;
+                    fs::remove_file(&path).map_err(|_| ObservationQueryError::Unavailable)?;
+                    self.note_object_path(&path);
                 }
             }
         }
@@ -531,6 +549,8 @@ fn delete_content_rows(
 ) -> Result<(), ObservationQueryError> {
     let workspace = spec.workspace_id.as_str();
     let session = spec.session_id.as_str();
+    super::records::retire_session_feedback(transaction, workspace, session)
+        .map_err(|_| ObservationQueryError::Unavailable)?;
     transaction
         .execute(
             "DELETE FROM observation_sensitive_payloads_v2 WHERE workspace_id=?1 AND session_id=?2",

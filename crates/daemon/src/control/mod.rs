@@ -26,6 +26,8 @@ use hiroute_platform::windows::pipe::{Listener as LocalListener, Stream as Local
 #[cfg(unix)]
 use std::os::unix::net::{UnixListener as LocalListener, UnixStream as LocalStream};
 
+#[cfg(test)]
+mod capacity_tests;
 #[cfg(any(unix, windows))]
 mod managed;
 pub(crate) mod runtime;
@@ -338,6 +340,8 @@ impl LocalControlDaemon {
                 | "GetObservationStatus"
                 | "GetValue"
                 | "GetPlanQualitySamples"
+                | "GetObservationCapacity"
+                | "SetObservationCapacity"
         );
         if request.operation_id.starts_with("Worker") && request.protected_grant.is_some() {
             return MachineEnvelopeV2::failed(

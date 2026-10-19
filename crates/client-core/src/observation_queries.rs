@@ -56,3 +56,28 @@ impl Client {
         .await
     }
 }
+
+impl Client {
+    pub async fn observation_capacity(
+        &self,
+        request_id: &str,
+        update: Option<ObservationCapacityUpdateV1>,
+    ) -> Result<MachineEnvelopeV2<ObservationCapacityStatusV1>, ClientFailure> {
+        let (operation, payload) = match update {
+            Some(input) => (
+                "SetObservationCapacity",
+                serde_json::to_value(input)
+                    .map_err(|_| ClientFailure::before_send(FailureCode::FrameInvalid))?,
+            ),
+            None => ("GetObservationCapacity", serde_json::json!({})),
+        };
+        self.call_typed(LocalControlWireRequestV2 {
+            schema_version: LOCAL_CONTROL_SCHEMA_V2,
+            request_id: request_id.into(),
+            operation_id: operation.into(),
+            payload,
+            protected_grant: None,
+        })
+        .await
+    }
+}

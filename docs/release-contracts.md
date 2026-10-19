@@ -12,6 +12,37 @@ Do not downgrade an initialized data directory in place. Manual recovery require
 complete pre-upgrade backup and the corresponding binary verified to read it; restore
 the whole store group, not selected tables or files.
 
+Observation format 5 changes the physical protocol carriers. On a supported
+format 1–4 upgrade, startup preserves the original three-store group, keys,
+auxiliary state and matching old package, then seals the stopped Observation
+DB/WAL/SHM/object/staging directory with a same-filesystem rename. It starts a
+fresh format-5 store with current configuration, credentials and routing. Old
+observations are not converted or merged into current queries; history and
+statistics begin at cutover. Current-format stores and their capacity policy are
+preserved on ordinary restart.
+
+Desktop reuses the verified previous package from its installation handoff. A
+headless operator must retain the old package and provide its absolute directory
+through `HIROUTE_RECOVERY_PACKAGE` on the first sealing startup. Missing keys or
+recovery material stop startup without clearing data. Interrupted publication
+resumes the original batch; missing or replaced archive material is not permission
+to initialize an empty store. Unfinished older conversion generations remain
+preserved for whole-group recovery.
+
+Startup does not enumerate, hash, copy or normalize historical Observation
+contents. The source manifest verifies copied recovery material and binds the
+sealed directory's native identity; it does not claim eager full-content integrity
+verification. This local recovery point still occupies disk and is not an
+independent disaster-recovery copy. Protected sources/packages are excluded from
+the active Observation threshold and are never deleted by its capacity policy.
+
+For manual recovery, stop the daemon, preserve later new-format data separately,
+check the old source offline, and restore its complete original storage group
+and auxiliary state at the recorded original locations with the matching old
+package, following the generated recovery guide. Never mix old business stores
+with newer Observation data or restore only `activity.db`. An independent copy
+and full-content check can be made offline, outside service startup.
+
 Branch-route publications may contain `source_binding_id` in the persisted active,
 prepared or last-known-good Gateway aggregate. Version 0.3.1 and earlier strict readers
 reject this field, even though the enclosing contract remains

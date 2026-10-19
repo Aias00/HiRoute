@@ -434,6 +434,9 @@ pub fn start_role_all(config: RoleAllConfig) -> Result<RoleAllHandle, RoleAllErr
         hiroute_local_storage::StorageStartupOptions {
             gateway_lkg: Some(config.gateway_lkg.clone()),
             upgrade_progress: config.upgrade_progress.clone(),
+            recovery_package: std::env::var_os("HIROUTE_RECOVERY_PACKAGE")
+                .map(std::path::PathBuf::from),
+            ..Default::default()
         },
     )
     .map_err(|error| RoleAllError::Component("Storage", error));

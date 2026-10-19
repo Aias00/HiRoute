@@ -1,3 +1,5 @@
+#[cfg(test)]
+mod digest_tests;
 pub(crate) mod source_snapshot;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -303,7 +305,7 @@ impl BackupSet {
     /// The caller must retain the startup barrier and directory ownership until publication ends.
     pub fn publish_stopped_source(
         &self,
-        _barrier: &SingleWriterBackupBarrier,
+        barrier: &SingleWriterBackupBarrier,
         storage_root: &Path,
         options: &crate::StorageStartupOptions,
     ) -> Result<(), LocalStorageError> {
@@ -328,10 +330,27 @@ impl BackupSet {
                 return Err(LocalStorageError::InvalidData);
             }
         }
-        let metadata = serde_json::json!({
-            "batch_id": self.set_id(), "target_schema_version": self.target_schema_version(),
-            "source_stores": {"control":self.control.manifest(),"runtime":self.runtime.manifest(),"secrets":self.secrets.manifest()}
-        });
+        self.publish_coordinated_source(barrier, storage_root, options)
+    }
+
+    /// The SQL coordinator admits only its verified source/target phases. Those
+    /// phases have never opened business or Observation writers, so unchanged
+    /// non-core state can be paired with the original three BackupSet sources
+    /// even when an older binary committed a SQL step before it stopped.
+    pub(crate) fn publish_coordinated_source(
+        &self,
+        _barrier: &SingleWriterBackupBarrier,
+        storage_root: &Path,
+        options: &crate::StorageStartupOptions,
+    ) -> Result<(), LocalStorageError> {
+        if self
+            .root
+            .canonicalize()?
+            .starts_with(storage_root.canonicalize()?)
+        {
+            return Err(LocalStorageError::InvalidData);
+        }
+        let metadata = serde_json::json!({"batch_id":self.set_id(),"target_schema_version":self.target_schema_version(),"source_stores":{"control":self.control.manifest(),"runtime":self.runtime.manifest(),"secrets":self.secrets.manifest()},"source_group":"original_core_batch_and_stopped_non_core_state"});
         source_snapshot::publish(storage_root, &self.root, &metadata, options)
     }
 
@@ -1144,7 +1163,44 @@ fn write_owner_file(path: &Path, bytes: &[u8]) -> Result<(), LocalStorageError> 
 }
 
 fn file_digest(path: &Path) -> Result<CanonicalDigest, LocalStorageError> {
-    Ok(CanonicalDigest::of_bytes(&fs::read(path)?))
+    let mut file = fs::File::open(path)?;
+    let before = file.metadata()?;
+    if !before.is_file() {
+        return Err(LocalStorageError::InvalidData);
+    }
+    let digest = stream_digest(&mut file, before.len())?;
+    let after = file.metadata()?;
+    if before.len() != after.len() || before.modified()? != after.modified()? {
+        return Err(LocalStorageError::InvalidData);
+    }
+    Ok(digest)
+}
+
+// Preserve the released raw-byte SHA-256 while bounding memory and the admitted read length.
+// A stopped source that shrinks or grows cannot become a verified recovery source.
+fn stream_digest(
+    reader: &mut impl std::io::Read,
+    byte_count: u64,
+) -> Result<CanonicalDigest, LocalStorageError> {
+    let mut remaining = byte_count;
+    let mut buffer = zeroize::Zeroizing::new([0_u8; 64 * 1024]);
+    let mut hasher = Sha256::new();
+    while remaining != 0 {
+        let count = remaining.min(buffer.len() as u64) as usize;
+        reader.read_exact(&mut buffer[..count])?;
+        hasher.update(&buffer[..count]);
+        remaining -= count as u64;
+    }
+    loop {
+        match reader.read(&mut buffer[..1]) {
+            Ok(0) => break,
+            Ok(_) => return Err(LocalStorageError::InvalidData),
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(error.into()),
+        }
+    }
+    CanonicalDigest::parse(format!("sha256:{}", encode_hex(&hasher.finalize())))
+        .map_err(|_| LocalStorageError::InvalidData)
 }
 
 fn random_attempt_id() -> Result<String, LocalStorageError> {
