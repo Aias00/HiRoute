@@ -60,6 +60,8 @@ pub(super) const SCOPE: &str = "
           AND t.delete_scope='content_only'))
 ";
 
+// Event IDs belong to producer streams; the trigger request also binds the
+// assessment lookup and lets it use the existing request index.
 pub(super) const SAMPLE_SELECT: &str = "SELECT q.segment_id,q.session_id,q.plan_id,q.plan_revision,
                         q.selected_branch_id,q.executed_branch_id,q.model_configuration_id,
                         q.profile_digest,q.attribution,q.first_turn_id,q.first_turn_ordinal,
@@ -96,6 +98,7 @@ pub(super) const SAMPLE_SELECT: &str = "SELECT q.segment_id,q.session_id,q.plan_
                  LEFT JOIN observation_run_links l ON l.workspace_id=q.workspace_id
                     AND l.request_id=q.first_request_id
                  LEFT JOIN execution_fact_events e ON e.workspace_id=q.workspace_id
+                    AND e.request_id=q.assessment_trigger_request_id
                     AND e.event_id=q.assessment_event_id
                  LEFT JOIN observation_sensitive_payloads_v2 p
                     ON p.id='fact:'||e.envelope_digest";

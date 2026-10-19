@@ -2,6 +2,86 @@ use super::*;
 use hiroute_domain::TrustPopulationQueryV1;
 
 #[test]
+fn assessment_reasons_are_bound_to_the_trigger_request() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = open_store(directory.path());
+    let writer = writer(&store);
+    let fixtures = [
+        Fixture::new("assessment-owner"),
+        Fixture::new("other-request"),
+    ];
+    for (index, fixture) in fixtures.iter().enumerate() {
+        let channel = fact_channel(fixture, 256 * 1024);
+        let stage = format!("stage-{index}");
+        assert!(matches!(
+            offer_fact(
+                &writer,
+                &channel,
+                fixture.fact(
+                    1,
+                    finished(fixture, &stage, "turn", 1, "smart_saving", 1000),
+                    1000
+                )
+            ),
+            WriterCycleOutcome::Ack(_)
+        ));
+        // Event IDs are scoped to their producer stream and can repeat in
+        // another request. Its assessment must not duplicate or relabel a stage.
+        assert!(matches!(
+            offer_fact(
+                &writer,
+                &channel,
+                fixture.fact(
+                    2,
+                    assessment(
+                        fixture,
+                        &stage,
+                        ("turn", "turn", 1, 1),
+                        1100,
+                        if index == 0 { 0.9 } else { 0.2 }
+                    ),
+                    1100
+                )
+            ),
+            WriterCycleOutcome::Ack(_)
+        ));
+    }
+    let page = store
+        .observed_plan_quality_samples(&reader(), &query(Some(17)), 5000)
+        .unwrap();
+    assert_eq!(page.samples.len(), 2);
+    for (index, reason) in ["score-0.9", "score-0.2"].into_iter().enumerate() {
+        let sample = page
+            .samples
+            .iter()
+            .find(|s| s.segment_id == format!("stage-{index}"))
+            .unwrap();
+        let assessment = sample.assessment.as_ref().unwrap();
+        assert_eq!(
+            assessment.trigger_request_id,
+            fixtures[index].request.as_str()
+        );
+        assert_eq!(assessment.reason.as_deref(), Some(reason));
+    }
+    let population = store
+        .observed_trust_population(
+            &reader(),
+            &TrustPopulationQueryV1 {
+                active_revision: 17,
+                plan_id: PLAN.into(),
+                branch_id: None,
+                revision: Some(17),
+                from_ms: Some(0),
+                to_ms: Some(10_000),
+            },
+            5000,
+        )
+        .unwrap();
+    assert_eq!(population.stages.len(), 2);
+    assert_eq!(population.active_stages.len(), 2);
+}
+
+#[test]
 fn trust_drilldown_filters_exact_identity_without_changing_scope_summary() {
     use hiroute_domain::{
         BranchExecutionPolicyV1, BranchExecutionV1, ExecutionGroupV1, PlanTrustRowFilterV1,
