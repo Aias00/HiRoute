@@ -61,35 +61,85 @@ def summarize(data):
     for (backend, method, route), rows in sorted(cells.items()):
         if len(rows) != 10 or {r['case_id'] for r in rows} != set(data['selected_ids']):
             raise ValueError('Inconsistent context sample')
+        post = sorted(r['elapsed_ms'] - r['connect_ms'] for r in rows)
         summaries.append({
             'backend': backend, 'method': method, 'route': route, 'n': len(rows),
             'median_elapsed_ms': statistics.median(r['elapsed_ms'] for r in rows),
             'median_connect_ms': statistics.median(r['connect_ms'] for r in rows),
             # Subtract each call's own connection phase before aggregation.
-            'median_post_connection_ms': statistics.median(
-                r['elapsed_ms'] - r['connect_ms'] for r in rows),
+            'median_post_connection_ms': statistics.median(post),
+            'p95_post_connection_ms': post[math.ceil(.95 * len(post)) - 1],
+        })
+    return summaries
+
+
+def summarize_qwen(data, selected_ids):
+    if data['model'] != 'qwen3.8-flash' or data['selected_ids'] != selected_ids:
+        raise ValueError('Different model or context sample')
+    records = data['records']
+    if len(records) != 22:
+        raise ValueError('Incomplete Qwen population')
+    cells = defaultdict(list)
+    warmups = Counter()
+    for call_order, row in enumerate(records):
+        if row['call_order'] != call_order or row['model'] != data['model']:
+            raise ValueError('Unexpected Qwen order or model')
+        if row['backend'] != 'qwen38flash' or row['method'] not in ('direct', 'decomposed'):
+            raise ValueError('Unexpected Qwen cell')
+        if row['http_status'] != 200 or row['valid_answer'] is not True:
+            raise ValueError('Invalid Qwen response must not be silently excluded')
+        if not all(math.isfinite(row[k]) and row[k] >= 0
+                   for k in ('elapsed_ms', 'connect_ms')):
+            raise ValueError('Invalid Qwen duration')
+        if row['connect_ms'] > row['elapsed_ms']:
+            raise ValueError('Qwen connection exceeds total duration')
+        if row['phase'] == 'warmup':
+            warmups[row['method']] += 1
+        elif row['phase'] == 'measured':
+            cells[row['method']].append(row)
+        else:
+            raise ValueError('Unknown Qwen phase')
+    if warmups != Counter({'direct': 1, 'decomposed': 1}):
+        raise ValueError('Expected two excluded Qwen warmups')
+    if sum(r['usage_total_tokens'] for r in records) != data['observed_total_tokens']:
+        raise ValueError('Qwen token accounting differs')
+    summaries = []
+    for method in ('direct', 'decomposed'):
+        rows = cells[method]
+        if len(rows) != 10 or {r['case_id'] for r in rows} != set(selected_ids):
+            raise ValueError('Inconsistent Qwen context sample')
+        post = sorted(r['elapsed_ms'] - r['connect_ms'] for r in rows)
+        summaries.append({
+            'backend': 'qwen38flash', 'method': method, 'route': 'study_transport',
+            'n': len(rows),
+            'median_elapsed_ms': statistics.median(r['elapsed_ms'] for r in rows),
+            'median_connect_ms': statistics.median(r['connect_ms'] for r in rows),
+            'median_post_connection_ms': statistics.median(post),
+            'p95_post_connection_ms': post[math.ceil(.95 * len(post)) - 1],
         })
     return summaries
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--json', action='store_true', help='Print all eight timing cells')
+    parser.add_argument('--json', action='store_true', help='Print all recorded timing cells')
     args = parser.parse_args()
     data = json.loads(Path(__file__).with_name('connection-timing.json').read_text())
     rows = summarize(data)
+    qwen = json.loads(Path(__file__).with_name('qwen-connection-timing.json').read_text())
+    rows += summarize_qwen(qwen, data['selected_ids'])
     if args.json:
         print(json.dumps(rows, indent=2))
         return
-    print('| Model | Format | Median excluding connection setup (n=10) |')
-    print('|---|---|---:|')
-    for row in rows:
-        if row['route'] != 'explicit_proxy':
-            continue
-        name = data['models'][row['backend']].split('/')[1].split('-2026')[0].replace('jev-', 'Jev ')
-        label = 'Direct' if row['method'] == 'direct' else 'Decomposed'
-        value = row['median_post_connection_ms']
-        print(f'| {name} | {label} | {value:,.0f} ms |')
+    print('| Backend | Format | Median latency | p95 latency |')
+    print('|---|---|---:|---:|')
+    for backend, name in (('jev113', 'Jev 1.13'), ('jev114', 'Jev 1.14'),
+                          ('qwen38flash', 'Qwen 3.8 Flash')):
+        for method, label in (('direct', 'Direct'), ('decomposed', 'Decomposed')):
+            row = next(r for r in rows if r['backend'] == backend and r['method'] == method
+                       and r['route'] in ('explicit_proxy', 'study_transport'))
+            median, p95 = row['median_post_connection_ms'], row['p95_post_connection_ms']
+            print(f'| {name} | {label} | {median:,.0f} ms | {p95:,.0f} ms |')
 
 
 if __name__ == '__main__':

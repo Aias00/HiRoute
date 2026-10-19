@@ -26,20 +26,20 @@ It also checks the separate MR010_b sensitivity. A mismatch fails the command.
 
 ## Connection timing diagnostic
 
-The separate 19 October transport check is reduced from curated numeric records:
+The existing comparison table in Appendix C is reduced from curated numeric records:
 
 ```sh
 python3 experiments/system-one-routing-paper/diagnostics/connection_timing.py
 python3 experiments/system-one-routing-paper/diagnostics/connection_timing.py --json
 ```
 
-The first command reproduces the setup-excluded Jev column of Appendix C's
-latency table; the second prints all recorded timing cells and their median
-connection durations. The reducer excludes eight
-warmups, checks all 40 matched route pairs and balanced path order, and subtracts
-each call's own connection duration before taking medians. It contains no network
-execution. This small diagnostic does not replace the original 256-call latency
-cells reproduced by `report`, and supplies no adjusted Qwen timing.
+The first command reproduces the six-row setup-excluded latency table. The second
+prints all recorded timing cells and their median connection durations. The
+reducer excludes warmups, checks the original matched request pairs and the shared
+ten-context sample, and subtracts each call's own connection duration before
+aggregation. It contains no network execution. Qwen's 20 measured calls and two
+warmups complete the same-context comparison. The original 256-call end-to-end
+latency cells remain reproducible through `report`; they are a separate metric.
 
 ## What is reproduced
 

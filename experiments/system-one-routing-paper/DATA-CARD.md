@@ -1,20 +1,30 @@
 # Dataset card
 
-Research snapshot: 18 October 2026. Public packaging: 19 October 2026.
-The original frozen datasets and responses were preserved locally; this package
-contains public copies with separate checksums. Decision-quality experiments are
-unchanged. A separate 19 October connection-timing diagnostic is described below.
+Research snapshot: 18 October 2026. Public packaging and latency update:
+19 October 2026. Original decision-quality datasets, labels and responses are
+preserved; the latency update does not change their experimental conditions.
 
-The supplemental [timing records](diagnostics/connection-timing.json) contain
-numeric measurements from 88 already-completed Jev calls, including eight excluded
-warmups. They omit credentials, service identifiers, socket addresses, personal
-proxy settings and response contents. Model versions, request hashes, call order,
-matched-pair IDs and per-call durations are retained. Ten contexts (five per
-language) are shared across formats, versions and paths; selection uses request
-size rather than observed accuracy. Both paths retain a system-level tunnel.
-This is a small transport diagnostic, not a new decision-quality panel or an
-estimate of isolated inference latency. Its reduction runs entirely offline;
-the original accuracy data and client-latency observations remain unchanged.
+Appendix C's latency table uses ten frozen engineering contexts, five per
+language, shared across all three backends and both formats. Selection was at
+request-size quantiles of Jev 1.14's three-question requests, before inspecting
+these timings. The Jev timings were already recorded on 19 October; Qwen was
+then measured with the same frozen inputs and original request parameters.
+All calls used one request in flight and a fresh connection. For each call,
+subtract its measured connection phase before taking the median or nearest-rank
+p95. The metric still includes request transport, service processing and response
+handling; these ten-call cells do not establish stable tail latency or universal
+model speed rankings.
+
+The [Jev timing records](diagnostics/connection-timing.json) retain 88 calls:
+40 in the original study transport condition used by the table, 40 in a separate
+transport control and eight excluded warmups. The [Qwen timing records](diagnostics/qwen-connection-timing.json)
+retain 22 calls: 20 table observations and two excluded warmups. All Qwen calls
+returned the expected model and valid answers, without retries; they consumed
+43,972 Token Plan tokens. Numeric records retain model identity, request hashes,
+call order and durations, while omitting credentials, private configuration and
+response contents. Original 256-call end-to-end timing observations remain in the
+saved-response archives and offline report; they are not relabeled as
+setup-excluded measurements.
 
 ## Intended use
 

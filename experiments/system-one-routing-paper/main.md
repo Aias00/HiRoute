@@ -337,16 +337,16 @@ In these observed workloads, three-question routing costs about **USD 0.084–0.
 
 These amounts cover decision calls only, not executor work, dataset construction or review. Qwen runs on a subscription Token Plan and is reported in tokens; we do not derive a comparable per-request USD cost from that allowance or claim a measured dollar saving relative to Qwen. The evaluated backend identities and versions are disclosed, but this public draft does not name the hosted Jev access service, which limits exact reproduction of billing and transport conditions.
 
-### Client-observed latency
+### Client-observed latency excluding connection setup (n=10 per cell)
 
-| Backend | Format | Median end-to-end (n=256) | p95 end-to-end (n=256) | Median excluding connection setup (Jev n=10) |
-|---|---|---:|---:|---:|
-| Jev 1.13 | Direct | 948 ms | 1,030 ms | 504 ms |
-| Jev 1.13 | Decomposed | 911 ms | 1,040 ms | 468 ms |
-| Jev 1.14 | Direct | 935 ms | 1,040 ms | 489 ms |
-| Jev 1.14 | Decomposed | 899 ms | 1,077 ms | 468 ms |
-| Qwen 3.8 Flash | Direct | 740 ms | 1,654 ms | Not recorded |
-| Qwen 3.8 Flash | Decomposed | 1,328 ms | 1,769 ms | Not recorded |
+| Backend | Format | Median latency | p95 latency |
+|---|---|---:|---:|
+| Jev 1.13 | Direct | 504 ms | 595 ms |
+| Jev 1.13 | Decomposed | 468 ms | 533 ms |
+| Jev 1.14 | Direct | 489 ms | 637 ms |
+| Jev 1.14 | Decomposed | 468 ms | 571 ms |
+| Qwen 3.8 Flash | Direct | 466 ms | 710 ms |
+| Qwen 3.8 Flash | Decomposed | 992 ms | 1,530 ms |
 
 ### Scalar consistency
 
