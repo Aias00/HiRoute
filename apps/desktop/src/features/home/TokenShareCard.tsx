@@ -14,7 +14,7 @@ export function TokenShareCard({ read, language, onRetry }: { read: HomeRead<Tok
     <div className="token-share-heading"><h2>{t('今日订阅外 Token 占比', 'Outside subscription today')}</h2>
       <div className="token-share-explanation" onMouseEnter={() => setExplain(true)} onMouseLeave={() => setExplain(false)}>
         <button type="button" className="btn btn-quiet" aria-label={t('了解占比的统计口径', 'About this figure')} aria-describedby={explain ? id : undefined} aria-expanded={explain}
-          onClick={() => setExplain(value => !value)} onFocus={() => setExplain(true)} onBlur={() => setExplain(false)}><UiIcon name="info" /></button>
+          onClick={() => setExplain(true)} onFocus={() => setExplain(true)} onBlur={() => setExplain(false)}><UiIcon name="info" /></button>
         {explain && <div role="tooltip" id={id} className="token-share-tooltip">
           {t('付费 API 和免费来源的已知 Token，占订阅、付费和免费来源已知 Token 的比例。输入（不含缓存）＋缓存读取＋缓存写入＋输出；未知计费类别单独列出。跨模型只是近似比较，不代表额度、费用或节省。', 'Known tokens from paid APIs and free sources, divided by known tokens from subscription, paid and free sources. Basis: uncached input + cache reads + cache writes + output. Unknown billing classes stay separate. Approximate across models; not quota, cost or savings.')}
           {share && <p>{share.period.timezone} · {t('按本地日期统计，区间不含结束时刻。', 'Local calendar date; the end instant is excluded.')}</p>}

@@ -30,8 +30,10 @@ try {
     } else if (process.argv[5] === '--console-only') {
       await (await import('./console-scenarios.mjs')).runConsoleScenarios(client, baseUrl, outputRoot);
       process.exitCode = 0;
-    } else if (process.argv[5] === '--claude-independent-only') {
-      const checks = await (await import('./claude-independent-captures.mjs')).runClaudeIndependentCaptures(client, fixtureUrl, outputRoot);
+    } else if (['--claude-independent-only', '--token-share-only'].includes(process.argv[5])) {
+      const checks = process.argv[5] === '--token-share-only'
+        ? await (await import('./token-share-captures.mjs')).runTokenShareCaptures(client, fixtureUrl, outputRoot)
+        : await (await import('./claude-independent-captures.mjs')).runClaudeIndependentCaptures(client, fixtureUrl, outputRoot);
       await writeFile(path.join(outputRoot, 'agent-trust-report.json'), JSON.stringify({
         generatedAt: new Date().toISOString(), evidence: 'Production React/styles with synthetic host replies; no native or model calls',
         transport: hostTransport, checks, summary: { total: checks.length, green: checks.length, red: 0 },

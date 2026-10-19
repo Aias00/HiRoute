@@ -59,7 +59,7 @@ export async function runClaudeIndependentCaptures(client, fixtureUrl, outputRoo
     // Exercise the complete quick start: choice before publication, confirmed mapping,
     // unchanged other presets, and the launch command only after fresh status confirms it.
     await navigate(client, fixtureUrl(`new-model-trial.html?lang=${language}&theme=${theme}&view=quickstart`), viewport);
-    await waitFor(client, '!!document.querySelector(".new-models button")');
+    await waitFor(client, `Array.from(document.querySelectorAll('.new-models button')).some(e=>!e.disabled && e.textContent.includes(${JSON.stringify(t('试用', 'Try'))}))`);
     await click('.new-models button', t('试用', 'Try'));
     await waitFor(client, '!!document.querySelector(".trial-agent-choice")');
     await choose('[data-claude-activation-choice] select', 'managed_launch');

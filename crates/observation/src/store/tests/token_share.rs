@@ -99,7 +99,15 @@ fn record(
     events.push(fixture.fact_for_plan(100, turn, 120, "plan/codex-daily", None));
     for (index, mut event) in events.into_iter().enumerate() {
         event.sequence = index as u64 + 1;
-        store.ingest_fact(&event, &[]).unwrap();
+        if matches!(event.fact, ExecutionFactV1::AgentTurnFinished { .. }) {
+            event.schema_version = EXECUTION_FACT_SCHEMA_V2.into();
+            event.schema_digest = CanonicalDigest::parse(EXECUTION_FACT_PORT_DIGEST_V2).unwrap();
+        }
+        let result = store.ingest_fact(&event, &[]).unwrap();
+        assert!(
+            matches!(result, IngestOutcome::Ack(_)),
+            "fixture fact was not admitted: {result:?}"
+        );
     }
     fixture
 }
