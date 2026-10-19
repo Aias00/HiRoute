@@ -25,6 +25,11 @@ impl HostAuthority for CompletionAuthority {
         revisions: &RevisionSetV1,
         operation: &'static str,
     ) -> Result<Zeroizing<String>, String> {
+        if operation == APPLY_SUBSCRIPTION_CHECK_OPERATION_V2 {
+            assert_eq!(revisions.target, 2);
+            self.0.fetch_add(1, Ordering::SeqCst);
+            return Ok(Zeroizing::new("next-check-grant".into()));
+        }
         let validation: ComputeValidationRefV2 =
             serde_json::from_value(result(false)["validation"].clone()).unwrap();
         assert_eq!(operation, RELEASE_SUBSCRIPTION_CHECK_OPERATION_V2);
@@ -53,6 +58,7 @@ struct Fixture {
     releases: Arc<AtomicUsize>,
     registrations: Arc<AtomicUsize>,
     created: Arc<AtomicBool>,
+    check_result: Arc<std::sync::Mutex<Value>>,
     server: tokio::task::JoinHandle<()>,
 }
 impl Fixture {
@@ -72,6 +78,8 @@ impl Fixture {
         let calls = Arc::new(AtomicUsize::new(0));
         let releases = Arc::new(AtomicUsize::new(0));
         let created = Arc::new(AtomicBool::new(false));
+        let check_result = Arc::new(std::sync::Mutex::new(result(false)));
+        let server_result = check_result.clone();
         let (server_calls, server_releases, server_created) =
             (calls.clone(), releases.clone(), created.clone());
         let server = tokio::spawn(async move {
@@ -94,7 +102,9 @@ impl Fixture {
                     "FindOperationByIdempotency" => json!({
                         "digest_matches": true,
                         "operation": if server_created.load(Ordering::SeqCst) { Some(json!({
-                            "operation_id": "operation-a", "state": "succeeded", "sequence": 1,
+                            "operation_id": "operation-a",
+                            "state": server_result.lock().unwrap()["approval_operation"]["state"],
+                            "sequence": 1,
                             "cancellable": false, "accepted_digest": CanonicalDigest::of_bytes(b"accepted"),
                             "safe_error_code": null
                         })) } else { None }
@@ -102,7 +112,9 @@ impl Fixture {
                     LIST_COMPUTE_SUBSCRIPTIONS_OPERATION_V2 => json!({
                         "candidates": [], "discovery_state": "complete"
                     }),
-                    GET_SUBSCRIPTION_CHECK_RESULT_OPERATION_V2 => result(false),
+                    GET_SUBSCRIPTION_CHECK_RESULT_OPERATION_V2 => {
+                        server_result.lock().unwrap().clone()
+                    }
                     "GetClientServiceStatus" => json!({
                         "schema": "hiroute.client-service-status/v1", "daemon_role": "all",
                         "recovery_ready": true, "mutation_available": true, "gateway": "ready",
@@ -136,6 +148,7 @@ impl Fixture {
             releases,
             registrations: Arc::new(AtomicUsize::new(0)),
             created,
+            check_result,
             server,
         }
     }
@@ -145,6 +158,147 @@ impl Fixture {
             Arc::new(CompletionAuthority(self.registrations.clone())),
         )
     }
+    fn set_check_result(&self, value: Value) {
+        serde_json::from_value::<ComputeSubscriptionCheckResultV2>(value.clone())
+            .unwrap()
+            .validate_shape()
+            .unwrap();
+        *self.check_result.lock().unwrap() = value;
+    }
+}
+
+fn next_check(session: &mut Session) -> SubscriptionCheckConfirmation {
+    let candidate = "candidate/cpa/claude/managed/second-login";
+    let preview = serde_json::from_value(json!({
+        "candidate": {"candidate_ref": candidate, "candidate_revision": 1},
+        "display_scope": "Claude Code subscription",
+        "spec": {
+            "schema_version": {"major": 1, "minor": 0},
+            "command_id": "compute.subscription.check.apply",
+            "resource_id": candidate,
+            "desired_state": {}
+        },
+        "accept_digest": CanonicalDigest::of_bytes(b"second-check"),
+        "expected_revisions": {"target": 2, "dependencies": {}}
+    }))
+    .unwrap();
+    let close_requested = session.resume_subscription_interaction();
+    session
+        .prepare_subscription_check_confirmation(
+            preview,
+            "en".into(),
+            "b".repeat(64),
+            close_requested,
+        )
+        .unwrap()
+}
+
+fn saved_result() -> Value {
+    let mut value = result(false);
+    value["status"] = json!("retained");
+    value["save_operation"] = json!({
+        "operation_id": "operation-save", "state": "succeeded", "sequence": 1,
+        "cancellable": false
+    });
+    value
+}
+
+fn verified_result() -> Value {
+    let mut value = result(false);
+    value["status"] = json!("verified");
+    value["checked_candidate"] = json!({
+        "candidate": {"candidate_ref": "candidate/one", "candidate_revision": 2},
+        "correlation": {
+            "candidate_ref": "candidate/one", "edit_revision": 1,
+            "check_id": "check-a", "input_digest": CanonicalDigest::of_bytes(b"checked")
+        },
+        "producer": "cpa", "provenance": "connector_owned",
+        "display_name": "Codex subscription", "models": [],
+        "input_state": "provided", "fact_state": "complete",
+        "validation": value["validation"]
+    });
+    value
+}
+
+#[tokio::test]
+async fn saved_subscription_check_allows_the_next_provider_without_releasing_saved_access() {
+    let fixture = Fixture::new();
+    fixture.set_check_result(saved_result());
+    fixture.created.store(true, Ordering::SeqCst);
+    let mut session = fixture.session();
+    let _ = submitted(&mut session);
+    let context = next_check(&mut session);
+    let pending = session
+        .begin_subscription_check_confirmation(context, true)
+        .await
+        .expect("a saved Codex subscription must not block the next Claude check");
+    assert_eq!(
+        pending.request.spec.resource_id.as_deref(),
+        Some("candidate/cpa/claude/managed/second-login")
+    );
+    assert_eq!(fixture.releases.load(Ordering::SeqCst), 0);
+    // A late observation of the old saved check must not clear the new identity.
+    session
+        .finish_subscription_hint(&serde_json::from_value(saved_result()).unwrap())
+        .unwrap();
+    assert_eq!(
+        session.subscription_hint.as_ref().unwrap().idempotency_key,
+        "b".repeat(64)
+    );
+}
+
+#[tokio::test]
+async fn observing_a_saved_check_finishes_only_its_interaction_without_releasing_access() {
+    let fixture = Fixture::new();
+    fixture.set_check_result(saved_result());
+    fixture.created.store(true, Ordering::SeqCst);
+    let mut session = fixture.session();
+    let _ = submitted(&mut session);
+    let result = session.recover_subscription_check().await.unwrap().unwrap();
+    assert_eq!(result.status, ComputeSubscriptionCheckStatusV2::Retained);
+    assert!(session.subscription_hint.is_none());
+    session.close_subscription_check().await.unwrap();
+    assert_eq!(fixture.releases.load(Ordering::SeqCst), 0);
+    assert_eq!(fixture.registrations.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn an_unsaved_verified_check_still_blocks_replacement() {
+    let fixture = Fixture::new();
+    fixture.set_check_result(verified_result());
+    fixture.created.store(true, Ordering::SeqCst);
+    let mut session = fixture.session();
+    let _ = submitted(&mut session);
+    let context = next_check(&mut session);
+    let failure = session
+        .begin_subscription_check_confirmation(context, true)
+        .await;
+    assert!(
+        matches!(failure, Err(DesktopFailure::Native { code }) if code == "SUBSCRIPTION_CHECK_ACTIVE")
+    );
+    assert_eq!(fixture.releases.load(Ordering::SeqCst), 0);
+    assert_eq!(fixture.registrations.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn an_in_progress_check_still_blocks_replacement() {
+    let fixture = Fixture::new();
+    let mut checking = result(false);
+    checking["status"] = json!("checking");
+    checking["validation"] = Value::Null;
+    checking["approval_operation"]["state"] = json!("running");
+    fixture.set_check_result(checking);
+    fixture.created.store(true, Ordering::SeqCst);
+    let mut session = fixture.session();
+    let _ = submitted(&mut session);
+    let context = next_check(&mut session);
+    let failure = session
+        .begin_subscription_check_confirmation(context, true)
+        .await;
+    assert!(
+        matches!(failure, Err(DesktopFailure::Native { code }) if code == "SUBSCRIPTION_CHECK_ACTIVE")
+    );
+    assert_eq!(fixture.registrations.load(Ordering::SeqCst), 0);
 }
 impl Drop for Fixture {
     fn drop(&mut self) {

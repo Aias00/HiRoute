@@ -111,8 +111,10 @@ export function SubscriptionSignIn({ language, trustedAuthority, onReuseNative, 
         if (session.status === 'pending') pendingOwned.current.add(session.login_ref);
       }
       merge(result.sessions);
-      const url = result.sessions.find(session => session.status === 'pending')?.authorization_url;
-      if (url) await invoke('open_external_url', { url });
+      const session = result.sessions.find(session => session.status === 'pending');
+      if (session?.authorization_url && session.reason_code !== 'SUBSCRIPTION_LOGIN_MANUAL_CALLBACK') {
+        await invoke('open_external_url', { url: session.authorization_url });
+      }
     });
   }
 
@@ -136,17 +138,17 @@ export function SubscriptionSignIn({ language, trustedAuthority, onReuseNative, 
       return <div className="oc-scan-detail" key={provider}>
         <div className="oc-status-row"><BrandIcon kind={provider === 'codex' ? 'codex' : 'claude-code'} label={name} /><div className="row-main"><strong>{name}</strong><p>{text('独立登录 · 推荐', 'Independent sign-in · Recommended')}</p></div><button type="button" className="btn btn-primary" disabled={!trustedAuthority || Boolean(busy) || pending} onClick={() => void start(provider)}>{pending ? text('等待登录', 'Waiting for sign-in') : text('登录', 'Sign in')}</button></div>
         {accounts.map(session => <div key={session.login_ref} className="oc-scan-detail">
-          <p role="status">{session.status === 'authorized' ? text('已登录，可检查并选择模型', 'Signed in. Check and choose models.') : session.status === 'pending' ? text('在浏览器中授权后，粘贴返回地址或授权码以完成登录。', 'After authorizing in your browser, paste the return URL or authorization code to finish signing in.') : session.status === 'expired' ? text('登录已过期，请重新登录', 'Sign-in expired. Start again.') : text('登录未完成，请重试', 'Sign-in did not complete. Try again.')}</p>
+          <p role="status">{session.status === 'authorized' ? text('已登录，可检查并选择模型', 'Signed in. Check and choose models.') : session.status === 'pending' ? session.reason_code === 'SUBSCRIPTION_LOGIN_MANUAL_CALLBACK' ? text('无法自动接收浏览器授权。请先结束本机其他登录，再打开登录页面；授权后复制完整返回地址，使用「手动完成授权」。', 'Automatic callback reception is unavailable. Finish any other local sign-in before opening the sign-in page, then copy the full return URL and use “Complete authorization manually”.') : text('请在浏览器中完成授权，HiRoute 会自动接收结果。若未自动完成，可手动粘贴完整返回地址。', 'Authorize in your browser; HiRoute will receive the result automatically. If it does not finish, you can paste the full return URL manually.') : session.status === 'expired' ? text('登录已过期，请重新登录', 'Sign-in expired. Start again.') : text('登录未完成，请重试', 'Sign-in did not complete. Try again.')}</p>
           <div className="task-actions">
             {session.status === 'pending' && <>
               {session.authorization_url && <button type="button" className="btn" disabled={!trustedAuthority || Boolean(busy)} onClick={() => void act(session.login_ref, () => invoke('open_external_url', { url: session.authorization_url }))}>{text('打开登录页面', 'Open sign-in page')}</button>}
               <button type="button" className="btn" disabled={!trustedAuthority || Boolean(busy)} onClick={() => void act(session.login_ref, async () => merge((await manage({ action: 'cancel', login_ref: session.login_ref })).sessions))}>{text('取消登录', 'Cancel sign-in')}</button>
-              <button type="button" className="btn" disabled={!trustedAuthority || Boolean(busy)} onClick={() => { setCallback(''); setCallbackLogin(session.login_ref); }}>{text('完成授权', 'Finish authorization')}</button>
+              <button type="button" className="btn" disabled={!trustedAuthority || Boolean(busy)} onClick={() => { setCallback(''); setCallbackLogin(session.login_ref); }}>{text('手动完成授权', 'Complete authorization manually')}</button>
             </>}
             {session.status === 'authorized' && session.candidate && <button type="button" className="btn btn-primary" disabled={!trustedAuthority || Boolean(busy)} onClick={() => void act(session.login_ref, () => onConnect(session.candidate!))}>{text('检查并选择模型', 'Check and choose models')}</button>}
             {session.status !== 'pending' && <button type="button" className="btn" disabled={!trustedAuthority || Boolean(busy)} onClick={() => setForgetLogin(session.login_ref)}>{text('移除登录', 'Remove sign-in')}</button>}
           </div>
-          {callbackLogin === session.login_ref && session.status === 'pending' && <form autoComplete="off" onSubmit={event => { event.preventDefault(); void submitCallback(session); }}><label className="field"><span>{text('粘贴授权完成页面的回调地址或授权码', 'Paste the callback URL or authorization code from the completed sign-in')}</span><SecretTransportWarning language={language} /><input type="password" autoComplete="off" spellCheck={false} value={callback} onChange={event => setCallback(event.currentTarget.value)} /></label><p className="oc-meta">{text('仅用于完成此次登录，不保存在页面中。', 'Used only to complete this sign-in; it is not saved in the page.')}</p><button className="btn" type="submit" disabled={!trustedAuthority || Boolean(busy) || !callback.trim()}>{text('完成授权', 'Finish authorization')}</button></form>}
+          {callbackLogin === session.login_ref && session.status === 'pending' && <form autoComplete="off" onSubmit={event => { event.preventDefault(); void submitCallback(session); }}><label className="field"><span>{text('粘贴浏览器地址栏中的完整回调地址或授权码', 'Paste the full callback URL from your browser address bar, or the authorization code')}</span><SecretTransportWarning language={language} /><input type="password" autoComplete="off" spellCheck={false} value={callback} onChange={event => setCallback(event.currentTarget.value)} /></label><p className="oc-meta">{text('返回页面无法打开时，也可复制地址栏。仅用于此次登录，请勿分享。', 'You can copy the address bar even if the return page cannot load. Used only for this sign-in; do not share it.')}</p><button className="btn" type="submit" disabled={!trustedAuthority || Boolean(busy) || !callback.trim()}>{text('提交授权', 'Submit authorization')}</button></form>}
           {forgetLogin === session.login_ref && <div className="callout warn"><p>{text('移除此登录会停止相关订阅连接。保留模型和路由配置，之后可重新登录。', 'Removing this sign-in stops its subscription connection. Model and routing settings remain available for a later sign-in.')}</p><button className="btn" type="button" disabled={!trustedAuthority || Boolean(busy)} onClick={() => void act(session.login_ref, async () => { merge((await manage({ action: 'forget', login_ref: session.login_ref })).sessions); if (alive.current) setForgetLogin(null); })}>{text('确认移除', 'Remove sign-in')}</button><button className="btn" type="button" disabled={!trustedAuthority || Boolean(busy)} onClick={() => setForgetLogin(null)}>{text('保留', 'Keep')}</button></div>}
         </div>)}
       </div>;

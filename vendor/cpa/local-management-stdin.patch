@@ -104,6 +104,582 @@ index 2b99077..a661fbb 100644
  			cmd.StartServiceWithPluginHost(cfg, configFilePath, password, pluginHost, serverOptions...)
  		}
  	}
+diff --git a/internal/api/handlers/management/auth_files_oauth_callback.go b/internal/api/handlers/management/auth_files_oauth_callback.go
+index f33f82e..3d87ba9 100644
+--- a/internal/api/handlers/management/auth_files_oauth_callback.go
++++ b/internal/api/handlers/management/auth_files_oauth_callback.go
+@@ -8,6 +8,7 @@ import (
+ 	"net/http"
+ 	"net/url"
+ 	"strings"
++	"sync"
+ 	"time"
+ 
+ 	"github.com/gin-gonic/gin"
+@@ -39,23 +40,6 @@ func isWebUIRequest(c *gin.Context) bool {
+ }
+ 
+ func startCallbackForwarder(port int, provider, targetBase string) (*callbackForwarder, error) {
+-	callbackForwardersMu.Lock()
+-	prev := callbackForwarders[port]
+-	if prev != nil {
+-		delete(callbackForwarders, port)
+-	}
+-	callbackForwardersMu.Unlock()
+-
+-	if prev != nil {
+-		stopForwarderInstance(port, prev)
+-	}
+-
+-	addr := fmt.Sprintf("0.0.0.0:%d", port)
+-	ln, err := net.Listen("tcp", addr)
+-	if err != nil {
+-		return nil, fmt.Errorf("failed to listen on %s: %w", addr, err)
+-	}
+-
+ 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+ 		target := targetBase
+ 		if raw := r.URL.RawQuery; raw != "" {
+@@ -69,6 +53,24 @@ func startCallbackForwarder(port int, provider, targetBase string) (*callbackFor
+ 		http.Redirect(w, r, target, http.StatusFound)
+ 	})
+ 
++	return startCallbackServer(port, provider, handler)
++}
++
++func startCallbackServer(port int, provider string, handler http.Handler) (*callbackForwarder, error) {
++	callbackForwardersMu.Lock()
++	prev := callbackForwarders[port]
++	if prev != nil {
++		delete(callbackForwarders, port)
++	}
++	callbackForwardersMu.Unlock()
++	if prev != nil {
++		stopForwarderInstance(port, prev)
++	}
++	listeners, err := listenHiRouteCallbackLoopback(port)
++	if err != nil {
++		return nil, err
++	}
++
+ 	srv := &http.Server{
+ 		Handler:           handler,
+ 		ReadHeaderTimeout: 5 * time.Second,
+@@ -76,10 +78,18 @@ func startCallbackForwarder(port int, provider, targetBase string) (*callbackFor
+ 	}
+ 	done := make(chan struct{})
+ 
++	var serving sync.WaitGroup
++	for _, listener := range listeners {
++		serving.Add(1)
++		go func(ln net.Listener) {
++			defer serving.Done()
++			if errServe := srv.Serve(ln); errServe != nil && !errors.Is(errServe, http.ErrServerClosed) {
++				log.Warn("local OAuth callback listener stopped unexpectedly")
++			}
++		}(listener)
++	}
+ 	go func() {
+-		if errServe := srv.Serve(ln); errServe != nil && !errors.Is(errServe, http.ErrServerClosed) {
+-			log.WithError(errServe).Warnf("callback forwarder for %s stopped unexpectedly", provider)
+-		}
++		serving.Wait()
+ 		close(done)
+ 	}()
+ 
+@@ -93,7 +103,7 @@ func startCallbackForwarder(port int, provider, targetBase string) (*callbackFor
+ 	callbackForwarders[port] = forwarder
+ 	callbackForwardersMu.Unlock()
+ 
+-	log.Infof("callback forwarder for %s listening on %s", provider, addr)
++	log.Infof("callback listener for %s is ready on loopback port %d", provider, port)
+ 
+ 	return forwarder, nil
+ }
+diff --git a/internal/api/handlers/management/auth_files_provider_oauth.go b/internal/api/handlers/management/auth_files_provider_oauth.go
+index 48fc4ef..ebacfa4 100644
+--- a/internal/api/handlers/management/auth_files_provider_oauth.go
++++ b/internal/api/handlers/management/auth_files_provider_oauth.go
+@@ -70,19 +70,17 @@ func (h *Handler) RequestAnthropicToken(c *gin.Context) {
+ 	RegisterOAuthSession(state, "anthropic")
+ 
+ 	isWebUI := isWebUIRequest(c)
++	callbackMode := "manual"
+ 	var forwarder *callbackForwarder
+ 	if isWebUI {
+-		targetURL, errTarget := h.managementCallbackURL("/anthropic/callback")
+-		if errTarget != nil {
+-			log.WithError(errTarget).Error("failed to compute anthropic callback target")
+-			c.JSON(http.StatusInternalServerError, gin.H{"error": "callback server unavailable"})
+-			return
+-		}
+ 		var errStart error
+-		if forwarder, errStart = startCallbackForwarder(anthropicCallbackPort, "anthropic", targetURL); errStart != nil {
+-			log.WithError(errStart).Error("failed to start anthropic callback forwarder")
+-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to start callback server"})
+-			return
++		forwarder, errStart = startHiRouteCallbackReceiver(anthropicCallbackPort, "anthropic", state, h.cfg.AuthDir)
++		if errStart == nil {
++			callbackMode = "automatic"
++		} else {
++			// Keep this exact session for protected manual input. Do not disclose
++			// host errors or replace an unrelated process owning the callback port.
++			log.Warn("local OAuth callback listener unavailable; manual completion required")
+ 		}
+ 	}
+ 
+@@ -142,6 +140,8 @@ func (h *Handler) RequestAnthropicToken(c *gin.Context) {
+ 		rawCode := resultMap["code"]
+ 		code := strings.Split(rawCode, "#")[0]
+ 
++		stopCallbackForwarderInstance(anthropicCallbackPort, forwarder)
++
+ 		// Exchange code for tokens using internal auth service
+ 		bundle, errExchange := anthropicAuth.ExchangeCodeForTokens(ctx, code, state, pkceCodes)
+ 		if errExchange != nil {
+@@ -192,7 +192,7 @@ func (h *Handler) RequestAnthropicToken(c *gin.Context) {
+ 		CompleteOAuthSession(state)
+ 	}()
+ 
+-	c.JSON(200, gin.H{"status": "ok", "url": authURL, "state": state})
++	c.JSON(200, gin.H{"status": "ok", "url": authURL, "state": state, "hiroute_callback_mode": callbackMode})
+ }
+ 
+ func (h *Handler) RequestCodexToken(c *gin.Context) {
+@@ -231,19 +231,17 @@ func (h *Handler) RequestCodexToken(c *gin.Context) {
+ 	RegisterOAuthSession(state, "codex")
+ 
+ 	isWebUI := isWebUIRequest(c)
++	callbackMode := "manual"
+ 	var forwarder *callbackForwarder
+ 	if isWebUI {
+-		targetURL, errTarget := h.managementCallbackURL("/codex/callback")
+-		if errTarget != nil {
+-			log.WithError(errTarget).Error("failed to compute codex callback target")
+-			c.JSON(http.StatusInternalServerError, gin.H{"error": "callback server unavailable"})
+-			return
+-		}
+ 		var errStart error
+-		if forwarder, errStart = startCallbackForwarder(codexCallbackPort, "codex", targetURL); errStart != nil {
+-			log.WithError(errStart).Error("failed to start codex callback forwarder")
+-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to start callback server"})
+-			return
++		forwarder, errStart = startHiRouteCallbackReceiver(codexCallbackPort, "codex", state, h.cfg.AuthDir)
++		if errStart == nil {
++			callbackMode = "automatic"
++		} else {
++			// Keep this exact session for protected manual input. Do not disclose
++			// host errors or replace an unrelated process owning the callback port.
++			log.Warn("local OAuth callback listener unavailable; manual completion required")
+ 		}
+ 	}
+ 
+@@ -288,6 +286,7 @@ func (h *Handler) RequestCodexToken(c *gin.Context) {
+ 			time.Sleep(500 * time.Millisecond)
+ 		}
+ 
++		stopCallbackForwarderInstance(codexCallbackPort, forwarder)
+ 		log.Debug("Authorization code received, exchanging for tokens...")
+ 		// Exchange code for tokens using internal auth service
+ 		bundle, errExchange := openaiAuth.ExchangeCodeForTokens(ctx, code, pkceCodes)
+@@ -353,7 +352,7 @@ func (h *Handler) RequestCodexToken(c *gin.Context) {
+ 		CompleteOAuthSession(state)
+ 	}()
+ 
+-	c.JSON(200, gin.H{"status": "ok", "url": authURL, "state": state})
++	c.JSON(200, gin.H{"status": "ok", "url": authURL, "state": state, "hiroute_callback_mode": callbackMode})
+ }
+ 
+ func (h *Handler) RequestAntigravityToken(c *gin.Context) {
+diff --git a/internal/api/handlers/management/hiroute_oauth_callback.go b/internal/api/handlers/management/hiroute_oauth_callback.go
+new file mode 100644
+index 0000000..7aac5b4
+--- /dev/null
++++ b/internal/api/handlers/management/hiroute_oauth_callback.go
+@@ -0,0 +1,107 @@
++package management
++
++import (
++	"errors"
++	"fmt"
++	"net"
++	"net/http"
++	"net/url"
++	"strconv"
++	"strings"
++	"syscall"
++
++	"github.com/gin-gonic/gin"
++)
++
++// The registered localhost redirect can resolve to either family. Never fall
++// back to another interface or retain half a listener when the other is occupied.
++func listenHiRouteCallbackLoopback(port int) ([]net.Listener, error) {
++	var listeners []net.Listener
++	for _, address := range []struct{ network, host string }{{"tcp4", "127.0.0.1"}, {"tcp6", "::1"}} {
++		listener, err := net.Listen(address.network, net.JoinHostPort(address.host, strconv.Itoa(port)))
++		if err != nil {
++			if errors.Is(err, syscall.EAFNOSUPPORT) || errors.Is(err, syscall.EPROTONOSUPPORT) || errors.Is(err, syscall.EADDRNOTAVAIL) {
++				continue
++			}
++			for _, opened := range listeners {
++				_ = opened.Close()
++			}
++			return nil, fmt.Errorf("callback loopback unavailable: %w", err)
++		}
++		listeners = append(listeners, listener)
++	}
++	if len(listeners) == 0 {
++		return nil, errors.New("callback loopback unavailable")
++	}
++	return listeners, nil
++}
++
++func startHiRouteCallbackReceiver(port int, provider, state, authDir string) (*callbackForwarder, error) {
++	return startCallbackServer(port, provider, hiRouteCallbackHandler(port, provider, state, authDir))
++}
++
++func hiRouteCallbackHandler(port int, provider, state, authDir string) http.Handler {
++	path := "/auth/callback"
++	if provider == "anthropic" {
++		path = "/callback"
++	}
++	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		w.Header().Set("Cache-Control", "no-store")
++		w.Header().Set("Referrer-Policy", "no-referrer")
++		w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
++		w.Header().Set("X-Content-Type-Options", "nosniff")
++		host, requestPort, err := net.SplitHostPort(r.Host)
++		if err != nil || requestPort != strconv.Itoa(port) || (host != "localhost" && host != "127.0.0.1" && host != "::1") {
++			http.Error(w, "Invalid callback address.", http.StatusBadRequest)
++			return
++		}
++		if r.Method != http.MethodGet || r.URL.Path != path || r.URL.RawPath != "" || len(r.RequestURI) > 16384 {
++			http.Error(w, "Invalid callback request.", http.StatusBadRequest)
++			return
++		}
++		receiveHiRouteBrowserCallback(w, r, provider, state, authDir)
++	})
++}
++
++// The main-server callback paths share the same checked reception and never
++// claim login success just because a browser reached the endpoint.
++func HiRouteBrowserOAuthCallback(authDir, provider string) gin.HandlerFunc {
++	return func(c *gin.Context) {
++		c.Header("Cache-Control", "no-store")
++		c.Header("Referrer-Policy", "no-referrer")
++		c.Header("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
++		c.Header("X-Content-Type-Options", "nosniff")
++		receiveHiRouteBrowserCallback(c.Writer, c.Request, provider, "", authDir)
++	}
++}
++
++func receiveHiRouteBrowserCallback(w http.ResponseWriter, r *http.Request, provider, expectedState, authDir string) {
++	if len(r.RequestURI) > 16384 {
++		http.Error(w, "Invalid callback request.", http.StatusBadRequest)
++		return
++	}
++	query, err := url.ParseQuery(r.URL.RawQuery)
++	if err != nil || len(query["state"]) != 1 || query.Get("state") == "" || (expectedState != "" && query.Get("state") != expectedState) || len(query["code"]) > 1 || len(query["error"]) > 1 {
++		http.Error(w, "Invalid callback. Return to HiRoute to continue signing in.", http.StatusBadRequest)
++		return
++	}
++	code, oauthError := query.Get("code"), query.Get("error")
++	if (code == "") == (oauthError == "") || strings.ContainsAny(code+oauthError, "\r\n\x00") {
++		http.Error(w, "Invalid callback. Return to HiRoute to continue signing in.", http.StatusBadRequest)
++		return
++	}
++	if _, err := WriteOAuthCallbackFileForPendingSession(authDir, provider, query.Get("state"), code, oauthError); err != nil {
++		status := http.StatusInternalServerError
++		if errors.Is(err, errOAuthSessionNotPending) {
++			status = http.StatusConflict
++		}
++		http.Error(w, "Callback was not accepted. Return to HiRoute to check the sign-in status.", status)
++		return
++	}
++	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
++	if oauthError != "" {
++		_, _ = w.Write([]byte("Authorization was not completed. Return to HiRoute to try again.\n授权未完成，请返回 HiRoute 重试。"))
++		return
++	}
++	_, _ = w.Write([]byte("Authorization received. Return to HiRoute to check whether sign-in has completed.\n已收到授权，请返回 HiRoute 查看登录结果。"))
++}
+diff --git a/internal/api/handlers/management/hiroute_oauth_callback_test.go b/internal/api/handlers/management/hiroute_oauth_callback_test.go
+new file mode 100644
+index 0000000..fdd19ac
+--- /dev/null
++++ b/internal/api/handlers/management/hiroute_oauth_callback_test.go
+@@ -0,0 +1,270 @@
++package management
++
++import (
++	"context"
++	"encoding/json"
++	"io"
++	"net"
++	"net/http"
++	"net/http/httptest"
++	"os"
++	"path/filepath"
++	"strconv"
++	"strings"
++	"sync"
++	"sync/atomic"
++	"testing"
++	"time"
++
++	"github.com/gin-gonic/gin"
++	"github.com/router-for-me/CLIProxyAPI/v8/internal/auth/codex"
++	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
++)
++
++func TestHiRouteBrowserCallbackValidationAndOneUse(t *testing.T) {
++	for _, provider := range []string{"codex", "anthropic"} {
++		t.Run(provider, func(t *testing.T) {
++			dir, state := t.TempDir(), "hiroute-validation-"+provider
++			RegisterOAuthSession(state, provider)
++			defer CancelOAuthSession(state)
++			path := "/auth/callback"
++			if provider == "anthropic" {
++				path = "/callback"
++			}
++			handler := hiRouteCallbackHandler(1455, provider, state, dir)
++			valid := path + "?state=" + state + "&code=private-test-code"
++			for _, input := range []struct{ method, path, host string }{
++				{"GET", path + "?state=foreign&code=private-test-code", "localhost:1455"},
++				{"GET", valid + "&state=" + state, "localhost:1455"},
++				{"GET", valid + "&code=second", "localhost:1455"},
++				{"GET", valid + "&error=denied", "localhost:1455"},
++				{"GET", path + "?state=" + state, "localhost:1455"},
++				{"GET", valid + "&bad=%ZZ", "localhost:1455"},
++				{"GET", valid, "foreign.test:1455"},
++				{"POST", valid, "localhost:1455"},
++				{"GET", "/foreign?state=" + state + "&code=test", "localhost:1455"},
++			} {
++				r := httptest.NewRequest(input.method, "http://localhost:1455"+input.path, nil)
++				r.Host = input.host
++				w := httptest.NewRecorder()
++				handler.ServeHTTP(w, r)
++				if w.Code != http.StatusBadRequest {
++					t.Fatalf("invalid callback accepted: %d", w.Code)
++				}
++				if strings.Contains(w.Body.String(), "private-test-code") || w.Header().Get("Location") != "" {
++					t.Fatal("callback escaped through response")
++				}
++			}
++			w := httptest.NewRecorder()
++			handler.ServeHTTP(w, httptest.NewRequest("GET", "http://localhost:1455"+valid, nil))
++			if w.Code != 200 || !strings.Contains(w.Body.String(), "Authorization received") || strings.Contains(w.Body.String(), "successful") {
++				t.Fatal("browser reception claimed login success")
++			}
++			if w.Header().Get("Referrer-Policy") != "no-referrer" || w.Header().Get("Cache-Control") != "no-store" {
++				t.Fatal("callback page did not protect the query")
++			}
++			file := filepath.Join(dir, ".oauth-"+provider+"-"+state+".oauth")
++			if err := os.Remove(file); err != nil {
++				t.Fatal(err)
++			}
++			if _, err := WriteOAuthCallbackFileForPendingSession(dir, provider, state, "replacement", ""); err == nil {
++				t.Fatal("manual input overwrote a consumed browser callback")
++			}
++			w = httptest.NewRecorder()
++			handler.ServeHTTP(w, httptest.NewRequest("GET", "http://localhost:1455"+valid, nil))
++			if w.Code != http.StatusConflict {
++				t.Fatal("repeated browser callback accepted")
++			}
++		})
++	}
++}
++
++func TestHiRouteCallbackAdmissionIsAtomicAndFailedWritesCanRetry(t *testing.T) {
++	dir, state := t.TempDir(), "hiroute-concurrent-callback"
++	RegisterOAuthSession(state, "codex")
++	defer CancelOAuthSession(state)
++	badPath := filepath.Join(dir, "not-a-directory")
++	if err := os.WriteFile(badPath, []byte("fixture"), 0600); err != nil {
++		t.Fatal(err)
++	}
++	if _, err := WriteOAuthCallbackFileForPendingSession(badPath, "codex", state, "code", ""); err == nil {
++		t.Fatal("failed write was accepted")
++	}
++	var accepted atomic.Int32
++	var group sync.WaitGroup
++	for i := 0; i < 16; i++ {
++		group.Add(1)
++		go func() {
++			defer group.Done()
++			if _, err := WriteOAuthCallbackFileForPendingSession(dir, "codex", state, "code", ""); err == nil {
++				accepted.Add(1)
++			}
++		}()
++	}
++	group.Wait()
++	if accepted.Load() != 1 {
++		t.Fatalf("accepted %d callbacks", accepted.Load())
++	}
++	for _, stale := range []string{"unknown-state", "cancelled-state", "expired-state"} {
++		RegisterOAuthSession(stale, "codex")
++		if stale == "expired-state" {
++			oauthSessions.mu.Lock()
++			s := oauthSessions.sessions[stale]
++			s.ExpiresAt = time.Now().Add(-time.Second)
++			oauthSessions.sessions[stale] = s
++			oauthSessions.mu.Unlock()
++		} else {
++			CancelOAuthSession(stale)
++		}
++		if _, err := WriteOAuthCallbackFileForPendingSession(dir, "codex", stale, "late-code", ""); err == nil {
++			t.Fatal("stale callback accepted")
++		}
++	}
++}
++
++func TestHiRouteLoopbackListenersReleaseTogether(t *testing.T) {
++	reservation, err := net.Listen("tcp4", "127.0.0.1:0")
++	if err != nil {
++		t.Fatal(err)
++	}
++	port := reservation.Addr().(*net.TCPAddr).Port
++	_ = reservation.Close()
++	listeners, err := listenHiRouteCallbackLoopback(port)
++	if err != nil {
++		t.Fatal(err)
++	}
++	for _, ln := range listeners {
++		if !ln.Addr().(*net.TCPAddr).IP.IsLoopback() {
++			t.Fatal("non-loopback callback listener")
++		}
++		_ = ln.Close()
++	}
++	forwarder, err := startHiRouteCallbackReceiver(port, "codex", "hiroute-loopback", t.TempDir())
++	if err != nil {
++		t.Fatal(err)
++	}
++	stopCallbackForwarderInstance(port, forwarder)
++	reopened, err := listenHiRouteCallbackLoopback(port)
++	if err != nil {
++		t.Fatalf("callback listener leaked: %v", err)
++	}
++	for _, ln := range reopened {
++		_ = ln.Close()
++	}
++	// An occupied IPv6 endpoint must release the already-opened IPv4 endpoint.
++	ipv6, err := net.Listen("tcp6", net.JoinHostPort("::1", strconv.Itoa(port)))
++	if err == nil {
++		defer ipv6.Close()
++		if opened, err := listenHiRouteCallbackLoopback(port); err == nil {
++			for _, ln := range opened {
++				_ = ln.Close()
++			}
++			t.Fatal("occupied IPv6 listener was ignored")
++		}
++		ipv4, err := net.Listen("tcp4", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
++		if err != nil {
++			t.Fatal("partial IPv4 listener leaked")
++		}
++		_ = ipv4.Close()
++	}
++}
++
++func TestHiRouteOccupiedCallbackPortKeepsManualSession(t *testing.T) {
++	for _, provider := range []string{"codex", "anthropic"} {
++		port := codexCallbackPort
++		if provider == "anthropic" {
++			port = anthropicCallbackPort
++		}
++		occupied, err := net.Listen("tcp4", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
++		if err == nil {
++			defer occupied.Close()
++		}
++		h := NewHandlerWithoutConfigFilePath(&config.Config{AuthDir: t.TempDir(), Port: 47111}, nil)
++		w := httptest.NewRecorder()
++		c, _ := gin.CreateTestContext(w)
++		c.Request = httptest.NewRequest("GET", "/auth-url?is_webui=true", nil)
++		if provider == "codex" {
++			h.RequestCodexToken(c)
++		} else {
++			h.RequestAnthropicToken(c)
++		}
++		var login map[string]string
++		if err := json.Unmarshal(w.Body.Bytes(), &login); err != nil {
++			t.Fatal(err)
++		}
++		if w.Code != 200 || login["hiroute_callback_mode"] != "manual" || login["url"] == "" || !IsOAuthSessionPending(login["state"], provider) {
++			t.Fatalf("occupied callback port lost the manual session: status %d", w.Code)
++		}
++		CancelOAuthSession(login["state"])
++	}
++}
++
++type hiRouteCountedCodexService struct {
++	fakeCodexOAuthService
++	exchanges atomic.Int32
++}
++
++func (s *hiRouteCountedCodexService) ExchangeCodeForTokens(ctx context.Context, code string, pkce *codex.PKCECodes) (*codex.CodexAuthBundle, error) {
++	s.exchanges.Add(1)
++	return s.fakeCodexOAuthService.ExchangeCodeForTokens(ctx, code, pkce)
++}
++
++func TestHiRouteCodexBrowserCompletionAndPortRelease(t *testing.T) {
++	service := &hiRouteCountedCodexService{}
++	original := newCodexOAuthService
++	newCodexOAuthService = func(*config.Config) codexOAuthService { return service }
++	defer func() { newCodexOAuthService = original }()
++	dir := t.TempDir()
++	h := NewHandlerWithoutConfigFilePath(&config.Config{AuthDir: dir, Port: 47111}, nil)
++	w := httptest.NewRecorder()
++	c, _ := gin.CreateTestContext(w)
++	c.Request = httptest.NewRequest("GET", "/auth-url?is_webui=true", nil)
++	h.RequestCodexToken(c)
++	var login map[string]string
++	if err := json.Unmarshal(w.Body.Bytes(), &login); err != nil {
++		t.Fatal(err)
++	}
++	defer CancelOAuthSession(login["state"])
++	if w.Code != 200 || login["hiroute_callback_mode"] != "automatic" {
++		t.Fatal("browser callback listener did not start")
++	}
++	client := &http.Client{Transport: &http.Transport{Proxy: nil}, Timeout: 3 * time.Second}
++	defer client.CloseIdleConnections()
++	response, err := client.Get("http://localhost:1455/auth/callback?state=" + login["state"] + "&code=hiroute-test-code")
++	if err != nil {
++		t.Fatal(err)
++	}
++	body, _ := io.ReadAll(response.Body)
++	_ = response.Body.Close()
++	if response.StatusCode != 200 || strings.Contains(string(body), "successful") || strings.Contains(string(body), "hiroute-test-code") {
++		t.Fatal("incorrect browser callback response")
++	}
++	waitForOAuthSessionDone(t, login["state"])
++	if service.exchanges.Load() != 1 {
++		t.Fatal("authorization code exchange was replayed")
++	}
++	files, _ := filepath.Glob(filepath.Join(dir, "*.json"))
++	if len(files) != 1 {
++		t.Fatal("browser callback did not persist exactly one credential")
++	}
++	if _, err := WriteOAuthCallbackFileForPendingSession(dir, "codex", login["state"], "replacement", ""); err == nil {
++		t.Fatal("completed login accepted manual input")
++	}
++	listeners, err := listenHiRouteCallbackLoopback(codexCallbackPort)
++	if err != nil {
++		t.Fatal("completed login retained its callback port")
++	}
++	for _, ln := range listeners {
++		_ = ln.Close()
++	}
++}
++
++func TestHiRouteMainCallbackDoesNotReportFalseSuccess(t *testing.T) {
++	router := gin.New()
++	router.GET("/codex/callback", HiRouteBrowserOAuthCallback(t.TempDir(), "codex"))
++	w := httptest.NewRecorder()
++	router.ServeHTTP(w, httptest.NewRequest("GET", "/codex/callback?state=unknown&code=secret", nil))
++	if w.Code != http.StatusConflict || strings.Contains(w.Body.String(), "successful") || strings.Contains(w.Body.String(), "secret") {
++		t.Fatal("unaccepted callback reported success")
++	}
++}
 diff --git a/internal/api/handlers/management/local_machine_password_test.go b/internal/api/handlers/management/local_machine_password_test.go
 new file mode 100644
 index 0000000..74d027d
@@ -148,6 +724,99 @@ index 0000000..74d027d
 +		t.Fatal("old instance credential accepted")
 +	}
 +}
+diff --git a/internal/api/handlers/management/oauth_sessions.go b/internal/api/handlers/management/oauth_sessions.go
+index 336f9bb..9359040 100644
+--- a/internal/api/handlers/management/oauth_sessions.go
++++ b/internal/api/handlers/management/oauth_sessions.go
+@@ -33,13 +33,14 @@ var (
+ )
+ 
+ type oauthSession struct {
+-	Provider  string
+-	Status    string
+-	Source    string
+-	Metadata  map[string]any
+-	Completed bool
+-	CreatedAt time.Time
+-	ExpiresAt time.Time
++	Provider          string
++	Status            string
++	Source            string
++	Metadata          map[string]any
++	Completed         bool
++	CallbackSubmitted bool
++	CreatedAt         time.Time
++	ExpiresAt         time.Time
+ }
+ 
+ type oauthSessionStore struct {
+@@ -481,8 +482,24 @@ func WriteOAuthCallbackFileForPendingSession(authDir, provider, state, code, err
+ 	if err != nil {
+ 		return "", err
+ 	}
+-	if !IsOAuthSessionPending(state, canonicalProvider) {
++	// Automatic browser callbacks and protected manual input share one admission.
++	// Hold it through atomic file publication; the consumer can remove that file,
++	// so its presence alone cannot prevent a second submission.
++	oauthSessions.mu.Lock()
++	defer oauthSessions.mu.Unlock()
++	oauthSessions.purgeExpiredLocked(time.Now())
++	session, ok := oauthSessions.sessions[state]
++	if !ok || session.Provider != canonicalProvider || session.Completed || session.Status != "" || session.CallbackSubmitted {
+ 		return "", errOAuthSessionNotPending
+ 	}
+-	return writeOAuthCallbackFile(authDir, canonicalProvider, state, code, errorMessage)
++	if strings.TrimSpace(code) == "" && strings.TrimSpace(errorMessage) == "" {
++		return "", errInvalidOAuthState
++	}
++	path, err := writeOAuthCallbackFile(authDir, canonicalProvider, state, code, errorMessage)
++	if err != nil {
++		return "", err
++	}
++	session.CallbackSubmitted = true
++	oauthSessions.sessions[state] = session
++	return path, nil
+ }
+diff --git a/internal/api/server_routes.go b/internal/api/server_routes.go
+index 546ca73..a878459 100644
+--- a/internal/api/server_routes.go
++++ b/internal/api/server_routes.go
+@@ -143,33 +143,9 @@ func (s *Server) setupRoutes() {
+ 	// OAuth callback endpoints (reuse main server port)
+ 	// These endpoints receive provider redirects and persist
+ 	// the short-lived code/state for the waiting goroutine.
+-	s.engine.GET("/anthropic/callback", func(c *gin.Context) {
+-		code := c.Query("code")
+-		state := c.Query("state")
+-		errStr := c.Query("error")
+-		if errStr == "" {
+-			errStr = c.Query("error_description")
+-		}
+-		if state != "" {
+-			_, _ = managementHandlers.WriteOAuthCallbackFileForPendingSession(s.cfg.AuthDir, "anthropic", state, code, errStr)
+-		}
+-		c.Header("Content-Type", "text/html; charset=utf-8")
+-		c.String(http.StatusOK, oauthCallbackSuccessHTML)
+-	})
++	s.engine.GET("/anthropic/callback", managementHandlers.HiRouteBrowserOAuthCallback(s.cfg.AuthDir, "anthropic"))
+ 
+-	s.engine.GET("/codex/callback", func(c *gin.Context) {
+-		code := c.Query("code")
+-		state := c.Query("state")
+-		errStr := c.Query("error")
+-		if errStr == "" {
+-			errStr = c.Query("error_description")
+-		}
+-		if state != "" {
+-			_, _ = managementHandlers.WriteOAuthCallbackFileForPendingSession(s.cfg.AuthDir, "codex", state, code, errStr)
+-		}
+-		c.Header("Content-Type", "text/html; charset=utf-8")
+-		c.String(http.StatusOK, oauthCallbackSuccessHTML)
+-	})
++	s.engine.GET("/codex/callback", managementHandlers.HiRouteBrowserOAuthCallback(s.cfg.AuthDir, "codex"))
+ 
+ 	s.engine.GET("/antigravity/callback", func(c *gin.Context) {
+ 		code := c.Query("code")
 diff --git a/internal/auth/claude/hiroute_environment_proxy_test.go b/internal/auth/claude/hiroute_environment_proxy_test.go
 new file mode 100644
 index 0000000..3869b7e

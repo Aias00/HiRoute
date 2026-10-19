@@ -295,7 +295,9 @@ impl LocalControlAdapter {
                     callback_input_candidate,
                     account_ref: session.account_ref,
                     candidate,
-                    reason_code: None,
+                    reason_code: session
+                        .manual_callback_required
+                        .then(|| "SUBSCRIPTION_LOGIN_MANUAL_CALLBACK".to_owned()),
                 }
             })
             .collect();

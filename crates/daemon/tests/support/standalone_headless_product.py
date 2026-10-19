@@ -377,7 +377,7 @@ for line in sys.stdin:
             '--version', '0.1.0-headless-product', '--revision', self.sha,
             '--hiroute', str(candidate_hiroute),
             '--hirouted', str(candidate_hirouted),
-            '--cpa-binary', str(cpa), '--cpa-version', '8.0.4-hiroute.4',
+            '--cpa-binary', str(cpa), '--cpa-version', '8.0.4-hiroute.5',
             '--cpa-license', str(license_path),
             '--notices', str(package_source / 'notices'), '--console-assets', str(staged_console),
             '--output', str(self.package),
