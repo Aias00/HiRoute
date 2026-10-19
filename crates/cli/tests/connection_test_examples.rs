@@ -78,6 +78,12 @@ fn published_native_and_registered_examples_execute_the_displayed_commands() {
     assert_eq!(kinds, BTreeSet::from(["native", "registered"]));
     for request in requests {
         let kind = request["kind"].as_str().unwrap();
+        let inference_path = if kind == "native" {
+            "/request/draft/inference_model_id"
+        } else {
+            "/request/inference_model_id"
+        };
+        assert_eq!(request.pointer(inference_path), Some(&Value::Null));
         let file = root.path().join(format!("{kind}-request.json"));
         std::fs::write(file, serde_json::to_vec(request).unwrap()).unwrap();
     }
