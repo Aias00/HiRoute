@@ -236,7 +236,7 @@ mod tests {
             hiroute_platform::durable::write_private_new(&path, b"retained original").unwrap();
             files.insert(
                 name.into(),
-                serde_json::json!(format!("{:x}", Sha256::digest(b"retained original"))),
+                serde_json::json!(format!("sha256:{:x}", Sha256::digest(b"retained original"))),
             );
         }
         let identity = std::fs::metadata(&history).unwrap();

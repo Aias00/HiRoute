@@ -101,7 +101,7 @@ pub(super) fn validate(storage: &Path, record: &StorageRecovery) -> io::Result<(
             }
             digest.update(&buffer[..count]);
         }
-        if format!("{:x}", digest.finalize()) != expected {
+        if format!("sha256:{:x}", digest.finalize()) != expected {
             return Err(invalid());
         }
     }
@@ -173,7 +173,7 @@ mod tests {
             durable::write_private_new(&source.join(name), b"retained source").unwrap();
             files.insert(
                 name.into(),
-                serde_json::json!(format!("{:x}", Sha256::digest(b"retained source"))),
+                serde_json::json!(format!("sha256:{:x}", Sha256::digest(b"retained source"))),
             );
         }
         #[cfg(unix)]
