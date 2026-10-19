@@ -303,3 +303,52 @@ fn omarchy_recovery_uses_the_staged_identity_and_keeps_a_later_user_edit() {
         }
     }
 }
+
+#[test]
+fn omarchy_public_plugin_commands_preserve_argv_and_accept_public_list_extensions() {
+    let temp = tempfile::tempdir().unwrap();
+    let program = temp.path().join("omarchy fake");
+    fs::write(
+        &program,
+        r#"#!/usr/bin/env python3
+import json, pathlib, sys
+p=pathlib.Path(sys.argv[0]);args=sys.argv[1:];state=p.with_suffix('.state')
+with p.with_suffix('.calls').open('a') as f: f.write(json.dumps(args)+'\n')
+if args==['plugin','list','--json']:
+    enabled=state.exists() and state.read_text()=='on'
+    rows=[{'id':'hiroute.status','enabled':enabled,'section':'right','future_field':True}]
+    if state.exists() and state.read_text()=='duplicate': rows=rows+rows
+    print(json.dumps(rows))
+elif args[:2]==['plugin','validate']: pass
+elif args==['plugin','enable','hiroute.status','--section','right']: state.write_text('on')
+elif args==['plugin','disable','hiroute.status']: state.write_text('off')
+else: sys.exit(2)
+"#,
+    )
+    .unwrap();
+    fs::set_permissions(&program, fs::Permissions::from_mode(0o700)).unwrap();
+    let control = PublicPluginControl {
+        executable: program.clone(),
+    };
+    let folder = temp.path().join("literal ; $(not-a-command)");
+    control.validate(&folder).unwrap();
+    assert_eq!(control.state(Duration::from_secs(2)).unwrap(), Some(false));
+    control.enable(true).unwrap();
+    assert_eq!(control.state(Duration::from_secs(2)).unwrap(), Some(true));
+    control.enable(false).unwrap();
+    let calls: Vec<Vec<String>> = fs::read_to_string(program.with_extension("calls"))
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(calls[0], ["plugin", "validate", folder.to_str().unwrap()]);
+    assert_eq!(
+        calls[2],
+        ["plugin", "enable", "hiroute.status", "--section", "right"]
+    );
+    fs::write(program.with_extension("state"), "duplicate").unwrap();
+    assert!(matches!(
+        control.state(Duration::from_secs(2)),
+        Err(Error::PluginFailed)
+    ));
+}

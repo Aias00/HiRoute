@@ -154,10 +154,31 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
         let temp = tempfile::tempdir().unwrap();
         let program = temp.path().join("waiter");
-        std::fs::write(&program, "#!/bin/sh\ncat >/dev/null\nsleep 1\n").unwrap();
+        std::fs::write(
+            &program,
+            "#!/bin/sh\ncat >/dev/null\ntouch \"$0.started\"\nsleep 1\ntouch \"$0.finished\"\n",
+        )
+        .unwrap();
         std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o700)).unwrap();
         let start = Instant::now();
         detach(&program, Notice::ServiceUnavailable).unwrap();
-        assert!(start.elapsed() < Duration::from_millis(500));
+        let started = program.with_file_name("waiter.started");
+        let finished = program.with_file_name("waiter.finished");
+        while !started.exists() && start.elapsed() < Duration::from_millis(700) {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(started.exists(), "The fake action waiter never started");
+        assert!(
+            !finished.exists(),
+            "The caller waited for the action process"
+        );
+        assert!(start.elapsed() < Duration::from_millis(700));
+        while !finished.exists() && start.elapsed() < Duration::from_secs(3) {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(
+            finished.exists(),
+            "The owned fake waiter did not finish before cleanup"
+        );
     }
 }
