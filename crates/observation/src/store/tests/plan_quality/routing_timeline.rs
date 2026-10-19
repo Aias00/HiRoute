@@ -94,14 +94,6 @@ fn native_timeline_identity_uses_the_executed_candidate_not_the_last_evaluated_o
                 WriterCycleOutcome::Ack(_)
             ));
         }
-        assert!(matches!(
-            offer_fact(
-                &writer,
-                &channel,
-                fixture.fact(8, support::request_finished(), 1020)
-            ),
-            WriterCycleOutcome::Ack(_)
-        ));
         let executed = store
             .observed_routing_timeline(&reader(), &query, 5000)
             .unwrap();
@@ -123,7 +115,7 @@ fn native_timeline_identity_uses_the_executed_candidate_not_the_last_evaluated_o
                 &writer,
                 &channel,
                 fixture.fact(
-                    9,
+                    8,
                     finished_for_model(
                         &fixture,
                         "segment/executed",
@@ -138,6 +130,14 @@ fn native_timeline_identity_uses_the_executed_candidate_not_the_last_evaluated_o
             ),
             WriterCycleOutcome::Ack(_)
         ));
+        assert!(matches!(
+            offer_fact(
+                &writer,
+                &channel,
+                fixture.fact(9, support::request_finished(), 1031)
+            ),
+            WriterCycleOutcome::Ack(_)
+        ));
         let closed = store
             .observed_routing_timeline(&reader(), &query, 5000)
             .unwrap();
@@ -148,6 +148,10 @@ fn native_timeline_identity_uses_the_executed_candidate_not_the_last_evaluated_o
         assert_eq!(
             closed.turns[0].reasoning_profile_id,
             executed.turns[0].reasoning_profile_id
+        );
+        assert_eq!(
+            closed.turns[0].requests[0].outcome.as_deref(),
+            Some("accepted")
         );
     }
 }
