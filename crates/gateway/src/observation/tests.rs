@@ -264,6 +264,7 @@ fn request_with_sinks(
             authority_epoch: 1,
             publication_revision: 7,
             publication_digest: "sha256:publication".into(),
+            agent_plan_id: Some("plan/test".into()),
             route: hiroute_domain::ModelRequestRouteV2::Plan {
                 revision: 5,
                 semantic_digest: hiroute_domain::CanonicalDigest::of_bytes(b"plan"),

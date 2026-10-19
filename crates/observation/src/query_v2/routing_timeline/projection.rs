@@ -9,6 +9,17 @@ fn held(request: &Request, code: LedgerReasonCodeV1) -> bool {
 }
 
 pub(super) fn hydrate(requests: &mut BTreeMap<String, Request>, facts: &[Fact]) {
+    let candidates: BTreeMap<_, _> = facts
+        .iter()
+        .filter_map(|fact| match &fact.value {
+            ExecutionFactV1::CandidateDecision(candidate) => Some((
+                (fact.request_id.as_str(), candidate.candidate_id.as_str()),
+                candidate.as_ref(),
+            )),
+            _ => None,
+        })
+        .collect();
+    let mut attempted = BTreeMap::new();
     for fact in facts {
         let Some(request) = requests.get_mut(&fact.request_id) else {
             continue;
@@ -17,19 +28,26 @@ pub(super) fn hydrate(requests: &mut BTreeMap<String, Request>, facts: &[Fact]) 
             ExecutionFactV1::RouteDecision(decision) => {
                 request.decision = Some((**decision).clone());
             }
-            ExecutionFactV1::CandidateDecision(candidate) => {
-                request.candidate = Some((
-                    candidate.model_configuration_id.clone(),
-                    candidate.reasoning_profile_id.clone(),
-                ));
-            }
             ExecutionFactV1::AttemptStarted {
                 ordinal,
+                candidate_id,
+                model_configuration_id,
+                profile_digest,
                 request_model,
                 credential_ref,
                 key_id,
                 ..
             } => {
+                let reasoning = candidates
+                    .get(&(fact.request_id.as_str(), candidate_id.as_str()))
+                    .filter(|candidate| {
+                        candidate.model_configuration_id == *model_configuration_id
+                            && candidate.profile_digest == *profile_digest
+                    })
+                    .and_then(|candidate| candidate.reasoning_profile_id.clone());
+                let identity = (model_configuration_id.clone(), reasoning);
+                attempted.insert((fact.request_id.as_str(), *ordinal), identity.clone());
+                request.candidate = Some(identity);
                 request.models.insert(*ordinal, request_model.clone());
                 request
                     .credentials
@@ -41,6 +59,11 @@ pub(super) fn hydrate(requests: &mut BTreeMap<String, Request>, facts: &[Fact]) 
             } => {
                 request.view.native_model =
                     accepted_attempt_ordinal.and_then(|n| request.models.get(&n).cloned());
+                if let Some(ordinal) = accepted_attempt_ordinal {
+                    request.candidate = attempted
+                        .get(&(fact.request_id.as_str(), *ordinal))
+                        .cloned();
+                }
             }
             _ => {}
         }

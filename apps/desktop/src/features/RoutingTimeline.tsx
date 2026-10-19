@@ -28,7 +28,7 @@ type Lane = 'regular' | 'primary' | 'unknown';
 
 const laneOf = (turn: TimelineTurn): Lane => turn.group === 'regular' || turn.group === 'primary' ? turn.group : 'unknown';
 const modelOf = (turn: TimelineTurn) => [...turn.requests].reverse().find(request => request.native_model)?.native_model ?? turn.model_configuration_id;
-const failed = (request: TimelineRequest) => request.outcome !== null && !['completed', 'success', 'succeeded'].includes(request.outcome);
+const failed = (request: TimelineRequest) => request.outcome !== null && !['accepted', 'completed', 'success', 'succeeded'].includes(request.outcome);
 const TICKS = 18;
 const REQUESTS = 6;
 
