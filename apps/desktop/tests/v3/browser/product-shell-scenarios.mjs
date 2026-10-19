@@ -154,7 +154,9 @@ const scenarios = [
     await click('模型'); await click('向此接入添加模型');
     await until(() => button('返回') && text().includes('Codex 本机订阅'), 'append subscription detail');
     await click('返回'); await click('连接订阅（推荐）');
-    await click('检查并选择模型'); await click('检查订阅');
+    await click('检查并选择模型');
+    assert(all('[role="dialog"] h2').some(item => item.textContent === '连接订阅') && !document.querySelector('[data-hermes-source-scope]'), 'Independent subscription check leaked the device-scan title or Hermes controls');
+    await click('检查订阅');
     await until(() => button('保存接入'), 'new account checked');
     await click('保存接入');
     await until(() => calls('preview_compute_save').length || document.querySelector('[data-error-code]'), 'save outcome');
@@ -222,6 +224,7 @@ const scenarios = [
     assert(!text().includes('订阅连接代理') && calls('subscription_proxy_status').length === 0, 'Settings still owns the proxy entry');
     await deviceScan();
     await until(() => button('调整模型'), 'scanned subscription');
+    assert(document.querySelector('[data-hermes-source-scope]'), 'Device scan lost its optional Hermes profile entry');
     const dialog = document.querySelector('[role="dialog"]');
     const list = document.querySelector('.oc-scan-list');
     await click('设置订阅连接代理');
@@ -248,11 +251,15 @@ const scenarios = [
     assert(calls('subscription_proxy_apply').length === 0, 'Cancel applied a draft');
     await click('调整模型');
     const detail = document.querySelector('.oc-scan-detail');
+    assert(all('[role="dialog"] h2').some(item => item.textContent === '连接订阅') && !document.querySelector('[data-hermes-source-scope]'), 'Selected subscription leaked device-scan controls');
     await click('设置订阅连接代理');
     await until(() => document.querySelector('[aria-label="订阅代理地址"]')?.value === saved.config.policy.url, 'discarded draft and saved readback');
     document.querySelector('[role="dialog"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await until(() => !document.querySelector('.subscription-proxy-panel'), 'Escape collapses editor');
     assert(document.querySelector('.oc-scan-detail') === detail && document.querySelector('[role="dialog"]') === dialog, 'Escape lost the selected subscription');
+    await click('返回');
+    await until(() => document.querySelector('.oc-scan-list'), 'returned to device scan');
+    assert(all('[role="dialog"] h2').some(item => item.textContent === '扫描本机') && document.querySelector('[data-hermes-source-scope]'), 'Returning from a subscription did not restore the device-scan context');
   }),
   scenario('desktop.models.subscription-proxy.read-retry', ['subscription-proxy'], 'An unread proxy policy cannot be overwritten and retry loads the saved mode', async () => {
     let attempts = 0;

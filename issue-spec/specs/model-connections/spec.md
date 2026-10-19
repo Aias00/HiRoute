@@ -235,6 +235,12 @@ Independent CPA sign-in is the default recommendation; NativeBorrowed is an expl
 option and saved choices do not migrate automatically. Login completion alone does
 not enable routes or import all models.
 
+Desktop subscription checks and model selection SHALL use subscription-specific
+titles. Native discovery controls, including Hermes profile scanning, SHALL remain
+on the device scan list and stay hidden in subscription details. Returning to the
+scan list restores its controls; cancelling proxy editing retains the selected
+subscription context.
+
 A successful subscription save ends its Desktop check interaction. A later explicit
 check, including another provider or account, MUST proceed without releasing or
 invalidating the saved access. Running checks and verified checks that have not
