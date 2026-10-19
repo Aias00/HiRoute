@@ -7,8 +7,8 @@
 </p>
 
 <p align="center">
-  <strong>Route agents by task. Route models by stage.</strong><br>
-  A local-first routing and coordination engine for long-horizon agent tasks.
+  <strong>Make Codex and Claude Code subscriptions go further.</strong><br>
+  A local model router that gives routine agent work to economical models and keeps your strongest model for the hard parts.
 </p>
 
 <p align="center">
@@ -31,14 +31,17 @@
   </a>
 </p>
 
-HiRoute is a local control and execution layer for long-horizon agents. It brings model
-sources, reusable routing plans, agent connections, bounded failover, and execution evidence
-into one system, available through a Desktop application or a headless CLI and daemon.
+Keep using Codex, Claude Code, Qoder, Pi or DeepSeek Harness. With a smart-saving plan, HiRoute
+judges each new message: routine work such as reading code or gathering facts can go to an
+economical model, while design decisions and difficult fixes stay with your subscription or
+primary model. Subscriptions, API keys and local models are managed in one place, and each
+session shows which model actually ran, its usage and its cost. Independent tasks can also be
+delegated to other agents.
 
-Decision-based routes choose again on each new user turn. Tool continuations in the same turn
-keep the frozen decision, helping the model reuse its growing context prefix. A context rebuild
-can require a new decision when HiRoute can no longer recognize the continuation or reuse its
-previous decision. Choosing again can also keep the same model; cache reuse depends on the provider.
+Tool calls within a turn usually keep that turn's decision, so the growing context prefix stays
+cacheable. HiRoute decides again on a new user message, or when a context rebuild breaks the
+previous continuation, and may keep the same model; cache reuse depends on the provider. HiRoute
+runs locally as a Desktop application or a headless CLI and daemon.
 
 ## News
 
