@@ -144,6 +144,15 @@ fn routing_summary_bounds_unrelated_safe_projection_work() {
 #[test]
 fn routing_index_reopen_preserves_malformed_safe_bytes_and_failed_read() {
     let (root, store) = seed();
+    let schema_version_before: String = store
+        .connection
+        .lock()
+        .query_row(
+            "SELECT value FROM observation_meta WHERE key='schema_version'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
     let retained = {
         let db = store.connection.lock();
         db.execute_batch(
@@ -200,7 +209,7 @@ fn routing_index_reopen_preserves_malformed_safe_bytes_and_failed_read() {
                 |row| row.get::<_, String>(0)
             )
             .unwrap(),
-            "4"
+            schema_version_before
         );
     }
 }
@@ -285,6 +294,15 @@ fn quality_identity_reads_use_covering_request_and_exact_payload_lookup() {
 #[test]
 fn quality_request_index_rebuild_preserves_existing_event_bytes_on_reopen() {
     let (root, store) = seed();
+    let schema_version_before: String = store
+        .connection
+        .lock()
+        .query_row(
+            "SELECT value FROM observation_meta WHERE key='schema_version'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
     let before = {
         let db = store.connection.lock();
         let mut statement = db.prepare("SELECT request_id,envelope_json,envelope_digest FROM execution_fact_events ORDER BY rowid").unwrap();
@@ -331,7 +349,7 @@ fn quality_request_index_rebuild_preserves_existing_event_bytes_on_reopen() {
                 |row| row.get::<_, String>(0)
             )
             .unwrap(),
-            "4"
+            schema_version_before
         );
     }
 }
