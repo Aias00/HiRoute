@@ -3,7 +3,7 @@
     "slug": "routing-cache-cost",
     "date": "2026-10-14",
     "title": {
-      "zh": "切换模型会丢缓存，但省下的钱丢不掉",
+      "zh": "切换模型会损失缓存，智能路由还省钱吗？",
       "en": "Switching Models Loses Cache, Not the Savings"
     },
     "shortTitle": {

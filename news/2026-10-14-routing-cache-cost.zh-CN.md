@@ -1,4 +1,4 @@
-# 切换模型会丢缓存，但省下的钱丢不掉
+# 切换模型会损失缓存，智能路由还省钱吗？
 
 智能路由会把不同的工作交给不同的模型。很多人随之会问：模型一换，之前积累的缓存就用不上了，这笔损失会不会把省下的钱又花回去？
 
@@ -11,7 +11,7 @@
 
 什么时候切换由 HiRoute 决定，开启智能省钱不需要自己先算一遍账。下面逐条说明。
 
-<figure class="article-video"><video controls playsinline preload="none" poster="/media/hiroute-cache-en-poster.jpg" aria-label="三分钟视频：切换模型会丢缓存，但省下的钱丢不掉"><source src="/media/hiroute-cache-en.mp4" type="video/mp4"></video><figcaption>三分钟视频版：英文旁白，中英双语字幕</figcaption></figure>
+<figure class="article-video"><video controls playsinline preload="none" poster="/media/hiroute-cache-en-poster.jpg" aria-label="三分钟视频：切换模型会损失缓存，智能路由还省钱吗？"><source src="/media/hiroute-cache-en.mp4" type="video/mp4"></video><figcaption>三分钟视频版：英文旁白，中英双语字幕</figcaption></figure>
 
 ## 先弄清楚：缓存省的是什么钱
 
