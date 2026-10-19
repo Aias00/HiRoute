@@ -42,6 +42,12 @@ advantage of three questions over a well-specified direct selector.
 
 ## Exact study questions
 
+The manuscript calls the two configurable routing roles **standard tier** and
+**enhanced tier**. Frozen questions, labels and evaluator inputs retain `economy`
+and `primary`, respectively. These identifiers and the numerical policy remain
+unchanged. Difficulty-based routing can select the enhanced tier for either
+current reasoning demand or applicable historical protection.
+
 These files are byte-preserving copies of the frozen research question definitions.
 The [policy manifest](policy-manifest.json) records their SHA-256 hashes. They are
 study artifacts, not new product defaults or a replacement for the production
@@ -55,10 +61,10 @@ configuration contract.
 | [Engineering: explicit direct](policies/engineering-direct-explicit.json) | Policy-equivalent expression sensitivity in Appendix D; not a newly blind dataset |
 | [Mathematics: explicit direct](policies/mathematics-direct-explicit.json) | Contemporaneous direct comparison in Section 5.4 |
 
-For eligible, complete history and valid answers, the paper selects primary when
+For eligible, complete history and valid answers, the paper selects the enhanced tier when
 `s < 0.5 OR (h < 1 AND a >= 0.5)`: `s` is the simple-current-work probability,
 `h` is the returned historical scalar on the 0–2 scale, and `a` is applicability.
-Otherwise it selects economy. The returned continuous scalar is retained; the
+Otherwise it selects the standard tier. The returned continuous scalar is retained; the
 modal grade is not substituted for it. Invalid or ineligible history follows the
 product contracts described in the manuscript. The paper's 0.5 simple threshold is
 separate from the tested product default of 0.8.

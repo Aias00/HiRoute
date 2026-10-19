@@ -13,7 +13,9 @@ Agent, multi-model gateway and decision-interface developers are the intended
 users. The evaluation method can be applied to another explicit policy; these
 labels do not define universal task difficulty or executor capability.
 
-The generic action track evaluates economy/primary selections from any mechanism.
+The generic action track evaluates standard-tier/enhanced-tier selections from any mechanism.
+Frozen action identifiers remain `economy` for the standard tier and `primary` for
+the enhanced tier, matching the original prompts, labels and evaluator.
 The typed track additionally evaluates component answers and error propagation.
 Only determinate actions enter headline accuracy. A boundary record is not an
 opportunity to count either answer correct.
@@ -33,8 +35,8 @@ from a fixed coverage supplement created before evaluated outputs. The supplemen
 is marked `construction_cohort=coverage_supplement`; the paraphrases use
 `evaluation_panel=expression`. Never merge the paraphrases into the primary score.
 
-Engineering primary has 46 economy and 40 primary determinate records. Mathematics
-has 28 economy and 22 primary. These constructed proportions do not estimate the
+Engineering primary has 46 standard-tier and 40 enhanced-tier determinate records. Mathematics
+has 28 standard-tier and 22 enhanced-tier records. These constructed proportions do not estimate the
 prevalence of decisions in production traffic.
 
 ## Record schema

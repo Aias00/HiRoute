@@ -67,7 +67,9 @@ semantic completions and failed outputs remain.
 
 ## Evaluate another router
 
-The generic action track accepts JSONL such as:
+The manuscript uses **standard tier** and **enhanced tier**. JSONL action values
+remain `economy` and `primary`, respectively, so saved predictions and frozen
+experiments keep their original identifiers. The generic action track accepts:
 
 ```json
 {"id":"IG001_a_en","repeat":0,"valid":true,"action":"primary"}
