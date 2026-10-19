@@ -1,7 +1,7 @@
 use super::*;
 use crate::{LocalStorageSet, StorageStartupOptions};
 
-fn fixture() -> (tempfile::TempDir, PathBuf, StorageStartupOptions) {
+fn fixture() -> (crate::TestTempDir, PathBuf, StorageStartupOptions) {
     let temporary = crate::test_tempdir().unwrap();
     let root = temporary.path().join("storage");
     drop(LocalStorageSet::open_for_daemon_startup(&root).unwrap());

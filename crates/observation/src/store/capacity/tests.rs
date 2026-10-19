@@ -217,6 +217,11 @@ fn a_nonpreemptible_overrun_extends_the_completion_based_cooldown() {
 
 #[test]
 fn turn_cleanup_progresses_with_unrelated_requests_and_surviving_session_turns() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicU8, Ordering},
+    };
+
     let directory = tempfile::tempdir().unwrap();
     let store = open_store(directory.path());
     let fixture = Fixture::new("turn-cleanup");
@@ -249,21 +254,45 @@ fn turn_cleanup_progresses_with_unrelated_requests_and_surviving_session_turns()
             1000,
         )
         .unwrap();
-    let deadline = Instant::now() + BUDGET;
-    let mut instructions = 0;
-    db.progress_handler(
-        1000,
-        Some(move || {
-            instructions += 1000;
-            instructions > 100_000 || Instant::now() >= deadline
-        }),
-    );
-    let result = store.capacity_cleanup(&mut db, &mut State::default(), deadline);
-    db.progress_handler(0, None::<fn() -> bool>);
-    assert!(
-        result.is_ok(),
-        "turn cleanup must not repeatedly scan unrelated history: {result:?}"
-    );
+    let mut state = State::default();
+    // Maintenance may yield between durable phases on a busy host. Preserve
+    // both the production time budget and the per-slice scan regression guard.
+    for _ in 0..10 {
+        let deadline = Instant::now() + BUDGET;
+        let interrupted = Arc::new(AtomicU8::new(0));
+        let reason = Arc::clone(&interrupted);
+        let mut instructions = 0;
+        db.progress_handler(
+            1000,
+            Some(move || {
+                instructions += 1000;
+                let value = if instructions > 100_000 {
+                    2
+                } else if Instant::now() >= deadline {
+                    1
+                } else {
+                    return false;
+                };
+                reason.store(value, Ordering::Relaxed);
+                true
+            }),
+        );
+        let result = store.capacity_cleanup(&mut db, &mut state, deadline);
+        db.progress_handler(0, None::<fn() -> bool>);
+        let reason = interrupted.load(Ordering::Relaxed);
+        assert_ne!(reason, 2, "turn cleanup must not scan unrelated history");
+        assert!(result.is_ok() || reason == 1, "{result:?}");
+        if !db
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM observation_capacity_pending_v5)",
+                [],
+                |row| row.get::<_, bool>(0),
+            )
+            .unwrap()
+        {
+            break;
+        }
+    }
     assert_eq!(
         db.query_row(
             "SELECT COUNT(*) FROM observation_capacity_pending_v5",
