@@ -55,7 +55,10 @@ def run(target, source_repo):
         docker_build = ['docker', 'build', '--platform', policy['targets'][target]['platform'],
                         '--provenance=false', '--network', 'host',
                         '--build-arg', 'BASE_IMAGE=' + policy['build_image'],
-                        '--build-arg', 'APT_SNAPSHOT=' + policy['apt_snapshot']]
+                        '--build-arg', 'APT_SNAPSHOT=' + policy['apt_snapshot'],
+                        '--build-arg', 'NODE_VERSION=' + policy['node_version'],
+                        '--build-arg', 'NODE_ARCH=' + policy['targets'][target]['node_arch'],
+                        '--build-arg', 'NODE_SHA256=' + policy['targets'][target]['node_sha256']]
         # Docker resolves each value from its inherited environment. Standard
         # proxy build args are excluded from image history/cache provenance.
         for name in proxy_names:
