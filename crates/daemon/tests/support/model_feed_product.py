@@ -8,6 +8,7 @@ import http.server
 import json
 import os
 from pathlib import Path
+import shutil
 import ssl
 import subprocess
 import sys
@@ -148,6 +149,32 @@ def main_session(product):
         cwd=product.project, env=product.env, capture_output=True, timeout=45)
     product.outputs.extend((result.stdout, result.stderr))
     assert result.returncode == 0 and b'native product answer' in result.stdout, result
+
+
+def preserve_failure_diagnostics(product, stage, upstream):
+    """Retain safe daemon JSONL before the installed fixture removes its state."""
+    report = {'scenario': 'installed-signed-feed-lifecycle', 'state': 'red',
+              'candidate': product.sha, 'stage': stage,
+              'upstream_calls': len(upstream.requests)}
+    try:
+        product.stop()
+        destination = product.repo / 'target/product-e2e-evidence' / ('model-feed-' + str(os.getpid()))
+        destination.mkdir(mode=0o700, parents=True, exist_ok=False)
+        copied = []
+        for directory in product.state.rglob('diagnostics'):
+            for source in directory.glob('daemon/*.jsonl'):
+                if source.is_symlink() or not source.is_file():
+                    continue
+                target = destination / source.name
+                shutil.copy2(source, target)
+                target.chmod(0o600)
+                copied.append(source.name)
+        report['diagnostics'] = {'files': sorted(copied), 'path': str(destination),
+                                 'state': 'retained' if copied else 'unavailable'}
+        (destination / 'report.json').write_bytes(wire(report))
+    except (OSError, subprocess.SubprocessError):
+        report['diagnostics'] = {'state': 'unavailable'}
+    print(json.dumps(report), flush=True)
 
 
 def run(repository):
@@ -306,6 +333,7 @@ def run(repository):
             'new_worker_after_withdrawal': True, 'continue_after_restart': True, 'new_admission_rejected': True,
             'rollback_and_restore': True, 'embedded_absorption': True}))
     except Exception as error:
+        preserve_failure_diagnostics(product, stage, upstream)
         raise AssertionError(('feed lifecycle stage', stage, error)) from error
     finally:
         upstream.close()

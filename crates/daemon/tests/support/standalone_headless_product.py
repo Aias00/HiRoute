@@ -72,7 +72,7 @@ class InstalledProduct:
         self.daemon = None
         self.upstream = NativeUpstream()
 
-    def close(self):
+    def stop(self):
         if self.daemon is not None:
             self.daemon.terminate()
             try:
@@ -85,6 +85,9 @@ class InstalledProduct:
                 self.daemon.stderr.read() if self.daemon.stderr else b'',
             ))
             self.daemon = None
+
+    def close(self):
+        self.stop()
         self.upstream.close()
         leaked = []
         for output in self.outputs:

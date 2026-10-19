@@ -75,7 +75,7 @@ class CandidateTests(unittest.TestCase):
             return ""
         if args[:2] == ("cargo", "metadata"):
             return json.dumps({"target_directory": str(self.root / "target")})
-        if args[0] in ("cargo", "rustc") and args[1] == "--version":
+        if args[0] in ("cargo", "rustc", "node", "npm", "npm.cmd") and args[1] == "--version":
             return "fixture toolchain"
         if args[0] in ("npm", "npm.cmd"):
             if args[1:3] == ("run", "build"):
@@ -134,6 +134,8 @@ class CandidateTests(unittest.TestCase):
             store.return_value.locked.return_value = nullcontext()
             result = self.candidate.build()
         self.assertEqual(result["status"], "awaiting_runtime")
+        self.assertEqual(result["toolchain"]["node"], "fixture toolchain")
+        self.assertEqual(result["toolchain"]["npm"], "fixture toolchain")
         self.assertEqual(set(result["linux_abi"]["files"]), {"bin/hiroute", "bin/hirouted", "libexec/cliproxyapi"})
         self.assertEqual(result["website_artifact"]["architecture"], "aarch64")
         self.assertEqual(sum(args[:3] == ("npm", "run", "build") for args in self.commands), 1)
@@ -155,6 +157,30 @@ class CandidateTests(unittest.TestCase):
         archive = next(path for path in artifacts if path.name.endswith(".tar.gz"))
         archive.write_bytes(b"tampered")
         self.assertNotEqual(subprocess.run(command, capture_output=True).returncode, 0)
+
+    def test_missing_frontend_tools_fail_before_frontend_cpa_or_rust_build(self):
+        for missing in ("node", "npm"):
+            self.commands.clear()
+
+            def command(*args, **kwargs):
+                if args[0] == missing:
+                    self.commands.append(args)
+                    raise FileNotFoundError(2, "No such file or directory", missing)
+                return self.command(*args, **kwargs)
+
+            with self.subTest(missing=missing), \
+                    patch.object(self.candidate, "run", side_effect=command), \
+                    patch.object(self.candidate, "script") as script, \
+                    patch.object(MODULES["package-desktop"], "ensure_sccache_server") as sccache, \
+                    self.assertRaisesRegex(ValueError, "Node.js and npm on PATH; missing: " + missing):
+                self.candidate.build()
+            script.assert_not_called()
+            sccache.assert_not_called()
+            self.assertFalse(any(args[0] == "cargo" for args in self.commands))
+            self.assertFalse(any(args[:2] == ("npm", "ci") for args in self.commands))
+            result = json.loads((self.candidate.output / "result.json").read_text())
+            self.assertEqual(result["status"], "failed")
+            self.assertIn("missing: " + missing, result["error"])
 
     def test_archive_with_new_glibc_requirement_cannot_produce_accepted_assets(self):
         def newer(*args, **kwargs):
@@ -214,6 +240,8 @@ class CandidateTests(unittest.TestCase):
     def test_windows_candidate_is_verified_as_native_pe_and_consumed_by_release_verifier(self):
         result = self.build_windows_candidate()
         self.assertEqual(result["status"], "awaiting_runtime")
+        self.assertIn(("npm.cmd", "--version"), self.commands)
+        self.assertEqual(result["toolchain"]["npm"], "fixture toolchain")
         self.assertNotIn("website_artifact", result)
         self.assertNotIn("assets", result)
         self.assertEqual(result["publication"], "internal-only")
