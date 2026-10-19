@@ -235,6 +235,11 @@ Independent CPA sign-in is the default recommendation; NativeBorrowed is an expl
 option and saved choices do not migrate automatically. Login completion alone does
 not enable routes or import all models.
 
+A successful subscription save ends its Desktop check interaction. A later explicit
+check, including another provider or account, MUST proceed without releasing or
+invalidating the saved access. Running checks and verified checks that have not
+completed saving retain their existing interaction ownership.
+
 | Mode | Credential authority | Repair action |
 | --- | --- | --- |
 | NativeBorrowed | Native client owns login/refresh; CPA receives current access leases only | Update native login and explicitly recheck |
