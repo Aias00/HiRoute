@@ -60,7 +60,8 @@ proves native authorization, persistence, process cleanup or real model calls.
 
 The [historical protection and overview scenarios](v3/visual/new-model-trial-protection-active.mjs)
 run with `node tests/v3/visual/new-model-trial.mjs <evidence-directory> --protection`.
-They verify scope-matched release counts and explicit unavailable reasons, the opening
+They verify scope-matched release counts and explicit unavailable reasons, a selectable
+24-hour interval inside independently clipped retention boundaries, the opening
 selection's historical-protection outcome/previous score, and forty-turn overview
 navigation, viewport tracking, keyboard access and live append. Use the same
 `HIROUTE_BROWSER_TRANSPORT=console` switch for the console host. These remain

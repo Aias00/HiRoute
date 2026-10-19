@@ -107,7 +107,11 @@ mockIPC(async (command, payload: any) => {
   if (command === 'observation_read' && payload.request.intent.view === 'plan_trust') {
     const value=structuredClone(report); if(params.has('cost')) value.cost={kind:'available',difference_micros:6000,comparison:{currency:'USD',coverage:'complete',request_count:3,compared_request_count:3,missing_request_count:0,excluded_request_count:0,routed_estimate_micros:18000,reference_estimate_micros:12000,compared_routed_subtotal_micros:18000,compared_reference_subtotal_micros:12000,retention_boundary_partial:false,arithmetic_overflow:false}}; if(params.has('division')) value.branches[0].suggestion={kind:'explore_division'}; if (params.has('empty')) {value.rows=[]; value.branches[0].full_history={executed:0,complete:0,meets_floor:0,partial:0,awaiting_assessment:0,unscored:0,sessions:0};}
     if(params.has('cost-partial') || params.has('cost-unknown')) {const known=params.has('cost-partial');value.cost={kind:'available',difference_micros:null,comparison:{currency:'USD',coverage:known?'partial':'unknown',request_count:3,compared_request_count:known?1:0,missing_request_count:known?2:3,excluded_request_count:known?2:3,routed_estimate_micros:null,reference_estimate_micros:null,compared_routed_subtotal_micros:known?6000:null,compared_reference_subtotal_micros:known?4000:null,retention_boundary_partial:false,arithmetic_overflow:false}};}
-    if(params.has('release-evidence')) {value.from_ms=payload.request.intent.query.from_ms??0;value.to_ms=payload.request.intent.query.to_ms;value.revision=payload.request.intent.query.revision;}
+    if(params.has('release-evidence')) {
+      const q=payload.request.intent.query;
+      value.from_ms=params.get('release-evidence')==='retention'?Math.max(q.from_ms??0,q.to_ms-7*86_400_000+10):q.from_ms??0;
+      value.to_ms=q.to_ms;value.revision=q.revision;
+    }
     if (payload.request.intent.query.group_by === 'executor') value.rows.forEach(row => row.executor='deepseek_harness');
     return value;
   }
@@ -140,7 +144,8 @@ mockIPC(async (command, payload: any) => {
   if(command==='observation_read' && payload.request.intent.view==='plan_quality' && params.has('release-evidence')) {
     const q=payload.request.intent.query, state=params.get('release-evidence');
     const counts={c_decisions:10,requested:10,unavailable:0,no_target_omissions:0,partial_target_omissions:0,inherited:0,required_question_missing:0,gate_opportunities:5,suppressed:state==='zero'?0:5,unavailable_per_requested:0,suppressed_per_opportunity:state==='zero'?0:1,suppressed_per_c_decision:state==='zero'?0:0.5};
-    const routing={plan_id:state==='plan'?'other-plan':q.plan_id,session_id:null,plan_revision:state==='revision'?99:q.plan_revision,requested_from_ms:q.from_ms??null,requested_to_ms:q.to_ms,covered_from_ms:(q.from_ms??0)+(state==='time'?1:0),covered_to_ms:q.to_ms,coverage:state==='partial'?'partial':'complete',retained_decisions:10,known_non_c_decisions:0,legacy_or_unknown_decisions:0,unknown_scope_decisions:0,missing_projection_events:0,scan_limited:false,cohorts:state==='empty'?[]:[{cohort:{protocol:'fixture',content_digest:'fixture',bundle_digest:'fixture',scope_id:state==='branch'?'another-branch':'smart_saving',standard:'default',provider:'Fixture service',model:'Judgment model',simple_threshold_millis:720,competence_floor_millis:500},counts}]};
+    const coveredFrom=state==='retention'?Math.max(q.from_ms??0,q.to_ms-7*86_400_000+20):(q.from_ms??0)+(state==='time'?1:0);
+    const routing={plan_id:state==='plan'?'other-plan':q.plan_id,session_id:null,plan_revision:state==='revision'?99:q.plan_revision,requested_from_ms:q.from_ms??null,requested_to_ms:q.to_ms,covered_from_ms:coveredFrom,covered_to_ms:q.to_ms,coverage:state==='partial'?'partial':'complete',retained_decisions:10,known_non_c_decisions:0,legacy_or_unknown_decisions:0,unknown_scope_decisions:0,missing_projection_events:0,scan_limited:false,cohorts:state==='empty'?[]:[{cohort:{protocol:'fixture',content_digest:'fixture',bundle_digest:'fixture',scope_id:state==='branch'?'another-branch':'smart_saving',standard:'default',provider:'Fixture service',model:'Judgment model',simple_threshold_millis:720,competence_floor_millis:500},counts}]};
     return {samples:qualitySamples,summary:{models:qualityModels,scored_stage_count:58,unrated_stage_count:19,session_count:9,available_revisions:[8]},routing_observations:state==='missing'?undefined:routing,next_cursor:null};
   }
   if (command === 'observation_read' && payload.request.intent.query.execution && !params.has('empty')) {

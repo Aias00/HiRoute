@@ -18,7 +18,7 @@ export type { PlanQualitySample } from './PlanQualityStage';
 
 type Page = { samples: PlanQualitySample[]; summary: QualitySummary; routing_observations?: RoutingSummary; next_cursor?: string | null };
 type ScoreFilter = 'all' | 'low' | 'high' | 'unrated';
-type Period = 'all' | 'seven_days';
+type Period = 'all' | 'seven_days' | 'one_day';
 const EMPTY_SUMMARY: QualitySummary = { models: [], scored_stage_count: 0, unrated_stage_count: 0, session_count: 0, available_revisions: [] };
 
 export function PlanQuality({
@@ -56,7 +56,7 @@ export function PlanQuality({
   // A detail filter or next page must retain exactly the same time window.
   const window = useMemo(() => {
     const now = Date.now();
-    return { from: period === 'seven_days' ? now - 7 * 86_400_000 : undefined, to: now + 1 };
+    return { from: period === 'one_day' ? now - 86_400_000 : period === 'seven_days' ? now - 7 * 86_400_000 : undefined, to: now + 1 };
   }, [planId, sessionId, planRevision, period, version, refreshVersion, reload, active]);
   const revision = version === 'current' ? planRevision || null : version === 'all' ? null : Number(version);
 
@@ -186,7 +186,7 @@ export function PlanQuality({
       <div className="quality-scope-meta">{text(`${stageCount} 个执行阶段 · ${summary.scored_stage_count} 已评分 · ${summary.unrated_stage_count} 未评分${report ? ` · 证据来自 ${report.session_total} 个会话` : ''}`, `${stageCount} stages · ${summary.scored_stage_count} scored · ${summary.unrated_stage_count} unrated${report ? ` · evidence from ${report.session_total} sessions` : ''}`)}</div>
       <div className="quality-filters">
         {!compact && <label><span className="sr-only">{text('时间范围', 'Time range')}</span><select className="select" value={period} onChange={event => { resetDetail(); setPeriod(event.target.value as Period); }}>
-          <option value="seven_days">{text('最近 7 天', 'Last 7 days')}</option><option value="all">{text('全部保留期', 'All retained')}</option>
+          <option value="seven_days">{text('最近 7 天', 'Last 7 days')}</option><option value="one_day">{text('最近 24 小时', 'Last 24 hours')}</option><option value="all">{text('全部保留期', 'All retained')}</option>
         </select></label>}
         {!compact && planRevision && <label><span className="sr-only">{text('路由版本', 'Route version')}</span><select className="select" value={version} onChange={event => { resetDetail(); setVersion(event.target.value); }}>
           <option value="current">{text('当前生效版本', 'Active version')}</option>

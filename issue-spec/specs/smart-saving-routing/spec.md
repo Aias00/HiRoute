@@ -231,6 +231,13 @@ Source SPEC comments:
 
 The Plan model-performance protection card MUST show how many historical low-score protections were released because the previous problem was fixed or unrelated and Regular continued. This count describes retained routing decisions and remains separate from the trust report's protected-stage count. A numeric count is permitted only when routing-observation coverage is complete and its Plan, published-revision selection, effective time interval and branch scopes match the protection card's trust report. Model and score filters must not relabel a Plan-wide count as a filtered-model count. Cohorts may be aggregated only within the matching branch scopes. A complete matching recorded cohort with no releases shows zero. Missing observations, incomplete coverage or any unproven scope alignment MUST show an unavailable value and a plain-language reason; unknown evidence MUST NOT become zero. The observation disclosure remains available with its own scope when a count cannot be placed beside protections. The release explanation uses capability language and MUST NOT display internal protocol labels, digests or question identifiers. No route, assessment, suggestion threshold or stored record changes through this view.
 
+The view MUST offer a last-24-hours scope alongside the unchanged default last-seven-days and all-retained scopes. The stage and routing-decision reads use the same captured requested interval. Independently clipped retention boundaries still require the unavailable state; the shorter scope does not weaken effective-interval matching. Changing the displayed period does not narrow the full active-revision evidence used for suggestions.
+
+#### Scenario: Inspect a scope inside the retention boundary
+
+- **WHEN** the user selects the last 24 hours and both complete evidence reads retain that exact interval
+- **THEN** the protection card may show the aligned release count, while grouping and detail navigation preserve the selected interval. A mismatch at the seven-day retention edge still withholds the count.
+
 #### Scenario: Aligned complete evidence
 
 - **WHEN** a trust report and complete routing observations match Plan, revision, time and branches and matching cohorts contain five released protections

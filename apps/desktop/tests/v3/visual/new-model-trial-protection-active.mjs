@@ -72,6 +72,28 @@ try {
         if(['valid','partial','empty'].includes(state)) {await evaluate(client,`document.querySelector('.trust-protection').scrollIntoView({block:'center'});true`);await shot(`released-${state}-${name}`);}
       }
     });
+    await check(`retained-window-${name}`,async()=>{
+      await load('view=editor&release-evidence=retention');
+      await waitFor(client,`!!document.querySelector('[data-trust-control="smart"]')`);
+      await click('[role="tab"]',lang==='zh'?'模型表现':'Model performance');
+      await waitFor(client,`document.querySelector('.trust-release')?.dataset.releaseState==='unavailable'`);
+      assert.ok(await evaluate(client,`document.querySelector('.trust-release').textContent.includes(${JSON.stringify(lang==='zh'?'时间范围不同':'different time range')})`));
+      assert.ok(await evaluate(client,`!!document.querySelector('.quality-filters select option[value="one_day"]')`),'A shorter retained interval must be selectable');
+      await evaluate(client,`(()=>{const s=document.querySelector('.quality-filters select');s.value='one_day';s.dispatchEvent(new Event('change',{bubbles:true}));return true;})()`);
+      await waitFor(client,`document.querySelector('.trust-release')?.dataset.releaseState==='available'`);
+      assert.ok(await evaluate(client,`document.querySelector('.trust-release').textContent.includes(${JSON.stringify(lang==='zh'?'解除 5 次':'5 protections released')})`));
+      await click('.segmented button',lang==='zh'?'按执行 Agent':'By execution agent');
+      await waitFor(client,`!document.querySelector('.trust-release')`);
+      await click('.segmented button',lang==='zh'?'按模型':'By model');
+      await waitFor(client,`document.querySelector('.trust-release')?.dataset.releaseState==='available'`);
+      assert.equal(await evaluate(client,`document.querySelector('.quality-filters select').value`),'one_day');
+      const scope=await evaluate(client,`(()=>{const xs=window.trialTrace.filter(x=>x.command==='observation_read').map(x=>x.payload.request.intent),t=xs.filter(x=>x.view==='plan_trust').at(-1).query,q=xs.filter(x=>x.view==='plan_quality'&&x.query.include_routing_observations).at(-1).query;return {trust:[t.from_ms,t.to_ms],quality:[q.from_ms,q.to_ms]};})()`);
+      assert.deepEqual(scope.trust,scope.quality);
+      assert.equal(scope.trust[1]-scope.trust[0],86_400_001);
+      assert.ok(await evaluate(client,fits));
+      await evaluate(client,`document.querySelector('.trust-protection').scrollIntoView({block:'center'});true`);
+      await shot(`retained-window-${name}`);
+    });
     await check(`history-outcomes-${name}`,async()=>{
       await load('view=timeline&turns=40&protection=1');
       await waitFor(client,`document.querySelectorAll('.routing-turn').length===40`);
