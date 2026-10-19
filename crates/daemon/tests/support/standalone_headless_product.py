@@ -430,20 +430,46 @@ for line in sys.stdin:
         gateway = self.cli('gateway', 'show')
         assert gateway['data']['ready'] and gateway['data']['connect_address'], gateway
 
-    def cli(self, *arguments, payload=None, expected=0, pass_fds=()):
+    def cli(self, *arguments, payload=None, expected=0, pass_fds=(), retry_reader_busy=False):
+        # Observation reads may report temporary contention. Opt in explicitly;
+        # mutations and their idempotency assertions must still run exactly once.
+        if retry_reader_busy:
+            assert expected == 0 and not pass_fds and (
+                arguments[:2] in (('sessions', 'list'), ('sessions', 'show'),
+                                  ('sessions', 'receipt'), ('value', 'show'))
+                or arguments[:3] == ('observation', 'plan-quality', 'samples')
+            ), 'reader_busy retry requires an observation read'
         command = [str(self.cli_path), *arguments]
         if '--output' not in command:
             command.extend(['--output', 'json'])
-        result = subprocess.run(
-            command, cwd=self.project, env=self.env,
-            input=(None if payload is None else
-                   payload.encode() if isinstance(payload, str) else wire(payload)),
-            pass_fds=pass_fds, capture_output=True, timeout=90)
-        self.outputs.extend((result.stdout, result.stderr))
-        try:
-            envelope = json.loads(result.stdout)
-        except json.JSONDecodeError as error:
-            raise AssertionError((command, result.returncode, result.stdout, result.stderr)) from error
+        body = (None if payload is None else
+                payload.encode() if isinstance(payload, str) else wire(payload))
+        deadline = time.monotonic() + 5
+        while True:
+            result = subprocess.run(
+                command, cwd=self.project, env=self.env, input=body,
+                pass_fds=pass_fds, capture_output=True,
+                timeout=max(.001, deadline - time.monotonic()) if retry_reader_busy else 90)
+            self.outputs.extend((result.stdout, result.stderr))
+            try:
+                envelope = json.loads(result.stdout)
+            except json.JSONDecodeError as error:
+                raise AssertionError((command, result.returncode, result.stdout, result.stderr)) from error
+            error = envelope.get('error') or {}
+            failure = error.get('observation_read') or {}
+            delay_ms = failure.get('retry_after_ms')
+            if (retry_reader_busy and result.returncode == 6
+                    and envelope.get('status') == 'unavailable'
+                    and error.get('code') == 'OBSERVATION_UNAVAILABLE'
+                    and error.get('retryable') is True
+                    and error.get('details_schema') == 'hiroute.observation.read-failure/v1'
+                    and failure.get('reason') == 'reader_busy'
+                    and failure.get('action') == 'retry_read'
+                    and type(delay_ms) is int and delay_ms > 0
+                    and time.monotonic() + delay_ms / 1000 < deadline):
+                time.sleep(delay_ms / 1000)
+                continue
+            break
         daemon_failure = None
         if (result.returncode != expected and self.daemon is not None
                 and self.daemon.poll() is not None):

@@ -232,6 +232,100 @@ response is a `hiroute.machine-envelope/v2`. Automation reads `status`, `data`, 
 The JSON examples below are ordinary credential-free files. `jq` is used only to demonstrate
 field extraction and is not a HiRoute dependency.
 
+## Test a catalog API connection
+
+`compute connection test` requires a JSON input source and a nested `{kind, request}`
+body. Use `registered` for an offered catalog option such as OpenRouter; use `native`
+with `request.draft` for a custom API. `--non-interactive` does not supply a request.
+The installed full schema includes both templates in `data.schemas.examples` and
+explains their prerequisites in `data.schemas.example_guidance`. Full schema/template
+discovery requires `--include-schema`; v0.3.1 returns descriptors only.
+
+With the service ready, Python 3 installed and a private mode-0600 file containing
+only your OpenRouter API key, replace `KEY_FILE` below. The script obtains the exact
+catalog from the running service and builds the registered template. The current
+bundled OpenRouter option has no remote directory probe. With `inference_model_id=null`,
+the check sends no request to OpenRouter: it prepares a candidate from bundled facts
+without verifying connectivity or the API key. It does not save a source.
+It attempts to release its protected input on exit and retains separate result/error
+files for diagnosis. Only references enter ordinary JSON; the key stays on FD 3.
+
+```sh
+(
+set -eu
+umask 077
+KEY_FILE='/absolute/private/openrouter-key'
+work=$(mktemp -d)
+candidate="candidate/native/openrouter-$(python3 -c 'import uuid; print(uuid.uuid4().hex)')"
+hiroute schema show --command-id compute.connection.test --include-schema --output json > "$work/contract.json"
+hiroute compute connection options --output json > "$work/options.json"
+hiroute protected-input register --candidate "$candidate" --secret-fd 3 --output json \
+  3< "$KEY_FILE" > "$work/input.json"
+trap 'hiroute protected-input release --candidate "$candidate" --output json >&2 || echo "Retry releasing this candidate if cleanup failed: $candidate" >&2' EXIT
+python3 - "$work" "$candidate" > "$work/registered-request.json" <<'PY'
+import json, pathlib, sys
+work, candidate = pathlib.Path(sys.argv[1]), sys.argv[2]
+contract = json.loads((work / 'contract.json').read_text())
+options = json.loads((work / 'options.json').read_text())
+registration = json.loads((work / 'input.json').read_text())
+if any(x.get('status') != 'succeeded' for x in (contract, options, registration)):
+    raise SystemExit('Read contract.json, options.json and input.json for the failed prerequisite')
+if registration.get('data', {}).get('registered') is not True:
+    raise SystemExit('Protected input was not registered')
+option_id = 'openrouter.free.global.v1'
+option = next((x for x in options['data']['options']
+               if x['connection_option_id'] == option_id), None)
+if option is None or not option.get('registered_check_available', False):
+    raise SystemExit('The current catalog does not offer this registered check')
+body = next(x for x in contract['data']['schemas']['examples'] if x['kind'] == 'registered')
+request = body['request']
+request.update(connection_option_id=option_id, expected_catalog=options['data']['catalog'],
+               candidate_ref=candidate, lineage_ref='lineage/native/' + candidate.rsplit('/', 1)[1],
+               check_id='check/native/' + candidate.rsplit('/', 1)[1], edit_revision=1,
+               input_candidate={'candidate_ref': candidate, 'candidate_revision': 1},
+               models=[], inference_model_id=None)
+print(json.dumps(body, indent=2))
+PY
+set +e
+hiroute compute connection test --request-stdin --output json \
+  < "$work/registered-request.json" > "$work/result.json" 2> "$work/stderr.txt"
+rc=$?
+set -e
+cat "$work/result.json"
+cat "$work/stderr.txt" >&2
+if [ "$rc" -eq 0 ]; then
+python3 - "$work/result.json" <<'PY'
+import json, sys
+check = json.load(open(sys.argv[1]))['data']
+fields = ('reachability', 'authentication', 'directory', 'inference')
+print('Remote check results: ' + ', '.join(name + '=' + check[name] for name in fields))
+if check['reachability'] == 'not_run' and check['authentication'] == 'unknown':
+    print('Remote connectivity and API key were not verified.')
+PY
+fi
+printf 'connection-test exit code: %s; result files: %s\n' "$rc" "$work"
+exit "$rc"
+)
+```
+
+Read `data.reachability`, `data.authentication`, `data.directory` and `data.inference`
+in the result. For the current bundled OpenRouter option this recipe reports
+`reachability=not_run`, `authentication=unknown`, `directory=not_run` and
+`inference=not_run`. Exit code 0 / `status=succeeded` means the command completed;
+it does not establish provider verification. Catalog models or a selectable candidate
+do not establish it either. A remote check requires an explicitly selected supported
+probe; selecting an inference model can consume quota.
+
+The protected-input registration protocol uses `candidate_revision=1` for a newly
+registered credential. This is distinct from revisions returned by a completed model
+check. Keep `expected_catalog` as the whole current `data.catalog` object. A catalog
+mismatch requires fetching current options and rebuilding the check; template digests
+are placeholders. The same request can be sent with
+`--request-file "$work/registered-request.json"` instead of stdin redirection.
+For custom APIs, save the `native` template as `native-request.json` and supply the
+actual endpoint/protocol facts and protected-input reference; the next section shows
+a complete manually declared-model request.
+
 ## Connect a Native API model source
 
 Credentials can be registered only through a protected file descriptor. Never put a key in

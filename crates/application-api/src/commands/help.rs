@@ -202,6 +202,13 @@ pub(super) fn network_and_model_use(command_id: &str, kind: CommandKind) -> &'st
     }
 }
 pub(super) fn examples(command_id: &str, joined_path: &str) -> Vec<String> {
+    if command_id == "compute.connection.test" {
+        return vec![
+            example(command_id, joined_path),
+            "hiroute compute connection test --request-file registered-request.json --output json".into(),
+            "hiroute schema show --command-id compute.connection.test --include-schema --output json".into(),
+        ];
+    }
     if command_id == "decision.services.apply" {
         return vec![
             "hiroute decision services apply --request-file preview-request.json --output json  # Preview: schema_version and spec".into(),
@@ -213,6 +220,7 @@ pub(super) fn examples(command_id: &str, joined_path: &str) -> Vec<String> {
 }
 pub(super) fn example(command_id: &str, joined_path: &str) -> String {
     match command_id {
+        "compute.connection.test" => "hiroute compute connection test --request-stdin --output json < native-request.json".into(),
         "compute.connection.login" => "printf '%s' '{\"action\":\"start\",\"provider\":\"claude\"}' | hiroute compute connection login --request-stdin --output json".to_owned(),
         "worker.executors" => "hiroute worker executors --output json".to_owned(),
         "worker.dependencies.discover" => {

@@ -5,7 +5,7 @@
   },
   "product_contract_revision": "487a807c8dc25cfb24e8b097882cd3bb9716a009",
   "proposal_map_revision": "ab4da93cc49c6ec56a01e046230411ff1ca82300",
-  "descriptor_digest": "sha256:e670e9caf54ed9c8eda19a0ec07413e04907d1077294a00d1d958d892a6dc7fe",
+  "descriptor_digest": "sha256:21e25dbc02c16b81302640403044637b293ede80b3f085ead22bd18865f4b276",
   "visibility": "planned",
   "commands": [
     {
@@ -1815,14 +1815,16 @@
       "help": {
         "purpose": "Run one explicit bounded connection probe, with inference only when requested.",
         "usage": "hiroute compute connection test (--request-stdin | --request-file <PATH>) --output json",
-        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. --request-stdin selects native, registered, discovered, or saved with its strict nested request. Credentials are referenced only through a protected-input candidate; plaintext credential fields are rejected. The explicit probe may contact the configured provider and may consume quota when an inference model is selected.",
+        "arguments_and_options": "JSON input: choose exactly one of --request-stdin or --request-file <PATH>. Both read one bounded UTF-8 JSON request with the same strict typed parser; unknown fields, duplicate members, trailing JSON, repeated/mixed sources and human-option mixtures are rejected before Local Control. A file must be regular; relative paths resolve from the current directory (prefix option-shaped filenames with ./). Existing command byte limits and separate protected-input/capability channels remain unchanged. The top-level JSON wrapper is {kind, request}. Choose registered for a catalog option such as OpenRouter, with expected_catalog copied from compute connection options; native contains request.draft for a custom API. discovered and saved retain their own strict nested requests. schema show --command-id compute.connection.test --include-schema provides complete native/registered templates and prerequisite guidance. Credentials are referenced only through a protected-input candidate; plaintext credential fields are rejected. The explicit probe may contact the configured provider and may consume quota when an inference model is selected.",
         "effects": "Runs one explicit bounded source check. It keeps protected input in daemon memory and does not persist source state until the separate Preview/Apply flow.",
         "network_and_model_use": "Contacts only the explicitly selected, typed endpoint. Inventory checks make no inference call; selecting an inference model may send one bounded model request and consume provider quota.",
         "automation": "Use stable command_id, status, typed data, warnings[].code, and next_actions[].command_id; never parse display text.",
         "output": "One hiroute.machine-envelope/v2 JSON object on stdout; diagnostics belong on stderr.",
         "exit_status": "0 success/accepted; 2 usage; 3 conflict/blocker; 4 capability denied; 5 not found; 6 unavailable; 7 action required; 8 needs attention.",
         "examples": [
-          "hiroute compute connection test --non-interactive --output json"
+          "hiroute compute connection test --request-stdin --output json < native-request.json",
+          "hiroute compute connection test --request-file registered-request.json --output json",
+          "hiroute schema show --command-id compute.connection.test --include-schema --output json"
         ],
         "see_also": [
           "hiroute schema show --command-id compute.connection.test"

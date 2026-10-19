@@ -1,6 +1,7 @@
 """Installed public management: real captured content, price edits and opt-in estimate."""
 import json
 import time
+from functools import partial
 from pathlib import Path
 
 
@@ -9,15 +10,16 @@ def query(view, payload):
 
 
 def run(product, plan):
-    snapshots = product.cli('sessions', 'list', '--include-unlinked', '--limit', '50')['data']['sessions']
+    read = partial(product.cli, retry_reader_busy=True)
+    snapshots = read('sessions', 'list', '--include-unlinked', '--limit', '50')['data']['sessions']
     assert snapshots
     selected = None
     for session in snapshots:
-        detail = product.cli('sessions', 'show', session['session_id'], '--content', 'messages-and-tools')['data']
+        detail = read('sessions', 'show', session['session_id'], '--content', 'messages-and-tools')['data']
         assert detail['content_access'] != 'not_requested', detail
         for turn in detail['turns']:
             for rid in turn['receipt_ids']:
-                receipt = product.cli('sessions', 'receipt', rid)['data']
+                receipt = read('sessions', 'receipt', rid)['data']
                 route_decisions = [e['fact'] for e in receipt['ordered_facts']
                     if e['fact']['kind'] == 'route_decision'
                     and e['fact'].get('complexity', {}).get('decision_source') == 'external_classifier']
@@ -35,16 +37,16 @@ def run(product, plan):
     request = receipt['request_id']
     assert any(e['fact']['kind'] == 'usage_and_cache' and e['fact']['cost_class'] != 'free'
                for e in receipt['ordered_facts']), 'Custom/paid/unknown access must not be called free'
-    facts = product.cli('sessions', 'receipt', '--request-stdin', payload=query('facts', {
+    facts = read('sessions', 'receipt', '--request-stdin', payload=query('facts', {
         'request_id': request, 'limit': 200, 'cursor': None}))['data']
     # V1 receipts own full decision evidence; V2 facts retain their existing safe summary.
     assert any(f['event_kind'] == 'route_decision' for f in facts['facts']), facts
-    catalog = product.cli('sessions', 'show', '--request-stdin', payload=query('catalog', {
+    catalog = read('sessions', 'show', '--request-stdin', payload=query('catalog', {
         'request_id': request, 'limit': 1, 'cursor': None}))['data']
     entries = list(catalog['contents'])
     pages = 1
     while catalog.get('next_cursor'):
-        catalog = product.cli('sessions', 'show', '--request-stdin', payload=query('catalog', {
+        catalog = read('sessions', 'show', '--request-stdin', payload=query('catalog', {
             'request_id': request, 'limit': 1, 'cursor': catalog['next_cursor']}))['data']
         entries.extend(catalog['contents'])
         pages += 1
@@ -52,7 +54,7 @@ def run(product, plan):
     assert entries
     text = ''
     for entry in entries:
-        content = product.cli('sessions', 'show', '--request-stdin', payload=query('content', {
+        content = read('sessions', 'show', '--request-stdin', payload=query('content', {
             'request_id': request, 'content_id': entry['content_id'], 'cursor': None}))['data']
         text += ''.join(c['text'] for c in content['chunks'])
     assert 'controlled' in text or 'native product answer' in text, text
@@ -60,14 +62,14 @@ def run(product, plan):
     # Search is explicitly selected and uses the same current visibility as body reads.
     deadline = time.monotonic() + 20
     while True:
-        search = product.cli('sessions', 'list', '--request-stdin', payload=query('search', {
+        search = read('sessions', 'list', '--request-stdin', payload=query('search', {
             'from_ms': now - 3600000, 'to_ms': now, 'session_id': session['session_id'],
             'keyword': 'controlled', 'limit': 10, 'cursor': None}))['data']
         if search['hits'] or time.monotonic() >= deadline:
             break
         time.sleep(.2)
     assert search['hits'] and 'next_cursor' in search, search
-    quality = product.cli('observation', 'plan-quality', 'samples', '--plan-id', plan)['data']
+    quality = read('observation', 'plan-quality', 'samples', '--plan-id', plan)['data']
     assert 'samples' in quality
     current = product.cli('routing', 'show', plan)['data']
     binding = current['desired']['strategy']['primary'][0]['binding_id']
@@ -77,11 +79,11 @@ def run(product, plan):
     prior = product.cli('prices', 'effective', '--request-stdin', payload=price_request)['data']
     edit = prior['items'][0]['edit_context']
     assert edit
-    missing = product.cli('value', 'show', '--routing', plan, '--basis', 'api-equivalent',
+    missing = read('value', 'show', '--routing', plan, '--basis', 'api-equivalent',
                           '--reference-binding', binding, '--currency', 'CNY')['data']
     assert missing['estimated_savings_micros'] is None and missing['actual_cash_micros'] is None
     assert missing['missing_request_count'] > 0
-    historical = product.cli('value', 'show', '--routing', plan)['data']
+    historical = read('value', 'show', '--routing', plan)['data']
     operation_ids = []
     previous_setting = None
     frozen_summary = frozen_scope = None
@@ -103,50 +105,50 @@ def run(product, plan):
         assert applied['state'] == 'succeeded', applied
         operation_ids.append(applied['operation_id'])
         if setting['kind'] == 'set':
-            estimate = product.cli('value', 'show', '--routing', plan, '--basis', 'api-equivalent',
+            estimate = read('value', 'show', '--routing', plan, '--basis', 'api-equivalent',
                 '--reference-binding', binding, '--currency', 'CNY')['data']
             assert estimate['coverage'] == 'complete' and estimate['compared_request_count'] > 0, estimate
             assert estimate['routed_estimate_micros'] > 0 and estimate['estimated_savings_micros'] == 0, estimate
             assert estimate['actual_cash_micros'] is None
 
-            recent = product.cli('value', 'show', '--view', 'summary', '--routing', plan,
+            recent = read('value', 'show', '--view', 'summary', '--routing', plan,
                                  '--currency', 'CNY')['data']
             assert recent['time']['clipped_for_retention'] and 'retention_prefix_clipped' in recent['gaps'], recent
-            summary = product.cli('value', 'show', '--view', 'summary', '--routing', plan,
+            summary = read('value', 'show', '--view', 'summary', '--routing', plan,
                                   '--period', 'today', '--currency', 'CNY')['data']
             assert summary['schema'] == 'hiroute.observation.analysis/v1', summary
             assert summary['status'] in ('ready', 'partial') and summary['savings'], summary
             assert summary['savings']['coverage'] == 'complete', summary
             assert summary['savings']['estimated_savings_micros'] == 0, summary
             frozen_summary, frozen_scope = summary['savings'], summary['analysis_scope']
-            ranking = product.cli('value', 'show', '--group-by', 'session', '--order-by', 'cost-desc',
+            ranking = read('value', 'show', '--group-by', 'session', '--order-by', 'cost-desc',
                                   '--analysis-scope', frozen_scope, '--limit', '1')['data']
             ranked = list(ranking['costs'])
             while ranking.get('next_cursor'):
-                ranking = product.cli('value', 'show', '--group-by', 'session', '--order-by', 'cost-desc',
+                ranking = read('value', 'show', '--group-by', 'session', '--order-by', 'cost-desc',
                                       '--cursor', ranking['next_cursor'], '--limit', '1')['data']
                 ranked.extend(ranking['costs'])
                 assert len(ranked) < 100
             assert sum(r['known_sum_micros'] for r in ranked) == frozen_summary['compared_routed_subtotal_micros'], ranked
             assert all(r['coverage'] == 'complete' for r in ranked), ranked
             assert [r['known_sum_micros'] for r in ranked] == sorted([r['known_sum_micros'] for r in ranked], reverse=True)
-            conversations = product.cli('sessions', 'list', '--view', 'conversations',
+            conversations = read('sessions', 'list', '--view', 'conversations',
                                         '--analysis-scope', frozen_scope)['data']
             assert sum(c['request_count'] for c in conversations['conversations']) == frozen_summary['request_count'], conversations
             matching = next(c for c in conversations['conversations']
                             if any(m['session_id'] == session['session_id'] for m in c['members']))
             anchor = matching['analysis_session_id']
-            routing = product.cli('sessions', 'show', anchor, '--view', 'routing',
+            routing = read('sessions', 'show', anchor, '--view', 'routing',
                                   '--analysis-scope', frozen_scope)['data']
             assert routing['transitions'], routing
             assert any(t['reason'] and t['reason']['selection'] for t in routing['transitions']), routing
-            detail = product.cli('sessions', 'show', anchor, '--view', 'conversation', '--request', request,
+            detail = read('sessions', 'show', anchor, '--view', 'conversation', '--request', request,
                                  '--analysis-scope', frozen_scope)['data']
             assert len(detail['requests']) == 1 and detail['requests'][0]['request']['request_id'] == request, detail
             assert detail['requests'][0]['content'], detail
             assert all(c['kind'] not in ('provider_state', 'reasoning_delta', 'reasoning_finished')
                        for c in detail['requests'][0]['content']), detail
-            scoped_request = product.cli('value', 'show', '--group-by', 'request', '--order-by', 'cost-desc',
+            scoped_request = read('value', 'show', '--group-by', 'request', '--order-by', 'cost-desc',
                                          '--request', request, '--analysis-scope', frozen_scope)['data']
             assert len(scoped_request['costs']) == 1, scoped_request
             assert scoped_request['costs'][0]['request_id'] == request, scoped_request
@@ -154,7 +156,7 @@ def run(product, plan):
         replay = product.cli('prices', 'override', 'apply', '--request-stdin', payload=apply)['data']
         assert replay['operation_id'] == applied['operation_id']
         previous_setting = setting
-    pinned = product.cli('value', 'show', '--view', 'summary', '--analysis-scope', frozen_scope)['data']
+    pinned = read('value', 'show', '--view', 'summary', '--analysis-scope', frozen_scope)['data']
     assert pinned['savings'] == frozen_summary, (pinned, frozen_summary)
     restored = product.cli('prices', 'effective', '--request-stdin', payload=price_request)['data']
     # Follow-catalog removes manual pricing. The missing-price reason can become more precise
@@ -162,7 +164,7 @@ def run(product, plan):
     assert restored['items'][0]['quote']['origin'] == prior['items'][0]['quote']['origin'] == 'unknown'
     assert all(rate['state'] == 'unknown' for rate in restored['items'][0]['quote']['rates'].values())
     # Time bounds change, frozen monetary amounts and usage do not.
-    after = product.cli('value', 'show', '--routing', plan)['data']
+    after = read('value', 'show', '--routing', plan)['data']
     assert after['summary']['amounts'] == historical['summary']['amounts']
     assert after['summary']['usage'] == historical['summary']['usage']
     print(json.dumps({'scenario': 'installed-management-analysis', 'state': 'green',

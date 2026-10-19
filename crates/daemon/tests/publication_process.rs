@@ -78,6 +78,13 @@ fn real_process_native_model_save_publishes_and_reaches_gateway() {
     run_script("model_connections_product.py");
 }
 
+/// Execute both published recipes against the current catalog without mistaking local
+/// candidate preparation for provider reachability or credential verification.
+#[test]
+fn real_process_connection_test_examples_report_unverified_openrouter() {
+    run_script("connection_test_examples_product.py");
+}
+
 #[test]
 fn real_process_custom_http_save_recheck_and_validation_errors() {
     run_script("custom_http_product.py");

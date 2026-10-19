@@ -55,6 +55,12 @@ CLI JSON request sources (`--request-file` / `--request-stdin`) share the bounde
 [strict input reader](../../crates/cli/src/request_input.rs). Command codecs retain
 typed intent, selector and byte-limit ownership; see the [CLI input guide](../../crates/cli/INPUT.md)
 and [production argv regressions](../../crates/cli/tests/request_input.rs).
+Connection-test help and native/registered templates come from
+[Application API](../../crates/application-api/src/command_schemas.rs); the
+[installed-example regression](../../crates/cli/tests/connection_test_examples.rs)
+executes the displayed commands with those request documents. The
+[real-process recipe regression](../../crates/daemon/tests/support/connection_test_examples_product.py)
+checks their current-catalog results and protected-input cleanup through CLI/daemon.
 
 [Quickstart and Preview convenience inputs](../../crates/cli/src/quickstart.rs) compose existing
 queries and transactions. They use [Application authoring options](../../crates/application/src/routing/editor_options.rs)
