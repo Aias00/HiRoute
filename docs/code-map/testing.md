@@ -49,7 +49,7 @@ Its [signed-feed lifecycle](../../crates/daemon/tests/support/model_feed_product
 checks registered-source admission, published sessions, new Workers and exact Continue
 through withdrawal, cache removal, restart and later embedded absorption. The daemon's
 `integration-test-hooks` feature supplies only the external feed/inventory fixtures;
-Gateway calls reuse the existing TLS E2E dial map. Normal builds have no feed fixture
+Gateway calls reuse the existing TLS E2E dial map. The Gateway's [registered-feed TLS case](../../crates/gateway/src/test_control/registered_feed_tls.rs) connects its production transport directly to that same external OpenSSL fixture, exposing handshake failures before the installed lifecycle. Normal builds have no feed fixture
 trust root or transport override. The test does not establish live production signing.
 
 ## Reuse the fixture at the owning boundary
