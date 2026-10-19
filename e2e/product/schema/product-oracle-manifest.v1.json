@@ -1,5 +1,5 @@
 {
-  "descriptor_digest": "sha256:a07f0fba88c73d351be68cd0a845ac2499a22212246fe276fcf4973d424f0972",
+  "descriptor_digest": "sha256:09627dbd802f299a49fbc1e104234cfbe91e2474fff7899a7c007bb3c0d1789a",
   "expected_red_reasons": [],
   "planned_commands": [
     "console.open",
@@ -93,6 +93,8 @@
     "sessions.delete.preview",
     "sessions.delete.apply",
     "value.show",
+    "observation.storage.show",
+    "observation.storage.set",
     "observation.plan-quality.samples"
   ],
   "planned_native_paths": [
@@ -164,6 +166,8 @@
     "sessions.receipt",
     "sessions.status",
     "value.show",
+    "observation.storage.show",
+    "observation.storage.set",
     "observation.plan-quality.samples"
   ],
   "release_state": "released",

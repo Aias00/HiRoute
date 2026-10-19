@@ -319,7 +319,11 @@ fn fixture(
     let report = diagnostic_report(temporary.path());
     let runtime = Arc::new(MemoryRuntime::accepted());
     let observation = Arc::new(
-        LocalObservationStore::open(temporary.path(), DigestAuthority::new([seed; 32])).unwrap(),
+        LocalObservationStore::open(
+            temporary.path().join("observation"),
+            DigestAuthority::new([seed; 32]),
+        )
+        .unwrap(),
     );
     let safety = Arc::new(
         RunSafetyProjection::new(Arc::new(SharedAdmissionGate::new()), "epoch".into()).unwrap(),

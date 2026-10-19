@@ -20,6 +20,8 @@ fn main() {
             "desktop_snapshot",
             "observation_read",
             "observation_delete",
+            "observation_capacity_get",
+            "observation_capacity_set",
             "test_classifier_decision",
             "decision_services",
             "save_decision_service",

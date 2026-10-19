@@ -2576,7 +2576,10 @@ dependencies = [
 name = "hiroute-observation"
 version = "0.1.0"
 dependencies = [
+ "fs2",
+ "getrandom 0.3.4",
  "hiroute-domain",
+ "hiroute-platform",
  "hmac",
  "parking_lot",
  "rusqlite",
@@ -2586,6 +2589,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.20",
  "zeroize",
+ "zstd",
 ]
 
 [[package]]

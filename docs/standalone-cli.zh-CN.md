@@ -730,6 +730,28 @@ Session ID、v1 Receipt ID 与此定位符不同：
 且不得把未知金额或尚未形成账值行的 token 伪造为零成本。同一用户通过 Local Control 显式读取正文、
 搜索、catalog 与 ancestry 无需另取读取票据；显式传入的授权仍绑定准确操作和范围，运行范围受限的调用方仍保留原有边界。
 
+## 设置本地观测存储容量
+
+默认仍保留七天明细。可以额外设置容量阈值，单位为字节，也可以关闭容量提前回收：
+
+```sh
+hiroute observation storage show --output json
+hiroute observation storage set --max-active-bytes 20000000000 --output json
+hiroute observation storage set --disable --output json
+```
+
+这些命令通过操作系统认证的本地用户通道访问；显式传入的委派或只读授权不能修改策略。
+
+示例为十进制 20 GB。超出后，最早的、已完成且允许回收的请求明细可能在七天前到期。
+正在处理的请求、仍被引用的内容、防重放和删除屏障、非正文金额汇总以及恢复备份受到保护。
+关闭后停止尚未提交的提前回收，不会恢复已经到期的历史。
+
+这是软阈值：后台按间隔、分批回收，繁忙或无进展时延后重试，每轮工作有时间预算。
+首次盘点、繁忙、待完成清理或受保护的数据均可能延迟磁盘释放。
+`show` 返回有效配置、实测活动占用、测量时间及等待或阻塞原因；
+数据库内部可复用页不计为已释放磁盘。旧源目录和恢复程序包单独保留，升级时需预留空间。
+恢复必须遵循[完整存储组恢复规则](release-contracts.md#upgrade-and-manual-recovery)。
+
 ## 配置 Worker 并委派任务
 
 Worker 复用现有命令。发现不会安装或选择软件：

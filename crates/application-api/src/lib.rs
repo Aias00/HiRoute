@@ -79,8 +79,9 @@ pub use hiroute_domain::{
     DecisionServiceChangeV1, HIDDEN_AGENT_GRANT_HELPER_VERB_V1,
     MANAGED_CLAUDE_SETTING_SOURCES_ARGUMENT_V1, MANAGED_CLAUDE_SETTINGS_ARGUMENT_V1,
     ManagedClaudeLaunchDescriptorV2, ManagedLaunchProfileV1, MaterializationState, ModelAlias,
-    ModelSwitchFilter, PRODUCT_CONTRACT_REVISION, PROPOSAL_MAP_REVISION, RevisionSetV1,
-    SchemaVersion, SessionId, SessionListQueryV1, UpstreamProtocol, ValueGroupByV1, ValueQueryV1,
+    ModelSwitchFilter, ObservationCapacityStatusV1, PRODUCT_CONTRACT_REVISION,
+    PROPOSAL_MAP_REVISION, RevisionSetV1, SchemaVersion, SessionId, SessionListQueryV1,
+    UpstreamProtocol, ValueGroupByV1, ValueQueryV1,
 };
 pub use protocol::{
     AgentCheckRequestV1, AgentCheckScopeV1, AgentCheckSuiteV1, AgentModelCheckTargetV2,
@@ -266,7 +267,7 @@ mod protocol_tests {
     #[test]
     fn p0_registry_and_staging_invariants_remain_closed() {
         let commands = planned_commands();
-        assert_eq!(commands.len(), 92);
+        assert_eq!(commands.len(), 94);
         assert_eq!(
             commands
                 .iter()
@@ -314,7 +315,7 @@ mod protocol_tests {
             CommandLifecycle::Released
         );
         let release = release_manifest();
-        assert_eq!(release.commands.len(), 59);
+        assert_eq!(release.commands.len(), 61);
         assert!(release.commands.iter().all(|command| {
             command.lifecycle == CommandLifecycle::Released
                 && command.positive.state == CoverageState::Executable

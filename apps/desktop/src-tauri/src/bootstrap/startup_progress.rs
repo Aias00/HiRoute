@@ -8,7 +8,9 @@ struct Progress {
     schema: String,
     phase: StorageUpgradePhase,
 }
-const UPGRADE_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+// Complete source publication and verified multi-GB conversion are I/O work.
+// Keep one finite, cancellable overall budget; phase frames never renew it.
+const UPGRADE_TIMEOUT: Duration = Duration::from_secs(2 * 60 * 60);
 
 pub(super) fn read_ready(
     reader: &mut impl Read,

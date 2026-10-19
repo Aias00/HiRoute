@@ -616,6 +616,8 @@ export function mockProductInvoke(command: string, payload: Record<string, any> 
     };
   }
   if (command === 'worker_dependencies_select_cancel') { preparedWorkerSelection = null; return undefined; }
+  if (command === 'observation_capacity_get') return { max_active_bytes: 20_000_000_000, active_bytes: null, measured_at_ms: null, state: 'pending', reason: 'measuring' };
+  if (command === 'observation_capacity_set') return { max_active_bytes: payload?.input?.max_active_bytes ?? null, active_bytes: null, measured_at_ms: null, state: 'pending', reason: 'measuring' };
   if (command === 'worker_settings_get') {
     return { schema: 'hiroute.worker-settings/v1', max_concurrent: 10 };
   }

@@ -16,7 +16,7 @@ use super::lifecycle::ContentProjectionError;
 
 type StoredContentEventReplay = (
     String,
-    String,
+    Vec<u8>,
     Option<String>,
     Option<i64>,
     Option<i64>,
@@ -35,7 +35,7 @@ pub(crate) fn verify_content_replay(
             "SELECT event_id, metadata_json, canonical_chunk_object_ref,
                     canonical_chunk_byte_offset, canonical_chunk_byte_count, envelope_digest
              FROM conversation_content_events_v2
-             WHERE producer_id=?1 AND producer_epoch=?2 AND stream_id=?3 AND sequence=?4",
+             WHERE stream_ref=(SELECT stream_ref FROM observation_streams_v5 WHERE channel='conversation_content' AND producer_id=?1 AND producer_epoch=?2 AND stream_id=?3) AND sequence=?4",
             params![
                 envelope.producer.stream.producer_id.as_str(),
                 envelope.producer.stream.producer_epoch.as_str(),
@@ -65,8 +65,11 @@ pub(crate) fn verify_content_replay(
         .as_object_mut()
         .ok_or(ContentProjectionError::ContentCorrupt)?
         .remove("canonical_bytes_base64");
-    let stored_metadata: serde_json::Value =
-        serde_json::from_str(&metadata).map_err(|_| ContentProjectionError::ContentCorrupt)?;
+    let stored_metadata: serde_json::Value = serde_json::from_slice(
+        &crate::store::records::decode(&metadata)
+            .map_err(|_| ContentProjectionError::ContentCorrupt)?,
+    )
+    .map_err(|_| ContentProjectionError::ContentCorrupt)?;
     if event_id != envelope.event_id.as_str()
         || stored_digest != digest.as_str()
         || stored_metadata != expected_metadata
@@ -127,7 +130,12 @@ pub(crate) fn verify_content_replay(
             |row| row.get(0),
         )
         .map_err(|_| ContentProjectionError::ContentCorrupt)?;
-    let mut file = File::open(path).map_err(|_| ContentProjectionError::ContentStorage)?;
+    let mut file = File::open(
+        store
+            .object_path(&path)
+            .map_err(|_| ContentProjectionError::ContentCorrupt)?,
+    )
+    .map_err(|_| ContentProjectionError::ContentStorage)?;
     let object_offset = if state == "complete" {
         u64::try_from(offset).map_err(|_| ContentProjectionError::ContentCorrupt)?
     } else if state == "installing" {
@@ -278,7 +286,12 @@ fn verify_acknowledged_blob(
     if digest != acknowledgement.digest || byte_count < 0 {
         return Err(ContentProjectionError::ContentCorrupt);
     }
-    let mut input = File::open(path).map_err(|_| ContentProjectionError::ContentStorage)?;
+    let mut input = File::open(
+        store
+            .object_path(&path)
+            .map_err(|_| ContentProjectionError::ContentCorrupt)?,
+    )
+    .map_err(|_| ContentProjectionError::ContentStorage)?;
     let mut accumulator = store.authority.content_accumulator(&media);
     let mut observed_count = 0_u64;
     let mut buffer = [0_u8; 16 * 1024];
@@ -362,7 +375,12 @@ pub(crate) fn finalize_content(
     let mut accumulator = store.authority.content_accumulator(&media);
     let mut buffer = [0_u8; 16 * 1024];
     for path in paths {
-        let mut input = File::open(path).map_err(|_| ContentProjectionError::ContentStorage)?;
+        let mut input = File::open(
+            store
+                .object_path(&path)
+                .map_err(|_| ContentProjectionError::ContentCorrupt)?,
+        )
+        .map_err(|_| ContentProjectionError::ContentStorage)?;
         loop {
             let read = input
                 .read(&mut buffer)
@@ -380,6 +398,7 @@ pub(crate) fn finalize_content(
         .sync_all()
         .map_err(|_| ContentProjectionError::ContentStorage)?;
     drop(output);
+    store.note_object_path(&install_path);
     let (actual_digest, byte_count) = accumulator.finish();
     if actual_digest.as_str() != expected_digest {
         return Err(ContentProjectionError::DigestMismatch {
@@ -413,12 +432,14 @@ pub(crate) fn finalize_content(
         fs::rename(&install_path, &blob_path)
             .map_err(|_| ContentProjectionError::ContentStorage)?;
     }
+    store.note_object_path(&install_path);
+    store.note_object_path(&blob_path);
     transaction.execute(
         "INSERT INTO content_blobs_v2
          (workspace_id, blob_digest, object_path, byte_count, media_type, state, created_at_unix_nanos)
          VALUES (?1, ?2, ?3, ?4, ?5, 'complete', ?6)
          ON CONFLICT(workspace_id, blob_digest) DO NOTHING",
-        params![envelope.correlation.workspace_id.as_str(), actual_digest.as_str(), blob_path.to_string_lossy(),
+        params![envelope.correlation.workspace_id.as_str(), actual_digest.as_str(), store.object_locator(&blob_path).map_err(|_|ContentProjectionError::ContentCorrupt)?,
             i64_from_u64(byte_count)?, media, i64_from_u64(envelope.occurred_at_unix_nanos)?],
     ).map_err(|_| ContentProjectionError::ActivityStorage)?;
     transaction
@@ -439,7 +460,9 @@ pub(crate) fn finalize_content(
             params![
                 envelope.correlation.workspace_id.as_str(),
                 content_id,
-                blob_path.to_string_lossy(),
+                store
+                    .object_locator(&blob_path)
+                    .map_err(|_| ContentProjectionError::ContentCorrupt)?,
             ],
         )
         .map_err(|_| ContentProjectionError::ActivityStorage)?;

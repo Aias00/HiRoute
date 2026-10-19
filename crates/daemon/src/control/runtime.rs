@@ -335,11 +335,19 @@ impl ProductionControlRuntime {
         recover: bool,
         overrides: RuntimeOpenOverrides,
     ) -> Result<Self, String> {
-        let stores = LocalStorageSet::open_for_daemon_startup_with_options(
-            storage_root,
-            &overrides.storage_startup,
-        )
-        .map_err(|error| error.to_string())?;
+        observation_key::validate_existing_authority(storage_root)?;
+        let mut startup = overrides.storage_startup.clone();
+        startup.preserve_observation_source =
+            LocalObservationStore::legacy_history_requires_seal(storage_root.join("observation"))
+                .map_err(|error| format!("{error}; preserve all storage generations and use the original whole-group recovery guide"))?
+                || LocalStorageSet::observation_cutover_pending(storage_root);
+        if startup.preserve_observation_source
+            && let Some(progress) = &startup.upgrade_progress
+        {
+            let _ = progress.send(hiroute_host_runtime::StorageUpgradePhase::SourceCheck);
+        }
+        let stores = LocalStorageSet::open_for_daemon_startup_with_options(storage_root, &startup)
+            .map_err(|error| error.to_string())?;
         stores
             .control()
             .begin_plan_version_recovery()
@@ -525,12 +533,30 @@ impl ProductionControlRuntime {
                 .chain(scoped_targets),
             )
             .map_err(|error| error.to_string())?;
+        if startup.preserve_observation_source
+            && let Some(progress) = &startup.upgrade_progress
+        {
+            let _ = progress.send(hiroute_host_runtime::StorageUpgradePhase::Conversion);
+        }
         let observation_workspace_key = observation_workspace_key(storage_root)?;
         let digest_authority = DigestAuthority::new(*observation_workspace_key);
+        let observation_root = storage_root.join("observation");
         let observation = Arc::new(
-            LocalObservationStore::open(storage_root.join("observation"), digest_authority.clone())
-                .map_err(|error| error.to_string())?,
+            if startup.preserve_observation_source {
+                LocalObservationStore::open_fresh_after_seal(
+                    observation_root,
+                    digest_authority.clone(),
+                )
+            } else {
+                LocalObservationStore::open(observation_root, digest_authority.clone())
+            }
+            .map_err(|error| error.to_string())?,
         );
+        if startup.preserve_observation_source
+            && let Some(progress) = &startup.upgrade_progress
+        {
+            let _ = progress.send(hiroute_host_runtime::StorageUpgradePhase::Validation);
+        }
         let delegation_epoch = delegation_epoch()?;
         let plan_admission =
             Arc::new(hiroute_application::publication::admission::SharedAdmissionGate::new());
@@ -1669,6 +1695,13 @@ fn map_port(error: PortError) -> ControlReadError {
 #[cfg(test)]
 #[path = "runtime_observation_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+mod history_cutover_tests;
+
+#[cfg(test)]
+#[path = "runtime_startup_progress_tests.rs"]
+mod startup_progress_tests;
 
 #[cfg(test)]
 #[path = "runtime_worker_dependencies_tests.rs"]

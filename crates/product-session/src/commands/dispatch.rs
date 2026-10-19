@@ -249,6 +249,23 @@ pub async fn dispatch(
                     .await?;
             serde_json::to_value(value).map_err(|_| "RESPONSE_DATA_INVALID".into())
         }
+        "observation_capacity_get" => {
+            let _: hiroute_application_api::ClientEmptyRequestV1 = serde_json::from_value(args)
+                .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
+            serde_json::to_value(observation_capacity_get(window, state).await?)
+                .map_err(|_| "RESPONSE_DATA_INVALID".into())
+        }
+        "observation_capacity_set" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Arguments {
+                input: hiroute_application_api::ObservationCapacityUpdateV1,
+            }
+            let input: Arguments = serde_json::from_value(args)
+                .map_err(|_| DesktopFailure::from("REQUEST_INVALID"))?;
+            serde_json::to_value(observation_capacity_set(window, state, input.input).await?)
+                .map_err(|_| "RESPONSE_DATA_INVALID".into())
+        }
         "observation_delete" => {
             #[derive(Deserialize)]
             #[serde(deny_unknown_fields, rename_all = "camelCase")]

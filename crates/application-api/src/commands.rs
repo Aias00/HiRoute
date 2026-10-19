@@ -1039,6 +1039,24 @@ const COMMANDS: &[StaticCommandDescriptor] = &[
         "Read recorded token, cache and valuation totals with coverage."
     ),
     command!(
+        "observation.storage.show",
+        ["observation", "storage", "show"],
+        "GetObservationCapacity",
+        ["CLI-059", "APP-059"],
+        Released,
+        Query,
+        "Read the local observation capacity policy and measured reclamation status."
+    ),
+    command!(
+        "observation.storage.set",
+        ["observation", "storage", "set"],
+        "SetObservationCapacity",
+        ["CLI-060", "APP-060"],
+        Released,
+        Action,
+        "Save a positive byte threshold or disable early observation expiry."
+    ),
+    command!(
         "observation.plan-quality.samples",
         ["observation", "plan-quality", "samples"],
         "GetPlanQualitySamples",

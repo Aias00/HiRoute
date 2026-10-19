@@ -48,6 +48,16 @@ impl LocalObservationStore {
             crate::valuation::archive_request(&transaction, workspace, session, request)
                 .map_err(|_| Error::Unavailable)?;
             transaction.execute("INSERT OR IGNORE INTO observation_request_tombstones_v2(workspace_id,request_id,deleted_ms) VALUES(?1,?2,?3)",params![workspace,request,now_ms]).map_err(|_|Error::Unavailable)?;
+            for table in ["conversation_content_events_v2", "execution_fact_events"] {
+                super::records::retire_request_feedback(
+                    &transaction,
+                    workspace,
+                    request,
+                    table,
+                    false,
+                )
+                .map_err(|_| Error::Unavailable)?;
+            }
             transaction.execute("DELETE FROM content_chunks_v2 WHERE workspace_id=?1 AND content_id IN(SELECT content_id FROM content_instances_v2 WHERE workspace_id=?1 AND request_id=?2)",params![workspace,request]).map_err(|_|Error::Unavailable)?;
             for table in [
                 "observation_sensitive_payloads_v2",
@@ -101,7 +111,7 @@ impl LocalObservationStore {
         if !requests.is_empty() || quality_changed {
             // Index cleanup is part of the same visibility barrier. Physical
             // blob GC is resumable and can follow this committed logical erase.
-            transaction.execute_batch("DELETE FROM observation_text_blocks_v2 WHERE NOT EXISTS(SELECT 1 FROM content_instances_v2 c WHERE c.workspace_id=observation_text_blocks_v2.workspace AND c.content_blob_digest=observation_text_blocks_v2.digest AND c.state='complete'); DELETE FROM observation_text_index_v2 WHERE NOT EXISTS(SELECT 1 FROM content_instances_v2 c WHERE c.workspace_id=observation_text_index_v2.workspace AND c.content_blob_digest=observation_text_index_v2.digest AND c.state='complete');").map_err(|_|Error::Unavailable)?;
+            transaction.execute_batch("DELETE FROM observation_text_blocks_v2 WHERE NOT EXISTS(SELECT 1 FROM content_instances_v2 c WHERE c.workspace_id=observation_text_blocks_v2.workspace AND c.content_blob_digest=observation_text_blocks_v2.digest AND c.state='complete') AND NOT EXISTS(SELECT 1 FROM observation_capacity_blobs_v5 b WHERE b.workspace=observation_text_blocks_v2.workspace AND b.digest=observation_text_blocks_v2.digest); DELETE FROM observation_text_index_v2 WHERE NOT EXISTS(SELECT 1 FROM content_instances_v2 c WHERE c.workspace_id=observation_text_index_v2.workspace AND c.content_blob_digest=observation_text_index_v2.digest AND c.state='complete') AND NOT EXISTS(SELECT 1 FROM observation_capacity_blobs_v5 b WHERE b.workspace=observation_text_index_v2.workspace AND b.digest=observation_text_index_v2.digest);").map_err(|_|Error::Unavailable)?;
             crate::query_v2::invalidate_visibility(&transaction).map_err(|_| Error::Unavailable)?;
             increment_store_revision(&transaction).map_err(|_| Error::Unavailable)?;
         }

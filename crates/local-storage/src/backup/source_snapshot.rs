@@ -3,6 +3,7 @@ use super::*;
 use crate::migrations::{prepare_storage_root as prepare_owner_directory, validate_owner_file};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
+mod seal;
 #[cfg(windows)]
 use std::io::{Read, Write};
 
@@ -103,7 +104,14 @@ fn copy_tree(source: &Path, target: &Path) -> Result<(), LocalStorageError> {
     Ok(())
 }
 fn excluded(name: &str) -> bool {
-    name == "live"
+    matches!(
+        name,
+        "observation.pre-v5-source"
+            | "observation.v5-target"
+            | "observation.v5-legacy-input"
+            | "observation.upgrade.json"
+            | "observation-source-backup.json"
+    ) || name == "live"
         || name.starts_with("migration-set")
         || name == "startup.lock"
         || name.ends_with(".pid")
@@ -121,10 +129,24 @@ pub(super) fn publish(
 ) -> Result<(), LocalStorageError> {
     let source = backup.join("source");
     if source.exists() {
-        return verify(backup);
+        verify(backup)?;
+        return publish_locator(
+            backup,
+            metadata["batch_id"]
+                .as_str()
+                .ok_or(LocalStorageError::InvalidData)?,
+        );
     }
     let stage = backup.join("source-staging");
+    if options.preserve_observation_source && stage.join(MANIFEST).exists() {
+        return seal::finish(root, backup, &stage, metadata);
+    }
+    preflight_space(root, backup, options)?;
     if stage.exists() {
+        // Never put a moved historical tree into a generic incomplete-copy path.
+        if stage.join("storage/observation").exists() {
+            return Err(LocalStorageError::InvalidData);
+        }
         // Preserve an interrupted attempt; it is never promoted or reused as complete.
         let mut id = [0u8; 8];
         getrandom::fill(&mut id).map_err(|_| LocalStorageError::Crypto)?;
@@ -140,7 +162,9 @@ pub(super) fn publish(
     for entry in fs::read_dir(root)? {
         let entry = entry?;
         let name = entry.file_name();
-        if excluded(&name.to_string_lossy()) {
+        if excluded(&name.to_string_lossy())
+            || (options.preserve_observation_source && name == "observation")
+        {
             continue;
         }
         copy_tree(&entry.path(), &storage.join(name))?;
@@ -180,45 +204,153 @@ pub(super) fn publish(
             }
         }
     }
+    let package_identity = if let Some(package) = &options.recovery_package {
+        let meta = fs::symlink_metadata(package)?;
+        if !meta.is_dir()
+            || meta.file_type().is_symlink()
+            || package.canonicalize()?.starts_with(backup.canonicalize()?)
+            || storage_root_conflict(package, root)?
+        {
+            return Err(LocalStorageError::InvalidData);
+        }
+        copy_tree(package, &stage.join("recovery-package"))?;
+        format!(
+            "配套旧包原路径：{}；完整副本位于 recovery-package/，身份以清单中的逐文件 SHA-256 为准。",
+            package.display()
+        )
+    } else {
+        "使用创建备份时的配套完整安装包；本说明不承诺支持其它存储格式。保留旧包后再开始安装验证。"
+            .to_owned()
+    };
     let extra_paths = extra
         .iter()
         .map(|(name, target)| format!("- {name} → {target}\n"))
         .collect::<String>();
+    let history = if options.preserve_observation_source {
+        "原 Observation 目录已在同一文件系统原地封存；包含原始数据库、WAL/SHM、对象和暂存文件，未逐文件扫描、哈希、转换或压缩。清单仅校验其余恢复材料并绑定封存目录身份，不宣称已逐字节验证历史内容。新版历史和统计从切换后开始。封存仍占用磁盘空间，不受当前观测容量回收影响；它是本机恢复点，不是独立灾备。需要独立备份时，在启动之外复制并校验本目录。恢复前离线检查原始数据库和内容。"
+    } else {
+        "本次可能转换核心数据库和 Observation 历史；该目录同时保存原始 Observation、密钥、原生恢复材料及其余自有持久状态。"
+    };
     let text = format!(
-        "# HiRoute 手工恢复\n\n备份批次 ID：{}\n\n备份源以本说明所在目录为准，目录改名或归档后仍从这里读取；不要使用其它批次。以下源文件路径均相对于本说明所在目录，目标路径为绝对位置。\n\n1. 完全退出 HiRoute，确认服务、CPA、任务与后台自动重启均已停止。\n2. 将 storage 目录 {} 改名保留；不要改名它的上级目录，备份仍保留在上述位置。恢复将舍弃备份之后的新数据。\n3. 将 storage/ 整个复制回 {}，保留权限。不要逐库覆盖，不要遗留不配套的 WAL/SHM。再按以下源 → 目标路径复制额外文件：\n\n{}\n4. 按下面的完整 App 路径和身份覆盖安装旧包，启动后检查配置、Agent 接入及一次真实请求。\n\n{}\n\n本次只修改三个数据库；该目录同时保存密钥、原生恢复材料及其余自有持久状态。不要将此备份加入诊断导出。\n",
+        "# HiRoute 手工恢复\n\n备份批次 ID：{}\n\n备份源以本说明所在目录为准，目录改名或归档后仍从这里读取；不要使用其它批次。以下源文件路径均相对于本说明所在目录，目标路径为绝对位置。\n\n1. 完全退出 HiRoute，确认服务、CPA、任务与后台自动重启均已停止。\n2. 将 storage 目录 {} 改名保留；不要改名它的上级目录，备份仍保留在上述位置。备份之后的新数据必须与配套新版本单独保留，不能混入旧格式恢复。\n3. 将 storage/ 整个复制回 {}，保留权限。不要逐库覆盖，不要遗留不配套的 WAL/SHM。再按以下源 → 目标路径复制额外文件：\n\n{}\n4. 按下面的完整 App 路径和身份覆盖安装旧包，启动后检查配置、Agent 接入及一次真实请求。\n\n{}\n\n{history}\n\n不要将此备份加入诊断导出。\n",
         metadata["batch_id"]
             .as_str()
             .ok_or(LocalStorageError::InvalidData)?,
         root.display(),
         root.display(),
         extra_paths,
-        "使用创建备份时的配套完整安装包；本说明不承诺支持其它存储格式。"
+        package_identity
     );
     write_private(&stage.join("恢复说明.md"), text.as_bytes())?;
     let mut files = BTreeMap::new();
-    collect(&stage, &stage, &mut files)?;
+    collect(&stage, &stage, &mut files, false)?;
     let created = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|_| LocalStorageError::InvalidData)?
         .as_secs();
     let mut info = metadata.clone();
     info["created_unix_seconds"] = json!(created);
-    let manifest = json!({"schema":"hiroute.upgrade-source-backup/v1","complete":true,
+    let mut manifest = json!({"schema":"hiroute.upgrade-source-backup/v1","complete":true,
         "source_storage":root.to_string_lossy(),"extra_locations":extra,"files":files,"source_info":info});
+    if options.preserve_observation_source {
+        manifest["schema"] = json!("hiroute.upgrade-source-backup/v2");
+        manifest["sealed_observation"] = seal::capture(root, &storage)?;
+    }
     write_private(
         &stage.join(MANIFEST),
         &serde_json::to_vec_pretty(&manifest).map_err(|_| LocalStorageError::InvalidData)?,
     )?;
     hiroute_platform::durable::directory_barrier(&stage)?;
+    if options.preserve_observation_source {
+        return seal::finish(root, backup, &stage, metadata);
+    }
     hiroute_platform::durable::rename(stage, &source)?;
     hiroute_platform::durable::directory_barrier(backup)?;
-    verify(backup)
+    verify(backup)?;
+    publish_locator(
+        backup,
+        metadata["batch_id"]
+            .as_str()
+            .ok_or(LocalStorageError::InvalidData)?,
+    )
+}
+
+/// A bounded directory hint after full verification. It is outside the immutable
+/// source and never replaces the authoritative file manifest during recovery.
+pub(crate) fn publish_locator(backup: &Path, batch_id: &str) -> Result<(), LocalStorageError> {
+    if manifest(backup)?["source_info"]["batch_id"] != batch_id {
+        return Err(LocalStorageError::InvalidData);
+    }
+    let bytes = serde_json::to_vec(&json!({"schema":1,"complete":true,"batch_id":batch_id}))
+        .map_err(|_| LocalStorageError::InvalidData)?;
+    hiroute_platform::durable::write_private_atomic(&backup.join("source-location.json"), &bytes)?;
+    hiroute_platform::durable::directory_barrier(backup)?;
+    Ok(())
+}
+
+fn preflight_space(
+    root: &Path,
+    backup: &Path,
+    options: &crate::StorageStartupOptions,
+) -> Result<(), LocalStorageError> {
+    fn bytes(path: &Path) -> Result<u64, LocalStorageError> {
+        let meta = fs::symlink_metadata(path)?;
+        if meta.file_type().is_symlink() {
+            return Err(LocalStorageError::Permission);
+        }
+        if meta.is_file() {
+            return Ok(meta
+                .len()
+                .max(fs2::FileExt::allocated_size(&fs::File::open(path)?)?));
+        }
+        if !meta.is_dir() {
+            return Err(LocalStorageError::InvalidData);
+        }
+        let mut total = 0u64;
+        for entry in fs::read_dir(path)? {
+            total = total
+                .checked_add(bytes(&entry?.path())?)
+                .ok_or(LocalStorageError::InvalidData)?;
+        }
+        Ok(total)
+    }
+    let mut required = 256_u64 * 1024 * 1024;
+    for entry in fs::read_dir(root)? {
+        let entry = entry?;
+        if !excluded(&entry.file_name().to_string_lossy())
+            && !(options.preserve_observation_source && entry.file_name() == "observation")
+        {
+            required = required.saturating_add(bytes(&entry.path())?);
+        }
+    }
+    for name in ["control.db", "runtime.db", "secrets.db"] {
+        required = required.saturating_add(bytes(&backup.join(name))?);
+    }
+    if let Some(package) = &options.recovery_package {
+        let meta = fs::symlink_metadata(package)?;
+        if !meta.is_dir()
+            || meta.file_type().is_symlink()
+            || package.canonicalize()?.starts_with(backup.canonicalize()?)
+            || storage_root_conflict(package, root)?
+        {
+            return Err(LocalStorageError::InvalidData);
+        }
+        required = required.saturating_add(bytes(package)?);
+    }
+    if fs2::available_space(root)? < required {
+        return Err(LocalStorageError::InvalidData.at_upgrade_stage("Insufficient space for recovery material and startup headroom; preserve the source and free unrelated space before retrying"));
+    }
+    Ok(())
 }
 fn collect(
     root: &Path,
     path: &Path,
     files: &mut BTreeMap<String, String>,
+    sealed: bool,
 ) -> Result<(), LocalStorageError> {
+    if sealed && path == root.join("storage/observation") {
+        return Ok(());
+    }
     let metadata = fs::symlink_metadata(path)?;
     if metadata.file_type().is_symlink() {
         return Err(LocalStorageError::Permission);
@@ -229,7 +361,7 @@ fn collect(
             if entry.path() == root.join(MANIFEST) {
                 continue;
             }
-            collect(root, &entry.path(), files)?;
+            collect(root, &entry.path(), files, sealed)?;
         }
     } else if metadata.is_file() {
         files.insert(
@@ -241,7 +373,7 @@ fn collect(
                 .map(|component| component.as_os_str().to_string_lossy().into_owned())
                 .collect::<Vec<_>>()
                 .join("/"),
-            CanonicalDigest::of_bytes(&fs::read(path)?).to_string(),
+            file_digest(path)?.to_string(),
         );
     } else {
         return Err(LocalStorageError::InvalidData);
@@ -249,21 +381,46 @@ fn collect(
     Ok(())
 }
 fn manifest(backup: &Path) -> Result<Value, LocalStorageError> {
-    validate_owner_file(&backup.join("source").join(MANIFEST))?;
-    let value: Value = serde_json::from_slice(&fs::read(backup.join("source").join(MANIFEST))?)
+    read_manifest(&backup.join("source"))
+}
+fn read_manifest(source: &Path) -> Result<Value, LocalStorageError> {
+    validate_owner_file(&source.join(MANIFEST))?;
+    let value: Value = serde_json::from_slice(&fs::read(source.join(MANIFEST))?)
         .map_err(|_| LocalStorageError::InvalidData)?;
-    if value["schema"] != "hiroute.upgrade-source-backup/v1"
-        || value["complete"] != true
-        || value.as_object().is_none_or(|o| o.len() != 6)
-    {
+    let fields = match value["schema"].as_str() {
+        Some("hiroute.upgrade-source-backup/v1") => 6,
+        Some("hiroute.upgrade-source-backup/v2") if value.get("sealed_observation").is_some() => 7,
+        _ => return Err(LocalStorageError::InvalidData),
+    };
+    if value["complete"] != true || value.as_object().is_none_or(|o| o.len() != fields) {
         return Err(LocalStorageError::InvalidData);
     }
     Ok(value)
 }
-pub(super) fn verify(backup: &Path) -> Result<(), LocalStorageError> {
+pub(crate) fn verify(backup: &Path) -> Result<(), LocalStorageError> {
     let value = manifest(backup)?;
+    verify_files(&backup.join("source"), &value)?;
+    if value.get("sealed_observation").is_some() {
+        seal::verify_directory(&backup.join("source/storage/observation"), &value)?;
+    }
+    Ok(())
+}
+pub(crate) fn verify_sealed(backup: &Path) -> Result<(), LocalStorageError> {
+    if manifest(backup)?["schema"] != "hiroute.upgrade-source-backup/v2" {
+        return Err(LocalStorageError::InvalidData.at_upgrade_stage(
+            "An earlier full-history conversion source exists; preserve it and use its whole-group recovery guide before retrying this upgrade",
+        ));
+    }
+    verify(backup)
+}
+fn verify_files(source: &Path, value: &Value) -> Result<(), LocalStorageError> {
     let mut actual = BTreeMap::new();
-    collect(&backup.join("source"), &backup.join("source"), &mut actual)?;
+    collect(
+        source,
+        source,
+        &mut actual,
+        value.get("sealed_observation").is_some(),
+    )?;
     if json!(actual) != value["files"] {
         return Err(LocalStorageError::InvalidData);
     }
@@ -281,7 +438,12 @@ pub(crate) fn verify_unchanged(root: &Path, backup: &Path) -> Result<(), LocalSt
         if excluded(&entry.file_name().to_string_lossy()) {
             continue;
         }
-        collect(root, &entry.path(), &mut actual)?;
+        if value.get("sealed_observation").is_some() && entry.file_name() == "observation" {
+            // The old generation is bound at its sealed location, not compared
+            // with the intentionally empty/new live Observation generation.
+            continue;
+        }
+        collect(root, &entry.path(), &mut actual, false)?;
     }
     let expected = value["files"]
         .as_object()
@@ -301,11 +463,17 @@ pub(crate) fn verify_unchanged(root: &Path, backup: &Path) -> Result<(), LocalSt
         .ok_or(LocalStorageError::InvalidData)?
     {
         let path = path.as_str().ok_or(LocalStorageError::InvalidData)?;
-        if json!(CanonicalDigest::of_bytes(&fs::read(path)?).to_string()) != value["files"][name] {
+        if json!(file_digest(Path::new(path))?.to_string()) != value["files"][name] {
             return Err(LocalStorageError::InvalidData);
         }
     }
     Ok(())
+}
+
+fn storage_root_conflict(package: &Path, root: &Path) -> Result<bool, LocalStorageError> {
+    let package = package.canonicalize()?;
+    let root = root.canonicalize()?;
+    Ok(package.starts_with(&root) || root.starts_with(&package))
 }
 
 #[cfg(test)]

@@ -150,7 +150,7 @@ fn value_query_uses_required_half_open_range() {
 }
 
 #[test]
-fn v1_value_schema_migrates_once_and_reopens_without_conflated_rollups() {
+fn legacy_value_normalizer_preserves_frozen_amounts_without_conflated_rollups() {
     let temporary = tempdir().unwrap();
     let fixture = Fixture::new("migration");
     let activity_path = temporary.path().join("activity.db");
@@ -232,6 +232,12 @@ fn v1_value_schema_migrates_once_and_reopens_without_conflated_rollups() {
         .unwrap();
     drop(connection);
 
+    // Keep the historical ledger normalization arithmetic regression as a
+    // component check. Production upgrade archives old observations unchanged.
+    let mut historical = Connection::open(&activity_path).unwrap();
+    super::super::schema::migrate_legacy(&mut historical).unwrap();
+    super::super::schema::migrate(&mut historical).unwrap();
+    drop(historical);
     let store = Arc::new(LocalObservationStore::open(temporary.path(), authority()).unwrap());
     let migrated = store
         .get_value(
@@ -247,11 +253,11 @@ fn v1_value_schema_migrates_once_and_reopens_without_conflated_rollups() {
     assert_eq!(migrated.routing_savings_micros, None);
     assert_eq!(migrated.entitlement_savings_micros, Some(600));
     assert_eq!(migrated.estimated_total_savings_micros, None);
-    assert_eq!(schema_version(&store), "4");
+    assert_eq!(schema_version(&store), "5");
     drop(store);
 
     let reopened = open_store(temporary.path());
-    assert_eq!(schema_version(&reopened), "4");
+    assert_eq!(schema_version(&reopened), "5");
     let after_restart = reopened
         .get_value(
             &fixture.workspace,

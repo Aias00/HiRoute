@@ -235,7 +235,27 @@ pub struct ObservationStatusV1 {
     pub production_exporter: String,
 }
 
+#[derive(schemars::JsonSchema, Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ObservationCapacityStatusV1 {
+    pub max_active_bytes: Option<u64>,
+    pub active_bytes: Option<u64>,
+    pub measured_at_ms: Option<i64>,
+    pub state: String,
+    pub reason: String,
+}
+
 pub trait ObservationQueryPort: Send + Sync {
+    fn observation_capacity(&self) -> Result<ObservationCapacityStatusV1, ObservationQueryError> {
+        Err(ObservationQueryError::Unavailable)
+    }
+    fn set_observation_capacity(
+        &self,
+        _max_active_bytes: Option<u64>,
+    ) -> Result<ObservationCapacityStatusV1, ObservationQueryError> {
+        Err(ObservationQueryError::Unavailable)
+    }
+
     fn observation_analysis(
         &self,
         _reader: &super::ObservationReaderContext,

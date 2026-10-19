@@ -410,6 +410,7 @@
     "hiroute.upgrade-installer-decision/v1",
     "hiroute.upgrade-installer-started/v1",
     "hiroute.upgrade-source-backup/v1",
+    "hiroute.upgrade-source-backup/v2",
     "hiroute.value-ledger-entry/v1",
     "hiroute.value-query/v1",
     "hiroute.value-view/v1",
@@ -1189,6 +1190,17 @@
       "owner": "application-api/daemon/model-connections",
       "reason": "The shared scanner retains the currently published empty-request V1 projection and one-model discovery handles. An explicit V2 request selects connection-point projection; credentials and source semantics have one private owner. Current CLI/Desktop consume the V2 shape without expanding old handles.",
       "removal_condition": "Remove the V1 request/projection adapter only when the supported public caller policy retires the released V1 API and its one-model handles."
+    },
+    {
+      "subject": "upgrade_source_backup",
+      "audited_prefixes": [
+        "hiroute.upgrade-source-backup"
+      ],
+      "current_contracts": [
+        "hiroute.upgrade-source-backup/v1",
+        "hiroute.upgrade-source-backup/v2"
+      ],
+      "legacy_support": []
     }
   ],
   "forbidden_contracts": [
@@ -1264,7 +1276,7 @@
       "field": "context_window_tokens",
       "mode": "recovery_read_only",
       "owner": "agent-connections",
-      "reason": "A descriptor reconstructed from a pre-window immutable settings operation has no managed context policy. It retains that operation’s behavior until settings are saved again.",
+      "reason": "A descriptor reconstructed from a pre-window immutable settings operation has no managed context policy. It retains that operation\u2019s behavior until settings are saved again.",
       "removal_condition": "Retire with the pre-window settings operation recovery reader.",
       "allowed_paths": [
         "crates/domain/src/agents/managed_launch.rs",
@@ -1808,6 +1820,24 @@
         "crates/gateway/src/publication/compiler.rs",
         "crates/domain/src/routing/authoring.rs",
         "crates/domain/src/operation/routing_content.rs"
+      ]
+    },
+    {
+      "contract": "hiroute.observation.query/v2",
+      "field": "persisted Observation schema_version 1 through 4 and original absolute owned object locators",
+      "mode": "recovery_read_only",
+      "owner": "observation-storage",
+      "reason": "Supported old histories are sealed unchanged by the startup coordinator with the complete original group, original keys, auxiliary state and matching old package. Startup does not traverse or convert old observations. Old absolute object locators stay unchanged and are read only through whole-group matching-version recovery at the recorded original locations. Current format 5 is the sole writer and current history/statistics start at cutover; already-current stores never reset on reopen. Preserve partial older converter generations for actionable original-group recovery.",
+      "removal_condition": "Retire only through an explicit supported-release decision that preserves verified whole-group recovery for every retained supported source.",
+      "allowed_paths": [
+        "crates/observation/src/store/upgrade.rs",
+        "crates/observation/src/store/upgrade/tests.rs",
+        "crates/observation/src/store/schema.rs",
+        "crates/local-storage/src/migrations/observation_source.rs",
+        "crates/local-storage/src/backup/source_snapshot.rs",
+        "crates/local-storage/src/backup/source_snapshot/seal.rs",
+        "crates/local-storage/src/backup/source_snapshot/seal/tests.rs",
+        "crates/daemon/src/control/runtime/history_cutover_tests.rs"
       ]
     }
   ]

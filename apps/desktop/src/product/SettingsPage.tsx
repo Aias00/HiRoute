@@ -1,6 +1,7 @@
 import { hostCapabilities } from '../host/index.ts';
 import { invoke } from '../host/index.ts';
 import { useEffect, useState } from 'react';
+import { ObservationStorageSettings } from '../features/ObservationStorageSettings';
 import { DiagnosticsSettings } from '../features/diagnostics/DiagnosticsSettings';
 import { UpdatesSettings } from '../features/UpdatesSettings';
 import { ShellHostSettings } from '../features/ShellHostSettings';
@@ -190,7 +191,7 @@ export function SettingsPage(props: SettingsPageProps) {
       <section className="settings-group"><h2>{text('本地记录', 'Local records')}</h2><div className="settings-list"><div className="settings-row">
         <div className="settings-copy"><strong>{text('会话内容', 'Session content')}</strong><span>{text('在会话详情中，可以清理该会话的正文或记录。', 'Clear content or records from each session’s detail view.')}</span></div>
         <button className="btn" type="button" onClick={() => props.onOpenSessions()}>{text('查看会话', 'View sessions')}</button>
-      </div></div></section>
+      </div><ObservationStorageSettings active={props.active} language={props.language} /></div></section>
       <DiagnosticsSettings active={props.active} language={props.language} />
       {hostCapabilities().updates && <UpdatesSettings active={props.active} language={props.language} onServiceChanged={props.onServiceChanged} />}
       {hostCapabilities().cli_entry && <section className="settings-group"><h2>CLI</h2><div className="settings-list"><div className="settings-row">
