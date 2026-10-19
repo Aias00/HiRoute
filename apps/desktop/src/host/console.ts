@@ -1,5 +1,6 @@
 import type { ConsoleIdentity, HostCapabilities, HostTransport } from './types.ts';
 import { browserCapabilities } from './types.ts';
+import { acceptConsoleLanding } from './console-landing.ts';
 import { safeDiagnosticCode } from '../error-code.ts';
 const SESSION_KEY = 'hiroute.console.session';
 const CONTEXT_KEY = 'hiroute.console.context';
@@ -13,7 +14,7 @@ let lastFailure = 'CONSOLE_UNAVAILABLE';
 const failure = (code: string) => ({ kind: 'native', code });
 function storage(): Storage { try { return window.sessionStorage; } catch { throw failure('CONSOLE_STORAGE_UNAVAILABLE'); } }
 export function sessionBearer(): string | null { try { return storage().getItem(SESSION_KEY); } catch { return null; } }
-export function clearConsoleSession(): void { try { storage().removeItem(SESSION_KEY); } catch { /* Read-only/denied storage has no usable session. */ } }
+export function clearConsoleSession(): void { acceptConsoleLanding(null); try { storage().removeItem(SESSION_KEY); } catch { /* Read-only/denied storage has no usable session. */ } }
 function contextId(): string {
   if (context) return context;
   // Reload reuses this tab's context. A new document/tab gets its own random id,
@@ -51,10 +52,13 @@ async function request<T>(path: string, options: RequestInit = {}, authenticated
   return value as T;
 }
 export async function exchangeConsoleCredential(kind: 'launch' | 'token', value: string): Promise<ConsoleIdentity> {
-  const exchange = await request<{ bearer: string }>(`/session/${kind}`, { method: 'POST', body: JSON.stringify(kind === 'launch' ? { code: value } : { token: value }) }, false);
+  acceptConsoleLanding(null);
+  const exchange = await request<{ bearer: string; landing?: string }>(`/session/${kind}`, { method: 'POST', body: JSON.stringify(kind === 'launch' ? { code: value } : { token: value }) }, false);
   if (!/^[a-f0-9]{64}$/.test(exchange.bearer)) throw failure('RESPONSE_DATA_INVALID');
   storage().setItem(SESSION_KEY, exchange.bearer);
-  return readConsoleSession();
+  const identity = await readConsoleSession();
+  if (kind === 'launch') acceptConsoleLanding(exchange.landing);
+  return identity;
 }
 export async function readConsoleSession(): Promise<ConsoleIdentity> {
   const identity = await request<ConsoleIdentity>('/session');

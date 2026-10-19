@@ -1,5 +1,6 @@
 //! Optional Omarchy files. Native Agent configuration and service lifecycle are not owned here.
 mod files;
+pub mod notifications;
 pub mod process;
 mod types;
 use serde::Deserialize;
@@ -295,7 +296,7 @@ impl Context {
         )
     }
     fn load_transaction(&self) -> Result<Option<Transaction>, Error> {
-        let Some((bytes, _)) = files::read(&self.transaction_path(), 0o600, 2 * 1024 * 1024)?
+        let Some((bytes, _)) = files::read(&self.transaction_path(), 0o600, 8 * 1024 * 1024)?
         else {
             return Ok(None);
         };

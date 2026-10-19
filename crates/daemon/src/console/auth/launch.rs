@@ -29,4 +29,5 @@ pub(crate) fn authority(address: SocketAddr) -> String {
 pub(super) struct Launch {
     pub expires: u64,
     pub target: LaunchTarget,
+    pub landing: Option<String>,
 }

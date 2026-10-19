@@ -2,7 +2,7 @@ use super::*;
 use std::cell::{Cell, RefCell};
 use std::os::unix::fs::PermissionsExt;
 
-struct FakePlugin {
+pub(super) struct FakePlugin {
     enabled: Cell<bool>,
     polls: Cell<u32>,
     discover_after: u32,
@@ -11,7 +11,7 @@ struct FakePlugin {
     calls: RefCell<Vec<String>>,
 }
 impl FakePlugin {
-    fn ready() -> Self {
+    pub(super) fn ready() -> Self {
         Self {
             enabled: Cell::new(false),
             polls: Cell::new(0),
@@ -42,7 +42,7 @@ impl PluginControl for FakePlugin {
         Ok(())
     }
 }
-fn fixture() -> (tempfile::TempDir, Context, Vec<Asset>) {
+pub(super) fn fixture() -> (tempfile::TempDir, Context, Vec<Asset>) {
     let temp = tempfile::tempdir().unwrap();
     let home = temp.path().canonicalize().unwrap().join("home");
     let context = Context {
@@ -85,7 +85,7 @@ fn fixture() -> (tempfile::TempDir, Context, Vec<Asset>) {
     }
     (temp, context, assets)
 }
-fn enable(context: &Context, assets: &[Asset], plugin: &FakePlugin) -> Manifest {
+pub(super) fn enable(context: &Context, assets: &[Asset], plugin: &FakePlugin) -> Manifest {
     context
         .enable(assets, plugin, None, false, Duration::from_millis(100))
         .unwrap()

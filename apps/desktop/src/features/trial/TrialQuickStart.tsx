@@ -27,8 +27,8 @@ import './trial.css';
 import { protectionExplanation } from '../trust/protection-copy';
 import { modelAnnouncements } from '../model-feed/announcements';
 
-export function TrialQuickStart({ initialModelId, initialBindingId, language, mutable, snapshot, operation, onOperation, onRefresh, onClose, onOpenAgent, onOpenPerformance, onOpenSessions }: {
-  initialModelId?: string; initialBindingId?: string; language: 'zh' | 'en'; mutable: boolean; snapshot: DesktopSnapshot | null; operation: DesktopOperation | null;
+export function TrialQuickStart({ initialModelId, initialBindingId, omarchy = false, language, mutable, snapshot, operation, onOperation, onRefresh, onClose, onOpenAgent, onOpenPerformance, onOpenSessions }: {
+  initialModelId?: string; initialBindingId?: string; omarchy?: boolean; language: 'zh' | 'en'; mutable: boolean; snapshot: DesktopSnapshot | null; operation: DesktopOperation | null;
   onOpenPerformance?(plan: Plan): void; onOpenSessions?(sessionId?: string): void;
   onOperation(operation: DesktopOperation | null): void; onRefresh(): Promise<void>; onClose(): void; onOpenAgent(id: string): void;
 }) {
@@ -69,7 +69,7 @@ export function TrialQuickStart({ initialModelId, initialBindingId, language, mu
         initialized.current = true;
         const requested = options.candidates.find(c => c.binding_id === initialBindingId && c.routable);
         if (requested) { setTrialId(requested.model_configuration_id); setTrialBinding(requested.binding_id); }
-        const target = initialTrialMapping(agents); setMapping(target);
+        const target = initialTrialMapping(agents, omarchy); setMapping(target);
         const current = currentPrimary(agents.agents.find(a => a.agent_id === target.agentId), agents.plans.plans);
         const candidate = options.candidates.find(c => c.binding_id === current?.binding_id && c.routable);
         if (candidate) { setPrimaryId(candidate.model_configuration_id); setPrimaryBinding(candidate.binding_id); setPrimarySelection(current); }

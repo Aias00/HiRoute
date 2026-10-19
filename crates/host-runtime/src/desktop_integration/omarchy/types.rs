@@ -109,6 +109,10 @@ pub enum Error {
     RegistrationTimeout,
     #[error("integration recovery could not safely restore the original items")]
     RecoveryRequired,
+    #[error(
+        "the at-most-once notification record reached its capacity; no delivery was retried or discarded"
+    )]
+    NotificationCapacity,
     #[error(transparent)]
     Io(#[from] std::io::Error),
 }

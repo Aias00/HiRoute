@@ -35,3 +35,11 @@ test('Primary defaults only from a unique enabled fixed-plan resolution, never a
  assert.equal(currentPrimary(configured,[{...plan,desired:{...plan.desired,strategy:{candidates:[{binding_id:'a'},{binding_id:'b'}]}}}]),undefined);
  assert.deepEqual(initialTrialMapping({agents:[native],plans:{plans:[]}}),{agentId:'agent_claude_default',presets:['opus']});
 });
+test('Omarchy first-run preselects independent targets and retains unrelated presets',()=>{
+ const codex={agent_id:'agent_codex_default',context_id:'codex/context',status_error:null,settings:{state:'not_configured'}};
+ const snapshot={agents:[native,codex],plans:{plans:[]}};
+ assert.deepEqual(initialTrialMapping(snapshot,true),{agentId:'agent_codex_default',presets:['opus'],omarchy:true,activationPreference:'managed_launch'});
+ const values=trialMappingValues(configured,'trial',{agentId:configured.agent_id,presets:['opus'],omarchy:true});
+ assert.equal(values.activationPreference,'managed_launch');
+ assert.deepEqual(values.claudePresets.sonnet,configured.settings.current_selection.preset_mappings.sonnet);
+});

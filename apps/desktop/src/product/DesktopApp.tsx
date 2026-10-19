@@ -1,4 +1,5 @@
 import type { Options } from '../plan-editor';
+import { takeConsoleLanding } from '../host/console-landing';
 import { TrialQuickStart } from '../features/trial/TrialQuickStart';
 import { NewModels } from '../features/trial/NewModels';
 import { useTrustSuggestions } from '../features/trust/use-trust-suggestions';
@@ -111,8 +112,10 @@ export function DesktopApp() {
   const preferences = usePresentationPreferences();
   const { language } = preferences;
   const home = useDesktopHome();
-  const [trialIntent, setTrialIntent] = useState<{ modelId?: string; bindingId?: string } | null>(null);
+  const [trialIntent, setTrialIntent] = useState<{ modelId?: string; bindingId?: string; omarchy?: boolean } | null>(null);
   const trialOpen = Boolean(trialIntent);
+  const [consoleLanding] = useState(takeConsoleLanding);
+  const landingHandled = useRef(false);
   const [page, setPage] = useState<Page>('home');
   const [modelTab, setModelTab] = useState<'general' | 'decisions'>('general');
   const [decisionIntent, setDecisionIntent] = useState<DecisionIntent | null>(null);
@@ -560,6 +563,28 @@ export function DesktopApp() {
     await showRouting({ key: `trust/${randomId()}`, plan });
   }
 
+  useEffect(() => {
+    if (!consoleLanding || landingHandled.current || !home.desktopSnapshot) return;
+    if (consoleLanding === 'first-run') {
+      landingHandled.current = true; setTrialIntent({ omarchy: true }); return;
+    }
+    if (consoleLanding.startsWith('agent:')) {
+      landingHandled.current = true;
+      setAgentIntent({ key: `omarchy/${randomId()}`, agentId: consoleLanding === 'agent:codex' ? 'agent_codex_default' : 'agent_claude_default', facet: 'model' });
+      setVisited(current => new Set([...current, 'agents'])); setPage('agents'); return;
+    }
+    if (trustSuggestions.status === 'loading') return;
+    landingHandled.current = true;
+    const id = consoleLanding.slice('suggestion:'.length);
+    const report = trustSuggestions.plans.find(plan => plan.branches.some(branch => branch.id === id));
+    const plan = home.desktopSnapshot.catalog.plans.find(plan => plan.agent_plan_id === report?.plan_id);
+    if (plan) void showRouting({ key: `suggestion/${id}`, plan, initialView: 'performance' });
+    else {
+      setVisited(current => new Set([...current, 'routing'])); setPage('routing');
+      setNotice(language === 'zh' ? '这条建议已不在当前证据中，请查看当前路由和模型表现。' : 'This suggestion is no longer in the current evidence. Review current routes and performance.');
+    }
+  }, [consoleLanding, home.desktopSnapshot, trustSuggestions.status, trustSuggestions.plans]);
+
   async function handleHomeAction(action: HomeAction) {
     if (action.kind === 'retry-read') {
       void home.refreshDomain(action.domain);
@@ -711,7 +736,7 @@ export function DesktopApp() {
           </div>
         </div>}
 
-        {trialIntent && <div className="trial-page-host"><TrialQuickStart onOpenPerformance={plan => { setTrialIntent(null); void showRouting({ key: `trial/${randomId()}`, plan, initialView: 'performance' }); }} onOpenSessions={sessionId => { void (async () => { if (!await allowPageChange('sessions') || !await leaveTrial()) return; setSessionIntent({ key: `sessions/${randomId()}`, sessionId }); openPage('sessions'); })(); }} initialModelId={trialIntent.modelId} initialBindingId={trialIntent.bindingId} language={language} mutable={Boolean(home.desktopSnapshot?.trusted_authority && home.desktopSnapshot.service.mutation_available)} snapshot={home.desktopSnapshot} operation={operation} onOperation={value => acceptOperation(value, { kind: 'routing' })} onRefresh={async () => { setObserving(true); await home.refreshAll(); setRefreshVersion(value => value + 1); }} onClose={() => setTrialIntent(null)} onOpenAgent={id => { setTrialIntent(null); setAgentIntent({ key: `agents/${randomId()}`, agentId: id }); openPage('agents'); }} /></div>}
+        {trialIntent && <div className="trial-page-host"><TrialQuickStart onOpenPerformance={plan => { setTrialIntent(null); void showRouting({ key: `trial/${randomId()}`, plan, initialView: 'performance' }); }} onOpenSessions={sessionId => { void (async () => { if (!await allowPageChange('sessions') || !await leaveTrial()) return; setSessionIntent({ key: `sessions/${randomId()}`, sessionId }); openPage('sessions'); })(); }} initialModelId={trialIntent.modelId} initialBindingId={trialIntent.bindingId} omarchy={trialIntent.omarchy} language={language} mutable={Boolean(home.desktopSnapshot?.trusted_authority && home.desktopSnapshot.service.mutation_available)} snapshot={home.desktopSnapshot} operation={operation} onOperation={value => acceptOperation(value, { kind: 'routing' })} onRefresh={async () => { setObserving(true); await home.refreshAll(); setRefreshVersion(value => value + 1); }} onClose={() => setTrialIntent(null)} onOpenAgent={id => { setTrialIntent(null); setAgentIntent({ key: `agents/${randomId()}`, agentId: id }); openPage('agents'); }} /></div>}
         <div hidden={trialOpen || page !== 'home'}><Home
             language={language}
             reads={home.reads}

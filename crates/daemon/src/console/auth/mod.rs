@@ -65,6 +65,8 @@ pub struct SessionIdentity {
 pub struct SessionExchange {
     pub bearer: String,
     pub session: SessionIdentity,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub landing: Option<String>,
 }
 struct Session {
     identity: SessionIdentity,
@@ -110,6 +112,19 @@ impl ConsoleAuth {
         })
     }
     pub fn create_launch(&mut self, target: LaunchTarget) -> Result<Zeroizing<String>, AuthError> {
+        self.create_launch_with_landing(target, None)
+    }
+    pub fn create_launch_with_landing(
+        &mut self,
+        target: LaunchTarget,
+        landing: Option<String>,
+    ) -> Result<Zeroizing<String>, AuthError> {
+        if landing
+            .as_deref()
+            .is_some_and(|value| !hiroute_application_api::valid_console_landing(value))
+        {
+            return Err(AuthError::Invalid);
+        }
         let now = now()?;
         self.launches.retain(|_, entry| entry.expires > now);
         if self.launches.len() >= 32 {
@@ -122,6 +137,7 @@ impl ConsoleAuth {
             launch::Launch {
                 expires: now + LAUNCH_TTL,
                 target,
+                landing,
             },
         );
         Ok(secret)
@@ -204,8 +220,13 @@ impl ConsoleAuth {
             return self.failed(peer);
         }
         // Consume before session creation: a failed/cancelled exchange cannot replay.
-        self.launches.remove(&digest);
-        self.new_session("launch", None, now)
+        let landing = self
+            .launches
+            .remove(&digest)
+            .and_then(|entry| entry.landing);
+        let mut exchange = self.new_session("launch", None, now)?;
+        exchange.landing = landing;
+        Ok(exchange)
     }
     pub fn exchange_token(
         &mut self,
@@ -268,6 +289,7 @@ impl ConsoleAuth {
         Ok(SessionExchange {
             bearer: secret.to_string(),
             session: identity,
+            landing: None,
         })
     }
     pub fn authenticate(

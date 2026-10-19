@@ -430,12 +430,40 @@ pub fn suggestion_evidence(
                 })
                 .collect::<BTreeSet<_>>();
             let mut value = serde_json::to_value(&b).expect("typed suggestion");
+            // Counts may grow on every read. Identity follows the actionable proposal,
+            // not the polling time, so desktop notification delivery can be at most once.
+            value["id"] = serde_json::json!(suggestion_id(
+                &query.plan_id,
+                context.active.content_revision,
+                &b.branch_id,
+                b.threshold_millis,
+                &b.suggestion,
+            ));
             value["protection_count"] = serde_json::json!(protections);
             value["identity_stabilities"] = serde_json::json!(identities);
             value
         })
         .collect();
     serde_json::json!({"plan_id":query.plan_id,"active_revision":context.active.content_revision,"branches":branches,"announcements":announcements,"previous_routing":[]})
+}
+
+fn suggestion_id(
+    plan: &str,
+    revision: u64,
+    branch: &str,
+    current: u16,
+    suggestion: &TrustSuggestionV1,
+) -> String {
+    let digest = CanonicalDigest::of(&(
+        "hiroute.trust-suggestion/v1",
+        plan,
+        revision,
+        branch,
+        current,
+        suggestion,
+    ))
+    .expect("typed scalar suggestion identity");
+    format!("trust-{}", &digest.as_str()[7..])
 }
 
 fn policies(context: &TrustContextV1) -> Vec<(String, u16, BTreeSet<String>)> {

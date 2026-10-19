@@ -4,7 +4,7 @@ import { agentEcosystem } from '../agents/ecosystems.ts';
 import { agentModelStatus } from '../agents/status.ts';
 import type { Options, Plan, Selection } from '../../plan-editor';
 
-export type TrialMapping = { agentId: string; presets: ('opus' | 'sonnet' | 'haiku')[]; activationPreference?: AgentActivationPreference };
+export type TrialMapping = { agentId: string; presets: ('opus' | 'sonnet' | 'haiku')[]; activationPreference?: AgentActivationPreference; omarchy?: boolean };
 
 /** Resolve recorded facts only. A provider alias or native preset name is not a model identity. */
 export function currentPrimary(agent: Agent | undefined, plans: Plan[]): Selection | undefined {
@@ -31,7 +31,7 @@ export function trialMappingValues(agent: Agent, planId: string, mapping: TrialM
   const ecosystem = agentEcosystem(agent.agent_id);
   if (ecosystem === 'claude') {
     if (!mapping.presets.length) throw new Error('TRIAL_PRESET_REQUIRED');
-    return { ...values, activationPreference: mapping.activationPreference ?? values.activationPreference,
+    return { ...values, activationPreference: mapping.omarchy ? 'managed_launch' as const : mapping.activationPreference ?? values.activationPreference,
       claudePresets: { ...values.claudePresets, ...Object.fromEntries(mapping.presets.map(preset => [preset, { kind: 'plan', plan_id: planId }])) } };
   }
   if (ecosystem === 'codex') return { ...values, allowedPlanIds: [...new Set([...values.allowedPlanIds, planId])], defaultChoice: { kind: 'plan' as const, plan_id: planId } };
@@ -39,9 +39,9 @@ export function trialMappingValues(agent: Agent, planId: string, mapping: TrialM
   throw new Error('AGENT_UNSUPPORTED');
 }
 
-export function initialTrialMapping(snapshot: AgentSnapshot): TrialMapping {
-  const usable = snapshot.agents.filter(agent => agentEditorSeed(agent, 'model', []).known && agent.context_id);
-  return { agentId: (usable.find(agent => agentEcosystem(agent.agent_id) === 'claude') ?? usable[0])?.agent_id ?? '', presets: ['opus'] };
+export function initialTrialMapping(snapshot: AgentSnapshot, omarchy = false): TrialMapping {
+  const usable = snapshot.agents.filter(agent => agentEditorSeed(agent, 'model', []).known && agent.context_id && (!omarchy || ['codex', 'claude'].includes(agentEcosystem(agent.agent_id) ?? '')));
+  return { agentId: (usable.find(agent => agentEcosystem(agent.agent_id) === (omarchy ? 'codex' : 'claude')) ?? usable[0])?.agent_id ?? '', presets: ['opus'], ...(omarchy && { omarchy: true, activationPreference: 'managed_launch' as const }) };
 }
 
 export function trialSelection(candidate: Options['candidates'][number]): Selection {

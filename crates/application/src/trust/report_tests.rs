@@ -3,6 +3,31 @@ use hiroute_domain::delegation::RunStateV1;
 use serde_json::json;
 
 #[test]
+fn suggestion_identity_is_stable_until_its_action_or_revision_changes() {
+    let action = TrustSuggestionV1::StepUp {
+        threshold_millis: 650,
+    };
+    let id = suggestion_id("plan/a", 1, "smart_saving", 800, &action);
+    assert_eq!(id, suggestion_id("plan/a", 1, "smart_saving", 800, &action));
+    assert_ne!(id, suggestion_id("plan/a", 2, "smart_saving", 800, &action));
+    assert_ne!(
+        id,
+        suggestion_id(
+            "plan/a",
+            1,
+            "smart_saving",
+            800,
+            &TrustSuggestionV1::StepDown {
+                threshold_millis: 900
+            }
+        )
+    );
+    assert!(hiroute_application_api::valid_console_landing(&format!(
+        "suggestion:{id}"
+    )));
+}
+
+#[test]
 fn executor_task_outcomes_do_not_depend_on_recorded_model_stages() {
     let tasks = [
         TrustTaskOutcomeV1 {

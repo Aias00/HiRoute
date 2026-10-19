@@ -18,7 +18,7 @@ export function TrialAgentChoice({ snapshot, value, onChange, language, disabled
   snapshot: AgentSnapshot; value: TrialMapping; onChange(value: TrialMapping): void; language: 'zh' | 'en'; disabled?: boolean;
 }) {
   const t = (zh: string, en: string) => language === 'zh' ? zh : en;
-  const usable = snapshot.agents.filter(agent => agent.context_id && agentEditorSeed(agent, 'model', []).known);
+  const usable = snapshot.agents.filter(agent => agent.context_id && agentEditorSeed(agent, 'model', []).known && (!value.omarchy || ['codex', 'claude'].includes(agentEcosystem(agent.agent_id) ?? '')));
   const agent = snapshot.agents.find(item => item.agent_id === value.agentId);
   const selection = agent && agentModelStatus(agent)?.current_selection;
   const current = (preset: 'opus' | 'sonnet' | 'haiku') => {
@@ -27,9 +27,9 @@ export function TrialAgentChoice({ snapshot, value, onChange, language, disabled
     return t('原生模型', 'Native model');
   };
   return <fieldset disabled={disabled} className="trial-agent-choice">
-    {usable.length > 1 ? <label className="field"><span className="field-label">Agent</span><select className="input" value={value.agentId} onChange={e => onChange({ ...value, agentId: e.target.value, activationPreference: undefined })}><option value="">{t('选择 Agent', 'Select an Agent')}</option>{usable.map(item => <option key={item.agent_id} value={item.agent_id}>{agentDisplayName(item.agent_id, language)}</option>)}</select></label>
+    {usable.length > 1 ? <label className="field"><span className="field-label">Agent</span><select className="input" value={value.agentId} onChange={e => onChange({ ...value, agentId: e.target.value, activationPreference: value.omarchy ? 'managed_launch' : undefined })}><option value="">{t('选择 Agent', 'Select an Agent')}</option>{usable.map(item => <option key={item.agent_id} value={item.agent_id}>{agentDisplayName(item.agent_id, language)}</option>)}</select></label>
       : !usable.length && <p className="field-help">{t('还没有可以修改模型设置的 Agent。发布后可以到 Agent 页面接入。', 'No Agent with editable model settings yet. You can connect one from Agents after publishing.')}</p>}
-    {agentEcosystem(value.agentId) === 'claude' && agent && <ClaudeActivationChoice value={value.activationPreference ?? agentEditorSeed(agent, 'model', []).activationPreference} language={language} onChange={activationPreference => onChange({ ...value, activationPreference })} />}
+    {agentEcosystem(value.agentId) === 'claude' && agent && !value.omarchy && <ClaudeActivationChoice value={value.activationPreference ?? agentEditorSeed(agent, 'model', []).activationPreference} language={language} onChange={activationPreference => onChange({ ...value, activationPreference })} />}
     {agentEcosystem(value.agentId) === 'claude' ? <div className="trial-presets" role="group" aria-label={t('应用到哪些预设', 'Presets to change')}>
       <span className="trial-presets-title">{t(`${agentDisplayName(value.agentId, language)} 的模型预设`, `${agentDisplayName(value.agentId, language)} model presets`)}</span>
       {(['opus', 'sonnet', 'haiku'] as const).map(preset => <label key={preset} className="trial-preset"><input type="checkbox" checked={value.presets.includes(preset)} onChange={e => onChange({ ...value, presets: e.target.checked ? [...value.presets, preset] : value.presets.filter(p => p !== preset) })} /><strong>{preset[0].toUpperCase() + preset.slice(1)}</strong><span>{t('现在：', 'Now: ')}{current(preset)}</span></label>)}
@@ -95,8 +95,11 @@ export function TrialAgentMapping({ plan, initial, language, mutable, onOperatio
         || editorFingerprint(agentEditorSeed(reviewed, 'model', [])) !== editorFingerprint(agentEditorSeed(agent, 'model', []))) {
         setError(t('Agent 配置已变化。已读入最新配置，请重新核对并确认。', 'Agent settings changed. Review the refreshed configuration and confirm again.')); return;
       }
+      if (mapping.omarchy && agent.codex_access?.slot_occupied && agent.codex_access.selected_mode === 'root') {
+        setError(t('Codex 当前使用根配置。请先到 Agent 页面还原，再确认独立 Profile。', 'Codex currently uses root configuration. Restore it from Agents before confirming the independent profile.')); return;
+      }
       const values = trialMappingValues(agent, plan.agent_plan_id, mapping);
-      const spec = agentSettingsSpec(agent, 'model', false, { values, codexMode: agent.codex_access?.selected_mode ?? 'profile', restoreNativeModel: '' });
+      const spec = agentSettingsSpec(agent, 'model', false, { values, codexMode: mapping.omarchy ? 'profile' : agent.codex_access?.selected_mode ?? 'profile', restoreNativeModel: '' });
       requested.current = { context: spec.context_id, fingerprint: editorFingerprint(values) };
       const input = { language, spec };
       submitted = true;
@@ -123,6 +126,7 @@ export function TrialAgentMapping({ plan, initial, language, mutable, onOperatio
   return <section className="trial-mapping"><h3>{done ? t('路由已发布，Agent 已映射', 'Route published and Agent mapped') : t('路由已发布，接下来映射 Agent', 'Route published. Map an Agent next.')}</h3><p className="trial-mapping-note">{plan.desired.display_name}{!done && <> · {t('即使离开，也可从智能路由页面继续映射。', 'You can resume mapping from Routing after leaving this flow.')}</>}</p>
     {error && <p role="alert" className="callout warn">{error}</p>}
     {done ? <p role="status" className="callout good"><span>{mapping && <strong>{agentDisplayName(mapping.agentId, language)} · {mapping.presets.join(', ')} — </strong>}{t('映射已确认。回到 Agent 发起新会话，在会话路由时间线中观察试用结果。', 'Mapping confirmed. Start a new session in your Agent and inspect the routing timeline for trial results.')}</span></p> : snapshot && mapping && <TrialAgentChoice snapshot={snapshot} value={mapping} onChange={setMapping} language={language} disabled={busy || !!pending} />}
+    {mapping?.omarchy && <p className="field-help">{t('从应用启动器使用“Codex · 难度路由”或“Claude Code · 难度路由”。Codex 使用独立 Profile；Claude Code 使用独立启动模式。', "Use 'Codex · Difficulty routing' or 'Claude Code · Difficulty routing' from the app launcher. Codex uses an independent profile; Claude Code uses independent launch mode.")}</p>}
     {preview && <AgentSettingsFeedback preview={preview} language={language} facet="model" defaultChoice={{ kind: 'plan', plan_id: plan.agent_plan_id }} disabled={busy || !!pending} onCheck={() => void apply()} />}
     {pending && <p role="status">{t('正在核实本次映射；刷新不会重复提交。', 'Verifying this mapping; refresh does not resubmit.')}</p>}
     {done !== null && <TrialSessionHandoff planId={plan.agent_plan_id} confirmedAt={done} language={language} onWatch={onOpenSessions} />}

@@ -84,7 +84,10 @@ pub(super) fn read(
 }
 pub(super) fn write_private(path: &Path, bytes: &[u8]) -> Result<(), Error> {
     directory(path.parent().ok_or(Error::InvalidRecord)?)?;
-    let _ = read(path, 0o600, 8 * 1024 * 1024)?;
+    if bytes.len() > 16 * 1024 * 1024 {
+        return Err(Error::InvalidRecord);
+    }
+    let _ = read(path, 0o600, 16 * 1024 * 1024)?;
     hiroute_platform::durable::write_private_atomic(path, bytes)?;
     Ok(())
 }

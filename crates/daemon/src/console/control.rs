@@ -70,7 +70,7 @@ impl ConsoleControl {
                     .auth
                     .lock()
                     .map_err(|_| AuthError::Unavailable)?
-                    .create_launch(target)?;
+                    .create_launch_with_landing(target, input.landing)?;
                 Ok(json!({"url":format!("{url}/launch?code={}", code.as_str()),"expires_in":120}))
             }
             "CreateConsoleToken" => {

@@ -42,6 +42,47 @@ fn launch_is_loopback_only_short_lived_and_single_use() {
     );
 }
 #[test]
+fn launch_landing_is_bound_to_one_credential_exchange_and_never_a_token_login() {
+    let (_root, mut auth) = auth();
+    for hint in ["first-run", "agent:codex", "suggestion:stable-id"] {
+        let code = auth
+            .create_launch_with_landing(local_target(), Some(hint.into()))
+            .unwrap();
+        let fresh = auth.create_launch(local_target()).unwrap();
+        assert_ne!(code.as_str(), fresh.as_str());
+        assert_eq!(
+            auth.exchange_launch(&code, peer(), &local_target().origin)
+                .unwrap()
+                .landing
+                .as_deref(),
+            Some(hint)
+        );
+        assert!(
+            auth.exchange_launch(&code, peer(), &local_target().origin)
+                .is_err()
+        );
+        assert!(
+            auth.exchange_launch(&fresh, peer(), &local_target().origin)
+                .unwrap()
+                .landing
+                .is_none()
+        );
+    }
+    assert!(
+        auth.create_launch_with_landing(local_target(), Some("https://example.invalid".into()))
+            .is_err()
+    );
+    let token = auth.create_token("Landing test".into(), None).unwrap();
+    let login = auth.exchange_token(&token.token, peer()).unwrap();
+    assert!(login.landing.is_none());
+    assert!(
+        serde_json::to_value(login)
+            .unwrap()
+            .get("landing")
+            .is_none()
+    );
+}
+#[test]
 fn token_revocation_ends_sessions_and_disk_never_contains_credentials() {
     let (root, mut a) = auth();
     let token = a.create_token("Test".into(), None).unwrap();
