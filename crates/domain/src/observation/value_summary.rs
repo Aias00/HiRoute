@@ -3,6 +3,10 @@ use serde::{Deserialize, Serialize};
 #[derive(schemars::JsonSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ObservationValueQueryV2 {
+    /// Resolved by Application from the opt-in public report options, never client input.
+    #[serde(skip)]
+    #[schemars(skip)]
+    pub token_share: Option<ObservationTokenShareReadV1>,
     pub from_ms: i64,
     pub to_ms: i64,
     pub session_id: Option<String>,
@@ -11,6 +15,8 @@ pub struct ObservationValueQueryV2 {
 }
 #[derive(schemars::JsonSchema, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ObservationValueSummaryV2 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token_share: Option<ObservationTokenShareV1>,
     pub from_ms: i64,
     pub to_ms: i64,
     pub pending_requests: u64,
@@ -29,10 +35,89 @@ pub struct ObservationValueSummaryV2 {
 /// first/last days retain their actual half-open query bounds.
 #[derive(schemars::JsonSchema, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ObservationValueReportV2 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token_share: Option<ObservationTokenShareV1>,
     pub summary: ObservationValueSummaryV2,
     pub group_by: crate::ValueGroupByV1,
     pub day_timezone: Option<String>,
     pub days: Vec<ObservationValueSummaryV2>,
+}
+
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ObservationValueBreakdownV1 {
+    BillingClass,
+}
+
+#[derive(Clone, Debug)]
+pub struct ObservationTokenShareReadV1 {
+    pub kind: ObservationTokenSharePeriodKindV1,
+    pub timezone: String,
+    pub agent_filter: Option<String>,
+}
+
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ObservationTokenSharePeriodKindV1 {
+    Today,
+    Last7d,
+}
+
+#[derive(schemars::JsonSchema, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ObservationTokenSharePeriodV1 {
+    pub kind: ObservationTokenSharePeriodKindV1,
+    pub timezone: String,
+    pub start_ms: i64,
+    pub end_ms: i64,
+}
+
+/// Known, mutually exclusive token components; absent components never acquire usage.
+#[derive(schemars::JsonSchema, Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ObservationTokenComponentsV1 {
+    pub input: u64,
+    pub cache_read: u64,
+    pub cache_write: u64,
+    pub output: u64,
+    pub total: u64,
+}
+#[derive(schemars::JsonSchema, Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ObservationBillingTokensV1 {
+    pub tokens: ObservationTokenComponentsV1,
+    pub requests: u64,
+}
+#[derive(schemars::JsonSchema, Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ObservationGroupTokensV1 {
+    pub tokens: ObservationTokenComponentsV1,
+    pub turns: u64,
+}
+
+#[derive(schemars::JsonSchema, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ObservationTokenShareHeadlineV1 {
+    NoRoutedRequests,
+    NoSubscriptionInPeriod,
+    SubscriptionUsageUnknown {
+        unknown_usage_requests: u64,
+    },
+    NoComparableUsage,
+    Share {
+        outside_subscription_ratio_millis: u32,
+        known_classified_tokens: u64,
+        unknown_usage_requests: u64,
+    },
+}
+
+#[derive(schemars::JsonSchema, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ObservationTokenShareV1 {
+    pub basis: String,
+    pub period: ObservationTokenSharePeriodV1,
+    pub agent_filter: Option<String>,
+    pub by_billing_class: std::collections::BTreeMap<String, ObservationBillingTokensV1>,
+    pub by_group: std::collections::BTreeMap<String, ObservationGroupTokensV1>,
+    pub unknown_usage_requests: u64,
+    pub retention_boundary_partial: bool,
+    pub headline: ObservationTokenShareHeadlineV1,
+    pub disclosure: String,
 }
 #[derive(schemars::JsonSchema, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ObservationValueTotalV2 {

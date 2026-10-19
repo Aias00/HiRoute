@@ -8,9 +8,10 @@ impl crate::LocalObservationStore {
         q: &ObservationValueQueryV2,
         now_ms: i64,
     ) -> Result<ObservationValueSummaryV2, ObservationV2Error> {
-        Ok(self
-            .observed_value_report(reader, q, ValueGroupByV1::None, now_ms)?
-            .summary)
+        let report = self.observed_value_report(reader, q, ValueGroupByV1::None, now_ms)?;
+        let mut summary = report.summary;
+        summary.token_share = report.token_share;
+        Ok(summary)
     }
 
     /// All totals and optional UTC day groups share one transaction, deadline,
@@ -53,6 +54,7 @@ impl crate::LocalObservationStore {
                     &tx,
                     reader,
                     &ObservationValueQueryV2 {
+                        token_share: None,
                         from_ms,
                         to_ms,
                         ..q.clone()
@@ -62,10 +64,16 @@ impl crate::LocalObservationStore {
                 from_ms = to_ms;
             }
         }
+        let token_share = q
+            .token_share
+            .as_ref()
+            .map(|scope| token_share::aggregate(&tx, reader, q, scope, now_ms))
+            .transpose()?;
         tx.commit()?;
         check_visibility(&db, visibility)?;
         reader.check(now_ms, false, false)?;
         Ok(ObservationValueReportV2 {
+            token_share,
             summary,
             group_by,
             day_timezone: grouped.then(|| "UTC".into()),
@@ -230,6 +238,7 @@ fn read_totals(
             args, |r| r.get(0),
         )?;
     Ok(ObservationValueSummaryV2 {
+        token_share: None,
         from_ms: q.from_ms,
         to_ms: q.to_ms,
         pending_requests: pending,

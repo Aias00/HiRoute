@@ -6,6 +6,7 @@ import { agentBrandFromId, BrandIcon, Disclosure, formatMoney, ProductPage, UiIc
 import { deriveHomePrimaryMode, visibleData } from './state';
 import type { HomeProps, HomeReads } from './types';
 import { formatCacheHit, formatCacheHitCoverage, formatTokenCount } from '../usage-presentation';
+import { TokenShareCard } from './TokenShareCard';
 
 /** v3-shell + occami-core DOM. Only the real read model supplies values. */
 export function Home({ language, reads, onAction, hasTasks = false, trustSuggestions, newModels, onTrustAction }: HomeProps & { hasTasks?: boolean; trustSuggestions?: TrustSuggestionsRead; newModels?: ReactNode; onTrustAction?(planId: string, branchId: string): void }) {
@@ -20,7 +21,7 @@ export function Home({ language, reads, onAction, hasTasks = false, trustSuggest
   const activityUnavailable = !activity && reads.activity.status === 'error';
   const done = [Boolean(compute?.sources.length), Boolean(plans?.plans.some(p => p.publication === 'published')), Boolean(agents?.agents.some(a => ['configured', 'verified'].includes(a.model) || ['configured', 'verified'].includes(a.collaboration)))];
   const complete = done.every(Boolean);
-  const errors = (Object.keys(reads) as (keyof HomeReads)[]).filter(k => reads[k].status === 'error');
+  const errors = (Object.keys(reads) as (keyof HomeReads)[]).filter(k => k !== 'tokenShare' && reads[k]?.status === 'error');
   const unresolvedRequiredRead = (['compute', 'plans', 'agents', 'activity'] as const).some(domain => {
     const read = reads[domain];
     return read.status === 'error' && read.previous === undefined;
@@ -32,6 +33,7 @@ export function Home({ language, reads, onAction, hasTasks = false, trustSuggest
     agents: 'Agent',
     activity: text('会话', 'Sessions'),
     value: text('用量', 'Usage'),
+    tokenShare: text('订阅外占比', 'Outside subscription'),
   };
   const steps = [
     [text('添加模型', 'Add models'), text('连接 API，或复用本机订阅', 'Connect an API or reuse a local subscription')],
@@ -54,6 +56,7 @@ export function Home({ language, reads, onAction, hasTasks = false, trustSuggest
   const attention = trustSuggestions && <TrustAttention onAct={onTrustAction} read={trustSuggestions} language={language} names={Object.fromEntries((plans?.plans ?? []).map(plan => [plan.planId, plan.displayName]))} onOpen={planId => onAction({kind:'open-plan',returnTo:'home',planId,performance:true})} />;
   return <ProductPage title={text('首页', 'Home')} subtitle={recent.length ? text('近期使用与需要你处理的事', 'Recent work and things that need your attention') : undefined}>
     <div className="home-wrap v3-home" data-home-mode={mode}>
+      {reads.tokenShare && <TokenShareCard read={reads.tokenShare} language={language} onRetry={() => onAction({kind:'retry-read',domain:'tokenShare'})} />}
       {!!errors.length && <div className="callout bad home-read-error" role="alert"><UiIcon name="warning" /><div><strong>{text('部分信息暂时无法读取', 'Some information is temporarily unavailable')}</strong><p>{text('已有数据会保留；首次读取完成前不会把当前状态当作首次使用。', 'Existing data is retained. The app will not treat this as first use until the initial reads finish.')}</p><div className="actions">{errors.map(domain => <button className="btn btn-quiet" key={domain} type="button" onClick={() => onAction({kind:'retry-read', domain})}>{text('重试', 'Retry')} {domainLabels[domain]}</button>)}</div></div></div>}
       {unresolvedRequiredRead && !recent.length ? <section className="surface v3-ready"><UiIcon name="warning" /><div><strong>{text('暂时无法确认当前配置', 'Current setup cannot be confirmed')}</strong><p>{text('请先重试上方读取；确认实际状态后再继续配置。', 'Retry the reads above before changing setup.')}</p></div></section> : mode === 'loading' && !recent.length ? <div className="oc-status-row" role="status"><span className="oc-spinner" /><span>{text('正在读取本机配置与记录…', 'Reading local configuration and records…')}</span></div> : activityPending && !recent.length ? <div className="oc-status-row" role="status"><span className="oc-spinner" /><span>{text('正在确认会话记录…', 'Checking session records…')}</span></div> : !recent.length ? <>
         <section className="v3-welcome"><div className="eyebrow"><UiIcon name="route" />{text('模型与 Agent 的智能路由', 'Smart routing for models and agents')}</div>

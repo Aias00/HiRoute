@@ -53,6 +53,7 @@ impl crate::LocalObservationStore {
         reader.check(now, false, false)?;
         let mut report = super::api_equivalent::comparison_report(
             &ObservationValueQueryV2 {
+                token_share: None,
                 from_ms: scope.from_ms,
                 to_ms: scope.to_ms,
                 session_id: None,

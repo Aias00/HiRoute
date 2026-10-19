@@ -62,6 +62,7 @@ fn analysis_freezes_prices_and_attempt_inputs_and_uses_the_existing_arithmetic()
         .observed_api_equivalent_value(
             &reader(),
             &ObservationValueQueryV2 {
+                token_share: None,
                 from_ms: 0,
                 to_ms: 1000,
                 session_id: None,
@@ -567,6 +568,7 @@ fn numeric_legacy_comparison_preserves_the_original_reader_output() {
         ingest(&store, suffix);
     }
     let q = ObservationValueQueryV2 {
+        token_share: None,
         from_ms: 0,
         to_ms: 1000,
         session_id: None,

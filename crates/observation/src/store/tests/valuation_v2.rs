@@ -10,6 +10,8 @@ use hiroute_domain::*;
 mod analysis_tests;
 #[path = "native_analysis_tests.rs"]
 mod native_analysis_tests;
+#[path = "token_share.rs"]
+mod token_share_tests;
 
 fn price(at_ms: i64, frame_kind: UsageFrameKindV1) -> ExecutionPricingEvidenceV1 {
     let target = PriceTargetV1 {

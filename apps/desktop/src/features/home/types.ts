@@ -167,6 +167,7 @@ export type HomeOperation = {
 };
 
 export type HomeReads = {
+  tokenShare?: HomeRead<import('./token-share').TokenShare>;
   service: HomeRead<HomeService>;
   compute: HomeRead<HomeCompute>;
   plans: HomeRead<HomePlans>;

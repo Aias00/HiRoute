@@ -13,6 +13,8 @@ impl ObservationControl {
     ) -> Result<ApiEquivalentValueReportV1, ObservationQueryError> {
         let q = options.report;
         if q.group_by != hiroute_domain::ValueGroupByV1::None
+            || q.breakdown.is_some()
+            || q.agent.is_some()
             || q.from_ms.is_some() && q.period.is_some()
         {
             return Err(ObservationQueryError::InvalidQuery);
@@ -73,6 +75,7 @@ impl ObservationControl {
         self.service.port.observed_api_equivalent_value(
             reader,
             &hiroute_domain::ObservationValueQueryV2 {
+                token_share: None,
                 from_ms,
                 to_ms,
                 session_id: q.session_id.map(|s| s.to_string()),

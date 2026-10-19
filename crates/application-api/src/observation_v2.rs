@@ -148,6 +148,10 @@ pub struct ObservationDeleteApplyRequestV2 {
 #[derive(schemars::JsonSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ObservationHomeValueQueryV2 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub breakdown: Option<hiroute_domain::ObservationValueBreakdownV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<String>,
     #[serde(default)]
     pub period: Option<crate::ValuePeriodV1>,
     #[serde(default)]
@@ -163,6 +167,10 @@ pub struct ObservationStatusQueryV2 {}
 #[derive(schemars::JsonSchema, Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ObservationValueReportOptionsV2 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub breakdown: Option<hiroute_domain::ObservationValueBreakdownV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<String>,
     pub agent_plan_id: Option<crate::AgentPlanId>,
     pub from_ms: Option<i64>,
     pub to_ms: Option<i64>,

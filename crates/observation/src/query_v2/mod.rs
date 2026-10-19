@@ -9,6 +9,7 @@ mod facts;
 mod plan_quality;
 #[cfg(test)]
 mod plan_quality_bounds_tests;
+mod token_share;
 mod trust_cost;
 pub(crate) use plan_quality::routing_reason;
 mod relation;

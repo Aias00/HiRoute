@@ -60,6 +60,7 @@ fn local_reader(fixture: &Fixture, now_ms: i64) -> ObservationReaderContext {
 
 fn value_query(session_id: Option<String>, to_ms: i64) -> ObservationValueQueryV2 {
     ObservationValueQueryV2 {
+        token_share: None,
         from_ms: 0,
         to_ms,
         session_id,
@@ -90,6 +91,7 @@ fn current_value_report_keeps_unpriced_usage_scoped_and_groups_utc_days() {
     let now = DAY + 1_000;
     let reader = local_reader(&first, now);
     let mut query = ObservationValueQueryV2 {
+        token_share: None,
         from_ms: 50,
         to_ms: now,
         session_id: Some(first.session.to_string()),
@@ -165,6 +167,7 @@ fn aggregate_reads_one_scope_and_does_not_double_count_legacy_and_v2() {
     )
     .unwrap();
     let query = ObservationValueQueryV2 {
+        token_share: None,
         from_ms: 0,
         to_ms: 1000,
         session_id: None,
@@ -628,6 +631,7 @@ fn scoped_value_expires_before_sweeper_and_empty_midnight_range_is_valid() {
     )
     .unwrap();
     let mut query = ObservationValueQueryV2 {
+        token_share: None,
         from_ms: 0,
         to_ms: now,
         session_id: Some(fixture.session.to_string()),
@@ -720,6 +724,7 @@ fn basic_archives_keep_usage_and_known_subtotals_once_after_expiry() {
     )
     .unwrap();
     let query = ObservationValueQueryV2 {
+        token_share: None,
         from_ms: 0,
         to_ms: now,
         session_id: None,

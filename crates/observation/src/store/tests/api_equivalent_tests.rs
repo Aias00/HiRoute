@@ -32,6 +32,7 @@ fn reader(fixture: &Fixture) -> ObservationReaderContext {
 }
 fn query(fixture: &Fixture) -> ObservationValueQueryV2 {
     ObservationValueQueryV2 {
+        token_share: None,
         from_ms: 50,
         to_ms: 1000,
         session_id: Some(fixture.session.to_string()),

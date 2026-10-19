@@ -1911,6 +1911,48 @@
         "crates/local-storage/src/backup/source_snapshot/seal/tests.rs",
         "crates/daemon/src/control/runtime/history_cutover_tests.rs"
       ]
+    },
+    {
+      "contract": "hiroute.agent-settings-preview/v2",
+      "field": "omitted activation_preference and optional activation_mode/connection_conflict in v2 settings messages",
+      "mode": "legacy_adapter",
+      "owner": "agent-connections",
+      "reason": "Older requests and accepted Operations keep automatic native configuration. The explicit managed_launch opt-in freezes independent state. Omitted optional response fields preserve ordinary response shapes; old Operations are never rewritten or reconfigured at read time.",
+      "removal_condition": "Remove only through an explicit versioned retirement of supported ordinary v2 settings callers and accepted Operations.",
+      "allowed_paths": [
+        "crates/domain/src/agents/settings.rs",
+        "crates/application-api/src/agent_settings_preview.rs",
+        "crates/application-api/src/agent_settings.rs",
+        "crates/application/src/agent_connection/settings_input.rs",
+        "crates/application/src/agent_connection/claude_launch_state.rs"
+      ]
+    },
+    {
+      "contract": "hiroute.observation.query/v2",
+      "field": "omitted billing_class breakdown and Agent filter in v2 value_report and home_value",
+      "mode": "legacy_adapter",
+      "owner": "observation-storage",
+      "reason": "Absent breakdown preserves existing periods, fields and valuation/usage reads. New token-share reads are opt-in and use retained frozen candidate and normalized attempt evidence, without rewriting observations or consulting current source metadata.",
+      "removal_condition": "Remove only through an explicit versioned retirement of supported v2 observation readers.",
+      "allowed_paths": [
+        "crates/application-api/src/observation_v2.rs",
+        "crates/domain/src/observation/value_summary.rs",
+        "crates/application/src/observation_query/control/v2.rs",
+        "crates/observation/src/query_v2/totals.rs"
+      ]
+    },
+    {
+      "contract": "hiroute.observation.value-report/v2",
+      "field": "optional token_share on requested reports and Home value summaries",
+      "mode": "legacy_adapter",
+      "owner": "observation-storage",
+      "reason": "Unrequested reports omit the field. Older response bytes remain readable without inventing zero usage or a percentage; the shared Home reports unavailable when a peer has not supplied the opt-in figure.",
+      "removal_condition": "Remove only through an explicit versioned retirement of supported v2 observation response readers.",
+      "allowed_paths": [
+        "crates/domain/src/observation/value_summary.rs",
+        "crates/observation/src/query_v2/totals.rs",
+        "apps/desktop/src/product/use-desktop-home.ts"
+      ]
     }
   ]
 }

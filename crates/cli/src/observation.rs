@@ -219,6 +219,13 @@ pub(super) fn value_show(options: &[String]) -> Result<Value, ErrorCode> {
     let mut index = 0;
     while index < options.len() {
         match options[index].as_str() {
+            "--breakdown" if query.breakdown.is_none() => {
+                query.breakdown = Some(match next(options, &mut index)?.as_str() {
+                    "billing_class" => hiroute_domain::ObservationValueBreakdownV1::BillingClass,
+                    _ => return Err(ErrorCode::InvalidArguments),
+                });
+            }
+            "--agent" if query.agent.is_none() => query.agent = Some(next(options, &mut index)?),
             "--basis" if basis.is_none() => basis = Some(next(options, &mut index)?),
             "--reference-binding" if reference.is_none() => {
                 reference = Some(next(options, &mut index)?)
@@ -248,7 +255,7 @@ pub(super) fn value_show(options: &[String]) -> Result<Value, ErrorCode> {
             "--period" => {
                 query.period = Some(match next(options, &mut index)?.as_str() {
                     "today" => ValuePeriodV1::Today,
-                    "7d" => ValuePeriodV1::SevenDays,
+                    "7d" | "last_7d" => ValuePeriodV1::SevenDays,
                     "30d" => ValuePeriodV1::ThirtyDays,
                     _ => return Err(ErrorCode::InvalidArguments),
                 });
@@ -435,6 +442,38 @@ mod tests {
         assert_eq!(value.to_ms, None);
         assert_eq!(value.period, None);
         assert_eq!(value.currency, None);
+    }
+
+    #[test]
+    fn token_share_is_an_explicit_read_and_old_value_requests_omit_the_new_options() {
+        let old = value_show(&[]).unwrap();
+        assert!(old["intent"]["query"].get("breakdown").is_none());
+        assert!(old["intent"]["query"].get("agent").is_none());
+        let request: ObservationReadRequestV2 = serde_json::from_value(
+            value_show(
+                &[
+                    "--breakdown",
+                    "billing_class",
+                    "--period",
+                    "last_7d",
+                    "--agent",
+                    "codex",
+                ]
+                .map(str::to_owned),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let ObservationReadIntentV2::ValueReport(options) = request.intent else {
+            panic!("current value report expected")
+        };
+        assert_eq!(
+            options.breakdown,
+            Some(hiroute_domain::ObservationValueBreakdownV1::BillingClass)
+        );
+        assert_eq!(options.agent.as_deref(), Some("codex"));
+        assert_eq!(options.period, Some(ValuePeriodV1::SevenDays));
+        assert!(value_show(&["--breakdown".into(), "cost".into()]).is_err());
     }
 
     #[test]

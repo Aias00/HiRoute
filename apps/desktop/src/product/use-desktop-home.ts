@@ -29,6 +29,7 @@ import {
   type ObservationValueSummary,
 } from './home-projections';
 import { safeDiagnosticCode } from '../error-code';
+import type { TokenShare } from '../features/home/token-share';
 
 const HOME_TARGET = 'desktop/local-home';
 const loading = <T,>(): DomainReadSlot<T> => ({
@@ -58,6 +59,7 @@ export function useDesktopHome() {
   const [agents, setAgents] = useState<DomainReadSlot<HomeAgents>>(loading);
   const [activity, setActivity] = useState<DomainReadSlot<HomeActivity>>(loading);
   const [value, setValue] = useState<DomainReadSlot<HomeValue>>(loading);
+  const [tokenShare, setTokenShare] = useState<DomainReadSlot<TokenShare>>(loading);
   const [desktopSnapshot, setDesktopSnapshot] = useState<DesktopSnapshot | null>(null);
   const [agentSnapshot, setAgentSnapshot] = useState<AgentSnapshot | null>(null);
   const sequence = useRef(0);
@@ -221,6 +223,20 @@ export function useDesktopHome() {
     }
   }, [requestId]);
 
+  const refreshTokenShare = useCallback(async () => {
+    const request = requestId('tokenShare');
+    setTokenShare(current => beginDomainRead(current, request, HOME_TARGET));
+    try {
+      const summary = await invoke<ObservationValueSummary>('observation_read', observationRequest('home_value', {
+        period: 'today', session_id: null, currency: null, breakdown: 'billing_class',
+      }));
+      if (!summary.token_share || summary.token_share.period.kind !== 'today') throw new Error('READ_UNAVAILABLE');
+      setTokenShare(current => resolveDomainRead(current, request, HOME_TARGET, summary.token_share!));
+    } catch (error) {
+      setTokenShare(current => failDomainRead(current, request, HOME_TARGET, errorCode(error)));
+    }
+  }, [requestId]);
+
   const refreshAll = useCallback(async () => {
     await Promise.allSettled([
       refreshDesktop(),
@@ -228,16 +244,18 @@ export function useDesktopHome() {
       refreshAgents(),
       refreshActivity(),
       refreshValue(),
+      refreshTokenShare(),
     ]);
-  }, [refreshActivity, refreshAgents, refreshCompute, refreshDesktop, refreshValue]);
+  }, [refreshActivity, refreshAgents, refreshCompute, refreshDesktop, refreshValue, refreshTokenShare]);
 
   const refreshDomain = useCallback(async (domain: keyof HomeReads) => {
     if (domain === 'service' || domain === 'plans') return refreshDesktop();
     if (domain === 'compute') return refreshCompute();
     if (domain === 'agents') return refreshAgents();
     if (domain === 'activity') return refreshActivity();
+    if (domain === 'tokenShare') return refreshTokenShare();
     return refreshValue();
-  }, [refreshActivity, refreshAgents, refreshCompute, refreshDesktop, refreshValue]);
+  }, [refreshActivity, refreshAgents, refreshCompute, refreshDesktop, refreshValue, refreshTokenShare]);
 
   useEffect(() => {
     void refreshAll();
@@ -269,6 +287,7 @@ export function useDesktopHome() {
       agents: agents.read,
       activity: activity.read,
       value: value.read,
+      tokenShare: tokenShare.read,
     } satisfies HomeReads,
     desktopSnapshot,
     agentSnapshot,

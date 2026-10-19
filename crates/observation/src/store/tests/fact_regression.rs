@@ -283,6 +283,7 @@ fn late_usage_after_request_finish_is_queryable_and_does_not_poison_the_fact_str
         .observed_value_totals(
             &reader,
             &ObservationValueQueryV2 {
+                token_share: None,
                 from_ms: 0,
                 to_ms: 1_000,
                 session_id: Some(fixture.session.to_string()),

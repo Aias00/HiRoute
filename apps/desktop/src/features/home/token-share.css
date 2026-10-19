@@ -1,0 +1,8 @@
+.token-share-card { padding: 18px 22px; min-width: 0; }
+.token-share-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.token-share-heading h2 { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
+.token-share-headline { display: block; margin-top: 8px; font-size: 18px; line-height: 1.5; overflow-wrap: anywhere; }
+.token-share-headline.percentage { font-size: 30px; }
+.token-share-explanation { position: relative; flex: 0 0 auto; }
+.token-share-tooltip { position: absolute; z-index: 20; top: 100%; right: 0; width: min(340px, calc(100vw - 80px)); padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--panel-solid); color: var(--text); box-shadow: var(--shadow-md); font-size: 12px; line-height: 1.6; }
+.token-share-tooltip p { margin: 8px 0 0; }

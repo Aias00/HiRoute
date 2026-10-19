@@ -1,5 +1,6 @@
 pub(super) mod analysis;
 mod api_equivalent;
+mod token_share;
 use super::*;
 use hiroute_application_api::{ObservationReadIntentV2, ObservationReadRequestV2};
 use hiroute_domain::ObservationReaderContext;
@@ -139,10 +140,8 @@ impl ObservationControl {
                 serde_json::to_value(self.service.observed_maintenance_status(&reader, now)?)
             }
             ObservationReadIntentV2::HomeValue(q) => {
-                let from_ms = match q
-                    .period
-                    .unwrap_or(hiroute_application_api::ValuePeriodV1::Today)
-                {
+                let period = q.period.unwrap_or(ValuePeriodV1::Today);
+                let from_ms = match period {
                     hiroute_application_api::ValuePeriodV1::Today => {
                         self.clock.local_day_start_ms(now).map_err(map_control)?
                     }
@@ -160,6 +159,14 @@ impl ObservationControl {
                 serde_json::to_value(self.service.observed_value_totals(
                     &reader,
                     &hiroute_domain::ObservationValueQueryV2 {
+                        token_share: token_share::scope(
+                            self.clock.as_ref(),
+                            q.breakdown,
+                            q.agent,
+                            period,
+                            from_ms,
+                            now,
+                        )?,
                         from_ms,
                         to_ms: now,
                         session_id: q.session_id,
@@ -200,16 +207,20 @@ impl ObservationControl {
                 serde_json::to_value(self.service.observed_value_totals(&reader, &q, now)?)
             }
             ObservationReadIntentV2::ValueReport(q) => {
-                if q.from_ms.is_some() && q.period.is_some() {
+                if q.from_ms.is_some() && q.period.is_some()
+                    || q.breakdown.is_some() && (q.from_ms.is_some() || q.to_ms.is_some())
+                {
                     return Err(ObservationQueryError::InvalidQuery);
                 }
                 let to_ms = q.to_ms.unwrap_or(now);
+                let period = q.period.unwrap_or(if q.breakdown.is_some() {
+                    ValuePeriodV1::Today
+                } else {
+                    ValuePeriodV1::SevenDays
+                });
                 let from_ms = match q.from_ms {
                     Some(from_ms) => from_ms,
-                    None => match q
-                        .period
-                        .unwrap_or(hiroute_application_api::ValuePeriodV1::SevenDays)
-                    {
+                    None => match period {
                         hiroute_application_api::ValuePeriodV1::Today => {
                             self.clock.local_day_start_ms(to_ms).map_err(map_control)?
                         }
@@ -227,6 +238,14 @@ impl ObservationControl {
                 serde_json::to_value(self.service.observed_value_report(
                     &reader,
                     &hiroute_domain::ObservationValueQueryV2 {
+                        token_share: token_share::scope(
+                            self.clock.as_ref(),
+                            q.breakdown,
+                            q.agent,
+                            period,
+                            from_ms,
+                            to_ms,
+                        )?,
                         from_ms,
                         to_ms,
                         session_id: q.session_id.map(|id| id.to_string()),

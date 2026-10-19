@@ -61,6 +61,7 @@ export type ObservationSessionPage = {
 type ObservationCoverage = 'complete' | 'partial' | 'unknown';
 
 export type ObservationValueSummary = {
+  token_share?: import('../features/home/token-share').TokenShare;
   from_ms: number;
   to_ms: number;
   pending_requests: number;

@@ -265,6 +265,8 @@ fn production_writer_store_drives_application_owned_defaults_and_all_plan_scope(
     let home = hiroute_application_api::ObservationReadRequestV2::new(
         hiroute_application_api::ObservationReadIntentV2::HomeValue(
             hiroute_application_api::ObservationHomeValueQueryV2 {
+                breakdown: None,
+                agent: None,
                 period: Some(hiroute_application_api::ValuePeriodV1::SevenDays),
                 session_id: None,
                 currency: Some("USD".into()),
@@ -291,6 +293,8 @@ fn production_writer_store_drives_application_owned_defaults_and_all_plan_scope(
     let scoped_home = hiroute_application_api::ObservationReadRequestV2::new(
         hiroute_application_api::ObservationReadIntentV2::HomeValue(
             hiroute_application_api::ObservationHomeValueQueryV2 {
+                breakdown: None,
+                agent: None,
                 period: Some(hiroute_application_api::ValuePeriodV1::SevenDays),
                 session_id: Some("session-alpha".into()),
                 currency: Some("USD".into()),
@@ -955,6 +959,7 @@ fn failed_live_check_with_known_usage_is_excluded_by_real_receipt_identity() {
     )
     .unwrap();
     let query = ObservationValueQueryV2 {
+        token_share: None,
         from_ms: now_ms - 5_000,
         to_ms: now_ms + 1,
         session_id: Some(session.to_string()),
