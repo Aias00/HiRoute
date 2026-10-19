@@ -439,7 +439,12 @@ pub fn start_role_all(config: RoleAllConfig) -> Result<RoleAllHandle, RoleAllErr
             ..Default::default()
         },
     )
-    .map_err(|error| RoleAllError::Component("Storage", error));
+    .map_err(
+        |error| match hiroute_host_runtime::StorageRecovery::read(&config.storage_root) {
+            Ok(Some(recovery)) => RoleAllError::StorageRecovery(recovery),
+            _ => RoleAllError::Component("Storage", error),
+        },
+    );
     let runtime = match runtime {
         Ok(runtime) => {
             config
@@ -848,6 +853,8 @@ pub enum RoleAllError {
     StandaloneProxyUnavailable,
     #[error("role=all configuration is invalid")]
     InvalidConfiguration,
+    #[error("storage startup recovery required: {0:?}")]
+    StorageRecovery(hiroute_host_runtime::StorageRecovery),
     #[error("{0} component failed: {1}")]
     Component(&'static str, String),
     #[error("{0} did not stop before the role=all deadline")]

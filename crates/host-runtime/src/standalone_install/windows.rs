@@ -215,6 +215,9 @@ pub fn recover_pending() -> io::Result<()> {
 }
 fn cleanup_locked(layout: &StandaloneLayout) -> io::Result<PackageCleanup> {
     let mut retained = vec![];
+    if let Some(package) = crate::RetainedRecoveryPackage::read(&layout.storage_root())? {
+        retained.push(package.package_root);
+    }
     if let Some(marker) = read_json::<StandaloneInstallRecordV1>(&layout.marker_path, MAX_RECORD)? {
         marker.validate().map_err(|_| invalid())?;
         retained.push(marker.install_root);
@@ -418,6 +421,14 @@ pub fn install(request: InstallRequest) -> io::Result<Value> {
             &journal.new_definition,
         )?;
         task::set_autostart(&native, request.autostart)?;
+        if let Some(old) = &old {
+            crate::RetainedRecoveryPackage::capture(
+                &layout.storage_root(),
+                &old.0.install_root,
+                &journal.new_marker.install_root.join("hirouted.exe"),
+            )?
+            .store()?;
+        }
         journal.commit(&layout)?;
         journal.finish(&layout)
     })();

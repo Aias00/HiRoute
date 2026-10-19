@@ -68,9 +68,15 @@ impl MigrationSetCoordinator {
         }
         let mut options = options.clone();
         if options.preserve_observation_source && options.recovery_package.is_none() {
-            options.recovery_package = super::recovery_package::previous_desktop(root)?;
+            options.recovery_package =
+                super::recovery_package::previous_desktop(root).map_err(|error| {
+                    error.with_recovery(
+                        hiroute_host_runtime::StorageRecoveryCause::InvalidPackage,
+                        hiroute_host_runtime::StorageRecoveryAction::PreserveAndDiagnose,
+                    )
+                })?;
             if options.recovery_package.is_none() {
-                return Err(LocalStorageError::InvalidData.at_upgrade_stage("Observation history sealing requires a matching old package: set HIROUTE_RECOVERY_PACKAGE"));
+                return Err(LocalStorageError::InvalidData.at_upgrade_stage("Observation history sealing requires a matching old package: set HIROUTE_RECOVERY_PACKAGE").with_recovery(hiroute_host_runtime::StorageRecoveryCause::MissingPackage, hiroute_host_runtime::StorageRecoveryAction::PreserveAndDiagnose));
             }
         }
         let source = self.set.as_ref().filter(|set| {

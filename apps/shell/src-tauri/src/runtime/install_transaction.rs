@@ -415,6 +415,11 @@ pub(super) fn rollback(allow_unavailable_agent_restore: bool) -> io::Result<()> 
         cleanup_committed();
         return Ok(());
     }
+    let layout =
+        hiroute_host_runtime::StandaloneLayout::from_environment().map_err(|_| invalid())?;
+    if hiroute_host_runtime::storage_upgrade_started(&layout.storage_root())? {
+        return Err(io::Error::other("STORAGE_UPGRADE_RECOVERY_REQUIRED"));
+    }
     windows::recover_pending()?;
     // Validate the complete replacement set before restoring the first file.
     for name in value.old.keys().chain(value.new.keys()) {

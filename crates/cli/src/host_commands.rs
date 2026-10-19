@@ -55,7 +55,7 @@ pub(crate) fn execute(arguments: &[String], globals: &Globals) -> Option<CliExec
 fn host_help(family: &str) -> &'static str {
     match family {
         "service" => {
-            "Usage\n  hiroute service start|stop|restart|status|logs|doctor --output json\n  hiroute service autostart enable|disable|status --output json\n  hiroute service run\n  hiroute service layout --output json\n"
+            "Usage\n  hiroute service start|stop|restart|status|logs|doctor|recovery --output json\n  hiroute service autostart enable|disable|status --output json\n  hiroute service run\n  hiroute service layout --output json\n"
         }
         "gateway" => {
             "Usage\n  hiroute gateway show --output json\n  hiroute gateway set --address <IPV4> --port auto|<PORT> [--accept-remote-risk] --output json\n  hiroute gateway recover --output json\n"
@@ -96,6 +96,7 @@ fn service_command(
         [verb] if verb == "restart" => json_value(service::restart(timeout).map_err(map)?)?,
         [verb] if verb == "status" => json_value(service::status().map_err(map)?)?,
         [verb] if verb == "logs" => service::logs().map_err(map)?,
+        [verb] if verb == "recovery" => service::recovery().map_err(map)?,
         [verb] if verb == "doctor" => service::doctor(),
         [verb] if verb == "layout" => service::windows_layout().map_err(map)?,
         [verb, manager_flag, manager, daemon_flag, daemon]

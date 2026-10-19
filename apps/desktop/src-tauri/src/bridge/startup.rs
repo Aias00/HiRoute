@@ -56,6 +56,8 @@ pub(super) fn start_session(
 pub struct StartupReport {
     state: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
+    storage_recovery: Option<hiroute_host_runtime::StorageRecovery>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     code: Option<String>,
     recovery_available: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -143,6 +145,11 @@ pub async fn startup_status(
     if let Some(code) = state.1.error.get() {
         return Ok(StartupReport {
             state: "failed",
+            storage_recovery: state.1.data_root.as_ref().and_then(|root| {
+                hiroute_host_runtime::StorageRecovery::read(&root.join("storage"))
+                    .ok()
+                    .flatten()
+            }),
             code: Some(code.clone()),
             recovery_available: state.1.data_root.as_ref().is_some_and(|root| {
                 root.is_absolute()
@@ -159,6 +166,7 @@ pub async fn startup_status(
     let ready = state.0.try_lock().is_ok_and(|session| session.is_some());
     Ok(StartupReport {
         state: if ready { "ready" } else { "starting" },
+        storage_recovery: None,
         code: None,
         recovery_available: false,
         backup_directory: None,

@@ -208,6 +208,7 @@ fn run_daemon(
         level_override,
     }));
     hiroute_diagnostics::panic::install_panic_hook(diagnostics.handle().clone());
+    let recovery_root = arguments.storage_root.clone();
     let result = match arguments.role.as_deref() {
         Some("control") => run_control(arguments, &diagnostics),
         Some("all") => run_all(
@@ -225,6 +226,11 @@ fn run_daemon(
         }));
         if managed_role {
             let _ = write_startup_failure_frame(error.code);
+        }
+        if let Some(root) = recovery_root
+            && let Ok(Some(recovery)) = hiroute_host_runtime::StorageRecovery::read(&root)
+        {
+            eprintln!("{}", recovery.operator_guidance());
         }
         diagnostics.shutdown();
         return Err(error.message);
@@ -278,6 +284,7 @@ fn diagnostics_elapsed_ms(diagnostics: &DiagnosticRuntime) -> u64 {
 
 fn classify_role_all_error(error: &RoleAllError) -> StartupFailureCode {
     match error {
+        RoleAllError::StorageRecovery(_) => StartupFailureCode::UpgradeStorageFailed,
         RoleAllError::InvalidConfiguration => StartupFailureCode::InvalidConfiguration,
         RoleAllError::StandaloneProxyUnavailable => StartupFailureCode::DependencyUnavailable,
         RoleAllError::JoinTimeout(_) => StartupFailureCode::Internal,

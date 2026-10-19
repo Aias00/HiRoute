@@ -114,6 +114,7 @@ fn excluded(name: &str) -> bool {
     ) || name == "live"
         || name.starts_with("migration-set")
         || name == "startup.lock"
+        || name == hiroute_host_runtime::STORAGE_RECOVERY_FILE
         || name.ends_with(".pid")
         || name.ends_with(".sock")
 }
@@ -338,7 +339,7 @@ fn preflight_space(
         required = required.saturating_add(bytes(package)?);
     }
     if fs2::available_space(root)? < required {
-        return Err(LocalStorageError::InvalidData.at_upgrade_stage("Insufficient space for recovery material and startup headroom; preserve the source and free unrelated space before retrying"));
+        return Err(LocalStorageError::InvalidData.at_upgrade_stage("Insufficient space for recovery material and startup headroom; preserve the source and free unrelated space before retrying").with_recovery(hiroute_host_runtime::StorageRecoveryCause::InsufficientSpace, hiroute_host_runtime::StorageRecoveryAction::RetryCurrent));
     }
     Ok(())
 }

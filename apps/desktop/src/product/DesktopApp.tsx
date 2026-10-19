@@ -1,3 +1,4 @@
+import { storageRecoveryText } from '../storage-recovery';
 import { randomId } from '../random-id.ts';
 import { hostCapabilities } from '../host/index.ts';
 import { HostNotices } from '../host/ConsoleUi';
@@ -639,15 +640,11 @@ export function DesktopApp() {
           <UiIcon name="warning" />
           <div>
             <strong>{language === 'zh' ? '本机服务启动失败' : 'Local service failed to start'}</strong>
-            <p>{startupFailure.code === 'DAEMON_UPGRADE_SOURCE_UNSUPPORTED'
-                ? (language === 'zh' ? '此数据格式尚无经过验证的升级与恢复路径。请保留原数据并使用对应旧版本，勿清空目录重试。' : 'This data format has no verified upgrade and recovery path. Keep the data and use its matching previous version.')
-              : startupFailure.backup_directory
-              ? (language === 'zh' ? '请保留当前数据目录，按升级备份中的《恢复说明.md》恢复整组数据，并覆盖安装说明指定的旧版本。恢复会舍弃备份之后的新数据。' : 'Keep the current data directory. Follow the recovery guide in the upgrade backup to restore the complete data set and install the specified previous version. Changes made after the backup will be lost.')
-              : (language === 'zh' ? `启动阶段失败（${startupFailure.code ?? 'STARTUP_FAILED'}）。请保留现有数据，打开恢复目录查看日志并备份。` : `Startup failed (${startupFailure.code ?? 'STARTUP_FAILED'}). Keep the existing data; open the recovery directory to inspect logs and back it up.`)}</p>
-            {startupFailure.backup_directory && <p>{language === 'zh' ? '升级备份：' : 'Upgrade backup: '}{startupFailure.backup_directory}</p>}
+            <p>{storageRecoveryText(startupFailure.storage_recovery, language, 'macos').reason}</p>
+            <p>{storageRecoveryText(startupFailure.storage_recovery, language, 'macos').instructions}</p>
             {startupFailure.recovery_available && <button className="btn" type="button" onClick={() => {
               void invoke('open_startup_recovery_directory').catch(() => setNotice(language === 'zh' ? '无法安全打开恢复目录，请检查目录权限后重试。' : 'The recovery directory could not be opened safely. Check its permissions and try again.'));
-            }}>{startupFailure.backup_directory ? (language === 'zh' ? '打开升级备份与恢复说明' : 'Open upgrade backup and recovery guide') : (language === 'zh' ? '打开恢复目录' : 'Open recovery directory')}</button>}
+            }}>{startupFailure.backup_directory ? (language === 'zh' ? '查看保留的恢复材料与说明' : 'Inspect preserved recovery material and guide') : (language === 'zh' ? '打开恢复目录' : 'Open recovery directory')}</button>}
           </div>
         </div>}
 

@@ -335,7 +335,13 @@ impl ProductionControlRuntime {
         recover: bool,
         overrides: RuntimeOpenOverrides,
     ) -> Result<Self, String> {
-        observation_key::validate_existing_authority(storage_root)?;
+        observation_key::validate_existing_authority(storage_root).inspect_err(|_| {
+            let _ = hiroute_host_runtime::StorageRecovery::new(
+                hiroute_host_runtime::StorageRecoveryCause::MissingKey,
+                hiroute_host_runtime::StorageRecoveryAction::PreserveAndDiagnose,
+            )
+            .store(storage_root);
+        })?;
         let mut startup = overrides.storage_startup.clone();
         startup.preserve_observation_source =
             LocalObservationStore::legacy_history_requires_seal(storage_root.join("observation"))

@@ -18,6 +18,7 @@ pub struct Status {
     phase: &'static str,
     code: Option<&'static str>,
     logs_path: String,
+    storage_recovery: Option<hiroute_host_runtime::StorageRecovery>,
 }
 pub struct ShellState {
     origin: Mutex<Option<ConsoleOrigin>>,
@@ -37,6 +38,7 @@ impl ShellState {
                 phase: "starting",
                 code: None,
                 logs_path: logs,
+                storage_recovery: None,
             }),
             starting: AtomicBool::new(false),
             updater: updater::Updater::new(),
@@ -46,6 +48,17 @@ impl ShellState {
         if let Ok(mut status) = self.status.lock() {
             status.phase = phase;
             status.code = code;
+            status.storage_recovery = if phase == "failed" {
+                hiroute_host_runtime::StandaloneLayout::from_environment()
+                    .ok()
+                    .and_then(|layout| {
+                        hiroute_host_runtime::StorageRecovery::read(&layout.storage_root())
+                            .ok()
+                            .flatten()
+                    })
+            } else {
+                None
+            };
         }
     }
 }

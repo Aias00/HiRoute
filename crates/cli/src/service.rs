@@ -41,6 +41,15 @@ pub(crate) struct ServiceStatus {
     runtime_root: PathBuf,
 }
 
+pub(crate) fn recovery() -> Result<serde_json::Value, ServiceFailure> {
+    let (layout, _) = installed()?;
+    let record = hiroute_host_runtime::StorageRecovery::read(&layout.storage_root())
+        .map_err(|_| ServiceFailure::Unavailable)?;
+    Ok(
+        json!({"schema":"hiroute.service-recovery/v1", "recovery":record, "instructions":record.as_ref().map(|r|r.operator_guidance()), "diagnostics_root":layout.diagnostics_root()}),
+    )
+}
+
 pub(crate) fn status() -> Result<ServiceStatus, ServiceFailure> {
     let (layout, _) = installed()?;
     Ok(ServiceStatus {

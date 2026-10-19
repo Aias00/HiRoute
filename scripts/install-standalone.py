@@ -696,6 +696,48 @@ def console_component(paths, desired):
     return staged_file(destination, (json.dumps(config, sort_keys=True) + "\n").encode(), 0o600), destination
 
 
+def retain_recovery_package(paths, current, target_daemon):
+    """Preserve the complete installed program/resources before replacement.
+
+    This handoff goes to the daemon through its private state directory, so
+    systemd/launchd does not depend on inheriting the invoking shell's environment.
+    """
+    old_program, old_resources, _service = validate_marker(paths, current)
+    def footprint(path):
+        metadata = path.lstat()
+        if path.is_symlink() or not (path.is_file() or path.is_dir()):
+            raise ValueError("recovery package contains an unsafe entry")
+        if path.is_dir():
+            return sum(footprint(entry) for entry in path.iterdir())
+        return metadata.st_size
+    required = footprint(old_program) + footprint(old_resources) + 256 * 1024 * 1024
+    if shutil.disk_usage(paths["state"]).free < required:
+        raise ValueError("Insufficient space on the service-state volume for the matching old package; free unrelated space before retrying")
+    parent = paths["state"] / "upgrade-packages"
+    parent.mkdir(mode=0o700, exist_ok=True)
+    if parent.is_symlink() or not parent.is_dir():
+        raise ValueError("unsafe recovery package directory")
+    retained = Path(tempfile.mkdtemp(prefix="old-package-", dir=parent))
+    files = {}
+    for source, name in ((old_program, "program"), (old_resources, "resources")):
+        target = retained / name
+        shutil.copytree(source, target)
+        for entry in source.rglob("*"):
+            if entry.is_file():
+                relative = entry.relative_to(source)
+                copied = target / relative
+                expected = digest(entry)
+                if digest(copied) != expected:
+                    raise ValueError("old recovery package changed during preservation")
+                files[f"{name}/{relative.as_posix()}"] = expected
+    locations = retained / "restore-locations.json"
+    locations.write_text(json.dumps({"schema": "hiroute.standalone-program-restore/v1", "program": str(old_program), "resources": str(old_resources)}, sort_keys=True) + "\n")
+    locations.chmod(0o600)
+    files["restore-locations.json"] = digest(locations)
+    record = {"schema": "hiroute.retained-recovery-package/v1", "storage_root": str(paths["state"] / "storage"), "package_root": str(retained), "target_daemon_sha256": digest(target_daemon), "files": files}
+    return staged_file(paths["state"] / "upgrade-package.json", (json.dumps(record, sort_keys=True) + "\n").encode(), 0o600)
+
+
 def install(args):
     home = Path(os.environ.get("HOME", ""))
     if not home.is_absolute() or not home.is_dir():
@@ -780,6 +822,8 @@ def install(args):
                 )
 
             if current is not None:
+                retained_handoff = retain_recovery_package(paths, current, staged_bin / "hirouted")
+                staged_components.insert(0, (retained_handoff, paths["state"] / "upgrade-package.json"))
                 old_install_root, old_resource_root, _old_service = validate_marker(
                     paths, current
                 )

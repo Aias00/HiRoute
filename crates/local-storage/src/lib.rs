@@ -83,16 +83,22 @@ impl LocalStorageSet {
     ) -> Result<Self, LocalStorageError> {
         let storage_root = storage_root.as_ref();
         migrations::prepare_storage_root(storage_root)?;
-        migrations::validate_startup_format(storage_root)?;
         let startup_lock = std::sync::Arc::new(migrations::acquire_startup_lock(storage_root)?);
-        migrations::validate_startup_format(storage_root)?;
-        Self::open_locked_stores(
-            authority,
-            barrier,
-            storage_root,
-            startup_lock,
-            Some(options),
-        )
+        hiroute_host_runtime::StorageRecovery::clear(storage_root)?;
+        let original = options.preserve_observation_source
+            && migrations::startup_recovery::original_group_admitted(storage_root).unwrap_or(false);
+        let result = migrations::validate_startup_format(storage_root).and_then(|()| {
+            Self::open_locked_stores(
+                authority,
+                barrier,
+                storage_root,
+                startup_lock.clone(),
+                Some(options),
+            )
+        });
+        result.map_err(|error| {
+            migrations::startup_recovery::publish_failure(storage_root, error, original)
+        })
     }
 
     // SQL coordinator component harness only: unsupported formats never pass through the
@@ -596,6 +602,11 @@ pub enum LocalStorageError {
         "UPGRADE_SOURCE_UNSUPPORTED: this source format has no validated upgrade and recovery path"
     )]
     UpgradeSourceUnsupported,
+    #[error("storage upgrade requires recovery: {recovery:?}: {source}")]
+    Recovery {
+        recovery: hiroute_host_runtime::StorageRecovery,
+        source: Box<LocalStorageError>,
+    },
     #[error("stable storage upgrade failed at {stage}: {source}")]
     UpgradeStage {
         stage: &'static str,
@@ -624,6 +635,36 @@ fn prepare_owner_directory(path: &Path) -> Result<(), LocalStorageError> {
 }
 
 impl LocalStorageError {
+    pub fn recovery(&self) -> hiroute_host_runtime::StorageRecovery {
+        use hiroute_host_runtime::{
+            StorageRecovery, StorageRecoveryAction as A, StorageRecoveryCause as C,
+        };
+        match self {
+            Self::Recovery { recovery, .. } => recovery.clone(),
+            Self::UpgradeStage { source, .. } => source.recovery(),
+            Self::UpgradeSourceUnsupported => {
+                StorageRecovery::new(C::UnsupportedFormat, A::PreserveAndDiagnose)
+            }
+            Self::Permission => StorageRecovery::new(C::AccessDenied, A::PreserveAndDiagnose),
+            Self::Locked | Self::Crypto => {
+                StorageRecovery::new(C::MissingKey, A::PreserveAndDiagnose)
+            }
+            Self::Io(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+                StorageRecovery::new(C::AccessDenied, A::PreserveAndDiagnose)
+            }
+            _ => StorageRecovery::new(C::UnknownState, A::PreserveAndDiagnose),
+        }
+    }
+    pub(crate) fn with_recovery(
+        self,
+        cause: hiroute_host_runtime::StorageRecoveryCause,
+        action: hiroute_host_runtime::StorageRecoveryAction,
+    ) -> Self {
+        Self::Recovery {
+            recovery: hiroute_host_runtime::StorageRecovery::new(cause, action),
+            source: Box::new(self),
+        }
+    }
     pub(crate) fn at_upgrade_stage(self, stage: &'static str) -> Self {
         Self::UpgradeStage {
             stage,
