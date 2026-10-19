@@ -6,7 +6,12 @@ license.workspace = true
 rust-version.workspace = true
 
 [features]
-integration-test-hooks = ["dep:base64", "dep:ring", "hiroute-gateway/e2e-test-control"]
+integration-test-hooks = [
+    "dep:base64",
+    "dep:ring",
+    "hiroute-gateway/e2e-test-control",
+    "hiroute-integrations/test-support",
+]
 
 [dependencies]
 base64 = { workspace = true, optional = true }
