@@ -14,6 +14,16 @@ announcements. It does not introduce a second editable model catalog.
 | `public-keys.json` | Reviewed production trust roots as `{ "keys": [{ "key_id": "…", "ed25519": "…" }] }`; `ed25519` is standard padded base64 of the raw 32-byte public key |
 | `payload.json` | Generated unsigned payload; never hand-edit model facts here |
 
+The Desktop client also bundles the maintained `featured.json` editorial input.
+When no feed announcements are available, Home and quick start use only these
+resolvable announcements, rather than labeling the first directory entries as new.
+Bundled announcements keep the model's built-in origin and never claim signature
+verification. An update headline may name an announced release while its note
+distinguishes that announcement from the version served by a connection. The
+underlying model identity, connection checks, prices and published routing remain
+owned by the ordinary catalog and saved connection. An unresolved announcement
+is hidden in both sources.
+
 Change model facts in
 [`metadata-catalog.json`](../model-data/current/inputs/metadata-catalog.json), then
 follow the [metadata maintainer workflow](../../.agents/skills/model-metadata-maintainer/SKILL.md).

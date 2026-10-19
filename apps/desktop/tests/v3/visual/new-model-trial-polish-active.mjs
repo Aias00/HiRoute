@@ -47,6 +47,21 @@ const matrix = process.env.POLISH_BASELINE ? [['en', 'light', process.env.POLISH
 try {
   for (const [lang, theme, width, height] of matrix) {
     const suffix = `${lang}-${theme}-${width}`;
+    await check(`home-current-announcement-${suffix}`, async () => {
+      await open('view=home&bundled=1', width, height, theme, lang);
+      await waitFor(client, `!!document.querySelector('.new-model-card')`);
+      assert.deepEqual(await evaluate(client, `[...document.querySelectorAll('.new-model-card h3')].map(e=>e.textContent)`), ['DeepSeek V4.1 Flash 1017']);
+      const text = await evaluate(client, `document.querySelector('.new-models').textContent`);
+      assert.ok(!text.includes('Older directory model'));
+      assert.ok(!text.includes(lang === 'zh' ? '签名已校验' : 'Signature verified'));
+      assert.equal(await evaluate(client, `document.querySelector('.new-models .model-feed-disclosure')`), null);
+      assert.ok(text.includes(lang === 'zh' ? '接入服务' : 'connection provider'));
+      assert.ok(await evaluate(client, `document.documentElement.scrollWidth<=innerWidth+1`));
+      assert.ok(await evaluate(client, `[...document.querySelectorAll('.new-model-card,.new-model-card h3,.new-model-note')].every(e=>e.scrollWidth<=e.clientWidth+1)`));
+      await shot(`home-current-announcement-${suffix}`);
+      await click('.new-model-card button', lang === 'zh' ? '查看模型表现' : 'View model performance');
+      assert.equal(await evaluate(client, `trialTrace.filter(x=>x.command==='open-plan').length`), 1);
+    });
     await check(`replay-cache-${suffix}`, async () => {
       await open('view=editor', width, height, theme, lang);
       await waitFor(client, `!!document.querySelector('.trust-replay-bar')`);

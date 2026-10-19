@@ -25,6 +25,7 @@ import { FeedDisclosure } from '../model-feed/FeedDisclosure';
 import { factTags, originLabel, publisherName, rollingIdentity, shortDate } from '../model-feed/presentation';
 import './trial.css';
 import { protectionExplanation } from '../trust/protection-copy';
+import { modelAnnouncements } from '../model-feed/announcements';
 
 export function TrialQuickStart({ initialModelId, initialBindingId, language, mutable, snapshot, operation, onOperation, onRefresh, onClose, onOpenAgent, onOpenPerformance, onOpenSessions }: {
   initialModelId?: string; initialBindingId?: string; language: 'zh' | 'en'; mutable: boolean; snapshot: DesktopSnapshot | null; operation: DesktopOperation | null;
@@ -97,7 +98,8 @@ export function TrialQuickStart({ initialModelId, initialBindingId, language, mu
   const leave = () => void (async () => { if (persistencePending || (await releaseConnection() && await requestEditorReplacement('routing'))) onClose(); })();
   const defaultName = trial && primary ? `${trial.display_name} + ${primary.display_name}` : '';
   const criteria = t('试用模型没有取得有效进展，反复失败且未能恢复，或用户在最新消息中明确指出它已完成的结果有误。请评价所引用的已完成阶段，并区分新增要求与纠错；重复、继续或沉默本身不代表失败。', 'The trial model made no effective progress, repeatedly failed without recovery, or the latest user message explicitly identifies its completed result as wrong. Judge the referenced completed stage and distinguish a new requirement from a correction; repetition, continuation or silence alone is not failure.');
-  const featured = (data?.availability.featured ?? []).map(entry => entry.model_configuration_id);
+  const announcements = data ? modelAnnouncements(data.availability).entries : [];
+  const featured = announcements.map(entry => entry.model_configuration_id);
   const cards = [...new Set([...(initialModelId ? [initialModelId] : []), ...featured, ...(trialId ? [trialId] : [])])].flatMap(id => models.filter(m => m.model_configuration_id === id)).slice(0, 6);
   const others = models.filter(m => !cards.includes(m));
   const primaryOptions = models.filter(m => m.model_configuration_id !== trialId && candidates(m.model_configuration_id).length > 0);
@@ -134,7 +136,7 @@ export function TrialQuickStart({ initialModelId, initialBindingId, language, mu
         <span className="trial-model-title"><strong>{model.display_name}</strong>{trialId === model.model_configuration_id && <UiIcon name="check" className="trial-model-check" />}</span>
         <span className="trial-model-meta">{[facts ? publisherName(facts.publisher_id, language) : '', model.catalog ? originLabel(model.catalog.origin, language) : [...new Set(candidates(model.model_configuration_id).map(c => source(c.binding_id)).filter(Boolean))].join(' · ')].filter(Boolean).join(' · ')}</span>
         {facts && <span className="model-fact-tags">{factTags(facts, language).map(tag => <span key={tag} className="badge no-dot">{tag}</span>)}</span>}
-        <span className="trial-model-note new-model-note">{data.availability.featured.find(entry => entry.model_configuration_id === model.model_configuration_id)?.note[language] || (facts?.tool ? t('支持工具调用，可先从常规任务开始。', 'Supports tool calls; start with routine tasks.') : t('先从范围明确的小任务开始试用。', 'Start with a small, clearly scoped task.'))}</span>
+        <span className="trial-model-note new-model-note">{announcements.find(entry => entry.model_configuration_id === model.model_configuration_id)?.note[language] || (facts?.tool ? t('支持工具调用，可先从常规任务开始。', 'Supports tool calls; start with routine tasks.') : t('先从范围明确的小任务开始试用。', 'Start with a small, clearly scoped task.'))}</span>
         <span className={`trial-model-state ${state.tone}`}>{state.text}</span>
       </button>; })}</div>
       {others.length > 0 && <label className="trial-other-model"><span>{t('试用其他模型', 'Try another model')}</span><select className="input" value={cards.some(m => m.model_configuration_id === trialId) ? '' : trialId} onChange={e => e.target.value && chooseTrial(e.target.value)}><option value="">{t('从全部模型中选择', 'Choose from all models')}</option>{others.map(m => <option key={m.model_configuration_id} value={m.model_configuration_id} disabled={m.availability.kind === 'needs_newer_client'}>{m.display_name}{m.availability.kind === 'needs_newer_client' ? ` · HiRoute ${m.availability.version}+` : ''}</option>)}</select></label>}

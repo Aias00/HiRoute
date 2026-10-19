@@ -293,6 +293,11 @@ A verified model feed MAY contain model, model endpoint capability, offer and pr
 - **WHEN** the feed carries capabilities for a model configuration identity that the embedded catalog also defines
 - **THEN** the embedded facts are used, the feed record is ignored, and feed status counts one ignored record.
 
+#### Scenario: Bundled announcements without a held feed
+
+- **WHEN** the feed supplies no featured entries and the client has maintained editorial announcements
+- **THEN** Home and quick start show only announcements whose model identities resolve in the service catalog, retain each model's real fact origin and do not label the bundled announcements as signature verified. Directory order alone never makes a model new. An announced provider update does not establish the version served by another connection or reattribute existing observations.
+
 #### Scenario: Price override survives a feed update
 
 - **WHEN** a user overrode the default price of a feed-supplied model and a later publication changes that default
