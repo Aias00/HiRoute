@@ -144,6 +144,10 @@ fn published_native_and_registered_examples_execute_the_displayed_commands() {
         "protected-input register",
         "expected_catalog",
         "inference_model_id",
+        "reachability=not_run",
+        "authentication=unknown",
+        "directory=not_run",
+        "inference=not_run",
     ] {
         assert!(
             guidance.contains(prerequisite),

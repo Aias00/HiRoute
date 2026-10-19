@@ -243,8 +243,10 @@ discovery requires `--include-schema`; v0.3.1 returns descriptors only.
 
 With the service ready, Python 3 installed and a private mode-0600 file containing
 only your OpenRouter API key, replace `KEY_FILE` below. The script obtains the exact
-catalog from the running service and builds the registered template. It contacts
-OpenRouter's model directory, selects no inference model and does not save a source.
+catalog from the running service and builds the registered template. The current
+bundled OpenRouter option has no remote directory probe. With `inference_model_id=null`,
+the check sends no request to OpenRouter: it prepares a candidate from bundled facts
+without verifying connectivity or the API key. It does not save a source.
 It attempts to release its protected input on exit and retains separate result/error
 files for diagnosis. Only references enter ordinary JSON; the key stays on FD 3.
 
@@ -291,10 +293,28 @@ rc=$?
 set -e
 cat "$work/result.json"
 cat "$work/stderr.txt" >&2
+if [ "$rc" -eq 0 ]; then
+python3 - "$work/result.json" <<'PY'
+import json, sys
+check = json.load(open(sys.argv[1]))['data']
+fields = ('reachability', 'authentication', 'directory', 'inference')
+print('Remote check results: ' + ', '.join(name + '=' + check[name] for name in fields))
+if check['reachability'] == 'not_run' and check['authentication'] == 'unknown':
+    print('Remote connectivity and API key were not verified.')
+PY
+fi
 printf 'connection-test exit code: %s; result files: %s\n' "$rc" "$work"
 exit "$rc"
 )
 ```
+
+Read `data.reachability`, `data.authentication`, `data.directory` and `data.inference`
+in the result. For the current bundled OpenRouter option this recipe reports
+`reachability=not_run`, `authentication=unknown`, `directory=not_run` and
+`inference=not_run`. Exit code 0 / `status=succeeded` means the command completed;
+it does not establish provider verification. Catalog models or a selectable candidate
+do not establish it either. A remote check requires an explicitly selected supported
+probe; selecting an inference model can consume quota.
 
 The protected-input registration protocol uses `candidate_revision=1` for a newly
 registered credential. This is distinct from revisions returned by a completed model

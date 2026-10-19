@@ -277,6 +277,7 @@ For the Quickstart and its supported branches, HiRoute SHALL expose navigable fa
 - **WHEN** a caller reads installed help and full schemas to test a catalog option or custom API
 - **THEN** help commands specify an actual JSON input source and request document, and the schemas provide complete `registered` and `native` templates with their strict nested wrappers. Registered guidance obtains the complete expected catalog from current connection options and credentials through protected-input registration. Custom API guidance identifies caller-supplied endpoint/protocol facts. Templates select no inference model by default and distinguish syntactic validity from a successful provider check.
 - **AND** missing input, a flattened request or malformed command options retain usage-error semantics and give bounded corrective guidance without exposing credentials or echoing the raw request.
+- **AND** guidance distinguishes command completion and catalog candidate availability from provider verification. For a key-authenticated option with neither a supported inventory path nor an explicitly selected inference model, the check performs no remote probe; `reachability=not_run`, `authentication=unknown`, `directory=not_run` and `inference=not_run` leave connectivity and credentials unverified. Published recipes explain these results and do not claim remote verification from exit code 0 or a successful envelope.
 
 #### Scenario: Prepare defaults without copying a sample
 

@@ -262,7 +262,9 @@ OpenRouter 等当前目录提供的选项使用 `registered`；自定义 API 使
 
 确认服务已就绪、本机已安装 Python 3，并准备好只包含 OpenRouter API Key 的私密文件
 （权限 0600），然后替换下方的 `KEY_FILE`。脚本从运行中的服务取得准确目录并构造
-registered 模板，只访问 OpenRouter 模型目录，不选择推理模型，也不保存来源。
+registered 模板。当前内置 OpenRouter 选项没有远端目录探测路径；
+`inference_model_id=null` 时不会向 OpenRouter 发请求，只根据内置目录准备候选，
+不验证连通性或 API Key，也不保存来源。
 退出时会尝试释放本次受保护输入，并保留独立的结果和错误文件供排查。
 普通 JSON 中只有引用，Key 通过 FD 3 单独传递。
 
@@ -309,10 +311,27 @@ rc=$?
 set -e
 cat "$work/result.json"
 cat "$work/stderr.txt" >&2
+if [ "$rc" -eq 0 ]; then
+python3 - "$work/result.json" <<'PY'
+import json, sys
+check = json.load(open(sys.argv[1]))['data']
+fields = ('reachability', 'authentication', 'directory', 'inference')
+print('Remote check results: ' + ', '.join(name + '=' + check[name] for name in fields))
+if check['reachability'] == 'not_run' and check['authentication'] == 'unknown':
+    print('Remote connectivity and API key were not verified.')
+PY
+fi
 printf 'connection-test exit code: %s; result files: %s\n' "$rc" "$work"
 exit "$rc"
 )
 ```
+
+请查看结果中的 `data.reachability`、`data.authentication`、`data.directory` 和
+`data.inference`。当前内置 OpenRouter 选项执行此流程会返回
+`reachability=not_run`、`authentication=unknown`、`directory=not_run` 和
+`inference=not_run`。退出码 0 / `status=succeeded` 仅表示命令完成，不能证明服务已验证；
+目录中有模型或候选可选择也不能证明这一点。远端验证需要显式选择受支持的探测方式；
+选择推理模型可能消耗配额。
 
 受保护输入登记协议对新登记凭据使用 `candidate_revision=1`，它与模型检查完成后返回的候选
 版本不同。`expected_catalog` 必须完整复制当前的 `data.catalog`；目录不匹配时，重新获取
