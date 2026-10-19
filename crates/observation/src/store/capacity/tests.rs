@@ -5,12 +5,12 @@ fn due(store: &LocalObservationStore) {
     store.capacity.lock().next_due = Instant::now();
 }
 #[test]
-fn default_twenty_gb_persists_positive_u64_and_explicit_disable() {
+fn default_ten_gb_persists_positive_u64_and_explicit_disable() {
     let dir = tempfile::tempdir().unwrap();
     let store = open_store(dir.path());
     assert_eq!(
         store.capacity_status().unwrap().max_active_bytes,
-        Some(20_000_000_000)
+        Some(10_000_000_000)
     );
     assert!(store.set_capacity_limit(Some(0)).is_err());
     assert_eq!(

@@ -242,17 +242,17 @@ Source SPEC comments:
 
 ### Requirement: Optional capacity retention uses restrained observation maintenance
 
-HiRoute SHALL allow the local installation owner to save or disable one durable active-observation capacity threshold. The default threshold SHALL be 20 GB (20,000,000,000 bytes), including a fresh generation after old-history sealing. The owner may change it or explicitly disable capacity expiry; a disabled choice SHALL remain disabled across restart. Seven-day age retention remains independent. When enabled and exceeded, the existing lifecycle SHALL retire oldest eligible completed-request detail before seven days, preserving in-flight writes, live shared references, deletion/replay barriers, lawful non-content aggregates and recovery backups. Retained observations remain lossless; policy removals SHALL be distinct from representation savings and actual physical release. Accounting/reclamation SHALL use spaced bounded work, yielding and idle/failure/no-progress backoff rather than sustained high CPU or an unbounded catch-up loop. HiRoute SHALL report actual measured usage and pending/blocked release with its reason, without promising an instantaneous hard cap, reporting reusable pages as released, or dropping acknowledged writes. Changes/disabling affect uncommitted future retirement and do not restore already expired history.
+HiRoute SHALL allow the local installation owner to save or disable one durable active-observation capacity threshold. The default threshold SHALL be 10 GB (10,000,000,000 bytes), including a fresh generation after old-history sealing. The owner may change it or explicitly disable capacity expiry; a disabled choice SHALL remain disabled across restart. Seven-day age retention remains independent. When enabled and exceeded, the existing lifecycle SHALL retire oldest eligible completed-request detail before seven days, preserving in-flight writes, live shared references, deletion/replay barriers, lawful non-content aggregates and recovery backups. Retained observations remain lossless; policy removals SHALL be distinct from representation savings and actual physical release. Accounting/reclamation SHALL use spaced bounded work, yielding and idle/failure/no-progress backoff rather than sustained high CPU or an unbounded catch-up loop. HiRoute SHALL report actual measured usage and pending/blocked release with its reason, without promising an instantaneous hard cap, reporting reusable pages as released, or dropping acknowledged writes. Changes/disabling affect uncommitted future retirement and do not restore already expired history.
 
-#### Scenario: Default is 20 GB with independent age retention
+#### Scenario: Default is 10 GB with independent age retention
 
 - **WHEN** the owner has not saved a capacity preference, including after a fresh-generation upgrade
-- **THEN** the effective threshold is 20,000,000,000 bytes and eligible detail may expire early when it is exceeded; ordinary seven-day expiry still applies independently.
+- **THEN** the effective threshold is 10,000,000,000 bytes and eligible detail may expire early when it is exceeded; ordinary seven-day expiry still applies independently.
 
 #### Scenario: Explicit disable survives restart
 
 - **WHEN** the owner disables capacity expiry and restarts HiRoute
-- **THEN** the effective threshold remains disabled rather than reverting to 20 GB; capacity pressure alone does not authorize early expiry, while ordinary age retention continues.
+- **THEN** the effective threshold remains disabled rather than reverting to 10 GB; capacity pressure alone does not authorize early expiry, while ordinary age retention continues.
 
 #### Scenario: Young eligible history can expire
 

@@ -8,9 +8,9 @@ export async function runStorageCapacityCaptures(client, output) {
     await evaluate(client, `window.productShell.reset(); localStorage.setItem('hiroute.language',${JSON.stringify(language)}); localStorage.setItem('hiroute.theme',${JSON.stringify(theme)}); window.productShell.remount()`);
     const label = language === 'zh' ? '设置' : 'Settings';
     await waitFor(client, `Boolean(document.querySelector('button[aria-label="${label}"]'))`);
-    await evaluate(client, `window.productShell.handlers.observation_capacity_get=()=>({max_active_bytes:20_000_000_000,active_bytes:21_000_000_000,measured_at_ms:1000,state:'pending',reason:'physical_release'});document.querySelector('button[aria-label="${label}"]').click()`);
+    await evaluate(client, `window.productShell.handlers.observation_capacity_get=()=>({max_active_bytes:10_000_000_000,active_bytes:11_000_000_000,measured_at_ms:1000,state:'pending',reason:'physical_release'});document.querySelector('button[aria-label="${label}"]').click()`);
     const field = `document.querySelector('input[aria-label="${language === 'zh' ? '记录容量上限（GB）' : 'Record storage limit (GB)'}"]')`;
-    await waitFor(client, `Boolean(${field} && !${field}.disabled && ${field}.value==='20')`);
+    await waitFor(client, `Boolean(${field} && !${field}.disabled && ${field}.value==='10')`);
     await evaluate(client, `${field}.scrollIntoView({block:'center'})`);
     const geometry = await evaluate(client, `(()=>{const field=${field},row=field.closest('.settings-row'),copy=row.querySelector('.settings-copy'),button=row.querySelector('button');return{overflow:row.scrollWidth>row.clientWidth+1,copy:copy.getBoundingClientRect().width,controls:[field,button].map(e=>{const b=e.getBoundingClientRect();return{left:b.left,right:b.right,top:b.top,bottom:b.bottom}})}})()`);
     if (geometry.overflow || geometry.copy < 160 || geometry.controls.some(b => b.left < 0 || b.right > width + 1 || b.top < 0 || b.bottom > height + 1)) throw new Error('Storage settings geometry failed: ' + JSON.stringify(geometry));

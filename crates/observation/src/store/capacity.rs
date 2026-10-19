@@ -15,7 +15,7 @@ use std::{
 };
 
 pub(crate) const INTERVAL: Duration = Duration::from_secs(10);
-const DEFAULT_LIMIT: u64 = 20_000_000_000;
+const DEFAULT_LIMIT: u64 = 10_000_000_000;
 const BUDGET: Duration = Duration::from_millis(100);
 const ROWS: usize = 128;
 

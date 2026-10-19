@@ -33,7 +33,7 @@ export function ObservationStorageSettings({ active, language }: { active: boole
   return <>
     <div className="settings-row">
       <div className="settings-copy"><strong>{text('记录容量上限', 'Record storage limit')}</strong>
-        <span>{text('默认上限 20GB，记录通常保留 7 天。容量超限会分批清理最旧的已完成请求，可能不足 7 天。留空并保存可关闭容量回收。', 'Default: 20 GB. Records normally last 7 days; exceeding the limit gradually clears the oldest completed requests sooner. Clear the field and save to disable capacity retention.')}</span>
+        <span>{text('默认上限 10GB，记录通常保留 7 天。容量超限会分批清理最旧的已完成请求，可能不足 7 天。留空并保存可关闭容量回收。', 'Default: 10 GB. Records normally last 7 days; exceeding the limit gradually clears the oldest completed requests sooner. Clear the field and save to disable capacity retention.')}</span>
         <span>{text('按间隔回收，空间释放可能延后；封存的旧历史与恢复副本不计入此上限。', 'Reclamation is spaced and space release may lag. Archived history and recovery copies are outside this limit.')}</span>
         {value?.active_bytes !== null && value?.active_bytes !== undefined && <span>{text('最近测量', 'Last measured')}: {(value.active_bytes / 1_000_000_000).toFixed(2)} GB · {value.state === 'blocked' ? text('等待空间释放或可回收记录', 'Waiting for space release or eligible records') : value.state === 'pending' ? text('分批处理中', 'Processing gradually') : text('正常', 'Ready')}</span>}
       </div>

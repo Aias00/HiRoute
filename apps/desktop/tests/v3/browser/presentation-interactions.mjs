@@ -40,7 +40,7 @@ export const presentationScenarios = [
   scenario('desktop.settings.storage-capacity', ['presentation', 'storage'], 'Capacity save, disable and failure preserve the effective policy and usable local-record controls', async () => {
     for (const language of ['zh', 'en']) for (const theme of ['light', 'dark']) {
       await ready(language, theme);
-      let effective = { max_active_bytes: 20_000_000_000, active_bytes: 18_000_000_000, measured_at_ms: 1000, state: 'idle', reason: 'within_limit' };
+      let effective = { max_active_bytes: 10_000_000_000, active_bytes: 9_000_000_000, measured_at_ms: 1000, state: 'idle', reason: 'within_limit' };
       control().handlers.observation_capacity_get = () => structuredClone(effective);
       control().handlers.observation_capacity_set = payload => { effective = { ...effective, ...payload.input }; return structuredClone(effective); };
       await navigate(language === 'zh' ? '设置' : 'Settings');
@@ -48,7 +48,7 @@ export const presentationScenarios = [
       await until(() => field() && !field().disabled, 'Capacity read did not finish');
       const set = value => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(field(), value); field().dispatchEvent(new Event('input', { bubbles: true })); };
       const save = () => field().closest('.settings-row').querySelector('button');
-      assert(field().value === '20' && save().disabled, 'Default capacity does not show 20 GB');
+      assert(field().value === '10' && save().disabled, 'Default capacity does not show 10 GB');
       set('25'); await pause(); save().click();
       await until(() => effective.max_active_bytes === 25_000_000_000 && !field().disabled, 'Custom capacity did not save as decimal bytes');
       assert(control().commands.some(c => c.command === 'observation_capacity_set' && c.payload.input.max_active_bytes === 25_000_000_000), 'Save bypassed the shared capacity boundary');

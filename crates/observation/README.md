@@ -40,7 +40,7 @@ with actionable whole-group recovery. See
 [release recovery](../../docs/release-contracts.md#upgrade-and-manual-recovery).
 
 `store/capacity` uses the existing maintenance owner. Its optional positive byte
-limit is installation-wide and defaults to 20 GB (20,000,000,000 bytes).
+limit is installation-wide and defaults to 10 GB (10,000,000,000 bytes).
 An explicitly saved disable is retained across restart; seven-day age retention
 continues independently. Accounting counts allocated active
 Observation DB/WAL/SHM and content files, excluding protected source generations

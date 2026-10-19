@@ -736,13 +736,13 @@ Session ID、v1 Receipt ID 与此定位符不同：
 
 ```sh
 hiroute observation storage show --output json
-hiroute observation storage set --max-active-bytes 20000000000 --output json
+hiroute observation storage set --max-active-bytes 10000000000 --output json
 hiroute observation storage set --disable --output json
 ```
 
 这些命令通过操作系统认证的本地用户通道访问；显式传入的委派或只读授权不能修改策略。
 
-示例为十进制 20 GB。超出后，最早的、已完成且允许回收的请求明细可能在七天前到期。
+默认值与示例均为十进制 10 GB。超出后，最早的、已完成且允许回收的请求明细可能在七天前到期。
 正在处理的请求、仍被引用的内容、防重放和删除屏障、非正文金额汇总以及恢复备份受到保护。
 关闭后停止尚未提交的提前回收，不会恢复已经到期的历史。
 

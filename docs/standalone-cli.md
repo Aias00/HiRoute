@@ -854,14 +854,14 @@ threshold in bytes, or disable early capacity expiry:
 
 ```sh
 hiroute observation storage show --output json
-hiroute observation storage set --max-active-bytes 20000000000 --output json
+hiroute observation storage set --max-active-bytes 10000000000 --output json
 hiroute observation storage set --disable --output json
 ```
 
 These commands use the owner-authenticated local OS channel. A supplied delegated
 or read-only grant cannot authorize a policy change.
 
-The example is 20 decimal GB. Exceeding the threshold may expire the oldest
+The default and example are 10 decimal GB. Exceeding the threshold may expire the oldest
 eligible completed-request detail before seven days. Active requests, live shared
 content, replay/deletion barriers, non-content monetary aggregates and recovery
 backups remain protected. Disabling stops future uncommitted early retirement;

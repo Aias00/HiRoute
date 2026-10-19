@@ -82,7 +82,7 @@ fn production_startup_seals_old_history_and_preserves_the_new_generation_on_rest
             .capacity_status()
             .unwrap()
             .max_active_bytes,
-        Some(20_000_000_000)
+        Some(10_000_000_000)
     );
     runtime
         .observation
