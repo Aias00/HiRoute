@@ -347,3 +347,80 @@ fn token_share_unknown_usage_and_unmapped_billing_are_separate_and_agent_filter_
     assert!(clipped.retention_boundary_partial);
     assert!(clipped.disclosure.contains("expired details"));
 }
+
+#[test]
+fn token_share_unknown_usage_in_each_class_stays_outside_the_known_component_totals() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    for (index, class) in [
+        CostClassV1::Subscription,
+        CostClassV1::Paid,
+        CostClassV1::Free,
+        CostClassV1::Unknown,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        record(
+            &store,
+            &format!("known-{index}"),
+            class,
+            Some([100, 0, 0, 0]),
+            "codex",
+            None,
+            false,
+        );
+        record(
+            &store,
+            &format!("unknown-{index}"),
+            class,
+            None,
+            "codex",
+            None,
+            false,
+        );
+    }
+    let report = read(&store, None, 0, 1000, 1000);
+    assert_eq!(
+        report.headline,
+        Headline::Share {
+            outside_subscription_ratio_millis: 667,
+            known_classified_tokens: 300,
+            unknown_usage_requests: 4
+        }
+    );
+    for class in ["subscription", "paid", "free", "unknown"] {
+        assert_eq!(report.by_billing_class[class].requests, 2);
+        assert_eq!(report.by_billing_class[class].tokens.total, 100);
+    }
+}
+
+#[test]
+fn token_share_counts_failed_attempt_consumption_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_store(dir.path());
+    let fixture = Fixture::new("failed-consumption");
+    let mut events = facts(&fixture, UsageFrameKindV1::Cumulative);
+    for event in &mut events {
+        match &mut event.fact {
+            ExecutionFactV1::AttemptFinished(attempt) => {
+                attempt.outcome = AttemptOutcomeV1::PostcommitTransportFailed;
+                attempt.downstream_outcome = AttemptDownstreamOutcomeV1::Failed;
+                attempt.stream_outcome = AttemptStreamOutcomeV1::StreamStartedNoRetry;
+                attempt.termination_reason = AttemptTerminationReasonV1::StreamStartedNoRetry;
+                attempt.error_class = Some("stream_started_no_retry".into());
+                attempt.retryable = Some(false);
+            }
+            ExecutionFactV1::RequestFinished { outcome, .. } => {
+                *outcome = ExecutionRequestOutcomeV1::PostcommitTransportFailed
+            }
+            _ => {}
+        }
+        let result = store.ingest_fact(event, &[]).unwrap();
+        assert!(matches!(result, IngestOutcome::Ack(_)), "{result:?}");
+    }
+    let report = read(&store, None, 0, 1000, 1000);
+    assert_eq!(report.by_billing_class["subscription"].requests, 1);
+    assert_eq!(report.by_billing_class["subscription"].tokens.total, 125);
+    assert_eq!(report.unknown_usage_requests, 0);
+}
