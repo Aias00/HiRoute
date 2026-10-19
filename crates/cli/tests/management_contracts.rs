@@ -77,6 +77,7 @@ fn installed_full_schemas_are_offline_complete_and_opt_in() {
         "compute.connection.preview",
         "compute.connection.apply",
         "compute.connection.authorize",
+        "compute.connection.test",
         "routing.options",
         "routing.list",
         "routing.show",
