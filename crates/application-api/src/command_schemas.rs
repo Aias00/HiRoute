@@ -345,12 +345,17 @@ pub fn command_schemas(command_id: &str) -> Option<CommandSchemasV1> {
         request,
         response,
         examples: examples(command_id),
-        example_guidance: "Examples show syntax. Resolve resource IDs from current queries. For Apply, copy the exact Preview spec/change, digest and expected revisions; keep one submission key. Example digests and revisions do not authorize writes.",
+        example_guidance: if command_id == "compute.connection.test" {
+            "Templates show syntax, not a successful check. Save the native template as native-request.json or the registered template as registered-request.json. For a registered option, run hiroute compute connection options --output json, choose an option with registered_check_available=true, and replace the entire request.expected_catalog with data.catalog from that response. Register the credential with hiroute protected-input register --candidate <REF> --secret-fd <FD> --output json; after registered=true, use that REF for request.input_candidate.candidate_ref and the matching candidate_ref (request.candidate_ref for registered, request.draft.candidate_ref for native), with input_candidate.candidate_revision=1 for this protected-input protocol. Use your own lineage_ref/check_id and edit_revision for this check. Native API templates also require your actual endpoint, protocol profile and authentication semantics. Keep secret bytes in the separate protected-input channel. inference_model_id=null performs no model inference; a selected inference model can consume quota. Catalog example digests/revisions are placeholders and cannot authorize a check."
+        } else {
+            "Examples show syntax. Resolve resource IDs from current queries. For Apply, copy the exact Preview spec/change, digest and expected revisions; keep one submission key. Example digests and revisions do not authorize writes."
+        },
     })
 }
 
 fn examples(command_id: &str) -> Vec<Value> {
     match command_id {
+        "compute.connection.test" => connection_test_examples(),
         "decision.services.apply" => {
             let change = json!({"id":"service/example", "expected_revision":0, "service":{
                 "id":"service/example","revision":1,"name":"Example decision service",
@@ -372,6 +377,61 @@ fn examples(command_id: &str) -> Vec<Value> {
         | "system.client-status" => vec![json!({})],
         _ => vec![],
     }
+}
+
+fn connection_test_examples() -> Vec<Value> {
+    let candidate = json!({
+        "candidate_ref":"candidate/native/example", "candidate_revision":1
+    });
+    vec![
+        json!({
+            "kind":"native",
+            "request":{
+                "draft":{
+                    "inference_model_id":null,
+                    "candidate_ref":"candidate/native/example",
+                    "lineage_ref":"lineage/native/example",
+                    "display_name":"My API",
+                    "existing_source_id":null,
+                    "edit_revision":1,
+                    "check_id":"check/native/example-1",
+                    "base_url":"https://provider.example/v1",
+                    "base_kind":"api_root",
+                    "request_path_override":null,
+                    "inventory_path_override":null,
+                    "protocol":"responses",
+                    "protocol_profile_id":"profile/custom/responses",
+                    "protocol_profile_revision":1,
+                    "authentication":{"kind":"bearer"},
+                    "configuration_revision":1,
+                    "models":[]
+                },
+                "input_candidate":candidate
+            }
+        }),
+        json!({
+            "kind":"registered",
+            "request":{
+                "connection_option_id":"openrouter.free.global.v1",
+                "display_name":"OpenRouter Free",
+                "expected_catalog":{
+                    "product_release":"replace-from-current-options",
+                    "catalog_binding_id":"replace-from-current-options",
+                    "release_sequence":1,
+                    "connector_registry_digest":format!("sha256:{}", "0".repeat(64)),
+                    "model_data_digest":format!("sha256:{}", "0".repeat(64)),
+                    "cross_reference_digest":format!("sha256:{}", "0".repeat(64))
+                },
+                "candidate_ref":"candidate/native/example",
+                "lineage_ref":"lineage/native/example",
+                "edit_revision":1,
+                "check_id":"check/native/example-1",
+                "input_candidate":candidate,
+                "models":[],
+                "inference_model_id":null
+            }
+        }),
+    ]
 }
 
 fn observation_request(views: &[&str]) -> Value {

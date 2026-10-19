@@ -252,6 +252,75 @@ hiroute compute connection test --help
 
 以下示例中的 JSON 都是不含凭据的普通文件。`jq` 仅用于演示提取字段，不是 HiRoute 依赖。
 
+## 测试目录中的 API 连接
+
+`compute connection test` 需要 JSON 输入来源和嵌套的 `{kind, request}` 请求体。
+OpenRouter 等当前目录提供的选项使用 `registered`；自定义 API 使用 `native`，其配置放在
+`request.draft`。`--non-interactive` 不能代替请求输入。完整的已安装 schema 在
+`data.schemas.examples` 中提供两种模板，`data.schemas.example_guidance` 说明前置条件。
+完整 schema/模板发现需要 `--include-schema`；v0.3.1 只返回命令描述。
+
+确认服务已就绪、本机已安装 Python 3，并准备好只包含 OpenRouter API Key 的私密文件
+（权限 0600），然后替换下方的 `KEY_FILE`。脚本从运行中的服务取得准确目录并构造
+registered 模板，只访问 OpenRouter 模型目录，不选择推理模型，也不保存来源。
+退出时会尝试释放本次受保护输入，并保留独立的结果和错误文件供排查。
+普通 JSON 中只有引用，Key 通过 FD 3 单独传递。
+
+```sh
+(
+set -eu
+umask 077
+KEY_FILE='/absolute/private/openrouter-key'
+work=$(mktemp -d)
+candidate="candidate/native/openrouter-$(python3 -c 'import uuid; print(uuid.uuid4().hex)')"
+hiroute schema show --command-id compute.connection.test --include-schema --output json > "$work/contract.json"
+hiroute compute connection options --output json > "$work/options.json"
+hiroute protected-input register --candidate "$candidate" --secret-fd 3 --output json \
+  3< "$KEY_FILE" > "$work/input.json"
+trap 'hiroute protected-input release --candidate "$candidate" --output json >&2 || echo "Retry releasing this candidate if cleanup failed: $candidate" >&2' EXIT
+python3 - "$work" "$candidate" > "$work/registered-request.json" <<'PY'
+import json, pathlib, sys
+work, candidate = pathlib.Path(sys.argv[1]), sys.argv[2]
+contract = json.loads((work / 'contract.json').read_text())
+options = json.loads((work / 'options.json').read_text())
+registration = json.loads((work / 'input.json').read_text())
+if any(x.get('status') != 'succeeded' for x in (contract, options, registration)):
+    raise SystemExit('Read contract.json, options.json and input.json for the failed prerequisite')
+if registration.get('data', {}).get('registered') is not True:
+    raise SystemExit('Protected input was not registered')
+option_id = 'openrouter.free.global.v1'
+option = next((x for x in options['data']['options']
+               if x['connection_option_id'] == option_id), None)
+if option is None or not option.get('registered_check_available', False):
+    raise SystemExit('The current catalog does not offer this registered check')
+body = next(x for x in contract['data']['schemas']['examples'] if x['kind'] == 'registered')
+request = body['request']
+request.update(connection_option_id=option_id, expected_catalog=options['data']['catalog'],
+               candidate_ref=candidate, lineage_ref='lineage/native/' + candidate.rsplit('/', 1)[1],
+               check_id='check/native/' + candidate.rsplit('/', 1)[1], edit_revision=1,
+               input_candidate={'candidate_ref': candidate, 'candidate_revision': 1},
+               models=[], inference_model_id=None)
+print(json.dumps(body, indent=2))
+PY
+set +e
+hiroute compute connection test --request-stdin --output json \
+  < "$work/registered-request.json" > "$work/result.json" 2> "$work/stderr.txt"
+rc=$?
+set -e
+cat "$work/result.json"
+cat "$work/stderr.txt" >&2
+printf 'connection-test exit code: %s; result files: %s\n' "$rc" "$work"
+exit "$rc"
+)
+```
+
+受保护输入登记协议对新登记凭据使用 `candidate_revision=1`，它与模型检查完成后返回的候选
+版本不同。`expected_catalog` 必须完整复制当前的 `data.catalog`；目录不匹配时，重新获取
+options 并构造检查，模板中的摘要仅为占位。相同请求也可通过
+`--request-file "$work/registered-request.json"` 传入，替代 stdin 重定向。
+自定义 API 可将 `native` 模板保存为 `native-request.json`，填写真实 endpoint、协议事实
+和受保护输入引用；下一节给出了手工声明模型的完整请求。
+
 ## 接入 Native API 模型来源
 
 凭据只能通过受保护 FD 登记。不要把 Key 放进 argv、环境变量、普通 JSON、日志或 Agent 对话：
