@@ -21,7 +21,7 @@ impl crate::LocalObservationStore {
             || scope.revision == Some(0)
             || scope.from_ms < 0
             || scope.from_ms >= scope.to_ms
-            || scope.to_ms > now
+            || scope.to_ms > now.saturating_add(1)
             || prices.len() > 4096
         {
             return Err(ObservationV2Error::Invalid);
