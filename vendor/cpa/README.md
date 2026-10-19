@@ -15,8 +15,10 @@ this handshake must not be used with the current daemon.
 
 Reception checks the method, path, host and exact pending state. Browser callbacks
 and the management callback POST share atomic one-use admission, including after
-the waiting OAuth worker removes the callback file. Failed publication may retry;
-an accepted authorization code never does. The browser response contains no code,
+the waiting OAuth worker removes the callback file. CPA reception may retry failed
+file publication; HiRoute's manual-input owner does not resend an admitted code
+after a failed or uncertain submission. Observe status or cancel and start again.
+An accepted authorization code cannot be replaced. The browser response contains no code,
 state, provider error or management redirect and acknowledges reception only.
 The existing token exchange and credential persistence establish actual login.
 Completion, cancellation, timeout and owned-process exit release the listeners.

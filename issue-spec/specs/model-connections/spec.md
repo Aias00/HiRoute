@@ -260,8 +260,10 @@ most one pending sign-in; saved accounts do not retain a callback listener.
 
 Browser and protected manual input MUST share atomic, one-use admission for the
 exact provider/session/state. Invalid, stale and duplicate input cannot replace
-an accepted callback. A failed callback-file publication permits retry. The
-browser acknowledges reception without claiming token exchange or sign-in success.
+an accepted callback. CPA reception permits retry after failed callback-file
+publication. HiRoute does not resend an admitted manual code after a failed or
+uncertain submission: observe status, or cancel and start a new sign-in. The browser
+acknowledges reception without claiming token exchange or sign-in success.
 Release listeners after reception, cancellation, expiry or failure, before slow
 token exchange. Do not redirect or reflect callback secrets in browser responses.
 
