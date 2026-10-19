@@ -240,6 +240,46 @@ HiRoute SHALL preserve supported old Observation history unchanged in a protecte
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/151#issuecomment-6248902605
 
+### Requirement: Upgrade recovery actions come from whole-group storage admission
+
+HiRoute SHALL provide a bounded typed startup cause and storage-owned recovery action on macOS, Linux and Windows, including while the daemon or console is unavailable. Missing/invalid recovery packages, insufficient space, missing keys, access failures, unsupported/corrupt input and execution/unknown states SHALL retain their safely established meaning. Unknown values SHALL preserve material and SHALL NOT authorize downgrade. Stable legacy startup failure envelopes remain supported; a private bounded recovery report may carry additional safe facts without adding arbitrary error strings or filesystem authority.
+
+Program-only original-version reinstallation SHALL be offered only after positively admitting the complete original Control/Runtime/Secrets, keys, Observation and related recovery state and proving that the failing attempt has not made an incompatible change. Combined core upgrades, prior/incomplete batches, unsupported input and unknown state SHALL NOT borrow that permission. A recorded original-compatible instruction SHALL be revoked if its bound original authority or cutover facts change. Equal SQL markers, an unmoved Observation directory or absence of a backup SHALL NOT establish this disposition alone. Diagnostics and transient lock files are not business data.
+
+Installers SHALL retain the complete matching previous program and resources before incompatible replacement. Native standalone startup SHALL obtain verified recovery input through an installation-owned storage-root and target-image-bound handoff rather than assume inheritance of the invoking shell's environment. The explicit absolute `HIROUTE_RECOVERY_PACKAGE` operator entry remains supported. Cleanup SHALL retain material still required by installation or storage recovery. Windows shell rollback SHALL refuse automatic original-program launch when storage has changed or cannot be established as compatible.
+
+The verified candidate SHALL check safely observable recovery/space prerequisites before installed-program replacement, and startup SHALL repeat authoritative admission under its writer barrier. Provisional checks SHALL NOT grant later write authority. Existing active-work waiting, cancellation, ownership and finite startup limits remain. A source release's actual shipped updater and any required transition sequence SHALL be validated; installing a new updater does not retroactively add checks to an old executable.
+
+Recovery presentation SHALL distinguish correcting prerequisites, current-batch resume, verified whole-group restoration and unavailable/unknown material. It SHALL identify the correct original batch rather than select a directory by presence, provide Chinese/English platform instructions, preserve newer data and its matching program separately before restoration, and require actual service readiness and a request before claiming successful restoration. Missing essential material SHALL lead to preservation and diagnostic/support guidance rather than a promise that retries, manual overwrite or an arbitrary older release will recover it.
+
+#### Scenario: Missing package with admitted unchanged original group
+
+- **WHEN** an incompatible Observation upgrade lacks a matching previous package and the complete original group is positively admitted without a prior/incomplete cutover
+- **THEN** startup preserves the original group and exposes the specific missing-package disposition; macOS directs the user to reinstall the exact original complete App without deleting data, launch it and use the supported application-update sequence, without a package picker or developer environment override.
+
+#### Scenario: Changed or uncertain group
+
+- **WHEN** core migration/cutover has begun, an original authority changes, a phase is corrupt/unknown or a prior batch prevents proving compatibility
+- **THEN** no consumer offers unverified program-only downgrade and no installer automatically starts an older daemon; all generations and journals remain available for current-version recovery or the corresponding complete-group guide.
+
+#### Scenario: Managed standalone upgrade
+
+- **WHEN** Linux systemd or a Windows ordinary-user Task starts the installed candidate after an upgrade
+- **THEN** the matching complete old package is retained and its protected handoff is verified against the storage root and candidate image; package cleanup cannot delete it prematurely and an unrelated terminal variable is not required for ordinary installer operation.
+
+#### Scenario: Prerequisite refusal and cancellation
+
+- **WHEN** preflight finds unavailable/unverified material or insufficient recovery space, or the user cancels while waiting for work
+- **THEN** replacement is not committed, the existing installation remains usable when verified, and the user receives the specific correction or cancellation state; startup rechecks races before any incompatible data mutation.
+
+#### Scenario: Failed startup without a console
+
+- **WHEN** the daemon cannot start or an upgrade batch is interrupted
+- **THEN** Desktop, the Windows bundled failure surface and the installed CLI expose the bounded cause and admitted recovery action without depending on the normal server; known resumable batches use the current program, while missing/substituted material never appears as a valid restore target.
+
+Source Issue:
+- https://github.com/higress-group/HiRoute/issues/176
+
 ### Requirement: Optional capacity retention uses restrained observation maintenance
 
 HiRoute SHALL allow the local installation owner to save or disable one durable active-observation capacity threshold. The default threshold SHALL be 20 GB (20,000,000,000 bytes), including a fresh generation after old-history sealing. The owner may change it or explicitly disable capacity expiry; a disabled choice SHALL remain disabled across restart. Seven-day age retention remains independent. When enabled and exceeded, the existing lifecycle SHALL retire oldest eligible completed-request detail before seven days, preserving in-flight writes, live shared references, deletion/replay barriers, lawful non-content aggregates and recovery backups. Retained observations remain lossless; policy removals SHALL be distinct from representation savings and actual physical release. Accounting/reclamation SHALL use spaced bounded work, yielding and idle/failure/no-progress backoff rather than sustained high CPU or an unbounded catch-up loop. HiRoute SHALL report actual measured usage and pending/blocked release with its reason, without promising an instantaneous hard cap, reporting reusable pages as released, or dropping acknowledged writes. Changes/disabling affect uncommitted future retirement and do not restore already expired history.

@@ -26,6 +26,7 @@ use zeroize::{Zeroize, Zeroizing};
 mod ready;
 #[cfg(any(unix, windows))]
 mod standalone;
+mod upgrade_preflight;
 #[cfg(windows)]
 mod windows_task;
 use ready::{write_ready_frame, write_startup_failure_frame};
@@ -63,6 +64,9 @@ struct Arguments {
 }
 
 fn main() {
+    if let Some(code) = upgrade_preflight::run_if_requested() {
+        std::process::exit(code);
+    }
     #[cfg(windows)]
     if std::env::args_os().nth(1).as_deref() == Some(std::ffi::OsStr::new("app-server"))
         && std::env::var_os("HIROUTE_NATIVE_LAUNCH_DESCRIPTOR").is_some()

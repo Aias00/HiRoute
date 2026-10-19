@@ -409,6 +409,8 @@ def service_bytes(paths, daemon, cpa, cpa_digest):
             f"ExecStart={quote(daemon)} --role all --standalone --cpa-binary {quote(cpa)} --cpa-sha256 {cpa_digest}\n"
             "Restart=on-failure\nRestartSec=2\nTimeoutStopSec=45\n"
             f"Environment=HOME={quote(home)}\nEnvironment={quote('PATH=' + native_path)}\n"
+            f"Environment={quote('XDG_STATE_HOME=' + str(paths['state'].parent))}\n"
+            f"Environment={quote('XDG_RUNTIME_DIR=' + str(paths['runtime']))}\n"
             "NoNewPrivileges=true\nPrivateTmp=true\n\n[Install]\nWantedBy=default.target\n"
         )
         path = home / ".config/systemd/user/ai.hiroute.cli.service"
@@ -696,6 +698,24 @@ def console_component(paths, desired):
     return staged_file(destination, (json.dumps(config, sort_keys=True) + "\n").encode(), 0o600), destination
 
 
+def candidate_preflight(program, storage, package):
+    result = subprocess.run([str(program), "--upgrade-preflight", "--storage-root", str(storage), "--recovery-package", str(package)], stdin=subprocess.DEVNULL, capture_output=True, timeout=15, check=False)
+    if len(result.stdout) > 16 * 1024:
+        raise ValueError("candidate upgrade preflight returned an invalid response")
+    try:
+        report = load_json_bytes(result.stdout)
+    except (ValueError, UnicodeError) as error:
+        raise ValueError("candidate cannot perform the required upgrade preflight; use the supported transition release") from error
+    if report.get("schema") != "hiroute.upgrade-preflight/v1":
+        raise ValueError("candidate upgrade preflight is unavailable; use the supported transition release")
+    if result.returncode or report.get("recovery"):
+        cause = (report.get("recovery") or {}).get("cause", "unknown_state")
+        # A closed reason is useful to operators; never echo arbitrary child output.
+        allowed = {"missing_package", "invalid_package", "insufficient_space", "access_denied", "locked", "missing_key", "unsupported_format", "migration_failed", "unknown_state"}
+        raise ValueError("upgrade preflight refused: " + (cause if cause in allowed else "unknown_state") + "; preserve data and old packages, correct the prerequisite before retrying")
+    return report
+
+
 def retain_recovery_package(paths, current, target_daemon):
     """Preserve the complete installed program/resources before replacement.
 
@@ -719,22 +739,66 @@ def retain_recovery_package(paths, current, target_daemon):
         raise ValueError("unsafe recovery package directory")
     retained = Path(tempfile.mkdtemp(prefix="old-package-", dir=parent))
     files = {}
+    def copy_verified_tree(source, target, prefix):
+        source_fd = os.open(source, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            target.mkdir(mode=0o700)
+            for name in os.listdir(source_fd):
+                metadata = os.stat(name, dir_fd=source_fd, follow_symlinks=False)
+                relative = prefix + "/" + name
+                if stat.S_ISDIR(metadata.st_mode):
+                    copy_verified_tree(source / name, target / name, relative)
+                elif stat.S_ISREG(metadata.st_mode):
+                    fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=source_fd)
+                    try:
+                        before = os.fstat(fd)
+                        if (before.st_dev, before.st_ino) != (metadata.st_dev, metadata.st_ino):
+                            raise ValueError("old package changed before preservation")
+                        hashed = hashlib.sha256()
+                        with os.fdopen(os.open(target / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600), "wb") as output:
+                            remaining = before.st_size
+                            while remaining:
+                                chunk = os.read(fd, min(remaining, 64 * 1024))
+                                if not chunk:
+                                    raise ValueError("old package was truncated during preservation")
+                                output.write(chunk)
+                                hashed.update(chunk)
+                                remaining -= len(chunk)
+                            if os.read(fd, 1):
+                                raise ValueError("old package grew during preservation")
+                            after = os.fstat(fd)
+                            if (before.st_size, before.st_mtime_ns, before.st_mode) != (after.st_size, after.st_mtime_ns, after.st_mode):
+                                raise ValueError("old package changed during preservation")
+                            os.fchmod(output.fileno(), stat.S_IMODE(before.st_mode))
+                            output.flush()
+                            os.fsync(output.fileno())
+                        files[relative] = hashed.hexdigest()
+                    finally:
+                        os.close(fd)
+                else:
+                    raise ValueError("old recovery package contains a link or special entry")
+                if len(files) > 6000:
+                    raise ValueError("old recovery package has too many entries")
+        finally:
+            os.close(source_fd)
     for source, name in ((old_program, "program"), (old_resources, "resources")):
-        target = retained / name
-        shutil.copytree(source, target)
-        for entry in source.rglob("*"):
-            if entry.is_file():
-                relative = entry.relative_to(source)
-                copied = target / relative
-                expected = digest(entry)
-                if digest(copied) != expected:
-                    raise ValueError("old recovery package changed during preservation")
-                files[f"{name}/{relative.as_posix()}"] = expected
+        copy_verified_tree(source, retained / name, name)
     locations = retained / "restore-locations.json"
-    locations.write_text(json.dumps({"schema": "hiroute.standalone-program-restore/v1", "program": str(old_program), "resources": str(old_resources)}, sort_keys=True) + "\n")
+    metadata = retained / "installation"
+    metadata.mkdir(mode=0o700)
+    restore_files = {}
+    for source, name in ((paths["marker"], "standalone.json"), (_service, "service-definition")):
+        if source.exists():
+            target = metadata / name
+            shutil.copy2(source, target)
+            files["installation/" + name] = digest(target)
+            restore_files["installation/" + name] = str(source)
+    locations.write_text(json.dumps({"schema": "hiroute.standalone-program-restore/v1", "program": str(old_program), "resources": str(old_resources), "files": restore_files}, sort_keys=True) + "\n")
     locations.chmod(0o600)
     files["restore-locations.json"] = digest(locations)
     record = {"schema": "hiroute.retained-recovery-package/v1", "storage_root": str(paths["state"] / "storage"), "package_root": str(retained), "target_daemon_sha256": digest(target_daemon), "files": files}
+    if digest(target_daemon) != digest(old_program / "hirouted"):
+        candidate_preflight(target_daemon, paths["state"] / "storage", retained)
     return staged_file(paths["state"] / "upgrade-package.json", (json.dumps(record, sort_keys=True) + "\n").encode(), 0o600)
 
 

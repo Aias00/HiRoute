@@ -2,7 +2,9 @@
 export type StorageRecovery = {
   schema: 'hiroute.storage-startup-recovery/v1';
   cause: 'missing_package' | 'invalid_package' | 'insufficient_space' | 'access_denied' | 'locked' | 'missing_key' | 'unsupported_format' | 'migration_failed' | 'unknown_state';
-  action: 'reinstall_original' | 'retry_current' | 'preserve_and_diagnose';
+  action: 'reinstall_original' | 'retry_current' | 'preserve_and_diagnose' | 'resume_current' | 'restore_complete_group';
+  backup_batch?: string;
+  backup_name?: string;
 };
 export function storageRecoveryText(value: unknown, language: 'zh' | 'en', platform: string) {
   const text = (zh: string, en: string) => language === 'zh' ? zh : en;
@@ -26,10 +28,14 @@ export function storageRecoveryText(value: unknown, language: 'zh' | 'en', platf
     instructions = platform === 'macos'
       ? text('本次升级尚未改变原数据组。请完全退出 HiRoute，重新安装升级前使用的完整原版 App，保留数据目录。打开原版后，通过“设置 → 版本升级”按受支持的升级顺序更新。', 'This upgrade has not changed the original data group. Fully quit HiRoute and reinstall the exact complete App used before this upgrade, keeping the data directory. Open that version and follow the supported sequence in Settings → Updates.')
       : text('原数据组仍保留。请停止后台服务，按安装指南恢复升级前的完整原版程序，保留数据。随后按受支持的安装流程提供配套旧包再升级；不要只替换单个程序或数据库文件。', 'The original data group was retained. Stop the background service and follow the installation guide to restore the exact complete original program, keeping the data. Then supply the matching old package through the supported upgrade workflow. Do not replace individual binaries or databases.');
+  } else if (trusted && ['resume_current', 'restore_complete_group'].includes(record.action ?? '') && typeof record.backup_batch === 'string' && /^[A-Za-z0-9._-]{1,128}$/.test(record.backup_batch)) {
+    instructions = record.action === 'resume_current'
+      ? text('已识别并校验原升级批次的恢复材料。请保留所有数据，重新打开当前版本继续该批次；不要运行旧版程序。若仍无法继续，请按该批次的完整恢复说明处理，并先另存新版数据及配套程序。', 'The original upgrade batch and its recovery material were verified. Keep all data and reopen the current version to continue that batch. Do not run an older program. If it cannot continue, follow this batch’s complete recovery guide, first preserving newer data and its matching program separately.')
+      : text('请停止 HiRoute，先另存新版数据及其配套程序，再按已校验批次的恢复说明，还原完整旧数据组及配套旧程序。不要逐库覆盖或混用不同批次。', 'Stop HiRoute and preserve newer data with its matching program separately. Follow the verified batch’s recovery guide to restore the complete old group and matching old program. Never replace individual databases or mix batches.');
   } else if (cause === 'insufficient_space') {
     instructions = text('请释放数据所在磁盘上的无关文件，保留原数据、封存历史和恢复包。空间足够后，重新打开当前版本继续恢复；不要删除升级备份。', 'Free unrelated files on the storage volume, keeping original data, sealed history and recovery packages. Once enough space is available, reopen the current version to continue recovery. Do not delete upgrade backups.');
   } else if (cause === 'access_denied' || cause === 'locked') {
     instructions = text('请关闭其他 HiRoute 实例并解决相关文件占用或访问问题，再重新打开当前版本。保留所有数据和升级记录，不要批量修改权限或清空目录。', 'Close other HiRoute instances and resolve the file-use or access issue, then reopen the current version. Keep all data and upgrade journals. Do not change permissions recursively or empty directories.');
   }
-  return { reason, instructions, canRetry: trusted && record.action === 'retry_current' && ['insufficient_space', 'access_denied', 'locked'].includes(cause ?? '') };
+  return { reason, instructions, canRetry: trusted && (record.action === 'resume_current' && typeof record.backup_batch === 'string' || record.action === 'retry_current' && ['insufficient_space', 'access_denied', 'locked'].includes(cause ?? '')) };
 }

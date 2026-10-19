@@ -24,7 +24,6 @@ fn invalid() -> io::Error {
 }
 fn hash(path: &Path) -> io::Result<String> {
     let mut file = private_fs::open_regular_file(path)?;
-    private_fs::verify_single_link(&file)?;
     let mut digest = Sha256::new();
     let mut buffer = [0u8; 64 * 1024];
     loop {
@@ -135,6 +134,10 @@ impl RetainedRecoveryPackage {
         {
             return Err(invalid());
         }
+        if Self::capture(&self.storage_root, &self.package_root, target_daemon)?.files != self.files
+        {
+            return Err(invalid());
+        }
         for (name, expected) in &self.files {
             if name.is_empty()
                 || name.len() > 512
@@ -159,7 +162,7 @@ impl RetainedRecoveryPackage {
                 }
                 parent = parent.parent().ok_or_else(invalid)?;
             }
-            if hash(&path)? != *expected {
+            if expected.len() != 64 || !expected.bytes().all(|b| b.is_ascii_hexdigit()) {
                 return Err(invalid());
             }
         }

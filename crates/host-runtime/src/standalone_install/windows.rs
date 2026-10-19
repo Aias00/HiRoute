@@ -352,11 +352,24 @@ pub fn install(request: InstallRequest) -> io::Result<Value> {
         journal.recover(&layout, &mut host)?;
     }
     let old = current(&layout)?;
+    if let Some(previous) = &old {
+        previous.2.verify_directory(&previous.0.install_root)?;
+    }
     let root = layout
         .home
         .join(".local/lib/hiroute")
         .join(package.directory_name());
     publish_package(&request.package_directory, &root, &package)?;
+    if let Some(previous) = &old
+        && root != previous.0.install_root
+    {
+        crate::run_upgrade_preflight(
+            &root.join("hirouted.exe"),
+            &layout.storage_root(),
+            &previous.0.install_root,
+        )
+        .map_err(io::Error::other)?;
+    }
     let native = Definition::new(Manager::Task, root.join("hirouted.exe"))?;
     let marker = StandaloneInstallRecordV1 {
         schema_version: crate::STANDALONE_INSTALL_SCHEMA_V1.into(),

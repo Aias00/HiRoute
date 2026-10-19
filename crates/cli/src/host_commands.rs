@@ -36,6 +36,16 @@ pub(crate) fn execute(arguments: &[String], globals: &Globals) -> Option<CliExec
         });
     }
     let request_id = globals.request_id.clone();
+    if arguments == ["service", "recovery"]
+        && globals.output == OutputMode::Text
+        && globals.agent.is_none()
+        && !globals.has_capability()
+    {
+        return Some(match service::recovery() {
+            Ok(value)=>CliExecution {exit_code:0,stdout:format!("HiRoute startup recovery\n\n{}\n\nStartup diagnostics: {}\n",value["instructions"].as_str().unwrap_or("No verified startup recovery report is available. Keep all data and inspect startup diagnostics; this does not establish service readiness or permission to downgrade."),value["diagnostics_root"].as_str().unwrap_or("unavailable")),stderr:String::new()},
+            Err(error)=>failure(map(error),request_id),
+        });
+    }
     if globals.agent.is_some() || globals.has_capability() || globals.output != OutputMode::Json {
         return Some(failure(ErrorCode::InvalidArguments, request_id));
     }
@@ -55,7 +65,7 @@ pub(crate) fn execute(arguments: &[String], globals: &Globals) -> Option<CliExec
 fn host_help(family: &str) -> &'static str {
     match family {
         "service" => {
-            "Usage\n  hiroute service start|stop|restart|status|logs|doctor|recovery --output json\n  hiroute service autostart enable|disable|status --output json\n  hiroute service run\n  hiroute service layout --output json\n"
+            "Usage\n  hiroute service start|stop|restart|status|logs|doctor|recovery --output json\n  hiroute service autostart enable|disable|status --output json\n  hiroute service recovery [--output text|json]\n  hiroute service run\n  hiroute service layout --output json\n"
         }
         "gateway" => {
             "Usage\n  hiroute gateway show --output json\n  hiroute gateway set --address <IPV4> --port auto|<PORT> [--accept-remote-risk] --output json\n  hiroute gateway recover --output json\n"

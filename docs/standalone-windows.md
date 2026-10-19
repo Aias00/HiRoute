@@ -99,6 +99,18 @@ After a successful upgrade, obsolete verified version directories are removed
 once shell rollback no longer needs them. Uninstall removes the current verified
 version too. Changed or foreign entries are preserved for repair.
 
+## Storage upgrade recovery
+
+A Task-started daemon reads the installer's protected matching-old-package handoff;
+it does not depend on an environment variable from another PowerShell session.
+The native installer checks the verified candidate before changing programs and
+retains the previous package while recovery needs it. For startup refusal, use
+`hiroute service recovery --output json` and the instructions in
+[Windows recovery](windows-desktop-installation.md#storage-format-failure-and-whole-group-recovery).
+Keep all data, keys and packages. Only a storage-confirmed original-compatible
+result permits program-only reinstall; mixed/unknown state requires current-batch
+resume or complete-group recovery. Verify an actual Gateway request after repair.
+
 ## Native evidence
 
 [Validation routing](validation-routing.md#windows-iteration-and-release-validation)

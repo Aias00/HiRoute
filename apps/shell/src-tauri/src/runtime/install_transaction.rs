@@ -172,6 +172,22 @@ pub(super) fn validate_installed() -> io::Result<()> {
     }
     Ok(())
 }
+fn same_repair_payload(
+    pending: &BTreeMap<String, String>,
+    requested: &BTreeMap<String, String>,
+) -> bool {
+    !requested.is_empty()
+        && requested
+            .iter()
+            .all(|(name, hash)| pending.get(name) == Some(hash))
+        && pending.keys().all(|name| {
+            requested.contains_key(name)
+                || matches!(
+                    name.as_str(),
+                    "uninstall.exe" | "shell-install.json" | INVENTORY
+                )
+        })
+}
 pub(super) fn prepare(manifest: &Path) -> io::Result<()> {
     windows::preflight()?;
     let package: Package = read(manifest, false)?;
@@ -180,6 +196,39 @@ pub(super) fn prepare(manifest: &Path) -> io::Result<()> {
         return Err(invalid());
     }
     if has_pending()? {
+        let layout =
+            hiroute_host_runtime::StandaloneLayout::from_environment().map_err(|_| invalid())?;
+        if hiroute_host_runtime::storage_upgrade_started(&layout.storage_root())? {
+            let value = pending()?;
+            let mut requested: BTreeMap<String, String> = package
+                .files
+                .iter()
+                .map(|(name, item)| {
+                    (
+                        format!("standalone/{}", Package::relative(name)),
+                        item.sha256.clone(),
+                    )
+                })
+                .collect();
+            requested.insert("standalone/package-manifest.json".into(), hash(manifest)?);
+            requested.insert("hiroute-shell.exe".into(), hash(&std::env::current_exe()?)?);
+            if value.phase != Phase::Prepared || !same_repair_payload(&value.new, &requested) {
+                return Err(invalid());
+            }
+            // Re-running the exact current installer continues its existing
+            // journal forward. Never replace its retained original rollback set.
+            for name in value.old.keys().chain(value.new.keys()) {
+                let path = root()?.join(name);
+                if present(&path)? {
+                    let actual = hash(&path)?;
+                    if value.old.get(name) != Some(&actual) && value.new.get(name) != Some(&actual)
+                    {
+                        return Err(invalid());
+                    }
+                }
+            }
+            return Ok(());
+        }
         rollback(false)?;
     }
     let root = root()?;
@@ -568,6 +617,20 @@ mod tests {
         }
     }
 
+    #[test]
+    fn forward_storage_repair_requires_the_exact_prepared_payload() {
+        let pending = BTreeMap::from([
+            ("hiroute-shell.exe".into(), "shell-new".into()),
+            ("standalone/hirouted.exe".into(), "daemon-new".into()),
+            ("uninstall.exe".into(), "generated".into()),
+        ]);
+        let mut request = pending.clone();
+        request.remove("uninstall.exe");
+        assert!(same_repair_payload(&pending, &request));
+        request.insert("standalone/hirouted.exe".into(), "daemon-old".into());
+        assert!(!same_repair_payload(&pending, &request));
+        assert!(!same_repair_payload(&pending, &BTreeMap::new()));
+    }
     #[test]
     fn committed_manual_repair_replaces_stale_failure_before_retiring_journal() {
         let temporary = PayloadDirectory::new();

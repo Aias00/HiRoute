@@ -67,43 +67,29 @@ pub struct StartupReport {
 }
 
 fn complete_upgrade_backup(root: &std::path::Path) -> Option<PathBuf> {
-    // Select only known backup names and a portable owner-written batch identity.
-    // The WebView never supplies a filesystem path or restoration authority.
-    let parent = root.join("storage.upgrade-backups");
-    if let Ok(storage) =
-        hiroute_diagnostics::files::PrivateDir::open_existing(&root.join("storage"))
-        && let Ok(Some(mut file)) = storage.open_read("observation-source-backup.json")
-    {
-        if file.len() > 16 * 1024 {
-            return None;
-        }
-        let link: serde_json::Value =
-            serde_json::from_slice(&file.read_prefix(16 * 1024).ok()?).ok()?;
-        file.recheck().ok()?;
-        let name = link["backup_name"].as_str()?;
-        let id = link["set_id"].as_str()?;
-        if link["schema"] != 1
-            || !matches!(name, "migration-set" | "observation-format-5")
-            || id.is_empty()
-            || id.len() > 128
-            || id.contains("..")
-            || !id
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
-        {
-            return None;
-        }
-        for candidate in [
-            parent.join(name),
-            parent.join(format!("migration-set.{id}")),
-        ] {
-            if let Some(path) = published_source(&candidate, Some(id)) {
-                return Some(path);
-            }
-        }
+    use hiroute_host_runtime::{StorageRecovery, StorageRecoveryAction};
+    let recovery = StorageRecovery::read(&root.join("storage")).ok()??;
+    if !matches!(
+        recovery.action,
+        StorageRecoveryAction::ResumeCurrent | StorageRecoveryAction::RestoreCompleteGroup
+    ) {
         return None;
     }
-    published_source(&parent.join("migration-set"), None)
+    let name = recovery.backup_name.as_deref()?;
+    let id = recovery.backup_batch.as_deref()?;
+    let portable = |s: &str| {
+        !s.is_empty()
+            && s.len() <= 128
+            && !s.contains("..")
+            && s.bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
+    };
+    if !portable(name) || !portable(id) {
+        return None;
+    }
+    // This target comes from the storage owner's verified failing batch, never
+    // from whichever old directory happens to be present.
+    published_source(&root.join("storage.upgrade-backups").join(name), Some(id))
 }
 
 fn published_source(batch: &std::path::Path, expected_id: Option<&str>) -> Option<PathBuf> {
@@ -232,6 +218,13 @@ mod tests {
             br#"{"schema":1,"complete":true,"batch_id":"retained-batch"}"#,
         )
         .unwrap();
+        let mut recovery = hiroute_host_runtime::StorageRecovery::new(
+            hiroute_host_runtime::StorageRecoveryCause::MigrationFailed,
+            hiroute_host_runtime::StorageRecoveryAction::ResumeCurrent,
+        );
+        recovery.backup_name = Some("observation-format-5".into());
+        recovery.backup_batch = Some("retained-batch".into());
+        recovery.store(&storage).unwrap();
         assert_eq!(complete_upgrade_backup(root), Some(source));
         std::fs::write(
             batch.join("source-location.json"),
@@ -269,7 +262,8 @@ mod tests {
             br#"{"schema":"hiroute.upgrade-source-backup/v1","complete":true}"#,
         )
         .unwrap();
-        assert_eq!(complete_upgrade_backup(&root), Some(backup.clone()));
+        // Directory/manifest existence alone never grants restoration authority.
+        assert_eq!(complete_upgrade_backup(&root), None);
         let other = backup.join("other.json");
         std::fs::rename(&manifest, &other).unwrap();
         symlink(&other, &manifest).unwrap();

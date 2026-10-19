@@ -110,6 +110,36 @@ recovery succeeded. The next shell start reads the private outcome and can recov
 an interrupted transaction after the installer is no longer active. An unresolved
 file or service conflict stays on the bundled failure page with a diagnostics path.
 
+## Storage-format failure and whole-group recovery
+
+NSIS/native installation retains the matching complete previous standalone
+package through a private storage-root-bound handoff, checked against the new
+daemon image. Candidate preflight runs before installed-program replacement; startup
+revalidates under the storage writer barrier. Package cleanup retains the old
+source while its handoff is needed. This does not use macOS App discovery or
+assume that a PowerShell variable is inherited by the logged-on Task.
+
+The bundled failure page displays the storage-owned reason and recovery action
+even when the daemon and console cannot start. It distinguishes missing/invalid
+packages, low space, unavailable keys and unknown state. Fix a stated prerequisite
+before retrying. Resume an admitted batch with the current program; never start
+an old program against newer/mixed data. Shell rollback checks storage cutover
+facts before reinstalling or starting an old service. An uncommitted shell journal
+is not proof that business data is unchanged.
+
+For complete restoration, stop the owned Task/daemon and automatic starts, keep
+newer storage with its matching program separately, and follow the exact verified
+batch's Chinese/English generated guide. Restore all stores, keys, Observation and
+recorded auxiliary locations together, then the matching full package and Task
+registration through the platform installation path. Verify actual service and
+Gateway readiness and a request. Missing keys or a substituted/incomplete source
+cannot be repaired by blind retry or choosing another old release. Inspect safe
+startup diagnostics and obtain support while retaining every generation.
+
+Use `hiroute service recovery --output json` for an offline report. Windows Server
+and Windows 11, ordinary-user and administrator sessions, and released versus
+development packages retain separate evidence boundaries.
+
 ## Uninstall boundaries
 
 Agent restoration uses production Preview/Apply and waits for the resulting

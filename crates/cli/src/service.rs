@@ -42,7 +42,7 @@ pub(crate) struct ServiceStatus {
 }
 
 pub(crate) fn recovery() -> Result<serde_json::Value, ServiceFailure> {
-    let (layout, _) = installed()?;
+    let layout = StandaloneLayout::from_environment().map_err(|_| ServiceFailure::Unavailable)?;
     let record = hiroute_host_runtime::StorageRecovery::read(&layout.storage_root())
         .map_err(|_| ServiceFailure::Unavailable)?;
     Ok(

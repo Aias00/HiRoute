@@ -41,6 +41,9 @@ class HTTPSResponse(io.BytesIO):
 
 class StandaloneFixture(unittest.TestCase):
     def setUp(self):
+        preflight = patch.object(installer, "candidate_preflight", return_value={"schema": "hiroute.upgrade-preflight/v1", "history_cutover_required": False, "required_bytes": 0, "available_bytes": 1000000000, "recovery": None})
+        preflight.start()
+        self.addCleanup(preflight.stop)
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         # Installer paths are canonicalized; Linux workbenches may alias /tmp.

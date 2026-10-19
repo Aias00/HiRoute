@@ -101,6 +101,42 @@ Installation fails if `/Applications/HiRoute.app`, `~/Applications/HiRoute.app`,
 Desktop Local Control exists. Stop and uninstall standalone before switching in the other
 direction.
 
+## Storage upgrade recovery
+
+Before replacing an installed program, the installer retains the complete original
+program/resources and installation records in private service state. A verified
+candidate performs read-only preflight; the daemon receives the retained-package
+handoff directly from its state directory, including when started by systemd.
+Do not delete `upgrade-packages`, `upgrade-package.json`, sealed history or
+`storage.upgrade-backups` to make room for an upgrade. Budget their disk use.
+
+If startup fails, use `hiroute service recovery --output json` even while Local
+Control is unavailable. It reports the storage-owned cause and action plus the
+startup diagnostic location. A confirmed original-compatible missing-package
+result permits reinstalling the exact complete original program without deleting
+data; otherwise do not downgrade in place. A resumable batch uses the current
+program. Whole-group recovery uses that batch's `RECOVERY.md`, `恢复说明.md` and,
+when present, `PROGRAM-LOCATIONS.md`: stop the service and automatic restarts,
+preserve newer data/program separately, restore all stores/keys/Observation and
+recorded auxiliary files, then restore the matching program/resources and service
+registration at their recorded locations. Reload the manager and verify actual
+Control/Gateway readiness and a real request. Installation-command success alone
+is insufficient.
+
+Explicit headless operators may still provide the absolute complete old-package
+directory via `HIROUTE_RECOVERY_PACKAGE` on the daemon's first sealing startup.
+Set it for the actual foreground daemon or the managed service's supported
+environment configuration. Exporting a variable in a shell and calling systemctl
+does not deliver it to the managed daemon. Ordinary installer upgrades use their
+protected handoff instead. Missing keys, unverified sources and unknown phases
+require preservation and diagnosis/support; repeated restarts cannot recreate them.
+The exact unchanged-program repair path does not require a new preflight protocol;
+changing program bytes requires a candidate that implements the supported checks.
+
+A format change preserves configuration, credentials and routing and seals old
+HiRoute observations. Current history/statistics start at cutover; native Agent
+history is unchanged. New current-format records survive ordinary restarts.
+
 ## Start and verify real readiness
 
 ```sh

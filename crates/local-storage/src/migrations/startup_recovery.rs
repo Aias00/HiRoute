@@ -53,6 +53,22 @@ pub(crate) fn publish_failure(
     // No other error, even low space after a prepared batch, borrows this proof.
     if original && recovery.cause == Cause::MissingPackage {
         recovery.action = Action::ReinstallOriginal;
+        if recovery.bind_original_state(root).is_err() {
+            recovery.action = Action::PreserveAndDiagnose;
+            recovery.original_state_digest = None;
+        }
+    }
+    if recovery.action == Action::PreserveAndDiagnose {
+        if let Ok((name, id, phase)) = verified_original_source(root) {
+            recovery.backup_name = Some(name);
+            recovery.backup_batch = Some(id);
+            recovery.action =
+                if matches!(phase, BackupSetPhase::Restored | BackupSetPhase::Restoring) {
+                    Action::RestoreCompleteGroup
+                } else {
+                    Action::ResumeCurrent
+                };
+        }
     }
     let _ = recovery.store(root);
     match error {
@@ -61,6 +77,51 @@ pub(crate) fn publish_failure(
         }
         error => error,
     }
+}
+
+fn verified_original_source(
+    root: &Path,
+) -> Result<(String, String, BackupSetPhase), LocalStorageError> {
+    let link = root.join("observation-source-backup.json");
+    validate_owner_file(&link)?;
+    if fs::metadata(&link)?.len() > 16 * 1024 {
+        return Err(LocalStorageError::InvalidData);
+    }
+    let record: serde_json::Value =
+        serde_json::from_slice(&fs::read(link)?).map_err(|_| LocalStorageError::InvalidData)?;
+    let name = record["backup_name"]
+        .as_str()
+        .ok_or(LocalStorageError::InvalidData)?;
+    let id = record["set_id"]
+        .as_str()
+        .ok_or(LocalStorageError::InvalidData)?;
+    let portable = |s: &str| {
+        !s.is_empty()
+            && s.len() <= 128
+            && !s.contains("..")
+            && s.bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
+    };
+    if record["schema"] != 1 || !portable(name) || !portable(id) {
+        return Err(LocalStorageError::InvalidData);
+    }
+    let parent = crate::upgrade_backup_root(root)?
+        .parent()
+        .ok_or(LocalStorageError::InvalidData)?
+        .to_path_buf();
+    for name in [name.to_owned(), format!("migration-set.{id}")] {
+        let path = parent.join(&name);
+        if !path.exists() {
+            continue;
+        }
+        let set = BackupSet::open(&crate::daemon_storage_authority(), &path)?;
+        if set.set_id() != id {
+            continue;
+        }
+        crate::backup::source_snapshot::verify_sealed(&path)?;
+        return Ok((name, id.to_owned(), set.phase()));
+    }
+    Err(LocalStorageError::InvalidData)
 }
 
 #[cfg(test)]

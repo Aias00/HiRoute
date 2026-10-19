@@ -49,6 +49,39 @@ pub struct StorageStartupOptions {
 }
 
 impl LocalStorageSet {
+    /// Provisional read-only checks; startup repeats admission under its writer lock.
+    pub fn preflight_upgrade(
+        storage: &Path,
+        package: &Path,
+        seal: bool,
+    ) -> Result<u64, LocalStorageError> {
+        if !storage.exists() {
+            return Ok(0);
+        }
+        migrations::validate_startup_format(storage)?;
+        if !seal {
+            return Ok(0);
+        }
+        LocalSecretStore::migration_binding(
+            &storage.join("live/secrets.db"),
+            &storage.join("master-key"),
+        )?
+        .ok_or(LocalStorageError::Locked)?;
+        migrations::validate_owner_file(&storage.join("observation-hmac-key"))?;
+        if std::fs::metadata(storage.join("observation-hmac-key"))?.len() != 32 {
+            return Err(LocalStorageError::Locked);
+        }
+        backup::source_snapshot::preflight_space(
+            storage,
+            None,
+            &StorageStartupOptions {
+                preserve_observation_source: true,
+                recovery_package: Some(package.to_path_buf()),
+                ..Default::default()
+            },
+        )
+    }
+
     /// A published source link also protects the intentionally absent live root
     /// between the old-directory rename and fresh Observation initialization.
     pub fn observation_cutover_pending(storage_root: &Path) -> bool {
@@ -641,7 +674,13 @@ impl LocalStorageError {
         };
         match self {
             Self::Recovery { recovery, .. } => recovery.clone(),
-            Self::UpgradeStage { source, .. } => source.recovery(),
+            Self::UpgradeStage { source, .. } => {
+                let mut report = source.recovery();
+                if report.cause == C::UnknownState {
+                    report.cause = C::MigrationFailed;
+                }
+                report
+            }
             Self::UpgradeSourceUnsupported => {
                 StorageRecovery::new(C::UnsupportedFormat, A::PreserveAndDiagnose)
             }

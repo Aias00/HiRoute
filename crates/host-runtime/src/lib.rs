@@ -37,3 +37,6 @@ pub use storage_recovery::*;
 
 mod recovery_package;
 pub use recovery_package::*;
+
+mod upgrade_preflight;
+pub use upgrade_preflight::*;
