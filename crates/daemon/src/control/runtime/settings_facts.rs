@@ -839,9 +839,7 @@ impl LocalControlAdapter {
         } else {
             None
         };
-        let dependency_digest = CanonicalDigest::of(&serde_json::json!({
-            "claude_slots": &claude_slots,
-            "codex_launch_snapshot": &codex_launch_snapshot,
+        let mut dependencies = serde_json::json!({
             "codex_profile_dependencies": self.codex_profile_dependencies(class, spec, active_configuration.as_ref())?,
             "claude_context_override": claude_context_override,
             "claude_plan_capability_unavailable": claude_plan_capability_unavailable,
@@ -872,8 +870,11 @@ impl LocalControlAdapter {
             "model_catalog":&model_catalog,
             "resident_service":login_item_required,
             "resident_service_removal":login_item_removal_required,
-        }))
-        .map_err(|_| ControlReadError::Corrupt)?;
+        });
+        dependencies["claude_slots"] = serde_json::json!(&claude_slots);
+        dependencies["codex_launch_snapshot"] = serde_json::json!(&codex_launch_snapshot);
+        let dependency_digest =
+            CanonicalDigest::of(&dependencies).map_err(|_| ControlReadError::Corrupt)?;
         let capabilities =
             AgentCapabilitySet::new(installation.capability_evidence.iter().cloned().map(
                 |mut item| {

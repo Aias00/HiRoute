@@ -288,7 +288,15 @@ fn native_actions(
         Pending | NotConfigured => return actions,
         Configured | Restored => {}
     }
-    if class == SettingsAgentClass::Hermes {
+    if status.activation_mode == Some(hiroute_domain::AgentActivationModeV1::ManagedLaunch) {
+        add(
+            "start_routed_session",
+            "claude_cli",
+            &["starts_new_native_process"],
+            "saved_independent_launch",
+            "Start hiroute agent launch --agent claude-code -- to use this mapping. Ordinary Claude sessions retain their native settings.",
+        );
+    } else if class == SettingsAgentClass::Hermes {
         add(
             "load_native_configuration",
             "hermes_cli_or_im",

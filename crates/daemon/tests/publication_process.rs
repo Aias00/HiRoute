@@ -84,6 +84,12 @@ fn real_process_routed_launch_preserves_native_argv_and_explicit_fallback() {
     run_script("routed_launch_product.py");
 }
 
+/// No real Claude or paid model: configure/restore use the production reversible journal.
+#[test]
+fn real_process_claude_independent_settings_preserve_native_files() {
+    run_script("claude_independent_product.py");
+}
+
 /// Execute both published recipes against the current catalog without mistaking local
 /// candidate preparation for provider reachability or credential verification.
 #[test]
