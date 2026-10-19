@@ -47,3 +47,24 @@ export function storageRecoveryText(value: unknown, language: 'zh' | 'en', platf
   }
   return { reason, instructions, canRetry: trusted && (record.action === 'resume_current' && batch || record.action === 'retry_current' && ['insufficient_space', 'access_denied', 'locked'].includes(cause ?? '')) };
 }
+
+export function startupFailureText(code: string | undefined | null, recovery: unknown, language: 'zh' | 'en', platform: string) {
+  const text = (zh: string, en: string) => language === 'zh' ? zh : en;
+  if (recovery || ['DAEMON_STORAGE_UNREADABLE', 'DAEMON_UPGRADE_SOURCE_UNSUPPORTED', 'DAEMON_UPGRADE_STORAGE_FAILED'].includes(code ?? '')) {
+    return storageRecoveryText(recovery, language, platform);
+  }
+  const reasons: Record<string, string> = {
+    DAEMON_DEPENDENCY_UNAVAILABLE: text('本机服务所需的配套组件无法启动。', 'A required bundled service component could not start.'),
+    DAEMON_GATEWAY_UNAVAILABLE: text('数据初始化已完成，但 Gateway 监听未就绪。', 'Storage initialization completed, but the Gateway listener is unavailable.'),
+    DAEMON_CONTROL_UNAVAILABLE: text('本机控制接口无法启动。', 'The local control interface could not start.'),
+    DAEMON_RELEASE_INVALID: text('当前完整程序的发布信息无法通过校验。', 'The complete program’s release identity could not be verified.'),
+    DAEMON_START_CANCELLED: text('本次服务启动已取消。', 'This service startup was cancelled.'),
+  };
+  return {
+    reason: reasons[code ?? ''] ?? text('本机服务尚未就绪，请查看启动诊断。', 'The local service is unavailable. Inspect startup diagnostics.'),
+    instructions: code === 'DAEMON_GATEWAY_UNAVAILABLE'
+      ? text('请检查配置的监听地址、端口及占用情况，再重新启动当前版本。此提示不要求还原数据库；请保留现有数据与恢复材料。', 'Check the configured listener address, port and file use, then reopen the current version. This failure does not require database restoration. Keep existing data and recovery material.')
+      : text('请保留数据和恢复材料，查看本机诊断中的具体原因。检查当前完整安装包及其配套组件；需要修复程序时使用同一版本的完整安装包。此提示不授权降级或还原数据库。', 'Keep data and recovery material and inspect the local startup diagnostics. Check the complete current package and its bundled components; use the same complete version for program repair. This failure does not authorize downgrade or database restoration.'),
+    canRetry: code === 'DAEMON_START_CANCELLED',
+  };
+}

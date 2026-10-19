@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { storageRecoveryText } from '../src/storage-recovery.ts';
+import { storageRecoveryText, startupFailureText } from '../src/storage-recovery.ts';
 const report=(cause,action)=>({schema:'hiroute.storage-startup-recovery/v1',cause,action});
 test('only the authoritative original-compatible missing-package result permits simple reinstall',()=>{
   for (const language of ['zh','en']) {
@@ -29,4 +29,12 @@ test('resume requires a portable original batch and measured space stays bounded
   assert.equal(storageRecoveryText({...report('migration_failed','resume_current'),backup_batch:'set_original'},'en','windows').canRetry,true);
   const low=storageRecoveryText({...report('insufficient_space','retry_current'),storage_space:{required_bytes:1048576000,available_bytes:1048576}},'en','windows');
   assert.match(low.instructions,/1,000 MiB.*1 MiB/);
+});
+
+test('healthy-storage listener failures do not recommend storage recovery',()=>{
+  for (const language of ['zh','en']) {
+    const value=startupFailureText('DAEMON_GATEWAY_UNAVAILABLE',undefined,language,'macos');
+    assert.match(value.reason,language==='zh'?/数据初始化已完成/:/Storage initialization completed/);
+    assert.doesNotMatch(value.instructions,language==='zh'?/完整旧数据组/:/restore the complete old group/);
+  }
 });

@@ -6,3 +6,4 @@
 .shell-status input { min-width: 0; width: 100%; }
 .shell-status pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 12px 0; font-size: 13px; line-height: 1.7; }
 .shell-status .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.shell-status [hidden] { display: none; }

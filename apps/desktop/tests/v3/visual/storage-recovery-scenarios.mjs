@@ -40,17 +40,29 @@ export async function runStorageRecoveryScenarios(client, baseUrl, output) {
         await waitFor(client, 'document.querySelector("#failure")?.textContent === "DAEMON_UPGRADE_STORAGE_FAILED"');
       }
       const selector = platform === 'macos' ? '[data-error-code=DAEMON_UPGRADE_STORAGE_FAILED]' : '#explanation';
-      const geometry = await evaluate(client, `(()=>{const e=document.querySelector(${JSON.stringify(selector)}); e.scrollIntoView({block:'start'});const b=e.getBoundingClientRect();return{text:e.textContent,left:b.left,right:b.right,overflow:e.scrollWidth>e.clientWidth+1,bodyOverflow:document.documentElement.scrollWidth>innerWidth+1,retry:document.querySelector('#retry')&&!document.querySelector('#retry').hidden};})()`);
+      const geometry = await evaluate(client, `(()=>{const e=document.querySelector(${JSON.stringify(selector)}); e.scrollIntoView({block:'start'});const b=e.getBoundingClientRect();return{text:e.textContent,left:b.left,right:b.right,overflow:e.scrollWidth>e.clientWidth+1,height:b.height,bodyOverflow:document.documentElement.scrollWidth>innerWidth+1,retry:!!document.querySelector('#retry')&&document.querySelector('#retry').getClientRects().length>0};})()`);
+      if (platform === 'macos') assert(geometry.height < height * 0.8, `Startup guidance stretched to fill the page: ${id}`);
       assert(!geometry.overflow && !geometry.bodyOverflow && geometry.left >= 0 && geometry.right <= width + 1, `Recovery guidance overflow: ${id} ${JSON.stringify(geometry)}`);
       assert((language === 'zh' ? /保留|另存/ : /keep|preserv/i).test(geometry.text), `Preservation guidance missing: ${id}`);
       if (fixture.action === 'preserve_and_diagnose' || fixture.action === 'future_action') {
         assert(!geometry.text.includes(language === 'zh' ? '尚未改变原数据组' : 'has not changed the original data group'), `Unproven original compatibility: ${id}`);
       }
+      const expected = {
+        missing_package: language === 'zh' ? '配套旧版本' : 'matching complete previous package',
+        insufficient_space: 'MiB',
+        namespace_unavailable: language === 'zh' ? '同一文件系统' : 'same filesystem',
+        migration_failed: language === 'zh' ? '批次' : 'batch',
+        future_cause: language === 'zh' ? '无法确认' : 'could not be established',
+      }[fixture.cause];
+      assert(geometry.text.includes(expected), `Specific reason/action missing: ${id}`);
       if (platform === 'windows') assert(geometry.retry === ['retry_current', 'resume_current'].includes(fixture.action), `Unsafe or missing retry: ${id}`);
       const screenshot = `${id}.png`;
       const shot = await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
       await writeFile(path.join(output, screenshot), Buffer.from(shot.data, 'base64'));
       results.push({ id, state: 'green', screenshot, geometry });
+    } catch (error) {
+      await writeFile(path.join(output, id + '.failure.json'), JSON.stringify({error:String(error),page:await evaluate(client, '({url:location.href,state:document.readyState,text:document.body.innerText,resources:performance.getEntriesByType("resource").map(r=>({name:r.name,status:r.responseStatus,duration:r.duration}))})')},null,2));
+      throw error;
     } finally {
       if (script) await client.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: script.identifier });
     }

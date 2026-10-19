@@ -1,4 +1,4 @@
-import { storageRecoveryText } from '../storage-recovery';
+import { startupFailureText } from '../storage-recovery';
 import { randomId } from '../random-id.ts';
 import { hostCapabilities } from '../host/index.ts';
 import { HostNotices } from '../host/ConsoleUi';
@@ -636,12 +636,12 @@ export function DesktopApp() {
         <HostNotices language={language} />
         {notice && <div className="toast-stack" aria-live="polite"><div className="toast" role="status"><UiIcon name="info" /><span>{notice}</span></div></div>}
         {upgradePhaseText && <div className="callout" role="status" aria-live="polite"><UiIcon name="info" /><div><strong>{upgradePhaseText}</strong><p>{language === 'zh' ? '请等待升级完成；请保留原数据与完整安装包。' : 'Wait for the upgrade to finish. Keep the original data and complete installation package.'}</p></div></div>}
-        {startupFailure && <div className="callout bad" role="alert" data-error-code={startupFailure.code}>
+        {startupFailure && <div className="callout bad startup-recovery" role="alert" data-error-code={startupFailure.code}>
           <UiIcon name="warning" />
           <div>
             <strong>{language === 'zh' ? '本机服务启动失败' : 'Local service failed to start'}</strong>
-            <p>{storageRecoveryText(startupFailure.storage_recovery, language, 'macos').reason}</p>
-            <p>{storageRecoveryText(startupFailure.storage_recovery, language, 'macos').instructions}</p>
+            <p>{startupFailureText(startupFailure.code, startupFailure.storage_recovery, language, 'macos').reason}</p>
+            <p>{startupFailureText(startupFailure.code, startupFailure.storage_recovery, language, 'macos').instructions}</p>
             {startupFailure.recovery_available && <button className="btn" type="button" onClick={() => {
               void invoke('open_startup_recovery_directory').catch(() => setNotice(language === 'zh' ? '无法安全打开恢复目录，请检查目录权限后重试。' : 'The recovery directory could not be opened safely. Check its permissions and try again.'));
             }}>{startupFailure.backup_directory ? (language === 'zh' ? '查看保留的恢复材料与说明' : 'Inspect preserved recovery material and guide') : (language === 'zh' ? '打开恢复目录' : 'Open recovery directory')}</button>}
