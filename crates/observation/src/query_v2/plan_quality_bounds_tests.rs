@@ -194,3 +194,57 @@ fn quality_identity_reads_use_covering_request_and_exact_payload_lookup() {
         "routing identity lookup must locate the exact retained event: {routing:?}"
     );
 }
+
+#[test]
+fn quality_request_index_rebuild_preserves_existing_event_bytes_on_reopen() {
+    let (root, store) = seed();
+    let before = {
+        let db = store.connection.lock();
+        let mut statement = db.prepare("SELECT request_id,envelope_json,envelope_digest FROM execution_fact_events ORDER BY rowid").unwrap();
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap();
+        // An existing released store has the request and session indexes but
+        // no covering payload index. Reopening must add it without rewriting
+        // immutable event identities or their original content carriers.
+        db.execute_batch("DROP INDEX IF EXISTS execution_facts_request_payload")
+            .unwrap();
+        rows
+    };
+    drop(store);
+    for _ in 0..2 {
+        let reopened = open_store(root.path());
+        let db = reopened.connection.lock();
+        let mut statement = db.prepare("SELECT request_id,envelope_json,envelope_digest FROM execution_fact_events ORDER BY rowid").unwrap();
+        let after = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap();
+        assert_eq!(after, before);
+        assert!(db.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name='execution_facts_request_payload')", [], |row| row.get::<_, bool>(0)).unwrap());
+        assert_eq!(
+            db.query_row(
+                "SELECT value FROM observation_meta WHERE key='schema_version'",
+                [],
+                |row| row.get::<_, String>(0)
+            )
+            .unwrap(),
+            "4"
+        );
+    }
+}
