@@ -914,7 +914,7 @@ mod tests {
             "agent",
             "launch",
             "--agent",
-            "codex",
+            "unknown-agent",
             "--context",
             "agent-context/claude/default",
             "--",

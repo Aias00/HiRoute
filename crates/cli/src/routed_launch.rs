@@ -17,7 +17,15 @@ pub(super) fn execute(arguments: &[OsString]) -> CliExecution {
     let invocation = match args::parse(arguments) {
         Ok(invocation) => invocation,
         Err(option) => {
-            let mut result = super::failure(ErrorCode::InvalidArguments, None);
+            let code = if hiroute_application_api::MANAGED_CLAUDE_CALLER_FORBIDDEN_OPTIONS_V1
+                .contains(&option)
+            {
+                // Retain the released Claude caller-auth rejection contract (exit 3).
+                ErrorCode::AgentAuthPrecedenceConflict
+            } else {
+                ErrorCode::InvalidArguments
+            };
+            let mut result = super::failure(code, None);
             result.stderr =
                 format!("Rejected launcher argument: {option}. Run hiroute agent launch --help.\n");
             return result;
