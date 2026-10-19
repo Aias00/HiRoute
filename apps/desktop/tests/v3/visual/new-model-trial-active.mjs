@@ -175,16 +175,23 @@ try {
   await waitFor(client,`document.querySelectorAll('.routing-turn').length===2`);
   await waitFor(client,`document.querySelector('.routing-turn').textContent.includes('0.40')`);
   assert.equal(await evaluate(client,`document.querySelectorAll('.routing-turn').length`),2);
+  assert.equal(await evaluate(client,`document.querySelectorAll('.routing-ticks .failed').length`),0,'delivered accepted requests are not failed ticks');
   assert.ok(await evaluate(client,`trialTrace.filter(x=>x.command==='observation_read'&&x.payload.request.intent.view==='routing_timeline')[1].payload.request.intent.query.after_watermark==='watermark-1'`));
   await click('button',lang==='zh'?'紧凑视图':'Compact view');
   assert.equal(await evaluate(client,`getComputedStyle(document.querySelector('.session-master')).display`),'none');
   await evaluate(client,`document.querySelectorAll('.routing-turn')[1].click();true`);
   await waitFor(client,`document.querySelector('.routing-request.selected')?.textContent.includes('trial-model')`);
+  assert.equal(await evaluate(client,`document.querySelectorAll('.routing-request.failed').length`),0,'delivered accepted requests are not failed detail rows');
   assert.ok(await evaluate(client,`document.querySelector('.routing-request.selected')?.textContent.includes('trial-model')`));
   for (const g of await evaluate(client,`[...document.querySelectorAll('.routing-timeline,.routing-conversation,.routing-turn-detail,.session-routing-and-conversation')].map(e=>({width:e.clientWidth,scroll:e.scrollWidth,left:e.getBoundingClientRect().left,right:e.getBoundingClientRect().right}))`)) {assert.ok(g.scroll<=g.width+1,JSON.stringify(g));assert.ok(g.left>=-1&&g.right<=width+1,JSON.stringify(g));}
   await shot(`timeline-${lang}-${theme}-${width}`);
   results.push({id:`timeline.late-score-and-request-selection.${lang}.${theme}.${width}${target ? '-from-request' : ''}`,status:'passed'});
  }
+ await open('lang=en&view=timeline&request-outcome=failed');
+ await waitFor(client,`document.querySelectorAll('.routing-turn').length===2`);
+ assert.equal(await evaluate(client,`document.querySelectorAll('.routing-ticks .failed').length`),2,'actual request failures retain failed ticks');
+ assert.ok(await evaluate(client,`document.querySelectorAll('.routing-request.failed').length>0`),'actual request failures retain failed detail rows');
+ results.push({id:'timeline.actual-request-outcomes',status:'passed'});
  await open('lang=en&view=timeline&stale-timeline=1');
  await waitFor(client,`document.querySelectorAll('.routing-turn').length===2`);
  await waitFor(client,`document.querySelectorAll('.routing-turn').length===3`);
