@@ -10,3 +10,6 @@ pub mod private_fs;
 
 #[cfg(windows)]
 pub mod windows;
+
+#[cfg(any(unix, windows))]
+pub mod owned_child;
