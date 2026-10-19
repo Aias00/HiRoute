@@ -54,7 +54,11 @@ fn seed() -> (
 }
 
 fn measured(db: &Connection, sql: &str) -> (Vec<Vec<Value>>, i32) {
-    let mut statement = db.prepare(sql).unwrap();
+    measured_result(db, sql).unwrap()
+}
+
+fn measured_result(db: &Connection, sql: &str) -> rusqlite::Result<(Vec<Vec<Value>>, i32)> {
+    let mut statement = db.prepare(sql)?;
     let columns = statement.column_count();
     let rows = statement
         .query_map(
@@ -67,11 +71,9 @@ fn measured(db: &Connection, sql: &str) -> (Vec<Vec<Value>>, i32) {
                     .map(|i| row.get(i))
                     .collect::<rusqlite::Result<Vec<Value>>>()
             },
-        )
-        .unwrap()
-        .collect::<rusqlite::Result<Vec<_>>>()
-        .unwrap();
-    (rows, statement.get_status(StatementStatus::VmStep))
+        )?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok((rows, statement.get_status(StatementStatus::VmStep)))
 }
 
 #[test]
@@ -137,6 +139,70 @@ fn routing_summary_bounds_unrelated_safe_projection_work() {
         retained < baseline * 2 + 1000,
         "routing summary grew from {baseline} to {retained} VM steps for unrelated safe history"
     );
+}
+
+#[test]
+fn routing_index_reopen_preserves_malformed_safe_bytes_and_failed_read() {
+    let (root, store) = seed();
+    let retained = {
+        let db = store.connection.lock();
+        db.execute_batch(
+            "DROP INDEX IF EXISTS observation_safe_route_decisions;
+            UPDATE observation_safe_facts_v2 SET body_json='{' WHERE rowid=(
+              SELECT rowid FROM observation_safe_facts_v2
+              WHERE json_extract(body_json,'$.event_kind')='route_decision' LIMIT 1);",
+        )
+        .unwrap();
+        let mut statement = db.prepare("SELECT workspace_id,request_id,original_digest,body_json FROM observation_safe_facts_v2 ORDER BY rowid").unwrap();
+        statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                ))
+            })
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap()
+    };
+    assert!(retained.iter().any(|row| row.3 == "{"));
+    drop(store);
+    for _ in 0..2 {
+        let reopened = open_store(root.path());
+        let db = reopened.connection.lock();
+        let mut statement = db.prepare("SELECT workspace_id,request_id,original_digest,body_json FROM observation_safe_facts_v2 ORDER BY rowid").unwrap();
+        let after = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                ))
+            })
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap();
+        assert_eq!(after, retained);
+        assert!(db.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name='observation_safe_route_decisions')", [], |row| row.get::<_, bool>(0)).unwrap());
+        assert!(
+            measured_result(&db, SUMMARY_SQL)
+                .unwrap_err()
+                .to_string()
+                .contains("malformed JSON")
+        );
+        assert_eq!(
+            db.query_row(
+                "SELECT value FROM observation_meta WHERE key='schema_version'",
+                [],
+                |row| row.get::<_, String>(0)
+            )
+            .unwrap(),
+            "4"
+        );
+    }
 }
 
 #[test]

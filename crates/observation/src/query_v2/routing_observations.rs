@@ -7,15 +7,19 @@ use std::collections::{BTreeMap, BTreeSet};
 const MAX_DECISIONS: usize = 10_000;
 const MAX_SAFE_BYTES: usize = 32 * 1024 * 1024;
 
-// Filter retained safe decisions before looking up their producer identity.
-// A reorderable join can scan all workspace execution events first.
+// The partial index excludes unrelated safe projections before opening JSON
+// payload pages. Invalid legacy JSON remains visible to the original predicate
+// so the read still fails closed, while index creation can preserve those bytes.
+// The fixed join order then bounds retained producer-identity lookups.
 pub(super) const SUMMARY_SQL: &str = "SELECT f.body_json,e.producer_id,e.producer_epoch,e.stream_id,e.event_id
         FROM observation_safe_facts_v2 f
         CROSS JOIN execution_fact_events e ON e.workspace_id=f.workspace_id AND e.request_id=f.request_id AND e.envelope_digest=f.original_digest
         JOIN logical_requests r ON r.workspace_id=f.workspace_id AND r.request_id=f.request_id
         JOIN sessions s ON s.workspace_id=r.workspace_id AND s.session_id=r.session_id
         LEFT JOIN observation_run_links l ON l.workspace_id=r.workspace_id AND l.request_id=r.request_id
-        WHERE f.workspace_id=:workspace AND json_extract(f.body_json,'$.event_kind')='route_decision'
+        WHERE f.workspace_id=:workspace
+          AND CASE WHEN json_valid(f.body_json) THEN json_extract(f.body_json,'$.event_kind') ELSE 'route_decision' END='route_decision'
+          AND json_extract(f.body_json,'$.event_kind')='route_decision'
           AND COALESCE(json_extract(f.body_json,'$.occurred_at_ms'),r.started_at_ms)>=:from AND COALESCE(json_extract(f.body_json,'$.occurred_at_ms'),r.started_at_ms)<:to
           AND (:session IS NULL OR r.session_id=:session)
           AND (:plan IS NULL OR COALESCE(json_extract(f.body_json,'$.routing_observation.plan_id'),json_extract(f.body_json,'$.routing_context.plan_id'))=:plan
