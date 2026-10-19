@@ -156,15 +156,27 @@ mod tests {
         let program = temp.path().join("waiter");
         std::fs::write(
             &program,
-            "#!/bin/sh\ncat >/dev/null\ntouch \"$0.started\"\nsleep 1\ntouch \"$0.finished\"\n",
+            r#"#!/bin/sh
+cat >/dev/null
+touch "$0.started"
+i=0
+while [ ! -e "$0.release" ]; do
+  i=$((i+1))
+  [ "$i" -lt 500 ] || exit 1
+  sleep 0.01
+done
+touch "$0.finished"
+"#,
         )
         .unwrap();
         std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o700)).unwrap();
+        // The fake waiter cannot finish until this caller releases it. This tests
+        // causality without assuming a sub-second process-startup speed.
         let start = Instant::now();
         detach(&program, Notice::ServiceUnavailable).unwrap();
         let started = program.with_file_name("waiter.started");
         let finished = program.with_file_name("waiter.finished");
-        while !started.exists() && start.elapsed() < Duration::from_millis(700) {
+        while !started.exists() && start.elapsed() < Duration::from_secs(3) {
             std::thread::sleep(Duration::from_millis(5));
         }
         assert!(started.exists(), "The fake action waiter never started");
@@ -172,8 +184,9 @@ mod tests {
             !finished.exists(),
             "The caller waited for the action process"
         );
-        assert!(start.elapsed() < Duration::from_millis(700));
-        while !finished.exists() && start.elapsed() < Duration::from_secs(3) {
+        std::fs::write(program.with_file_name("waiter.release"), b"release").unwrap();
+        let released = Instant::now();
+        while !finished.exists() && released.elapsed() < Duration::from_secs(3) {
             std::thread::sleep(Duration::from_millis(5));
         }
         assert!(
