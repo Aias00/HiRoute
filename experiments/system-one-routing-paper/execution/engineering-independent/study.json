@@ -1,0 +1,19 @@
+{
+  "id": "engineering-independent",
+  "dataset": "engineering",
+  "kind": "independent",
+  "repeats": 2,
+  "planned_calls": 1792,
+  "started_calls": 1792,
+  "result_calls": 1792,
+  "unknown_outcomes": [],
+  "not_started_calls": 0,
+  "expected_models": {
+    "jev113": "typesafe/jev-1.13-20260917",
+    "jev114": "typesafe/jev-1.14-20261014",
+    "qwen38flash": "qwen3.8-flash"
+  },
+  "jobs": "execution/engineering-independent/jobs.jsonl.gz",
+  "requests": "execution/engineering-independent/requests.jsonl.gz",
+  "responses": "responses/engineering-independent.jsonl.gz"
+}

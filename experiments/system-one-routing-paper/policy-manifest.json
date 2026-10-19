@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "scope": "Exact question files for the 18 October 2026 research snapshot. This manifest does not cover the datasets, provider adapters, requests or model responses.",
+  "files": [
+    {
+      "path": "policies/engineering-three-questions.json",
+      "sha256": "50ffefc958c455c18094e19da2f8926cdb92f4b203e1210e89815cd86c003742",
+      "role": "Engineering three-judgment method; development identifier C."
+    },
+    {
+      "path": "policies/mathematics-three-questions.json",
+      "sha256": "c45539e182fc26c6db18048ea954518dfe83ae0e75792ad22e1b07d1314a39e3",
+      "role": "Mathematical custom policy; changes only the two current-demand criteria."
+    },
+    {
+      "path": "policies/engineering-direct-original.json",
+      "sha256": "5b90310763e4c10c6e3e6c40c1c149dbe50aeed445367626bb042d1477d759d8",
+      "role": "Original engineering direct encoding retained in the main configuration comparison."
+    },
+    {
+      "path": "policies/engineering-direct-explicit.json",
+      "sha256": "46ec81b064aa27410df1524a59ac366b298f5ff3761dd31ba79f97fe4efc62ae",
+      "role": "Explicit-condition/local-scope engineering direct rewrite used in the expression sensitivity."
+    },
+    {
+      "path": "policies/mathematics-direct-explicit.json",
+      "sha256": "56c61e4ddef2b6a1398a1ab8f94a9f9a512d08bc0daa5067b1cdde7d93cb3e30",
+      "role": "Explicit direct question used in the contemporaneous mathematical comparison."
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "id": "format-development-completed",
+  "dataset": "engineering",
+  "kind": "format_development",
+  "repeats": 1,
+  "planned_calls": 20,
+  "result_calls": 20,
+  "ledger_scope": "Original result-only developer ledger; no start events recorded. Unobserved plan entries are not imputed as observed starts. Not a headline benchmark.",
+  "unobserved_plan_entries": 0,
+  "expected_models": {
+    "qwen38flash": "qwen3.8-flash",
+    "jev113": "typesafe/jev-1.13-20260917",
+    "jev114": "typesafe/jev-1.14-20261014"
+  },
+  "jobs": "execution/format-development-completed/jobs.jsonl.gz",
+  "requests": "execution/format-development-completed/requests.jsonl.gz",
+  "responses": "responses/format-development-completed.jsonl.gz"
+}
