@@ -11,6 +11,8 @@ use crate::LocalObservationStore;
 
 /// Both projections share the same scope and transaction. Detail filters never
 /// enter this CTE, so pagination and drill-down cannot change the full-scope mean.
+/// The small safe-event catalog excludes known unrelated payloads before opening
+/// content carriers; absent projections retain the original reasoning lookup.
 pub(super) const SCOPE: &str = "
     SELECT q.*,
       json_extract(q.branch_execution_json,'$.group') AS execution_group,
@@ -34,10 +36,12 @@ pub(super) const SCOPE: &str = "
       ) AS native_model,
       (SELECT json_extract(p.body_json,'$.fact.reasoning_profile_id')
        FROM execution_fact_events e
-       JOIN observation_sensitive_payloads_v2 p ON p.id='fact:'||e.envelope_digest
+       LEFT JOIN observation_safe_facts_v2 f ON f.workspace_id=e.workspace_id AND f.request_id=e.request_id AND f.original_digest=e.envelope_digest
+       CROSS JOIN observation_sensitive_payloads_v2 p ON p.id='fact:'||e.envelope_digest
        JOIN logical_requests r ON r.workspace_id=e.workspace_id AND r.request_id=e.request_id
        WHERE e.workspace_id=q.workspace_id AND r.session_id=q.session_id
          AND e.request_id IN(q.last_request_id,q.first_request_id)
+         AND (f.body_json IS NULL OR json_extract(f.body_json,'$.event_kind')='candidate_decision')
          AND json_extract(p.body_json,'$.fact.kind')='candidate_decision'
          AND json_extract(p.body_json,'$.fact.model_configuration_id')=q.model_configuration_id
          AND json_extract(p.body_json,'$.fact.profile_digest')=q.profile_digest

@@ -4,7 +4,11 @@ use crate::store::tests::support::{
     Fixture, fact_channel, finished, offer_fact, open_store, request_facts, writer,
 };
 use hiroute_domain::CanonicalDigest;
-use rusqlite::{Connection, StatementStatus, named_params, types::Value};
+use rusqlite::{Connection, StatementStatus, functions::FunctionFlags, named_params, types::Value};
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
 
 const PLAN: &str = "plan/codex-daily";
 
@@ -112,4 +116,135 @@ fn routing_summary_bounds_unrelated_execution_history_work() {
         bounded * 4 < previous,
         "routing summary used {bounded} VM steps; workspace event scan used {previous}"
     );
+}
+
+#[test]
+fn quality_reasoning_filters_known_unrelated_payloads_before_opening_them() {
+    let (_root, store) = seed();
+    let db = store.connection.lock();
+    let reads = Arc::new(AtomicUsize::new(0));
+    let count = Arc::clone(&reads);
+    db.create_scalar_function(
+        "quality_payload_probe",
+        1,
+        FunctionFlags::SQLITE_UTF8,
+        move |ctx| {
+            count.fetch_add(1, Ordering::Relaxed);
+            ctx.get::<String>(0)
+        },
+    )
+    .unwrap();
+    let sql = summary_sql().replace("p.body_json", "quality_payload_probe(p.body_json)");
+    let (rows, _) = measured(&db, &sql);
+    let bounded = reads.swap(0, Ordering::Relaxed);
+    let unfiltered = sql.replace(
+        "LEFT JOIN observation_safe_facts_v2 f ON f.workspace_id=e.workspace_id AND f.request_id=e.request_id AND f.original_digest=e.envelope_digest", ""
+    ).replace(
+        "AND (f.body_json IS NULL OR json_extract(f.body_json,'$.event_kind')='candidate_decision')", ""
+    );
+    let (previous_rows, _) = measured(&db, &unfiltered);
+    let previous = reads.swap(0, Ordering::Relaxed);
+    assert_eq!(rows, previous_rows);
+    assert!(
+        bounded * 2 < previous,
+        "reasoning opened {bounded} payload expressions; unfiltered read opened {previous}"
+    );
+
+    // A missing safe projection remains a gap, not permission to invent a
+    // different profile. Retain the original payload lookup as its fallback.
+    db.execute("DELETE FROM observation_safe_facts_v2", [])
+        .unwrap();
+    assert_eq!(measured(&db, &sql).0, rows);
+    db.execute("DELETE FROM observation_sensitive_payloads_v2", [])
+        .unwrap();
+    let deleted = measured(&db, &sql).0;
+    assert_eq!(
+        deleted[0][7],
+        Value::Null,
+        "deleted reasoning must stay unavailable"
+    );
+}
+
+#[test]
+fn quality_identity_reads_use_covering_request_and_exact_payload_lookup() {
+    let (_root, store) = seed();
+    let db = store.connection.lock();
+    let plan = |sql: &str| {
+        let mut statement = db.prepare(&format!("EXPLAIN QUERY PLAN {sql}")).unwrap();
+        statement
+            .raw_query()
+            .mapped(|row| row.get::<_, String>(3))
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap()
+    };
+    let summary = plan(&summary_sql());
+    assert!(
+        summary
+            .iter()
+            .any(|step| step.starts_with("SEARCH e USING COVERING INDEX")
+                && step.contains("workspace_id=? AND request_id=?")),
+        "reasoning identity lookup must not open the event payload row: {summary:?}"
+    );
+    let routing = plan(SUMMARY_SQL);
+    assert!(
+        routing
+            .iter()
+            .any(|step| step.starts_with("SEARCH e USING INDEX")
+                && step.contains("workspace_id=? AND request_id=? AND envelope_digest=?")),
+        "routing identity lookup must locate the exact retained event: {routing:?}"
+    );
+}
+
+#[test]
+fn quality_request_index_rebuild_preserves_existing_event_bytes_on_reopen() {
+    let (root, store) = seed();
+    let before = {
+        let db = store.connection.lock();
+        let mut statement = db.prepare("SELECT request_id,envelope_json,envelope_digest FROM execution_fact_events ORDER BY rowid").unwrap();
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap();
+        // An existing released store has the request and session indexes but
+        // no covering payload index. Reopening must add it without rewriting
+        // immutable event identities or their original content carriers.
+        db.execute_batch("DROP INDEX IF EXISTS execution_facts_request_payload")
+            .unwrap();
+        rows
+    };
+    drop(store);
+    for _ in 0..2 {
+        let reopened = open_store(root.path());
+        let db = reopened.connection.lock();
+        let mut statement = db.prepare("SELECT request_id,envelope_json,envelope_digest FROM execution_fact_events ORDER BY rowid").unwrap();
+        let after = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap();
+        assert_eq!(after, before);
+        assert!(db.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name='execution_facts_request_payload')", [], |row| row.get::<_, bool>(0)).unwrap());
+        assert_eq!(
+            db.query_row(
+                "SELECT value FROM observation_meta WHERE key='schema_version'",
+                [],
+                |row| row.get::<_, String>(0)
+            )
+            .unwrap(),
+            "4"
+        );
+    }
 }

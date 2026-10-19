@@ -517,6 +517,8 @@ const EXECUTION_FACT_SCHEMA_V3: &str = r#"
     );
     CREATE INDEX IF NOT EXISTS execution_facts_request
         ON execution_fact_events(workspace_id, request_id, sequence);
+    CREATE INDEX IF NOT EXISTS execution_facts_request_payload
+        ON execution_fact_events(workspace_id, request_id, envelope_digest, sequence);
     CREATE INDEX IF NOT EXISTS execution_facts_session
         ON execution_fact_events(workspace_id, session_id, sequence);
 "#;
