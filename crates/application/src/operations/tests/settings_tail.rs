@@ -112,6 +112,7 @@ fn settings_plan_for_action(host_login_item: bool, restoring: bool) -> Transacti
             }
         } else {
             CodexModelFileAction::Configure {
+                launch_snapshot: None,
                 previous_operation: None,
                 provider_id: "hiroute".to_owned(),
                 endpoint: "http://127.0.0.1:8787/v1".to_owned(),

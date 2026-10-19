@@ -17,6 +17,7 @@ mod observation;
 mod protected_prompt;
 mod quickstart;
 mod request_input;
+mod routed_launch;
 mod routing_timeline;
 mod service;
 mod trust;
@@ -29,13 +30,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use args::{Globals, split_globals};
 pub use client::{LocalControlClient, LocalControlClientError};
 use hiroute_application_api::{
-    AgentCheckRequestV1, AgentCheckScopeV1, AgentCheckSuiteV1, AgentLaunchDescriptorRequestV1,
-    CanonicalDigest, CommandDescriptorV1, CommandLifecycle, ErrorCode, ErrorV1, FallbackPolicyV1,
-    FreePoolModeV1, HIDDEN_AGENT_GRANT_HELPER_VERB_V1, LOCAL_CONTROL_SCHEMA_V2,
-    LocalControlWireRequestV2, MachineEnvelopeV2, ManagedClaudeLaunchDescriptorV2,
-    OperationCancelRequestV1, OperationLookupV1, PrincipalKind, ProtectedClientGrantV2,
-    RoutingModeV1, SetupApplyRequestV1, SetupRequestV1, SetupSelectionV1, command_by_id,
-    descriptor_digest, released_commands,
+    AgentCheckRequestV1, AgentCheckScopeV1, AgentCheckSuiteV1, CanonicalDigest,
+    CommandDescriptorV1, CommandLifecycle, ErrorCode, ErrorV1, FallbackPolicyV1, FreePoolModeV1,
+    HIDDEN_AGENT_GRANT_HELPER_VERB_V1, LOCAL_CONTROL_SCHEMA_V2, LocalControlWireRequestV2,
+    MachineEnvelopeV2, OperationCancelRequestV1, OperationLookupV1, PrincipalKind,
+    ProtectedClientGrantV2, RoutingModeV1, SetupApplyRequestV1, SetupRequestV1, SetupSelectionV1,
+    command_by_id, descriptor_digest, released_commands,
 };
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -159,72 +159,7 @@ where
 }
 
 fn execute_managed_launch(arguments: &[OsString]) -> CliExecution {
-    let invocation = match managed_launch::parse_invocation(arguments) {
-        Ok(invocation) => invocation,
-        Err(managed_launch::ManagedLaunchFailure::AuthPrecedenceConflict) => {
-            return failure(ErrorCode::AgentAuthPrecedenceConflict, None);
-        }
-        Err(_) => return failure(ErrorCode::InvalidArguments, None),
-    };
-    let request_id = next_request_id();
-    let payload = serde_json::to_value(AgentLaunchDescriptorRequestV1 {
-        connection_id: invocation.connection_id.clone(),
-    })
-    .expect("managed-launch request is serializable");
-    let request = LocalControlWireRequestV2 {
-        schema_version: LOCAL_CONTROL_SCHEMA_V2,
-        request_id: request_id.clone(),
-        operation_id: "GetManagedAgentLaunchDescriptor".to_owned(),
-        payload,
-        protected_grant: None,
-    };
-    let response =
-        match LocalControlClient::cli_from_environment().and_then(|client| client.call(request)) {
-            Ok(response) => response,
-            Err(_) => return failure(ErrorCode::DaemonUnavailable, Some(request_id)),
-        };
-    if response.status != hiroute_application_api::MachineStatus::Succeeded {
-        return render(response);
-    }
-    let Some(data) = response.data.as_ref() else {
-        return failure(ErrorCode::DaemonUnavailable, Some(request_id));
-    };
-    let Ok(descriptor) = serde_json::from_value::<ManagedClaudeLaunchDescriptorV2>(data.clone())
-    else {
-        return failure(ErrorCode::DaemonUnavailable, Some(request_id));
-    };
-    if descriptor.connection_id != invocation.connection_id {
-        return failure(ErrorCode::DaemonUnavailable, Some(request_id));
-    }
-    let trusted_hiroute_executable = match current_executable() {
-        Ok(executable) => executable,
-        Err(()) => return failure(ErrorCode::DaemonUnavailable, Some(request_id)),
-    };
-    let exit_code =
-        match managed_launch::launch(&descriptor, &invocation, &trusted_hiroute_executable) {
-            Ok(exit_code) => exit_code,
-            Err(managed_launch::ManagedLaunchFailure::AuthPrecedenceConflict) => {
-                return failure(ErrorCode::AgentAuthPrecedenceConflict, Some(request_id));
-            }
-            Err(_) => return failure(ErrorCode::DaemonUnavailable, Some(request_id)),
-        };
-    let warned = response
-        .warnings
-        .iter()
-        .any(|warning| warning.code == "MANAGED_LAUNCH_ENV_SANITIZED")
-        || descriptor
-            .environment_removals
-            .iter()
-            .any(|name| std::env::var_os(name).is_some());
-    CliExecution {
-        exit_code,
-        stdout: String::new(),
-        stderr: if warned {
-            "MANAGED_LAUNCH_ENV_SANITIZED\n".to_owned()
-        } else {
-            String::new()
-        },
-    }
+    routed_launch::execute(arguments)
 }
 
 fn current_executable() -> Result<String, ()> {

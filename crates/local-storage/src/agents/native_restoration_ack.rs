@@ -14,7 +14,10 @@ struct RestorationAck {
 
 fn accepts_ack(intent: &ExternalEffectIntentV1) -> bool {
     hiroute_domain::is_settings_managed_configuration(intent)
-        && intent.desired()["payload"]["schema"] == "hiroute.settings-codex-model-file/v1"
+        && matches!(
+            intent.desired()["payload"]["schema"].as_str(),
+            Some("hiroute.settings-codex-model-file/v1" | "hiroute.settings-codex-model-file/v2")
+        )
         && intent.desired()["payload"]["change"]["action"] == "restore"
 }
 

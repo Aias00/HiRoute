@@ -194,6 +194,25 @@ pub(crate) fn dispatch_launch_descriptor(
     if request.protected_grant.is_some() {
         return failed(ErrorCode::CapabilityDenied, request.request_id);
     }
+    if request.payload.get("agent").is_some() {
+        let payload = match serde_json::from_value::<hiroute_application_api::RoutedLaunchRequestV1>(
+            request.payload,
+        ) {
+            Ok(payload) => payload,
+            Err(_) => return failed(ErrorCode::InvalidArguments, request.request_id),
+        };
+        let Some(port) = service
+            .ports
+            .as_ref()
+            .and_then(|ports| ports.agent_connection.as_deref())
+        else {
+            return failed(ErrorCode::DaemonUnavailable, request.request_id);
+        };
+        return match port.routed_launch(&payload) {
+            Ok(read) => succeeded(read, request.request_id),
+            Err(error) => failed(map_control_error(error), request.request_id),
+        };
+    }
     let payload = match serde_json::from_value::<AgentLaunchDescriptorRequestV1>(request.payload) {
         Ok(payload) => payload,
         Err(_) => return failed(ErrorCode::InvalidArguments, request.request_id),
@@ -207,6 +226,22 @@ pub(crate) fn dispatch_launch_descriptor(
     };
     match port.managed_launch_descriptor(&payload) {
         Ok(descriptor) => succeeded(descriptor, request.request_id),
+        Err(crate::control::ControlReadError::NotFound) => {
+            match port.managed_codex_launch_descriptor(&payload) {
+                Ok(crate::control::CodexLaunchDescriptorRead::Ready(descriptor)) => {
+                    succeeded(descriptor, request.request_id)
+                }
+                Ok(crate::control::CodexLaunchDescriptorRead::SnapshotMissing) => failed_with_data(
+                    ErrorCode::ActionRequired,
+                    serde_json::json!({
+                        "reason_code": "launch_snapshot_missing",
+                        "repair": "hiroute agents connect preview --help",
+                    }),
+                    request.request_id,
+                ),
+                Err(error) => failed(map_control_error(error), request.request_id),
+            }
+        }
         Err(error) => failed(map_control_error(error), request.request_id),
     }
 }

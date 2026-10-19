@@ -123,5 +123,6 @@ mod tests;
 #[cfg(all(test, windows))]
 mod windows_collaboration_tests;
 
+mod codex_launch;
 mod codex_profile;
 pub use codex_profile::*;

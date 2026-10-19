@@ -8,6 +8,28 @@ use toml_edit::DocumentMut;
 pub const CODEX_STANDALONE_PROFILE_ID: &str = "codex-standalone-profile-v1";
 pub const CODEX_MANAGED_PROFILE_NAME: &str = "hiroute";
 
+/// Inspect only the key; a config value may contain credentials and is never diagnostic text.
+pub fn codex_cli_override_changes_routing(argument: &str) -> bool {
+    let Some((key, _)) = argument.split_once('=') else {
+        return false;
+    };
+    let key = key.trim();
+    let protected = |key: &str| {
+        matches!(
+            key,
+            "profile" | "profiles" | "model_provider" | "model_providers"
+        )
+    };
+    if protected(key) || key.starts_with("profiles.") || key.starts_with("model_providers.") {
+        return true;
+    }
+    // Also recognize quoted/dotted TOML keys without interpreting the caller's value.
+    key.len() <= 4096
+        && format!("{key} = 0")
+            .parse::<DocumentMut>()
+            .is_ok_and(|doc| doc.iter().any(|(key, _)| protected(key)))
+}
+
 /// Hash every inherited file, including absence. Never infer ownership from a filename.
 pub fn codex_profile_dependency_digest(
     root: &Path,

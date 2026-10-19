@@ -2,6 +2,7 @@
 
 mod additional_model;
 mod capability;
+mod codex_launch;
 mod collaboration;
 mod context_window;
 mod emulator;
@@ -18,6 +19,7 @@ mod surface_check;
 
 pub use additional_model::*;
 pub use capability::*;
+pub use codex_launch::*;
 pub use collaboration::*;
 pub use context_window::*;
 pub use emulator::*;

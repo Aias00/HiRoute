@@ -568,6 +568,7 @@ fn settings_operation(
     let catalog_facts = catalog_facts(&catalog_plan);
     let catalog_digest = catalog_plan.content_digest;
     let change = CodexModelFileAction::Configure {
+        launch_snapshot: None,
         previous_operation: previous.cloned(),
         provider_id: "hiroute".into(),
         endpoint: "http://127.0.0.1:5837/v1".into(),
@@ -1025,6 +1026,7 @@ fn operation(
     });
     let change = original.map_or_else(
         || CodexModelFileAction::Configure {
+            launch_snapshot: None,
             previous_operation: None,
             provider_id: "hiroute".into(),
             endpoint: "http://127.0.0.1:5837/v1".into(),

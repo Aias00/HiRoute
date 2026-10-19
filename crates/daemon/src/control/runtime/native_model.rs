@@ -351,6 +351,7 @@ impl LocalControlAdapter {
                 endpoint,
                 model,
                 model_catalog,
+                ..
             } => {
                 let mutation = operation
                     .plan

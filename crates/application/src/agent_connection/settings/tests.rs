@@ -814,6 +814,7 @@ fn codex_model_file_journal_binds_the_catalog_to_plan_carrying_grants() {
     .unwrap();
     let catalog_digest = CanonicalDigest::of_bytes(b"merged-catalog");
     let change = |model_catalog: Option<CanonicalDigest>| CodexModelFileAction::Configure {
+        launch_snapshot: None,
         previous_operation: None,
         provider_id: "hiroute".to_owned(),
         endpoint: "http://127.0.0.1:8787/v1".to_owned(),

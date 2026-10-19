@@ -246,7 +246,7 @@ fn validated_managed_path(
 }
 
 #[cfg(unix)]
-fn spawn_and_wait(command: &mut Command) -> Result<u8, ManagedLaunchFailure> {
+pub(super) fn spawn_and_wait(command: &mut Command) -> Result<u8, ManagedLaunchFailure> {
     use tokio::signal::unix::{SignalKind, signal};
 
     let runtime = tokio::runtime::Builder::new_current_thread()
@@ -292,7 +292,7 @@ fn spawn_and_wait(command: &mut Command) -> Result<u8, ManagedLaunchFailure> {
 }
 
 #[cfg(windows)]
-fn spawn_and_wait(command: &mut Command) -> Result<u8, ManagedLaunchFailure> {
+pub(super) fn spawn_and_wait(command: &mut Command) -> Result<u8, ManagedLaunchFailure> {
     use hiroute_platform::windows::job::{Child, Launch, Stream};
     use std::time::Instant;
 
@@ -362,7 +362,7 @@ fn spawn_and_wait(command: &mut Command) -> Result<u8, ManagedLaunchFailure> {
 }
 
 #[cfg(not(any(unix, windows)))]
-fn spawn_and_wait(command: &mut Command) -> Result<u8, ManagedLaunchFailure> {
+pub(super) fn spawn_and_wait(command: &mut Command) -> Result<u8, ManagedLaunchFailure> {
     command
         .status()
         .map(exit_code)

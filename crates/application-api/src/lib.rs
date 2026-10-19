@@ -9,6 +9,7 @@
 mod agent_connection;
 mod agent_discovery;
 mod agent_effective_state;
+mod agent_launch;
 pub use agent_effective_state::*;
 mod agent_grant_raw;
 mod agent_settings;
@@ -61,6 +62,7 @@ mod subscription_login;
 
 pub use agent_connection::*;
 pub use agent_grant_raw::*;
+pub use agent_launch::*;
 pub use agent_settings::*;
 pub use commands::{
     CommandDescriptorV1, CommandKind, CommandLifecycle, CommandManifestV1, CommandScope,
@@ -81,8 +83,9 @@ pub use hiroute_domain::{
     AgentActivationModeV1, AgentPlanId, CHANGE_SPEC_SCHEMA_V1, CanonicalDigest, ChangeSpecV1,
     ComputeCredentialSelectionError, ComputeCredentialSelectionV2, ContentMode,
     DecisionServiceChangeV1, HIDDEN_AGENT_GRANT_HELPER_VERB_V1,
-    MANAGED_CLAUDE_SETTING_SOURCES_ARGUMENT_V1, MANAGED_CLAUDE_SETTINGS_ARGUMENT_V1,
-    ManagedClaudeLaunchDescriptorV2, ManagedLaunchProfileV1, MaterializationState, ModelAlias,
+    MANAGED_CLAUDE_CALLER_FORBIDDEN_OPTIONS_V1, MANAGED_CLAUDE_SETTING_SOURCES_ARGUMENT_V1,
+    MANAGED_CLAUDE_SETTINGS_ARGUMENT_V1, ManagedClaudeLaunchDescriptorV2,
+    ManagedCodexLaunchDescriptorV1, ManagedLaunchProfileV1, MaterializationState, ModelAlias,
     ModelSwitchFilter, ObservationCapacityStatusV1, PRODUCT_CONTRACT_REVISION,
     PROPOSAL_MAP_REVISION, RevisionSetV1, SchemaVersion, SessionId, SessionListQueryV1,
     UpstreamProtocol, ValueGroupByV1, ValueQueryV1,

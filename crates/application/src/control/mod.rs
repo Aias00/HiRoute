@@ -284,6 +284,11 @@ pub trait ApplicationMutationPort: Send + Sync {
     ) -> Result<OperationV1, crate::TransactionError>;
 }
 
+pub enum CodexLaunchDescriptorRead {
+    Ready(Box<hiroute_application_api::ManagedCodexLaunchDescriptorV1>),
+    SnapshotMissing,
+}
+
 /// Read-only facts needed by the typed AgentConnection planner and managed-launch endpoint.
 /// The daemon adapter owns filesystem/publication joins; Application owns every product decision.
 pub trait AgentConnectionControlPort: Send + Sync {
@@ -358,6 +363,20 @@ pub trait AgentConnectionControlPort: Send + Sync {
         &self,
         request: &AgentLaunchDescriptorRequestV1,
     ) -> Result<ManagedClaudeLaunchDescriptorV2, ControlReadError>;
+
+    fn managed_codex_launch_descriptor(
+        &self,
+        _request: &AgentLaunchDescriptorRequestV1,
+    ) -> Result<CodexLaunchDescriptorRead, ControlReadError> {
+        Err(ControlReadError::NotFound)
+    }
+
+    fn routed_launch(
+        &self,
+        _request: &hiroute_application_api::RoutedLaunchRequestV1,
+    ) -> Result<hiroute_application_api::RoutedLaunchReadV1, ControlReadError> {
+        Err(ControlReadError::Unavailable)
+    }
 }
 
 #[derive(Clone)]

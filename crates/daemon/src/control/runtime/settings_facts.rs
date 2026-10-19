@@ -806,7 +806,19 @@ impl LocalControlAdapter {
                 .scanner
                 .claude_context_override()
                 .map_err(|_| ControlReadError::Unavailable)?;
+        let codex_launch_snapshot = if class == SettingsAgentClass::CodexProfile
+            && matches!(spec.model, AgentFacetIntent::Configure { .. })
+        {
+            Some(
+                self.scanner
+                    .codex_launch_snapshot()
+                    .map_err(|_| ControlReadError::SnapshotChanged)?,
+            )
+        } else {
+            None
+        };
         let dependency_digest = CanonicalDigest::of(&serde_json::json!({
+            "codex_launch_snapshot": &codex_launch_snapshot,
             "codex_profile_dependencies": self.codex_profile_dependencies(class, spec, active_configuration.as_ref())?,
             "claude_context_override": claude_context_override,
             "claude_plan_capability_unavailable": claude_plan_capability_unavailable,
@@ -862,6 +874,7 @@ impl LocalControlAdapter {
                 SettingsModelTargetFacts::Codex {
                     provider_id: "hiroute".into(),
                     endpoint: runtime.gateway_base_url.clone(),
+                    launch_snapshot: codex_launch_snapshot,
                 }
             }
             SettingsAgentClass::Claude => {

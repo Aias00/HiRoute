@@ -49,6 +49,7 @@ pub enum SettingsModelTargetFacts {
     Codex {
         provider_id: String,
         endpoint: String,
+        launch_snapshot: Option<hiroute_domain::CodexLaunchSnapshotV1>,
     },
     Claude(SettingsClaudeModelFacts),
     Additional {
@@ -127,7 +128,9 @@ impl AgentSettingsPlanningInput {
                     SettingsModelTargetFacts::Codex {
                         provider_id,
                         endpoint,
+                        launch_snapshot,
                     } => SettingsModelAction::Codex(CodexModelFileAction::Configure {
+                        launch_snapshot: launch_snapshot.clone(),
                         previous_operation: file.active_configuration.clone(),
                         provider_id: provider_id.clone(),
                         endpoint: endpoint.clone(),

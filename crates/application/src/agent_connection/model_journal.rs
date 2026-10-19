@@ -7,13 +7,16 @@ use hiroute_domain::{
 };
 use serde::{Deserialize, Serialize};
 
-const SCHEMA: &str = "hiroute.settings-codex-model-file/v1";
+const SCHEMA: &str = "hiroute.settings-codex-model-file/v2";
+const LEGACY_SCHEMA: &str = "hiroute.settings-codex-model-file/v1";
 const CATALOG_SCHEMA: &str = "hiroute.codex-catalog-artifact/v1";
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum CodexModelFileAction {
     Configure {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        launch_snapshot: Option<hiroute_domain::CodexLaunchSnapshotV1>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         previous_operation: Option<OperationId>,
         provider_id: String,
@@ -214,17 +217,22 @@ pub fn decode_settings_codex_model_file(
     }
     let payload: CodexModelFilePayload =
         serde_json::from_value(value["payload"].clone()).map_err(|_| invalid())?;
-    if payload.schema != SCHEMA || !super::settings::identity(&payload.context_id) {
+    if !matches!(payload.schema.as_str(), SCHEMA | LEGACY_SCHEMA)
+        || !super::settings::identity(&payload.context_id)
+    {
         return Err(invalid());
     }
     if let CodexModelFileAction::Configure {
+        launch_snapshot,
         previous_operation,
         provider_id,
         endpoint,
         model,
         model_catalog,
     } = &payload.change
-        && (provider_id != "hiroute"
+        && (launch_snapshot.as_ref().is_some_and(|snapshot| {
+            payload.schema == LEGACY_SCHEMA || snapshot.validate().is_err()
+        }) || provider_id != "hiroute"
             || !local_endpoint(endpoint)
             || endpoint.len() > 2048
             || endpoint.contains(['\0', '\n', '\r'])
