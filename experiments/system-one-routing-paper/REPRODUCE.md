@@ -24,6 +24,22 @@ archives for every campaign. `--check` separately compares the recomputed reduct
 with `reference-results.json`; that file does not supply parsing or scoring inputs.
 It also checks the separate MR010_b sensitivity. A mismatch fails the command.
 
+## Connection timing diagnostic
+
+The separate 19 October transport check is reduced from curated numeric records:
+
+```sh
+python3 experiments/system-one-routing-paper/diagnostics/connection_timing.py
+python3 experiments/system-one-routing-paper/diagnostics/connection_timing.py --json
+```
+
+The first command reproduces Appendix C's supplemental latency table; the second
+also prints each cell's median connection duration. The reducer excludes eight
+warmups, checks all 40 matched route pairs and balanced path order, and subtracts
+each call's own connection duration before taking medians. It contains no network
+execution. This small diagnostic does not replace the original 256-call latency
+cells reproduced by `report`, and supplies no adjusted Qwen timing.
+
 ## What is reproduced
 
 - Matched engineering direct/three actions, component scores, cohorts, language

@@ -2,7 +2,19 @@
 
 Research snapshot: 18 October 2026. Public packaging: 19 October 2026.
 The original frozen datasets and responses were preserved locally; this package
-contains public copies with separate checksums. It adds no model experiments.
+contains public copies with separate checksums. Decision-quality experiments are
+unchanged. A separate 19 October connection-timing diagnostic is described below.
+
+The supplemental [timing records](diagnostics/connection-timing.json) contain
+numeric measurements from 88 already-completed Jev calls, including eight excluded
+warmups. They omit credentials, service identifiers, socket addresses, personal
+proxy settings and response contents. Model versions, request hashes, call order,
+matched-pair IDs and per-call durations are retained. Ten contexts (five per
+language) are shared across formats, versions and paths; selection uses request
+size rather than observed accuracy. Both paths retain a system-level tunnel.
+This is a small transport diagnostic, not a new decision-quality panel or an
+estimate of isolated inference latency. Its reduction runs entirely offline;
+the original accuracy data and client-latency observations remain unchanged.
 
 ## Intended use
 

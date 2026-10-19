@@ -337,7 +337,7 @@ In these observed workloads, three-question routing costs about **USD 0.084–0.
 
 These amounts cover decision calls only, not executor work, dataset construction or review. Qwen runs on a subscription Token Plan and is reported in tokens; we do not derive a comparable per-request USD cost from that allowance or claim a measured dollar saving relative to Qwen. The evaluated backend identities and versions are disclosed, but this public draft does not name the hosted Jev access service, which limits exact reproduction of billing and transport conditions.
 
-### Client-observed latency and scalar consistency
+### Client-observed end-to-end latency
 
 | Backend | Format | Median client latency | p95 client latency |
 |---|---|---:|---:|
@@ -348,7 +348,24 @@ These amounts cover decision calls only, not executor work, dataset construction
 | Qwen 3.8 Flash | Direct | 740 ms | 1,654 ms |
 | Qwen 3.8 Flash | Decomposed | 1,328 ms | 1,769 ms |
 
-This descriptive post-run table includes all 128 inputs and two repeats per cell, and p95 uses the nearest-rank definition. Jev was reached through a hosted decision API over a proxy, while Qwen used its Token Plan endpoint, so absolute differences include transport, scheduling and service effects. The sample does not show that System One is universally faster; Qwen direct has the lowest median in this campaign. The three native questions do not require serial round trips.
+This descriptive post-run table includes all 128 inputs and two repeats per cell, and p95 uses the nearest-rank definition. Each request used a fresh connection. Its duration includes connection setup, the request, service processing and response handling; it is not model inference time. Jev was reached through a hosted decision API over an explicit HTTP proxy, while Qwen used its Token Plan endpoint. The original run recorded no per-request connection duration, so these values cannot be retrospectively corrected by subtracting a measured setup phase. Absolute differences include transport, scheduling and service effects. The sample does not show that System One is universally faster; Qwen direct has the lowest end-to-end median in this campaign. The three native questions do not require serial round trips.
+
+### Connection timing diagnostic
+
+A separate 19 October diagnostic replayed ten frozen engineering contexts, five per language, through both an explicit HTTP proxy and a path without an application proxy. Both paths retained the existing system-level tunnel. The same ten contexts were used for each Jev version and format, selected at request-size quantiles of the Jev 1.14 three-question bodies. Each pair used identical request bytes; path order was balanced, pairs were shuffled, and only one request was in flight. All 88 calls returned the requested model with valid answers; eight warmups were excluded, leaving ten measured calls per model/format/path. These are exploratory transport observations, separate from the original 256-call cells and their concurrent execution.
+
+The diagnostic recorded each connection phase, including DNS, TCP, proxy negotiation when applicable, and TLS. For each call we subtract **that call's connection duration** from its total, then take the median. This avoids assuming a fixed setup cost or subtracting two medians. The resulting **post-connection client duration** still includes request transport, provider queueing and processing, response handling and connection closure; it does not measure isolated inference or the effect of reusing a live connection.
+
+| Model | Format | Proxy: total | Proxy: post-connection | No app proxy: total | No app proxy: post-connection |
+|---|---|---:|---:|---:|---:|
+| Jev 1.13 | Original direct | 1,110 ms | 504 ms | 820 ms | 364 ms |
+| Jev 1.13 | Three questions | 1,012 ms | 468 ms | 845 ms | 378 ms |
+| Jev 1.14 | Original direct | 1,149 ms | 489 ms | 872 ms | 369 ms |
+| Jev 1.14 | Three questions | 1,002 ms | 468 ms | 819 ms | 345 ms |
+
+The [curated timings](diagnostics/connection-timing.json) and [offline reducer](diagnostics/connection_timing.py) reproduce this table without further API calls. Qwen has no corresponding connection-phase records, so no adjusted Qwen value or cross-backend latency ranking is inferred. Differences between the two paths remain after setup is removed. These small samples describe these routes and workloads; they do not establish an architectural speed advantage or a stable single-versus-three-question ordering.
+
+### Scalar consistency
 
 Native Jev historical scalars differ by at most 0.01 from the expectations reconstructed from the displayed probabilities. Qwen's generated scalar differs by more than 0.05 in seven of 256 decomposed responses, by up to 0.7. In a post-run sensitivity check, replacing only the scalar with that expectation would change three Qwen actions in the determinate main panel, each from correct enhanced-tier protection to an incorrect standard-tier selection. The reported main results keep the supplied scalars, with no arithmetic repair, modal-grade substitution or threshold calibration. This is why generated numerical reports and native decision outputs need separate consistency checks.
 
