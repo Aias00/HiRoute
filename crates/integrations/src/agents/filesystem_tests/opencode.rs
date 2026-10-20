@@ -162,17 +162,27 @@ fn opencode_model_target_stays_bound_and_explicit_selectors_have_no_alternative(
         vec![json.clone(), json.with_extension("jsonc")]
     );
 
-    let mut layout = layout(root.path());
-    let selected = root.path().join("explicit.json");
+    let explicit_root = tempfile::tempdir().unwrap();
+    let mut layout = layout(explicit_root.path());
+    let selected = explicit_root.path().join("explicit.json");
     layout.opencode_context = Some(
-        crate::agents::OpenCodeNativeContext::from_lookup(root.path(), |key| {
+        crate::agents::OpenCodeNativeContext::from_lookup(explicit_root.path(), |key| {
             (key == "OPENCODE_CONFIG").then(|| selected.clone().into_os_string())
         })
         .unwrap(),
     );
     let mut explicit = FilesystemAgentScannerV1::new(layout, registry());
     assert_eq!(explicit.opencode_model_target_candidates(), vec![selected]);
-    assert!(explicit.bind_opencode_model_target(json).is_err());
+    let unselected_sibling = explicit
+        .opencode_native_context()
+        .unwrap()
+        .config_root
+        .join("opencode.jsonc");
+    assert!(
+        explicit
+            .bind_opencode_model_target(unselected_sibling)
+            .is_err()
+    );
 }
 #[test]
 fn opencode_settings_dependencies_detect_layer_changes_and_owned_provider_shadowing() {
