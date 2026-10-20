@@ -694,8 +694,30 @@ def execute(request, run, product, pm, helper, activity, manifest, root):
     if activity.get('administrator_groups') is not False:
         raise ValueError('Native Desktop evidence requires a standard account, not a filtered administrator')
     action = request['desktop_action']
-    if action not in ('install', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call', 'codex-inference', 'network-probe'):
+    if action not in ('install', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call', 'codex-inference', 'network-probe', 'recovery-preview'):
         raise ValueError('Unknown native Desktop action')
+    if action == 'recovery-preview':
+        previous = request.get('from_product')
+        observation = request.get('observation_run')
+        if not re.fullmatch(r'[a-f0-9]{12}-[a-f0-9]{12}', previous or '') or not re.fullmatch(r'[a-f0-9]{32}', observation or ''):
+            raise ValueError('Original recovery preview requires the current product and recent inspection')
+        inspection = root / 'runs' / observation
+        original = json.loads((inspection / 'request.json').read_text(encoding='utf-8'))
+        result = json.loads((inspection / 'result.json').read_text(encoding='utf-8'))
+        if (original.get('operation') != 'inspect' or original['product'] != previous
+                or not result.get('passed') or result.get('administrator') is not False
+                or original['config']['user'] != request['config']['user']
+                or original['config']['session_id'] != request['config']['session_id']
+                or time.time() - (inspection / 'result.json').stat().st_mtime > 3600):
+            raise ValueError('The original recovery inspection is stale or belongs to another product/account')
+        installed(helper, root / 'bundles' / previous, manifest(root / 'bundles' / previous))
+        source = helper.original_recovery_source(Path.home(), Path(os.environ['LOCALAPPDATA']), pm)
+        facts = dict(batch_id=source['batch_id'], source=str(source['source']),
+                     baseline_revision=pm['source_revision'], copied_materials=len(source['record']['files']),
+                     locator_sha256=source['locator_sha256'], extra_locations=source['record'].get('extra_locations'),
+                     source_keys=list(source['record']), info_keys=list(source['record'].get('source_info', {})))
+        (run / 'recovery-source.json').write_text(json.dumps(facts, indent=2), encoding='utf-8')
+        return dict(native_entry='read-only original recovery material verification', **facts)
     if action == 'desktop-state':
         return dict(native_entry='read-only input desktop inspection', state=desktop_state())
     if action == 'native-files':

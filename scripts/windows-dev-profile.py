@@ -244,3 +244,109 @@ def archive_orphaned_data(native_home, local_app_data, destination, inspected, a
         outcome='archived_and_verified', manifest_sha256=digest(manifest))), encoding='utf-8')
     return dict(archived=[str(t) for _, t in moved], backup_manifest='profile-backup.json',
                 native_configuration='unchanged', assessment='preparation_only')
+
+
+def bounded_json(path, maximum=1024 * 1024):
+    path = plain(path)
+    if not path.is_file() or path.stat().st_size > maximum:
+        raise ValueError('Missing or oversized recovery metadata')
+    with path.open('rb') as stream:
+        content = stream.read(maximum + 1)
+    if len(content) > maximum:
+        raise ValueError('Recovery metadata changed while reading')
+    return json.loads(content)
+
+
+def native_directory_identity(path):
+    """The same volume/index pair as the product's retained-directory seal."""
+    import ctypes
+    from ctypes import wintypes
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    class FileTime(ctypes.Structure):
+        _fields_ = [('low', wintypes.DWORD), ('high', wintypes.DWORD)]
+    class Information(ctypes.Structure):
+        _fields_ = [('attributes', wintypes.DWORD), ('created', FileTime),
+                    ('accessed', FileTime), ('written', FileTime),
+                    ('volume', wintypes.DWORD), ('size_high', wintypes.DWORD),
+                    ('size_low', wintypes.DWORD), ('links', wintypes.DWORD),
+                    ('index_high', wintypes.DWORD), ('index_low', wintypes.DWORD)]
+    kernel.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+        ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
+    kernel.CreateFileW.restype = wintypes.HANDLE
+    kernel.GetFileInformationByHandle.argtypes = [wintypes.HANDLE, ctypes.POINTER(Information)]
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    path = plain(path)
+    handle = kernel.CreateFileW(str(path), 0x80, 7, None, 3, 0x02200000, None)
+    if handle == wintypes.HANDLE(-1).value:
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        information = Information()
+        if not kernel.GetFileInformationByHandle(handle, ctypes.byref(information)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        if information.attributes & 1024 or not information.attributes & 16:
+            raise ValueError('The sealed source is not an ordinary directory')
+        return [information.volume, (information.index_high << 32) | information.index_low]
+    finally:
+        kernel.CloseHandle(handle)
+
+
+def original_recovery_source(native_home, local_app_data, baseline):
+    """Read the live locator's exact batch; never select a source by directory presence."""
+    paths = locations(native_home, local_app_data)
+    storage = plain(paths['data'] / 'storage')
+    locator_path = storage / 'observation-source-backup.json'
+    locator = bounded_json(locator_path, 16 * 1024)
+    import re
+    def portable(value):
+        return isinstance(value, str) and '..' not in value and re.fullmatch(r'[A-Za-z0-9_.-]{1,128}', value)
+    name, batch_id = locator.get('backup_name'), locator.get('set_id')
+    if locator.get('schema') != 1 or not portable(name) or not portable(batch_id):
+        raise ValueError('Unknown or foreign original-batch locator')
+    parent = plain(storage.parent / (storage.name + '.upgrade-backups'))
+    batch = plain(parent / name)
+    row = bounded_json(batch / 'backup-set.manifest.json', 64 * 1024)
+    if row.get('set_id') != batch_id:
+        batch = plain(parent / ('migration-set.' + batch_id))
+        row = bounded_json(batch / 'backup-set.manifest.json', 64 * 1024)
+    if row.get('schema') != 'hiroute.sqlite-backup-set/v2' or row.get('set_id') != batch_id:
+        raise ValueError('Original batch identity changed')
+    source = plain(batch / 'source')
+    record = bounded_json(source / 'source-backup.json')
+    if (record.get('schema') != 'hiroute.upgrade-source-backup/v2'
+            or record.get('complete') is not True or record.get('source_storage') != str(storage)
+            or record.get('source_info', {}).get('batch_id') != batch_id):
+        raise ValueError('The recovery source is incomplete or belongs to another storage root')
+    files = record.get('files')
+    if not isinstance(files, dict) or not 1 <= len(files) <= 10000:
+        raise ValueError('Original material inventory is unavailable')
+    required = {'storage/live/' + name + '.db' for name in ('control', 'runtime', 'secrets')}
+    required.update(('storage/master-key', 'storage/observation-hmac-key'))
+    if not required <= files.keys():
+        raise ValueError('The complete source lacks essential databases or keys')
+    for name, expected in files.items():
+        if (not isinstance(name, str) or '\\' in name or ':' in name
+                or any(part in ('', '.', '..') for part in name.split('/'))
+                or not isinstance(expected, str) or not re.fullmatch(r'sha256:[a-f0-9]{64}', expected)):
+            raise ValueError('Invalid original material inventory')
+        path = plain(source / name)
+        if not path.is_file() or digest(path) != expected[7:]:
+            raise ValueError('Original recovery material changed or is unavailable')
+    candidates = [source / 'recovery-package', source / 'recovery-package/program']
+    matching = []
+    for candidate in candidates:
+        manifest = candidate / 'package-manifest.json'
+        if not manifest.exists():
+            continue
+        package = bounded_json(manifest)
+        if package.get('revision') != baseline['source_revision']:
+            continue
+        for binary in ('hiroute.exe', 'hirouted.exe'):
+            if digest(plain(candidate / binary)) != baseline['files'][binary]['sha256']:
+                raise ValueError('Original program does not match the independently staged baseline')
+        matching.append(candidate)
+    if len(matching) != 1:
+        raise ValueError('The exact native baseline program cannot be identified')
+    if native_directory_identity(source / 'storage/observation') != record.get('sealed_observation', {}).get('identity'):
+        raise ValueError('Original sealed history identity changed')
+    return dict(batch=batch, source=source, record=record, batch_id=batch_id,
+                locator_sha256=digest(locator_path), program=matching[0])

@@ -144,6 +144,41 @@ class Runner(unittest.TestCase):
         self.assertTrue(result['timed_out'])
         self.assertNotIn('exit_code', result)
 
+    def test_recovery_preview_binds_the_live_batch_source_and_independent_baseline(self):
+        home, local = self.root / 'home', self.root / 'local'
+        storage = home / '.local/share/hiroute/storage'
+        batch = storage.parent / 'storage.upgrade-backups/original'
+        source = batch / 'source'
+        storage.mkdir(parents=True)
+        (storage / 'observation-source-backup.json').write_text(json.dumps(dict(schema=1, backup_name='original', set_id='batch-1')))
+        (source / 'storage/observation').mkdir(parents=True)
+        (batch / 'backup-set.manifest.json').write_text(json.dumps(dict(schema='hiroute.sqlite-backup-set/v2', set_id='batch-1')))
+        files = {}
+        def original(name, content):
+            path = source / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+            files[name] = 'sha256:' + profiles.digest(path)
+        for name in ('control', 'runtime', 'secrets'):
+            original('storage/live/' + name + '.db', b'original database fixture')
+        for name in ('master-key', 'observation-hmac-key'):
+            original('storage/' + name, b'original key fixture')
+        original('recovery-package/package-manifest.json', json.dumps(dict(revision='a'*40)).encode())
+        binaries = {}
+        for name in ('hiroute.exe', 'hirouted.exe'):
+            original('recovery-package/' + name, name.encode())
+            binaries[name] = dict(sha256=profiles.digest(source / 'recovery-package' / name))
+        record = dict(schema='hiroute.upgrade-source-backup/v2', complete=True, source_storage=str(storage),
+                      source_info=dict(batch_id='batch-1'), files=files, sealed_observation=dict(identity=[1, 2]))
+        (source / 'source-backup.json').write_text(json.dumps(record))
+        baseline = dict(source_revision='a'*40, files=binaries)
+        with patch.object(profiles, 'native_directory_identity', return_value=[1, 2]):
+            self.assertEqual(profiles.original_recovery_source(home, local, baseline)['batch_id'], 'batch-1')
+            (source / 'storage/master-key').write_bytes(b'changed authority')
+            with self.assertRaisesRegex(ValueError, 'material changed'):
+                profiles.original_recovery_source(home, local, baseline)
+        self.assertFalse((source / 'preserved-current').exists(), 'read-only preview never prepares a restore')
+
     def test_desktop_refuses_filtered_administrator_before_native_actions(self):
         with self.assertRaisesRegex(ValueError, 'filtered administrator'), patch.object(desktop.subprocess, 'run') as run:
             desktop.execute({}, self.root, self.root, {}, profiles, {'administrator_groups': True}, host.manifest, self.root)

@@ -334,7 +334,7 @@ def main():
     desktop = commands.add_parser('desktop-session', help='Measured installed Desktop and native UI acceptance')
     desktop.add_argument('--product', required=True)
     desktop.add_argument('--action', dest='desktop_action', required=True,
-                         choices=('install', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call', 'codex-inference', 'network-probe'))
+                         choices=('install', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call', 'codex-inference', 'network-probe', 'recovery-preview'))
     desktop.add_argument('--from-product', help='Exact installed bundle admitted before a cross-build upgrade')
     desktop.add_argument('--recover-product', help='Exact interrupted bundle, with a recent inspection, before normal NSIS recovery')
     desktop.add_argument('--observation-run')
@@ -410,7 +410,7 @@ def main():
             if args.desktop_action == 'network-probe' and (
                     not args.source_id or not re.fullmatch(r'source/[A-Za-z0-9._:-]{1,240}', args.source_id)):
                 raise ValueError('TLS diagnostics require an explicit saved source identity')
-            if args.desktop_action in ('installer-resume', 'installer-quarantine') and (
+            if args.desktop_action in ('installer-resume', 'installer-quarantine', 'recovery-preview') and (
                     not args.from_product or not args.observation_run
                     or not re.fullmatch(r'[a-f0-9]{32}', args.observation_run)):
                 raise ValueError('Installer resume requires the prior product and a recent installation inspection')

@@ -182,6 +182,14 @@ candidate, `--from-product OLD_BUNDLE_ID` verifies the old images before invokin
 the new installer. Preserve existing data and identify both packages in the
 result. Different source revisions carrying the same semantic version prove a
 cross-build replacement, not a newer-version catalog selection or N-to-N+1 update.
+`--action recovery-preview --from-product CURRENT_BUNDLE --observation-run INSPECTION`
+uses the selected product as the independently measured original baseline. It
+verifies the live storage locator's exact source batch, copied-material hashes,
+essential keys, matching baseline CLI/daemon and native sealed-directory identity.
+It reads no historical content and makes no restoration or availability claim;
+its bounded metadata stays in private evidence. Another batch's presence cannot
+substitute for the live locator. A fresh inspection binds the current account,
+login session and installed product before this read-only recovery step.
 `--action cli --cli-args PRIVATE_JSON_FILE` executes a bounded argument array
 through the installed public CLI for preparation and effect readback; it does
 not establish a UI action. The selected standard account must have no
