@@ -83,6 +83,7 @@ impl QoderFixture {
         }
         if opencode {
             layout.opencode_executable = layout.qoder_executable.clone();
+            layout.qoder_config_root = home.join("selected-qoder");
             layout.opencode_context = Some(
                 hiroute_integrations::OpenCodeNativeContext::from_lookup(&home, |_| None).unwrap(),
             );
