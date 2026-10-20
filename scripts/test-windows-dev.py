@@ -200,6 +200,33 @@ class Runner(unittest.TestCase):
                 desktop.locked_startup_ui({},self.root,self.root,{},profiles,{},self.root)
         run.assert_not_called();admit.assert_not_called()
 
+    def test_preparation_inspection_is_bounded_metadata_and_not_recovery_admission(self):
+        home, local = self.root/'home', self.root/'local'
+        program = local/'Programs/HiRoute'; program.mkdir(parents=True)
+        (program/'shell-package.json').write_text(json.dumps(dict(files={'hiroute-shell.exe':'0'*64})))
+        staging = local/'HiRoute/shell/recovery-packages'/('a'*64)
+        (staging/'installation').mkdir(parents=True)
+        (staging/'installation/task.xml').write_bytes(b'captured task definition')
+        (staging/'source-history').mkdir()
+        history = staging/'source-history/never-inspected'
+        history.write_bytes(b'not part of bounded preparation metadata')
+        backups = local/'HiRoute/shell/install-backups'; backups.mkdir()
+        (backups/'hiroute-shell.exe').write_bytes(b'substituted backup')
+        digest = profiles.digest
+        def bounded_digest(path):
+            if Path(path) == history:
+                raise AssertionError('Preparation inspection read historical content')
+            return digest(path)
+        with patch.object(profiles,'digest',side_effect=bounded_digest):
+            facts = profiles.inspect_installation(home,local)
+        self.assertEqual(facts['shell_backup_mismatches'],['hiroute-shell.exe'])
+        retained = facts['retained_preparation_metadata']
+        self.assertEqual(retained['assessment'],'staging_only_not_recovery_admission')
+        self.assertEqual(list(retained['packages'][0]['files']),['installation/task.xml'])
+        self.assertEqual(retained['packages'][0]['files']['installation/task.xml']['sha256'],
+                         profiles.digest(staging/'installation/task.xml'))
+        self.assertNotIn('source-history',json.dumps(retained))
+
     def test_full_desktop_restore_admits_only_the_original_native_map_and_limited_task(self):
         home, local = self.root/'home', self.root/'local'
         paths = profiles.locations(home,local)

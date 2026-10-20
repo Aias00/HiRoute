@@ -105,6 +105,31 @@ def inspect_installation(native_home, local_app_data):
                         pass  # A concurrently written or clipped first/last record is incomplete.
                 tails[str(path.relative_to(diagnostics))] = dict(bytes=size, records=records)
     facts['diagnostics_tail'] = tails
+    # Pre-replacement refusal may precede the transaction journal. Inspect only
+    # fixed, bounded preparation metadata; never walk sealed history or infer a
+    # restorable source from these staging files.
+    retained = plain(paths['shell_state'] / 'recovery-packages')
+    packages = []
+    if retained.is_dir():
+        from itertools import islice
+        entries = list(islice(retained.iterdir(), 33))
+        for entry in sorted(entries[:32]):
+            plain(entry)
+            if len(entry.name) != 64 or any(c not in '0123456789abcdef' for c in entry.name) or not entry.is_dir():
+                continue
+            files = {}
+            for name in ('desktop/shell-package.json', 'program/package-manifest.json',
+                         'installation/standalone.json', 'installation/windows-background.json',
+                         'installation/task.xml', 'installation/uninstall.reg', 'restore-locations.json'):
+                path = plain(entry / name)
+                if path.is_file():
+                    size = path.stat().st_size
+                    files[name] = dict(bytes=size)
+                    if size <= 4 * 1024 * 1024:
+                        files[name]['sha256'] = digest(path)
+            packages.append(dict(name=entry.name, files=files))
+        facts['retained_preparation_metadata'] = dict(packages=packages, truncated=len(entries) > 32,
+                                                     assessment='staging_only_not_recovery_admission')
     expected = facts.get('shell-package.json', {}).get('record', {}).get('files', {})
     mismatches = []
     for name, wanted in expected.items():
@@ -118,6 +143,8 @@ def inspect_installation(native_home, local_app_data):
     backups = plain(local_app_data / 'HiRoute/shell/install-backups')
     if backups.is_dir():
         facts['shell_backup_entries'] = sorted(str(p.relative_to(backups)) for p in backups.rglob('*') if p.is_file())[:100]
+        facts['shell_backup_mismatches'] = [name for name, wanted in expected.items()
+                                           if (path := plain(backups / name)).is_file() and digest(path) != wanted]
     return facts
 
 

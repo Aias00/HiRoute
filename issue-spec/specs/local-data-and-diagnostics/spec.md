@@ -287,6 +287,11 @@ Recovery presentation SHALL distinguish correcting prerequisites, current-batch 
 - **WHEN** the daemon cannot start or an upgrade batch is interrupted
 - **THEN** Desktop, the Windows bundled failure surface and the installed CLI expose the bounded cause and admitted recovery action without depending on the normal server; known resumable batches use the current program, while missing/substituted material never appears as a valid restore target.
 
+#### Scenario: Locate the exact admitted recovery material offline
+
+- **WHEN** a failure admits current-batch resume or complete-group restoration
+- **THEN** the failure surface displays the verified original batch ID, source directory and guide filenames. Windows explains the folder route from its displayed log directory; macOS provides the preserved-material action. Long portable names wrap without hiding content in Chinese and English. The offline CLI names the absolute source directory derived from its actual storage root. Missing/unsafe locations and unknown causes cannot grant located recovery or resume.
+
 Source Issue:
 - https://github.com/higress-group/HiRoute/issues/176
 
