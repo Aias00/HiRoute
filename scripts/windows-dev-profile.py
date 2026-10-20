@@ -293,7 +293,7 @@ def native_directory_identity(path):
 def original_recovery_source(native_home, local_app_data, baseline):
     """Read the live locator's exact batch; never select a source by directory presence."""
     paths = locations(native_home, local_app_data)
-    storage = plain(paths['data'] / 'storage')
+    storage = plain(paths['state'] / 'storage')
     locator_path = storage / 'observation-source-backup.json'
     locator = bounded_json(locator_path, 16 * 1024)
     import re

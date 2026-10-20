@@ -146,7 +146,7 @@ class Runner(unittest.TestCase):
 
     def test_recovery_preview_binds_the_live_batch_source_and_independent_baseline(self):
         home, local = self.root / 'home', self.root / 'local'
-        storage = home / '.local/share/hiroute/storage'
+        storage = local / 'HiRoute/cli/storage'
         batch = storage.parent / 'storage.upgrade-backups/original'
         source = batch / 'source'
         storage.mkdir(parents=True)
