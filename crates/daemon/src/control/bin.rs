@@ -232,9 +232,11 @@ fn run_daemon(
         if managed_role {
             let _ = write_startup_failure_frame(error.code);
         }
-        if let Some(recovery) =
-            startup_recovery::failure_report(error.code, recovery_root.as_deref())
-        {
+        if let Some(recovery) = startup_recovery::failure_report(
+            error.code,
+            recovery_root.as_deref(),
+            error.recovery.as_deref(),
+        ) {
             eprintln!("{}", recovery.operator_guidance());
         }
         diagnostics.shutdown();
@@ -249,6 +251,7 @@ fn run_daemon(
 struct StartupError {
     code: StartupFailureCode,
     message: String,
+    recovery: Option<Box<hiroute_host_runtime::StorageRecovery>>,
 }
 
 impl From<String> for StartupError {
@@ -268,6 +271,7 @@ impl StartupError {
         Self {
             code,
             message: message.into(),
+            recovery: None,
         }
     }
 }
@@ -461,8 +465,7 @@ fn run_all(
             )
         })?
         .map_err(|error| StartupError::new(StartupFailureCode::ReadyChannelFailed, error))?;
-    let mut role = result
-        .map_err(|error| StartupError::new(classify_role_all_error(&error), error.to_string()))?;
+    let mut role = result.map_err(startup_recovery::role_failure)?;
     #[cfg(unix)]
     let protected_inputs = match standalone::ProtectedInputServer::bind_path(protected_input_path) {
         Ok(server) => server,
