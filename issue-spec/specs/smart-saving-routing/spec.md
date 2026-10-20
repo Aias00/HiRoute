@@ -232,6 +232,42 @@ User-facing Desktop text, website guides, README files and user documentation SH
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/140#issuecomment-6236473660
 
+### Requirement: The trust view distinguishes released historical protection
+
+The Plan model-performance protection card MUST show how many historical low-score protections were released because the previous problem was fixed or unrelated and Regular continued. This count describes retained routing decisions and remains separate from the trust report's protected-stage count. A numeric count is permitted only when routing-observation coverage is complete and its Plan, published-revision selection, effective time interval and branch scopes match the protection card's trust report. Model and score filters must not relabel a Plan-wide count as a filtered-model count. Cohorts may be aggregated only within the matching branch scopes. A complete matching recorded cohort with no releases shows zero. Missing observations, incomplete coverage or any unproven scope alignment MUST show an unavailable value and a plain-language reason; unknown evidence MUST NOT become zero. The observation disclosure remains available with its own scope when a count cannot be placed beside protections. The release explanation uses capability language and MUST NOT display internal protocol labels, digests or question identifiers. No route, assessment, suggestion threshold or stored record changes through this view.
+
+The view MUST offer last-24-hours, default last-seven-days and all-retained scopes. For every period, the stage and routing-decision reads MUST use the same captured explicit interval with its lower bound inside the retention boundary and a bounded read margin. Reads taken at different instants MUST NOT make an otherwise complete matching release count unavailable at the normal seven-day edge. Actual effective-interval mismatches still show unavailable. Changing the displayed period does not narrow the full active-revision evidence used for suggestions.
+
+The routing release aggregate SHALL remain the result of the base read paired with the trust report. Later detail score/model filters and pagination SHALL NOT replace it with a separately clipped aggregate, even after the bounded read margin has elapsed. A grouping, period or revision change, explicit refresh or retry SHALL capture a fresh interval and reread both sources together. Actual scope mismatches remain unavailable.
+
+#### Scenario: Inspect every period inside the retention boundary
+
+- **WHEN** the user opens the default last-seven-days view or selects all retained records or the last 24 hours, and the two complete evidence reads occur at different instants
+- **THEN** both use the same explicit retained interval and the protection card shows the aligned release count; detail navigation preserves the pair and grouping captures a fresh paired interval.
+
+#### Scenario: Aligned complete evidence
+
+- **WHEN** a trust report and complete routing observations match Plan, revision, time and branches and matching cohorts contain five released protections
+- **THEN** the protection card shows five releases separately from its protected-stage count and explains that Regular continued after the earlier problem stopped mattering
+
+#### Scenario: Incomplete or mismatched scope
+
+- **WHEN** observations have partial coverage or a different Plan, revision, interval or branch scope
+- **THEN** the protection card shows an unavailable value with the corresponding reason, while the observation disclosure retains its actual scope
+
+#### Scenario: Missing and zero evidence differ
+
+- **WHEN** there are no recorded historical-protection observations, or a complete matching recorded cohort has zero releases
+- **THEN** missing evidence is unavailable with a reason, whereas the complete matching recorded cohort shows zero
+
+#### Scenario: Filter and paginate after the read margin expires
+
+- **WHEN** the default seven-day or all-retained view remains open for more than one minute, then the user selects low-score stages and loads another page
+- **THEN** the release count stays bound to the original paired base read; grouping afterward refreshes both sources with one new interval.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/140#issuecomment-6253018308
+
 ## Implementation references
 
 - [Two-group policy](../../../crates/gateway/src/core_runtime/classification/group_policy.rs)

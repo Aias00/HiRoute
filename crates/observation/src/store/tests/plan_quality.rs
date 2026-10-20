@@ -11,6 +11,7 @@ use super::support::{Fixture, fact_channel, offer_fact, open_store, writer};
 
 mod routing_observations;
 mod routing_observations_released;
+mod routing_timeline_protection;
 mod summary;
 mod trust;
 

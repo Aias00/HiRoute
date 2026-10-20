@@ -8,8 +8,10 @@ import { ContentExcerpt } from './Sessions';
 import { safeDiagnosticCode } from '../error-code';
 import { observationRead } from './observation-client';
 import { qualityExecutionModels } from './plan-quality-models';
+import { planQualityWindow } from './plan-quality-window';
 import { PlanQualityStage, type PlanQualitySample } from './PlanQualityStage';
 import { RoutingObservations, type RoutingSummary } from './RoutingObservations';
+import { releasedProtectionEvidence, type ReleasedProtectionEvidence } from './trust/protection-evidence';
 import { qualityRowSection, qualityRowSectionLabel, qualityGroupLabel, qualityModelRows, qualityNativeModelName, qualityReasoningLabel, type PlanQualityModel, type QualityExecution, type QualityModelRow, type QualitySummary } from './plan-quality-state';
 
 export type { PlanQualityModel } from './plan-quality-state';
@@ -17,7 +19,7 @@ export type { PlanQualitySample } from './PlanQualityStage';
 
 type Page = { samples: PlanQualitySample[]; summary: QualitySummary; routing_observations?: RoutingSummary; next_cursor?: string | null };
 type ScoreFilter = 'all' | 'low' | 'high' | 'unrated';
-type Period = 'all' | 'seven_days';
+type Period = 'all' | 'seven_days' | 'one_day';
 const EMPTY_SUMMARY: QualitySummary = { models: [], scored_stage_count: 0, unrated_stage_count: 0, session_count: 0, available_revisions: [] };
 
 export function PlanQuality({
@@ -54,14 +56,15 @@ export function PlanQuality({
   const generation = useRef(0);
   // A detail filter or next page must retain exactly the same time window.
   const window = useMemo(() => {
-    const now = Date.now();
-    return { from: period === 'seven_days' ? now - 7 * 86_400_000 : undefined, to: now + 1 };
-  }, [planId, sessionId, planRevision, period, version, refreshVersion, reload, active]);
+    return planQualityWindow(period, Date.now());
+  }, [planId, sessionId, planRevision, period, version, refreshVersion, reload, active, groupBy]);
+  const pairedWindow = useRef<typeof window | null>(null);
   const revision = version === 'current' ? planRevision || null : version === 'all' ? null : Number(version);
 
-  async function load(next: string | null = null) {
+  async function load(next: string | null = null, captureRouting = false) {
     if (!active || (!planId && !sessionId)) return;
     const epoch = ++generation.current;
+    if (captureRouting) pairedWindow.current = window;
     setBusy(true); setError('');
     try {
       const page = await observationRead<Page>('plan_quality', {
@@ -73,9 +76,11 @@ export function PlanQuality({
         competence: score === 'high' ? 'meets_floor' : score === 'low' ? 'below_floor' : null,
         unrated_only: score === 'unrated', limit: 20, cursor: next,
       });
+      // Aggregate routing evidence belongs to the base read paired with PlanTrust.
+      // Detail reads can be clipped by a later retention clock and must not replace it.
+      if (captureRouting && pairedWindow.current === window) setRoutingSummary(page.routing_observations ?? null);
       if (epoch !== generation.current) return;
       setSummary(page.summary);
-      setRoutingSummary(page.routing_observations ?? null);
       const stages = selected && !selected.execution && !selected.trustRow ? [] : page.samples;
       setSamples(current => next ? [...current, ...stages] : stages);
       setCursor(selected && !selected.execution && !selected.trustRow ? null : page.next_cursor ?? null);
@@ -100,12 +105,14 @@ export function PlanQuality({
   useEffect(() => {
     setSummary(EMPTY_SUMMARY);
     setRoutingSummary(null);
+    pairedWindow.current = null;
+    return () => { pairedWindow.current = null; };
   }, [planId, sessionId, revision, window]);
 
   useEffect(() => {
     if (!active) { generation.current++; setBusy(false); return; }
     setSamples([]); setExecutionModels({}); setCursor(null); setLoaded(false);
-    void load();
+    void load(null, pairedWindow.current !== window);
     return () => { generation.current++; };
   }, [planId, sessionId, revision, score, selected?.key, window, active]);
 
@@ -185,7 +192,7 @@ export function PlanQuality({
       <div className="quality-scope-meta">{text(`${stageCount} 个执行阶段 · ${summary.scored_stage_count} 已评分 · ${summary.unrated_stage_count} 未评分${report ? ` · 证据来自 ${report.session_total} 个会话` : ''}`, `${stageCount} stages · ${summary.scored_stage_count} scored · ${summary.unrated_stage_count} unrated${report ? ` · evidence from ${report.session_total} sessions` : ''}`)}</div>
       <div className="quality-filters">
         {!compact && <label><span className="sr-only">{text('时间范围', 'Time range')}</span><select className="select" value={period} onChange={event => { resetDetail(); setPeriod(event.target.value as Period); }}>
-          <option value="seven_days">{text('最近 7 天', 'Last 7 days')}</option><option value="all">{text('全部保留期', 'All retained')}</option>
+          <option value="seven_days">{text('最近 7 天', 'Last 7 days')}</option><option value="one_day">{text('最近 24 小时', 'Last 24 hours')}</option><option value="all">{text('全部保留期', 'All retained')}</option>
         </select></label>}
         {!compact && planRevision && <label><span className="sr-only">{text('路由版本', 'Route version')}</span><select className="select" value={version} onChange={event => { resetDetail(); setVersion(event.target.value); }}>
           <option value="current">{text('当前生效版本', 'Active version')}</option>
@@ -195,7 +202,7 @@ export function PlanQuality({
         <button className="btn btn-quiet quality-refresh" type="button" disabled={busy} onClick={() => setReload(value => value + 1)}><UiIcon name="refresh" />{text('刷新', 'Refresh')}</button>
       </div>
     </div>
-    {trust.error && <div className="callout warn" role="alert" data-error-code={trust.error}><span>{trust.error.toLowerCase().includes('scope_too_large') ? text('证据超过读取上限。建议需要本版本的全部保留记录；缩短显示时间不一定能减少建议计算范围。', 'Evidence exceeds the read limit. Suggestions need the full retained version; narrowing the displayed window may not reduce that scope.') : text('证据暂时无法读取，当前档位未改变。', 'Evidence is unavailable. Your trust level has not changed.')}</span><button className="btn" type="button" onClick={trust.retry}>{text('重试', 'Retry')}</button></div>}
+    {trust.error && <div className="callout warn" role="alert" data-error-code={trust.error}><span>{trust.error.toLowerCase().includes('scope_too_large') ? text('证据超过读取上限。建议需要本版本的全部保留记录；缩短显示时间不一定能减少建议计算范围。', 'Evidence exceeds the read limit. Suggestions need the full retained version; narrowing the displayed window may not reduce that scope.') : text('证据暂时无法读取，当前档位未改变。', 'Evidence is unavailable. Your trust level has not changed.')}</span><button className="btn" type="button" onClick={() => setReload(value => value + 1)}>{text('重试', 'Retry')}</button></div>}
     {trustScope && !report && !trust.error && <p className="quality-status" role="status">{text('正在读取完整范围的证据…', 'Reading the complete evidence scope…')}</p>}
     {report && <TrustSuggestions report={report} language={language} onThreshold={onThreshold} onDivision={onDivision} onOpenAgent={onOpenAgent} />}
     {report && groupBy === 'model' && <TrustTiles report={report} language={language} />}
@@ -244,7 +251,7 @@ export function PlanQuality({
     </section>}
     {stageSection}
     {report && groupBy === 'model' && <div className="trust-card-pair">
-      <ProtectionCard report={report} caught={caught} language={language} onShowLow={showLowStages || undefined} onOpenEvidence={onOpenEvidence} />
+      <ProtectionCard report={report} released={releasedProtectionEvidence(report, routingSummary)} caught={caught} language={language} onShowLow={showLowStages || undefined} onOpenEvidence={onOpenEvidence} />
       <TrustCost value={report.cost} language={language} />
     </div>}
     {report && groupBy === 'executor' && <ExecutorOutcomes report={report} language={language} />}
@@ -253,14 +260,27 @@ export function PlanQuality({
   </div>;
 }
 
-function ProtectionCard({ report, caught, language, onShowLow, onOpenEvidence }: { report: TrustReport; caught: PlanQualitySample[] | null; language: 'zh' | 'en'; onShowLow?: () => void; onOpenEvidence?: (sessionId: string, requestId: string) => void }) {
+function ProtectionCard({ report, released, caught, language, onShowLow, onOpenEvidence }: { report: TrustReport; released: ReleasedProtectionEvidence; caught: PlanQualitySample[] | null; language: 'zh' | 'en'; onShowLow?: () => void; onOpenEvidence?: (sessionId: string, requestId: string) => void }) {
   const text = (zh: string, en: string) => language === 'zh' ? zh : en;
   const protections = report.rows.reduce((total, row) => total + row.protections.length, 0);
   const relays = report.rows.reduce((total, row) => total + row.availability_relays, 0);
+  const releaseReason = released.kind === 'available' ? text('之前的问题已修正或与当前工作无关，允许新模型继续。', 'Earlier problems were fixed or unrelated, allowing Regular to continue.') : {
+    missing: text('历史保护记录尚不可用。', 'Historical protection records are not available yet.'),
+    partial: text('历史保护记录覆盖不完整。', 'Historical protection records have incomplete coverage.'),
+    plan: text('历史保护记录与当前路由范围不同。', 'Historical protection records cover a different route scope.'),
+    revision: text('历史保护记录与当前路由版本不同。', 'Historical protection records cover a different route version.'),
+    time: text('历史保护记录与当前时间范围不同。', 'Historical protection records cover a different time range.'),
+    branch: text('历史保护记录与当前分支范围不同。', 'Historical protection records cover different branches.'),
+  }[released.reason];
   const time = (ms: number) => new Date(ms).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
   return <section className="trust-card trust-protection">
     <h3>{text(`被拦下的 ${protections} 次`, `${protections} stages caught`)}</h3>
     <p>{protections ? text('这些轮次因低分保护而交给主力模型，计数来自实际发生的记录。', 'These turns went to Primary through low-score protection; the count comes from recorded routing.') : text('还没有因为低分转交主力的阶段。', 'No stage has been handed to Primary after a low score yet.')}</p>
+    <div className="trust-release" data-release-state={released.kind}>
+      <strong>{released.kind === 'available' ? text(`解除 ${released.count} 次`, `${released.count} protections released`) : text('解除次数 —', 'Protections released —')}</strong>
+      <p>{releaseReason}</p>
+      {released.kind === 'available' && <p className="field-help">{text('解除按路由判断次数统计，与上方保护阶段数分开。', 'Releases count routing decisions; protections above count stages.')}</p>}
+    </div>
     {caught && caught.length > 0 && <ul className="trust-caught">{caught.map(sample => <li key={sample.segment_id}>
       <div><strong><ContentExcerpt session={sample.session_id} language={language} fallback={text('会话记录', 'Session')} limit={40} /></strong>
         <span>{time(sample.first_at_ms)} · {text(`评分 ${sample.assessment?.score.toFixed(2) ?? '—'}`, `score ${sample.assessment?.score.toFixed(2) ?? '—'}`)}{sample.assessment?.reason ? text(`（${sample.assessment.reason}）`, ` (${sample.assessment.reason})`) : ''} → {text('下一轮主力', 'next turn Primary')}</span></div>

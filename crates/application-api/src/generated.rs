@@ -379,6 +379,18 @@ fn value_query_schema() -> Value {
 pub fn generated_contract_files() -> Vec<GeneratedContractFile> {
     let mut files = BTreeMap::from([
         (
+            "routing-timeline-selection.v1.schema.json",
+            pretty_json(&{
+                let mut schema = serde_json::to_value(schemars::schema_for!(
+                    hiroute_domain::RoutingTimelineSelectionV1
+                ))
+                .expect("timeline selection schema");
+                schema["$id"] =
+                    json!("hiroute://contracts/cli/routing-timeline-selection.v1.schema.json");
+                schema
+            }),
+        ),
+        (
             "console-launch-request.v1.schema.json",
             pretty_json(
                 &json!({"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"hiroute://contracts/cli/console-launch-request.v1.schema.json","type":"object","additionalProperties":false,"properties":{"loopback_only":{"type":"boolean","default":false}}}),
@@ -645,6 +657,7 @@ mod tests {
                 "planned-manifest.v1.json",
                 "prepare-discovered-model-connection-request.v1.schema.json",
                 "publication-checkpoint-change.v1.schema.json",
+                "routing-timeline-selection.v1.schema.json",
                 "session-list-query.v1.schema.json",
                 "session-lookup.v1.schema.json",
                 "setup-apply-request.v1.schema.json",

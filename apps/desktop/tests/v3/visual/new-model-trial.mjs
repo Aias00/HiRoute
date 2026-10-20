@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -57,19 +57,24 @@ const profile = await mkdtemp(path.join(os.tmpdir(), 'hiroute-v3-new-model-trial
 await mkdir(outputRoot, { recursive: true });
 let vite;
 let chrome;
+let viteLog = '';
+const captureVite = chunk => { viteLog = (viteLog + chunk.toString()).slice(-65536); };
 try {
   vite = spawn(path.join(desktopRoot, 'node_modules/.bin/vite'), ['tests/v3/browser', '--host', '127.0.0.1', '--port', String(httpPort), '--strictPort'], { cwd: desktopRoot, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  vite.stdout.on('data', captureVite);
+  vite.stderr.on('data', captureVite);
   await new Promise((resolve, reject) => { vite.once('spawn', resolve); vite.once('error', reject); });
   await waitFor(`http://127.0.0.1:${httpPort}/`);
   const chromeExecutable = process.env.CHROME_BIN || (process.platform === 'darwin' ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : 'google-chrome');
   chrome = spawn(chromeExecutable, ['--headless=new', '--disable-gpu', `--remote-debugging-port=${cdpPort}`, '--remote-allow-origins=*', `--user-data-dir=${profile}`, '--window-size=1280,900', 'about:blank'], { detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
   await new Promise((resolve, reject) => { chrome.once('spawn', resolve); chrome.once('error', reject); });
   await waitFor(`http://127.0.0.1:${cdpPort}/json/version`);
-  const runner = spawn(process.execPath, [path.join(here, process.argv.includes('--polish') ? 'new-model-trial-polish-active.mjs' : 'new-model-trial-active.mjs'), String(cdpPort), `http://127.0.0.1:${httpPort}/`, outputRoot], { cwd: desktopRoot, stdio: 'inherit' });
+  const runner = spawn(process.execPath, [path.join(here, process.argv.includes('--protection') ? 'new-model-trial-protection-active.mjs' : process.argv.includes('--polish') ? 'new-model-trial-polish-active.mjs' : 'new-model-trial-active.mjs'), String(cdpPort), `http://127.0.0.1:${httpPort}/`, outputRoot], { cwd: desktopRoot, stdio: 'inherit' });
   const outcome = await waitForExit(runner);
   if (outcome.code !== 0) process.exitCode = outcome.code ?? 1;
 } finally {
   await terminate(chrome);
   await terminate(vite);
+  await writeFile(path.join(outputRoot, 'vite.log'), viteLog);
   await removeProfile(profile);
 }
