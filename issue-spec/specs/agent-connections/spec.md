@@ -604,8 +604,15 @@ authentication. Rejected arguments SHALL be named in the error. Before starting 
 agent, it SHALL check three things: the HiRoute service is ready; the agent's routed
 configuration is applied and current; and every Plan the configuration maps is
 published. When a check fails, it SHALL NOT start the agent. It SHALL state the
-failed check and its repair action, and exit with a documented reserved status that
-the routed launch uses only for preflight failures. In interactive use it MAY then
+failed check and its repair action. Failures the earlier Claude Code launch already
+reported keep their documented statuses: rejected arguments are a usage error, a
+routing or authentication override is a conflict, a named connection that does not
+exist is not found, and an unreachable service is unavailable with its recovery hint.
+A readiness check that fails after the service answers (service not ready, connection
+not current, a mapped Plan unpublished, or a Claude Code managed-launch conflict) exits
+with a documented reserved status used only for those failures. The readiness check
+mode reports every failed check with that reserved status and the check result. In
+interactive use it MAY then
 offer to start the native agent with the same arguments, but only after explicit user
 confirmation, and the native session SHALL be labelled as not routed. Non-interactive
 use SHALL never start the native agent. A routed launch SHALL NOT change native
@@ -624,8 +631,13 @@ status and signal handling SHALL be preserved.
 
 #### Scenario: Non-interactive failure
 
-- **WHEN** the routed configuration is missing and the routed launch runs without a terminal
+- **WHEN** Codex's routed configuration is missing, no context is named and the routed launch runs without a terminal
 - **THEN** it exits with the reserved preflight status and starts no agent.
+
+#### Scenario: Earlier launch statuses are kept
+
+- **WHEN** a routed launch names its Claude Code context without a terminal, first while the service is unreachable and then for a context that does not exist
+- **THEN** it starts no agent, first exiting as unavailable with the recovery hint and then as not found, while the readiness check mode reports both with the reserved status and the check result.
 
 #### Scenario: Routing override rejected
 
