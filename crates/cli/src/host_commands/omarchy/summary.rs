@@ -6,7 +6,7 @@ use hiroute_application_api::{
     ObservationTokenShareHeadlineV1, PlanTrustStateV1, TrustLevelV1,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 
 pub(super) const SCHEMA: &str = "hiroute.omarchy-summary/v1";
 const MAX_IDS: usize = 20;
@@ -441,9 +441,9 @@ fn service_facts(
         .flat_map(start_slots)
         .map(|(_, plan)| plan)
     {
-        if !plans.contains_key(&plan) {
-            let facts = reads::plan(query, &plan)?;
-            plans.insert(plan, facts);
+        if let Entry::Vacant(entry) = plans.entry(plan) {
+            let facts = reads::plan(query, entry.key())?;
+            entry.insert(facts);
         }
     }
     let mapped = reads::mapped_plans(connections);
@@ -495,7 +495,7 @@ pub(super) fn choose_latest(
                 return Ok(None);
             }
             checks += 1;
-            if attributed(*context, candidate)? {
+            if attributed(context, candidate)? {
                 return Ok(Some(LatestSession {
                     session_id: candidate.session_id.clone(),
                     agent: (*agent).into(),

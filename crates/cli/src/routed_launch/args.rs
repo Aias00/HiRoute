@@ -57,7 +57,7 @@ pub(super) fn parse(arguments: &[OsString]) -> Result<Invocation, &'static str> 
                 })
             }
             "--context" if context.is_none() => {
-                AgentGrantRawRequestV1::new(&format!("agent-connection/{value}"))
+                AgentGrantRawRequestV1::new(format!("agent-connection/{value}"))
                     .map_err(|_| "--context")?;
                 context = Some(value.to_owned());
             }
