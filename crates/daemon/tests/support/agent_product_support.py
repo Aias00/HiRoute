@@ -16,6 +16,11 @@ def expose_native_installation(product, harness, binary, node=None):
         entries.append(('node',runtime))
     if harness == 'pi':
         entries.append(('node', node))
+    if harness == 'opencode':
+        import shutil
+        ripgrep = shutil.which('rg')
+        assert ripgrep is not None, 'OpenCode product fixtures require installed ripgrep'
+        entries.append(('rg', Path(ripgrep).resolve(strict=True)))
     for name, path in entries:
         (product.root / 'bin' / name).symlink_to(Path(path).resolve(strict=True))
 

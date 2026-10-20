@@ -10,7 +10,7 @@ Use a dedicated synthetic HOME and workspace for acceptance. OpenCode uses nativ
 
 ## Real product entry
 
-Set `HIROUTE_PRODUCT_CANDIDATE_SHA` to the exact candidate and `HIROUTE_WORKER_OPENCODE_BINARY` to the selected official native binary. Run through the [configured validation runner](../../../docs/validation-routing.md):
+Set `HIROUTE_PRODUCT_CANDIDATE_SHA` to the exact candidate and `HIROUTE_WORKER_OPENCODE_BINARY` to the selected official native binary. Unix acceptance also requires installed `rg` on the runner PATH: the fixture exposes that exact native tool in its private PATH so Skill loading does not depend on an upstream tool download. Run through the [configured validation runner](../../../docs/validation-routing.md):
 
 ```text
 cargo test --locked -p hiroute-product-e2e --test opencode_delegation -- --ignored --nocapture --test-threads=1
