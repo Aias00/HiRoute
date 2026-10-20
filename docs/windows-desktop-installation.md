@@ -127,7 +127,12 @@ assume that a PowerShell variable is inherited by the logged-on Task.
 The bundled failure page displays the storage-owned reason and recovery action
 even when the daemon and console cannot start. It distinguishes missing/invalid
 packages, low space, unavailable keys and unknown state. Fix a stated prerequisite
-before retrying. Resume an admitted batch with the current program; never start
+before retrying. A verified resumable/restorable source shows its original batch
+ID and relative source directory, including long names without clipping. From the
+parent of the displayed local log directory, open that source directory and read
+`RECOVERY.md` or `恢复说明.md`, then `PROGRAM-LOCATIONS.md` where present. Missing,
+unsafe or unverified batch locations must not be presented as verified material.
+Resume an admitted batch with the current program; never start
 an old program against newer/mixed data. Shell rollback checks storage cutover
 facts before reinstalling or starting an old service. An uncommitted shell journal
 is not proof that business data is unchanged.
@@ -141,7 +146,9 @@ Gateway readiness and a request. Missing keys or a substituted/incomplete source
 cannot be repaired by blind retry or choosing another old release. Inspect safe
 startup diagnostics and obtain support while retaining every generation.
 
-Use `hiroute service recovery --output json` for an offline report. Windows Server
+Use `hiroute service recovery --output json` for an offline report. Verified
+resume/restore guidance includes the exact batch and absolute source directory,
+derived from the actual storage root. Windows Server
 and Windows 11, ordinary-user and administrator sessions, and released versus
 development packages retain separate evidence boundaries.
 

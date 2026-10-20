@@ -26,9 +26,36 @@ test('resume requires a portable original batch and measured space stays bounded
     const value={...report('migration_failed','resume_current'),backup_batch:id};
     assert.equal(storageRecoveryText(value,'en','windows').canRetry,false);
   }
-  assert.equal(storageRecoveryText({...report('migration_failed','resume_current'),backup_batch:'set_original'},'en','windows').canRetry,true);
+  assert.equal(storageRecoveryText({...report('migration_failed','resume_current'),backup_batch:'set_original',backup_name:'observation-format-5'},'en','windows').canRetry,true);
   const low=storageRecoveryText({...report('insufficient_space','retry_current'),storage_space:{required_bytes:1048576000,available_bytes:1048576}},'en','windows');
   assert.match(low.instructions,/1,000 MiB.*1 MiB/);
+});
+
+test('verified recovery shows its exact original batch and source, with a usable folder route',()=>{
+  for (const language of ['zh','en']) for (const action of ['resume_current','restore_complete_group']) {
+    const value={...report('migration_failed',action),backup_batch:'set_original',backup_name:'observation-format-5'};
+    const windows=storageRecoveryText(value,language,'windows');
+    assert.equal(windows.backupBatch,'set_original');
+    assert.equal(windows.backupDirectory,'storage.upgrade-backups/observation-format-5/source/');
+    assert.match(windows.locationHint,/RECOVERY\.md.*PROGRAM-LOCATIONS\.md/);
+    assert.match(windows.locationHint,language==='zh'?/本机日志目录的上一级/:/parent of the local log folder/);
+    const mac=storageRecoveryText(value,language,'macos');
+    assert.match(mac.locationHint,language==='zh'?/下方按钮/:/button below/);
+  }
+});
+
+test('missing or unsafe source names and unknown causes never grant located recovery or resume',()=>{
+  for (const name of [undefined,'../foreign','..','',42,'a'.repeat(129)]) {
+    const value={...report('migration_failed','resume_current'),backup_batch:'set_original',backup_name:name};
+    const message=storageRecoveryText(value,'en','windows');
+    assert.equal(message.canRetry,false);assert.equal(message.backupDirectory,undefined);
+  }
+  for (const cause of ['future_cause','__proto__']) {
+    const value={...report(cause,'resume_current'),backup_batch:'set_original',backup_name:'observation-format-5'};
+    const message=storageRecoveryText(value,'en','windows');
+    assert.equal(message.canRetry,false);assert.equal(message.backupDirectory,undefined);
+    assert.match(message.reason,/could not be established/);
+  }
 });
 
 test('healthy-storage listener failures do not recommend storage recovery',()=>{

@@ -47,19 +47,83 @@ pub(crate) fn recovery() -> Result<serde_json::Value, ServiceFailure> {
         &layout.storage_root(),
         &layout.diagnostics_root(),
     );
-    let instructions = record.as_ref().map(|record| {
-        let mut text = record.operator_guidance().to_owned();
-        if let Some(space) = &record.storage_space {
-            text.push_str(&format!(
-                " Storage volume: approximately {} bytes required, {} bytes available.",
-                space.required_bytes, space.available_bytes
-            ));
-        }
-        text
-    });
+    let instructions = record
+        .as_ref()
+        .map(|record| recovery_instructions(record, &layout.storage_root()));
     Ok(
         json!({"schema":"hiroute.service-recovery/v1", "recovery":record, "instructions":instructions, "diagnostics_root":layout.diagnostics_root()}),
     )
+}
+
+fn recovery_instructions(record: &hiroute_host_runtime::StorageRecovery, storage: &Path) -> String {
+    use hiroute_host_runtime::StorageRecoveryAction;
+    let mut text = record.operator_guidance().to_owned();
+    if let Some(space) = &record.storage_space {
+        text.push_str(&format!(
+            " Storage volume: approximately {} bytes required, {} bytes available.",
+            space.required_bytes, space.available_bytes
+        ));
+    }
+    if matches!(
+        record.action,
+        StorageRecoveryAction::ResumeCurrent | StorageRecoveryAction::RestoreCompleteGroup
+    ) && let (Some(batch), Some(name), Some(parent), Some(leaf)) = (
+        record.backup_batch.as_deref(),
+        record.backup_name.as_deref(),
+        storage.parent(),
+        storage.file_name(),
+    ) && [batch, name].iter().all(|value| {
+        !value.is_empty()
+            && value.len() <= 128
+            && !value.contains("..")
+            && value
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"-_.".contains(&byte))
+    }) {
+        // The caller obtained this disposition through the storage owner's
+        // complete batch verification; formatting does not infer authority.
+        let mut directory = leaf.to_os_string();
+        directory.push(".upgrade-backups");
+        let source = parent.join(directory).join(name).join("source");
+        text.push_str(&format!(" Verified original batch: {batch}. Recovery source directory: {}. Read RECOVERY.md (or 恢复说明.md), then PROGRAM-LOCATIONS.md where present. Use only this batch.",source.display()));
+    }
+    text
+}
+
+#[cfg(test)]
+mod recovery_text_tests {
+    use super::*;
+    use hiroute_host_runtime::{StorageRecovery, StorageRecoveryAction, StorageRecoveryCause};
+
+    #[test]
+    fn offline_recovery_names_the_original_batch_and_exact_source_directory() {
+        let directory = tempfile::tempdir().unwrap();
+        let storage = directory.path().join("custom-storage");
+        let mut report = StorageRecovery::new(
+            StorageRecoveryCause::MigrationFailed,
+            StorageRecoveryAction::RestoreCompleteGroup,
+        );
+        report.backup_batch = Some("set_original".into());
+        report.backup_name = Some("observation-format-5".into());
+        let text = recovery_instructions(&report, &storage);
+        assert!(text.contains("Verified original batch: set_original"));
+        assert!(
+            text.contains(
+                &directory
+                    .path()
+                    .join("custom-storage.upgrade-backups/observation-format-5/source")
+                    .display()
+                    .to_string()
+            )
+        );
+        assert!(text.contains("RECOVERY.md"));
+        assert!(text.contains("PROGRAM-LOCATIONS.md"));
+        report.action = StorageRecoveryAction::PreserveAndDiagnose;
+        assert!(!recovery_instructions(&report, &storage).contains("Recovery source directory:"));
+        report.action = StorageRecoveryAction::RestoreCompleteGroup;
+        report.backup_name = Some("../foreign".into());
+        assert!(!recovery_instructions(&report, &storage).contains("Recovery source directory:"));
+    }
 }
 
 pub(crate) fn status() -> Result<ServiceStatus, ServiceFailure> {

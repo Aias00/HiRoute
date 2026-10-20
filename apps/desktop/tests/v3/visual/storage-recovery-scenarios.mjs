@@ -14,11 +14,14 @@ export async function runStorageRecoveryScenarios(client, baseUrl, output) {
     { cause: 'namespace_unavailable', action: 'preserve_and_diagnose' },
     { cause: 'migration_failed', action: 'resume_current', backup_batch: 'set_original', backup_name: 'migration-set' },
     { cause: 'migration_failed', action: 'restore_complete_group', backup_batch: 'set_original', backup_name: 'migration-set' },
+    { variant:'long-location', cause:'migration_failed',action:'restore_complete_group',backup_batch:'set_'+ 'a'.repeat(100),backup_name:'observation-format-5.'+'b'.repeat(100) },
     { cause: 'future_cause', action: 'future_action' },
   ];
   for (const platform of ['macos', 'windows']) for (const language of ['zh', 'en']) for (const theme of ['light', 'dark']) for (const [width, height] of [[1200, 813], [755, 600]]) for (const fixture of cases) {
-    const report = { schema: 'hiroute.storage-startup-recovery/v1', ...fixture };
-    const id = `${platform}.${fixture.cause}.${fixture.action}.${language}.${theme}.${width}`;
+    const {variant,...facts}=fixture;
+    const report = { schema: 'hiroute.storage-startup-recovery/v1', ...facts };
+    const hasSource = ['resume_current', 'restore_complete_group'].includes(fixture.action);
+    const id = `${platform}.${fixture.cause}.${fixture.action}.${language}.${theme}.${width}${variant?'.'+variant:''}`;
     await client.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: theme }] });
     let script;
     try {
@@ -29,7 +32,7 @@ export async function runStorageRecoveryScenarios(client, baseUrl, output) {
           localStorage.setItem('hiroute.language', ${JSON.stringify(language)});
           localStorage.setItem('hiroute.theme', ${JSON.stringify(theme)});
           window.productShell.handlers.desktop_snapshot=()=>{throw 'DAEMON_NOT_READY';};
-          window.productShell.handlers.startup_status=()=>({state:'failed',code:'DAEMON_UPGRADE_STORAGE_FAILED',recovery_available:false,storage_recovery:${JSON.stringify(report)}});
+          window.productShell.handlers.startup_status=()=>({state:'failed',code:'DAEMON_UPGRADE_STORAGE_FAILED',recovery_available:${hasSource},backup_directory:${JSON.stringify(hasSource ? `/Users/example/Library/Application Support/ai.hiroute.desktop/storage.upgrade-backups/${fixture.backup_name}/source` : undefined)},storage_recovery:${JSON.stringify(report)}});
           window.productShell.remount();
         })()`);
         await waitFor(client, 'Boolean(document.querySelector("[data-error-code=DAEMON_UPGRADE_STORAGE_FAILED]"))');
@@ -55,6 +58,11 @@ export async function runStorageRecoveryScenarios(client, baseUrl, output) {
         future_cause: language === 'zh' ? '无法确认' : 'could not be established',
       }[fixture.cause];
       assert(geometry.text.includes(expected), `Specific reason/action missing: ${id}`);
+      const located=await evaluate(client,`(()=>{const e=document.querySelector(${JSON.stringify(platform==='macos'?'.recovery-location':'#recovery-material')});return e&&e.getClientRects().length?{text:e.textContent,overflow:e.scrollWidth>e.clientWidth+1}:null;})()`);
+      if(hasSource){
+        assert(located&&!located.overflow&&located.text.includes(fixture.backup_batch)&&located.text.includes(fixture.backup_name)&&located.text.includes('RECOVERY.md'),`Original recovery location missing or overflowing: ${id}`);
+        if(platform==='macos') assert(geometry.text.includes(language==='zh'?'查看保留的恢复材料与说明':'Inspect preserved recovery material and guide'),`Recovery directory action missing: ${id}`);
+      }else assert(!located,`Unverified recovery location exposed: ${id}`);
       if (platform === 'windows') assert(geometry.retry === ['retry_current', 'resume_current'].includes(fixture.action), `Unsafe or missing retry: ${id}`);
       const screenshot = `${id}.png`;
       const shot = await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });

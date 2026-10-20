@@ -173,6 +173,7 @@ export function DesktopApp() {
 
   const serviceStatus = deriveHomeServiceStatus(home.reads.service);
   const startupFailure = home.startup?.state === 'failed' ? home.startup : null;
+  const startupMessage = startupFailureText(startupFailure?.code, startupFailure?.storage_recovery, language, 'macos');
   const upgradePhase = home.startup?.state === 'starting' ? home.startup.upgrade_phase : undefined;
   const upgradePhaseText = upgradePhase ? ({
     source_check: language === 'zh' ? '正在校验存储格式' : 'Checking storage format',
@@ -640,8 +641,13 @@ export function DesktopApp() {
           <UiIcon name="warning" />
           <div>
             <strong>{language === 'zh' ? '本机服务启动失败' : 'Local service failed to start'}</strong>
-            <p>{startupFailureText(startupFailure.code, startupFailure.storage_recovery, language, 'macos').reason}</p>
-            <p>{startupFailureText(startupFailure.code, startupFailure.storage_recovery, language, 'macos').instructions}</p>
+            <p>{startupMessage.reason}</p>
+            <p>{startupMessage.instructions}</p>
+            {startupMessage.backupBatch && <div className="recovery-location">
+              <p><strong>{language === 'zh' ? '已校验的原批次：' : 'Verified original batch: '}</strong><code>{startupMessage.backupBatch}</code></p>
+              <p><strong>{language === 'zh' ? '恢复目录：' : 'Recovery directory: '}</strong><code>{startupMessage.backupDirectory}</code></p>
+              <p>{startupMessage.locationHint}</p>
+            </div>}
             {startupFailure.recovery_available && <button className="btn" type="button" onClick={() => {
               void invoke('open_startup_recovery_directory').catch(() => setNotice(language === 'zh' ? '无法安全打开恢复目录，请检查目录权限后重试。' : 'The recovery directory could not be opened safely. Check its permissions and try again.'));
             }}>{startupFailure.backup_directory ? (language === 'zh' ? '查看保留的恢复材料与说明' : 'Inspect preserved recovery material and guide') : (language === 'zh' ? '打开数据目录' : 'Open data directory')}</button>}

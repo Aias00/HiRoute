@@ -85,7 +85,12 @@ group; they do not appear in the restored old group. Invalid/missing material or
 keys need correction/support, not repeated retries or data deletion.
 
 Recovery instructions remain available on the startup failure page while the
-service is down. Insufficient-space errors require freeing unrelated files;
+service is down. A verified resumable/restorable source shows its original batch
+ID and source directory. Use the preserved-material action, match the batch and
+read `RECOVERY.md` or `恢复说明.md` before restoration. Unknown or unverified
+locations cannot authorize recovery. Offline `hiroute service recovery --output json`
+also names the verified batch and absolute source directory.
+Insufficient-space errors require freeing unrelated files;
 retain sealed history and recovery packages. A format-changing update keeps
 configuration, credentials and routing, seals old HiRoute observations, and starts
 current history/statistics at cutover. Native Agent history is unchanged.

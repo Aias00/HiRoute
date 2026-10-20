@@ -7,7 +7,8 @@ export type StorageRecovery = {
   backup_name?: string;
   storage_space?: { required_bytes: number; available_bytes: number };
 };
-export function storageRecoveryText(value: unknown, language: 'zh' | 'en', platform: string) {
+type RecoveryText = { reason: string; instructions: string; canRetry: boolean; backupBatch?: string; backupDirectory?: string; locationHint?: string };
+export function storageRecoveryText(value: unknown, language: 'zh' | 'en', platform: string): RecoveryText {
   const text = (zh: string, en: string) => language === 'zh' ? zh : en;
   const record = value && typeof value === 'object' ? value as Partial<StorageRecovery> : null;
   const trusted = record?.schema === 'hiroute.storage-startup-recovery/v1';
@@ -23,9 +24,12 @@ export function storageRecoveryText(value: unknown, language: 'zh' | 'en', platf
     namespace_unavailable: text('历史目录无法在同一文件系统内安全封存。请保留材料，检查原历史目录和恢复目标所在磁盘及占用情况。', 'The history directory cannot be sealed safely on the same filesystem. Keep all material and check the history and recovery destination volumes and file use.'),
     migration_failed: text('数据升级未完成，需要核对保留的恢复材料。', 'The storage upgrade did not complete. Check the preserved recovery material.'),
   };
-  const reason = cause && reasons[cause] || text('无法确认这组数据的升级状态。', 'The storage upgrade state could not be established.');
+  const knownCause = cause === 'unknown_state' || !!cause && Object.hasOwn(reasons, cause);
+  const reason = cause && Object.hasOwn(reasons, cause) ? reasons[cause] : text('无法确认这组数据的升级状态。', 'The storage upgrade state could not be established.');
   let instructions = text('请保留所有数据版本、密钥、完整安装包和升级记录。不要直接降级、删除数据或反复重试。查看启动诊断和对应批次的完整恢复说明；整组还原前，先另存新版数据及其配套程序。缺少密钥或完整备份时，请保留材料并寻求支持。', 'Keep every data generation, key, complete package and upgrade journal. Do not downgrade, delete data or retry blindly. Inspect startup diagnostics and the matching complete-group recovery guide. Preserve newer data and its matching program separately before restoration. Missing keys or complete backups may require support.');
-  const batch = trusted && typeof record.backup_batch === 'string' && /^[A-Za-z0-9._-]{1,128}$/.test(record.backup_batch) && !record.backup_batch.includes('..');
+  const portable = (name: unknown): name is string => typeof name === 'string' && /^[A-Za-z0-9._-]{1,128}$/.test(name) && !name.includes('..');
+  const batch = trusted && knownCause && portable(record.backup_batch) && portable(record.backup_name);
+  const located = batch && ['resume_current', 'restore_complete_group'].includes(record.action ?? '');
   const original = trusted && cause === 'missing_package' && record.action === 'reinstall_original';
   if (original) {
     instructions = platform === 'macos'
@@ -49,10 +53,17 @@ export function storageRecoveryText(value: unknown, language: 'zh' | 'en', platf
     const mb = (bytes: number) => `${Math.ceil(bytes / 1048576).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')} MiB`;
     instructions += text(` 数据所在磁盘预计需要 ${mb(space.required_bytes)}，当前可用 ${mb(space.available_bytes)}。`, ` The storage volume requires approximately ${mb(space.required_bytes)}; ${mb(space.available_bytes)} is available.`);
   }
-  return { reason, instructions, canRetry: trusted && (record.action === 'resume_current' && batch || record.action === 'retry_current' && ['insufficient_space', 'access_denied', 'locked'].includes(cause ?? '')) };
+  return { reason, instructions,
+    backupBatch: located ? record.backup_batch : undefined,
+    backupDirectory: located ? `storage.upgrade-backups/${record.backup_name}/source/` : undefined,
+    locationHint: located ? platform === 'windows'
+      ? text('在下方本机日志目录的上一级，进入上述备份目录。先读 RECOVERY.md 或恢复说明.md，再按需阅读 PROGRAM-LOCATIONS.md。', 'From the parent of the local log folder below, open this backup directory. Read RECOVERY.md (or 恢复说明.md), then PROGRAM-LOCATIONS.md where present.')
+      : text('通过下方按钮打开已保留的恢复材料，核对批次后阅读 RECOVERY.md 或恢复说明.md；不要使用其它批次。', 'Open the preserved recovery material with the button below. Match this batch and read RECOVERY.md or 恢复说明.md; do not use another batch.')
+      : undefined,
+    canRetry: trusted && (record.action === 'resume_current' && batch || record.action === 'retry_current' && ['insufficient_space', 'access_denied', 'locked'].includes(cause ?? '')) };
 }
 
-export function startupFailureText(code: string | undefined | null, recovery: unknown, language: 'zh' | 'en', platform: string) {
+export function startupFailureText(code: string | undefined | null, recovery: unknown, language: 'zh' | 'en', platform: string): RecoveryText {
   const text = (zh: string, en: string) => language === 'zh' ? zh : en;
   if (recovery || ['DAEMON_STORAGE_UNREADABLE', 'DAEMON_UPGRADE_SOURCE_UNSUPPORTED', 'DAEMON_UPGRADE_STORAGE_FAILED'].includes(code ?? '')) {
     return storageRecoveryText(recovery, language, platform);
