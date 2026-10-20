@@ -32,6 +32,27 @@ desktop = load('windows-desktop-session')
 
 
 class Runner(unittest.TestCase):
+    def test_incomplete_installation_page_requires_exact_repair_and_no_storage_retry_in_both_languages(self):
+        (self.root/'window.png').write_bytes(b'captured native image placeholder')
+        (self.root/'ui.json').write_text('{}')
+        button=dict(name='English',type='ControlType.Button',offscreen=False,runtime_id='42.1')
+        zh=dict(nodes=[dict(name='安装尚未完成'),dict(name='SHELL_INSTALL_RECOVERY_REQUIRED'),
+                       dict(name='相同版本及构建；缺包时寻求支持'),button])
+        en=dict(nodes=[dict(name='Installation is incomplete'),dict(name='SHELL_INSTALL_RECOVERY_REQUIRED'),
+                       dict(name='same version and build; obtain support if missing')])
+        source=dict(batch_id='original-batch')
+        with patch.object(desktop,'ui_action',side_effect=[zh,en]) as action:
+            self.assertEqual(desktop.failure_page_languages(self.root,Path('shell.exe'),42,'installer_recovery',source),['zh','en'])
+        self.assertEqual(action.call_args_list[1].args[-1],button,
+                         'Native invocation needs the entire observed element for identity recheck')
+        for extra in [dict(name='original-batch'),dict(name='重试',offscreen=False)]:
+            with self.subTest(extra=extra),patch.object(desktop,'ui_action',return_value=dict(nodes=zh['nodes']+[extra])), \
+                    self.assertRaisesRegex(ValueError,'borrowed storage advice'):
+                desktop.failure_page_languages(self.root,Path('shell.exe'),42,'installer_recovery',source)
+        with patch.object(desktop,'ui_action',return_value=dict(nodes=[n for n in zh['nodes'] if '相同版本' not in n['name']])), \
+                self.assertRaisesRegex(ValueError,'exact repair/support'):
+            desktop.failure_page_languages(self.root,Path('shell.exe'),42,'installer_recovery',source)
+
     def test_registration_diagnosis_compares_values_without_granting_recovery(self):
         text='Windows Registry Editor Version 5.00\r\n\r\n[HKEY_CURRENT_USER\\Software\\Example]\r\n"Path"="C:\\\\Program Files\\\\Example"\r\n"Size"=dword:000000ff\r\n'
         self.assertEqual(profiles.registration_values(text),dict(Path=(1,r'C:\Program Files\Example'),Size=(4,255)))

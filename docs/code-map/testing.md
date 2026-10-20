@@ -36,6 +36,9 @@ backups, and changed native entries are refused before any manager call.
 The native session runner's commit file-use case holds only the old closed
 inventory, then independently verifies the actual NSIS failure after current
 storage startup, retained whole-source identity and absence of an older daemon.
+It also opens the real prepared-transaction report in both languages, checking
+the incomplete-installation heading, exact installer repair/support path and
+absence of a borrowed storage retry or batch location.
 An explicit same-installer retry is a separate installed-product verdict.
 
 Choose a user promise, then the layer that can observe its failure. Keep tests

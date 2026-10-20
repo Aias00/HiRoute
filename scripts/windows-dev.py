@@ -436,7 +436,7 @@ def main():
                     raise ValueError('Scrolling requires an explicit direction')
             values.update(run_id=uuid.uuid4().hex, harness=args.product, binary='hiroute.exe',
                           case='native_desktop_' + args.desktop_action.replace('-', '_'), operation='desktop', ignored=False,
-                          timeout={'recovery-restore-original':1500,'install':810,'install-commit-file-use':810,'recovery-lock-ui':600,'recovery-file-use-ui':600,'recovery-format-ui':1200}.get(args.desktop_action,240))
+                          timeout={'recovery-restore-original':1500,'install':810,'install-commit-file-use':960,'recovery-lock-ui':600,'recovery-file-use-ui':600,'recovery-format-ui':1200}.get(args.desktop_action,240))
             values.pop('cli_args')
             values.pop('prepare_manifest')
             values.pop('prepare_shell')

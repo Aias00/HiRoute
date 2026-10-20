@@ -719,6 +719,8 @@ def install_commit_file_use(request,run,product,pm,helper,activity,manifest,root
     allowed={old/'hirouted.exe',old/'libexec/cliproxyapi.exe'}
     if any(Path(p.get('ExecutablePath') or '') not in allowed for p in activity.get('processes',[])):
         raise ValueError('Quit Desktop and preserve unrelated activity before the commit fixture')
+    if not desktop_state().get('interactive'):
+        raise ValueError('The existing input desktop is unavailable; no commit fixture was created')
     admit_nsis_install(request,helper,activity,manifest,root)
     ready=subprocess.run([str(old/'hiroute.exe'),'system','status','--output','json'],capture_output=True,timeout=150,creationflags=0x08000000)
     (run/'before-commit-fixture-system.stdout').write_bytes(ready.stdout);(run/'before-commit-fixture-system.stderr').write_bytes(ready.stderr)
@@ -759,8 +761,23 @@ def install_commit_file_use(request,run,product,pm,helper,activity,manifest,root
     check=subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-Command',
         "$ErrorActionPreference='Stop';$old=@("+images+");@(Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -in $old}).Count"],capture_output=True,text=True,timeout=30,creationflags=0x08000000)
     if check.returncode or check.stdout.strip()!='0':raise ValueError('An older daemon was observed after current storage cutover')
+    replacement=helper.plain(roots['programs']/'hiroute-shell.exe')
+    if helper.digest(replacement)!=pm['shell_sha256']:
+        raise ValueError('The prepared replacement shell differs from the measured NSIS payload')
+    # Use the same bounded report entry launched by the failed recovery helper.
+    # This observes the real prepared transaction without attempting rollback.
+    child=subprocess.Popen([str(replacement),'--recovery-report'],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    try:
+        time.sleep(10)
+        languages=failure_page_languages(run,replacement,child.pid,'installer_recovery',source)
+    finally:
+        if child.poll() is None:
+            try:ui_action(run,dict(desktop_action='quit'),replacement,child.pid);child.wait(timeout=20)
+            except Exception:
+                if child.poll() is None:child.terminate();child.wait(timeout=20)
     return dict(native_entry='NSIS /S with real post-startup commit file use',installer_exit_code=code,
                 current_gateway_ready=True,older_daemon_running=False,original_batch_id=source['batch_id'],
+                incomplete_installation_page_languages=languages,
                 original_locator_sha256=source['locator_sha256'],
                 service_state='current version ready; shell transaction remains prepared for explicit same-installer repair')
 
@@ -967,7 +984,8 @@ def failure_page_languages(run, shell, pid, cause, source=None):
     deadline=time.monotonic()+75
     languages=[]
     reasons={'locked':('另一个 HiRoute 实例','Another HiRoute instance'),
-             'unsupported_format':('这组数据的格式没有经过验证','This data format has no verified upgrade path')}
+             'unsupported_format':('这组数据的格式没有经过验证','This data format has no verified upgrade path'),
+             'installer_recovery':('安装尚未完成','Installation is incomplete')}
     for index in range(2):
         while True:
             names='\n'.join(n.get('name','') for n in observed.get('nodes',[]))
@@ -977,16 +995,23 @@ def failure_page_languages(run, shell, pid, cause, source=None):
             if time.monotonic()>=deadline:raise ValueError('The native failure page did not expose the current cause')
             time.sleep(1)
             observed=ui_action(run,dict(desktop_action='snapshot'),shell,pid)
-        prefix='locked' if cause=='locked' else 'format'
+        prefix={'locked':'locked','unsupported_format':'format','installer_recovery':'installer-recovery'}[cause]
         shutil.copyfile(run/'window.png',run/(prefix+'-'+language+'.png'))
         shutil.copyfile(run/'ui.json',run/(prefix+'-'+language+'.json'))
-        if source is not None and (source['batch_id'] not in names or source['batch'].name not in names or 'RECOVERY.md' not in names):
+        if cause=='installer_recovery':
+            if ('SHELL_INSTALL_RECOVERY_REQUIRED' not in names
+                    or ('相同版本及构建' if language=='zh' else 'same version and build') not in names
+                    or ('寻求支持' if language=='zh' else 'obtain support') not in names
+                    or any(n.get('name') in ('重试','Try again') and not n.get('offscreen') for n in observed.get('nodes',[]))
+                    or source is not None and source['batch_id'] in names):
+                raise ValueError('The incomplete installation page borrowed storage advice or lost its exact repair/support path')
+        elif source is not None and (source['batch_id'] not in names or source['batch'].name not in names or 'RECOVERY.md' not in names):
             raise ValueError('The actual failure page did not locate the exact verified original batch and guide')
         languages.append(language)
         if index==0:
             buttons=[n for n in observed['nodes'] if n.get('name') in ('English','中文') and n.get('type')=='ControlType.Button' and not n.get('offscreen')]
             if len(buttons)!=1:raise ValueError('The actual failure-page language control is unavailable')
-            observed=ui_action(run,dict(desktop_action='invoke'),shell,pid,buttons[0]['runtime_id'])
+            observed=ui_action(run,dict(desktop_action='invoke'),shell,pid,buttons[0])
     if set(languages)!={'zh','en'}:raise ValueError('Both native failure-page languages were not observed')
     return languages
 
