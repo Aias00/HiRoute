@@ -76,6 +76,8 @@ fn changed_storage_refuses_rollback_and_forward_reapplication_never_registers_ol
     journal.old_definition = Some(json!({"manager":"old-task"}));
     let entry = &mut journal.files[0];
     fs::write(&entry.destination, b"old").unwrap();
+    directory(entry.backup.parent().unwrap()).unwrap();
+    copy_new(&entry.destination, &entry.backup).unwrap();
     entry.old_sha256 = Some(format!("{:x}", sha2::Sha256::digest(b"old")));
     journal.persist(&layout).unwrap();
     journal.apply_files().unwrap();

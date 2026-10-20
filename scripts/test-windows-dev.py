@@ -626,6 +626,37 @@ class Runner(unittest.TestCase):
         self.assertEqual(run.call_args.args[0], [str(shell), '--installer-install', '--no-login-start', '--no-tray'])
         self.assertEqual((self.root / 'installer-resume.stdout').read_bytes(), b'installed')
 
+    def test_prepared_repair_accepts_only_the_measured_old_or_current_marker(self):
+        home=self.root/'home';namespace=home/'.local/lib/hiroute'
+        old=namespace/('0.3.1-'+'a'*12);current=namespace/('0.3.1-'+'b'*12)
+        programs=home/'local/Programs/HiRoute';(programs/'standalone').mkdir(parents=True)
+        prior=dict(source_revision='a'*40,files={});pm=dict(source_revision='b'*40,files={})
+        for folder,record,prefix in [(old,prior,b'old'),(current,pm,b'current')]:
+            folder.mkdir(parents=True)
+            for name in ['hiroute.exe','hirouted.exe']:
+                (folder/name).write_bytes(prefix+name.encode());record['files'][name]=dict(sha256=profiles.digest(folder/name))
+                if folder==current:(programs/'standalone'/name).write_bytes((folder/name).read_bytes())
+        shell=programs/'hiroute-shell.exe';shell.write_bytes(b'current measured shell');pm['shell_sha256']=profiles.digest(shell)
+        pending=dict(schema='hiroute.windows-shell-transaction/v1',phase='prepared',previous_package=str(old),new={'hiroute-shell.exe':pm['shell_sha256']})
+        facts={'marker':dict(sha256='marker',record=dict(install_root=str(old))),
+               'install-pending.json':dict(sha256='pending',record=pending),'programs':dict(path=str(programs))}
+        observation='f'*32;run=self.root/'runs'/observation;run.mkdir(parents=True)
+        new_bundle='b'*12+'-'+'d'*12;old_bundle='a'*12+'-'+'c'*12
+        request=dict(product=new_bundle,from_product=old_bundle,observation_run=observation,config=dict(session_id=3))
+        (run/'request.json').write_text(json.dumps(dict(product=new_bundle,config=dict(session_id=3))))
+        (run/'result.json').write_text(json.dumps(dict(passed=True,assessment='inspection_only',installation=facts)))
+        with patch.object(desktop.Path,'home',return_value=home),patch.dict(os.environ,LOCALAPPDATA=str(home/'local')), \
+                patch.object(profiles,'inspect_installation',return_value=facts):
+            for accepted in [old,current]:
+                facts['marker']['record']['install_root']=str(accepted)
+                self.assertEqual(desktop.prepared_installer_replacement(request,pm,profiles,dict(processes=[]),lambda _:prior,self.root)[2],shell)
+            foreign=namespace/('0.3.1-'+'e'*12);facts['marker']['record']['install_root']=str(foreign)
+            with self.assertRaisesRegex(ValueError,'outside the admitted'):
+                desktop.prepared_installer_replacement(request,pm,profiles,dict(processes=[]),lambda _:prior,self.root)
+            facts['marker']['record']['install_root']=str(current);(current/'hiroute.exe').write_bytes(b'substituted current CLI')
+            with self.assertRaisesRegex(ValueError,'substituted product'):
+                desktop.prepared_installer_replacement(request,pm,profiles,dict(processes=[]),lambda _:prior,self.root)
+
     def test_nsis_retry_admits_the_exact_interrupted_product_before_normal_install(self):
         interrupted = 'b' * 12 + '-' + 'c' * 12
         request = dict(product='a' * 12 + '-' + 'd' * 12, from_product='e' * 12 + '-' + 'f' * 12,

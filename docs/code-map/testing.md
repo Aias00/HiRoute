@@ -33,6 +33,10 @@ The [standalone journal cases](../../crates/host-runtime/src/standalone_install/
 also prove that cutover facts stop rollback before manager effects, forward
 reapplication registers only the current definition and preserves the original
 backups, and changed native entries are refused before any manager call.
+The native session runner's commit file-use case holds only the old closed
+inventory, then independently verifies the actual NSIS failure after current
+storage startup, retained whole-source identity and absence of an older daemon.
+An explicit same-installer retry is a separate installed-product verdict.
 
 Choose a user promise, then the layer that can observe its failure. Keep tests
 beside that owner and preserve independent assertions. A focused filesystem

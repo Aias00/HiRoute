@@ -459,13 +459,20 @@ def prepared_installer_replacement(request, pm, helper, activity, manifest, root
         raise ValueError('Only the exact prepared shell installation can be resumed')
     prior = manifest(root / 'bundles' / request['from_product'])
     marker = facts['marker']['record']
-    previous = helper.plain(Path(marker['install_root']))
-    if (previous != Path(pending.get('previous_package') or '') or not previous.name.endswith(prior['source_revision'][:12])
+    previous = helper.plain(Path(pending.get('previous_package') or ''))
+    if (not previous.name.endswith(prior['source_revision'][:12])
             or previous.parent != Path.home() / '.local/lib/hiroute'):
         raise ValueError('The retained previous package does not match the requested product')
     for name in ('hiroute.exe', 'hirouted.exe'):
         if helper.digest(previous / name) != prior['files'][name]['sha256']:
             raise ValueError('The retained previous product changed')
+    active=helper.plain(Path(marker['install_root']))
+    accepted=prior if active==previous else pm
+    if active.parent!=previous.parent or not active.name.endswith(accepted['source_revision'][:12]):
+        raise ValueError('The current installation marker is outside the admitted old/current pair')
+    for name in ('hiroute.exe','hirouted.exe'):
+        if helper.digest(active/name)!=accepted['files'][name]['sha256']:
+            raise ValueError('The current installation marker points at a substituted product')
     programs = helper.plain(Path(facts['programs']['path']))
     shell = helper.plain(programs / 'hiroute-shell.exe')
     if (helper.digest(shell) != pm['shell_sha256'] or pending.get('new', {}).get('hiroute-shell.exe') != pm['shell_sha256']
@@ -699,6 +706,63 @@ def robocopy_path(path):
     if value.startswith('\\\\?\\UNC\\'):
         return '\\\\' + value[8:]
     return value[4:] if value.startswith('\\\\?\\') else value
+
+
+def install_commit_file_use(request,run,product,pm,helper,activity,manifest,root):
+    """Fail the real NSIS commit after readiness; release only this case's handle."""
+    previous=request.get('from_product')
+    if not re.fullmatch(r'[a-f0-9]{12}-[a-f0-9]{12}',previous or '') or request.get('recover_product'):
+        raise ValueError('The commit file-use journey requires the exact healthy original installation')
+    prior=manifest(root/'bundles'/previous)
+    roots,before,shell=installed(helper,root/'bundles'/previous,prior)
+    old=Path(before['marker']['record']['install_root'])
+    allowed={old/'hirouted.exe',old/'libexec/cliproxyapi.exe'}
+    if any(Path(p.get('ExecutablePath') or '') not in allowed for p in activity.get('processes',[])):
+        raise ValueError('Quit Desktop and preserve unrelated activity before the commit fixture')
+    admit_nsis_install(request,helper,activity,manifest,root)
+    ready=subprocess.run([str(old/'hiroute.exe'),'system','status','--output','json'],capture_output=True,timeout=150,creationflags=0x08000000)
+    (run/'before-commit-fixture-system.stdout').write_bytes(ready.stdout);(run/'before-commit-fixture-system.stderr').write_bytes(ready.stderr)
+    if ready.returncode or json.loads(ready.stdout).get('data',{}).get('gateway')!='ready':
+        raise ValueError('The original Gateway must be healthy before the commit file-use fixture')
+    inventory=helper.plain(roots['programs']/'shell-package.json');original=helper.digest(inventory)
+    kernel=ctypes.WinDLL('kernel32',use_last_error=True)
+    from ctypes import wintypes
+    kernel.CreateFileW.argtypes=[wintypes.LPCWSTR,wintypes.DWORD,wintypes.DWORD,ctypes.c_void_p,wintypes.DWORD,wintypes.DWORD,wintypes.HANDLE]
+    kernel.CreateFileW.restype=wintypes.HANDLE;kernel.CloseHandle.argtypes=[wintypes.HANDLE]
+    # Allow preparation/hash reads, but refuse the final atomic inventory replacement.
+    handle=kernel.CreateFileW(str(inventory),0x80000000,1,None,3,0x00200000,None)
+    if handle==wintypes.HANDLE(-1).value:raise ctypes.WinError(ctypes.get_last_error())
+    code=None
+    try:
+        try:nsis_install(product/'installer.exe',run,roots)
+        except subprocess.CalledProcessError as error:code=error.returncode
+    finally:kernel.CloseHandle(handle)
+    after=helper.inspect_installation(Path.home(),Path(os.environ['LOCALAPPDATA']))
+    (run/'commit-file-use.after.json').write_text(json.dumps(after,indent=2),encoding='utf-8')
+    pending=after.get('install-pending.json',{}).get('record',{})
+    current=Path(after.get('marker',{}).get('record',{}).get('install_root',''))
+    if (not code or pending.get('phase')!='prepared' or 'shell-package.json' not in pending.get('new',{})
+            or helper.digest(inventory)!=original or current.parent!=old.parent
+            or not current.name.endswith(pm['source_revision'][:12])):
+        raise ValueError('The installer did not reach the intended post-startup inventory-publication refusal')
+    for name in ('hiroute.exe','hirouted.exe'):
+        if helper.digest(current/name)!=pm['files'][name]['sha256']:
+            raise ValueError('The current program changed during the controlled commit refusal')
+    source=helper.original_recovery_source(Path.home(),Path(os.environ['LOCALAPPDATA']),prior)
+    if helper.original_desktop_locations(source,prior,roots) is None:
+        raise ValueError('The complete original Desktop source was not retained before cutover')
+    done=subprocess.run([str(current/'hiroute.exe'),'system','status','--output','json'],capture_output=True,timeout=150,creationflags=0x08000000)
+    (run/'post-failure-system.stdout').write_bytes(done.stdout);(run/'post-failure-system.stderr').write_bytes(done.stderr)
+    if done.returncode or json.loads(done.stdout).get('data',{}).get('gateway')!='ready':
+        raise ValueError('Actual current Gateway readiness was not established after the commit refusal')
+    images=','.join("'"+str(p).replace("'","''")+"'" for p in allowed)
+    check=subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-Command',
+        "$ErrorActionPreference='Stop';$old=@("+images+");@(Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -in $old}).Count"],capture_output=True,text=True,timeout=30,creationflags=0x08000000)
+    if check.returncode or check.stdout.strip()!='0':raise ValueError('An older daemon was observed after current storage cutover')
+    return dict(native_entry='NSIS /S with real post-startup commit file use',installer_exit_code=code,
+                current_gateway_ready=True,older_daemon_running=False,original_batch_id=source['batch_id'],
+                original_locator_sha256=source['locator_sha256'],
+                service_state='current version ready; shell transaction remains prepared for explicit same-installer repair')
 
 
 def copy_recovery_tree(helper, source, target, log):
@@ -1186,8 +1250,10 @@ def execute(request, run, product, pm, helper, activity, manifest, root):
     if activity.get('administrator_groups') is not False:
         raise ValueError('Native Desktop evidence requires a standard account, not a filtered administrator')
     action = request['desktop_action']
-    if action not in ('install', 'registration-probe', 'installer-prepare', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call', 'codex-inference', 'network-probe', 'recovery-preview', 'recovery-restore-original', 'recovery-lock-ui', 'recovery-file-use-ui', 'recovery-format-ui'):
+    if action not in ('install', 'install-commit-file-use', 'registration-probe', 'installer-prepare', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call', 'codex-inference', 'network-probe', 'recovery-preview', 'recovery-restore-original', 'recovery-lock-ui', 'recovery-file-use-ui', 'recovery-format-ui'):
         raise ValueError('Unknown native Desktop action')
+    if action=='install-commit-file-use':
+        return install_commit_file_use(request,run,product,pm,helper,activity,manifest,root)
     if action=='registration-probe':
         installed(helper,product,pm)
         identifier=request.get('probe_product')

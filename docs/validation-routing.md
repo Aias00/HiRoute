@@ -270,6 +270,16 @@ To test a normal NSIS retry over that prepared replacement, `install` accepts
 the recent matching `--observation-run`. It verifies both retained and interrupted
 product images before launching the new installer. Recovery itself remains the
 normal NSIS/Rust path; this admission does not repair files or journals.
+For the post-startup/pre-commit boundary, `install-commit-file-use --from-product
+ORIGINAL_BUNDLE` starts from actual original Gateway readiness and holds only the
+verified shell inventory against replacement while allowing preparation reads.
+It runs the real NSIS, releases its own handle, then requires a nonzero installer
+exit, the new accepted program, a still-prepared shell transaction, verified
+complete original material, actual current Gateway readiness and no older daemon.
+This is a passing rollback-refusal scenario, never a successful install verdict.
+Inspect the resulting installation before an explicit normal `install` retry
+with the same `--product`, original `--from-product`, current `--recover-product`
+and that inspection. Verify completion and an unchanged original locator separately.
 Before native input, the runner checks that the existing session's input desktop
 is accessible and matches its ordinary desktop. `--action desktop-state` reads
 that prerequisite without unlocking or creating a login. UI observations require
