@@ -249,6 +249,13 @@ without the selected passing case is failure. Archive entries must be flat,
 manifested x64 executables with matching size/hash; partial stages cannot be reused.
 Cross-built artifacts never become native CI producers.
 
+The four `hiroute_local_storage.exe` cases in
+`control::windows_artifacts_tests` use only unique temporary directories. The runner
+admits these exact non-ignored cases alongside an existing installation and records
+`temporary_artifact_component`; it does not collect that installation's diagnostics.
+Other test cases retain the fresh-profile requirement. Temporary ACL/recovery checks
+prove native file behavior, not installed-product acceptance.
+
 `inspect-installation` runs a read-only inventory in the configured account. Collect
 and finish it normally; its success is inspection evidence, not a product scenario.
 When the user explicitly authorizes clearing old validation data, use
