@@ -230,9 +230,6 @@ function Harness() {
     setRefresh(0);
     setGeneration(value => value + 1);
   };
-  const parameters=new URLSearchParams(window.location.search);
-  const language=parameters.get('language')==='en'?'en':'zh';
-  const theme=parameters.get('theme')==='light'?'light':'dark';
   return <PresentationRoot language={language} theme={theme} textScale={1}>
     <div className="app-window">
       <div role="note" style={{ gridColumn: '1 / -1', gridRow: 1 }}>组件测试：所有 IPC 为 mock；不连接 Tauri、daemon 或真实安装。</div>

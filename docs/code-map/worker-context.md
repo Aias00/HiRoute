@@ -250,3 +250,10 @@ Mac `desktop-pilot --all-targets` compile gate; ignored native targets need expl
 execution. Shared Product Session filters are `commands::worker_tasks::tests`,
 `session::checks::tests` and `commands::model_connection_web::tests`; zero selected
 tests prove nothing about those consumers.
+
+The OpenCode native Windows leaf is
+[`windows_opencode_business.rs`](../../crates/daemon/tests/support/windows_opencode_business.rs),
+selected by `actual_windows_opencode_worker_native_history_and_cancellation` in
+[`windows_headless.rs`](../../crates/daemon/tests/windows_headless.rs). It shares the
+public routing/Worker receipt oracle and Job cancellation assertions with existing
+Windows acceptance; it adds no alternative production lifecycle.

@@ -30,6 +30,25 @@ pub(super) fn verify(
     plan: &str,
     nonce: &str,
 ) -> CancellationReceipts {
+    verify_for(product, workspace, plan, nonce, "pi")
+}
+
+pub(super) fn verify_opencode(
+    product: &InstalledProduct,
+    workspace: &Path,
+    plan: &str,
+    nonce: &str,
+) {
+    let _ = verify_for(product, workspace, plan, nonce, "opencode");
+}
+
+fn verify_for(
+    product: &InstalledProduct,
+    workspace: &Path,
+    plan: &str,
+    nonce: &str,
+    harness: &str,
+) -> CancellationReceipts {
     let executors = command(
         product,
         &["worker", "executors"],
@@ -40,12 +59,14 @@ pub(super) fn verify(
         .as_array()
         .unwrap()
         .iter()
-        .find(|executor| executor["harness"] == "pi")
+        .find(|executor| executor["harness"] == harness)
         .unwrap();
     assert_eq!(pi["start_approve_all"]["state"], "ready");
     assert_eq!(pi["cancel"]["state"], "ready");
-    assert_eq!(pi["continue_session"]["state"], "unknown");
-    assert_eq!(pi["continue_session"]["reason"], "capability_unverified");
+    if harness == "pi" {
+        assert_eq!(pi["continue_session"]["state"], "unknown");
+        assert_eq!(pi["continue_session"]["reason"], "capability_unverified");
+    }
     let prompt = workspace.join("cancel-task.txt");
     write_new(
         &prompt,
@@ -174,6 +195,12 @@ pub(super) fn verify(
     );
     assert_eq!(rejected["error"]["code"], "REVISION_CONFLICT");
     assert_eq!(rejected["status"], json!("conflict"));
+    if harness == "opencode" {
+        return CancellationReceipts {
+            late: vec![late],
+            residual_task: String::new(),
+        };
+    }
     let (residual_late, residual_task) = residual(product, workspace, plan, nonce);
     CancellationReceipts {
         late: vec![late, residual_late],

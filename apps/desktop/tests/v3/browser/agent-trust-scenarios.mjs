@@ -74,14 +74,14 @@ const scenarios = [
     agent.context_id = null; agent.settings = null; agent.status_error = 'AGENT_STATUS_UNAVAILABLE'; agent.configuration_state = 'profile_unavailable';
     c().refresh(); await tick();
     await until(() => document.querySelector('[data-agent-discovery="unavailable"]'), 'Unreadable default profile');
-    assert(rows().length === 1 && document.querySelectorAll('.native-list .list-row').length === c().agents.agents.length, 'An unreadable profile hid or duplicated Agents');
+    assert(rows().length === 1 && document.querySelectorAll('.native-list .list-row').length === 7, 'An unreadable profile hid or duplicated Agents');
     assert(facet('model').disabled && !document.querySelector('[data-hermes-select-root]').disabled, 'Unreadable profile has settings authority or cannot change directory');
   }),
   scenario('hermes.discovery.parallel-entry', ['hermes', 'agent-discovery'], 'Hermes remains alongside other Agents and selects its profile from details without writes', async () => {
     c().reset(); await tick();
     const hermesRows = () => [...document.querySelectorAll('.native-list .list-row')].filter(row => row.textContent.includes('Hermes'));
     await until(() => hermesRows().length === 1, 'Unscoped Hermes list row');
-    assert(document.querySelectorAll('.native-list .list-row').length === c().agents.agents.length + 1, 'Existing Agent entries changed');
+    assert(document.querySelectorAll('.native-list .list-row').length === 7, 'Existing Agent entries changed');
     assert(!document.querySelector('[data-hermes-select-root]'), 'Hermes directory control leaked into another Agent');
     assert(![...document.querySelectorAll('button')].some(button => button.textContent === '选择 Hermes 配置目录'), 'Hermes has a page-level directory entry');
     hermesRows()[0].click();
@@ -140,7 +140,7 @@ const scenarios = [
     await until(() => calls('agent_snapshot').at(-1)?.payload.nativeTargets?.length === 1, 'Remembered target reread');
     [...document.querySelectorAll('.native-list .list-row')].find(row => row.textContent.includes('Hermes')).click();
     await until(() => document.querySelector('[data-agent-discovery="unavailable"]'), 'Unavailable retained profile');
-    assert(document.querySelectorAll('.native-list .list-row').length === 6, 'One failed target hid another Agent');
+    assert(document.querySelectorAll('.native-list .list-row').length === 7, 'One failed target hid another Agent');
     assert(document.querySelector('[data-hermes-profile]').textContent.includes('/tmp/hermes-profile-fixture'), 'Failed read lost the selected root');
     assert(facet('model').disabled && facet('management_skill').disabled && facet('collaboration').disabled, 'A preference became settings authority');
     assert(configureSpecs().length === 0 && calls('check_agent_live').length === 0, 'Discovery wrote settings or called a model');

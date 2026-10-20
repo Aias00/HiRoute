@@ -27,3 +27,15 @@ The explicit collaboration prerequisite check uses private configuration and his
 Require every selected business case to be green in its scenario report. A successful build, fixture response or process exit alone is insufficient. Retain the exact source SHA, native package identity, selected protocol, task/native-session identities, source request kinds, owned-child cancellation and preserved native files. The product tests must not promote SDK metadata or mock IPC to native success.
 
 macOS/Linux/native Windows each need their real filesystem, installation and process boundary evidence. The Unix product entry above does not establish Windows acceptance. Windows compilation and native execution follow the existing [Windows validation workflow](../../../docs/validation-routing.md#windows-iteration-and-release-validation); neither another OS nor a cross-compile replaces execution. Browser component checks cover OpenCode forms separately and do not prove native Desktop authorization or persistence.
+
+For the native Windows boundary, configure the pinned `HIROUTE_WORKER_OPENCODE_BINARY`
+path in the existing HOME Windows validation configuration and include its native
+package metadata. Compile the `windows_headless` target through the managed MSVC
+workbench, export/stage its verified bundle, and select
+`actual_windows_opencode_worker_native_history_and_cancellation` with the existing
+`validation.py windows run` entry. It reuses the public source/Plan/Worker fixture,
+real Skill and file-tool receipts, Job cancellation checks and daemon restart with
+exact Continue. Native roots are created before daemon startup and borrowed
+configuration must remain byte-identical. This case establishes those Windows
+boundaries; saved ordinary model routes, static import and native Main delegation
+retain their separate journeys above.
