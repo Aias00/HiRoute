@@ -64,6 +64,8 @@ def registration_values(text):
 
 def registration_comparison(path):
     import winreg
+    import subprocess
+    import tempfile
     if path.stat().st_size>64*1024:return dict(assessment='export_exceeds_bound')
     try:retained=registration_values(path.read_text(encoding='utf-16'))
     except (ValueError,UnicodeError):return dict(assessment='unrecognized_retained_export')
@@ -73,7 +75,16 @@ def registration_comparison(path):
         if count>64:return dict(assessment='current_registration_exceeds_bound')
         for i in range(count):
             name,value,kind=winreg.EnumValue(key,i);current[name]=(kind,value)
-    return dict(assessment='diagnostic_only_not_recovery_admission',
+    observed={}
+    with tempfile.TemporaryDirectory(prefix='hiroute-registration-observe-') as temporary:
+        exported=Path(temporary)/'observed.reg'
+        done=subprocess.run([str(Path(os.environ['SystemRoot'])/'System32/reg.exe'),'export',
+            r'HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\HiRoute',str(exported),'/y'],
+            capture_output=True,timeout=15,creationflags=0x08000000)
+        observed['system_export_exit_code']=done.returncode
+        if done.returncode==0 and exported.is_file() and exported.stat().st_size<=64*1024:
+            observed.update(system_export_sha256=digest(exported),system_export_bytes_equal=exported.read_bytes()==path.read_bytes())
+    return dict(assessment='diagnostic_only_not_recovery_admission',**observed,
         values_equal=retained==current,changed_names=sorted(k for k in retained.keys()&current.keys() if retained[k]!=current[k]),
         retained_only=sorted(retained.keys()-current.keys()),current_only=sorted(current.keys()-retained.keys()))
 
