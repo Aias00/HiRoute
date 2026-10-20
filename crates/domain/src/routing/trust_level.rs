@@ -59,9 +59,62 @@ impl TrustLevelV1 {
             .find(|level| level.threshold_millis > threshold_millis)
     }
 }
+/// One Plan-wide trust presentation. It never picks one branch to stand for differing ones,
+/// and it never invents a threshold for a Plan without difficulty trust controls.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PlanTrustStateV1 {
+    Uniform {
+        /// A preset id, or `custom` for a threshold between presets.
+        level: String,
+        threshold_millis: u16,
+    },
+    NotApplicable,
+    BranchSpecific,
+}
+impl PlanTrustStateV1 {
+    pub fn from_thresholds(thresholds: impl IntoIterator<Item = u16>) -> Self {
+        let mut values = thresholds.into_iter();
+        let Some(first) = values.next() else {
+            return Self::NotApplicable;
+        };
+        if values.any(|value| value != first) {
+            return Self::BranchSpecific;
+        }
+        Self::Uniform {
+            level: TrustLevelV1::from_threshold(first)
+                .map_or_else(|| "custom".to_owned(), |level| level.id.clone()),
+            threshold_millis: first,
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn plan_trust_state_is_uniform_only_for_one_shared_threshold() {
+        assert_eq!(
+            PlanTrustStateV1::from_thresholds([]),
+            PlanTrustStateV1::NotApplicable
+        );
+        assert_eq!(
+            PlanTrustStateV1::from_thresholds([900, 900]),
+            PlanTrustStateV1::Uniform {
+                level: "trial".into(),
+                threshold_millis: 900
+            }
+        );
+        assert_eq!(
+            PlanTrustStateV1::from_thresholds([720]),
+            PlanTrustStateV1::Uniform {
+                level: "custom".into(),
+                threshold_millis: 720
+            }
+        );
+        assert_eq!(
+            PlanTrustStateV1::from_thresholds([900, 800]),
+            PlanTrustStateV1::BranchSpecific
+        );
+    }
     #[test]
     fn custom_thresholds_keep_their_value_and_step_to_adjacent_levels() {
         assert!(TrustLevelV1::from_threshold(720).is_none());

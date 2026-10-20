@@ -14,6 +14,7 @@ use std::{
 mod notifications;
 pub(crate) use notifications::worker as notifications_worker;
 mod reads;
+mod summary;
 
 pub(super) fn execute(arguments: &[String], globals: &Globals) -> CliExecution {
     if globals.help {
@@ -35,7 +36,7 @@ pub(super) fn execute(arguments: &[String], globals: &Globals) -> CliExecution {
         }
     }
 }
-const HELP: &str = "Usage\n  hiroute integrations omarchy enable [--console yes|no] [--notifications on|off]\n  hiroute integrations omarchy status\n  hiroute integrations omarchy disable\n  hiroute integrations omarchy configure --notifications on|off\n  hiroute integrations omarchy refresh\n  hiroute integrations omarchy launch --agent codex|claude-code -- <AGENT_ARGS...>\n  hiroute integrations omarchy open-console [--landing first-run|suggestion:<id>|agent:<agent>]\n  hiroute integrations omarchy notify\n\nAn optional current-user standalone Linux integration. Enable requires OMARCHY_PATH and the public omarchy command. It never starts, stops or restarts HiRoute. Native Agent settings remain owned by their existing configuration flows. On launch, the exact -- preserves native argv; only a caller in HOME moves to an existing ~/Work. A failed routed preflight queues one notification and enters agent launch --native-fallback prompt. No unattended native fallback is permitted. Console initialization is explicit and loopback-only; a saved listener may need a service restart. Launch links are fresh, single-use and never printed by this family.\n";
+const HELP: &str = "Usage\n  hiroute integrations omarchy enable [--console yes|no] [--notifications on|off]\n  hiroute integrations omarchy status\n  hiroute integrations omarchy disable\n  hiroute integrations omarchy configure --notifications on|off\n  hiroute integrations omarchy refresh\n  hiroute integrations omarchy launch --agent codex|claude-code -- <AGENT_ARGS...>\n  hiroute integrations omarchy open-console [--landing first-run|suggestion:<id>|agent:<agent>]\n  hiroute integrations omarchy summary\n  hiroute integrations omarchy notify\n\nAn optional current-user standalone Linux integration. Enable requires OMARCHY_PATH and the public omarchy command. It never starts, stops or restarts HiRoute. Native Agent settings remain owned by their existing configuration flows. On launch, the exact -- preserves native argv; only a caller in HOME moves to an existing ~/Work. A failed routed preflight queues one notification and enters agent launch --native-fallback prompt. No unattended native fallback is permitted. Console initialization is explicit and loopback-only; a saved listener may need a service restart. Launch links are fresh, single-use and never printed by this family. summary is the read-only hiroute.omarchy-summary/v1 indicator view: it reports service unavailable, and exits 0, whenever a current figure cannot be read.\n";
 type Failure = (ErrorCode, String);
 fn host_error(error: host::Error) -> Failure {
     (ErrorCode::ActionRequired, error.to_string())
@@ -179,6 +180,7 @@ fn command(args: &[String], globals: &Globals) -> Result<serde_json::Value, Fail
                 }
             }
         }
+        [verb] if verb == "summary" => value(summary::read(&context, globals)),
         [verb] if verb == "notify" => value(notifications::notify(&context, globals)?),
         _ => Err(invalid()),
     }
@@ -186,7 +188,14 @@ fn command(args: &[String], globals: &Globals) -> Result<serde_json::Value, Fail
 fn validate(args: &[String]) -> Result<(), Failure> {
     match args {
         [verb, options @ ..] if verb == "enable" => enable_options(options).map(|_| ()),
-        [verb] if matches!(verb.as_str(), "status" | "disable" | "refresh" | "notify") => Ok(()),
+        [verb]
+            if matches!(
+                verb.as_str(),
+                "status" | "disable" | "refresh" | "summary" | "notify"
+            ) =>
+        {
+            Ok(())
+        }
         [verb, flag, choice] if verb == "configure" && flag == "--notifications" => {
             on_off(choice).map(|_| ())
         }

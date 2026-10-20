@@ -273,6 +273,43 @@ pub enum AgentPlanStrategyV2 {
 }
 
 impl AgentPlanAuthoringV2 {
+    /// Difficulty trust controls: each scope whose Regular/Primary division uses a simple
+    /// threshold, with its Regular candidates. Fixed, free-first, custom and local-rule Plans
+    /// have none. Trust evidence and Plan summaries share this one definition.
+    pub fn trust_controls(&self) -> Vec<(&str, u16, &[CandidateSelectionV1])> {
+        match &self.strategy {
+            AgentPlanStrategyV2::SmartSaving {
+                judgment,
+                classifier,
+                economy,
+                ..
+            } if !matches!(classifier, ComplexityClassifierModeV1::LocalRules) => vec![(
+                super::SMART_SAVING_SCOPE_ID,
+                judgment.degree.simple_threshold_millis,
+                economy.as_slice(),
+            )],
+            AgentPlanStrategyV2::Branches { routing } => routing
+                .branches
+                .iter()
+                .filter(|b| !b.primary_candidates.is_empty())
+                .map(|b| {
+                    (
+                        b.id.as_str(),
+                        routing.judgment_for(b).degree.simple_threshold_millis,
+                        b.candidates.as_slice(),
+                    )
+                })
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
+
+    pub fn trust_state(&self) -> super::PlanTrustStateV1 {
+        super::PlanTrustStateV1::from_thresholds(
+            self.trust_controls().into_iter().map(|(_, t, _)| t),
+        )
+    }
+
     pub fn decision_service(&self) -> Option<&super::DecisionServiceV1> {
         let classifier = match &self.strategy {
             AgentPlanStrategyV2::SmartSaving { classifier, .. } => classifier,

@@ -87,8 +87,8 @@ pub use hiroute_domain::{
     MANAGED_CLAUDE_SETTINGS_ARGUMENT_V1, ManagedClaudeLaunchDescriptorV2,
     ManagedCodexLaunchDescriptorV1, ManagedLaunchProfileV1, MaterializationState, ModelAlias,
     ModelSwitchFilter, ObservationCapacityStatusV1, PRODUCT_CONTRACT_REVISION,
-    PROPOSAL_MAP_REVISION, RevisionSetV1, SchemaVersion, SessionId, SessionListQueryV1,
-    UpstreamProtocol, ValueGroupByV1, ValueQueryV1,
+    PROPOSAL_MAP_REVISION, PlanTrustStateV1, RevisionSetV1, SchemaVersion, SessionId,
+    SessionListQueryV1, TrustLevelV1, UpstreamProtocol, ValueGroupByV1, ValueQueryV1,
 };
 pub use protocol::{
     AgentCheckRequestV1, AgentCheckScopeV1, AgentCheckSuiteV1, AgentModelCheckTargetV2,

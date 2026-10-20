@@ -467,41 +467,21 @@ pub(crate) fn suggestion_id(
 }
 
 fn policies(context: &TrustContextV1) -> Vec<(String, u16, BTreeSet<String>)> {
-    let models = |candidates: &[CandidateSelectionV1]| {
-        candidates
-            .iter()
-            .filter_map(|c| context.binding_models.get(&c.binding_id).cloned())
-            .collect()
-    };
-    match &context.configuration.strategy {
-        AgentPlanStrategyV2::SmartSaving {
-            judgment,
-            classifier,
-            economy,
-            ..
-        } if !matches!(classifier, ComplexityClassifierModeV1::LocalRules) => vec![(
-            SMART_SAVING_SCOPE_ID.into(),
-            judgment.degree.simple_threshold_millis,
-            models(economy),
-        )],
-        AgentPlanStrategyV2::Branches { routing } => routing
-            .branches
-            .iter()
-            .filter(|b| !b.primary_candidates.is_empty())
-            .map(|b| {
-                (
-                    b.id.clone(),
-                    b.judgment
-                        .as_ref()
-                        .unwrap_or(&routing.judgment)
-                        .degree
-                        .simple_threshold_millis,
-                    models(&b.candidates),
-                )
-            })
-            .collect(),
-        _ => Vec::new(),
-    }
+    context
+        .configuration
+        .trust_controls()
+        .into_iter()
+        .map(|(scope, threshold, candidates)| {
+            (
+                scope.to_owned(),
+                threshold,
+                candidates
+                    .iter()
+                    .filter_map(|c| context.binding_models.get(&c.binding_id).cloned())
+                    .collect(),
+            )
+        })
+        .collect()
 }
 
 #[cfg(test)]
