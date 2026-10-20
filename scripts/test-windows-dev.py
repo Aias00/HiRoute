@@ -32,6 +32,13 @@ desktop = load('windows-desktop-session')
 
 
 class Runner(unittest.TestCase):
+    def test_preparation_executes_only_the_measured_actual_nsis_shell(self):
+        data=b'actual NSIS shell';encoded=base64.b64encode(data).decode('ascii')
+        pm=dict(shell_sha256=hashlib.sha256(data).hexdigest())
+        self.assertEqual(desktop.prepare_shell_bytes(encoded,pm),data)
+        for substituted in (None,'invalid!',base64.b64encode(b'test harness').decode('ascii')):
+            with self.assertRaises(ValueError):desktop.prepare_shell_bytes(substituted,pm)
+
     def test_prepare_manifest_binds_both_binaries_and_revision(self):
         pm=dict(source_revision='a'*40,files={name:dict(sha256=name) for name in ('hiroute.exe','hirouted.exe')})
         value=dict(revision='a'*40,target='x86_64-pc-windows-msvc',

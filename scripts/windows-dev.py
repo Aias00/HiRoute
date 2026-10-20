@@ -353,6 +353,7 @@ def main():
     desktop.add_argument('--generated-uninstaller-sha256', help='Digest independently extracted from the verified failed NSIS artifact, for manual quarantine only')
     desktop.add_argument('--cli-args', type=Path, help='Private JSON array of public CLI arguments')
     desktop.add_argument('--prepare-manifest', type=Path, help='Manifest independently extracted from the verified failed NSIS, for its actual preparation adapter only')
+    desktop.add_argument('--prepare-shell', type=Path, help='Actual shell independently extracted from the same verified NSIS; its measured shell digest is mandatory')
     run = commands.add_parser('run')
     run.add_argument('--harness', required=True)
     run.add_argument('--product', required=True)
@@ -435,10 +436,14 @@ def main():
                           timeout={'recovery-restore-original':1500,'install':810,'recovery-lock-ui':600,'recovery-file-use-ui':600,'recovery-format-ui':1200}.get(args.desktop_action,240))
             values.pop('cli_args')
             values.pop('prepare_manifest')
+            values.pop('prepare_shell')
             if args.desktop_action == 'installer-prepare':
                 if args.prepare_manifest is None or not 1 <= args.prepare_manifest.stat().st_size <= 64 * 1024:
                     raise ValueError('Preparation diagnosis requires the bounded, independently extracted NSIS manifest')
                 values['prepare_manifest'] = json.loads(args.prepare_manifest.read_text(encoding='utf-8'))
+                if args.prepare_shell is None or not 1 <= args.prepare_shell.stat().st_size <= 32 * 1024 * 1024:
+                    raise ValueError('Preparation diagnosis requires the bounded actual NSIS shell')
+                values['prepare_shell'] = base64.b64encode(args.prepare_shell.read_bytes()).decode('ascii')
             if args.desktop_action == 'cli':
                 if args.cli_args is None:
                     raise ValueError('Public CLI acceptance requires a private argument file')

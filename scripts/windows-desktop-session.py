@@ -5,6 +5,7 @@ Uses the installed NSIS product, Windows UI Automation and window screenshots.
 It never injects browser scripts, creates a login or changes native data roots.
 """
 import json
+import base64
 import hashlib
 import ctypes
 import os
@@ -1143,6 +1144,16 @@ def prepare_manifest_bytes(value, pm):
     return data
 
 
+def prepare_shell_bytes(value,pm):
+    if not isinstance(value,str) or not 1<=len(value)<=48*1024*1024:
+        raise ValueError('The actual NSIS preparation shell is unavailable or exceeds its bound')
+    try:data=base64.b64decode(value,validate=True)
+    except ValueError as error:raise ValueError('The preparation shell encoding is invalid') from error
+    if not 1<=len(data)<=32*1024*1024 or hashlib.sha256(data).hexdigest()!=pm.get('shell_sha256'):
+        raise ValueError('The preparation shell differs from the measured NSIS member')
+    return data
+
+
 def installer_prepare(request,run,product,pm,helper,activity,manifest,root):
     """Diagnose the real mutating pre-replacement adapter; never claim an NSIS result."""
     previous,observation=request.get('from_product'),request.get('observation_run')
@@ -1160,7 +1171,8 @@ def installer_prepare(request,run,product,pm,helper,activity,manifest,root):
     if facts.get('install-pending.json') or facts.get('install-journal.json'):
         raise ValueError('Preserve the pending native transaction; do not replay preparation diagnosis')
     path=run/'incoming-package.json';path.write_bytes(prepare_manifest_bytes(request.get('prepare_manifest'),pm))
-    done=subprocess.run([str(product/'windows_desktop.exe'),'--installer-prepare',str(path),str(product/'hirouted.exe')],
+    adapter=run/'candidate-preparation.exe';adapter.write_bytes(prepare_shell_bytes(request.get('prepare_shell'),pm))
+    done=subprocess.run([str(adapter),'--installer-prepare',str(path),str(product/'hirouted.exe')],
         capture_output=True,timeout=180,creationflags=0x08000000)
     (run/'prepare-adapter.stdout').write_bytes(done.stdout);(run/'prepare-adapter.stderr').write_bytes(done.stderr)
     (run/'prepare-adapter.after.json').write_text(json.dumps(

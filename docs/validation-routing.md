@@ -240,8 +240,10 @@ output and resulting transaction before any further installation attempt.
 For a refusal before any transaction was published, `installer-prepare` captures
 the actual candidate preparation adapter's stderr. It requires the exact installed
 `--from-product`, recent inspection and `--prepare-manifest` independently extracted
-from that verified failed NSIS. The candidate revision and CLI/daemon digests must
-match; pending transactions are refused. This can publish preparation material
+from that verified failed NSIS, plus its actual shell in `--prepare-shell`.
+The candidate revision, CLI/daemon digests and measured NSIS shell digest must
+match; the compiled acceptance test is never executed as an installer adapter.
+Pending transactions are refused. This can publish preparation material
 and must be inspected before another action. It does not replace installed programs
 and is never a successful full-installer verdict.
 If that failed unreleased producer never registered its generated uninstaller,
