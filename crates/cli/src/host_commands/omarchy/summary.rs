@@ -265,8 +265,8 @@ impl Summary {
 impl Agent {
     fn validate(&self) -> bool {
         let (max, allowed): (usize, &[Slot]) = match self.agent.as_str() {
-            "codex" => (1, &[Slot::Default]),
-            "claude-code" => (3, &[Slot::Opus, Slot::Sonnet, Slot::Haiku]),
+            "codex" => (1, &[Slot::Default][..]),
+            "claude-code" => (3, &[Slot::Opus, Slot::Sonnet, Slot::Haiku][..]),
             _ => return false,
         };
         let slots: Vec<Slot> = self
@@ -482,7 +482,7 @@ pub(super) fn choose_latest(
                 return Ok(None);
             }
             checks += 1;
-            if attributed(context, candidate)? {
+            if attributed(*context, candidate)? {
                 return Ok(Some(LatestSession {
                     session_id: candidate.session_id.clone(),
                     agent: (*agent).into(),

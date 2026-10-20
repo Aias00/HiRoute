@@ -220,12 +220,12 @@ pub(super) fn suggestions(
     let read = suggestion_read(query, &mapped_plans(connections));
     let mut names = BTreeMap::new();
     let mut notices = Vec::new();
-    for (id, plan) in read.ids {
-        if !names.contains_key(&plan) {
-            let name = plan_name(query, &plan);
-            names.insert(plan.clone(), name);
+    for (id, plan_id) in read.ids {
+        if !names.contains_key(&plan_id) {
+            let name = plan(query, &plan_id).ok().map(|facts| facts.name);
+            names.insert(plan_id.clone(), name);
         }
-        if let Some(Some(name)) = names.get(&plan) {
+        if let Some(Some(name)) = names.get(&plan_id) {
             notices.push(host::notifications::SuggestionNotice {
                 id,
                 plan_name: name.clone(),
@@ -233,9 +233,6 @@ pub(super) fn suggestions(
         }
     }
     Ok(notices)
-}
-fn plan_name(query: &Query, plan: &str) -> Option<String> {
-    plan(query, plan).ok().map(|facts| facts.name)
 }
 pub(super) const LATEST_WINDOW_MS: i64 = 7 * 24 * 60 * 60 * 1000;
 #[derive(Clone, Debug, PartialEq)]
@@ -302,10 +299,10 @@ pub(super) fn attributed(
 }
 pub(super) fn token_share_today(query: &Query) -> Result<ObservationTokenShareHeadlineV1, Failure> {
     let payload = crate::observation::value_show(&[
-        "--breakdown".into(),
-        "billing_class".into(),
-        "--period".into(),
-        "today".into(),
+        "--breakdown".to_owned(),
+        "billing_class".to_owned(),
+        "--period".to_owned(),
+        "today".to_owned(),
     ])
     .map_err(|_| invalid())?;
     let value = query.call("GetValue", payload)?;

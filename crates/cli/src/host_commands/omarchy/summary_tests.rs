@@ -196,7 +196,7 @@ fn omarchy_summary_counts_suggestions_across_every_mapped_plan_once() {
     )
     .unwrap();
     assert_eq!(read.ids.len(), 2);
-    assert_eq!(read.unavailable, ["plan-a".to_owned()].into());
+    assert_eq!(read.unavailable, BTreeSet::from(["plan-a".to_owned()]));
     let mut facts = facts(vec![(
         "codex",
         codex(
@@ -260,7 +260,11 @@ fn omarchy_summary_attributes_the_latest_session_or_reports_none() {
             last_activity_ms: NOW - 20,
         },
     ];
-    let routed = vec![("codex", "context-codex", ["plan-a".to_owned()].into())];
+    let routed = vec![(
+        "codex",
+        "context-codex",
+        BTreeSet::from(["plan-a".to_owned()]),
+    )];
     let mut asked = Vec::new();
     let latest = choose_latest(&candidates, &routed, |context, candidate| {
         asked.push((context.to_owned(), candidate.session_id.clone()));
@@ -394,32 +398,44 @@ fn omarchy_summary_validates_the_trust_state_and_value_pair() {
 fn omarchy_summary_rejects_unbounded_or_inconsistent_output() {
     let value = ready_value();
     let cases: Vec<Box<dyn Fn(&mut serde_json::Value)>> = vec![
-        Box::new(|v| v["schema"] = json!("hiroute.omarchy-summary/v2")),
-        Box::new(|v| v["unexpected"] = json!(true)),
-        Box::new(|v| v["service"]["reason_code"] = json!("service_unavailable")),
-        Box::new(|v| v["suggestions"] = json!(null)),
-        Box::new(|v| v["token_share_today"] = json!(null)),
-        Box::new(|v| v["agents"][0]["agent"] = json!("hermes")),
-        Box::new(|v| v["agents"][0]["launchable"] = json!(false)),
-        Box::new(|v| v["agents"][0]["check_reason_code"] = json!("Not Ready")),
-        Box::new(|v| v["agents"][0]["slot_plans"][0]["slots"] = json!(["default"])),
-        Box::new(|v| v["agents"][0]["slot_plans"][0]["slots"] = json!([])),
-        Box::new(|v| v["agents"][0]["slot_plans"][1]["slots"] = json!(["opus"])),
-        Box::new(|v| v["agents"][0]["slot_plans"][0]["plan_name"] = json!("x".repeat(81))),
-        Box::new(|v| v["agents"][0]["slot_plans"][0]["plan_name"] = json!("a\u{7}b")),
-        Box::new(|v| {
+        Box::new(|v: &mut serde_json::Value| v["schema"] = json!("hiroute.omarchy-summary/v2")),
+        Box::new(|v: &mut serde_json::Value| v["unexpected"] = json!(true)),
+        Box::new(|v: &mut serde_json::Value| {
+            v["service"]["reason_code"] = json!("service_unavailable")
+        }),
+        Box::new(|v: &mut serde_json::Value| v["suggestions"] = json!(null)),
+        Box::new(|v: &mut serde_json::Value| v["token_share_today"] = json!(null)),
+        Box::new(|v: &mut serde_json::Value| v["agents"][0]["agent"] = json!("hermes")),
+        Box::new(|v: &mut serde_json::Value| v["agents"][0]["launchable"] = json!(false)),
+        Box::new(|v: &mut serde_json::Value| {
+            v["agents"][0]["check_reason_code"] = json!("Not Ready")
+        }),
+        Box::new(|v: &mut serde_json::Value| {
+            v["agents"][0]["slot_plans"][0]["slots"] = json!(["default"])
+        }),
+        Box::new(|v: &mut serde_json::Value| v["agents"][0]["slot_plans"][0]["slots"] = json!([])),
+        Box::new(|v: &mut serde_json::Value| {
+            v["agents"][0]["slot_plans"][1]["slots"] = json!(["opus"])
+        }),
+        Box::new(|v: &mut serde_json::Value| {
+            v["agents"][0]["slot_plans"][0]["plan_name"] = json!("x".repeat(81))
+        }),
+        Box::new(|v: &mut serde_json::Value| {
+            v["agents"][0]["slot_plans"][0]["plan_name"] = json!("a\u{7}b")
+        }),
+        Box::new(|v: &mut serde_json::Value| {
             let plans = v["agents"][0]["slot_plans"].as_array_mut().unwrap();
             plans.swap(0, 1);
         }),
-        Box::new(|v| v["suggestions"]["ids"] = json!(["s-1"])),
-        Box::new(|v| {
+        Box::new(|v: &mut serde_json::Value| v["suggestions"]["ids"] = json!(["s-1"])),
+        Box::new(|v: &mut serde_json::Value| {
             v["suggestions"]["count"] = json!(21);
             v["suggestions"]["ids"] = json!((0..21).map(|n| format!("s-{n}")).collect::<Vec<_>>());
         }),
-        Box::new(|v| {
+        Box::new(|v: &mut serde_json::Value| {
             v["latest_routed_session"] = json!({"session_id":"s","agent":"codex","plan_id":"plan-a","last_activity_ms":NOW - 1});
         }),
-        Box::new(|v| {
+        Box::new(|v: &mut serde_json::Value| {
             v["latest_routed_session"] = json!({"session_id":"s","agent":"claude-code","plan_id":"plan-a","last_activity_ms":NOW - reads::LATEST_WINDOW_MS - 1});
         }),
     ];
