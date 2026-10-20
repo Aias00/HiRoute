@@ -123,7 +123,7 @@ impl Journey {
             "node_path":null,"expected_selection_revision":revision});
         command(
             product,
-            &["worker", "dependencies", "select"],
+            &["worker", "dependencies", "select", "--request-stdin"],
             Some(&selection),
             Duration::from_secs(120),
         );

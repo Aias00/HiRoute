@@ -471,7 +471,10 @@ impl ProductionControlRuntime {
             (&pi_subject, scanner.pi_user_skill_target()),
             (&dsh_subject, scanner.dsh_user_skill_target()),
             (&opencode_subject, scanner.opencode_user_skill_target()),
-        ] {
+        ]
+        .into_iter()
+        .filter(|(_, collaboration)| collaboration.is_absolute())
+        {
             let root = collaboration
                 .parent()
                 .and_then(|p| p.parent())

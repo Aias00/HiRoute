@@ -96,6 +96,14 @@ impl OpenCodeCollaborationProbe {
             .map_err(|_| fail())?
             .ok_or_else(fail)?;
         let (before, before_parts) = dependency_parts(&executable, native, &cli, &target)?;
+        let resource_metadata = || {
+            let path = native.skill_target();
+            path.ancestors()
+                .take(2)
+                .map(|path| std::fs::symlink_metadata(path).ok())
+                .collect::<Vec<_>>()
+        };
+        let before_metadata = resource_metadata();
         let root = super::probe_files::temporary("hiroute-opencode-check-").map_err(|_| fail())?;
         let root_path = std::fs::canonicalize(root.path()).map_err(|_| fail())?;
         let workspace = root_path.join("workspace");
@@ -277,6 +285,12 @@ impl OpenCodeCollaborationProbe {
         }
         let (after, after_parts) = dependency_parts(&executable, native, &cli, &target)?;
         if before != after {
+            if before_parts[0] != after_parts[0] {
+                eprintln!(
+                    "native OpenCode resource metadata: before={before_metadata:?} after={:?}",
+                    resource_metadata()
+                );
+            }
             for (index, name) in [
                 "native-resource",
                 "native-executable",

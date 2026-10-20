@@ -148,6 +148,53 @@ fn collaboration_grant_cannot_select_worker_dependencies() {
 }
 
 #[test]
+fn unavailable_opencode_context_does_not_block_other_agents_or_control_startup() {
+    #[cfg(unix)]
+    if crate::test_support::isolated_agent_home(
+        "control::runtime::worker_dependencies_tests::unavailable_opencode_context_does_not_block_other_agents_or_control_startup",
+    ) {
+        return;
+    }
+    let root = crate::test_support::private_tempdir();
+    let home = root.path().join("home");
+    std::fs::create_dir(&home).unwrap();
+    private_root(&home);
+    let mut layout =
+        hiroute_integrations::AgentFilesystemLayoutV1::from_process(&home, root.path());
+    layout.opencode_context = None;
+    let registry = serde_json::from_slice(include_bytes!(
+        "../../../../assets/connector-registry/current/registry-seed.json"
+    ))
+    .unwrap();
+    let models: hiroute_domain::ReleaseModelDataBundleV2 = serde_json::from_slice(include_bytes!(
+        "../../../../assets/release-facts/current/bundle/model-data.json"
+    ))
+    .unwrap();
+    let scanner = hiroute_integrations::FilesystemAgentScannerV1::new(
+        layout,
+        hiroute_integrations::ClaudeRegistrationIndexV1::from_verified_model_data(
+            &registry,
+            &models.data,
+        )
+        .unwrap(),
+    );
+    let runtime = ProductionControlRuntime::prepare_for_role_all_with_scanner(
+        &root.path().join("storage"),
+        crate::release_catalog::fixture_catalog(),
+        None,
+        scanner,
+    )
+    .unwrap();
+    runtime.adapter.reconcile_startup_and_open().unwrap();
+    assert!(runtime.adapter.scanner.opencode_native_context().is_err());
+    let daemon =
+        super::super::LocalControlDaemon::new(ApplicationService::new(runtime.application_ports()))
+            .with_released_commands_only();
+    let selected = daemon.dispatch_wire(wire(&select_request(root.path(), "codex"), None));
+    assert!(selected.error.is_none(), "{selected:?}");
+}
+
+#[test]
 fn opencode_selected_entry_is_discovered_after_restart() {
     #[cfg(unix)]
     if crate::test_support::isolated_agent_home(
