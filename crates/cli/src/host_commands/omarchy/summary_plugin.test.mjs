@@ -46,7 +46,7 @@ test('rejects output that is not one current, bounded summary', () => {
 });
 
 const invalid = {
-  'unknown schema': (s) => { s.schema = 'hiroute.omarchy-summary/v2'; },
+  'unknown schema': (s) => { s.schema = 'hiroute.omarchy-summary'; },
   'unknown field': (s) => { s.extra = true; },
   'missing notifications': (s) => { delete s.notifications; },
   'ready with a reason': (s) => { s.service.reason_code = 'service_unavailable'; },

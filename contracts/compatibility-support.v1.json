@@ -303,6 +303,7 @@
     "hiroute.observation.value-report/v2",
     "hiroute.omarchy-integration/v1",
     "hiroute.omarchy-notifications/v1",
+    "hiroute.omarchy-summary/v1",
     "hiroute.omarchy-transaction/v1",
     "hiroute.operation-cancel-request/v1",
     "hiroute.operation-event/v1",
@@ -1289,6 +1290,16 @@
         "hiroute.omarchy-integration/v1",
         "hiroute.omarchy-transaction/v1",
         "hiroute.omarchy-notifications/v1"
+      ],
+      "legacy_support": []
+    },
+    {
+      "subject": "omarchy_indicator_summary",
+      "audited_prefixes": [
+        "hiroute.omarchy-summary"
+      ],
+      "current_contracts": [
+        "hiroute.omarchy-summary/v1"
       ],
       "legacy_support": []
     },

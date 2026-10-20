@@ -398,7 +398,7 @@ fn omarchy_summary_validates_the_trust_state_and_value_pair() {
 fn omarchy_summary_rejects_unbounded_or_inconsistent_output() {
     let value = ready_value();
     let cases: Vec<Box<dyn Fn(&mut serde_json::Value)>> = vec![
-        Box::new(|v: &mut serde_json::Value| v["schema"] = json!("hiroute.omarchy-summary/v2")),
+        Box::new(|v: &mut serde_json::Value| v["schema"] = json!("hiroute.omarchy-summary")),
         Box::new(|v: &mut serde_json::Value| v["unexpected"] = json!(true)),
         Box::new(|v: &mut serde_json::Value| {
             v["service"]["reason_code"] = json!("service_unavailable")
