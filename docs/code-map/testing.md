@@ -20,6 +20,11 @@ The [Windows uninstall restore plan](../../crates/cli/src/service/restore_plan.r
 keeps Codex root collaboration separate from its model-profile projection; its
 portable unit cases cover owner selection and refusal, while the actual NSIS
 uninstall remains the native evidence for restoring Agent files.
+The [native registration publication regression](../../crates/platform/src/windows/shell_registration.rs)
+uses a unique disposable registry key to reproduce inherited system-file permissions,
+verify private publication and refuse changed retained bytes or a failed export.
+The focused Windows candidate workflow runs it before packaging; it does not
+establish the ordinary-user installed restoration journey.
 
 Choose a user promise, then the layer that can observe its failure. Keep tests
 beside that owner and preserve independent assertions. A focused filesystem

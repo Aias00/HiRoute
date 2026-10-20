@@ -123,8 +123,14 @@ pub(super) fn prepare(value: &Pending, incoming: &Package, daemon: &Path) -> io:
         hiroute_platform::durable::write_private_new(&task_path, &task_xml)?;
     }
     let registration = bundle.join("installation/uninstall.reg");
-    if !value.old.is_empty() && !present(&registration)? {
-        hiroute_platform::windows::shell_registration::export(&registration)?;
+    if !value.old.is_empty() {
+        hiroute_platform::windows::shell_registration::export(&registration).map_err(|error| {
+            if error.kind() == io::ErrorKind::PermissionDenied {
+                error
+            } else {
+                io::Error::other("UPGRADE_REGISTRATION_UNAVAILABLE")
+            }
+        })?;
     }
     let locations = WindowsDesktopRestore {
         schema: "hiroute.windows-desktop-restore/v1".into(),

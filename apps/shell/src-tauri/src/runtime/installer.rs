@@ -97,6 +97,9 @@ fn preflight() -> Result<(), String> {
     Ok(())
 }
 fn prepare_failure(error: &std::io::Error) -> String {
+    if error.to_string() == "UPGRADE_REGISTRATION_UNAVAILABLE" {
+        return "UPGRADE_REGISTRATION_UNAVAILABLE: The installed Windows Apps registration could not be retained or no longer matches the retained copy. No installed program was replaced. Keep the installed version, all data and recovery material. Repair the known installation with its matching complete installer under the same account; if ownership or the correct registration is unclear, preserve both copies and contact support. / 无法保留已安装程序的 Windows 应用注册，或其内容与保留副本不符。本次尚未替换已安装程序。请保留当前版本、全部数据与恢复材料；使用配套完整安装器在同一账户修复已知安装，无法确认归属或正确注册时请保留两份材料并联系支持。".into();
+    }
     if error.to_string() == "UPGRADE_TASK_REGISTRATION_UNAVAILABLE" {
         return "UPGRADE_TASK_REGISTRATION_UNAVAILABLE: The previous HiRoute Task could not be verified or retained. No installed program was replaced. Keep all data and the exact previous installer. If its Task is missing, repair it with that matching installer under the same account; if ownership is unclear, preserve the registration and contact support. / 无法验证或保留旧版 HiRoute 任务，本次尚未替换已安装程序。请保留全部数据与配套旧安装器；若原任务缺失，用该安装器在同一账户修复，无法确认任务归属时保留注册并联系支持。".into();
     }

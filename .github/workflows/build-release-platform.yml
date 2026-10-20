@@ -110,6 +110,11 @@ jobs:
           if ((git rev-parse HEAD) -ne $env:GITHUB_SHA) { throw 'Exact dispatch SHA required' }
           $desktop = @()
           if ($env:WINDOWS_DESKTOP -eq 'true') { $desktop = @('--windows-desktop') }
+          if ($desktop.Count -gt 0) {
+            New-Item artifacts/windows-desktop -ItemType Directory -Force | Out-Null
+            cargo test --locked -p hiroute-platform windows::shell_registration::tests -- --nocapture 2>&1 | Tee-Object artifacts/windows-desktop/registry-test.log
+            if ($LASTEXITCODE -ne 0) { throw 'Native registry recovery publication regression failed' }
+          }
           $buildOutput = python scripts/build-release.py --target $env:RELEASE_TARGET --cpa-source-repo "$env:RUNNER_TEMP/cpa" @desktop
           if ($LASTEXITCODE -ne 0) { throw 'Native Windows candidate build failed' }
           $buildOutput
