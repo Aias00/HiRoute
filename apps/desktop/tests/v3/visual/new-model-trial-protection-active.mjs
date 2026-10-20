@@ -76,23 +76,24 @@ try {
       await load('view=editor&release-evidence=retention');
       await waitFor(client,`!!document.querySelector('[data-trust-control="smart"]')`);
       await click('[role="tab"]',lang==='zh'?'模型表现':'Model performance');
-      await waitFor(client,`document.querySelector('.trust-release')?.dataset.releaseState==='unavailable'`);
-      assert.ok(await evaluate(client,`document.querySelector('.trust-release').textContent.includes(${JSON.stringify(lang==='zh'?'时间范围不同':'different time range')})`));
-      assert.ok(await evaluate(client,`!!document.querySelector('.quality-filters select option[value="one_day"]')`),'A shorter retained interval must be selectable');
-      await evaluate(client,`(()=>{const s=document.querySelector('.quality-filters select');s.value='one_day';s.dispatchEvent(new Event('change',{bubbles:true}));return true;})()`);
-      await waitFor(client,`document.querySelector('.trust-release')?.dataset.releaseState==='available'`);
-      assert.ok(await evaluate(client,`document.querySelector('.trust-release').textContent.includes(${JSON.stringify(lang==='zh'?'解除 5 次':'5 protections released')})`));
+      for(const period of ['seven_days','all','one_day']) {
+        await evaluate(client,`(()=>{const s=document.querySelector('.quality-filters select');s.value=${JSON.stringify(period)};s.dispatchEvent(new Event('change',{bubbles:true}));return true;})()`);
+        await waitFor(client,`!!document.querySelector('.trust-release')`);
+        assert.equal(await evaluate(client,`document.querySelector('.trust-release').dataset.releaseState`),'available',`${period} must use one retained interval`);
+        assert.ok(await evaluate(client,`document.querySelector('.trust-release').textContent.includes(${JSON.stringify(lang==='zh'?'解除 5 次':'5 protections released')})`));
+        const scope=await evaluate(client,`(()=>{const xs=window.trialTrace.filter(x=>x.command==='observation_read').map(x=>x.payload.request.intent),t=xs.filter(x=>x.view==='plan_trust').at(-1).query,q=xs.filter(x=>x.view==='plan_quality'&&x.query.include_routing_observations).at(-1).query;return {trust:[t.from_ms,t.to_ms],quality:[q.from_ms,q.to_ms]};})()`);
+        assert.deepEqual(scope.trust,scope.quality);
+        if(period==='one_day') assert.equal(scope.trust[1]-scope.trust[0],86_400_001);
+        else {assert.ok(scope.trust[0]>scope.trust[1]-7*86_400_000+20);assert.ok(scope.trust[1]-scope.trust[0]>6.99*86_400_000);}
+        await evaluate(client,`document.querySelector('.trust-protection').scrollIntoView({block:'center'});true`);
+        await shot(`retained-window-${period}-${name}`);
+      }
       await click('.segmented button',lang==='zh'?'按执行 Agent':'By execution agent');
       await waitFor(client,`!document.querySelector('.trust-release')`);
       await click('.segmented button',lang==='zh'?'按模型':'By model');
       await waitFor(client,`document.querySelector('.trust-release')?.dataset.releaseState==='available'`);
       assert.equal(await evaluate(client,`document.querySelector('.quality-filters select').value`),'one_day');
-      const scope=await evaluate(client,`(()=>{const xs=window.trialTrace.filter(x=>x.command==='observation_read').map(x=>x.payload.request.intent),t=xs.filter(x=>x.view==='plan_trust').at(-1).query,q=xs.filter(x=>x.view==='plan_quality'&&x.query.include_routing_observations).at(-1).query;return {trust:[t.from_ms,t.to_ms],quality:[q.from_ms,q.to_ms]};})()`);
-      assert.deepEqual(scope.trust,scope.quality);
-      assert.equal(scope.trust[1]-scope.trust[0],86_400_001);
       assert.ok(await evaluate(client,fits));
-      await evaluate(client,`document.querySelector('.trust-protection').scrollIntoView({block:'center'});true`);
-      await shot(`retained-window-${name}`);
     });
     await check(`history-outcomes-${name}`,async()=>{
       await load('view=timeline&turns=40&protection=1');
@@ -110,6 +111,18 @@ try {
     });
     await check(`overview-navigation-${name}`,async()=>{
       await load('view=timeline&turns=40&protection=1');await waitFor(client,`document.querySelectorAll('.routing-overview-turn').length===40`);
+      assert.equal(await evaluate(client,`document.querySelectorAll('.routing-overview-turn[tabindex="0"]').length`),1,'The entire overview has one tab stop');
+      assert.equal(await evaluate(client,`document.querySelectorAll('.routing-overview-turn[tabindex="-1"]').length`),39);
+      assert.ok(await evaluate(client,`[...document.querySelectorAll('.routing-overview-turn')].every(e=>e.getAttribute('aria-label')?.startsWith('T'))`));
+      await evaluate(client,`document.querySelector('.routing-overview-turn[tabindex="0"]').focus();true`);
+      const key=async(key,code=key)=>{for(const type of ['keyDown','keyUp'])await client.send('Input.dispatchKeyEvent',{type,key,code});};
+      await key('Home');assert.equal(await evaluate(client,`document.activeElement.dataset.overviewTurn`),'request-1');
+      await key('ArrowLeft');assert.equal(await evaluate(client,`document.activeElement.dataset.overviewTurn`),'request-40');
+      await key('ArrowRight');assert.equal(await evaluate(client,`document.activeElement.dataset.overviewTurn`),'request-1');
+      await key('ArrowRight');assert.equal(await evaluate(client,`document.activeElement.dataset.overviewTurn`),'request-2');
+      await key(' ','Space');await waitFor(client,`document.querySelector('.routing-detail-head > strong')?.textContent==='T2'`);
+      await key('End');assert.equal(await evaluate(client,`document.activeElement.dataset.overviewTurn`),'request-40');
+      await key('Tab');assert.ok(await evaluate(client,`!document.activeElement.closest('.routing-overview')`),'Tab leaves the overview');
       assert.equal(await evaluate(client,`document.querySelectorAll('.routing-overview-turn[data-protection=suppressed]').length`),7);
       assert.ok(await evaluate(client,`document.querySelectorAll('.routing-overview-turn[data-problem=true]').length>0`));
       assert.ok(await evaluate(client,`getComputedStyle(document.querySelector('.routing-overview-turn.cyan')).color===getComputedStyle(document.querySelector('.routing-turn.cyan .routing-turn-reason')).color`));

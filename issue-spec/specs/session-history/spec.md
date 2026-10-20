@@ -515,7 +515,7 @@ Source SPEC comments:
 
 ### Requirement: Long routing timelines provide a navigable overview
 
-Above the routing lanes, session detail MUST provide a compact overview with one chronological mark per retained agent turn. Marks use the same Regular and Primary colors as the lanes and identify recorded low scores or failures, protection, and released protection. An outline shows the visible lane interval and follows scrolling, resizing and newly received turns. Activating a mark scrolls its turn into the lane viewport and selects it without changing routing or calling a model. The overview stays within the supported small window and preserves chronological keyboard access through the lanes; it is not the sole accessible path to a turn. Unknown groups and unavailable evidence remain distinct. Existing live-arrival handling, explicit-selection retention and reduced-motion preferences still apply.
+Above the routing lanes, session detail MUST provide a compact overview with one chronological mark per retained agent turn. Marks use the same Regular and Primary colors as the lanes and identify recorded low scores or failures, protection, and released protection. An outline shows the visible lane interval and follows scrolling, resizing and newly received turns. Activating a mark scrolls its turn into the lane viewport and selects it without changing routing or calling a model. The overview stays within the supported small window and has one Tab stop with roving focus across its chronologically ordered marks. Arrow keys move focus, Home and End reach the first and last mark, and Enter or Space selects the focused turn. Each mark retains a readable accessible label. Tab leaves the overview without visiting every mark. Chronological keyboard access through the lanes remains available; the overview is not the sole accessible path to a turn. Unknown groups and unavailable evidence remain distinct. Existing live-arrival handling, explicit-selection retention and reduced-motion preferences still apply.
 
 #### Scenario: Forty-turn overview
 
@@ -529,8 +529,8 @@ Above the routing lanes, session detail MUST provide a compact overview with one
 
 #### Scenario: Keyboard and live append
 
-- **WHEN** turns arrive while the user navigates lane controls by keyboard
-- **THEN** chronological focus and live-follow or explicit-selection behavior remain available and the overview adds matching marks
+- **WHEN** turns arrive while the user navigates overview marks or lane controls by keyboard
+- **THEN** the overview keeps one Tab stop and its readable labels, arrow navigation and activation work, and chronological lane focus and live-follow or explicit-selection behavior remain available as matching marks are added
 
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/140#issuecomment-6253019758

@@ -8,6 +8,7 @@ import { ContentExcerpt } from './Sessions';
 import { safeDiagnosticCode } from '../error-code';
 import { observationRead } from './observation-client';
 import { qualityExecutionModels } from './plan-quality-models';
+import { planQualityWindow } from './plan-quality-window';
 import { PlanQualityStage, type PlanQualitySample } from './PlanQualityStage';
 import { RoutingObservations, type RoutingSummary } from './RoutingObservations';
 import { releasedProtectionEvidence, type ReleasedProtectionEvidence } from './trust/protection-evidence';
@@ -55,8 +56,7 @@ export function PlanQuality({
   const generation = useRef(0);
   // A detail filter or next page must retain exactly the same time window.
   const window = useMemo(() => {
-    const now = Date.now();
-    return { from: period === 'one_day' ? now - 86_400_000 : period === 'seven_days' ? now - 7 * 86_400_000 : undefined, to: now + 1 };
+    return planQualityWindow(period, Date.now());
   }, [planId, sessionId, planRevision, period, version, refreshVersion, reload, active]);
   const revision = version === 'current' ? planRevision || null : version === 'all' ? null : Number(version);
 

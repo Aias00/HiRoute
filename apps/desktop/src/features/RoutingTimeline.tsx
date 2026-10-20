@@ -53,6 +53,7 @@ export function RoutingTimeline({ session, language, active, displayed, refreshV
   const [arrivals, setArrivals] = useState(new Set<string>());
   const [unseen, setUnseen] = useState<string[]>([]);
   const [viewport, setViewport] = useState({ from: 0, to: 1 });
+  const [overviewFocus, setOverviewFocus] = useState<string | null>(null);
   const watermark = useRef<string | null>(null);
   const blockedScope = useRef(false);
   const probed = useRef(false);
@@ -60,7 +61,7 @@ export function RoutingTimeline({ session, language, active, displayed, refreshV
   const stored = useRef(new Map<string, TimelineTurn>());
   const scroller = useRef<HTMLDivElement>(null);
   useEffect(() => { blockedScope.current = false; setError(''); }, [session]);
-  useEffect(() => { watermark.current = null; probed.current = false; lastRead.current = -Infinity; stored.current.clear(); setTurns([]); setSelected(null); setLoaded(false); setArrivals(new Set()); setUnseen([]); }, [session, refreshVersion]);
+  useEffect(() => { watermark.current = null; probed.current = false; lastRead.current = -Infinity; stored.current.clear(); setTurns([]); setSelected(null); setOverviewFocus(null); setLoaded(false); setArrivals(new Set()); setUnseen([]); }, [session, refreshVersion]);
   useEffect(() => {
     if (!arrivals.size) return;
     const timer = window.setTimeout(() => setArrivals(new Set()), 600);
@@ -142,6 +143,7 @@ export function RoutingTimeline({ session, language, active, displayed, refreshV
   useEffect(() => setAllRequests(false), [selected]);
 
   const selectedTurn = turns.find(t => t.turn_id === selected) ?? turns[turns.length - 1];
+  const overviewTabStop = turns.some(turn => turn.turn_id === overviewFocus) ? overviewFocus : selectedTurn?.turn_id;
   const index = (turn: TimelineTurn) => turns.indexOf(turn) + 1;
   const boundary = (turn: TimelineTurn) => turn.boundary === 'new_user_message' ? text('新消息', 'New message') : turn.boundary === 'context_rebuild' ? text('压缩后', 'After compaction') : text('边界未确认', 'Boundary unknown');
   const laneName = (lane: Lane) => lane === 'primary' ? text('主力', 'Primary') : lane === 'regular' ? text('常规', 'Regular') : text('分组未记录', 'Group unknown');
@@ -295,7 +297,14 @@ export function RoutingTimeline({ session, language, active, displayed, refreshV
             const protectedTurn = outcome === 'applied' || outcome === 'retained_unavailable' || turn.selection?.selection_reason === 'low_competence';
             const problem = below(turn) || turn.status === 'failed' || turn.requests.some(failed);
             const label = [`T${i + 1}`, laneName(laneOf(turn)), problem ? text('低分或失败', 'Low score or failure') : '', protectionLabel(turn)].filter(Boolean).join(' · ');
-            return <g key={turn.turn_id} className={`routing-overview-turn ${tone(laneOf(turn))}`} role="button" tabIndex={0} aria-label={label} aria-pressed={selectedTurn?.turn_id === turn.turn_id} data-overview-turn={turn.turn_id} data-protection={outcome} data-problem={problem || undefined} onClick={() => selectTurn(turn, true)} onKeyDown={event => {
+            return <g key={turn.turn_id} className={`routing-overview-turn ${tone(laneOf(turn))}`} role="button" tabIndex={overviewTabStop === turn.turn_id ? 0 : -1} aria-label={label} aria-pressed={selectedTurn?.turn_id === turn.turn_id} data-overview-turn={turn.turn_id} data-protection={outcome} data-problem={problem || undefined} onFocus={() => setOverviewFocus(turn.turn_id)} onClick={() => { setOverviewFocus(turn.turn_id); selectTurn(turn, true); }} onKeyDown={event => {
+              const next = event.key === 'Home' ? 0 : event.key === 'End' ? turns.length - 1
+                : event.key === 'ArrowRight' || event.key === 'ArrowDown' ? (i + 1) % turns.length
+                : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? (i + turns.length - 1) % turns.length : null;
+              if (next !== null) {
+                event.preventDefault();
+                event.currentTarget.parentElement?.querySelectorAll<SVGGElement>('.routing-overview-turn')[next]?.focus();
+              }
               if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectTurn(turn, true); }
             }}>
               <title>{label}</title>
