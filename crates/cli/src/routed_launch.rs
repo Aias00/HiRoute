@@ -32,10 +32,10 @@ pub(super) fn execute(arguments: &[OsString]) -> CliExecution {
         }
     };
     let mut check = AgentLaunchCheckV1::new(invocation.agent, invocation.context.clone());
-    let service = query("GetSystemStatus", json!({}))
-        .ok()
-        .and_then(|value| serde_json::from_value::<SystemStatusV1>(value).ok());
-    let ready = service.as_ref().is_some_and(|s| {
+    let service = query("GetSystemStatus", json!({})).and_then(|value| {
+        serde_json::from_value::<SystemStatusV1>(value).map_err(|_| QueryFailure::Client)
+    });
+    let ready = service.as_ref().is_ok_and(|s| {
         s.daemon == "role_all"
             && s.gateway == "ready"
             && s.control_store == "ready"
@@ -48,7 +48,10 @@ pub(super) fn execute(arguments: &[OsString]) -> CliExecution {
         "service_unavailable",
         "hiroute service start",
     ) {
-        return refused(&invocation, check);
+        // A service that answers but is not ready is a readiness failure; an unreachable one
+        // keeps the released unavailable result.
+        let released = matches!(service, Err(QueryFailure::Client)).then(unavailable);
+        return refused(&invocation, check, released);
     }
     let read = query(
         "GetManagedAgentLaunchDescriptor",
@@ -57,16 +60,24 @@ pub(super) fn execute(arguments: &[OsString]) -> CliExecution {
             context: invocation.context.clone(),
         }),
     )
-    .ok()
-    .and_then(|value| serde_json::from_value::<RoutedLaunchReadV1>(value).ok());
-    let Some(read) = read else {
-        check.record(
-            "connection",
-            false,
-            "connection_unavailable",
-            "hiroute agents connect status --help",
-        );
-        return refused(&invocation, check);
+    .and_then(|value| {
+        serde_json::from_value::<RoutedLaunchReadV1>(value).map_err(|_| QueryFailure::Client)
+    });
+    let read = match read {
+        Ok(read) => read,
+        Err(failure) => {
+            check.record(
+                "connection",
+                false,
+                "connection_unavailable",
+                "hiroute agents connect status --help",
+            );
+            let released = match failure {
+                QueryFailure::Client => unavailable(),
+                QueryFailure::Service(response) => super::render(*response),
+            };
+            return refused(&invocation, check, Some(released));
+        }
     };
     let claude_independent =
         read.activation_mode == Some(hiroute_application_api::AgentActivationModeV1::ManagedLaunch);
@@ -87,7 +98,7 @@ pub(super) fn execute(arguments: &[OsString]) -> CliExecution {
             "invalid_launch_response",
             "hiroute agents connect status --help",
         );
-        return refused(&invocation, check);
+        return refused(&invocation, check, Some(unavailable()));
     }
     if invocation.context.is_none() && read.check.candidate_contexts.len() > 1 {
         check.record(
@@ -96,7 +107,7 @@ pub(super) fn execute(arguments: &[OsString]) -> CliExecution {
             "ambiguous_context",
             "hiroute agent launch --help",
         );
-        return refused(&invocation, check);
+        return refused(&invocation, check, None);
     }
     let expected: &[&str] = if invocation.agent == RoutedLaunchAgentV1::Codex {
         &["connection", "plans"]
@@ -125,22 +136,31 @@ pub(super) fn execute(arguments: &[OsString]) -> CliExecution {
             "invalid_launch_response",
             "hiroute agents connect status --help",
         );
-        return refused(&invocation, check);
+        return refused(&invocation, check, Some(unavailable()));
     }
     check.checks.extend(read.check.checks);
     check.launchable = read.check.launchable && check.checks.iter().all(|entry| entry.ok);
     let descriptor = read.descriptor.filter(|_| check.launchable);
     if !check.launchable || descriptor.is_none() {
         check.launchable = false;
-        if check.checks.iter().all(|entry| entry.ok) {
+        let released = if check.checks.iter().all(|entry| entry.ok) {
             check.record(
                 "connection",
                 false,
                 "descriptor_unavailable",
                 "hiroute agents connect preview --help",
             );
-        }
-        return refused(&invocation, check);
+            Some(unavailable())
+        } else {
+            // A named connection that does not exist keeps its released not-found result.
+            (invocation.context.is_some()
+                && check
+                    .checks
+                    .iter()
+                    .any(|entry| entry.reason_code.as_deref() == Some("connection_missing")))
+            .then(|| super::failure(ErrorCode::ResourceNotFound, Some(super::next_request_id())))
+        };
+        return refused(&invocation, check, released);
     }
     let descriptor = descriptor.expect("checked above");
     let connection = check
@@ -167,7 +187,7 @@ pub(super) fn execute(arguments: &[OsString]) -> CliExecution {
             "invalid_launch_descriptor",
             "hiroute agents connect preview --help",
         );
-        return refused(&invocation, check);
+        return refused(&invocation, check, Some(unavailable()));
     }
     match descriptor {
         RoutedLaunchDescriptorV1::Codex(d) => {
@@ -179,7 +199,7 @@ pub(super) fn execute(arguments: &[OsString]) -> CliExecution {
                     "installation_changed",
                     "hiroute agents connect preview --help",
                 );
-                return refused(&invocation, check);
+                return refused(&invocation, check, None);
             }
             if invocation.check {
                 return super::success(check, Some(super::next_request_id()));
@@ -218,7 +238,7 @@ pub(super) fn execute(arguments: &[OsString]) -> CliExecution {
                         .unwrap_or_else(|| "Repair unreadable project or managed Claude settings, then retry hiroute agent launch --check".into());
                     check.checks.pop();
                     check.record("managed_launch", false, "managed_launch_conflict", &repair);
-                    return refused(&invocation, check);
+                    return refused(&invocation, check, None);
                 }
             }
             let mut native = vec![
@@ -231,14 +251,21 @@ pub(super) fn execute(arguments: &[OsString]) -> CliExecution {
             native.extend_from_slice(&invocation.child);
             let native = match managed_launch::parse_invocation(&native) {
                 Ok(native) => native,
-                Err(_) => {
+                Err(error) => {
                     check.record(
                         "managed_launch",
                         false,
                         "caller_auth_override",
                         "hiroute agent launch --help",
                     );
-                    return refused(&invocation, check);
+                    let code = match error {
+                        managed_launch::ManagedLaunchFailure::AuthPrecedenceConflict => {
+                            ErrorCode::AgentAuthPrecedenceConflict
+                        }
+                        _ => ErrorCode::InvalidArguments,
+                    };
+                    let released = super::failure(code, Some(super::next_request_id()));
+                    return refused(&invocation, check, Some(released));
                 }
             };
             let executable = match super::current_executable() {
@@ -259,7 +286,7 @@ pub(super) fn execute(arguments: &[OsString]) -> CliExecution {
                         "managed_launch_conflict",
                         "hiroute agent launch --help",
                     );
-                    return refused(&invocation, check);
+                    return refused(&invocation, check, Some(unavailable()));
                 }
             };
             if invocation.check {
@@ -274,7 +301,15 @@ pub(super) fn execute(arguments: &[OsString]) -> CliExecution {
     }
 }
 
-fn query(operation: &str, payload: Value) -> Result<Value, ()> {
+/// Why a launch read produced no usable data.
+enum QueryFailure {
+    /// The service could not be reached, or its reply could not be used.
+    Client,
+    /// The service answered with a typed error.
+    Service(Box<MachineEnvelopeV2<Value>>),
+}
+
+fn query(operation: &str, payload: Value) -> Result<Value, QueryFailure> {
     let request = LocalControlWireRequestV2 {
         schema_version: LOCAL_CONTROL_SCHEMA_V2,
         request_id: super::next_request_id(),
@@ -284,14 +319,25 @@ fn query(operation: &str, payload: Value) -> Result<Value, ()> {
     };
     let response = LocalControlClient::cli_from_environment()
         .and_then(|client| client.call(request))
-        .map_err(|_| ())?;
+        .map_err(|_| QueryFailure::Client)?;
     if response.status != MachineStatus::Succeeded {
-        return Err(());
+        return Err(QueryFailure::Service(Box::new(response)));
     }
-    response.data.ok_or(())
+    response.data.ok_or(QueryFailure::Client)
 }
 
-fn refused(invocation: &args::Invocation, check: AgentLaunchCheckV1) -> CliExecution {
+fn unavailable() -> CliExecution {
+    super::failure(ErrorCode::DaemonUnavailable, Some(super::next_request_id()))
+}
+
+/// `--check` reports every failed check as exit 78 with the check. A launch keeps the released
+/// result when one exists (usage, conflict, not found, unavailable); 78 covers only the readiness
+/// checks the service reports after it answers.
+fn refused(
+    invocation: &args::Invocation,
+    check: AgentLaunchCheckV1,
+    released: Option<CliExecution>,
+) -> CliExecution {
     let failed = check.checks.iter().find(|entry| !entry.ok);
     let reason = failed
         .and_then(|entry| entry.reason_code.as_deref())
@@ -335,6 +381,12 @@ fn refused(invocation: &args::Invocation, check: AgentLaunchCheckV1) -> CliExecu
             command.args(&invocation.child);
             return launched(managed_launch::spawn_and_wait(&mut command));
         }
+    }
+    if let Some(mut result) = released.filter(|_| !invocation.check) {
+        if !emitted {
+            result.stderr.insert_str(0, &message);
+        }
+        return result;
     }
     let mut result = super::render(MachineEnvelopeV2::failed_with_data(
         ErrorV1::new(ErrorCode::ActionRequired),

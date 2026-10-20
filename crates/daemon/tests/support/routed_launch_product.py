@@ -106,6 +106,15 @@ def run(repository):
         missing = invoke(product, check_args, env)
         assert missing.returncode == 78 and not capture.exists()
         assert json.loads(missing.stdout)['data']['launchable'] is False
+        # A launch refused by a readiness check the service reports is 78 with only the reason.
+        refused = invoke(product, ['agent', 'launch', '--agent', 'codex', '--', 'prompt'], env)
+        assert refused.returncode == 78 and not capture.exists() and not refused.stdout
+        assert refused.stderr.startswith(b'HiRoute launch refused: ')
+        # A named connection that does not exist keeps the released not-found result.
+        unknown = invoke(product, ['agent', 'launch', '--agent', 'claude-code', '--context',
+                                   'missing-context', '--', 'prompt'], env)
+        assert unknown.returncode == 5 and not capture.exists()
+        assert json.loads(unknown.stdout)['error']['code'] == 'RESOURCE_NOT_FOUND'
         saved = save_native_source(product, upstream, NATIVE_TOKEN, cli_input=True)
         product.public_cli('protected-input release --candidate candidate/native/product')
         publish_plan_and_agent(product, saved['binding_id'], native_model_mode='hiroute_only')
@@ -185,10 +194,14 @@ def run(repository):
         stopped = invoke(product, check_args, env)
         assert stopped.returncode == 78 and not capture.exists()
         assert json.loads(stopped.stdout)['data']['checks'][0]['reason_code'] == 'service_unavailable'
+        # Only --check reports an unreachable service as 78; a launch keeps the released
+        # unavailable result and its recovery hint.
         piped = invoke(product, ['agent', 'launch', '--agent', 'codex', '--native-fallback=prompt', '--'], env, b'y\n')
-        assert piped.returncode == 78 and not capture.exists() and b'[y/N]' not in piped.stderr
+        assert piped.returncode == 6 and not capture.exists() and b'[y/N]' not in piped.stderr
+        assert json.loads(piped.stdout)['error']['code'] == 'DAEMON_UNAVAILABLE'
+        assert b'service_unavailable' in piped.stderr and b'hiroute service start' in piped.stderr
         for answer in (b'n\n', b'Y\n', b'\n'):
-            terminal(product, env, answer, 78)
+            terminal(product, env, answer, 6)
             assert not capture.exists()
         transcript = terminal(product, env, b'y\n', 23)
         assert b'This session is not routed through HiRoute.' in transcript

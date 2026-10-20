@@ -5,7 +5,7 @@
   },
   "product_contract_revision": "487a807c8dc25cfb24e8b097882cd3bb9716a009",
   "proposal_map_revision": "ab4da93cc49c6ec56a01e046230411ff1ca82300",
-  "descriptor_digest": "sha256:b9708f7882df697cb1e278b616d53331485a4ef182f1abf48edb2d1da5cb80a5",
+  "descriptor_digest": "sha256:f53c670633e4ccd99e2eb94114f0ca4ce1958b21af578e0f152fdcedacf8a081",
   "visibility": "release",
   "commands": [
     {
@@ -859,7 +859,7 @@
         "network_and_model_use": "Preflight and --check make no model request. A routed Agent uses the HiRoute Gateway. Only explicitly confirmed native fallback starts an unrouted session, labelled as such.",
         "automation": "Treat the exact -- delimiter as the child argv boundary. Before-spawn failures are typed machine envelopes; after spawn, consume the child streams and exit status directly.",
         "output": "--check emits a machine envelope containing hiroute.agent-launch-check/v1. After spawn, stdout and stderr are launched Agent streams and the descriptor is not printed. A refused launch states its reason and repair on stderr; --output json also carries the check in the machine envelope.",
-        "exit_status": "78 (EX_CONFIG) is reserved for a failed readiness check; no Agent starts unless terminal use explicitly confirms native fallback. 2 rejects arguments; 6 is a launcher lifecycle failure. Once started, the Agent exit code or 128 plus its terminating Unix signal is returned unchanged.",
+        "exit_status": "Returns the launched Agent exit code, or 128 plus its terminating Unix signal. Before spawn: 2 usage; 3 auth/routing conflict; 5 connection not found; 6 service unavailable; 78 (EX_CONFIG) when the service answers but a readiness check fails: service not ready, connection not current, mapped Plan unpublished or Claude managed-launch conflict. --check returns 78 with the check for any failed check. No Agent starts after a refusal unless terminal use explicitly confirms native fallback. Launcher lifecycle failures return 6.",
         "examples": [
           "hiroute agent launch --agent claude-code --context agent-context/claude/example -- --print 'hello'"
         ],

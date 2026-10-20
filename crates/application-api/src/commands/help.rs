@@ -113,7 +113,7 @@ pub(super) fn exit_status(command_id: &str) -> &'static str {
     if command_id.starts_with("worker.") {
         "0 accepted/query/pending; final exec/continue failure is nonzero; 2 usage; 3 conflict/busy; 4 denied; 5 not found; 6 unavailable; 7 action required; 8 needs attention; 1 execution failure. A result query may exit 0 while honestly reporting a failed run."
     } else if command_id == "agent.launch" {
-        "78 (EX_CONFIG) is reserved for a failed readiness check; no Agent starts unless terminal use explicitly confirms native fallback. 2 rejects arguments; 6 is a launcher lifecycle failure. Once started, the Agent exit code or 128 plus its terminating Unix signal is returned unchanged."
+        "Returns the launched Agent exit code, or 128 plus its terminating Unix signal. Before spawn: 2 usage; 3 auth/routing conflict; 5 connection not found; 6 service unavailable; 78 (EX_CONFIG) when the service answers but a readiness check fails: service not ready, connection not current, mapped Plan unpublished or Claude managed-launch conflict. --check returns 78 with the check for any failed check. No Agent starts after a refusal unless terminal use explicitly confirms native fallback. Launcher lifecycle failures return 6."
     } else {
         "0 success/accepted; 2 usage; 3 conflict/blocker; 4 capability denied; 5 not found; 6 unavailable; 7 action required; 8 needs attention."
     }
