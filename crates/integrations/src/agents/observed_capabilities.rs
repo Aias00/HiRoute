@@ -277,13 +277,19 @@ mod tests {
         // Reproduce the observed native read: ctime changed while bytes, inode,
         // access policy and mtime remained identical. chmod with the same policy
         // provides this metadata event without depending on a macOS background service.
-        std::thread::sleep(std::time::Duration::from_millis(2));
-        std::fs::set_permissions(&target, original.permissions()).unwrap();
-        let after = std::fs::metadata(&target).unwrap();
-        assert_ne!(
-            (original.ctime(), original.ctime_nsec()),
-            (after.ctime(), after.ctime_nsec())
-        );
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        let after = loop {
+            std::fs::set_permissions(&target, original.permissions()).unwrap();
+            let after = std::fs::metadata(&target).unwrap();
+            if (original.ctime(), original.ctime_nsec()) != (after.ctime(), after.ctime_nsec()) {
+                break after;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "filesystem ctime did not advance"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        };
         assert_eq!(original.modified().unwrap(), after.modified().unwrap());
         assert_ne!(strict.0, dependencies(None, &target).unwrap().0);
         assert_eq!(
