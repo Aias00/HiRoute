@@ -95,7 +95,7 @@ impl OpenCodeCollaborationProbe {
         let cli = super::executable::resolve(cli)
             .map_err(|_| fail())?
             .ok_or_else(fail)?;
-        let before = dependencies(&executable, native, &cli, &target)?;
+        let (before, before_parts) = dependency_parts(&executable, native, &cli, &target)?;
         let root = super::probe_files::temporary("hiroute-opencode-check-").map_err(|_| fail())?;
         let root_path = std::fs::canonicalize(root.path()).map_err(|_| fail())?;
         let workspace = root_path.join("workspace");
@@ -275,7 +275,21 @@ impl OpenCodeCollaborationProbe {
         if challenge.step != 3 {
             return Err(qoder_error("native collaboration incomplete"));
         }
-        if before != dependencies(&executable, native, &cli, &target)? {
+        let (after, after_parts) = dependency_parts(&executable, native, &cli, &target)?;
+        if before != after {
+            for (index, name) in [
+                "native-resource",
+                "native-executable",
+                "trusted-cli",
+                "installed-skill",
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                if before_parts[index] != after_parts[index] {
+                    eprintln!("native OpenCode collaboration dependency changed: {name}");
+                }
+            }
             return Err(qoder_error("native context changed"));
         }
         Ok(Evidence {
@@ -293,25 +307,33 @@ fn dependencies(
     cli: &Path,
     target: &Target,
 ) -> Result<CanonicalDigest, QoderNativeError> {
+    dependency_parts(executable, native, cli, target).map(|(digest, _)| digest)
+}
+fn dependency_parts(
+    executable: &Path,
+    native: &OpenCodeNativeContext,
+    cli: &Path,
+    target: &Target,
+) -> Result<(CanonicalDigest, [CanonicalDigest; 4]), QoderNativeError> {
     let skill = match target {
         Target::PreinstallCapability => None,
         Target::InstalledUserSkill { expected_content } => Some(CanonicalDigest::of_bytes(
             confirmed_skill(&native.skill_target(), expected_content)?.as_bytes(),
         )),
     };
-    CanonicalDigest::of(&(
-        CONTRACT,
-        native,
+    let resource =
         super::observed_capabilities::dependencies(Some(executable), &native.skill_target())
             .map_err(|_| qoder_error("native resource identity"))?
-            .0,
-        super::native_ingress_probe::binary_identity(executable)
-            .map_err(|_| qoder_error("native binary identity"))?,
-        super::native_ingress_probe::binary_identity(cli)
-            .map_err(|_| qoder_error("CLI identity"))?,
-        skill,
-    ))
-    .map_err(|_| qoder_error("check dependencies"))
+            .0;
+    let executable = super::native_ingress_probe::binary_identity(executable)
+        .map_err(|_| qoder_error("native binary identity"))?;
+    let cli = super::native_ingress_probe::binary_identity(cli)
+        .map_err(|_| qoder_error("CLI identity"))?;
+    let skill_digest =
+        CanonicalDigest::of(&skill).map_err(|_| qoder_error("check dependencies"))?;
+    let digest = CanonicalDigest::of(&(CONTRACT, native, &resource, &executable, &cli, skill))
+        .map_err(|_| qoder_error("check dependencies"))?;
+    Ok((digest, [resource, executable, cli, skill_digest]))
 }
 struct Challenge {
     name: String,

@@ -19,6 +19,52 @@ fn opencode_pending_file_tail_retries_the_original_context_bound_operation() {
 }
 
 #[test]
+fn opencode_selected_native_default_blocks_restore_with_an_actionable_preview() {
+    if crate::test_support::isolated_agent_home(
+        "control::runtime::native_model::tests::settings_entry_tests::qoder::opencode::opencode_selected_native_default_blocks_restore_with_an_actionable_preview",
+    ) {
+        return;
+    }
+    let fixture = QoderFixture::with_kind(true, AgentKindV1::OpenCode);
+    configure_models(&fixture);
+    let status = model_status(&fixture);
+    let mut value: serde_json::Value =
+        serde_json::from_slice(&fs::read(&fixture.native_config).unwrap()).unwrap();
+    let (provider, declaration) = value["provider"]
+        .as_object()
+        .unwrap()
+        .iter()
+        .next()
+        .unwrap();
+    let model = declaration["models"]
+        .as_object()
+        .unwrap()
+        .keys()
+        .next()
+        .unwrap();
+    value["model"] = json!(format!("{provider}/{model}"));
+    private_file(&fixture.native_config, &serde_json::to_vec(&value).unwrap());
+    let before = fs::read(&fixture.native_config).unwrap();
+    let preview = fixture.service.dispatch_wire(request(
+        "PreviewAgentConnectionRestore",
+        json!({"spec":restore_spec(&fixture, &status)}),
+        None,
+    ));
+    assert!(preview.error.is_none(), "{preview:?}");
+    let preview = preview.data.unwrap();
+    assert_eq!(preview["applicable"], false, "{preview:?}");
+    assert!(
+        preview["blockers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row["reason"] == "additional_default_in_use"),
+        "{preview:?}"
+    );
+    assert_eq!(fs::read(&fixture.native_config).unwrap(), before);
+}
+
+#[test]
 fn opencode_review_new_jsonc_keeps_managed_json_binding_after_restart_and_restore() {
     if crate::test_support::isolated_agent_home(
         "control::runtime::native_model::tests::settings_entry_tests::qoder::opencode::opencode_review_new_jsonc_keeps_managed_json_binding_after_restart_and_restore",
