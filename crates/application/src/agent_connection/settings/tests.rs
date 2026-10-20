@@ -46,7 +46,7 @@ fn facts() -> AgentSettingsFacts {
                 login_item_removal_required: false,
                 fixed_candidate_facts: Vec::new(),
             },
-            native: SettingsModelNativeFacts::Claude(SettingsClaudeNativeFacts {
+            native: SettingsModelNativeFacts::Claude(Box::new(SettingsClaudeNativeFacts {
                 supports_managed_launch: true,
                 active_connection: None,
                 pending_connection: None,
@@ -54,7 +54,7 @@ fn facts() -> AgentSettingsFacts {
                 plan_capability_unavailable: false,
                 native_default_model: None,
                 presets: None,
-            }),
+            })),
         }),
     }
 }
@@ -76,7 +76,7 @@ fn codex(facts: &mut AgentSettingsFacts) -> &mut SettingsCodexModelFacts {
 }
 fn claude(facts: &mut AgentSettingsFacts) -> &mut SettingsClaudeNativeFacts {
     match &mut model(facts).native {
-        SettingsModelNativeFacts::Claude(facts) => facts,
+        SettingsModelNativeFacts::Claude(facts) => facts.as_mut(),
         _ => panic!("Claude fixture required"),
     }
 }

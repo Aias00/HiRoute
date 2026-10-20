@@ -211,7 +211,9 @@ fn token_share_matches_the_mixed_day_and_keeps_exclusive_components_and_agent_tu
 
 #[test]
 fn token_share_headline_uses_request_presence_and_recorded_zero_before_token_totals() {
-    let cases: Vec<(Vec<(CostClassV1, Option<u64>)>, Headline)> = vec![
+    // Each case lists requests as (cost class, recorded usage or none) and the expected headline.
+    type Requests = Vec<(CostClassV1, Option<u64>)>;
+    let cases: Vec<(Requests, Headline)> = vec![
         (vec![], Headline::NoRoutedRequests),
         (
             vec![(CostClassV1::Paid, Some(200))],

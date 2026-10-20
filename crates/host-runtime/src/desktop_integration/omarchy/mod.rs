@@ -417,8 +417,11 @@ impl Context {
                     Ok(Some((bytes, _))) => old.is_some_and(|old| files::hash(bytes) == old.sha256),
                     Err(_) => false,
                 };
-                if refresh && old.is_some() && !unchanged {
-                    after.items.push(old.unwrap().clone());
+                if refresh
+                    && !unchanged
+                    && let Some(old) = old
+                {
+                    after.items.push(old.clone());
                     continue;
                 }
                 let bytes = current?;

@@ -10,7 +10,7 @@ pub(crate) fn read(
     request: &RoutedLaunchRequestV1,
 ) -> Result<RoutedLaunchReadV1, ControlReadError> {
     if request.context.as_ref().is_some_and(|context| {
-        AgentGrantRawRequestV1::new(&format!("agent-connection/{context}")).is_err()
+        AgentGrantRawRequestV1::new(format!("agent-connection/{context}")).is_err()
     }) {
         return Err(ControlReadError::Denied);
     }

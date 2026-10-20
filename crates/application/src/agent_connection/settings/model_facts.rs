@@ -17,7 +17,7 @@ pub struct SettingsModelCommonFacts {
 
 pub enum SettingsModelNativeFacts {
     Codex(Box<SettingsCodexModelFacts>),
-    Claude(SettingsClaudeNativeFacts),
+    Claude(Box<SettingsClaudeNativeFacts>),
     Additional(SettingsAdditionalModelFacts),
     Hermes(SettingsAdditionalModelFacts),
 }
@@ -69,7 +69,7 @@ impl SettingsModelFacts {
 
     pub fn claude(&self) -> Option<&SettingsClaudeNativeFacts> {
         match &self.native {
-            SettingsModelNativeFacts::Claude(facts) => Some(facts),
+            SettingsModelNativeFacts::Claude(facts) => Some(facts.as_ref()),
             _ => None,
         }
     }

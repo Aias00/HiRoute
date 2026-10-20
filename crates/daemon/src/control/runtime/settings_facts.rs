@@ -978,7 +978,7 @@ impl LocalControlAdapter {
                     } else {
                         let (active_connection, pending_connection) =
                             claude_slots.unwrap_or((None, None));
-                        SettingsModelNativeFacts::Claude(SettingsClaudeNativeFacts {
+                        SettingsModelNativeFacts::Claude(Box::new(SettingsClaudeNativeFacts {
                             supports_managed_launch: installation.profile.supports_managed_launch(),
                             active_connection,
                             pending_connection,
@@ -986,7 +986,7 @@ impl LocalControlAdapter {
                             plan_capability_unavailable: claude_plan_capability_unavailable,
                             native_default_model,
                             presets: native_claude_presets,
-                        })
+                        }))
                     },
                 }),
             },
