@@ -26,6 +26,7 @@ use zeroize::{Zeroize, Zeroizing};
 mod ready;
 #[cfg(any(unix, windows))]
 mod standalone;
+mod startup_recovery;
 mod upgrade_preflight;
 #[cfg(windows)]
 mod windows_task;
@@ -231,8 +232,8 @@ fn run_daemon(
         if managed_role {
             let _ = write_startup_failure_frame(error.code);
         }
-        if let Some(root) = recovery_root
-            && let Ok(Some(recovery)) = hiroute_host_runtime::StorageRecovery::read(&root)
+        if let Some(recovery) =
+            startup_recovery::failure_report(error.code, recovery_root.as_deref())
         {
             eprintln!("{}", recovery.operator_guidance());
         }
