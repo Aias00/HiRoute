@@ -92,9 +92,12 @@ impl InstalledProduct {
             "product gate must not replace an existing stable entry"
         );
         security::ensure_private_directory(&layout.data_root).unwrap();
+        let mut entropy = [0u8; 16];
+        getrandom::fill(&mut entropy).unwrap();
+        let nonce: String = entropy.iter().map(|byte| format!("{byte:02x}")).collect();
         let root = layout
             .data_root
-            .join(format!("Windows headless 测试 {}", std::process::id()));
+            .join(format!("Windows headless 测试 {nonce}"));
         security::create_owner_only_directory(&root).unwrap();
         if windows_execution_host::selected() {
             assert!(
