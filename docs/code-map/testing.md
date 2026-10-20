@@ -20,6 +20,19 @@ The [Windows uninstall restore plan](../../crates/cli/src/service/restore_plan.r
 keeps Codex root collaboration separate from its model-profile projection; its
 portable unit cases cover owner selection and refusal, while the actual NSIS
 uninstall remains the native evidence for restoring Agent files.
+The [native registration publication regression](../../crates/platform/src/windows/shell_registration.rs)
+uses a unique disposable registry key to reproduce inherited system-file permissions,
+verify private publication and refuse changed retained bytes or a failed export.
+It verifies a generic recovery boundary; it does not establish a supported
+historical Windows release or a complete ordinary-user restoration journey.
+The [standalone journal cases](../../crates/host-runtime/src/standalone_install/journal/tests.rs)
+also prove that cutover facts stop rollback before manager effects, forward
+reapplication registers only the current definition and preserves the original
+backups, and changed native entries are refused before any manager call.
+Current-installation failure pages and finite installer waits have bounded
+component and production-style checks. Development cross-build simulations are
+not supported historical Windows upgrade evidence. The general complete-source
+recovery design remains; extending the development historical matrix is separate.
 
 Choose a user promise, then the layer that can observe its failure. Keep tests
 beside that owner and preserve independent assertions. A focused filesystem
@@ -57,6 +70,7 @@ validate the oracle. The real installed management loop is in
 | Observe native routing and rejected attempts | [NativeContextUpstream](../../crates/daemon/tests/support/native_context_fixture.py): count every model POST, including rejected endpoints/models/credentials; keep the ledger for positive route/history assertions |
 | Prove exact Continue, concurrent routes and cancellation | [Native context](../../crates/daemon/tests/support/native_context_product.py), [boundary journey](../../crates/daemon/tests/support/native_context_boundaries.py), [boundary oracle guide](../../crates/daemon/tests/support/NATIVE_CONTEXT_BOUNDARIES.md) |
 | Prove restoration of old durable state | [Frozen producer fixtures](../../crates/local-storage/src/migrations/fixtures/README.md), [crash-boundary tests](../../crates/local-storage/src/migrations/upgrade_batch_recovery_tests.rs): old bytes through the current consumer, not a new serializer pretending to be history |
+| Locate recovery material while the service is down | [Shared presentation](../../apps/desktop/tests/storage-recovery.test.mjs), [production-style geometry](../../apps/desktop/tests/v3/visual/storage-recovery-scenarios.mjs), [offline CLI formatter](../../crates/cli/src/service.rs): verified batch and source location, platform folder route and guide names; unsafe/absent locations remain unverified. Native opening/restoration needs its own installed evidence. |
 | Preserve native probe failure classification | [Pi probe tests](../../crates/integrations/src/agents/pi_runtime_tests.rs), [immutable launcher](../../crates/integrations/tests/fixtures/pi-node-launcher.sh): mutable test bodies are interpreter inputs; executable availability and version/output failures have separate assertions |
 | Exercise actual Desktop controls | [Browser scenario map](../../apps/desktop/tests/README.md) and native acceptance: select stable scenario IDs and require every declared outcome |
 
