@@ -48,7 +48,16 @@ fn export_to(key: &str, destination: &Path) -> io::Result<()> {
         destination.as_os_str().to_owned(),
         "/y".into(),
     ];
-    let env = [(OsString::from("SystemRoot"), windows.as_os_str().to_owned())];
+    let temporary = destination.parent().ok_or(io::ErrorKind::InvalidInput)?;
+    let env = [
+        (OsString::from("SystemRoot"), windows.as_os_str().to_owned()),
+        (OsString::from("TEMP"), temporary.as_os_str().to_owned()),
+        (OsString::from("TMP"), temporary.as_os_str().to_owned()),
+    ];
+    // reg.exe also needs a writable scratch directory while exporting. With a
+    // cleared environment its Windows-directory fallback fails for an ordinary
+    // account, even when the final destination itself is writable. Keep every
+    // scratch file under this already private, held staging directory.
     // The existing launcher gives only this suspended child private user-SID
     // defaults, including for an elevated caller, without changing the parent.
     let child = Child::spawn(Launch {
@@ -75,8 +84,8 @@ fn export_to(key: &str, destination: &Path) -> io::Result<()> {
                     let mut bytes = Vec::new();
                     let _ = stderr.take(4096).read_to_end(&mut bytes);
                     eprintln!(
-                        "registry system child exit={code}, bounded stderr={:?}",
-                        String::from_utf8_lossy(&bytes)
+                        "registry system child exit={code}, bounded stderr={:?}, bytes={bytes:02x?}",
+                        String::from_utf8_lossy(&bytes),
                     );
                 }
                 return Err(io::Error::other("SHELL_REGISTRATION_UNAVAILABLE"));
@@ -180,9 +189,10 @@ mod tests {
                 .output()
                 .unwrap();
             eprintln!(
-                "ordinary minimal-environment export exit={:?}, bounded stderr={:?}",
+                "ordinary minimal-environment export exit={:?}, bounded stderr={:?}, bytes={:02x?}",
                 plain.status.code(),
-                String::from_utf8_lossy(&plain.stderr[..plain.stderr.len().min(4096)])
+                String::from_utf8_lossy(&plain.stderr[..plain.stderr.len().min(4096)]),
+                &plain.stderr[..plain.stderr.len().min(4096)],
             );
             panic!("controlled system export in installed ordinary account: {error:?}");
         }

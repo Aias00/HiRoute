@@ -213,7 +213,9 @@ it preserves readable native ACLs instead of adopting managed-file permissions.
 Follow these owners for elevated-account defaults or third-party file creation.
 The [Windows Apps registration exporter](../../crates/platform/src/windows/shell_registration.rs)
 admits a controlled `reg.exe` export under a held private temporary directory;
-the existing child Job gives that process private user-SID defaults. It
+the existing child Job gives that process private user-SID defaults. Its explicit
+environment binds both temporary-directory variables to the same private stage,
+so standard-user export never depends on the Windows-directory scratch fallback. It
 then publishes complete bytes with protected private permissions. A repeated
 preparation must match the retained export; changed material is preserved and
 refused. Unpublished system output never occupies a final recovery filename.
