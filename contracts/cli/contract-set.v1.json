@@ -29,7 +29,7 @@
     "model-feed-removal-preview.v1.schema.json": "sha256:a78cc643d1f5b7b714209969ec8b4f748b9415da49331c0bf877b3bc94d8e971",
     "model-feed-remove.v1.schema.json": "sha256:49a8fb7e2ba909141937cca4e73828706b0b67ea44622ae553c6da12fa8036cc",
     "model-feed-settings.v1.schema.json": "sha256:a5a32e2665362cf613abadb36ea5c2a43d3a846b0f397bbdcf7aa4989fd24525",
-    "model-feed-status.v1.schema.json": "sha256:d7a8101e375d7796e04ba518215247a3b1a5da9d7bc7d84d2e238dd92cf4bb7e",
+    "model-feed-status.v1.schema.json": "sha256:1941b9104ccf58d826e851387dbeeea56bd580496812c15337572b99339a0752",
     "operation-cancel-request.v1.schema.json": "sha256:0071cbcf27de3bfb7f6644478fe2b73bb5387ebe33db93629ff5672959e8495f",
     "operation-lookup.v1.schema.json": "sha256:0fbaaa15b0e75b4186979bdd856bed0485d55a4bd33a33f3caf3bd92e01a7850",
     "plan-content-change.v2.schema.json": "sha256:b67a57ca076002e341c7a74a1b8d505819ed20ee6a028354c8e6d2c5ff475f47",
